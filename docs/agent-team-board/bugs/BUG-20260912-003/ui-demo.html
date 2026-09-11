@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260912-003 提交号显示优化 · 界面演示</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font: 15px/1.6 system-ui, -apple-system, "PingFang SC", sans-serif; background: #eef2f7; color: #172338; margin: 0; padding: 28px; }
+  main { max-width: 900px; margin: auto; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  header, section { background: #fff; border: 1px solid #cdd5e0; border-radius: 12px; padding: 16px 20px; margin: 14px 0; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  label.ctl-item { display: inline-flex; align-items: center; gap: 6px; }
+  select, button { font: inherit; padding: 6px 10px; border: 1px solid #8799b1; border-radius: 7px; background: #f8faff; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  /* 看板卡片（模拟需求列表一行） */
+  .card { border: 1px solid #d5dde8; border-radius: 10px; padding: 10px 14px; margin: 10px 0; background: #fbfcfe; }
+  .card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+  .cid { font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+  .card-title { font-weight: 600; margin: 4px 0 2px; }
+  .state-chip { background: #e1f4e9; color: #14532d; border-radius: 5px; padding: 1px 8px; font-size: 12px; }
+  .badge { display: inline-block; border-radius: 5px; padding: 2px 9px; font-size: 12px; }
+  .badge.ok { background: #d9f2e2; color: #14532d; }
+  .badge.uncommitted { background: #e8edf3; color: #586880; }
+  .badge.err { background: #fde3e3; color: #8c1d1d; cursor: pointer; }
+  .hash { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: #eef3fa; border: 1px solid #d3deec; border-radius: 5px; padding: 2px 7px; user-select: text; }
+  .hash.short { cursor: copy; }
+  .hash.full { overflow-wrap: anywhere; word-break: break-all; max-width: 100%; }
+  .hint { font-size: 12px; color: #586880; }
+  .copy-btn { font-size: 12px; padding: 2px 9px; }
+  .hash-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 3px 0; }
+  details.hashes { font-size: 12.5px; }
+  details.hashes summary { cursor: pointer; color: #18559b; user-select: none; }
+  /* 详情抽屉（模拟右侧抽屉基本信息） */
+  .drawer { border: 1px solid #cdd5e0; border-radius: 10px; overflow: hidden; }
+  .drawer-tabbar { background: #f2f5fa; border-bottom: 1px solid #d5dde8; padding: 6px 12px; font-size: 13px; }
+  .drawer-tabbar b { background: #fff; border: 1px solid #cdd5e0; border-bottom-color: #fff; border-radius: 6px 6px 0 0; padding: 2px 10px; }
+  .drawer-body { padding: 12px 16px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; font-size: 13px; }
+  .meta-grid .wide { grid-column: 1 / -1; }
+  .meta-grid label { color: #586880; margin-right: 6px; }
+  #feedback { min-height: 24px; color: #18559b; font-size: 14px; }
+  #feedback.warn { color: #8c4a1d; }
+  .demo-note { font-size: 12.5px; color: #586880; margin: 6px 0 0; }
+  input.manual { width: 100%; padding: 6px 8px; font: 12px ui-monospace, Menlo, monospace; margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>提交号显示优化 · 界面演示</h1>
+  <p class="demo-note">BUG-20260912-003 · 全部数据为模拟，不执行 Git、不调用服务。对照「缺陷现象 / 期望修复后」，双击提交号体验复制差异。</p>
+
+  <header>
+    <div class="ctl">
+      <label class="ctl-item">对照
+        <select id="mode">
+          <option value="fixed">期望修复后</option>
+          <option value="broken">缺陷现象</option>
+        </select>
+      </label>
+      <label class="ctl-item">场景
+        <select id="scene">
+          <option value="normal">正常</option>
+          <option value="empty">空（无已完成条目）</option>
+          <option value="loading">加载中</option>
+          <option value="error">加载失败</option>
+        </select>
+      </label>
+      <button id="retryBtn" class="hidden" onclick="retry()">重试读取</button>
+    </div>
+  </header>
+
+  <section>
+    <h2>需求看板 · 列表卡片</h2>
+    <div id="cards"></div>
+  </section>
+
+  <section>
+    <h2>详情抽屉 · 基本信息（以 REQ-DEMO-001 为例）</h2>
+    <div class="drawer">
+      <div class="drawer-tabbar"><b>基本信息</b> 设计 测试 讨论纪要</div>
+      <div class="drawer-body"><div class="meta-grid" id="meta"></div></div>
+    </div>
+  </section>
+
+  <p id="feedback" role="status" aria-live="polite"></p>
+  <div id="manualCopy" class="hidden"><input class="manual" id="manualInput" readonly aria-label="完整提交号，请手动复制" onclick="this.select()"></div>
+</main>
+
+<script>
+const HASHES = [
+  '8c57c69a21567b187d83aad6ae37312678f122ad',
+  '20edaa986cac548b38d91ecdc7dd826b9f370256'
+];
+const mode = document.getElementById('mode');
+const scene = document.getElementById('scene');
+const cards = document.getElementById('cards');
+const meta = document.getElementById('meta');
+const feedback = document.getElementById('feedback');
+const manualCopy = document.getElementById('manualCopy');
+const manualInput = document.getElementById('manualInput');
+const retryBtn = document.getElementById('retryBtn');
+mode.onchange = scene.onchange = () => { feedback.textContent = ''; feedback.className = ''; manualCopy.classList.add('hidden'); render(); };
+
+const short = (h) => h.slice(0, 5);
+
+async function copyFull(h, via) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(h); ok = true; }
+  catch (e) {
+    try {
+      const t = document.createElement('textarea');
+      t.value = h; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      ok = document.execCommand('copy'); t.remove();
+    } catch (e2) { ok = false; }
+  }
+  if (ok) {
+    feedback.textContent = '✓ 已复制完整提交号 ' + short(h) + '…（剪贴板为 40 位完整值' + (via ? '，经' + via : '') + '）';
+    feedback.className = '';
+  } else {
+    feedback.textContent = '无法访问剪贴板：已展示完整提交号，请点击下方输入框全选后手动复制。';
+    feedback.className = 'warn';
+    manualCopy.classList.remove('hidden');
+    manualInput.value = h;
+  }
+}
+
+function brokenDblClick() {
+  feedback.textContent = '缺陷现象：双击提交号无任何反应（仅浏览器默认选词），须点击右侧「复制」按钮。';
+  feedback.className = 'warn';
+}
+
+function hashRowFixed(h) {
+  return '<span class="hash-row"><code class="hash short" title="完整提交号：' + h + '（双击复制完整值）" ondblclick="copyFull(\'' + h + '\')">' + short(h) + '</code></span>';
+}
+function hashRowBroken(h) {
+  return '<span class="hash-row"><code class="hash full" title="' + h + '" ondblclick="brokenDblClick()">' + h + '</code>' +
+    '<button class="copy-btn" onclick="copyFull(\'' + h + '\',\'复制按钮\')">复制</button></span>';
+}
+
+function committedHtml(expandable) {
+  if (mode.value === 'broken') {
+    return '<span class="badge ok" title="已有经核验/自动提交的关联提交记录">已提交</span>' +
+      (expandable ? '<details class="hashes"><summary>' + HASHES.length + ' 个提交号</summary>' + HASHES.map(hashRowBroken).join('') + '</details>'
+                  : HASHES.map(hashRowBroken).join(''));
+  }
+  // 修复后：无「已提交」徽标、无折叠层，直接并列展示 5 位短提交号
+  return '<span title="提交号（双击复制完整值）">' + HASHES.map(hashRowFixed).join('') + '</span>' +
+    (expandable ? '' : '');
+}
+
+function renderCard(id, title, committed) {
+  let commitHtml = '';
+  if (scene.value === 'loading') commitHtml = '<span class="hint">提交状态读取中…</span>';
+  else if (scene.value === 'error') commitHtml = '<button class="copy-btn" onclick="retry()">提交状态加载失败</button>';
+  else if (committed) commitHtml = committedHtml(true);
+  else commitHtml = '<span class="badge uncommitted" title="尚无关联提交（自动提交完成后更新标记）">未提交</span>';
+  return '<div class="card"><div class="card-top"><span class="cid">' + id + '</span>' + commitHtml + '</div>' +
+    '<div class="card-title">' + title + '</div>' +
+    '<div class="hint">已完成 · 2026-09-11 18:02（模拟数据）</div></div>';
+}
+
+function renderMeta() {
+  let commitCell = '';
+  if (scene.value === 'loading') commitCell = '<span class="hint">提交状态读取中…</span>';
+  else if (scene.value === 'error') commitCell = '<button class="copy-btn" onclick="retry()">重试读取</button> <span class="hint">已有成功记录保留（模拟）</span>';
+  else commitCell = committedHtml(false);
+  return '<div><label>状态</label>已完成</div>' +
+    '<div><label>类型</label>需求</div>' +
+    '<div><label>认领者</label>—</div>' +
+    '<div><label>更新</label>2026-09-11 18:02</div>' +
+    '<div class="wide"><label>提交状态</label><span class="hash-row">' + commitCell + '</span></div>';
+}
+
+function render() {
+  retryBtn.classList.toggle('hidden', scene.value !== 'error');
+  if (scene.value === 'loading') {
+    cards.innerHTML = '<p class="hint" role="status">正在读取提交状态（模拟主轮询刷新）…</p>';
+    meta.innerHTML = '<div class="wide"><label>提交状态</label><span class="hint">读取中…</span></div>';
+    return;
+  }
+  if (scene.value === 'empty') {
+    cards.innerHTML = '<p class="hint">当前项目暂无已完成条目，提交状态区不展示任何徽标或提交号（空状态）。</p>';
+    meta.innerHTML = '<div class="wide"><label>提交状态</label><span class="hint">—（条目未到已完成/待测试，不展示）</span></div>';
+    return;
+  }
+  // normal / error：error 场景下列表与详情走失败态；normal 展示两条已完成条目
+  if (scene.value === 'error') {
+    cards.innerHTML = '<div class="card"><div class="card-top"><span class="cid">REQ-DEMO-001</span>' +
+      '<span class="badge err" title="提交状态查询失败。点击重试；已加载的成功记录保留。" onclick="retry()">提交状态加载失败</span></div>' +
+      '<div class="card-title">示例已完成需求（失败场景，成功记录保留不消失）</div></div>';
+    meta.innerHTML = '<div class="wide"><label>提交状态</label><span class="badge err" onclick="retry()">提交状态加载失败</span> ' +
+      '<button class="copy-btn" onclick="retry()">重试读取</button> <span class="hint">不伪装成未提交，也不抹掉已成功加载的数据</span></div>';
+    return;
+  }
+  cards.innerHTML =
+    renderCard('REQ-DEMO-001', '示例需求：已完成且有两个提交记录', true) +
+    renderCard('REQ-DEMO-002', '示例需求：已完成但尚无提交', false);
+  meta.innerHTML = renderMeta();
+}
+
+function retry() {
+  feedback.textContent = '已重试读取提交状态（模拟成功），恢复正常场景。';
+  feedback.className = '';
+  scene.value = 'normal';
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
