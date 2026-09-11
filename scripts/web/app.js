@@ -1884,7 +1884,7 @@ function reqRowEl(it) {
       ${it.status === 'planned' ? `<input type="checkbox" class="accept-check" data-impl-id="${esc(it.id)}" aria-label="选择 ${esc(it.id)}">` : ''}
       ${itemIdHtml(it.id, { copy: false })} <!-- REQ-20260910-006：单号归信息区；BUG-20260910-007：操作图标化并与单号同排 -->
       ${refineBadgeHtml(it)}
-      ${commitBadgeHtml(it, { expandable: true })} <!-- BUG-20260910-014：已完成条目提交状态徽标（未提交/已提交+提交号） -->
+      ${commitBadgeHtml(it, { inline: true })} <!-- BUG-20260912-003：完成条目提交状态原位直显短提交号（无「已提交」徽标与折叠层） -->
       ${it.hold ? `<span class="flag hold-flag" title="待人工决策：${it.hold.unanswered} 项未答；到列表下方「待人工确认」区补决策并复工">⚠ 等人工决策</span>` : ''}
       ${state.codexPending.byItem.has(it.id) ? '<span class="flag warn" title="模型配置待处理：点击行查看，或到设置模块的「模型与推理强度」处理">模型配置待处理</span>' : ''}
       <!-- BUG-20260910-007：四操作仅图标（⧉/✓/✎/🗑），动作与单号由 aria-label/title 提示，顺序与显隐规则不变 -->
@@ -6303,22 +6303,28 @@ async function abortDevTask() {
 /* ---------- 已完成条目提交状态（BUG-20260910-014 保留部分）：列表徽标 + 详情字段 ---------- */
 /* REQ-20260911-010：批量 Commit 面板（页签/启动区/运行面板/记录/创建/暂停/终止）已随人工
    批量提交流程回退整体移除；本节仅保留提交状态展示（取数换源 /api/commit/item-status →
-   REQ-20260911-009 索引），布局与交互不变。 */
+   REQ-20260911-009 索引）。BUG-20260912-003：展示格式调整——去掉「已提交」徽标与
+   「N 个提交号」折叠层，提交号只显示前 5 位短号直显，双击短号复制完整 40 位 hash。 */
 
-// 提交号列表：完整 hash（可换行、悬停可见）+ 独立复制按钮（复制失败可手动框选完整值）
-function commitHashListHtml(hashes) {
-  return `<div class="commit-hash-list">${hashes.map((h) => `
-    <span class="commit-hash-row">
-      <code class="commit-hash" title="${esc(h)}">${esc(h)}</code>
-      <button type="button" class="btn small copy-hash-btn" data-copy-hash="${esc(h)}" aria-label="复制提交号 ${esc(String(h).slice(0, 10))}">复制</button>
-    </span>`).join('')}</div>`;
+// BUG-20260912-003：提交号只展示前 5 位（用户明确要求 5 位）；完整值保留在 title 与复制口径中
+function commitShortHash(h) {
+  return String(h).slice(0, 5);
 }
 
-// 已完成（done）条目专属：默认未提交；有经核验的成功提交记录（item-status 索引）才显示已提交。
+// 提交号列表：5 位短号直显（完整 hash 悬停 title 可见）；双击短号复制完整值（data-copy-hash →
+// bindCommitWidgets dblclick），复制失败可手动框选完整值
+function commitHashListHtml(hashes) {
+  return `<div class="commit-hash-list">${hashes.map((h) => `
+    <code class="commit-hash" title="完整提交号：${esc(h)}（双击复制完整值）" data-copy-hash="${esc(h)}">${esc(commitShortHash(h))}</code>`).join('')}</div>`;
+}
+
+// 已完成（done）条目专属：默认未提交；有经核验的成功提交记录（item-status 索引）原位直显短提交号。
 // 查询失败显示「提交状态加载失败」并给重试入口——不伪装成未提交，也不抹掉已成功加载的数据。
 // REQ-20260911-009：待测试（in-progress 且已上报）条目同样展示——到待测试自动提交完成后
-// 徽标随之点亮（与「待测试」角标并列，索引同源）。
-function commitBadgeHtml(it, { expandable = false } = {}) {
+// 提交号随之点亮（与「待测试」角标并列，索引同源）。
+// BUG-20260912-003：不再渲染「已提交」徽标——inline（列表卡片）在有记录时直显短提交号；
+// 详情位（非 inline）返回空串，由 commitStatusDetailHtml 渲染同一列表，口径一致不重复。
+function commitBadgeHtml(it, { inline = false } = {}) {
   if (it.status !== 'done' && !(it.status === 'in-progress' && it.agentCompletedAt)) return '';
   const cs = state.commitStatus || { map: {}, error: null };
   if (cs.error) {
@@ -6329,11 +6335,10 @@ function commitBadgeHtml(it, { expandable = false } = {}) {
   if (!hashes.length) {
     return `<span class="commit-badge cm-uncommitted" title="尚无关联提交（自动提交完成后更新标记）">未提交</span>`;
   }
-  return `<span class="commit-badge cm-committed" title="已有经核验/自动提交的关联提交记录">已提交</span>${expandable ? `
-    <details class="commit-hashes"><summary>${hashes.length} 个提交号</summary>${commitHashListHtml(hashes)}</details>` : ''}`;
+  return inline ? commitHashListHtml(hashes) : '';
 }
 
-// 详情页提交状态补充：hash 全量列表（逐个可复制）；错误态给重试按钮
+// 详情页提交状态补充：短提交号列表（双击逐个复制完整值）；错误态给重试按钮
 function commitStatusDetailHtml(it) {
   const cs = state.commitStatus || { map: {}, error: null };
   if (cs.error) {
@@ -6370,12 +6375,13 @@ async function retryCommitStatus() {
   await refreshCommitStatus();
 }
 
-// 提交号复制 / 状态重试 / 提交号展开：均不冒泡（不打断行点击打开详情）
+// 提交号双击复制 / 状态重试：均不冒泡（不打断行点击打开详情）
 function bindCommitWidgets(root) {
   for (const el of root.querySelectorAll('[data-copy-hash]')) {
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', (e) => e.stopPropagation()); // BUG-20260912-003：双击前的单击不冒泡（不误开详情抽屉）
+    el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
-      return copyHash(el.dataset.copyHash, el);
+      return copyHash(el.dataset.copyHash, el); // 双击短号复制完整 40 位 hash
     });
   }
   for (const el of root.querySelectorAll('[data-commit-retry]')) {
@@ -6384,15 +6390,14 @@ function bindCommitWidgets(root) {
       return retryCommitStatus();
     });
   }
-  for (const d of root.querySelectorAll('.commit-hashes')) {
-    d.addEventListener('click', (e) => e.stopPropagation()); // 展开/收起不触发行点击
-  }
 }
 
-// 完整提交号复制（口径对齐 copyId：clipboard → execCommand 降级；失败提示手动框选完整值）
+// 完整提交号复制（口径对齐 copyId：clipboard → execCommand 降级；失败提示手动框选完整值）。
+// BUG-20260912-003：复制对象从「复制」按钮变为短提交号 code——成功反馈改为 copied 高亮 +
+// toast（不再改写文本内容），复制内容仍为完整 40 位 hash。
 async function copyHash(hash, el) {
-  if (!el || el.disabled || el.dataset.copied) return;
-  el.disabled = true; // 异步复制和反馈期间防止重复提交
+  if (!el || el.dataset.copied) return;
+  el.dataset.copied = '1'; // 异步复制和反馈期间防止重复触发
   let ok = false;
   try {
     await navigator.clipboard.writeText(hash);
@@ -6411,18 +6416,14 @@ async function copyHash(hash, el) {
     }
   }
   if (ok) {
-    el.dataset.copied = '1';
-    const original = el.textContent;
-    el.textContent = '已复制 ✓';
     el.classList.add('copied');
+    toast(`✓ 已复制完整提交号 ${commitShortHash(hash)}…`);
     setTimeout(() => {
-      el.textContent = original;
       el.classList.remove('copied');
       delete el.dataset.copied;
-      el.disabled = false;
     }, 1200);
   } else {
-    el.disabled = false;
+    delete el.dataset.copied;
     toast('复制失败，请手动框选完整提交号', true);
   }
 }

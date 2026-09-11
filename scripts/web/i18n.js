@@ -256,7 +256,6 @@ const EN = {
   '已排入开发计划，开发启动后最旧优先处理': 'Planned; development processes the oldest first',
   '已接受未完善：可由批量完善任务补全文档；点击查看批量完善面板': 'Accepted but unrefined: a batch refine task can complete the documents; click to view the batch refine panel',
   '已接受，可在详情页「移入计划」排入开发计划': 'Accepted; use "Add to plan" in the detail view to schedule it',
-  '已提交': 'Committed',
   '已是最后一条': 'This is the last item',
   '已是第一条': 'This is the first item',
   '已暂停': 'Paused',
@@ -761,7 +760,6 @@ const EN_DYNAMIC = {
   '执行 Agent ◇（子代理模式） · 创建 ◇': 'Run Agent $1 (subagent mode) · created $2',
   '◇ ← 前置未完成：◇': '$1 ← prerequisite unfinished: $2',
   '◇ 个任务': '$1 tasks',
-  '◇ 个提交号': '$1 commit hashes',
   '◇ 个项目 ·': '$1 projects ·',
   '◇ 已不在已接受状态，已从选择中移除': '$1 is no longer accepted; removed from selection',
   '◇ 已不在已计划状态，已从选择中移除': '$1 is no longer planned; removed from selection',
@@ -950,7 +948,10 @@ const EN_DYNAMIC = {
   '◇下的条目': 'Items under $1',
   '删除 ◇': 'Delete $1',
   '复制单号 ◇': 'Copy ID $1',
-  '复制提交号 ◇': 'Copy commit hash $1',
+  // BUG-20260912-003：提交号 5 位短号直显、双击复制完整值——新增悬停提示与成功 toast 词条；
+  // 旧「已提交」徽标、「◇ 个提交号」折叠 summary、「复制提交号 ◇」按钮 aria 词条随 UI 移除清理
+  '完整提交号：◇（双击复制完整值）': 'Full commit hash: $1 (double-click to copy)',
+  '✓ 已复制完整提交号 ◇…': '✓ Copied full commit hash $1…',
   '提交状态查询失败：◇。点击重试；已加载的成功记录保留。': 'Commit status query failed: $1. Click to retry; loaded success records are kept.',
   '查看条目 ◇': 'View item $1',
   '点击进入该项目任务模块（◇ · ◇）': 'Open this project\'s task module ($1 · $2)',

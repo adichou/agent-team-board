@@ -1936,17 +1936,15 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   white-space: nowrap;
 }
 .commit-badge.cm-uncommitted { background: var(--bg); color: var(--muted); }
-.commit-badge.cm-committed { background: var(--ok-bg); color: var(--ok-text); }
 .commit-badge.cm-error {
   background: rgba(220, 38, 38, 0.12);
   color: var(--warn);
   cursor: pointer;
 }
-.commit-hashes { display: inline-block; font-size: 11px; }
-.commit-hashes > summary { cursor: pointer; color: var(--info-text); user-select: none; }
-.commit-hash-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px; }
-.commit-hash-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.commit-hash { overflow-wrap: anywhere; word-break: break-all; font-size: 11px; max-width: 34ch; }
+/* BUG-20260912-003：提交号 5 位短号直显（双击复制完整值）；「已提交」徽标与折叠层样式移除 */
+.commit-hash-list { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.commit-hash { font-size: 11px; cursor: copy; }
+.commit-hash.copied { color: var(--ok-text); }
 .commit-status-cell { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .commit-status-cell-wide { grid-column: 1 / -1; }
 
