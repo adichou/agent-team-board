@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-010",
+  "type": "requirement",
+  "title": "文件栏支持 md、图片的渲染展示。并支持复制目录和行号到剪贴板以便在讨论对话框中讨论",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-003-1",
+  "createdAt": "2026-09-06T03:39:07.580Z",
+  "updatedAt": "2026-09-11T05:52:14.714Z",
+  "agentCompletedAt": "2026-09-06T16:55:00.256Z",
+  "lastReport": {
+    "at": "2026-09-06T16:55:00.256Z",
+    "coverage": 62,
+    "framework": "node:assert（server 集成 + 源码结构契约）",
+    "summary": "文件视图新增 /api/fs/raw 图片端点（白名单+8MB 上限+nosniff/CSP），openFile 分流：图片直接预览、md 默认 renderMd 渲染可切源码、源码视图行号槽点击复制 路径:行号、工具条一键复制路径（clipboard→execCommand 降级）；file-board 新增 R1–R8 全绿，npm test 43 文件失败 0",
+    "runId": "run-20260907-018"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T03:39:07.580Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T14:05:57.474Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T16:50:38.910Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-003-1",
+      "note": "认领（zcode-batch-003-1）"
+    },
+    {
+      "at": "2026-09-06T16:55:00.256Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-003-1",
+      "note": "上报测试报告（覆盖率 62%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.714Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-3b62",
+      "note": "人工确认完成"
+    }
+  ]
+}

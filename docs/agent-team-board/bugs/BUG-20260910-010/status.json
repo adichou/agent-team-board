@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-010",
+  "type": "bug",
+  "title": "待测试界面为什么会有这个紫蓝色边框？",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-14",
+  "createdAt": "2026-09-10T04:34:02.130Z",
+  "updatedAt": "2026-09-11T05:52:22.383Z",
+  "agentCompletedAt": "2026-09-10T06:27:06.081Z",
+  "lastReport": {
+    "at": "2026-09-10T06:27:06.081Z",
+    "coverage": 4,
+    "framework": "node:assert+vm",
+    "summary": "picked 行标记改中性 var(--text)（弃 --primary/--viewrail-accent），title 追加「详情打开中（右侧抽屉正展示此条目）」；新增 4 用例测试，全量 147 文件回归 0 失败（accepted-batch-entry L1 断言随新契约更新）",
+    "runId": "run-20260910-160"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T04:34:02.130Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T04:34:06.738Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T05:20:52.869Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-123815-3114）"
+    },
+    {
+      "at": "2026-09-10T06:20:16.449Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-14",
+      "note": "认领（zcode-batch-031-14）"
+    },
+    {
+      "at": "2026-09-10T06:27:06.081Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-14",
+      "note": "上报测试报告（覆盖率 4%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.383Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-927b",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-011 演示 · 详情文档滚动可达性（对照缺陷 / 修复后）</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --line:#d8dce2; --ink:#24292f; --muted:#6a737d; --brand:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); padding:20px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:12px; margin:0 0 14px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .bar .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel); }
+  .seg button { border:0; background:transparent; padding:6px 12px; cursor:pointer; font:inherit; color:var(--ink); }
+  .seg button.on { background:var(--brand); color:#fff; }
+  .hint { font-size:12px; color:var(--muted); }
+  .drawer { max-width:560px; margin:0 auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.08); overflow:hidden; }
+  .d-head { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .d-id { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); }
+  .d-title { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .d-close { border:1px solid var(--line); background:#fff; border-radius:6px; padding:2px 10px; cursor:pointer; }
+  .tabs { display:flex; gap:2px; padding:0 14px; border-bottom:1px solid var(--line); background:#fbfcfd; }
+  .tabs button { border:0; border-bottom:2px solid transparent; background:transparent; padding:8px 12px; cursor:pointer; font:inherit; color:var(--muted); }
+  .tabs button.on { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
+  .doc { height:220px; padding:12px 16px; }
+  .doc.defect { overflow:hidden; }           /* 缺陷态：内容被裁剪，无滚动条，滚轮滚不到底 */
+  .doc.fixed { overflow-y:auto; }            /* 修复态：可滚动到底，滚动条可见 */
+  .doc p { margin:0 0 10px; }
+  .doc .end { color:var(--brand); font-weight:600; }
+  .state { padding:40px 16px; text-align:center; color:var(--muted); }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--brand); border-radius:50%; animation:sp 0.8s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .note { max-width:560px; margin:12px auto 0; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>详情文档滚动可达性 —— 缺陷现象 / 修复后状态对照</h1>
+  <p class="sub">对应条目 BUG-20260910-003（说明文档完善补充的界面演示，非看板源码；布局与交互按条目 README 界面展示节描述绘制，加载/失败提示文案为示意）</p>
+
+  <div class="bar">
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on">缺陷现象</button>
+      <button type="button" data-mode="fixed">修复后状态</button>
+    </span>
+    <span class="seg" id="stateSeg">
+      <button type="button" data-state="long" class="on">长内容</button>
+      <button type="button" data-state="short">短内容</button>
+      <button type="button" data-state="empty">空内容</button>
+      <button type="button" data-state="loading">加载中</button>
+      <button type="button" data-state="error">加载失败</button>
+    </span>
+  </div>
+  <p class="hint" id="hint">缺陷态：正文超出可视区，右侧无滚动条，滚轮无法到达末尾；修复态：可滚动到底并保留滚动指示。</p>
+
+  <div class="drawer">
+    <div class="d-head">
+      <span class="d-id">REQ-20260910-002</span>
+      <span class="d-title">工作区入口与项目导航调整</span>
+      <button type="button" class="d-close" id="closeBtn">关闭</button>
+    </div>
+    <div class="tabs" id="tabs">
+      <button type="button" data-tab="说明" class="on">说明</button>
+      <button type="button" data-tab="设计">设计</button>
+      <button type="button" data-tab="用例">用例</button>
+    </div>
+    <div class="doc" id="doc"></div>
+  </div>
+  <p class="note">说明：本页演示滚动可达性与状态反馈；「设计」页签对应原始反馈中的「方案」。空/加载/失败态下不应残留上一份长文档的异常滚动范围。</p>
+
+<script>
+  var mode = 'defect', state = 'long', tab = '说明';
+  var doc = document.getElementById('doc');
+  var hint = document.getElementById('hint');
+
+  function para(i) {
+    return '<p>' + (i + 1) + '. 这是一段用于验证滚动的长文档内容，说明条目的背景、目标与边界，重复多段以撑开正文高度，观察右侧滚动条与滚轮是否可到达末尾。</p>';
+  }
+  function render() {
+    doc.className = 'doc ' + mode;
+    if (state === 'loading') {
+      doc.innerHTML = '<div class="state"><span class="spin"></span>文档加载中…（示意）</div>';
+    } else if (state === 'error') {
+      doc.innerHTML = '<div class="state">文档加载失败，请重试（示意）</div>';
+    } else if (state === 'empty') {
+      doc.innerHTML = '<div class="state">（空）暂无内容</div>';
+    } else if (state === 'short') {
+      doc.innerHTML = '<p>短内容：一段即可容纳，自然填充可用区域。</p><p class="end">—— 已到末尾 ——</p>';
+    } else {
+      var n = tab === '说明' ? 14 : 9;
+      var out = '';
+      for (var i = 0; i < n; i++) out += para(i);
+      out += '<p class="end">—— 已到末尾（' + tab + '页签）——</p>';
+      doc.innerHTML = out;
+    }
+    hint.textContent = mode === 'defect'
+      ? '缺陷态：正文超出可视区，右侧无滚动条，滚轮无法到达末尾（overflow 被裁剪）。'
+      : (state === 'long' ? '修复态：可滚动到底并保留滚动指示。' : '修复态：短/空/加载/失败态保持提示可见，不残留异常滚动范围。');
+  }
+  document.getElementById('modeSeg').addEventListener('click', function (e) {
+    if (e.target.dataset.mode) { mode = e.target.dataset.mode; mark(this, mode); render(); }
+  });
+  document.getElementById('stateSeg').addEventListener('click', function (e) {
+    if (e.target.dataset.state) { state = e.target.dataset.state; mark(this, state); render(); }
+  });
+  document.getElementById('tabs').addEventListener('click', function (e) {
+    if (e.target.dataset.tab) { tab = e.target.dataset.tab; mark(this, tab); render(); }
+  });
+  document.getElementById('closeBtn').addEventListener('click', function () {
+    document.querySelector('.drawer').style.opacity = '0.4';
+    setTimeout(function () { document.querySelector('.drawer').style.opacity = '1'; }, 500);
+  });
+  function mark(seg, val) {
+    [].forEach.call(seg.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b.dataset.mode === val || b.dataset.state === val || b.dataset.tab === val);
+    });
+  }
+  render();
+</script>
+</body>
+</html>

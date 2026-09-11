@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-016",
+  "type": "bug",
+  "title": "detail-close-btn T2 失败：批量抽屉头部残留 space-between 内联布局",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-003-01",
+  "createdAt": "2026-09-06T14:39:54.772Z",
+  "updatedAt": "2026-09-11T05:52:16.031Z",
+  "agentCompletedAt": "2026-09-06T19:24:21.416Z",
+  "lastReport": {
+    "at": "2026-09-06T19:24:21.416Z",
+    "coverage": 100,
+    "framework": "node 静态契约测试（scripts/tests）",
+    "summary": "消除 renderBatchDrawer 头部内联 space-between：新增 .batch-head/.batch-title 类承载两端布局，补 aria-label；detail-close-btn 新增 T5 恢复全局无内联 space-between 断言（引入来源 REQ-20260906-002）；T5 先红后绿，全量 57 测试文件全过",
+    "runId": "run-20260907-029"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T14:39:54.772Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-62ec"
+    },
+    {
+      "at": "2026-09-06T16:33:32.662Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T19:21:33.482Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "认领（zcode-batch-003-01）"
+    },
+    {
+      "at": "2026-09-06T19:24:21.417Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.032Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-3a70",
+      "note": "人工确认完成"
+    }
+  ]
+}

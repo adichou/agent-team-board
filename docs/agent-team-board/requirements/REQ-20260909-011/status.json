@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-011",
+  "type": "requirement",
+  "title": "优化批量完善和批量开发的提示词，不再区分 Agent，使用通用的描述词。设置中去掉 Agent 的配置",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-025-01",
+  "createdAt": "2026-09-09T08:43:25.412Z",
+  "updatedAt": "2026-09-11T05:52:20.915Z",
+  "agentCompletedAt": "2026-09-09T10:18:53.675Z",
+  "lastReport": {
+    "at": "2026-09-09T10:18:53.675Z",
+    "coverage": 19,
+    "framework": "node:assert + vm 模拟 DOM（npm test / run-all.mjs）",
+    "summary": "提示词单一通用化（refine 前缀 refine-、subagent 账本标识、幂等去 mode 分叉）；设置区精简为仅完善流转开关（POST 忽略 agents/models）；启动区与终态去 Agent 化（无候选禁用说明）；创建入口固定 follow、agent/mode 入参忽略；存量存储与账本不回溯。新增 19 用例 + 更新 15 个既有测试文件，全量 122 文件通过。",
+    "runId": "run-20260909-131"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T08:43:25.412Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T08:43:31.956Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T09:47:23.735Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T09:48:55.405Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-025-01",
+      "note": "认领（zcode-batch-025-01）"
+    },
+    {
+      "at": "2026-09-09T10:18:53.676Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-025-01",
+      "note": "上报测试报告（覆盖率 19%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.915Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-902f",
+      "note": "人工确认完成"
+    }
+  ]
+}

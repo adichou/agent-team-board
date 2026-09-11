@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-015",
+  "type": "bug",
+  "title": "已终止完善任务可被暂停操作复活为未结束状态",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T12:13:47.178Z",
+  "updatedAt": "2026-09-11T05:52:19.318Z",
+  "agentCompletedAt": "2026-09-08T15:49:53.908Z",
+  "lastReport": {
+    "at": "2026-09-08T15:49:53.908Z",
+    "coverage": 92,
+    "framework": "Node 原生 assert 自研聚合（run-all.mjs，95 文件）",
+    "summary": "库层 refineBatchTerminalReason+pauseRefineBatch 终态幂等拒绝（暂停/恢复双向、不写 pauseRequested 不改 status）；CLI refine pause 与 POST /api/refine/pause 前置校验透传明确错误（400/非零退出）；看板终态批次不再渲染「暂停后续」。新增 R13/R10d/R11b/R12-9 四处用例；deep-probes D12 转 PASS（12/12），run-all 95 文件 0 失败；开发批次同类隐患另登记 BUG-20260908-023。",
+    "runId": "run-20260908-094"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T12:13:47.178Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-d29a"
+    },
+    {
+      "at": "2026-09-08T12:33:46.950Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T14:08:42.387Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T15:41:12.561Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T15:49:53.909Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.318Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0654",
+      "note": "人工确认完成"
+    }
+  ]
+}

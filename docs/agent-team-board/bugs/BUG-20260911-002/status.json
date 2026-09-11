@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260911-002",
+  "type": "bug",
+  "title": "发布模块的副标题有问题，不仅仅是 Git 和 App Store，要更通用",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-034-1",
+  "createdAt": "2026-09-11T00:25:37.816Z",
+  "updatedAt": "2026-09-11T05:52:23.732Z",
+  "agentCompletedAt": "2026-09-11T00:54:29.969Z",
+  "lastReport": {
+    "at": "2026-09-11T00:54:29.969Z",
+    "coverage": 100,
+    "framework": "node:assert 零依赖静态契约测试（项目约定）",
+    "summary": "发布副标题通用化：app.js MODULE_SUB.release 改为「构建与发布流程：预检 → 计划确认 → 执行 → 核验」（目标无关、不枚举渠道），行内补 BUG 溯源；新增回归测试 release-sub-generic-20260911-002（C1–C5，先红后绿）；引入来源已归因 REQ-20260910-029（design.md 源单节+README 头部行）；npm test 全量 185 文件 0 失败",
+    "runId": "run-20260911-188"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T00:25:37.816Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:25:37.817Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T00:35:13.263Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-083320-b972）"
+    },
+    {
+      "at": "2026-09-11T00:50:55.468Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-034-1",
+      "note": "认领（zcode-batch-034-1）"
+    },
+    {
+      "at": "2026-09-11T00:54:29.969Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-034-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.732Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a6e9",
+      "note": "人工确认完成"
+    }
+  ]
+}

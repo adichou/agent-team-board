@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-021",
+  "type": "requirement",
+  "title": "完善需求时的 UI 设计要使用 html 进行可交互设计展示",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-01",
+  "createdAt": "2026-09-08T09:55:30.073Z",
+  "updatedAt": "2026-09-11T05:52:18.892Z",
+  "agentCompletedAt": "2026-09-08T14:06:51.410Z",
+  "lastReport": {
+    "at": "2026-09-08T14:06:51.410Z",
+    "coverage": 15,
+    "framework": "node:test（自研断言式用例 runner，scripts/tests/*.test.mjs）",
+    "summary": "完善阶段 UI 展示升级为可交互 html 演示：analyzeItemDocs 演示三查（缺 ui-demo.html/占位/README 节未链接，兜底与 Bug 判定不变）；DOC_FILES/docsFingerprint 纳入 ui-demo.html，只改演示文件的 done 可过核验；两处提示词与 SKILL.md/req.md/atb/server/fake-codex 口径同步，质量门槛固化为 UI_DEMO_QUALITY 常量；refine 五套件与 run-all 90 文件全绿",
+    "runId": "run-20260908-084"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T09:55:30.073Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T12:02:05.259Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.324Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T13:58:54.219Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-01",
+      "note": "认领（zcode-batch-018-01）"
+    },
+    {
+      "at": "2026-09-08T14:06:51.411Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-01",
+      "note": "上报测试报告（覆盖率 15%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.892Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-4529",
+      "note": "人工确认完成"
+    }
+  ]
+}

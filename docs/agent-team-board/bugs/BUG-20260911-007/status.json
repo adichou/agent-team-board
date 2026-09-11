@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260911-007",
+  "type": "bug",
+  "title": "明明存在批量完善队列在执行中，但是在全局任务界面却没有显示，请定位",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-035-4",
+  "createdAt": "2026-09-11T01:47:32.708Z",
+  "updatedAt": "2026-09-11T05:52:24.013Z",
+  "agentCompletedAt": "2026-09-11T02:51:17.349Z",
+  "lastReport": {
+    "at": "2026-09-11T02:51:17.349Z",
+    "coverage": 90,
+    "framework": "node:assert/strict（npm test 自研 runner）",
+    "summary": "全局任务面板 kind 兜底：前端 globalTaskKind() 按批次号前缀（RFB-/CMT-/batch-）推断缺失或未知 kind，推不出归 unknown 中性档；类型筛选/计数行/徽标/跳转挂点全走兜底 kind，行内「类型推断/类型未知」诊断 flag 指引重启看板服务，消除「执行中1但0匹配」矛盾态与静默丢失。归因 REQ-20260910-003。新增 4 用例先红后绿，全量 190 测试文件 0 失败。",
+    "runId": "run-20260911-193"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T01:47:32.708Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T01:47:32.709Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T02:09:12.200Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-095912-bbad）"
+    },
+    {
+      "at": "2026-09-11T02:40:46.910Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-035-4",
+      "note": "认领（zcode-batch-035-4）"
+    },
+    {
+      "at": "2026-09-11T02:51:17.349Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-035-4",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:24.014Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-9233",
+      "note": "人工确认完成"
+    }
+  ]
+}

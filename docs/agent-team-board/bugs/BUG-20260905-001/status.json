@@ -1,0 +1,53 @@
+{
+  "id": "BUG-20260905-001",
+  "type": "bug",
+  "title": "源码保护的 Bash 守卫把只读 sed 误判为改写意图（读操作被拦）",
+  "status": "done",
+  "parent": null,
+  "owner": "codex-bash-sed-guard",
+  "createdAt": "2026-09-05T07:51:31.254Z",
+  "updatedAt": "2026-09-11T05:52:14.160Z",
+  "agentCompletedAt": "2026-09-05T08:31:03.962Z",
+  "lastReport": {
+    "at": "2026-09-05T08:31:03.962Z",
+    "coverage": 100,
+    "framework": "node:assert 子进程守卫实测 + 16 套全量脚本回归",
+    "summary": "引入来源：REQ-20260901-003 新增 Bash 源码保护时采用宽泛词法 REWRITE_INTENT。现已用引号感知的轻量分段/分词与统一 hasRewriteIntent 区分 sed 只读、原地写入及 w/W/r/e 脚本命令，并仅豁免指向 /dev/null 的输出重定向；cp/mv/rm/chmod/tee 等既有规则保持。TDD Red 精准失败 B1/B4，Green 后 G1–G6 与 B1–B6 全绿；16 个测试脚本、105 个命名用例全量回归通过。本条验收用例覆盖 7/7，项目未配置语句/分支覆盖采集。"
+  },
+  "history": [
+    {
+      "at": "2026-09-05T07:51:31.254Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0905-f27e"
+    },
+    {
+      "at": "2026-09-05T08:16:20.543Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-05T08:19:37.853Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "codex-bash-sed-guard",
+      "note": "认领（codex-bash-sed-guard）"
+    },
+    {
+      "at": "2026-09-05T08:31:03.962Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "codex-bash-sed-guard-0905-3ce0",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.160Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f2a5",
+      "note": "人工确认完成"
+    }
+  ]
+}

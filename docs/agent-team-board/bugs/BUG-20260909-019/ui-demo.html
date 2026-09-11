@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260909-019 演示 · 左上角交通灯遮挡顶栏</title>
+<style>
+  /* ---------- 主题变量（取自项目 scripts/web/style.css 的真实配色） ---------- */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --submitted: #64748b; --accepted: #2563eb; --planned: #0891b2; --inprogress: #d97706;
+    --confirming: #7c3aed; --done: #16a34a; --chip-req: #4f46e5; --chip-bug: #e11d48;
+    --primary: #2563eb; --warn: #dc2626;
+  }
+  [data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    --submitted: #94a3b8; --accepted: #60a5fa; --planned: #22d3ee; --inprogress: #fbbf24;
+    --confirming: #a78bfa; --done: #4ade80; --chip-req: #818cf8; --chip-bug: #fb7185;
+    --primary: #3b82f6; --warn: #f87171;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]):not([data-theme="dark"]) {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+      --submitted: #94a3b8; --accepted: #60a5fa; --planned: #22d3ee; --inprogress: #fbbf24;
+      --confirming: #a78bfa; --done: #4ade80; --chip-req: #818cf8; --chip-bug: #fb7185;
+      --primary: #3b82f6; --warn: #f87171;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px 16px 40px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+
+  /* ---------- 控制区 ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+  .ctrl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ctrl-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--text); cursor: pointer;
+    padding: 5px 10px; font-size: 12.5px; line-height: 1.4; border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; }
+  .seg button:disabled { opacity: .45; cursor: not-allowed; }
+  .btn {
+    appearance: none; cursor: pointer; border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); border-radius: 8px; padding: 5px 12px; font-size: 12.5px;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ---------- 舞台与模拟窗口 ---------- */
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 16px; }
+  .mock-win {
+    position: relative; width: min(880px, 100%); background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; transition: width .25s ease;
+  }
+  .mock-win.width-narrow { width: 360px; }
+
+  /* 交通灯（仅桌面壳环境显示）：三圆点约 70px 宽，悬浮于窗口左上页面内容之上 */
+  .tl { position: absolute; left: 8px; top: 12px; display: none; gap: 8px; z-index: 5; }
+  .mock-win.env-shell .tl { display: flex; }
+  .tl span { width: 12px; height: 12px; border-radius: 50%; position: relative; }
+  .tl .r { background: #ff5f57; } .tl .y { background: #febc2e; } .tl .g { background: #28c840; }
+  .tl span::after {
+    content: attr(data-sym); position: absolute; inset: 0; display: grid; place-items: center;
+    font-size: 9px; line-height: 1; color: rgba(0,0,0,.55); font-weight: 700; opacity: 0;
+  }
+  .tl:hover span::after { opacity: 1; }
+
+  /* 让位区演示标注（仅桌面壳 + 期望形态时强调；虚线为演示标注，非真实 UI） */
+  .tl-zone {
+    position: absolute; left: 6px; top: 9px; width: 68px; height: 18px; border: 1.5px dashed var(--muted);
+    border-radius: 6px; opacity: 0; z-index: 4; pointer-events: none; transition: opacity .2s;
+  }
+  .mock-win.env-shell.form-fixed .tl-zone { opacity: .75; }
+  .tl-zone b {
+    position: absolute; top: 22px; left: 2px; font-size: 10px; font-weight: 500; color: var(--muted); white-space: nowrap;
+  }
+  .mock-win.width-narrow .tl-zone b { display: none; }
+
+  /* ---------- 顶栏（对应 scripts/web/index.html .topbar） ---------- */
+  .topbar {
+    display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 10px 18px; padding-left: 18px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  /* 期望形态：注入让位样式 .topbar { padding-left: 78px } 生效 */
+  .mock-win.form-fixed .topbar { padding-left: 78px; }
+  /* 竖屏分支（≤640px，对应 style.css @media 覆盖；期望形态下让位仍需赢过该覆盖） */
+  .mock-win.env-shell.width-narrow .topbar { padding: 8px 12px; flex-wrap: wrap; gap: 8px 10px; }
+  .mock-win.env-shell.width-narrow.form-fixed .topbar { padding: 8px 12px; padding-left: 78px; }
+
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .logo-badge { position: relative; flex: none; display: inline-flex; }
+  .logo {
+    width: 34px; height: 34px; display: grid; place-items: center; font-size: 17px; color: #fff;
+    background: linear-gradient(135deg, #4f46e5, #0ea5e9); border-radius: 9px; flex: none;
+  }
+  .poll {
+    position: absolute; top: -5px; right: -6px; font-size: 12px; line-height: 1; color: var(--done);
+    background: var(--panel); border-radius: 50%; padding: 1px; box-shadow: 0 0 0 2px var(--panel);
+  }
+  .mock-win.poll-off .poll { color: var(--muted); }
+  .brand-text { min-width: 0; }
+  .brand-text h1 { font-size: 15px; font-weight: 650; margin: 0; }
+  .path {
+    display: block; color: var(--muted); font-size: 11px; max-width: 100%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .mock-win.width-narrow .path { display: none; }
+  .mock-win.width-narrow .brand-text h1 { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-actions { display: flex; align-items: center; gap: 14px; flex: none; flex-wrap: wrap; }
+  .mock-win.width-narrow .top-actions { margin-left: auto; gap: 10px; }
+  .project-sel {
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 7px;
+    padding: 4px 8px; font-size: 12.5px; max-width: 150px;
+  }
+  .btn-new {
+    appearance: none; border: 0; cursor: pointer; background: var(--primary); color: #fff;
+    border-radius: 7px; padding: 5px 12px; font-size: 12.5px; white-space: nowrap;
+  }
+
+  /* ---------- 模块导航（对应 .module-nav） ---------- */
+  .module-nav {
+    display: flex; align-items: center; gap: 4px; padding: 8px 18px; background: var(--panel);
+    border-bottom: 1px solid var(--border); overflow-x: auto;
+  }
+  .view-tab {
+    appearance: none; border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    border-radius: 7px; padding: 5px 12px; font-size: 13px; white-space: nowrap;
+  }
+  .view-tab.active { color: var(--chip-req); background: rgba(79,70,229,.1); font-weight: 600; }
+
+  /* ---------- 工作区（列表 / 空态） ---------- */
+  .workspace { padding: 12px 16px 18px; min-height: 210px; }
+  .ws-caption { color: var(--muted); font-size: 12px; margin: 0 2px 8px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; margin-bottom: 6px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+  }
+  .chip { font-size: 11.5px; border-radius: 5px; padding: 1px 7px; color: #fff; white-space: nowrap; }
+  .chip.req { background: var(--chip-req); } .chip.bug { background: var(--chip-bug); }
+  .row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st { font-size: 12px; white-space: nowrap; }
+  .st.submitted { color: var(--submitted); } .st.accepted { color: var(--accepted); }
+  .st.inprogress { color: var(--inprogress); } .st.done { color: var(--done); }
+
+  .empty-card {
+    margin: 18px auto 6px; max-width: 430px; text-align: center; background: var(--panel);
+    border: 1px dashed var(--border); border-radius: 10px; padding: 26px 20px;
+  }
+  .empty-card h2 { font-size: 15px; margin: 0 0 6px; }
+  .empty-card p { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .mock-win.data-empty .list { display: none; }
+
+  /* ---------- 加载遮罩（重载过渡） ---------- */
+  .load-overlay {
+    position: absolute; inset: 0; z-index: 9; display: none; flex-direction: column; gap: 10px;
+    align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 94%, transparent);
+    font-size: 13px; color: var(--muted);
+  }
+  .mock-win.loading .load-overlay { display: flex; }
+  .spinner {
+    width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--border);
+    border-top-color: var(--primary); animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 判定徽标与说明 ---------- */
+  .verdict {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; max-width: min(880px, 100%);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+    font-size: 12.5px; box-shadow: var(--shadow);
+  }
+  .badge { border-radius: 6px; padding: 2px 10px; font-weight: 600; color: #fff; white-space: nowrap; }
+  .badge.bad { background: var(--warn); } .badge.ok { background: var(--done); } .badge.na { background: var(--submitted); }
+  .verdict .detail { color: var(--muted); }
+
+  /* ---------- 操作日志 ---------- */
+  .logwrap { max-width: min(880px, 100%); margin: 14px auto 0; }
+  .logwrap h2 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+  #log { list-style: none; margin: 0; padding: 8px 12px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; font-size: 12px; max-height: 170px; overflow: auto; }
+  #log li { padding: 2px 0; color: var(--text); border-bottom: 1px dashed var(--border); }
+  #log li:last-child { border-bottom: 0; }
+  #log time { color: var(--muted); font-family: ui-monospace, Menlo, monospace; margin-right: 8px; }
+
+  details.ascii { max-width: min(880px, 100%); margin: 14px auto 0; font-size: 12.5px; }
+  details.ascii summary { cursor: pointer; color: var(--muted); }
+  details.ascii pre {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+    overflow-x: auto; font-size: 11.5px; line-height: 1.5;
+  }
+  footer.note { text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<h1>BUG-20260909-019 演示 · 左上角交通灯遮挡顶栏</h1>
+<p class="sub">缺陷现状（附件截图形态）与修复后期望形态的对照示意。模拟 Electron 桌面壳（macOS <code>hiddenInset</code> 标题栏）下的看板顶栏；非已实现效果，最终方案以开发阶段 design.md 为准。</p>
+
+<section class="controls" aria-label="演示控制">
+  <div class="ctrl" id="grpForm" role="group" aria-label="形态">
+    <span class="ctrl-label">形态：</span>
+    <span class="seg">
+      <button type="button" data-k="form" data-v="defect" aria-pressed="true">缺陷现状（遮挡）</button>
+      <button type="button" data-k="form" data-v="fixed" aria-pressed="false">修复后期望（让位 78px）</button>
+    </span>
+  </div>
+  <div class="ctrl" role="group" aria-label="环境">
+    <span class="ctrl-label">环境：</span>
+    <span class="seg">
+      <button type="button" data-k="env" data-v="shell-wide" aria-pressed="true">桌面壳 · 宽屏</button>
+      <button type="button" data-k="env" data-v="shell-narrow" aria-pressed="false">桌面壳 · 竖屏 ≤640px</button>
+      <button type="button" data-k="env" data-v="browser" aria-pressed="false">浏览器直连（对照）</button>
+    </span>
+  </div>
+  <div class="ctrl" role="group" aria-label="状态点">
+    <span class="ctrl-label">状态点：</span>
+    <span class="seg">
+      <button type="button" data-k="poll" data-v="on" aria-pressed="true">在线 ●</button>
+      <button type="button" data-k="poll" data-v="off" aria-pressed="false">离线 ○</button>
+    </span>
+  </div>
+  <div class="ctrl" role="group" aria-label="列表数据">
+    <span class="ctrl-label">列表数据：</span>
+    <span class="seg">
+      <button type="button" data-k="data" data-v="list" aria-pressed="true">正常</button>
+      <button type="button" data-k="data" data-v="empty" aria-pressed="false">空看板</button>
+    </span>
+  </div>
+  <div class="ctrl" role="group" aria-label="外观">
+    <span class="ctrl-label">外观：</span>
+    <span class="seg">
+      <button type="button" data-k="theme" data-v="auto" aria-pressed="true">跟随系统</button>
+      <button type="button" data-k="theme" data-v="light" aria-pressed="false">浅色</button>
+      <button type="button" data-k="theme" data-v="dark" aria-pressed="false">深色</button>
+    </span>
+  </div>
+  <div class="ctrl">
+    <button type="button" id="btnReload" class="btn primary">⟳ 重新加载页面（模拟 Cmd-R）</button>
+  </div>
+</section>
+
+<main class="stage">
+  <div class="mock-win env-shell form-defect width-wide" id="mockWin">
+    <!-- macOS 交通灯（hiddenInset：悬浮于页面左上内容之上，三圆点约占 70px 宽） -->
+    <div class="tl" aria-hidden="true">
+      <span class="r" data-sym="✕"></span><span class="y" data-sym="−"></span><span class="g" data-sym="＋"></span>
+    </div>
+    <div class="tl-zone" aria-hidden="true"><b>交通灯让位区 ≈70px（演示标注）</b></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-badge">
+          <span class="logo">▦</span>
+          <span class="poll" id="pollDot" title="● 实时（服务在线）">●</span>
+        </span>
+        <div class="brand-text">
+          <h1>智能体团队看板</h1>
+          <span class="path">/Users/adichou/Documents/src/agent-team-board</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <select class="project-sel" aria-label="切换项目看板（示意）"><option>agent-team-board</option></select>
+        <button type="button" class="btn-new" id="btnNew">＋ 新建</button>
+      </div>
+    </header>
+
+    <nav class="module-nav" aria-label="模块导航（示意）">
+      <button type="button" class="view-tab">讨论</button>
+      <button type="button" class="view-tab active">需求</button>
+      <button type="button" class="view-tab">任务</button>
+      <button type="button" class="view-tab">文件</button>
+      <button type="button" class="view-tab">设置</button>
+    </nav>
+
+    <div class="workspace">
+      <p class="ws-caption">需求工作区（示意，仅展示与本 Bug 相关的顶栏布局）</p>
+      <div class="list">
+        <div class="row"><span class="chip req">REQ</span><span class="title">REQ-20260907-004 看板整体布局优化：统一导航、三类新建入口与列表工作区</span><span class="st accepted">已接受</span></div>
+        <div class="row"><span class="chip bug">BUG</span><span class="title">BUG-20260909-019 左上角有元素遮挡，请修复（本单）</span><span class="st inprogress">开发中</span></div>
+        <div class="row"><span class="chip bug">BUG</span><span class="title">BUG-20260905-003 Electron 壳窗口交通灯与看板顶栏文字重叠</span><span class="st inprogress">开发中</span></div>
+        <div class="row"><span class="chip req">REQ</span><span class="title">REQ-20260905-001 为看板增加 Electron 桌面壳（内嵌现有 Node 服务）</span><span class="st submitted">已提交</span></div>
+      </div>
+      <div class="empty-card">
+        <h2>当前项目尚未初始化看板</h2>
+        <p>将在 <code>docs/agent-team-board/</code> 创建数据目录，需求与 Bug 随代码进 git。</p>
+        <button type="button" class="btn-new" id="btnInit">初始化</button>
+      </div>
+    </div>
+
+    <div class="load-overlay"><span class="spinner" aria-hidden="true"></span>页面加载中…</div>
+  </div>
+
+  <div class="verdict" id="verdict" aria-live="polite"></div>
+</main>
+
+<section class="logwrap">
+  <h2>操作日志</h2>
+  <ul id="log"></ul>
+</section>
+
+<details class="ascii">
+  <summary>附：ASCII 线框（缺陷现状 vs 修复后期望，可选补充）</summary>
+<pre>缺陷现状（让位未生效，padding-left 18px）      修复后期望（padding-left 78px）
+┌────────────────────────────────────┐      ┌────────────────────────────────────┐
+│ ● ● ● [▦] 智能体团队看板    ＋新建 │      │ ● ● ●        [▦] 智能体团队看板 ＋新建│
+│ ↑交通灯  ↑被遮挡的 logo(34×34)     │      │ ↑交通灯独占 ≈70px 让位区，logo 右移  │
+├────────────────────────────────────┤      ├────────────────────────────────────┤
+│ 讨论 | [需求] | 任务 | 文件 | 设置  │      │ 讨论 | [需求] | 任务 | 文件 | 设置  │
+└────────────────────────────────────┘      └────────────────────────────────────┘</pre>
+</details>
+
+<footer class="note">单文件演示 · 无外网依赖 · 数据为静态示意；对应条目：docs/agent-team-board/bugs/BUG-20260909-019</footer>
+
+<script>
+(function () {
+  'use strict';
+  var state = { form: 'defect', env: 'shell-wide', poll: 'on', data: 'list', theme: 'auto' };
+  var win = document.getElementById('mockWin');
+  var verdict = document.getElementById('verdict');
+  var logEl = document.getElementById('log');
+  var reloadBtn = document.getElementById('btnReload');
+  var loading = false;
+
+  var LABEL = {
+    form: { defect: '缺陷现状（遮挡）', fixed: '修复后期望（让位 78px）' },
+    env: { 'shell-wide': '桌面壳 · 宽屏', 'shell-narrow': '桌面壳 · 竖屏 ≤640px', browser: '浏览器直连' },
+    poll: { on: '在线 ●', off: '离线 ○' },
+    data: { list: '正常列表', empty: '空看板' },
+    theme: { auto: '跟随系统', light: '浅色', dark: '深色' }
+  };
+
+  function addLog(text) {
+    var li = document.createElement('li');
+    var t = document.createElement('time');
+    var d = new Date();
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    t.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    li.appendChild(t);
+    li.appendChild(document.createTextNode(text));
+    logEl.insertBefore(li, logEl.firstChild);
+    while (logEl.children.length > 30) logEl.removeChild(logEl.lastChild);
+  }
+
+  function topbarLeft() {
+    if (state.form === 'fixed') return 78;
+    return state.env === 'shell-narrow' ? 12 : 18;
+  }
+
+  function render() {
+    // 窗口形态类
+    win.className = 'mock-win'
+      + (state.env === 'browser' ? ' env-browser width-wide' : ' env-shell width-' + (state.env === 'shell-narrow' ? 'narrow' : 'wide'))
+      + ' form-' + state.form
+      + (state.poll === 'off' ? ' poll-off' : '')
+      + (state.data === 'empty' ? ' data-empty' : '');
+    // 状态点
+    var dot = document.getElementById('pollDot');
+    dot.textContent = state.poll === 'off' ? '○' : '●';
+    dot.title = state.poll === 'off' ? '○ 服务离线' : '● 实时（服务在线）';
+    // 主题
+    document.documentElement.dataset.theme = state.theme;
+    // 形态组在浏览器直连下无意义，禁用
+    var formBtns = document.querySelectorAll('#grpForm button');
+    for (var i = 0; i < formBtns.length; i++) formBtns[i].disabled = (state.env === 'browser');
+    // 按钮按下态
+    document.querySelectorAll('.seg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(state[b.dataset.k] === b.dataset.v));
+    });
+    // 判定徽标
+    var badge = document.createElement('span');
+    var detail = document.createElement('span');
+    detail.className = 'detail';
+    if (state.env === 'browser') {
+      badge.className = 'badge na'; badge.textContent = '无交通灯 · 浏览器直连不受影响';
+      detail.textContent = '对照形态：浏览器窗口没有交通灯，顶栏左内边距保持 18px，不存在遮挡问题。';
+    } else if (state.form === 'defect') {
+      badge.className = 'badge bad'; badge.textContent = '遮挡 · 缺陷现状';
+      detail.textContent = '让位未生效：顶栏左内边距 ' + topbarLeft() + 'px < 交通灯占位约 70px → 交通灯压在 logo「▦」与右上角状态点上（即附件截图形态）。';
+    } else {
+      badge.className = 'badge ok'; badge.textContent = '让位正常 · 修复后期望';
+      detail.textContent = '顶栏左内边距 78px ≥ 交通灯占位约 70px：品牌区整体右移，交通灯独占左上留白区。' + (state.env === 'shell-narrow' ? '竖屏 ≤640px 分支下让位同样保持。' : '');
+    }
+    verdict.innerHTML = '';
+    verdict.appendChild(badge); verdict.appendChild(detail);
+  }
+
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.disabled) return;
+      var k = b.dataset.k, v = b.dataset.v;
+      if (state[k] === v) return;
+      state[k] = v;
+      render();
+      var msg = '切换' + ({ form: '形态', env: '环境', poll: '状态点', data: '列表数据', theme: '外观' })[k] + '：' + LABEL[k][v];
+      if (k === 'env' && v === 'browser') msg += '（浏览器无交通灯，形态切换已禁用）';
+      addLog(msg);
+    });
+  });
+
+  reloadBtn.addEventListener('click', function () {
+    if (loading) return;
+    loading = true;
+    reloadBtn.disabled = true;
+    win.classList.add('loading');
+    addLog('触发页面重载（模拟 Cmd-R），进入加载态「页面加载中…」');
+    setTimeout(function () {
+      win.classList.remove('loading');
+      loading = false;
+      reloadBtn.disabled = false;
+      if (state.env === 'browser') addLog('重载完成：浏览器直连，无交通灯，不涉及遮挡。');
+      else if (state.form === 'defect') addLog('重载完成：当前为缺陷现状形态，交通灯仍遮挡 logo（让位未生效，期望行为应与之相反）。');
+      else addLog('重载完成：让位保持 78px，重载后交通灯仍独占左上留白区（期望行为：让位在重载后持续有效）。');
+    }, 850);
+  });
+
+  document.getElementById('btnNew').addEventListener('click', function () { addLog('点击「＋ 新建」：示意按钮，仅用于布局演示。'); });
+  document.getElementById('btnInit').addEventListener('click', function () { addLog('点击「初始化」：空态示意按钮，仅用于状态反馈演示。'); });
+
+  render();
+  addLog('演示就绪：形态=缺陷现状（对应附件截图），环境=桌面壳 · 宽屏，状态点=在线，外观=跟随系统。');
+})();
+</script>
+</body>
+</html>

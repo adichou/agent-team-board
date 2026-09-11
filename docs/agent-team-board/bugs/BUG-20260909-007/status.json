@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-007",
+  "type": "bug",
+  "title": "详细页面的返回按钮多余，因为已经有关闭按钮了",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-022-1",
+  "createdAt": "2026-09-09T04:48:09.914Z",
+  "updatedAt": "2026-09-11T05:52:20.637Z",
+  "agentCompletedAt": "2026-09-09T05:38:57.673Z",
+  "lastReport": {
+    "at": "2026-09-09T05:38:57.673Z",
+    "coverage": 92,
+    "framework": "node:assert 静态契约测试（node scripts/tests/run-all.mjs）",
+    "summary": "移除需求/Bug 详情抽屉冗余「← 返回」按钮：app.js 删 drawerBack 标记与绑定，关闭收敛为 ✕/Escape/遮罩（同一 closeDrawer 不变）；.drawer-back 样式保留给讨论侧唯一出口 #ocBack 未受波及；style.css 仅更正注释；D4/W4/P2 三处契约断言先红后绿，全量 117 测试文件 0 失败",
+    "runId": "run-20260909-122"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T04:48:09.914Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T04:48:16.210Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T05:28:57.014Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T05:33:11.076Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-022-1",
+      "note": "认领（zcode-batch-022-1）"
+    },
+    {
+      "at": "2026-09-09T05:38:57.673Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-022-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.637Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-b074",
+      "note": "人工确认完成"
+    }
+  ]
+}

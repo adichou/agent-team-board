@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-004",
+  "type": "bug",
+  "title": "全局模块入口放在右上角管理项目右边",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-6",
+  "createdAt": "2026-09-10T01:54:07.014Z",
+  "updatedAt": "2026-09-11T05:52:22.000Z",
+  "agentCompletedAt": "2026-09-10T04:40:59.596Z",
+  "lastReport": {
+    "at": "2026-09-10T04:40:59.596Z",
+    "coverage": 12,
+    "framework": "node:assert 静态契约（scripts/tests/run-all.mjs 入口）",
+    "summary": "全局入口移至顶栏「管理项目」右侧（#btnGlobal），第二行模块导航移除全局页签；原 #globalView 主视图改为右侧 #globalPanel 面板（标题+跨项目说明+常驻关闭+独立搜索+滚动内容），打开不切换当前模块、关闭回焦入口、Esc 链插层；view=global 深链/快照/回放收敛为打开面板；快照增 globalQ；新增 B1–B12 测试；更新 6 处被取代契约断言；全量 140 文件 0 失败；归因引入来源 REQ-20260910-003",
+    "runId": "run-20260910-152"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T01:54:07.014Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T01:54:14.790Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T02:22:50.339Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-102104-047c）"
+    },
+    {
+      "at": "2026-09-10T04:21:59.186Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-6",
+      "note": "认领（zcode-batch-031-6）"
+    },
+    {
+      "at": "2026-09-10T04:40:59.596Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-6",
+      "note": "上报测试报告（覆盖率 12%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.000Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f543",
+      "note": "人工确认完成"
+    }
+  ]
+}

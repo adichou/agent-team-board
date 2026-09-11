@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-016",
+  "type": "bug",
+  "title": "scheduler-unclaimed 测试在负载下偶发超时失败",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-26",
+  "createdAt": "2026-09-10T07:52:26.550Z",
+  "updatedAt": "2026-09-11T05:52:22.901Z",
+  "agentCompletedAt": "2026-09-10T10:23:18.484Z",
+  "lastReport": {
+    "at": "2026-09-10T10:23:18.484Z",
+    "coverage": 100,
+    "framework": "node:test",
+    "summary": "与012完全同源且修复已覆盖：HEAD全程150ms时限误杀重启后worker-ok run致agentCompletedAt永不出现、waitFor空转5s断言，即本条负载下间歇失败机制；当前工作树已含012修复(waitFor 15s+分阶段timeoutMs)。复测：直连10/10过(4轮与全量npm test并行施载)、全量3次158文件全绿；断言语义全保留、调度器生产默认零改动。重复登记，零代码改动，引入来源BUG-20260906-006。",
+    "runId": "run-20260910-172"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T07:52:26.550Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0910-70a8"
+    },
+    {
+      "at": "2026-09-10T08:19:12.649Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T08:44:27.686Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-164010-da9c）"
+    },
+    {
+      "at": "2026-09-10T10:15:11.329Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-26",
+      "note": "认领（zcode-batch-031-26）"
+    },
+    {
+      "at": "2026-09-10T10:23:18.485Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-26",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.902Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0440",
+      "note": "人工确认完成"
+    }
+  ]
+}

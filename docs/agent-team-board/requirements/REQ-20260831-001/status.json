@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260831-001",
+  "type": "requirement",
+  "title": "/dev 先出实现方案并置「待对齐」，人工对齐后再实施",
+  "status": "done",
+  "parent": null,
+  "owner": "terminal",
+  "createdAt": "2026-08-31T12:44:31.427Z",
+  "updatedAt": "2026-09-11T05:52:13.140Z",
+  "agentCompletedAt": "2026-09-01T03:38:48.736Z",
+  "lastReport": {
+    "at": "2026-09-01T03:38:48.736Z",
+    "coverage": null,
+    "framework": "node:assert 集成测试（真实 server + 子进程钩子实测）",
+    "summary": "/dev 两阶段闸门落地。状态机新增 pending-alignment（待对齐）：accepted→pending-alignment（Agent claim+出方案）→in-progress 须人工对齐确认；移除 accepted→in-progress 直达边。claim 语义调整：认领即进方案阶段（owner+锁+history 注明），同 owner 幂等（含锁幂等）、异 owner 冲突。钩子拦截清单扩为 accepted/in-progress/done（status 与 curl 双通道）。Status Board 五列（新增紫色「待对齐」列）+ 抽屉「▶ 对齐确认」按钮；布局契约演进为 repeat(5,minmax(176px,1fr))（合计 972px<980 保持无横向溢出）。dev.md/SKILL.md 重写为两阶段流程：阶段一出方案（写 design.md+会话呈现，不写代码）停在待对齐；阶段二仅在人工确认（会话明确同意或看板按钮）后 TDD 实施，引入来源规范保留在实施段；loop 每条目停在待对齐，批量对齐须会话明确同意。TDD：新增 pending-alignment.test.mjs P1–P8（真实起 server + 子进程钩子实测）先红后绿全过；P9 五套既有测试回归全绿；旧数据兼容（预置升级前 in-progress 条目照常读写）。版本 0.2.3→0.3.0。"
+  },
+  "history": [
+    {
+      "at": "2026-08-31T12:44:31.427Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-09-01T03:20:49.131Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-01T03:24:39.475Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "认领（terminal）"
+    },
+    {
+      "at": "2026-09-01T03:38:48.736Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.140Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-302a",
+      "note": "人工确认完成"
+    }
+  ]
+}

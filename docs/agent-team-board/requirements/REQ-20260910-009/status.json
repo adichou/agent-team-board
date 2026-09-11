@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-009",
+  "type": "requirement",
+  "title": "搜索模块优化",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-4",
+  "createdAt": "2026-09-10T00:52:10.195Z",
+  "updatedAt": "2026-09-11T05:52:21.953Z",
+  "agentCompletedAt": "2026-09-10T04:01:51.274Z",
+  "lastReport": {
+    "at": "2026-09-10T04:01:51.274Z",
+    "coverage": 8,
+    "framework": "node:assert 静态契约（零依赖）",
+    "summary": "搜索模块优化：搜索组新增常显范围标签 #searchScope（aria-label 随模块同步）与显式清除按钮 #searchClear（清空后焦点留输入框、不关详情、seq++ 作废在途响应）；Enter 清防抖立即搜索；统一反馈条 #searchFeedback（role=region/aria-live，替代 #docHits/#fileSearchHits）覆盖未输入/加载/旧结果/正常/空/失败重试/截断六态；需求结果分「条目/文档」两组各标数量，文件路径 chip 与 data-goto-view 跨模块入口保留关键词；列表头改为「搜索命中条目 N 项（当前档可见 M 项）」；ensureSearchForView 修复讨论输入后切需求停留「搜索中」；oncall.js 新增 searchStats 导出；≤720px 搜索组独占整行。S1–S11 全部通过；全量 scripts/tests 138 个测试文件 0 失败（REQ-20260910-008 L3 随口径升级同步改写）；任务面板不过滤缺口登记 BUG-20260910-009；M1–M5 待人工浏览器验收",
+    "runId": "run-20260910-150"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T00:52:10.195Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T00:52:23.116Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T02:06:59.488Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-100450-d6ae）"
+    },
+    {
+      "at": "2026-09-10T03:31:04.925Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-4",
+      "note": "认领（zcode-batch-031-4）"
+    },
+    {
+      "at": "2026-09-10T04:01:51.274Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-4",
+      "note": "上报测试报告（覆盖率 8%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.953Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-fd93",
+      "note": "人工确认完成"
+    }
+  ]
+}

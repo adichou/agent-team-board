@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-006",
+  "type": "bug",
+  "title": "已计划列表中的选择进入批量开发的功能去掉，因为已经有批量开发队列了。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-1",
+  "createdAt": "2026-09-09T01:00:14.700Z",
+  "updatedAt": "2026-09-11T05:52:20.447Z",
+  "agentCompletedAt": "2026-09-09T03:36:25.268Z",
+  "lastReport": {
+    "at": "2026-09-09T03:36:25.268Z",
+    "coverage": 95,
+    "framework": "node:test 自研聚合 runner（npm test / scripts/tests/run-all.mjs）",
+    "summary": "移除已计划列表「进入批量开发」入口与勾选范围推送链路（enterBatchImpl/pushImplScope/#implGo/scopeActive、项目切换清范围、?ids= 拉取、创建勾选回退、Codex 范围提示与 scope-empty 文案、面板 scopeLine）；服务端同步删除 /api/dispatch/scope 路由、scheduler scope 机制与 /api/batch/current ids 过滤；保留 createBatch({ids}) 供 REQ-20260908-026 单条目重试；复选框仅为「移出计划」服务（全选/全不选/防误触/失败分列不回归）；引入来源 REQ-20260906-018+REQ-20260908-010（已核验）；TDD 先红后绿，npm test 112 文件全部通过",
+    "runId": "run-20260909-118"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T01:00:14.700Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T01:00:27.432Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T01:20:22.075Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T03:15:20.608Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "认领（zcode-batch-019-1）"
+    },
+    {
+      "at": "2026-09-09T03:36:25.268Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "上报测试报告（覆盖率 95%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.447Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-211e",
+      "note": "人工确认完成"
+    }
+  ]
+}

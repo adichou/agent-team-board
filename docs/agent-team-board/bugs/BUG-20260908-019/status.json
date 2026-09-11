@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-019",
+  "type": "bug",
+  "title": "创建讨论正文留空，点击创建按钮提示正文不能为空。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T14:13:36.997Z",
+  "updatedAt": "2026-09-11T05:52:19.509Z",
+  "agentCompletedAt": "2026-09-08T17:11:29.600Z",
+  "lastReport": {
+    "at": "2026-09-08T17:11:29.600Z",
+    "coverage": 100,
+    "framework": "node:test 风格自研断言（assert/strict + vm 沙箱 + HTTP 端到端）",
+    "summary": "环境滞后非代码缺陷：创建链路三处（前端 submitNew 仅拦空标题/服务端转调 store/store createTicket 空白正文回退标题）已无正文拦截；U1~U3 vm 行为+S6 系列 store+H4 全新进程端到端复测全绿，run-all 98 文件 0 失败；当前 8888 服务实测 14:34:56Z 启动（晚于登记 14:13:36Z），证明登记时刻服务为改码前旧进程。归因：未定位（非缺陷无引入源单，排查过程落 design.md 引入来源节）；已补 README 头部引入来源行与排查线索结论，无需改码，刷新页面（必要时重启 server.mjs）即可复验",
+    "runId": "run-20260909-101"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T14:13:36.997Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T15:20:35.110Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T16:08:29.138Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T17:07:03.303Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T17:11:29.600Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.510Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-da05",
+      "note": "人工确认完成"
+    }
+  ]
+}

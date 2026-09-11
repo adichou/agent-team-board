@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-001",
+  "type": "bug",
+  "title": "全依赖阻塞批次已结束但 check 仍返回 continue",
+  "status": "done",
+  "parent": "REQ-20260906-002",
+  "owner": "zcode-batch-002-1",
+  "createdAt": "2026-09-06T06:40:03.960Z",
+  "updatedAt": "2026-09-11T05:52:15.035Z",
+  "agentCompletedAt": "2026-09-06T15:10:23.493Z",
+  "lastReport": {
+    "at": "2026-09-06T15:10:23.493Z",
+    "coverage": null,
+    "framework": "node:test 风格自研聚合（node:assert/strict，scripts/tests/run-all.mjs）",
+    "summary": "修复全受阻批次 check 误返 continue：scripts/lib/batch.mjs 新增 remainingDisposition（与 nextItem 逐候选出局判定同口径：终态运行跳过、目录损坏/冻结后被认领或流转出局、依赖未满足受阻），checkBatch 在 remaining>0 且无可派发候选时改判 stop 并附带 counts.blockedPending 准确受阻计数、notice 说明原因、批次落 finished；nextItem 的 stop=blocked 响应同样附 blockedPending；atb batch check 人类可读输出增加「受阻待处理」。依赖后续满足时 check 恢复 continue、批次可复活继续派发。回归用例 TC-1/TC-2 先红后绿（batch-core.test.mjs）；Z-A1 验收探针复刻 + 真实 CLI 复核通过（dispatch/runs/run-20260906-006/）。全量 npm test 43 文件仅 detail-close-btn.test.mjs T2 存量失败（与本修复无关，已登记 BUG-20260906-018）。",
+    "runId": "run-20260906-006"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T06:40:03.960Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-05e3"
+    },
+    {
+      "at": "2026-09-06T08:26:56.791Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T15:04:31.209Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "认领（zcode-batch-002-1）"
+    },
+    {
+      "at": "2026-09-06T15:10:23.494Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.035Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5bf4",
+      "note": "人工确认完成"
+    }
+  ]
+}

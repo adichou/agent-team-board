@@ -1,0 +1,68 @@
+{
+  "id": "REQ-20260908-013",
+  "type": "requirement",
+  "title": "讨论单的问题正文改为可选，如果用户没有填则复制标题作为正文。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T03:11:34.448Z",
+  "updatedAt": "2026-09-11T05:52:18.425Z",
+  "agentCompletedAt": "2026-09-08T13:42:37.056Z",
+  "lastReport": {
+    "at": "2026-09-08T13:42:37.056Z",
+    "coverage": 100,
+    "framework": "node:test 风格自研断言（assert/strict + vm 沙箱）",
+    "summary": "讨论单创建正文可空：store 层 createTicket 空白 question 回退已 trim 标题（唯一落点）；前端 submitNew 删拦截、标签/placeholder 注明可留空＝以标题作为正文；CLI atb oncall new 去 die 并同步两处用法文案。test-cases 13/13 用例全过，run-all 90 文件 0 失败；标题必填/追问必填口径不变",
+    "runId": "run-20260908-081"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T03:11:34.448Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T04:19:26.949Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.317Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T13:36:53.692Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T13:42:21.130Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 13%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-08T13:42:37.056Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.425Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6e20",
+      "note": "人工确认完成"
+    }
+  ]
+}

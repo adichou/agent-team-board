@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-012",
+  "type": "requirement",
+  "title": "Bug 单的说明文档中，针对引入来源单的描述需放置开头",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-2",
+  "createdAt": "2026-09-08T02:56:04.286Z",
+  "updatedAt": "2026-09-11T05:52:18.378Z",
+  "agentCompletedAt": "2026-09-08T13:35:59.202Z",
+  "lastReport": {
+    "at": "2026-09-08T13:35:59.202Z",
+    "coverage": 100,
+    "framework": "node:test（node:assert/strict 自研 runner）",
+    "summary": "引入来源速览行落 Bug README 开头头部元信息区（- 引入来源：… 行，创建行之前，正例 BUG-20260907-017），与 REQ-20260908-009 的 design.md『引入来源（源单）』详述节叠加不回退；SKILL.md/bug.md/dev.md 三处口径同步，末尾『关联』节降级为可选补充；traceability R2/R4 增开头头部断言+防旧口径回潮反向断言，新增 R5b 正例守护，7/7 绿；全量 89 测试文件 0 失败；运行时零改动（bugReadme 模板未动，mtime 核验）；存量 Bug 不回填留人工定夺；REQ-20260830-004 修订记录追加因果链一行",
+    "runId": "run-20260908-080"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T02:56:04.286Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T04:19:26.945Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.315Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T13:30:19.837Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-2",
+      "note": "认领（zcode-batch-018-2）"
+    },
+    {
+      "at": "2026-09-08T13:35:59.203Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-2",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.378Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5a86",
+      "note": "人工确认完成"
+    }
+  ]
+}

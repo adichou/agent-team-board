@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-011",
+  "type": "bug",
+  "title": "bug 的说明文档还是没有写上 ui Demo",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-16",
+  "createdAt": "2026-09-10T04:47:28.805Z",
+  "updatedAt": "2026-09-11T05:52:22.478Z",
+  "agentCompletedAt": "2026-09-10T07:11:47.979Z",
+  "lastReport": {
+    "at": "2026-09-10T07:11:47.979Z",
+    "coverage": 25,
+    "framework": "node:assert",
+    "summary": "done 回执新增 UI 演示三查门槛（缺演示拒绝/齐备通过）；Bug 探测纳入标题+词表补「边框」；022 时代冻结提示词展示层归一（账本不回写）；存量 003~007 补齐 ui-demo.html 后均 complete；新增 7 用例，全量 149 文件 0 失败",
+    "runId": "run-20260910-162"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T04:47:28.805Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T04:47:32.749Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T05:30:40.963Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-132435-7b7c）"
+    },
+    {
+      "at": "2026-09-10T06:45:33.981Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-16",
+      "note": "认领（zcode-batch-031-16）"
+    },
+    {
+      "at": "2026-09-10T07:11:47.979Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-16",
+      "note": "上报测试报告（覆盖率 25%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.478Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-04ab",
+      "note": "人工确认完成"
+    }
+  ]
+}

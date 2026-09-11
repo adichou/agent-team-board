@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-020",
+  "type": "bug",
+  "title": "app 版本无法按住标题栏进行移动，请修复",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-1",
+  "createdAt": "2026-09-09T15:54:48.047Z",
+  "updatedAt": "2026-09-11T05:52:21.432Z",
+  "agentCompletedAt": "2026-09-09T23:13:42.478Z",
+  "lastReport": {
+    "at": "2026-09-09T23:13:42.478Z",
+    "coverage": 9,
+    "framework": "node:assert/strict + run-all",
+    "summary": "壳层注入拖动区：shell-css.mjs 新增 TOPBAR_DRAG_REGION_CSS（.topbar drag + .top-actions no-drag，均 !important），main.mjs 与让位样式同次 insertCSS（含重载）；归因 REQ-20260905-001；pollState/dataDir 取舍：纳入拖动区，壳内悬停/选择失效、浏览器直连不受影响；V5 契约先红后绿，run-all 127 文件 0 失败",
+    "runId": "run-20260910-138"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T15:54:48.047Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T15:55:06.148Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T16:32:21.035Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-002809-8d4d）"
+    },
+    {
+      "at": "2026-09-09T23:08:53.657Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "认领（zcode-batch-029-1）"
+    },
+    {
+      "at": "2026-09-09T23:13:42.479Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.433Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-425c",
+      "note": "人工确认完成"
+    }
+  ]
+}

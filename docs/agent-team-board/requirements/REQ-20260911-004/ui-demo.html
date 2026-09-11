@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260911-004 批量 Commit 提交目录范围设置 — 可交互演示</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --border: #dfe3e8; --text: #1f2329; --muted: #8a919c;
+    --primary: #3b82f6; --primary-text: #ffffff; --ok: #16a34a; --warn: #d97706; --danger: #dc2626;
+    --chip: #eef2f7; --shadow: 0 4px 16px rgba(15, 23, 42, .08);
+    --ok-bg: rgba(22,163,74,.1); --warn-bg: rgba(217,119,6,.12); --info-bg: rgba(59,130,246,.1);
+    --err-bg: rgba(220,38,26,.1); --keep-bg: #f1f3f5; --keep-text: #6b7280;
+    --commit-bg: #e8f5ec; --commit-text: #15803d; --skeleton: #e7eaf0;
+  }
+  html[data-theme="dark"] {
+    --bg: #14171c; --card: #1d2129; --border: #333a45; --text: #e6e9ee; --muted: #8b93a1;
+    --chip: #262c36; --shadow: 0 4px 16px rgba(0, 0, 0, .35);
+    --keep-bg: #262c36; --keep-text: #9aa3b2; --commit-bg: #12301d; --commit-text: #4ade80;
+    --skeleton: #262c36;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input[type="checkbox"] { accent-color: var(--primary); width: 15px; height: 15px; vertical-align: -2px; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+
+  /* 顶栏 */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 30; flex-wrap: wrap; }
+  .brand { font-weight: 700; margin-right: 6px; }
+  .sel { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; background: var(--bg); color: var(--text); }
+  .btn { border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; background: var(--card); }
+  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .btn.small { padding: 2px 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .topbar .grow { flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { padding: 5px 12px; background: var(--card); }
+  .seg button.on { background: var(--primary); color: var(--primary-text); }
+  .simfail { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--warn); }
+
+  /* 模块导航 */
+  .modnav { display: flex; gap: 4px; padding: 8px 16px 0; background: var(--card); border-bottom: 1px solid var(--border); }
+  .modnav button { padding: 8px 16px; border-radius: 8px 8px 0 0; color: var(--muted); font-weight: 500; }
+  .modnav button.active { color: var(--primary); box-shadow: inset 0 -2px 0 var(--primary); background: var(--bg); }
+  .modnav .nav-extra { margin-left: auto; color: var(--muted); font-size: 13px; align-self: center; padding: 8px 0; }
+
+  main { padding: 14px 16px 40px; max-width: 920px; margin: 0 auto; }
+  .notice { padding: 8px 12px; border-radius: 6px; margin: 10px 0; font-size: 13px; }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.info { background: var(--info-bg); color: var(--primary); }
+  .notice.err { background: var(--err-bg); color: var(--danger); }
+
+  /* 设置分区 */
+  section.config { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  section.config h4 { font-size: 14px; margin-bottom: 6px; }
+  .block { margin: 10px 0; }
+  .field-inline { display: flex; align-items: baseline; gap: 8px; }
+  .dep-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  [role="status"] { font-size: 12.5px; color: var(--muted); }
+  [role="status"].dirty { color: var(--warn); }
+  [role="status"].ok { color: var(--ok); }
+  [role="status"].err { color: var(--danger); }
+  .skeleton { display: inline-block; height: 13px; border-radius: 4px; background: var(--skeleton); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+  /* 目录清单 */
+  .dir-group { margin: 10px 0 4px; }
+  .dir-group > h5 { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+  .dir-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 18px; }
+  .dir-item { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+  .dir-item label { cursor: pointer; }
+  .dir-item .path { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .dir-item .tag { font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .dir-item .tag.src { color: var(--primary); border-color: var(--primary); opacity: .8; }
+
+  /* 效果预览 */
+  .preview-head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px; font-size: 13px; }
+  .preview-head b.in { color: var(--commit-text); }
+  .preview-head b.out { color: var(--keep-text); }
+  .file-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-radius: 6px; font-size: 12.5px; }
+  .file-row:nth-child(odd) { background: var(--chip); }
+  .file-row .st { font-family: ui-monospace, Menlo, monospace; width: 14px; text-align: center; color: var(--muted); flex: none; }
+  .file-row .f { flex: 1; font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+  .fbadge { font-size: 11.5px; border-radius: 999px; padding: 1px 10px; white-space: nowrap; flex: none; }
+  .fbadge.commit { background: var(--commit-bg); color: var(--commit-text); }
+  .fbadge.keep { background: var(--keep-bg); color: var(--keep-text); }
+
+  /* toast */
+  #toasts { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast { background: var(--card); color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--primary); box-shadow: var(--shadow); border-radius: 8px; padding: 8px 14px; font-size: 13px; max-width: 90vw; }
+
+  .demo-note { padding: 8px 12px; border-radius: 8px; background: var(--card); border: 1px dashed var(--border); margin: 12px 0; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">Agent Team Board</span>
+    <select class="sel" id="projectSel"><option>agent-team-board</option></select>
+    <div class="grow"></div>
+    <span class="small muted">场景：</span>
+    <div class="seg" id="sceneSeg" title="切换设置数据加载场景（正常 / 加载中 / 加载失败 / 未配置空态）">
+      <button data-scene="normal" class="on">正常加载</button>
+      <button data-scene="loading">加载中</button>
+      <button data-scene="error">加载失败</button>
+      <button data-scene="fresh">未配置（空态）</button>
+    </div>
+    <label class="simfail" title="演示：下一次保存请求模拟失败（保存失败：草稿保留、可重试）">
+      <input type="checkbox" id="simFail"> 模拟保存失败
+    </label>
+    <button class="btn" id="btnTheme">◐ 主题</button>
+  </div>
+
+  <div class="modnav">
+    <button>需求</button>
+    <button>任务</button>
+    <button>文件</button>
+    <button class="active">设置</button>
+    <span class="nav-extra">设置 · REQ-20260911-004 新增「批量 Commit 提交目录范围」分区</span>
+  </div>
+
+  <main>
+    <!-- 既有「批量任务」分区（保留现状，作为布局上下文） -->
+    <section class="config" id="taskSection">
+      <h4>批量任务</h4>
+      <p class="muted small">两类批量任务均为子代理模式，子代理模型跟随主调度会话；保存仅对后续新任务生效。</p>
+      <div class="block">
+        <label class="field-inline" title="开启后完善完成即自动移入计划；默认关闭＝人工移入计划。">
+          <input type="checkbox" id="tsAutoPlan"> 完善完成后自动转入计划
+        </label>
+        <p class="muted small" style="margin:2px 0 0">开启后完善完成即自动移入计划；默认关闭＝人工移入计划。</p>
+      </div>
+      <div class="dep-toolbar">
+        <button type="button" class="btn primary" id="tsSave">保存批量任务设置</button>
+        <span class="muted small" id="tsStatus" role="status">已加载设置</span>
+      </div>
+    </section>
+
+    <!-- 新增「批量 Commit」分区（本需求主体） -->
+    <section class="config" id="commitSection" aria-busy="false">
+      <h4>批量 Commit</h4>
+      <p class="muted small" id="csDesc">提交目录范围：仅范围内的目录允许被批量 Commit 提交到 git；范围外改动不提交、不暂存，原样保留在工作区。保存仅对后续新创建的批量 Commit 任务生效（范围随提示词在批次创建时冻结）。</p>
+      <div id="csBody"><!-- 场景渲染：加载骨架 / 错误重试 / 目录清单 --></div>
+      <div class="dep-toolbar" id="csToolbar"><!-- 保存按钮 + 就近状态（就绪态渲染） --></div>
+    </section>
+
+    <!-- 范围效果预览（演示辅助：模拟 git status 按当前草稿范围着色） -->
+    <section class="config" id="previewSection">
+      <h4>范围效果预览（演示辅助，非本需求界面）</h4>
+      <p class="muted small">模拟某时刻工作区 <code>git status --short</code> 的未提交改动，按<strong>当前草稿范围</strong>着色——直观呈现「默认只 commit 源代码相关目录」的语义。</p>
+      <div class="preview-head">
+        <span>将提交 <b class="in" id="pvIn">0</b> 个文件</span>
+        <span>保留在工作区 <b class="out" id="pvOut">0</b> 个文件</span>
+        <span class="muted small" id="pvScopeNote"></span>
+      </div>
+      <div id="pvList"></div>
+    </section>
+
+    <p class="demo-note">演示说明：全部数据为模拟，不访问真实服务、不执行任何 Git 操作。目录清单为示意（基于本仓库 git ls-files 顶层事实），默认清单——尤其 <code>docs/</code>（条目文档现行以 doc 类提交）是否默认排除——以条目 README「待确认 1 / 2」裁定结论为准。</p>
+  </main>
+
+  <div id="toasts"></div>
+
+<script>
+/* ---------- 数据（模拟） ---------- */
+
+// 目录全集（本仓库 git ls-files 顶层事实；标签为示意）
+const DIRS = [
+  { key: 'scripts/',        group: 'src',   note: '业务源码' },
+  { key: 'bin/',            group: 'src',   note: 'CLI 入口' },
+  { key: 'commands/',       group: 'src',   note: '斜杠命令' },
+  { key: 'electron/',       group: 'src',   note: 'Electron 壳' },
+  { key: 'hooks/',          group: 'src',   note: '钩子配置' },
+  { key: 'skills/',         group: 'src',   note: 'Agent skills' },
+  { key: '（根文件）',       group: 'src',   note: 'package.json 等', root: true },
+  { key: 'docs/',           group: 'other', note: '看板数据 / 条目文档' },
+  { key: 'output/',         group: 'other', note: '素材 / 生成物' },
+  { key: '.codex-plugin/',  group: 'other', note: '插件元数据' },
+  { key: '.zcode/',         group: 'other', note: '会话数据' },
+  { key: '.zcode-plugin/',  group: 'other', note: '插件元数据' },
+];
+const SRC_KEYS = DIRS.filter((d) => d.group === 'src').map((d) => d.key);
+const GROUP_LABEL = { src: '源代码相关目录（默认勾选）', other: '其他目录（默认不提交）' };
+
+// 模拟 git status --short 改动清单（status, path）
+const MOCK_STATUS = [
+  { st: 'M', path: 'scripts/lib/commit-store.mjs' },
+  { st: 'M', path: 'scripts/server.mjs' },
+  { st: 'A', path: 'scripts/tests/commit-scope-20260911-004.test.mjs' },
+  { st: 'M', path: 'bin/atb' },
+  { st: 'M', path: 'commands/board.md' },
+  { st: 'M', path: 'electron/main.mjs' },
+  { st: 'M', path: 'hooks/hooks.json' },
+  { st: 'M', path: 'skills/agent-team-board/SKILL.md' },
+  { st: 'M', path: 'package.json' },
+  { st: 'A', path: 'docs/agent-team-board/requirements/REQ-20260911-004/README.md' },
+  { st: 'A', path: 'docs/agent-team-board/requirements/REQ-20260911-004/ui-demo.html' },
+  { st: 'M', path: 'docs/agent-team-board/tasks/settings.json' },
+  { st: 'A', path: 'output/logo/agent-team-board-concept-v2.png' },
+  { st: 'M', path: '.zcode/session-cache.json' },
+];
+
+// 文件 → 所属范围键（根文件映射到「（根文件）」项）
+function scopeKeyOf(path) {
+  const dir = DIRS.find((d) => !d.root && (path === d.key.slice(0, -1) || path.startsWith(d.key)));
+  if (dir) return dir.key;
+  return '（根文件）'; // 不在任何子目录 → 根文件
+}
+
+/* ---------- 状态 ---------- */
+const state = {
+  scene: 'normal',        // normal | loading | error | fresh
+  configured: true,       // fresh 场景 = 从未保存过配置（未配置 · 默认生效）
+  saved: new Set(SRC_KEYS),   // 已保存（生效）范围
+  draft: new Set(SRC_KEYS),   // 草稿范围
+  saving: false,
+};
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+/* ---------- 设置分区渲染 ---------- */
+function dirGroupHtml(group) {
+  const items = DIRS.filter((d) => d.group === group);
+  return `
+    <div class="dir-group">
+      <h5>${GROUP_LABEL[group]}</h5>
+      <div class="dir-list">
+        ${items.map((d) => `
+          <div class="dir-item">
+            <label>
+              <input type="checkbox" data-dir="${esc(d.key)}"${state.draft.has(d.key) ? ' checked' : ''}>
+              <span class="path">${esc(d.key)}</span>
+            </label>
+            <span class="tag${d.group === 'src' ? ' src' : ''}">${esc(d.note)}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderCommitSection() {
+  const body = $('#csBody');
+  const toolbar = $('#csToolbar');
+  const section = $('#commitSection');
+  section.setAttribute('aria-busy', state.scene === 'loading' ? 'true' : 'false');
+
+  if (state.scene === 'loading') {
+    body.innerHTML = `<p class="muted small">正在加载任务设置…</p>
+      <div class="skeleton" style="width:72%"></div><div class="skeleton" style="width:56%"></div>`;
+    toolbar.innerHTML = '';
+    return;
+  }
+  if (state.scene === 'error') {
+    body.innerHTML = `<div class="notice err">任务设置加载失败：读取 /api/tasks/settings 超时（模拟） <button type="button" class="btn small" id="csRetry">重试</button></div>`;
+    toolbar.innerHTML = '';
+    $('#csRetry').addEventListener('click', () => { setScene('loading'); setTimeout(() => setScene('normal'), 900); });
+    return;
+  }
+
+  // 正常 / 未配置（空态）：未配置时按默认口径展示并标注
+  const freshBadge = !state.configured
+    ? `<div class="notice info">未配置 · 默认生效（仅源代码相关目录）——保存后按自定义范围生效。</div>`
+    : '';
+  body.innerHTML = `
+    ${freshBadge}
+    ${dirGroupHtml('src')}
+    ${dirGroupHtml('other')}
+    <div class="notice warn hidden" id="csEmptyWarn">目录范围为空：批量 Commit 将无内容可提交。请至少勾选一个目录，或点「恢复默认」。</div>
+    <div class="dep-toolbar">
+      <button type="button" class="btn" id="csReset">恢复默认（仅源代码相关目录）</button>
+    </div>`;
+
+  toolbar.innerHTML = `
+    <button type="button" class="btn primary" id="csSave"${state.saving ? ' disabled' : ''}>${state.saving ? '保存中…' : '保存批量 Commit 设置'}</button>
+    <span id="csStatus" role="status">${statusText()}</span>`;
+
+  for (const cb of body.querySelectorAll('input[data-dir]')) {
+    cb.addEventListener('change', () => {
+      if (cb.checked) state.draft.add(cb.dataset.dir); else state.draft.delete(cb.dataset.dir);
+      refreshDraftUi();
+    });
+  }
+  $('#csReset').addEventListener('click', () => {
+    state.draft = new Set(SRC_KEYS);
+    for (const cb of body.querySelectorAll('input[data-dir]')) cb.checked = state.draft.has(cb.dataset.dir);
+    refreshDraftUi();
+    toast('已恢复默认清单（仅源代码相关目录）——仍需保存后生效');
+  });
+  $('#csSave').addEventListener('click', saveCommitSettings);
+  refreshDraftUi();
+}
+
+function statusText() {
+  if (state.saving) return '保存中…';
+  if (!state.configured) return '已加载设置（未配置，按默认生效）';
+  return sameSet(state.saved, state.draft) ? '已加载设置' : '有未保存的更改';
+}
+
+// 草稿变化后的就近反馈 + 空态警示 + 预览重算
+function refreshDraftUi() {
+  const st = $('#csStatus');
+  if (!st) return;
+  const txt = statusText();
+  st.textContent = txt;
+  st.className = txt === '有未保存的更改' ? 'dirty' : (txt.includes('已保存') ? 'ok' : 'muted small');
+  const warn = $('#csEmptyWarn');
+  if (warn) warn.classList.toggle('hidden', state.draft.size > 0);
+  const save = $('#csSave');
+  if (save) save.disabled = state.saving || state.draft.size === 0;
+  renderPreview();
+}
+
+function saveCommitSettings() {
+  if (state.saving || state.draft.size === 0) return;
+  state.saving = true;
+  renderCommitSection(); // 保存中：按钮禁用 + 文案切换
+  setTimeout(() => {
+    state.saving = false;
+    if ($('#simFail').checked) {
+      $('#simFail').checked = false; // 一次性模拟
+      state.scene = 'normal'; state.configured = true;
+      renderCommitSection();
+      const st = $('#csStatus');
+      if (st) { st.textContent = '保存失败：写入 tasks/settings.json 被拒（模拟）——草稿已保留，可重试'; st.className = 'err'; }
+      toast('保存失败（模拟）：草稿已保留，可再次点击保存');
+    } else {
+      state.saved = new Set(state.draft);
+      state.configured = true;
+      state.scene = 'normal';
+      renderCommitSection();
+      const st = $('#csStatus');
+      if (st) { st.textContent = '已保存，仅对后续新创建的批量 Commit 任务生效'; st.className = 'ok'; }
+      toast('✓ 已保存批量 Commit 设置（仅对后续新创建的批量 Commit 任务生效）');
+    }
+  }, 700);
+}
+
+/* ---------- 效果预览 ---------- */
+function renderPreview() {
+  const list = $('#pvList');
+  let inN = 0, outN = 0;
+  list.innerHTML = MOCK_STATUS.map((f) => {
+    const scoped = state.draft.has(scopeKeyOf(f.path));
+    scoped ? inN++ : outN++;
+    return `<div class="file-row">
+      <span class="st" title="git status 标记">${esc(f.st)}</span>
+      <span class="f">${esc(f.path)}</span>
+      <span class="fbadge ${scoped ? 'commit' : 'keep'}">${scoped ? '将提交' : '保留在工作区'}</span>
+    </div>`;
+  }).join('');
+  $('#pvIn').textContent = inN;
+  $('#pvOut').textContent = outN;
+  $('#pvScopeNote').textContent = `当前草稿范围：${state.draft.size} 项 / 共 ${DIRS.length} 项目录${sameSet(state.saved, state.draft) ? '' : '（有未保存的更改）'}`;
+}
+
+/* ---------- 场景与主题 ---------- */
+function setScene(scene) {
+  state.scene = scene;
+  if (scene === 'fresh') {
+    state.configured = false;
+    state.saved = new Set(SRC_KEYS); // 服务端未配置 → 回退默认口径
+    state.draft = new Set(SRC_KEYS);
+  } else if (scene === 'normal') {
+    state.configured = true;
+  }
+  for (const b of document.querySelectorAll('#sceneSeg button')) b.classList.toggle('on', b.dataset.scene === scene);
+  renderCommitSection();
+}
+
+document.querySelectorAll('#sceneSeg button').forEach((b) => b.addEventListener('click', () => setScene(b.dataset.scene)));
+$('#btnTheme').addEventListener('click', () => {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === 'dark' ? '' : 'dark';
+});
+// 跟随系统外观（可选项）：无手工切换时按 prefers-color-scheme
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.dataset.theme = 'dark';
+
+/* ---------- 既有「批量任务」分区（现状上下文，最小交互） ---------- */
+$('#tsAutoPlan').addEventListener('change', () => { $('#tsStatus').textContent = '有未保存的更改'; $('#tsStatus').className = 'dirty'; });
+$('#tsSave').addEventListener('click', () => {
+  $('#tsStatus').textContent = '已保存，仅对后续启动的任务生效';
+  $('#tsStatus').className = 'ok';
+  toast('✓ 已保存批量任务设置（流转开关仅对后续完善回执生效）');
+});
+
+/* ---------- 启动 ---------- */
+setScene('normal');
+</script>
+</body>
+</html>

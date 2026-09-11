@@ -1,0 +1,68 @@
+{
+  "id": "REQ-20260909-006",
+  "type": "requirement",
+  "title": "需求 bug 单详情页布局优化，使用页签式布局",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-1",
+  "createdAt": "2026-09-09T00:36:45.643Z",
+  "updatedAt": "2026-09-11T05:52:20.400Z",
+  "agentCompletedAt": "2026-09-09T03:12:46.679Z",
+  "lastReport": {
+    "at": "2026-09-09T03:12:46.679Z",
+    "coverage": 15,
+    "framework": "node:assert 自研契约+vm",
+    "summary": "详情抽屉改页签式布局：头部下固定五页签(基本信息/说明/设计/测试用例/讨论纪要,button[role=tab],test-report.md存在时附加其后),内容区三pane按.hidden切换;openDrawer/closeDrawer重置tab=info与docCache(切条目回基本信息不串显);activateDrawerTab纯前端切换(失效回落info,文档缓存命中不重复请求,缺失文档空态不请求);loadDoc写docCache并setActive切页签(linkupDocDemo契约不动);讨论纪要页签=关联讨论旧绑定+#reqDocDisc挂载(Bug单空态);轮询重渲染按state.drawer.tab恢复页签;.drawer-tabs可换行+focus-visible焦点态。新增15用例先红后绿,npm test 112文件0失败,drawer-actions-row/drawer-nav/item-demo-link/req-disc-ui等既有契约无回归",
+    "runId": "run-20260909-117"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T00:36:45.643Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T00:39:20.226Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "描述修改（README「## 描述」节整体替换）"
+    },
+    {
+      "at": "2026-09-09T00:39:24.275Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:48:27.843Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T02:50:25.271Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "认领（zcode-batch-019-1）"
+    },
+    {
+      "at": "2026-09-09T03:12:46.679Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "上报测试报告（覆盖率 15%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.401Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-35c7",
+      "note": "人工确认完成"
+    }
+  ]
+}

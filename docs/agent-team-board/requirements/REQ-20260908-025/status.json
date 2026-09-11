@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-025",
+  "type": "requirement",
+  "title": "完善文档指纹算法版本化，避免基线口径不一致导致误报",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T14:20:13.629Z",
+  "updatedAt": "2026-09-11T05:52:19.556Z",
+  "agentCompletedAt": "2026-09-08T16:22:01.330Z",
+  "lastReport": {
+    "at": "2026-09-08T16:22:01.330Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + run-all 聚合脚本",
+    "summary": "指纹自带 v2: 版本前缀，FINGERPRINT_VERSIONS 注册表(v1三文档/v2四文件)为唯一事实源；三处比对点统一走 docsUnchangedSince 按基线版本口径重算；存量裸 sha1 任一已知口径匹配=未编辑，领取/重排队重冻结就地升级；升级登记纪律成文(refine-store 注释+design)；新增 F1~F6 先红后绿，全量 96 测试文件 0 失败",
+    "runId": "run-20260909-098"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T14:20:13.629Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-abdf"
+    },
+    {
+      "at": "2026-09-08T15:20:00.493Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T15:33:28.123Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T16:13:55.170Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T16:22:01.330Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.556Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-bfb7",
+      "note": "人工确认完成"
+    }
+  ]
+}

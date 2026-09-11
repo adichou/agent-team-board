@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-010",
+  "type": "bug",
+  "title": "批量完善实时队列提前结束并漏掉重新接受条目",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T12:13:46.653Z",
+  "updatedAt": "2026-09-11T05:52:19.078Z",
+  "agentCompletedAt": "2026-09-08T15:02:18.297Z",
+  "lastReport": {
+    "at": "2026-09-08T15:02:18.297Z",
+    "coverage": 90,
+    "framework": "node:assert/strict 自研测试（scripts/tests/refine-reaccept.test.mjs + 深测夹具）",
+    "summary": "refine-store：check/回执/释放/结算判定 stop 前实时吸收新接受候选（D01）；终态后驳回再接受经 reaccepted 标记识别，重排队尾并按当前文档重冻结基线（D03）；fail/release/人工编辑出局与 stop 语义不回归。深测 D01/D03 转 PASS，D07~D11 保持，npm test 94 文件全绿。",
+    "runId": "run-20260908-089"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T12:13:46.653Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-d17c"
+    },
+    {
+      "at": "2026-09-08T12:33:46.969Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T14:08:42.379Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T14:44:01.114Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T15:02:18.298Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.078Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-4179",
+      "note": "人工确认完成"
+    }
+  ]
+}

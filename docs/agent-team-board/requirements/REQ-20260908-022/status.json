@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-022",
+  "type": "requirement",
+  "title": "支持就单一需求和 Agent 进行讨论的功能",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T10:00:22.349Z",
+  "updatedAt": "2026-09-11T05:52:18.938Z",
+  "agentCompletedAt": "2026-09-08T14:20:50.031Z",
+  "lastReport": {
+    "at": "2026-09-08T14:20:50.031Z",
+    "coverage": 85,
+    "framework": "node:assert/strict + 自研聚合（npm test / run-all.mjs）",
+    "summary": "讨论单新增可选 reqId 需求绑定：store 层创建校验（仅 REQ- 且存在）+卡片/按需过滤+reqContext（README/design/test-cases 全文，需求删除 missing 不崩）；oncall show 与 codex worker 提示词自动注入需求文档上下文；CLI oncall new --req / list --req / show 归属展示；server 新增 /api/oncall/tickets?req=；Web 需求抽屉「需求讨论」区块（2 秒轮询刷新）+统一弹窗关联需求输入（抽屉发起预填只读）、讨论卡片/抽屉归属徽标 atb:open-req 双向跳转。新增 oncall-req-bind.test.mjs（R1-R7），全量 91 测试文件 0 失败，未绑定老单零回归。",
+    "runId": "run-20260908-085"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T10:00:22.349Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T12:02:05.257Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.323Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T14:08:01.273Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T14:20:50.031Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.938Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-bb0d",
+      "note": "人工确认完成"
+    }
+  ]
+}

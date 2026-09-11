@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-018",
+  "type": "bug",
+  "title": "detail-close-btn T2 全文件断言误伤批量抽屉的 space-between（存量失败）",
+  "status": "done",
+  "parent": "REQ-20260906-005",
+  "owner": "zcode-batch-003-01",
+  "createdAt": "2026-09-06T15:09:59.111Z",
+  "updatedAt": "2026-09-11T05:52:16.218Z",
+  "agentCompletedAt": "2026-09-06T19:29:46.091Z",
+  "lastReport": {
+    "at": "2026-09-06T19:29:46.091Z",
+    "coverage": 100,
+    "framework": "node 静态契约测试（scripts/tests）",
+    "summary": "存量失败已被并行修复消除，本次核验确认并归因结案：T2 全文件断言误伤 renderBatchDrawer 由 REQ-20260906-005 的 T2 过度断言引入；BUG-20260906-011 已把 T2 收窄至 renderDrawer，BUG-20260906-016 已把批量抽屉头部改 .batch-head 类并新增 T5 全局断言。现状 detail-close-btn T1–T5 全绿，全量 npm test 57 个文件失败 0；未改代码，README 补归因与排查结论",
+    "runId": "run-20260907-031"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T15:09:59.111Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-1329"
+    },
+    {
+      "at": "2026-09-06T16:33:32.671Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T19:27:38.253Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "认领（zcode-batch-003-01）"
+    },
+    {
+      "at": "2026-09-06T19:29:46.092Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.218Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2cc8",
+      "note": "人工确认完成"
+    }
+  ]
+}

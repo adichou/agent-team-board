@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260910-003 全局看板 · 可交互演示</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6ea; --txt: #24292f; --muted: #6a737d;
+    --brand: #1f6feb; --chip-bg: #eef1f4; --warn-bg: #fff8c5; --warn-line: #d4a72c;
+    --err-bg: #ffebe9; --err-line: #cf222e; --ok-bg: #dafbe1; --ok-line: #1a7f37;
+    --run-bg: #ddf4ff; --run-line: #0969da; --skel: #e9edf1;
+    --shadow: 0 1px 3px rgba(27,31,36,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --line: #30363d; --txt: #e6edf3; --muted: #8b949e;
+      --brand: #4493f8; --chip-bg: #21262d; --warn-bg: #3a2d00; --warn-line: #bb8009;
+      --err-bg: #2d1113; --err-line: #f85149; --ok-bg: #0f2e1b; --ok-line: #3fb950;
+      --run-bg: #0c2d6b; --run-line: #4493f8; --skel: #21262d;
+      --shadow: 0 1px 3px rgba(1,4,9,.5);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--txt);
+         font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* ---- 顶栏（沿用看板四行头部） ---- */
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .logo { font-size: 20px; }
+  .brand h1 { font-size: 15px; margin: 0; }
+  .brand small { color: var(--muted); display: block; font-weight: 400; }
+  .poll { color: var(--ok-line); }
+  .poll.err { color: var(--err-line); }
+  .project-sel { border: 1px solid var(--line); background: var(--panel); color: var(--txt);
+                 border-radius: 6px; padding: 4px 8px; }
+  .module-nav { display: flex; gap: 2px; padding: 0 18px; background: var(--panel);
+                border-bottom: 1px solid var(--line); }
+  .module-nav button { border: 0; background: none; color: var(--muted); padding: 9px 14px;
+                       border-bottom: 2px solid transparent; }
+  .module-nav button.active { color: var(--txt); font-weight: 600; border-bottom-color: var(--brand); }
+  .module-nav button.new-tab { color: var(--brand); font-weight: 600; }
+  .page-head { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+               padding: 10px 18px; }
+  .module-sub { margin: 0; color: var(--muted); }
+  .search { display: flex; align-items: center; gap: 6px; background: var(--panel);
+            border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; min-width: 220px; }
+  .search input { border: 0; outline: none; background: none; color: var(--txt); width: 100%; }
+
+  /* ---- 汇总条 + 筛选 ---- */
+  .summary-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+                 padding: 8px 18px; }
+  .summary-bar .sum { color: var(--muted); }
+  .summary-bar .sum b { color: var(--txt); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip-filter { border: 1px solid var(--line); background: var(--chip-bg); color: var(--muted);
+                 border-radius: 999px; padding: 2px 12px; font-size: 13px; }
+  .chip-filter.on { color: #fff; background: var(--brand); border-color: var(--brand); }
+  .chip-filter .n { opacity: .8; margin-left: 2px; }
+
+  /* ---- 分组列表 ---- */
+  main { padding: 4px 18px 24px; max-width: 1000px; }
+  .proj-group { margin: 14px 0; }
+  .proj-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 2px 6px; }
+  .proj-head b { font-size: 14px; }
+  .proj-head code { color: var(--muted); font-size: 12px; }
+  .proj-head .cnt { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .task-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+              background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+              padding: 10px 14px; margin-bottom: 8px; box-shadow: var(--shadow);
+              cursor: pointer; transition: border-color .15s; }
+  .task-row:hover { border-color: var(--brand); }
+  .task-row.flash { animation: flash 1.2s ease; }
+  @keyframes flash { 0% { box-shadow: 0 0 0 3px rgba(31,111,235,.35);} 100% { box-shadow: var(--shadow);} }
+  .task-row.leaving { opacity: .45; }
+  .st { border-radius: 999px; padding: 1px 10px; font-size: 12px; border: 1px solid; white-space: nowrap; }
+  .st-running { color: var(--run-line); border-color: var(--run-line); background: var(--run-bg); }
+  .st-prepared { color: var(--muted); border-color: var(--line); background: var(--chip-bg); }
+  .st-queued { color: var(--muted); border-color: var(--line); background: var(--chip-bg); }
+  .st-paused { color: var(--warn-line); border-color: var(--warn-line); background: var(--warn-bg); }
+  .st-attn { color: var(--err-line); border-color: var(--err-line); background: var(--err-bg); }
+  .sub-flag { font-size: 11px; color: var(--warn-line); border: 1px dashed var(--warn-line);
+              border-radius: 4px; padding: 0 4px; }
+  .kind { font-size: 12px; color: var(--muted); border: 1px solid var(--line); background: var(--chip-bg);
+          border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+  .task-main { flex: 1 1 340px; min-width: 260px; }
+  .task-main .l1 { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+  .task-main .bid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .task-main .cur { color: var(--txt); }
+  .task-main .cur .cid { color: var(--brand); text-decoration: underline dotted; cursor: pointer; }
+  .task-main .l2 { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .task-side { text-align: right; color: var(--muted); font-size: 12.5px; }
+  .task-side .nums b { color: var(--txt); }
+  .err-line-2 { color: var(--err-line); }
+  .go { border: 1px solid var(--line); background: var(--panel); color: var(--txt); border-radius: 6px;
+        padding: 3px 10px; font-size: 12.5px; white-space: nowrap; }
+  .go:hover { border-color: var(--brand); color: var(--brand); }
+
+  .err-card, .empty-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+                           padding: 12px 14px; margin-bottom: 8px; }
+  .err-card { border-color: var(--err-line); color: var(--err-line); }
+  .empty-card { text-align: center; padding: 42px 20px; color: var(--muted); margin-top: 18px; }
+  .empty-card h2 { margin: 0 0 6px; font-size: 16px; color: var(--txt); }
+
+  /* ---- 骨架（加载态） ---- */
+  .skel-row { height: 58px; border-radius: 8px; margin-bottom: 8px; background:
+    linear-gradient(90deg, var(--skel) 25%, rgba(140,150,160,.18) 50%, var(--skel) 75%);
+    background-size: 200% 100%; animation: sweep 1.1s linear infinite; }
+  @keyframes sweep { from { background-position: 200% 0;} to { background-position: -200% 0;} }
+
+  .footnote { color: var(--muted); font-size: 12.5px; padding: 6px 2px 0; }
+
+  /* ---- 演示控制台 ---- */
+  .demo-bar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+              background: var(--panel); border-top: 1px solid var(--line); padding: 8px 18px;
+              box-shadow: 0 -2px 8px rgba(0,0,0,.06); z-index: 5; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .demo-bar button { border: 1px solid var(--line); background: var(--chip-bg); color: var(--txt);
+                     border-radius: 6px; padding: 3px 10px; font-size: 12.5px; }
+  .demo-bar button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  .toast { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%) translateY(16px);
+           background: var(--txt); color: var(--bg); border-radius: 8px; padding: 8px 16px;
+           font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none; max-width: 80vw; }
+  .toast.show { opacity: .96; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">▦</span>
+    <div>
+      <h1>智能体团队看板 <small><span class="poll" id="pollDot">●</span> 全局视图 · 演示（数据为模拟）</small></h1>
+    </div>
+  </div>
+  <select class="project-sel" id="projectSel" title="项目选择器（全局视图下仅记忆，不改变本视图内容）">
+    <option>agent-team-board</option><option>cam-media-man</option>
+    <option>Weekly-Meal-Plan</option><option>jav-library</option>
+  </select>
+</header>
+
+<nav class="module-nav" aria-label="模块导航">
+  <button type="button">讨论</button>
+  <button type="button">需求</button>
+  <button type="button">任务</button>
+  <button type="button" class="active new-tab" title="本需求新增的全局页签">全局（新增）</button>
+  <button type="button">文件</button>
+  <button type="button">设置</button>
+</nav>
+
+<section class="page-head">
+  <p class="module-sub">全部项目的批量任务，一处总览 · 只读聚合，操作进入对应项目</p>
+  <div class="search" title="按批次号 / 条目号 / 项目名过滤（前端过滤，不发请求）">
+    <span aria-hidden="true">⌕</span>
+    <input id="searchInput" type="search" placeholder="搜批次 / 条目 / 项目…" aria-label="全局任务搜索">
+  </div>
+</section>
+
+<div class="summary-bar" id="summaryBar"></div>
+<main id="listArea" aria-live="polite"></main>
+
+<div class="demo-bar" aria-label="演示控制：切换场景与模拟轮询">
+  <span class="lbl">演示场景：</span>
+  <button data-scene="normal" class="on">正常（多项目在跑）</button>
+  <button data-scene="empty">空态（全部收尾）</button>
+  <button data-scene="loading">加载中</button>
+  <button data-scene="error">部分项目读取失败</button>
+  <button data-scene="noproject">无注册项目</button>
+  <button data-scene="offline">刷新失败（连接异常）</button>
+  <span class="lbl">｜</span>
+  <button id="pollBtn" title="开启后每 3 秒模拟一轮轮询：计数推进、任务收尾移出、新任务出现">▶ 模拟轮询</button>
+  <button id="advanceBtn" title="手动推进一步（等同单轮轮询）">单步推进 ▸</button>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ================= 模拟数据与场景 ================= */
+const now = () => Date.now();
+const rel = (t) => { const s = Math.max(0, Math.round((now() - t) / 1000));
+  if (s < 60) return `${s} 秒前`; if (s < 3600) return `${Math.round(s/60)} 分钟前`;
+  if (s < 86400) return `${Math.round(s/3600)} 小时前`; return `${Math.round(s/86400)} 天前`; };
+
+const ST_LABEL = { running: '执行中', prepared: '待启动', queued: '排队中', paused: '已暂停', needs_attention: '待核对' };
+
+let seq = 0;
+function mkTask(p, kind, st, extra) {
+  return Object.assign({
+    id: 'T' + (++seq), project: p, kind, st,            // kind: develop | refine
+    batchId: kind === 'refine' ? 'RFB-20260909-022' : 'batch-20260910-028',
+    itemId: 'REQ-20260910-003', itemTitle: '增加一个全局看板，可以看到当前在工作的批量任务',
+    owner: 'zcode-refine-022-8', developer: '张三',
+    reported: 5, abnormal: 1, pending: 4, total: 10,
+    createdAt: now() - 3600e3, lastAt: now() - 30e3, pauseFlag: false,
+    current: true,
+  }, extra);
+}
+
+let scene = 'normal';
+let dataVersion = 0;          // 每次推进 +1，驱动“轮询重渲染”
+let tasks = [];
+let pollTimer = null;
+
+const PROJECTS = {
+  'agent-team-board': '/Users/adichou/Documents/src/agent-team-board',
+  'cam-media-man': '/Users/adichou/Documents/src/cam-media-man',
+  'Weekly-Meal-Plan': '/Users/adichou/Documents/src/Weekly-Meal-Plan',
+};
+
+function seedNormal() {
+  seq = 0; dataVersion = 0;
+  tasks = [
+    mkTask('agent-team-board', 'refine', 'running', {}),
+    mkTask('agent-team-board', 'develop', 'prepared', {
+      batchId: 'batch-20260910-028', itemId: 'BUG-20260909-018',
+      itemTitle: '已计划列表的选择进入批量开发功能去掉', owner: '—',
+      developer: '未指定', reported: 0, abnormal: 0, pending: 1, total: 1,
+      createdAt: now() - 600e3, lastAt: now() - 600e3, current: false,
+      itemHint: '待启动：请在 Agent 会话粘贴调度提示词' }),
+    mkTask('cam-media-man', 'develop', 'running', {
+      batchId: 'batch-20260910-027', itemId: 'REQ-20260909-011',
+      itemTitle: '媒体库去重支持按拍摄日期归档', owner: 'zcode-dev-027-3',
+      developer: '李四', reported: 7, abnormal: 0, pending: 2, total: 9,
+      createdAt: now() - 7200e3, lastAt: now() - 8e3 }),
+    mkTask('Weekly-Meal-Plan', 'develop', 'needs_attention', {
+      batchId: 'batch-20260910-026', itemId: 'REQ-20260909-006',
+      itemTitle: '周菜谱导出购物清单分组', owner: 'zcode-dev-026-1',
+      developer: '未指定', reported: 2, abnormal: 2, pending: 1, total: 5,
+      pauseFlag: false, createdAt: now() - 5400e3, lastAt: now() - 900e3 }),
+    mkTask('cam-media-man', 'refine', 'paused', {
+      batchId: 'RFB-20260909-021', itemId: 'BUG-20260909-020',
+      itemTitle: '导入失败后队列卡住的偶发问题', owner: '—',
+      developer: '王五', reported: 3, abnormal: 0, pending: 3, total: 6,
+      createdAt: now() - 9000e3, lastAt: now() - 1200e3, pauseFlag: true, current: false,
+      itemHint: '已暂停，等待恢复' }),
+    mkTask('agent-team-board', 'develop', 'queued', {
+      batchId: 'batch-20260910-029', itemId: null, itemTitle: '', owner: '—',
+      developer: '张三', reported: 0, abnormal: 0, pending: 2, total: 2,
+      createdAt: now() - 300e3, lastAt: now() - 300e3, current: false,
+      itemHint: '排队中 · 第 2 位（当前批次结束后自动接续）' }),
+  ];
+}
+
+function advance() {  // 模拟一轮“轮询”：时间推进 + 计数变化 + 收尾/新增
+  dataVersion++;
+  let changed = [];
+  for (const t of tasks) {
+    if (t.st !== 'running' && t.st !== 'needs_attention') continue;
+    t.lastAt = now();
+    if (t.current && t.reported + t.abnormal + t.pending < t.total && Math.random() < .8) {
+      t.reported++; t.pending--; changed.push(t.id);
+    }
+  }
+  // 概率：某个 running 批次收尾（remaining 清零 → finished → 移出全局列表）
+  const runnings = tasks.filter((t) => t.st === 'running');
+  if (runnings.length && Math.random() < .45) {
+    const t = runnings[Math.floor(Math.random() * runnings.length)];
+    if (t.pending === 0) { tasks = tasks.filter((x) => x.id !== t.id); changed = null;
+      toast(`「${t.batchId}」已收尾，自动移出全局列表`); }
+  }
+  // 概率：新任务在别的项目出现
+  if (Math.random() < .35 && tasks.length < 8) {
+    const p = ['jav-library', 'DarlingHelper', 'cili_search'][Math.floor(Math.random()*3)];
+    tasks.push(mkTask(p, Math.random() < .5 ? 'develop' : 'refine', 'prepared', {
+      batchId: (Math.random() < .5 ? 'RFB-' : 'batch-') + '20260910-03' + (10 + Math.floor(Math.random()*9)),
+      itemId: null, itemTitle: '', owner: '—', developer: '未指定',
+      reported: 0, abnormal: 0, pending: 3, total: 3, current: false,
+      createdAt: now(), lastAt: now(),
+      itemHint: '待启动：提示词已复制，请在 Agent 会话粘贴发送' }));
+    changed = null;
+  }
+  if (changed) { render(); flashRows(changed); }
+  else render();
+}
+
+function flashRows(ids) {
+  for (const id of ids) {
+    const el = document.querySelector(`[data-task="${id}"]`);
+    if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  }
+}
+
+/* ================= 渲染 ================= */
+const $ = (s) => document.querySelector(s);
+
+let filterSt = 'all', filterKind = 'all', keyword = '';
+
+function applyFilter(list) {
+  return list.filter((t) =>
+    (filterSt === 'all' ||
+      (filterSt === 'running' && (t.st === 'running')) ||
+      (filterSt === 'prepared' && (t.st === 'prepared' || t.st === 'queued')) ||
+      (filterSt === 'paused' && t.st === 'paused') ||
+      (filterSt === 'attn' && t.st === 'needs_attention'))
+    && (filterKind === 'all' || t.kind === filterKind)
+    && (!keyword || (t.batchId + ' ' + (t.itemId||'') + ' ' + t.project).toLowerCase().includes(keyword)));
+}
+
+function stChip(t) {
+  const pause = t.pauseFlag ? ' <span class="sub-flag">已请求暂停</span>' : '';
+  return `<span class="st st-${t.st}">${ST_LABEL[t.st]}</span>${pause}`;
+}
+
+function taskRow(t) {
+  const kind = t.kind === 'refine' ? '批量完善' : '批量开发';
+  const cur = t.itemHint
+    ? `<span class="muted">${esc(t.itemHint)}</span>`
+    : `当前 <span class="cid" data-goto="1">${esc(t.itemId)}</span> ${esc(t.itemTitle)}`;
+  return `
+  <div class="task-row" data-task="${t.id}" title="点击进入该项目的任务模块（切换项目 → 任务页签 → 运行概况）">
+    ${stChip(t)}<span class="kind">${kind}</span>
+    <div class="task-main">
+      <div class="l1"><span class="bid">${esc(t.batchId)}</span><span class="cur">${cur}</span></div>
+      <div class="l2">子代理会话 ${esc(t.owner)} · 开发人员 ${esc(t.developer)} · 创建 ${rel(t.createdAt)} · 最后活动 ${rel(t.lastAt)}</div>
+    </div>
+    <div class="task-side">
+      <div class="nums">已上报 <b>${t.reported}</b> / 异常 <b class="${t.abnormal?'err-line-2':''}">${t.abnormal}</b> / 待处理 <b>${t.pending}</b> / 共 <b>${t.total}</b></div>
+    </div>
+    <button class="go" type="button">进入项目任务 ›</button>
+  </div>`;
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderSummary(list) {
+  const by = (k) => list.filter((x) => x.st === k).length;
+  const chips = [
+    ['all', '全部', list.length], ['running', '执行中', by('running')],
+    ['prepared', '待启动/排队', by('prepared') + by('queued')],
+    ['paused', '已暂停', by('paused')], ['attn', '待核对', by('needs_attention')],
+  ].map(([k, l, n]) => `<button class="chip-filter${filterSt===k?' on':''}" data-fst="${k}">${l}<span class="n">${n}</span></button>`).join('');
+  const kinds = [['all','全部类型'],['develop','批量开发'],['refine','批量完善']]
+    .map(([k,l]) => `<button class="chip-filter${filterKind===k?' on':''}" data-fkind="${k}">${l}</button>`).join('');
+  const projN = new Set(list.map((t) => t.project)).size;
+  $('#summaryBar').innerHTML = scene === 'noproject' ? '' : `
+    <span class="sum"><b>${projN}</b> 个项目 · <b>${list.length}</b> 个在工作的批量任务</span>
+    <span class="chips">${chips}</span><span class="chips">${kinds}</span>`;
+}
+
+function render() {
+  const area = $('#listArea');
+  const bar = $('#summaryBar');
+  $('#pollDot').classList.toggle('err', scene === 'offline');
+  $('#pollDot').title = scene === 'offline' ? '刷新失败，正在重试（保留上次数据）' : '已连接 · 2 秒轮询';
+
+  if (scene === 'loading') {
+    bar.innerHTML = '<span class="sum">正在汇总各项目批量任务…</span>';
+    area.innerHTML = [0,1,2,3,4].map(() => '<div class="skel-row"></div>').join('') +
+      '<p class="footnote">首次进入显示骨架占位，不阻塞头部导航切换。</p>';
+    return;
+  }
+  if (scene === 'noproject') {
+    bar.innerHTML = '';
+    area.innerHTML = `<div class="empty-card"><h2>尚无注册项目</h2>
+      <p>先在顶栏项目选择器打开 / 注册一个项目，再回到「全局」查看批量任务总览。</p></div>`;
+    return;
+  }
+
+  const list = applyFilter(tasks);
+  renderSummary(tasks);
+
+  if (scene === 'empty') {
+    area.innerHTML = `<div class="empty-card"><h2>所有项目的批量任务均已收尾</h2>
+      <p>已结束 / 已终止的批次不再出现在这里；到各项目「任务」模块可启动新的批量完善或批量开发。</p></div>
+      <p class="footnote">空态口径：全部注册项目都没有未收尾批次（待启动 / 执行中 / 排队中 / 已暂停 / 待核对）。</p>`;
+    return;
+  }
+
+  const groups = new Map();
+  for (const t of list) { if (!groups.has(t.project)) groups.set(t.project, []); groups.get(t.project).push(t); }
+
+  let html = '';
+  for (const [p, arr] of groups) {
+    html += `<section class="proj-group">
+      <div class="proj-head"><b>${esc(p)}</b><code>${esc(PROJECTS[p] || '/Users/adichou/Documents/src/' + p)}</code>
+      <span class="cnt">${arr.length} 个在工作的批量任务</span></div>
+      ${arr.map(taskRow).join('')}</section>`;
+  }
+  // 部分失败场景：额外一个读不出来的项目组
+  if (scene === 'error') {
+    html += `<section class="proj-group">
+      <div class="proj-head"><b>jav-library</b><code>/Users/adichou/Documents/src/jav-library</code><span class="cnt">读取失败</span></div>
+      <div class="err-card">读取失败：数据目录 docs/agent-team-board/ 不存在（该项目可能已迁移或未初始化）。该项目行不影响其他项目展示，下轮轮询自动重试。</div></section>`;
+  }
+  if (scene === 'offline') {
+    html = `<div class="err-card" style="margin-bottom:12px">刷新失败：看板服务暂不可达，正在重试；以下为上一次成功读取的数据（连接状态见顶栏指示灯 ●）。</div>` + html;
+  }
+  if (!list.length && scene !== 'error') {
+    html += `<div class="empty-card"><h2>没有符合筛选的任务</h2><p>调整状态 / 类型筛选或清空搜索词。</p></div>`;
+  }
+  html += `<p class="footnote">数据随看板轮询自动刷新（演示：开启「模拟轮询」看新任务出现 / 收尾移出）；暂停 / 终止 / 删除等操作请进入对应项目的任务模块，全局视图只读。</p>`;
+  area.innerHTML = html;
+}
+
+/* ================= 交互 ================= */
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+$('#listArea').addEventListener('click', (e) => {
+  const fst = e.target.closest('[data-fst]'); if (fst) { filterSt = fst.dataset.fst; render(); return; }
+  const fk = e.target.closest('[data-fkind]'); if (fk) { filterKind = fk.dataset.fkind; render(); return; }
+  const row = e.target.closest('.task-row');
+  if (row) {
+    const t = tasks.find((x) => x.id === row.dataset.task);
+    const gotoItem = e.target.closest('[data-goto]');
+    toast(gotoItem
+      ? `跳转：项目「${t.project}」→ 任务模块 → ${t.kind === 'refine' ? '批量完善' : '批量开发'} → 高亮条目 ${t.itemId}（URL: ?project=${encodeURIComponent(PROJECTS[t.project] || t.project)}&view=runs）`
+      : `跳转：项目「${t.project}」→ 任务模块（顶栏项目选择器同步切换，浏览器返回可回到全局视图）`);
+  }
+});
+$('#summaryBar').addEventListener('click', (e) => {
+  const fst = e.target.closest('[data-fst]'); if (fst) { filterSt = fst.dataset.fst; render(); return; }
+  const fk = e.target.closest('[data-fkind]'); if (fk) { filterKind = fk.dataset.fkind; render(); }
+});
+$('#searchInput').addEventListener('input', (e) => { keyword = e.target.value.trim().toLowerCase(); render(); });
+$('#projectSel').addEventListener('change', () => toast('全局视图按项目选择器切换仅记忆当前项目，不改变总览内容。'));
+
+document.querySelectorAll('.demo-bar [data-scene]').forEach((b) => b.addEventListener('click', () => {
+  scene = b.dataset.scene;
+  document.querySelectorAll('.demo-bar [data-scene]').forEach((x) => x.classList.toggle('on', x === b));
+  if (scene === 'normal' || scene === 'empty') seedNormal();
+  if (scene === 'empty') tasks = [];
+  if (scene === 'error' || scene === 'offline') seedNormal();
+  if (scene === 'loading') { render(); setTimeout(() => { if (scene === 'loading') render(); }, 100); return; }
+  render();
+}));
+
+$('#pollBtn').addEventListener('click', () => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; $('#pollBtn').classList.remove('on'); $('#pollBtn').textContent = '▶ 模拟轮询'; }
+  else { pollTimer = setInterval(() => { if (scene === 'normal' || scene === 'error' || scene === 'offline') advance(); }, 3000);
+         $('#pollBtn').classList.add('on'); $('#pollBtn').textContent = '⏸ 模拟轮询中…'; toast('模拟轮询已开启：每 3 秒推进一轮（计数变化 / 收尾移出 / 新任务出现）'); }
+});
+$('#advanceBtn').addEventListener('click', () => { if (scene === 'normal' || scene === 'error' || scene === 'offline') advance(); else toast('当前场景为静态展示，请切回「正常」再推进'); });
+
+/* 初始化 */
+seedNormal();
+render();
+setTimeout(() => toast('演示提示：点击任务行看跳转反馈；开启「模拟轮询」看实时变化；底部按钮切换 空态 / 加载 / 失败 场景'), 600);
+</script>
+</body>
+</html>

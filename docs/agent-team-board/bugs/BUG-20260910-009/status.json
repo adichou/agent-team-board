@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-009",
+  "type": "bug",
+  "title": "任务模块搜索不过滤批量完善/批量开发面板",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-13",
+  "createdAt": "2026-09-10T04:01:07.548Z",
+  "updatedAt": "2026-09-11T05:52:22.336Z",
+  "agentCompletedAt": "2026-09-10T06:19:27.661Z",
+  "lastReport": {
+    "at": "2026-09-10T06:19:27.661Z",
+    "coverage": 100,
+    "framework": "node:assert/strict 脚本式契约 + vm 渲染测试",
+    "summary": "任务模块两面板真实按 state.search.q 前端过滤：pendingQueueHtml/runAttemptsHtml 新增可选 q（缺省零回归，队列按编号/标题、记录按执行编号/编号/标题/执行器，账面计数保持全量、无匹配空态与暂无空态互斥、N 条被搜索过滤标注）；renderZcodeBatchPanel 排队批次按批次号/开发人员过滤；反馈条文案与行为一致；两面板保持空参签名（兼容既有 vm 桩契约），Codex 深链过滤零改动；新增 10 用例全绿，全量 146 测试文件零回归",
+    "runId": "run-20260910-159"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T04:01:07.548Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0910-220a"
+    },
+    {
+      "at": "2026-09-10T04:21:45.905Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T04:37:32.015Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-122902-75f0）"
+    },
+    {
+      "at": "2026-09-10T06:05:02.499Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-13",
+      "note": "认领（zcode-batch-031-13）"
+    },
+    {
+      "at": "2026-09-10T06:19:27.661Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-13",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.337Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a6c8",
+      "note": "人工确认完成"
+    }
+  ]
+}

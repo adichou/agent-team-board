@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-022",
+  "type": "bug",
+  "title": "修改提示词功能去掉",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T15:45:38.522Z",
+  "updatedAt": "2026-09-11T05:52:19.788Z",
+  "agentCompletedAt": "2026-09-08T17:47:36.880Z",
+  "lastReport": {
+    "at": "2026-09-08T17:47:36.880Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + run-all（静态契约 + vm 沙箱）",
+    "summary": "「修改提示词」功能整体下线：app.js 删除 editBtnHtml/bindEditButtons/editableStatus/itemDirRel/fetchItemEditPrompt/copyEditPrompt 及卡片与抽屉两处调用，抽屉占位回退简化为 drawerActionsButtonHtml(it)||'—'；style.css 删 .card-edit-btn；core.mjs renameItem/editItem 报错文案改为「直接编辑条目目录 markdown 或另立新单」；删 edit-prompt.test.mjs，edit-content.test.mjs U4/U5 改写为下线契约并新增 C12（TDD 先红后绿）。引入来源 REQ-20260906-011（经 atb list 核验）已写入 README 头部与 design.md。npm test 99 文件 0 失败；验收 grep 功能代码零残留；copyPlain/详情接口/改标题描述均保留。",
+    "runId": "run-20260909-104"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T15:45:38.522Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T15:46:28.183Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T16:08:29.132Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T17:42:18.345Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T17:47:36.880Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.788Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0975",
+      "note": "人工确认完成"
+    }
+  ]
+}

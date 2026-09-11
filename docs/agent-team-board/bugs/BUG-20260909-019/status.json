@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-019",
+  "type": "bug",
+  "title": "左上角有元素遮挡，请修复",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-1",
+  "createdAt": "2026-09-09T15:53:57.289Z",
+  "updatedAt": "2026-09-11T05:52:21.385Z",
+  "agentCompletedAt": "2026-09-09T23:07:48.290Z",
+  "lastReport": {
+    "at": "2026-09-09T23:07:48.290Z",
+    "coverage": 8,
+    "framework": "node:assert/strict（electron-shell.test.mjs V1–V4 + I1–I4，run-all 全量 127 文件）",
+    "summary": "根因：insertCSS 注入表与页面 style.css 同 author 同 specificity，不保证排在页面规则之后，78px 让位被 .topbar{padding:10px 18px} 压制从未生效（引入来源 BUG-20260905-003，已核验）。修复：让位声明加 !important（author important 恒胜 normal，与顺序无关）且不包 @media（竖屏分支同让位）；main.mjs 注入失败改为可见日志；V4 契约补 !important/无 @media 断言（先红后绿）；浏览器直连零改动。全量 127 测试文件失败 0。真机验收（首载/Cmd-R/≤640px/深浅色）留人工。",
+    "runId": "run-20260910-137"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T15:53:57.289Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T15:55:06.159Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T16:27:38.238Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-001934-13f5）"
+    },
+    {
+      "at": "2026-09-09T23:00:11.011Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "认领（zcode-batch-029-1）"
+    },
+    {
+      "at": "2026-09-09T23:07:48.290Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "上报测试报告（覆盖率 8%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.385Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-4b1a",
+      "note": "人工确认完成"
+    }
+  ]
+}

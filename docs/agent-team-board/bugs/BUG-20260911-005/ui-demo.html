@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260911-005 界面演示 · 已完成列表「开始 Commit」按钮</title>
+<style>
+  :root {
+    --bg: #f3f5f8; --card: #ffffff; --line: #e2e6ec; --ink: #1f2733; --muted: #6b7686;
+    --primary: #2563eb; --primary-ink: #ffffff; --ok: #16803c; --ok-bg: #e6f4ea;
+    --warn: #b45309; --warn-bg: #fdf1e2; --danger: #b42318; --danger-bg: #fdecea;
+    --gap-bg: #fbfbfc; --skeleton: #e8ebf0;
+  }
+  [data-theme="dark"] {
+    --bg: #14181f; --card: #1d232d; --line: #313947; --ink: #e7ecf3; --muted: #97a3b4;
+    --primary: #4c8dff; --primary-ink: #0d1220; --ok: #57c985; --ok-bg: #1d3226;
+    --warn: #e0a458; --warn-bg: #3a2e1a; --danger: #ef7b72; --danger-bg: #3c211f;
+    --gap-bg: #171c24; --skeleton: #262d38;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* ---- 演示控制条 ---- */
+  .demo-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+    padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .demo-title { font-weight: 600; }
+  .demo-title .sub { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+  .demo-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; }
+  .seg button.active { background: var(--primary); color: var(--primary-ink); }
+  .ghost { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 5px 12px; }
+  .demo-note {
+    margin: 10px 16px 0; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+    background: var(--warn-bg); color: var(--warn); border: 1px dashed var(--warn);
+  }
+  .demo-note.fix { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+
+  /* ---- 应用外壳 ---- */
+  .app { max-width: 980px; margin: 14px auto 60px; padding: 0 16px; }
+  .topnav {
+    display: flex; gap: 8px; align-items: center; padding: 10px 14px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px 10px 0 0;
+  }
+  .brand { font-weight: 700; margin-right: 10px; }
+  .navbtn { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 7px; }
+  .navbtn.active { background: var(--primary); color: var(--primary-ink); }
+  .stage { background: var(--card); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px; padding: 12px 14px 16px; }
+
+  /* ---- 需求模块 ---- */
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .filter-chip {
+    border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+    border-radius: 999px; padding: 3px 12px; font-size: 13px;
+  }
+  .filter-chip.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .filter-chip .cnt { opacity: .75; font-weight: 400; }
+  .list-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 6px 0; }
+  .list-title { font-weight: 600; }
+  .list-title .count { font-weight: 400; color: var(--muted); margin-left: 8px; font-size: 13px; }
+  .caption-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sel-group { display: inline-flex; gap: 6px; align-items: center; padding-left: 8px; border-left: 1px solid var(--line); }
+  .sel-count { color: var(--muted); font-size: 13px; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 7px; padding: 4px 12px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.small { padding: 3px 10px; font-size: 13px; }
+  .btn.primary { border-color: var(--primary); background: var(--primary); color: var(--primary-ink); }
+  .btn.warn { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+  /* 缺陷占位（仅缺陷模式 · 已完成档） */
+  .quick-gap {
+    display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px; font-size: 13px;
+    border: 1px dashed var(--danger); color: var(--danger); background: var(--danger-bg); border-radius: 7px;
+  }
+  .quick-gap a { color: inherit; text-decoration: underline; }
+  .req-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .req-item { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  .req-item:last-child { border-bottom: 0; }
+  .req-item .id { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .req-item .t { flex: 1; }
+  .badge { font-size: 12px; border-radius: 6px; padding: 1px 8px; white-space: nowrap; border: 1px solid transparent; }
+  .badge.none { color: var(--muted); border-color: var(--line); background: var(--bg); }
+  .badge.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+  .badge.ok code { font-family: ui-monospace, Menlo, monospace; }
+  .empty-box { border: 1px dashed var(--line); border-radius: 8px; padding: 26px; text-align: center; color: var(--muted); }
+  .skeleton-row { height: 38px; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; }
+  .skeleton-row:last-child { border-bottom: 0; }
+  .skeleton-row::after {
+    content: ""; position: absolute; inset: 8px 12px auto 12px; height: 14px; border-radius: 4px;
+    background: var(--skeleton); animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  /* ---- 任务模块 ---- */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .tab { border: 0; background: transparent; color: var(--muted); padding: 6px 14px; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .panel-desc { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  .create-box { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .create-box .stats b { color: var(--primary); }
+  .err-box {
+    border: 1px solid var(--danger); background: var(--danger-bg); color: var(--danger);
+    border-radius: 8px; padding: 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  }
+  .loading-box { color: var(--muted); padding: 18px; text-align: center; }
+  .spin {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--primary); animation: spin .8s linear infinite; vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .mini-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* ---- toast ---- */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); border-radius: 8px; padding: 9px 16px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.22); z-index: 99; max-width: 86vw;
+  }
+</style>
+</head>
+<body>
+  <header class="demo-bar">
+    <div class="demo-title">BUG-20260911-005 交互演示
+      <span class="sub">已完成列表添加「开始 Commit」按钮 · 布局同已接受/已计划档 · 全部数据为模拟，不调用服务、不执行 Git</span>
+    </div>
+    <div class="demo-controls">
+      <div class="seg" id="modeSeg" role="group" aria-label="模式对照">
+        <button type="button" data-mode="bug" class="active">缺陷现象</button>
+        <button type="button" data-mode="fix">期望修复</button>
+      </div>
+      <div class="seg" id="sceneSeg" role="group" aria-label="场景切换">
+        <button type="button" data-scene="normal" class="active">正常</button>
+        <button type="button" data-scene="empty">空</button>
+        <button type="button" data-scene="loading">加载</button>
+        <button type="button" data-scene="fail">失败</button>
+      </div>
+      <button type="button" class="ghost" id="themeBtn">深色</button>
+    </div>
+  </header>
+  <p class="demo-note" id="modeNote"></p>
+
+  <main class="app">
+    <nav class="topnav">
+      <span class="brand">Agent Team Board</span>
+      <button type="button" class="navbtn active" id="navReq">需求</button>
+      <button type="button" class="navbtn" id="navRuns">任务</button>
+    </nav>
+    <div class="stage">
+      <!-- 需求模块 -->
+      <section id="viewReq">
+        <div class="filters" id="laneChips"></div>
+        <div class="list-head">
+          <div class="list-title"><span id="laneTitle"></span><span class="count" id="laneCount"></span></div>
+          <div class="caption-actions">
+            <div class="sel-group hidden" id="selGroup"></div>
+            <button type="button" id="laneQuickEntry" class="btn small primary hidden">▶ 开始完善</button>
+            <span class="quick-gap hidden" id="quickEntryGap"></span>
+          </div>
+        </div>
+        <div class="req-list" id="reqList" aria-live="polite"></div>
+      </section>
+      <!-- 任务模块 -->
+      <section id="viewRuns" class="hidden">
+        <div class="tabs" id="runTabs" role="tablist" aria-label="批量任务类型">
+          <button type="button" class="tab" data-kind="refine" role="tab">批量完善</button>
+          <button type="button" class="tab" data-kind="develop" role="tab">批量开发</button>
+          <button type="button" class="tab" data-kind="commit" role="tab">批量 Commit</button>
+        </div>
+        <div id="runPane" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var LANES = [
+    { key: 'submitted', label: '待接受' },
+    { key: 'accepted', label: '已接受' },
+    { key: 'planned', label: '已计划' },
+    { key: 'developing', label: '开发中' },
+    { key: 'confirming', label: '待测试' },
+    { key: 'done', label: '已完成' }
+  ];
+  var LANE_LABEL = {};
+  LANES.forEach(function (l) { LANE_LABEL[l.key] = l.label; });
+
+  var BASE_ITEMS = {
+    submitted: [
+      { id: 'REQ-20260911-006', title: '值班表增加导出能力' },
+      { id: 'BUG-20260911-008', title: '发布列表统计口径修正' },
+      { id: 'REQ-20260911-009', title: '营销任务支持按项目筛选' }
+    ],
+    accepted: [
+      { id: 'REQ-20260911-002', title: '讨论模块批量重发入口' },
+      { id: 'BUG-20260911-004', title: '详情抽屉滚动偶发异常' }
+    ],
+    planned: [
+      { id: 'REQ-20260910-028', title: '全局任务总览增加提交统计' },
+      { id: 'BUG-20260910-016', title: '任务面板页签记忆偶发失效' }
+    ],
+    developing: [
+      { id: 'REQ-20260910-025', title: '讨论时间线分组优化' }
+    ],
+    confirming: [
+      { id: 'BUG-20260910-018', title: '批量提交后条目徽标刷新时机' }
+    ],
+    done: [
+      { id: 'REQ-20260910-013', title: '批量 commit 功能（CLI 命令组）', commit: 'committed', hash: 'a1b2c3d4e5f67890' },
+      { id: 'BUG-20260910-014', title: '批量 Commit 功能需要有 UI', commit: 'none' },
+      { id: 'REQ-20260910-027', title: '移除开发阶段设置入口', commit: 'none' },
+      { id: 'REQ-20260910-023', title: '批量完善批次记录分页', commit: 'none' }
+    ]
+  };
+
+  var QUICK = {
+    accepted: { label: '▶ 开始完善', title: '进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）', kind: 'refine' },
+    planned: { label: '▶ 开始开发', title: '进入任务模块批量开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务', kind: 'develop' }
+  };
+
+  var PANEL_COPY = {
+    refine: {
+      desc: '批量完善：对已接受（accepted）未完善条目批量补全文档，子代理逐项领取——完善 → 回执 → 核对。人工创建并派发后子代理才工作；浏览本页面不改动任何数据。',
+      stats: '候选（已接受未完善）'
+    },
+    develop: {
+      desc: '批量开发：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务，子代理按两阶段 TDD 逐项开发。人工启动后才执行；浏览本页面不改动任何数据。',
+      stats: '候选（已计划未认领）'
+    },
+    commit: {
+      desc: '批量 Commit：把已完成条目的未提交改动按单归因提交到本地 Git。人工创建并派发任务后子代理才执行 git 提交（任务之外仍不自动提交）；浏览本页面不执行 Git 操作；只 commit 不 push。',
+      stats: '候选（已完成 done）'
+    }
+  };
+
+  var state = {
+    mode: 'bug', scene: 'normal', lane: 'submitted', view: 'req',
+    runsKind: null, retried: false, theme: 'light',
+    laneLoading: false, paneLoading: false
+  };
+
+  function $(sel) { return document.querySelector(sel); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function laneItems(key) {
+    var arr = BASE_ITEMS[key] || [];
+    if (key === 'done' && state.scene === 'empty') return [];
+    return arr;
+  }
+
+  function quickConf() {
+    if (state.lane === 'accepted') return QUICK.accepted;
+    if (state.lane === 'planned') return QUICK.planned;
+    if (state.lane === 'done' && state.mode === 'fix') {
+      return {
+        label: '▶ 开始 Commit',
+        title: '进入任务模块批量 Commit 面板：对已完成条目的未提交改动批量归因提交到本地 Git（与勾选无关；只 commit 不 push）',
+        kind: 'commit'
+      };
+    }
+    return null;
+  }
+
+  /* ---------- 需求模块渲染 ---------- */
+
+  function renderChips() {
+    var html = LANES.map(function (l) {
+      var n = laneItems(l.key).length;
+      return '<button type="button" class="filter-chip' + (state.lane === l.key ? ' active' : '') +
+        '" data-lane="' + l.key + '">' + l.label + ' <span class="cnt">' + n + '</span></button>';
+    }).join('');
+    $('#laneChips').innerHTML = html;
+  }
+
+  function renderSelGroup() {
+    var g = $('#selGroup');
+    var byLane = {
+      submitted: '<button type="button" class="btn primary small" disabled>接受所选</button>',
+      accepted: '<button type="button" class="btn primary small" disabled>移入计划</button>' +
+        '<button type="button" class="btn warn small" disabled>驳回待接受</button>',
+      planned: '<button type="button" class="btn warn small" disabled>移出计划</button>'
+    };
+    var html = byLane[state.lane];
+    g.classList.toggle('hidden', !html);
+    if (html) g.innerHTML = '<span class="sel-count">已选 0 项</span>' + html;
+  }
+
+  function renderQuick() {
+    var btn = $('#laneQuickEntry');
+    var gap = $('#quickEntryGap');
+    var conf = quickConf();
+    btn.classList.toggle('hidden', !conf);
+    if (conf) {
+      btn.textContent = conf.label;
+      btn.title = conf.title;
+      btn.setAttribute('aria-label', conf.label);
+    }
+    // 缺陷模式 · 已完成档：按钮缺失，用虚线占位标出缺陷点并给“绕行”路径
+    var showGap = state.lane === 'done' && state.mode === 'bug';
+    gap.classList.toggle('hidden', !showGap);
+    if (showGap) {
+      gap.innerHTML = '✕ 缺陷：此处缺少「开始 Commit」入口（已接受/已计划档均有同位按钮）。' +
+        '绕行：<a href="#" id="gapDetour">手动切「任务」→「批量 Commit」</a>';
+      var detour = $('#gapDetour');
+      detour.addEventListener('click', function (e) {
+        e.preventDefault();
+        gotoRuns('commit');
+        toast('绕行路径：需求 →（手动）→ 任务 → 批量 Commit——期望修复后可从已完成档一键直达');
+      });
+    }
+  }
+
+  function itemRow(it) {
+    var badge = '';
+    if (it.commit === 'committed') {
+      badge = '<span class="badge ok">已提交 <code>' + esc(String(it.hash).slice(0, 7)) + '</code></span>';
+    } else if (it.commit === 'none') {
+      badge = '<span class="badge none">未提交</span>';
+    }
+    return '<div class="req-item"><span class="id">' + esc(it.id) + '</span>' +
+      '<span class="t">' + esc(it.title) + '</span>' + badge + '</div>';
+  }
+
+  function renderList() {
+    var items = laneItems(state.lane);
+    var box = $('#reqList');
+    if (state.laneLoading) {
+      box.innerHTML = '<div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>';
+      return;
+    }
+    box.innerHTML = items.length
+      ? items.map(itemRow).join('')
+      : '<div class="empty-box">暂无' + LANE_LABEL[state.lane] + '条目' +
+        (state.lane === 'done' && state.scene === 'empty' ? '——批量 Commit 将无候选，「启动」应保持禁用并说明原因' : '') +
+        '</div>';
+  }
+
+  function renderLaneHead() {
+    $('#laneTitle').textContent = '需求 · ' + LANE_LABEL[state.lane];
+    $('#laneCount').textContent = laneItems(state.lane).length + ' 项';
+  }
+
+  function renderReq() {
+    renderChips();
+    renderLaneHead();
+    renderSelGroup();
+    renderQuick();
+    renderList();
+  }
+
+  function switchLane(key) {
+    state.lane = key;
+    if (state.scene === 'loading') {
+      state.laneLoading = true;
+      renderReq(); // 快捷入口等控件态先就位：按钮不消失、不闪烁，仅列表区加载
+      setTimeout(function () {
+        state.laneLoading = false;
+        if (state.view === 'req') renderList();
+      }, 420);
+    } else {
+      renderReq();
+    }
+  }
+
+  /* ---------- 任务模块渲染 ---------- */
+
+  function commitCandidateCount() {
+    return laneItems('done').length;
+  }
+
+  function renderPane() {
+    var pane = $('#runPane');
+    var kind = state.runsKind;
+    var copy = PANEL_COPY[kind];
+    var tabs = document.querySelectorAll('#runTabs .tab');
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.kind === kind); });
+
+    if (state.paneLoading) {
+      pane.innerHTML = '<div class="loading-box"><span class="spin"></span> 正在加载面板数据…</div>';
+      return;
+    }
+    if (kind === 'commit' && state.scene === 'fail' && !state.retried) {
+      pane.innerHTML = '<div class="err-box"><span>提交状态加载失败：模拟的接口错误（不伪装成“未提交”）</span>' +
+        '<button type="button" class="btn" id="paneRetry">重试</button></div>' +
+        '<p class="mini-note">失败场景仅作用于批量 Commit 面板（模拟 /api/commit/current 拉取失败）；重试成功后恢复。</p>';
+      $('#paneRetry').addEventListener('click', function () {
+        state.retried = true;
+        toast('重试成功：面板数据已恢复');
+        renderPane();
+      });
+      return;
+    }
+
+    var n = kind === 'commit' ? commitCandidateCount() : (kind === 'refine' ? BASE_ITEMS.accepted.length : BASE_ITEMS.planned.length);
+    var startDisabled = kind === 'commit' && n === 0;
+    var startTitle = startDisabled
+      ? '暂无已完成候选：请先人工确认条目完成（done）'
+      : (kind === 'commit' ? '创建批量 Commit 任务并复制主调度提示词（演示不执行）' : '创建任务并复制派发提示词（演示不执行）');
+    pane.innerHTML =
+      '<p class="panel-desc">' + esc(copy.desc) + '</p>' +
+      '<div class="create-box">' +
+      '<span class="stats">' + esc(copy.stats) + '：<b>' + n + '</b> 项</span>' +
+      '<button type="button" class="btn primary" id="paneStart"' + (startDisabled ? ' disabled title="' + esc(startTitle) + '"' : ' title="' + esc(startTitle) + '"') + '>启动</button>' +
+      '</div>' +
+      '<p class="mini-note">本演示仅呈现布局与状态反馈：点击「启动」不会创建任务，也不会执行任何 Git 操作（真实行为见面板内说明）。</p>';
+    var start = $('#paneStart');
+    if (start && !startDisabled) {
+      start.addEventListener('click', function () {
+        toast(kind === 'commit' ? '模拟：创建批量 Commit 任务并复制主调度提示词（演示不执行 Git）' : '模拟：创建任务并复制派发提示词（演示不影响数据）');
+      });
+    }
+  }
+
+  function gotoRuns(kind) {
+    state.view = 'runs';
+    state.runsKind = kind || state.runsKind || 'commit';
+    state.retried = false;
+    $('#viewReq').classList.add('hidden');
+    $('#viewRuns').classList.remove('hidden');
+    $('#navReq').classList.remove('active');
+    $('#navRuns').classList.add('active');
+    if (state.scene === 'loading') {
+      state.paneLoading = true;
+      renderPane();
+      setTimeout(function () {
+        state.paneLoading = false;
+        if (state.view === 'runs') renderPane();
+      }, 420);
+    } else {
+      renderPane();
+    }
+  }
+
+  function gotoReq() {
+    state.view = 'req';
+    $('#viewRuns').classList.add('hidden');
+    $('#viewReq').classList.remove('hidden');
+    $('#navRuns').classList.remove('active');
+    $('#navReq').classList.add('active');
+    renderReq();
+  }
+
+  /* ---------- 模式 / 场景 / 主题 ---------- */
+
+  function renderModeNote() {
+    var el = $('#modeNote');
+    if (state.mode === 'bug') {
+      el.className = 'demo-note';
+      el.innerHTML = '<b>缺陷现象</b>：批量 Commit 上线后，「已完成」档列表标题行缺少「开始 Commit」快捷入口——请切到最右「已完成」档查看（已接受/已计划档均有同位按钮作对照）。';
+    } else {
+      el.className = 'demo-note fix';
+      el.innerHTML = '<b>期望修复</b>：「已完成」档在同一位置显示「▶ 开始 Commit」，样式与「开始完善 / 开始开发」一致；点击仅导航直达任务模块「批量 Commit」面板，不创建任务、不执行 Git。';
+    }
+  }
+
+  function applyScene() {
+    // 场景仅影响数据与加载行为，重绘当前视图
+    if (state.view === 'req') renderReq(); else renderPane();
+    var hint = {
+      normal: '场景 · 正常：已完成档有条目（含已提交/未提交徽标），面板可启动。',
+      empty: '场景 · 空：已完成档无条目，批量 Commit 面板候选为 0，「启动」禁用并说明原因。',
+      loading: '场景 · 加载：切档与进入面板均出现短暂加载态；快捷入口按钮保持可见、不闪烁。',
+      fail: '场景 · 失败：进入「批量 Commit」面板时数据加载失败，显示错误与重试，不伪装成空/未提交。'
+    }[state.scene];
+    toast(hint);
+  }
+
+  function bindEvents() {
+    $('#modeSeg').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-mode]');
+      if (!b) return;
+      state.mode = b.dataset.mode;
+      document.querySelectorAll('#modeSeg button').forEach(function (x) { x.classList.toggle('active', x === b); });
+      renderModeNote();
+      if (state.view === 'req') renderReq();
+    });
+    $('#sceneSeg').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-scene]');
+      if (!b) return;
+      state.scene = b.dataset.scene;
+      state.retried = false;
+      document.querySelectorAll('#sceneSeg button').forEach(function (x) { x.classList.toggle('active', x === b); });
+      applyScene();
+    });
+    $('#themeBtn').addEventListener('click', function () {
+      state.theme = state.theme === 'light' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = state.theme;
+      $('#themeBtn').textContent = state.theme === 'light' ? '深色' : '浅色';
+    });
+    $('#laneChips').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-lane]');
+      if (!b) return;
+      switchLane(b.dataset.lane);
+    });
+    $('#laneQuickEntry').addEventListener('click', function () {
+      var conf = quickConf();
+      if (!conf) return;
+      gotoRuns(conf.kind);
+      var names = { refine: '批量完善', develop: '批量开发', commit: '批量 Commit' };
+      toast('已进入任务模块 · ' + names[conf.kind] + '（仅导航，未创建任务）');
+    });
+    $('#navReq').addEventListener('click', gotoReq);
+    $('#navRuns').addEventListener('click', function () {
+      gotoRuns(state.runsKind || 'commit');
+      toast('手动进入任务模块（缺陷模式下的绕行路径）');
+    });
+    $('#runTabs').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-kind]');
+      if (!b) return;
+      state.runsKind = b.dataset.kind;
+      state.retried = false;
+      if (state.scene === 'loading') {
+        state.paneLoading = true;
+        renderPane();
+        setTimeout(function () {
+          state.paneLoading = false;
+          if (state.view === 'runs') renderPane();
+        }, 420);
+      } else {
+        renderPane();
+      }
+    });
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var el = $('#toast');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.add('hidden'); }, 3200);
+  }
+
+  renderModeNote();
+  bindEvents();
+  renderReq();
+})();
+</script>
+</body>
+</html>

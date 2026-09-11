@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-011",
+  "type": "bug",
+  "title": "批量完善创建后人工编辑导致待领取条目被跳过",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-12",
+  "createdAt": "2026-09-08T12:13:46.766Z",
+  "updatedAt": "2026-09-11T05:52:19.127Z",
+  "agentCompletedAt": "2026-09-08T15:11:41.383Z",
+  "lastReport": {
+    "at": "2026-09-08T15:11:41.383Z",
+    "coverage": 90,
+    "framework": "node:assert/strict 自研测试（scripts/tests/refine-claim-baseline.test.mjs + 深测夹具 deep-probes.mjs）",
+    "summary": "refine-store：nextRefineItem 领取时重冻结文档基线（写运行前持久化），移除「冻结后人工编辑基线失效」领取门槛——创建/吸收到领取之间的人工编辑不再 skip（D02 转 PASS）；done 核验以领取时基线为准（领取后未改文档仍拒），目录损坏/离开 accepted 出局与账目不回归；更新旧口径用例 R5/V5；npm test 95 文件全绿",
+    "runId": "run-20260908-090"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T12:13:46.766Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-594e"
+    },
+    {
+      "at": "2026-09-08T12:33:46.967Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T14:08:42.376Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T15:06:51.354Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-12",
+      "note": "认领（zcode-batch-018-12）"
+    },
+    {
+      "at": "2026-09-08T15:11:41.383Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-12",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.127Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-d97d",
+      "note": "人工确认完成"
+    }
+  ]
+}

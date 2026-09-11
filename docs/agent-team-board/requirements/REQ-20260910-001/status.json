@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-001",
+  "type": "requirement",
+  "title": "app 场景点击 Cmd+R 刷新后，需要回到刷新前的界面",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-1",
+  "createdAt": "2026-09-09T16:03:38.387Z",
+  "updatedAt": "2026-09-11T05:52:21.529Z",
+  "agentCompletedAt": "2026-09-09T23:57:48.885Z",
+  "lastReport": {
+    "at": "2026-09-09T23:57:48.885Z",
+    "coverage": 92,
+    "framework": "Node vm 行为测试（node:assert/strict，scripts/tests/refresh-restore-20260910-001.test.mjs）",
+    "summary": "web 层刷新状态恢复：sessionStorage 会话级快照（键按项目隔离，URL ?project=/?view= 深链优先），boot 首轮 poll 后恢复模块/需求筛选档/详情抽屉与页签/搜索词/任务两面板二级页签/讨论详情与筛选/文件层栈与当前文件（md 渲染态）；恢复目标失效按既有先例静默回落（条目/讨论/文档页签/文件/目录逐层），switchProject 重置后覆盖默认态快照；electron 零改动；16 用例全绿 + run-all 129 文件回归全绿",
+    "runId": "run-20260910-140"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T16:03:38.387Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T16:03:44.746Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T16:47:23.153Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-003824-e864）"
+    },
+    {
+      "at": "2026-09-09T23:31:18.256Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "认领（zcode-batch-029-1）"
+    },
+    {
+      "at": "2026-09-09T23:57:48.885Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.529Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-14d1",
+      "note": "人工确认完成"
+    }
+  ]
+}

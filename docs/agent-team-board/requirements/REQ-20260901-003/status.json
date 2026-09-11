@@ -1,0 +1,60 @@
+{
+  "id": "REQ-20260901-003",
+  "type": "requirement",
+  "title": "钩子硬约束插件代码改动：必须先登记并认领条目",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-code-guard",
+  "createdAt": "2026-09-01T03:45:42.355Z",
+  "updatedAt": "2026-09-11T05:52:13.282Z",
+  "agentCompletedAt": "2026-09-02T10:01:06.582Z",
+  "lastReport": {
+    "at": "2026-09-02T10:01:06.582Z",
+    "coverage": null,
+    "framework": "node:assert 子进程钩子实测（code-guard.test.mjs G1–G6）",
+    "summary": "钩子硬约束插件源码改动完成（按对齐方案 A，state-guard.mjs 内扩展、不新增挂点）：1) 守卫范围=插件根（脚本自身 realpath 解析，兼容软链/缓存，当前缓存软链下即时生效）下根级文件与 scripts/commands/skills/hooks/.zcode-plugin/.codex-plugin/assets，豁免 docs/ 看板目录；2) 放行条件=当前项目看板 .locks/ 存在 24h 内未过期认领锁（复用 claim 锁零新机制）；无锁时 Write/Edit 指向插件源码、Bash 改写类操作（sed/tee/cp/mv/rm/重定向/chmod/perl -pi/python -c）命中插件源码目标（插件根路径或 agent-team-board/<受保护目录>，防误拦其他项目同名相对路径）一律拦并给流程指引；3) 同步修复 BUG-20260901-002 只读误报，并新增「提及≠目标」修正——status.json 拦截要求路径形态 token，写关于守卫的文档/测试不再自阻塞（实施中被 live 钩子实测暴露并修复）；4) SKILL.md 铁律新增第 6 条。TDD：code-guard.test.mjs G1–G6 子进程实测先红后绿全过；提及式文本放行实测 exit 0；九套既有测试回归全绿。开放点取默认（任一有效锁放行全区、锁保留至驳回/过期、BUG-002 一并修复）。版本 0.3.8→0.3.9。"
+  },
+  "history": [
+    {
+      "at": "2026-09-01T03:45:42.355Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-09-01T07:13:32.456Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-01T07:15:39.082Z",
+      "from": "accepted",
+      "to": "pending-alignment",
+      "by": "zcode-code-guard",
+      "note": "认领（出方案阶段，zcode-code-guard）"
+    },
+    {
+      "at": "2026-09-01T07:23:16.492Z",
+      "from": "pending-alignment",
+      "to": "in-progress",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-02T10:01:06.583Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0902-5351",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.282Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-bea4",
+      "note": "人工确认完成"
+    }
+  ]
+}

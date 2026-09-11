@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260910-015 演示 — 创建需求或 Bug，支持创建并接受</title>
+<style>
+  /* ---------- 主题变量：默认跟随系统，可手动切换（深浅色适配） ---------- */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea; --text: #1f2329; --muted: #8a919c;
+    --primary: #2563eb; --primary-text: #ffffff; --ok: #16a34a; --ok-bg: #e8f7ee;
+    --warn: #b45309; --warn-bg: #fdf1df; --danger: #dc2626; --danger-bg: #fdecec;
+    --chip: #eef1f5; --chip-text: #4b5563; --shadow: 0 8px 28px rgba(15, 23, 42, .14);
+    --focus: rgba(37, 99, 235, .28);
+  }
+  html[data-theme="dark"] {
+    --bg: #10141b; --panel: #1a2029; --line: #2b333f; --text: #e6e9ee; --muted: #8b94a1;
+    --primary: #3b82f6; --primary-text: #ffffff; --ok: #34d399; --ok-bg: #10331f;
+    --warn: #f0b355; --warn-bg: #3a2c10; --danger: #f87171; --danger-bg: #3d1717;
+    --chip: #232b36; --chip-text: #b3bcc9; --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+    --focus: rgba(59, 130, 246, .35);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    transition: background .2s, color .2s;
+  }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* ---------- 顶部说明条 ---------- */
+  .demo-bar {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .demo-bar .t { font-weight: 600; }
+  .demo-bar .d { color: var(--muted); font-size: 12.5px; }
+  .demo-bar .spacer { flex: 1; }
+  .demo-note { font-size: 12.5px; color: var(--muted); padding: 8px 16px; border-bottom: 1px dashed var(--line); }
+
+  /* ---------- 看板骨架（简化） ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .topbar .logo { font-weight: 700; letter-spacing: .5px; }
+  .nav { display: flex; gap: 4px; color: var(--muted); font-size: 13px; }
+  .nav span { padding: 3px 8px; border-radius: 6px; }
+  .nav span.on { color: var(--text); background: var(--chip); }
+  .topbar .spacer { flex: 1; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 5px 12px;
+  }
+  .btn:hover { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  .btn.accent { background: var(--panel); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .btn.small { padding: 2px 9px; font-size: 12.5px; border-radius: 6px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); }
+
+  .board { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 16px; max-width: 1080px; margin: 0 auto; }
+  @media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
+  .lane { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; min-height: 220px; }
+  .lane h4 { margin: 2px 4px 10px; font-size: 13px; color: var(--muted); font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .lane h4 .cnt { background: var(--chip); color: var(--chip-text); border-radius: 999px; padding: 0 8px; font-size: 12px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px;
+    display: flex; gap: 8px; align-items: center; background: var(--bg);
+  }
+  .card .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .card .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { border-radius: 999px; padding: 1px 9px; font-size: 11.5px; background: var(--chip); color: var(--chip-text); white-space: nowrap; }
+  .chip.sub { background: var(--warn-bg); color: var(--warn); }
+  .chip.acc { background: var(--ok-bg); color: var(--ok); }
+  .chip.refine { background: var(--warn-bg); color: var(--warn); }
+  .lane .empty { color: var(--muted); font-size: 12.5px; text-align: center; padding: 26px 0; }
+
+  /* ---------- 新建弹窗（还原看板统一新建弹窗结构） ---------- */
+  .modal-wrap {
+    position: fixed; inset: 0; background: rgba(10, 14, 20, .45);
+    display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px;
+  }
+  .modal {
+    width: 460px; max-width: 100%; max-height: 92vh; overflow: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .modal-head h3 { margin: 0; font-size: 15px; }
+  .icon-btn { border: none; background: none; color: var(--muted); font-size: 15px; border-radius: 6px; padding: 2px 7px; }
+  .icon-btn:hover { background: var(--chip); color: var(--text); }
+  .modal form { padding: 14px 16px 16px; }
+  .field { display: block; margin-bottom: 12px; font-size: 13px; }
+  .field > span { display: block; color: var(--muted); margin-bottom: 5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+    color: var(--text); padding: 7px 10px; font: inherit;
+  }
+  .field textarea { resize: vertical; }
+  .field.invalid input { border-color: var(--danger); }
+  .field-err { color: var(--danger); font-size: 12px; margin-top: 4px; }
+  .shot-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .shot-head .muted { color: var(--muted); font-size: 12px; }
+  .shot-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .shot-item {
+    position: relative; width: 74px; height: 54px; border-radius: 8px; border: 1px solid var(--line);
+    background: repeating-linear-gradient(45deg, var(--chip), var(--chip) 6px, transparent 6px, transparent 12px);
+    display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 11px;
+  }
+  .shot-item .x {
+    position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; border-radius: 50%;
+    border: none; background: var(--danger); color: #fff; font-size: 11px; line-height: 1; padding: 0;
+  }
+  .shot-empty { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+  /* ---------- toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-left: 4px solid var(--ok); border-radius: 10px; padding: 9px 16px;
+    box-shadow: var(--shadow); z-index: 90; max-width: min(92vw, 560px); font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  .toast.err { border-left-color: var(--danger); }
+
+  .demo-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .demo-controls label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; user-select: none; }
+  .legend { font-size: 12.5px; color: var(--muted); padding: 0 16px 14px; max-width: 1080px; margin: 0 auto; }
+  .legend code { background: var(--chip); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="demo-bar">
+    <span class="t">REQ-20260910-015 · 创建需求或 Bug，支持创建并接受</span>
+    <span class="d">可交互演示（简化看板，仅示意本需求改动面）</span>
+    <span class="spacer"></span>
+    <button class="btn small" id="themeBtn" type="button">深浅色切换</button>
+  </div>
+  <div class="demo-note">
+    对照两条路径：<b>「创建」</b>落待接受档、仍需人工点 ✓ 接受（现状）；<b>「创建并接受」</b>一步直达已接受档并带「未完善」徽标（本需求，与分步接受结果等价）。
+    可勾选「模拟创建失败」体验失败反馈；标题留空提交体验空态校验。
+  </div>
+
+  <!-- 简化看板：顶栏 + 待接受 / 已接受两档 -->
+  <div class="topbar">
+    <span class="logo">Status Board</span>
+    <div class="nav"><span>讨论</span><span class="on">需求</span><span>任务</span><span>文件</span></div>
+    <span class="spacer"></span>
+    <button class="btn primary" id="newBtn" type="button">＋ 新建</button>
+  </div>
+  <main class="board">
+    <section class="lane" aria-label="待接受档">
+      <h4>待接受 <span class="cnt" id="cntSub">1</span></h4>
+      <div id="laneSub">
+        <div class="card" data-demo-item>
+          <span class="id">REQ-20260910-015</span>
+          <span class="title">创建需求或 bug，支持创建并接受</span>
+          <span class="chip sub">待接受</span>
+          <button class="btn small" type="button" data-accept-demo title="人工接受（现状第二步）">✓</button>
+        </div>
+      </div>
+    </section>
+    <section class="lane" aria-label="已接受档">
+      <h4>已接受 <span class="cnt" id="cntAcc">1</span></h4>
+      <div id="laneAcc">
+        <div class="card" data-demo-item>
+          <span class="id">REQ-20260909-013</span>
+          <span class="title">隐藏讨论模块（示意存量条目）</span>
+          <span class="chip acc">已接受</span>
+          <span class="chip refine" title="进入 accepted 一律置未完善（REQ-20260908-020），进入批量完善候选">未完善</span>
+        </div>
+      </div>
+    </section>
+  </main>
+  <p class="legend">
+    说明：已接受档的「未完善」徽标沿用看板现状（任何单进入 accepted 即置未完善，REQ-20260908-020）——「创建并接受」产出的条目与先创建再接受完全等价。演示编号为虚构占位。
+  </p>
+
+  <div class="demo-controls" style="padding: 0 16px 22px; max-width: 1080px; margin: 0 auto;">
+    <label><input type="checkbox" id="failSwitch"> 模拟创建失败（演示失败反馈：表单保留、toast 报错、可重试）</label>
+  </div>
+
+  <!-- 统一新建弹窗（结构对齐 scripts/web/index.html #modalWrap） -->
+  <div class="modal-wrap hidden" id="modalWrap">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="新建条目">
+      <header class="modal-head">
+        <h3>新建条目</h3>
+        <button class="icon-btn" id="modalClose" type="button" aria-label="关闭">✕</button>
+      </header>
+      <form id="newForm" novalidate>
+        <label class="field">类型
+          <select id="fType">
+            <option value="req">需求（REQ）</option>
+            <option value="bug">Bug（BUG）</option>
+            <option value="ask">讨论</option>
+          </select>
+        </label>
+        <label class="field" id="fTitleRow">标题
+          <input id="fTitle" maxlength="120" placeholder="一句话说清这条需求 / Bug / 讨论">
+          <span class="field-err hidden" id="fTitleErr">标题不能为空</span>
+        </label>
+        <label class="field" id="fDescRow"><span id="fDescLabel">描述</span>
+          <textarea id="fDesc" rows="3" placeholder="验收标准、现象与复现步骤等（可留空，后续补充）"></textarea>
+        </label>
+        <div class="field" id="fShotRow">
+          <div class="shot-head">
+            <span>截图（可选）</span>
+            <span class="muted" id="fShotCount">0 / 9</span>
+            <button class="btn small" id="fShotPick" type="button">上传图片</button>
+            <span class="muted">或直接 ⌘V 粘贴（演示中按钮等价）</span>
+          </div>
+          <div class="shot-list hidden" id="fShotList"></div>
+          <p class="shot-empty" id="fShotEmpty">粘贴或选择图片，创建后写入描述（png / jpg / webp 等，单张 ≤ 8MB）</p>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn" id="modalCancel" type="button">取消</button>
+          <button class="btn accent" id="fCreateAccept" type="submit" data-mode="accept">创建并接受</button>
+          <button class="btn primary" id="fSubmit" type="submit" data-mode="plain">创建</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (sel) { return document.querySelector(sel); };
+
+  /* ---------- 深浅色：默认跟随系统，按钮手动覆盖 ---------- */
+  var themeBtn = $('#themeBtn');
+  function applyTheme(pref) {
+    var dark = pref === 'dark' || (!pref && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    themeBtn.textContent = dark ? '切换浅色' : '切换深色';
+  }
+  applyTheme();
+  themeBtn.addEventListener('click', function () {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ---------- toast ---------- */
+  var toastEl = $('#toast'), toastTimer = null;
+  function toast(msg, isErr) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 3400);
+  }
+
+  /* ---------- 弹窗状态 ---------- */
+  var modalWrap = $('#modalWrap');
+  var shots = [];          // 模拟截图（仅计数与占位缩略图）
+  var busy = false;        // 提交中：禁用一切提交/截图入口（防竞态，对齐看板口径）
+  var nextSeq = { req: 16, bug: 2 }; // 演示编号（虚构占位）
+
+  function openModal() {
+    $('#fType').value = 'req';
+    $('#fTitle').value = '';
+    $('#fDesc').value = '';
+    shots = [];
+    busy = false;
+    titleInvalid(false);
+    renderShots();
+    syncFields();
+    setButtons(false);
+    modalWrap.classList.remove('hidden');
+    $('#fTitle').focus();
+  }
+  function closeModal() { modalWrap.classList.add('hidden'); }
+  $('#newBtn').addEventListener('click', openModal);
+  $('#modalClose').addEventListener('click', closeModal);
+  $('#modalCancel').addEventListener('click', closeModal);
+  modalWrap.addEventListener('click', function (e) { if (e.target === modalWrap) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modalWrap.classList.contains('hidden')) closeModal();
+  });
+
+  /* ---------- 类型联动：讨论隐藏截图区与「创建并接受」（沿用 syncNewFormFields 范式） ---------- */
+  function syncFields() {
+    var type = $('#fType').value;
+    $('#fShotRow').classList.toggle('hidden', type === 'ask');
+    $('#fCreateAccept').classList.toggle('hidden', type === 'ask'); // 讨论（ask）无接受概念，不展示该入口
+    $('#fDescLabel').textContent = type === 'ask' ? '背景（可选）' : '描述';
+    $('#fDesc').placeholder = type === 'ask'
+      ? '填写讨论背景，不需要关联需求；留空也可创建'
+      : '验收标准、现象与复现步骤等（可留空，后续补充）';
+  }
+  $('#fType').addEventListener('change', syncFields);
+
+  /* ---------- 标题校验（空态） ---------- */
+  function titleInvalid(on) {
+    $('#fTitleRow').classList.toggle('invalid', on);
+    $('#fTitleErr').classList.toggle('hidden', !on);
+  }
+  $('#fTitle').addEventListener('input', function () { if ($('#fTitleErr').classList.contains('hidden') === false) titleInvalid(false); });
+
+  /* ---------- 模拟截图（占位缩略图，演示附件路径不丢） ---------- */
+  function renderShots() {
+    $('#fShotCount').textContent = shots.length + ' / 9';
+    $('#fShotEmpty').classList.toggle('hidden', shots.length > 0);
+    var list = $('#fShotList');
+    list.classList.toggle('hidden', shots.length === 0);
+    list.innerHTML = shots.map(function (_, i) {
+      return '<div class="shot-item">shot-' + (i + 1) + (busy ? '' :
+        '<button class="x" type="button" data-shot-i="' + i + '" aria-label="移除截图">✕</button>') + '</div>';
+    }).join('');
+    $('#fShotPick').disabled = busy || shots.length >= 9;
+    Array.prototype.forEach.call(list.querySelectorAll('.x'), function (b) {
+      b.addEventListener('click', function () {
+        if (busy) return;
+        shots.splice(Number(b.dataset.shotI), 1);
+        renderShots();
+      });
+    });
+  }
+  $('#fShotPick').addEventListener('click', function () {
+    if (busy || shots.length >= 9) return;
+    shots.push(true); // 演示仅入列占位，不读真实文件
+    renderShots();
+  });
+
+  /* ---------- 提交按钮状态（加载态 / 防重复点击） ---------- */
+  function setButtons(inFlight) {
+    $('#fSubmit').disabled = inFlight;
+    $('#fCreateAccept').disabled = inFlight;
+    $('#fSubmit').textContent = inFlight ? '创建中…' : '创建';
+    $('#fCreateAccept').textContent = inFlight ? '创建中…' : '创建并接受';
+  }
+
+  /* ---------- 提交：plain=创建（现状，落待接受）；accept=创建并接受（本需求，直达已接受） ---------- */
+  $('#newForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var mode = e.submitter && e.submitter.dataset.mode === 'accept' ? 'accept' : 'plain';
+    var title = $('#fTitle').value.trim();
+    if (!title) { titleInvalid(true); toast('标题不能为空', true); $('#fTitle').focus(); return; }
+    busy = true;
+    setButtons(true);
+    renderShots(); // 提交中禁用截图增删
+    var failSwitch = $('#failSwitch').checked;
+    setTimeout(function () {
+      if (failSwitch) {
+        // 失败态：保留表单内容与截图，toast 报错，可重试，不产生条目
+        busy = false;
+        setButtons(false);
+        renderShots();
+        toast('创建失败：服务暂不可用（演示）——已填内容与截图已保留，可直接重试', true);
+        return;
+      }
+      var type = $('#fType').value;
+      var id, st;
+      if (type === 'ask') {
+        id = 'ASK-20260910-0' + (++nextSeq.ask || (nextSeq.ask = 1));
+        st = null; // 讨论不走条目状态机，演示中仅 toast 提示
+      } else {
+        var prefix = type === 'bug' ? 'BUG' : 'REQ';
+        id = prefix + '-20260910-' + String(nextSeq[type]++).padStart(3, '0');
+        st = mode === 'accept' ? 'accepted' : 'submitted';
+        addItemCard(id, title, st);
+      }
+      var shotNote = shots.length ? '，截图 ' + shots.length + ' 张已随单提交' : '';
+      if (st === 'accepted') {
+        toast('✓ 已创建 ' + id + '（已接受）——无需再人工接受，已带「未完善」徽标进入批量完善候选' + shotNote);
+      } else if (st === 'submitted') {
+        toast('✓ 已创建 ' + id + '（待接受）——仍需人工点 ✓ 接受（现状路径）' + shotNote);
+      } else {
+        toast('✓ 已创建 ' + id + '（讨论，无接受概念）');
+      }
+      closeModal();
+    }, 650);
+  });
+
+  /* ---------- 列表卡片 ---------- */
+  function addItemCard(id, title, status) {
+    var lane = status === 'accepted' ? $('#laneAcc') : $('#laneSub');
+    var empty = lane.querySelector('.empty');
+    if (empty) empty.remove();
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.setAttribute('data-demo-item', '');
+    var chip = status === 'accepted'
+      ? '<span class="chip acc">已接受</span><span class="chip refine" title="进入 accepted 一律置未完善（REQ-20260908-020）">未完善</span>'
+      : '<span class="chip sub">待接受</span><button class="btn small" type="button" data-accept-demo title="人工接受（现状第二步）">✓</button>';
+    card.innerHTML = '<span class="id">' + id + '</span><span class="title"></span>' + chip;
+    card.querySelector('.title').textContent = title;
+    if (status === 'submitted') {
+      card.querySelector('[data-accept-demo]').addEventListener('click', function () {
+        card.remove(); // 演示直接接受（真实看板为页内确认对话框 BUG-20260907-009 + POST status）
+        refreshCounts();
+        addItemCard(id, title, 'accepted');
+        toast('✓ ' + id + ' 已接受（人工第二步）——与「创建并接受」最终状态一致');
+      });
+    }
+    lane.appendChild(card);
+    refreshCounts();
+  }
+  function refreshCounts() {
+    ['Sub', 'Acc'].forEach(function (k) {
+      var lane = $('#lane' + k);
+      var n = lane.querySelectorAll('[data-demo-item]').length;
+      $('#cnt' + k).textContent = String(n);
+      if (!n && !lane.querySelector('.empty')) {
+        var p = document.createElement('p');
+        p.className = 'empty';
+        p.textContent = k === 'Sub' ? '暂无待接受条目' : '暂无已接受条目';
+        lane.appendChild(p);
+      }
+    });
+  }
+
+  /* 存量演示卡片：人工接受（现状第二步） */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-accept-demo]'), function (btn) {
+    btn.addEventListener('click', function () {
+      var card = btn.closest('.card');
+      var id = card.querySelector('.id').textContent;
+      var title = card.querySelector('.title').textContent;
+      card.remove();
+      refreshCounts();
+      addItemCard(id, title, 'accepted');
+      toast('✓ ' + id + ' 已接受（人工第二步）——与「创建并接受」最终状态一致');
+    });
+  });
+
+  refreshCounts();
+})();
+</script>
+</body>
+</html>

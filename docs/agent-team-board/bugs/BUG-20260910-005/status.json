@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-005",
+  "type": "bug",
+  "title": "打开 XX 工作区改为去新建 XX 会话",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-7",
+  "createdAt": "2026-09-10T01:59:53.478Z",
+  "updatedAt": "2026-09-11T05:52:22.047Z",
+  "agentCompletedAt": "2026-09-10T04:56:17.987Z",
+  "lastReport": {
+    "at": "2026-09-10T04:56:17.987Z",
+    "coverage": 100,
+    "framework": "node:assert + node:vm 沙箱渲染/绑定行为与源码契约测试",
+    "summary": "入口迁至任务头部一级页签旁（去新建 Zcode/Codex 会话文字超链接，CSS 与页签区分），删除提示词分区底部旧按钮；补探测三态（正在检测/已知/失败可重试）与点击交互（点击时最新项目路径、不切页签、仅提示已请求打开）；Zcode 保留 workspace/open 并明确需手动新建。新增 session-entry-20260910-005.test.mjs 14/14，更新 workspace-entry-20260910-002 与 tasks-tabs-20260909-008 断言；全量 141 文件失败 0；引入来源归因 REQ-20260910-002",
+    "runId": "run-20260910-153"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T01:59:53.478Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T01:59:55.922Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T02:26:50.965Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-102530-d661）"
+    },
+    {
+      "at": "2026-09-10T04:41:29.925Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-7",
+      "note": "认领（zcode-batch-031-7）"
+    },
+    {
+      "at": "2026-09-10T04:56:17.987Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-7",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.047Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-04f4",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "id": "BUG-20260902-001",
+  "type": "bug",
+  "title": "Codex 命令迁移缺失：dev.md 正文超 token 估算上限，source-command-dev 不生成",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-dev-migration",
+  "createdAt": "2026-09-02T10:50:47.613Z",
+  "updatedAt": "2026-09-11T05:52:13.563Z",
+  "agentCompletedAt": "2026-09-03T00:16:59.525Z",
+  "lastReport": {
+    "at": "2026-09-03T00:16:59.525Z",
+    "coverage": null,
+    "framework": "node:assert 文档契约（loop-mode 7/7）+ 字节上限断言",
+    "summary": "dev.md 超 Codex 迁移上限修复完成。【引入来源：REQ-20260831-001（两阶段重写加长正文）+ BUG-20260901-001（恢复失败跳过条款再加长），叠加至 4511 字节越限；来源均已核验存在，README「关联」节已记】修复：dev.md 全文精炼压缩 4511→3156 字节（<3600 上限），骨架保留全部流程要点与契约关键词，细则指向 SKILL.md 会话调度规则；loop-mode.test.mjs #2/#3 加 SKILL 兜底分支并新增 dev.md ≤3600 字节硬上限断言防回归。loop-mode 7/7 绿，全量回归绿。Codex 端 remove+add 重装验证由用户操作（沙箱压缩版可行已在登记时验证）。版本 0.3.10→0.3.11。"
+  },
+  "history": [
+    {
+      "at": "2026-09-02T10:50:47.613Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0902-07f0"
+    },
+    {
+      "at": "2026-09-02T10:56:19.448Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-02T10:58:26.401Z",
+      "from": "accepted",
+      "to": "pending-alignment",
+      "by": "zcode-dev-migration",
+      "note": "认领（出方案阶段，zcode-dev-migration）"
+    },
+    {
+      "at": "2026-09-02T23:49:33.803Z",
+      "from": "pending-alignment",
+      "to": "in-progress",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-03T00:16:59.525Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0903-eab7",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.563Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1a69",
+      "note": "人工确认完成"
+    }
+  ]
+}

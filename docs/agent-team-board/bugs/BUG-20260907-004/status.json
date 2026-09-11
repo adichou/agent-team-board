@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-004",
+  "type": "bug",
+  "title": "咨询单图片附件超约 750KB 必失败：前端 8MB 校验与后端 1MB 请求体上限矛盾，且连接被掐断无明确报错",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.665Z",
+  "updatedAt": "2026-09-11T05:52:16.717Z",
+  "agentCompletedAt": "2026-09-07T15:35:53.459Z",
+  "lastReport": {
+    "at": "2026-09-07T15:35:53.459Z",
+    "coverage": 100,
+    "framework": "node:assert + 隔离 HTTP 服务集成测试",
+    "summary": "server.mjs readBody 上限放宽至 12MB 对齐前端单张 8MB 附件 base64（≈10.7MB）；超限不再 req.destroy()，读干后应答完整 400 JSON；新增 body-limit.test.mjs 4 断言组（修复前 ECONNRESET 跑红），全量 66 测试文件 0 失败；归因 REQ-20260907-001（destroy 先掐连接行为未定位，已附排查）",
+    "runId": "run-20260907-042"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.665Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-8f0b"
+    },
+    {
+      "at": "2026-09-07T15:09:45.000Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T15:30:44.001Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T15:35:53.459Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.717Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1e96",
+      "note": "人工确认完成"
+    }
+  ]
+}

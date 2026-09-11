@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260908-006",
+  "type": "requirement",
+  "title": "详情页面的操作按钮要改成横向布局",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-012-01",
+  "createdAt": "2026-09-08T01:53:21.685Z",
+  "updatedAt": "2026-09-11T05:52:18.042Z",
+  "agentCompletedAt": "2026-09-08T02:01:17.855Z",
+  "lastReport": {
+    "at": "2026-09-08T02:01:17.855Z",
+    "coverage": 80,
+    "framework": "node:test 静态契约（CSS/模板正则断言）",
+    "summary": "详情抽屉中栏 .drawer-actions-center 由纵向堆叠改为横向一行（flex-direction:row + wrap + 居中），行内按钮 flex:none 不折行、序号 nowrap；纯 CSS 改动，模板与交互不动。新增 drawer-actions-row.test.mjs（H1–H4），全量 79 个测试文件通过。",
+    "runId": "run-20260908-065"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T01:53:21.685Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T01:54:42.657Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T01:56:55.660Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-012-01",
+      "note": "认领（zcode-batch-012-01）"
+    },
+    {
+      "at": "2026-09-08T02:01:17.855Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-012-01",
+      "note": "上报测试报告（覆盖率 80%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.042Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a768",
+      "note": "人工确认完成"
+    }
+  ]
+}

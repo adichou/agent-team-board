@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-001",
+  "type": "bug",
+  "title": "抽屉头部残留 space-between 内联布局致 detail-close-btn T2 回归",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-003-01",
+  "createdAt": "2026-09-06T16:08:08.586Z",
+  "updatedAt": "2026-09-11T05:52:16.312Z",
+  "agentCompletedAt": "2026-09-06T19:32:40.105Z",
+  "lastReport": {
+    "at": "2026-09-06T19:32:40.105Z",
+    "coverage": 100,
+    "framework": "node 静态契约测试",
+    "summary": "与 BUG-20260906-016/017 重复登记同根因（引入来源 REQ-20260906-002，已核验）；领取时修复已在位（renderBatchDrawer 头部 .batch-head 类，app.js 全文 0 处内联 space-between），验证 detail-close-btn 5/5、run-all 57 文件全过，未改代码，README 补归因与处置说明，建议人工以 016 为准合并/忽略本单",
+    "runId": "run-20260907-032"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T16:08:08.586Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-891d"
+    },
+    {
+      "at": "2026-09-06T16:33:32.675Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T19:31:10.257Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "认领（zcode-batch-003-01）"
+    },
+    {
+      "at": "2026-09-06T19:32:40.106Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.312Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-c2d3",
+      "note": "人工确认完成"
+    }
+  ]
+}

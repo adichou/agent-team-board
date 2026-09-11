@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260907-003",
+  "type": "requirement",
+  "title": "需求完善：待接受需求与 Bug 批量补全文档，支持 Zcode / Codex 派发",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-007-1",
+  "createdAt": "2026-09-07T00:06:16.530Z",
+  "updatedAt": "2026-09-11T05:52:16.479Z",
+  "agentCompletedAt": "2026-09-07T14:13:41.564Z",
+  "lastReport": {
+    "at": "2026-09-07T14:13:41.564Z",
+    "coverage": 92,
+    "framework": "node:test（静态契约+端到端）",
+    "summary": "新增需求完善子系统：refine-store 数据层（完整性分析/RFB批次与运行账本/指纹基线冻结/幂等与出局保护/done-fail回执校验/check协议）+ atb refine CLI 九个子命令 + server /api/refine/* 与 codex 逐项后台执行器（文档变更核验、锁忙重试、重启恢复）+ 看板待接受列「需求完善」入口与任务模块子面板（候选缺失原因/进度/记录文档链接）；全程保持 submitted、不占 impl.lock；新增测试 R1~R12（store/cli/serve/ui），全量 64 个测试文件 0 失败",
+    "runId": "run-20260907-037"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T00:06:16.530Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-0899"
+    },
+    {
+      "at": "2026-09-07T08:17:58.505Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T13:50:56.234Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-007-1",
+      "note": "认领（zcode-batch-007-1）"
+    },
+    {
+      "at": "2026-09-07T14:13:41.565Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-007-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.479Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5f20",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-028",
+  "type": "requirement",
+  "title": "新建讨论时支持上传截图，和新建需求、bug 一样",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260910-032-04",
+  "createdAt": "2026-09-10T14:58:50.644Z",
+  "updatedAt": "2026-09-11T05:52:23.446Z",
+  "agentCompletedAt": "2026-09-10T16:22:13.097Z",
+  "lastReport": {
+    "at": "2026-09-10T16:22:13.097Z",
+    "coverage": 8,
+    "framework": "node:assert 自研测试脚本（scripts/tests）",
+    "summary": "新建讨论同口径支持截图：createDiscussion 先全量校验再占号落盘 attachments/、question.md 追加引用行、启动提示词带截图位置；POST /api/discussion 透传附件并新增 GET /api/discussion/:id/attachment/:name；前端去掉讨论隐藏截图区块分支、带截图先过旧服务预检（atb serve 指引）再提交；讨论详情背景相对图接管+点击放大+失败占位。新增 8 用例全绿，两处旧口径断言按新口径修正，全量 176 测试文件 0 失败",
+    "runId": "run-20260910-182"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T14:58:50.644Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T14:58:50.644Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T15:08:19.733Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-230105-3bc9）"
+    },
+    {
+      "at": "2026-09-10T15:58:33.203Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-04",
+      "note": "认领（zcode-batch-20260910-032-04）"
+    },
+    {
+      "at": "2026-09-10T16:22:13.098Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-04",
+      "note": "上报测试报告（覆盖率 8%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.446Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1648",
+      "note": "人工确认完成"
+    }
+  ]
+}

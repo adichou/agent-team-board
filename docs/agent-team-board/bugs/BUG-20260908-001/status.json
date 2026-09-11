@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260908-001",
+  "type": "bug",
+  "title": "守卫 file 模式不拦新建文件：无锁可经 Write 在插件源码目录新建文件",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-010-1",
+  "createdAt": "2026-09-07T16:19:21.062Z",
+  "updatedAt": "2026-09-11T05:52:17.710Z",
+  "agentCompletedAt": "2026-09-08T00:07:07.833Z",
+  "lastReport": {
+    "at": "2026-09-08T00:07:07.833Z",
+    "coverage": 92,
+    "framework": "node:assert/strict + 子进程实测（scripts/tests/code-guard.test.mjs NF1–NF4）",
+    "summary": "file 模式守卫与 Bash 侧同口径：抽公共 realpathAncestralHitsPluginRoot（目标不存在时上溯最近存在祖先 realpath，suffix 段判定落点），denyIfSourceLocked 不再要求 existsSync，tokenRealpathHitsPluginRoot 复用同一实现；docs/ 豁免、插件根外、有效认领锁放行均保持。NF1–NF4 新用例（真实路径/软链别名/多级缺失目录/docs 豁免/锁放行），run-all 75 个测试文件全量回归通过；无锁 cwd 实测新建 scripts/brand-new-file.mjs exit 2 拦截。引入来源：REQ-20260901-003（file 守卫原始实现前置 existsSync，新建场景从未进入判定）",
+    "runId": "run-20260908-060"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T16:19:21.062Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-ae21"
+    },
+    {
+      "at": "2026-09-07T22:56:15.317Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T00:03:11.172Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-010-1",
+      "note": "认领（zcode-batch-010-1）"
+    },
+    {
+      "at": "2026-09-08T00:07:07.834Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-010-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.710Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e075",
+      "note": "人工确认完成"
+    }
+  ]
+}

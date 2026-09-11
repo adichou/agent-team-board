@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>智能体团队看板</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/highlight-github.min.css" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="/highlight-github-dark.min.css" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+  <!-- REQ-20260907-004 第一行：产品与项目上下文在左，统一新建入口在右。
+    REQ-20260910-012：模块页签上移并入顶栏（原独立第二行取消），位于标题右侧、操作区左侧；
+    项目路径默认不再显示（完整路径移入「管理项目」弹窗，#dataDir 仅在无项目时给简短引导） -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-badge">
+        <span class="logo">▦</span>
+        <span id="pollState" class="poll" title="连接中…">●</span>
+      </span>
+      <div class="brand-text">
+        <h1>智能体团队看板</h1>
+        <span id="dataDir" class="path"></span>
+      </div>
+    </div>
+    <!-- REQ-20260910-012：模块页签（讨论 → 需求 → 任务 → 文件 → 营销，设置为末位辅助入口）上移并入顶栏；
+         REQ-20260910-019：营销模块插在「文件」与「设置」之间；
+         REQ-20260910-029：发布模块插在「营销」与「设置」之间（Git 远端 / Apple App Store 发布流水线）；
+         REQ-20260909-013：「讨论（oncall）」「文件（files）」入口暂态隐藏（非删除：数据与服务端零改动，
+         app.js HIDDEN_VIEWS 统一兜底旧深链与间接入口回落需求模块；恢复步骤见条目 design.md）；
+         REQ-20260911-002：「营销（marketing）」「发布（release）」入口同口径暂态隐藏（模块源码与
+         #marketingView / #releaseView 容器、服务端接口与数据零改动；恢复步骤见条目 design.md） -->
+    <nav class="module-nav" aria-label="模块导航">
+      <button type="button" class="view-tab active" data-view="status">需求</button>
+      <button type="button" class="view-tab" data-view="runs">任务</button>
+      <button type="button" class="view-tab nav-extra" data-view="settings">设置</button>
+    </nav>
+    <div class="top-actions">
+      <select id="projectSel" class="project-sel" title="切换项目看板"></select>
+      <!-- REQ-20260910-005：项目管理入口（初始化 / 导入 / 移出；移出仅移出列表，目录与文档保留）；
+           REQ-20260910-014：点击改开右侧侧拉面板，入口带面板开合联动（对齐全局按钮写法） -->
+      <button id="btnProjManage" class="btn" type="button" title="初始化、导入或移出项目" aria-haspopup="dialog" aria-expanded="false" aria-controls="projModalWrap">管理项目</button>
+      <!-- BUG-20260910-004：全局任务总览入口（跨项目只读聚合，自第二行模块导航移入顶栏「管理项目」右侧；
+           点击从右侧打开全局任务面板，不切换当前项目模块） -->
+      <button id="btnGlobal" class="btn" type="button" title="全部项目的批量任务（跨项目总览）" aria-haspopup="dialog" aria-expanded="false" aria-controls="globalPanel">全局</button>
+      <!-- REQ-20260906-024：当前项目模型待处理计数入口（点击打开任务模块的 Codex 自动派发） -->
+      <button id="cxPendingBadge" class="btn pending-badge hidden" type="button" title="模型配置待处理：点击查看原因与恢复入口">待处理 0</button>
+      <!-- REQ-20260911-005：界面语言切换（中文 ⇄ English；初始按系统语言自动检测，手动选择记忆） -->
+      <button id="btnLang" class="btn" type="button" title="Switch to English · 当前：中文">EN</button>
+      <!-- REQ-20260910-007：快捷键帮助入口（与按 ? 同一行为；快捷键只触发现有界面入口，不做状态变更） -->
+      <button id="btnShortcuts" class="btn" type="button" title="快捷键说明（按 ? 打开）">快捷键 ?</button>
+      <!-- REQ-20260910-014：新建入口改开右侧侧拉面板，入口带面板开合联动（对齐全局按钮写法） -->
+      <button id="btnNew" class="btn primary" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="modalWrap">＋ 新建</button>
+    </div>
+  </header>
+
+  <!-- REQ-20260910-012：原独立第二行模块导航已上移并入顶栏（见 header 内 .module-nav） -->
+
+  <!-- REQ-20260907-004 第三行：模块副标题 + 当前模块搜索框（搜索随模块解释）。
+    REQ-20260910-009：搜索范围以常显标签 #searchScope 表达（输入前后均可见，不再只靠占位符），
+    显式清除按钮 #searchClear 有词时出现，点击 / Esc 清空并把焦点交还输入框。
+    REQ-20260910-016：排序菜单迁入本行定位控件组（#locateGroup），紧邻搜索框左侧——
+    按时间/单号浏览与关键词定位集中在同一组控件；宽屏整组靠右、副标题保持左侧；
+    #reqSort 仅需求模块且已初始化时可见（app.js syncReqSortVisibility），初始 hidden；
+    REQ-20260910-025：定位组内排序下拉与搜索组等高平齐（同高 32px，见 style.css）；
+    BUG-20260910-018：组内左右相邻结构保证（定位组内搜索组全宽度 min-width:0，见 style.css）；
+    BUG-20260911-001（018 复发）：组内改 flex-wrap:nowrap——断行按 flex-basis 380px 打包，
+    min-width:0 不阻止换行；nowrap 下任意宽度组内恒同一行，空间不足整组随 .page-head wrap 下移 -->
+  <section id="pageHead" class="page-head">
+    <p id="moduleSub" class="module-sub"></p>
+    <div id="locateGroup" class="locate-group">
+      <!-- REQ-20260908-002：所有列表提供排序——五档列表共用排序键，选择记忆 localStorage；
+        REQ-20260910-016 自列表工具栏迁入定位组（Tab 顺序：排序 → 搜索） -->
+      <select id="reqSort" class="sort-select hidden" title="列表排序（更新 / 创建 / 单号）" aria-label="列表排序">
+        <option value="updated-desc">最新更新</option>
+        <option value="updated-asc">最早更新</option>
+        <option value="created-desc">最新创建</option>
+        <option value="created-asc">最早创建</option>
+        <option value="id-asc">单号</option>
+      </select>
+      <div class="global-search module-search" title="搜索当前模块">
+        <span class="gs-icon" aria-hidden="true">⌕</span>
+        <span id="searchScope" class="search-scope">需求</span>
+        <input id="searchInput" class="search-input" type="search" placeholder="搜需求 / Bug / 文档…" autocomplete="off" enterkeyhint="search" aria-label="搜索当前模块" aria-describedby="searchScope" />
+        <button type="button" id="searchClear" class="search-clear hidden" aria-label="清除搜索" title="清空搜索并恢复模块内容">✕</button>
+        <!-- REQ-20260910-007：键位提示——非输入态按 / 聚焦本框 -->
+        <kbd class="kbd-hint" aria-hidden="true">/</kbd>
+      </div>
+    </div>
+  </section>
+
+  <!-- REQ-20260910-009：统一搜索反馈条（id="searchFeedback"，五模块共用；替代原 #docHits / #fileSearchHits
+    两条带），紧邻 #pageHead 不与其他内容块混排，由 renderSearchFeedback 按模块渲染
+    关键词 / 范围 / 分类命中数与未输入、加载、正常、空结果、失败、截断状态 -->
+  <section id="searchFeedback" class="hits-strip search-feedback hidden" role="region" aria-live="polite" aria-label="搜索结果反馈"></section>
+
+  <!-- REQ-20260910-012：需求六档状态筛选（BUG-20260907-016 恢复的横向筛选条）迁为内容区左缘
+    纵向竖排栏（原独立第四行取消，chips 由 app.js renderFilterBar 渲染、机制不变） -->
+  <!-- REQ-20260907-004 需求工作区：宽屏列表与详情并排，窄屏进入详情可返回 -->
+  <main id="reqView" class="req-view hidden">
+    <nav id="filterBar" class="filter-bar hidden" aria-label="按状态筛选需求"></nav>
+    <section id="emptyState" class="empty hidden">
+      <!-- REQ-20260910-005：空态双卡——当前项目未初始化（初始化卡）/ 暂无项目（引导卡），app.js syncEmptyCards 切换 -->
+      <div class="empty-card" id="initCard">
+        <h2>当前项目尚未初始化看板</h2>
+        <p>将在 <code>docs/agent-team-board/</code> 创建数据目录，需求与 Bug 随代码进 git。</p>
+        <button id="btnInit" class="btn primary">初始化</button>
+      </div>
+      <div class="empty-card hidden" id="noProjectCard">
+        <h2>暂无项目</h2>
+        <p>初始化一个项目目录，或导入已有看板数据的项目；移出过的项目可随时重新导入。</p>
+        <button id="btnOpenProjManage" class="btn primary" type="button">管理项目</button>
+      </div>
+    </section>
+    <div class="req-split">
+      <section id="board" class="req-list-wrap hidden" aria-label="需求列表">
+        <!-- REQ-20260910-008：列表头单行工具栏（REQ-20260909-002 合并、BUG-20260909-009 固定两行后，
+          本需求取消固定的第二行选择区）——左起：全选、全不选、已选数量与批量动作（#selGroup）、
+          档位快捷入口（空间足够时靠右）；宽度不足按组整体换行，不裁切不横向滚动。
+          REQ-20260910-016：排序菜单迁至第三行搜索框左侧定位组（见 #pageHead），工具栏不再有排序入口。
+          普通「N 个条目」已移除（顶部分类标签展示各档数量），#reqCount 保留为条件提示：
+          已完成默认截断（显示范围 / 总量 / 搜索引导）与搜索命中「搜索命中 N 项」，无提示时隐藏 -->
+        <div id="reqCaption" class="req-caption">
+          <span id="reqCount" class="caption-hint muted small hidden" aria-live="polite"></span>
+          <!-- 全选 / 全不选（REQ-20260908-027 仅当前档叠搜索；BUG-20260909-008 非选择档整体隐藏）：
+               三选择档恒可见——勾选首项右组出现 / 消失不改变工具栏结构，宽度足够时不增加行数。
+               REQ-20260910-026：图标化去文字，语义由 title 悬浮提示与 aria-label 承载；
+               BUG-20260910-019：图标由 U+2611 / U+2610 投票框字形改为自绘内联 SVG（标准复选框语汇：带勾方框 / 空方框，
+               等线宽描边、stroke=currentColor 随主题与 hover 变色，13×13 对齐行内 13px 字形图标视觉重量，
+               不随系统字体回退漂移；BUG-20260910-017 为字形单独降字号的 icon-check 修补随之移除）；
+               SVG aria-hidden，读屏仍由按钮 aria-label 念出「全选 / 全不选」 -->
+          <button type="button" id="selectOperable" class="btn small quiet icon-act" aria-label="全选" title="全选：仅勾选当前筛选档内可见的可操作条目（待接受 / 已接受 / 已计划；叠搜索范围）"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5"/><polyline points="4.6 8.3 6.9 10.6 11.4 5.3"/></svg></button>
+          <button type="button" id="selectNone" class="btn small quiet icon-act" disabled aria-label="全不选" title="全不选：仅取消当前筛选档的勾选"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5"/></svg></button>
+          <!-- REQ-20260910-026：批量动作组与档位快捷入口绑定为同一行的一组——#captionActions 内
+               恒不拆散到两行，空间足够时整组靠右；宽度不足整组在工具栏内换行兜底 -->
+          <div id="captionActions" class="caption-actions">
+          <div id="selGroup" class="sel-group hidden" role="group" aria-label="批量操作">
+          <span id="selCount" class="sel-count">已选 0 项</span>
+          <button type="button" id="acceptSelected" class="btn primary hidden" disabled>接受所选</button>
+          <!-- REQ-20260908-018：批量移入计划（已接受 → 已计划，人工排期），逐条流转、单项失败不回滚 -->
+          <button type="button" id="planAdd" class="btn primary hidden" disabled title="移入计划（排入开发计划）：勾选的已接受条目逐条置为已计划，开发启动后最旧优先处理">移入计划</button>
+          <!-- REQ-20260908-027：批量驳回待接受（已接受 → 待接受），完善中的单被服务端拦截计入失败清单 -->
+          <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮批量完善结束后再驳回">驳回待接受</button>
+          <!-- BUG-20260909-006：已计划列表的批量开发入口移除（批量开发入口唯一收敛任务模块，口径=已计划队列）；
+               已计划档勾选仅为「移出计划」服务 -->
+          <button type="button" id="planRemove" class="btn warn hidden" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
+          </div>
+          <!-- REQ-20260909-007：档位快捷入口——已接受档「开始完善」/ 已计划档「开始开发」，空间足够时靠右、
+               与勾选无关仅导航（初始隐藏，syncAcceptance 按当前档切换显隐与文案；任务创建仍由面板内「启动」承接）；
+               REQ-20260910-026：与批量动作组同入 #captionActions 恒定同一行 -->
+          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始完善" title="进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ 开始完善</button>
+          </div>
+        </div>
+        <div id="acceptResult" class="accept-result hidden" role="status" aria-live="polite"></div>
+        <div id="reqList" class="req-list"></div>
+        <!-- REQ-20260911-007 待人工确认持久聚合区：不随批次结束消失；worker 声明 hold 的 in-progress
+             条目在此呈现（等待时长 / 未答清单 / 补决策 / 复工 / 确认完成防呆）。空态整体隐藏不占版面 -->
+        <div id="holdArea" class="hold-area hidden" role="region" aria-label="待人工确认" aria-live="polite"></div>
+      </section>
+      <aside id="drawer" class="drawer" aria-label="条目详情"></aside>
+    </div>
+    <!-- REQ-20260908-005：遮罩随详情抽屉入工作区——窄屏覆盖层不越过状态筛选行 -->
+    <div id="mask" class="mask hidden"></div>
+  </main>
+
+  <!-- REQ-20260906-007：目录树改横幅呈现（面包屑 + 分层横幅条带），文件内容占满剩余高度。
+    REQ-20260910-009：文件搜索命中统一在 #searchFeedback 呈现，横幅保持模块原有内容不再被替代 -->
+  <section id="fileView" class="file-view hidden">
+    <div id="fileBanner" class="file-banner">
+      <nav id="fileCrumb" class="file-crumb" aria-label="当前目录路径"></nav>
+      <div id="bannerStack" class="banner-stack" aria-label="目录分层横幅"></div>
+    </div>
+    <article id="fileViewer" class="file-viewer"><p class="muted">点击上方横幅中的文件查看内容（md 默认渲染可切源码、图片直接预览、其余语法高亮；点击行号复制「路径:行号」便于在讨论对话框中引用）</p></article>
+  </section>
+
+  <!-- REQ-20260909-004 开放式讨论模块（重构自 REQ-20260907-001 讨论看板；沿用 ASK 序列兼容旧数据）：
+       两态筛选 + 宽屏左右分栏 + 窄屏详情覆盖（结构复用需求模块 req-split），内容动态渲染于 oncall.js -->
+  <section id="oncallView" class="disc-view hidden" aria-label="讨论看板"></section>
+
+  <div id="oncallLightbox" class="oncall-lightbox hidden" title="点击任意处关闭放大图"><img alt="放大查看"></div>
+
+  <!-- REQ-20260907-004 任务模块：集中呈现批次、队列、执行记录与对应操作（页面化，不再用抽屉遮罩） -->
+  <section id="runsView" class="runs-view hidden" aria-label="任务">
+    <aside id="batchDrawer" class="batch-drawer" aria-label="任务面板"></aside>
+  </section>
+
+  <!-- REQ-20260910-019 营销模块：概览 / 定位与定价 / 渠道与行动 / 效果与复盘四页签，
+       后两页由关联需求（020 / 021）交付，当前禁用并标注暂不可用；
+       内容动态渲染于 marketing.js（营销档案初始化由用户点击触发，未建立前显示引导） -->
+  <section id="marketingView" class="marketing-view hidden" aria-label="营销"></section>
+
+  <!-- REQ-20260910-029 发布模块：运行列表 / 运行详情分栏 + 阶段进度 + 四页签 + 新建侧拉面板，
+       内容动态渲染于 release.js（Git 七阶段 / Apple 八阶段；预检不推送，启动须计划确认；
+       深浅色走既有 CSS 变量，窄屏 ≤960px 分栏改上下排列） -->
+  <section id="releaseView" class="release-view hidden" aria-label="发布"></section>
+
+  <!-- BUG-20260910-004 全局任务总览：顶栏「全局」打开的右侧面板（跨项目只读聚合，不随顶栏项目选择器变化）。
+       BUG-20260910-015 头部紧凑化：首行标题 + 关闭按钮，次行精简副标题「跨项目批量任务」与搜索同排
+       （原「不随顶栏项目选择变化」语义保留在副标题 title 辅助说明）。
+       头部（标题 / 副标题 / 关闭按钮 / 搜索）为常驻节点，不随内容重渲染——加载 / 失败状态不阻塞关闭；
+       任务内容动态渲染于 app.js renderGlobalView（#globalPanelBody）；打开面板不切换当前项目模块 -->
+  <aside id="globalPanel" class="global-panel hidden" role="dialog" aria-label="全局任务（跨项目）">
+    <header class="global-panel-head">
+      <div class="global-panel-title">
+        <h2>全局任务</h2>
+      </div>
+      <button type="button" id="globalPanelClose" class="icon-btn" aria-label="关闭全局任务面板" title="关闭全局任务（Esc）">✕</button>
+    </header>
+    <div class="global-panel-tools">
+      <p class="global-panel-scope" title="不随顶栏项目选择变化">跨项目批量任务</p>
+      <input id="globalSearchInput" class="search-input" type="search" placeholder="搜项目 / 批次号 / 条目编号…" autocomplete="off" enterkeyhint="search" aria-label="搜索全局任务（跨项目）" />
+    </div>
+    <div id="globalPanelBody" class="global-panel-body" aria-label="全局任务列表"></div>
+  </aside>
+
+  <!-- REQ-20260907-004 设置模块（BUG-20260909-011：运行参数分区已删除，仅剩批量任务分区） -->
+  <section id="settingsView" class="settings-view hidden" aria-label="项目设置"></section>
+
+  <!-- REQ-20260907-004 统一新建：需求 / Bug / 讨论三类同一表单，按类型切换字段
+       （REQ-20260909-004：讨论改为标题 + 背景（可选），不再关联需求与上传截图）。
+       REQ-20260910-014：容器形态对齐全局面板（BUG-20260910-004）——自居中弹窗 + 全屏遮罩
+       迁为右侧贴边通高侧拉面板：头部（标题 + 说明 + ✕）常驻、内容区独立滚动、无遮罩不压暗主界面；
+       表单字段、功能与数据流不变。
+       REQ-20260909-013：讨论类型随讨论入口暂态隐藏（类型下拉仅剩需求 / Bug；机制保留待恢复） -->
+  <div id="modalWrap" class="side-panel hidden" role="dialog" aria-label="新建条目">
+    <header class="side-panel-head">
+      <div class="side-panel-title">
+        <h3>新建条目</h3>
+        <p class="side-panel-scope">需求 / Bug 同一表单，按类型切换字段</p>
+      </div>
+      <button type="button" class="icon-btn" id="modalClose" aria-label="关闭新建面板" title="关闭（Esc）">✕</button>
+    </header>
+    <div class="side-panel-body">
+      <form id="newForm">
+        <label class="field">类型
+          <select id="fType">
+            <option value="req">需求（REQ）</option>
+            <option value="bug">Bug（BUG）</option>
+            <!-- REQ-20260909-013：「讨论（ASK）」选项随讨论入口暂态隐藏移除（口径见条目 design.md 待确认 2 裁定；
+                 /api/discussion 服务端与 submitNew ask 分支保留，恢复 = 加回本 option 即生效） -->
+          </select>
+        </label>
+        <label class="field">标题
+          <input id="fTitle" required maxlength="120" placeholder="一句话说清这条需求 / Bug / 讨论">
+        </label>
+        <label class="field" id="fDescRow"><span id="fDescLabel">描述</span>
+          <textarea id="fDesc" rows="4" placeholder="验收标准、现象与复现步骤等（可留空，后续补充）"></textarea>
+        </label>
+        <!-- REQ-20260909-009 截图区块；REQ-20260910-028 讨论同口径开放（三类类型统一显示，随创建一次提交） -->
+        <div class="field" id="fShotRow">
+          <div class="shot-head">
+            <span>截图（可选）</span>
+            <span class="muted small" id="fShotCount">0 / 9</span>
+            <button type="button" class="btn small" id="fShotPick">上传图片</button>
+            <span class="muted small">或直接 ⌘V 粘贴</span>
+            <!-- REQ-20260910-017：双击查看大图提示（预览入口随缩略图渲染，见 app.js renderShots） -->
+            <span class="muted small">双击查看大图</span>
+          </div>
+          <input type="file" id="fShotFile" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon,image/bmp,image/avif" multiple hidden>
+          <div id="fShotList" class="shot-list hidden"></div>
+          <p id="fShotEmpty" class="muted small shot-empty">粘贴或选择图片，创建后写入描述（png / jpg / webp 等，单张 ≤ 8MB）</p>
+          <p id="fShotError" class="shot-error hidden" role="alert"></p>
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="modalCancel">取消</button>
+          <!-- REQ-20260910-015 创建并接受：需求 / Bug 一步直达 accepted（结果与分步接受等价）；
+               讨论无接受概念，随 syncNewFormFields 隐藏 -->
+          <button type="button" class="btn accent" id="fSubmitAccept">创建并接受</button>
+          <button type="submit" class="btn primary" id="fSubmit">创建</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- REQ-20260910-017 新建表单截图双击放大预览：全屏遮罩常驻节点（打开前 hidden），覆盖在
+       新建侧拉面板之上（z-index 见 style.css）；顶部文件名 + 关闭按钮常驻，内容区渲染
+       加载中 / 大图 / 失败重试三态（app.js shotPreviewShow / shotPreviewClose）；
+       只查看本次表单已添加的图片，不创建条目、不新增附件、不改变顺序或文件内容 -->
+  <div id="shotPreview" class="shot-preview hidden" role="dialog" aria-modal="true" aria-label="截图大图预览">
+    <header class="shot-preview-head">
+      <strong id="shotPreviewName" class="shot-preview-name"></strong>
+      <button type="button" class="shot-preview-close" id="shotPreviewClose" aria-label="关闭大图预览" title="关闭（Esc）">✕ 关闭</button>
+    </header>
+    <div id="shotPreviewBody" class="shot-preview-body" aria-live="polite"></div>
+  </div>
+
+  <!-- REQ-20260910-005 项目管理：初始化 / 导入（两步确认）+ 项目列表（切换 / 移出确认）；
+       移出仅从注册列表移出，项目目录与需求、Bug 文档保留。
+       REQ-20260910-014：容器形态对齐全局面板——自居中弹窗 + 全屏遮罩迁为右侧贴边通高侧拉面板
+       （头部常驻、内容区独立滚动、无遮罩）；操作表单、检测栏、列表与确认区分区及顺序不变 -->
+  <div id="projModalWrap" class="side-panel hidden" role="dialog" aria-label="项目管理">
+    <header class="side-panel-head">
+      <div class="side-panel-title">
+        <h3>项目管理</h3>
+        <p class="side-panel-scope">初始化、导入或移出项目；移出仅移出列表，目录与文档保留</p>
+      </div>
+      <button type="button" class="icon-btn" id="projClose" aria-label="关闭项目管理面板" title="关闭（Esc）">✕</button>
+    </header>
+    <div class="side-panel-body">
+      <form id="projForm">
+        <label class="field">操作
+          <select id="projMode">
+            <option value="init">初始化项目（在新目录创建看板数据）</option>
+            <option value="import">导入项目（加入已有看板数据的项目）</option>
+          </select>
+        </label>
+        <label class="field">项目根目录绝对路径
+          <input id="projPath" placeholder="/absolute/path/to/project" autocomplete="off" spellcheck="false">
+        </label>
+        <!-- 初始化两步走：先解析展示实际将写入的目标位置，确认后才执行 -->
+        <p id="projTarget" class="proj-target hidden" aria-live="polite"></p>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="projCancel">关闭</button>
+          <button type="submit" class="btn primary" id="projSubmit">解析路径</button>
+        </footer>
+      </form>
+      <p id="projNotice" class="proj-notice" role="status" aria-live="polite"></p>
+      <!-- REQ-20260910-010 目录存在性检测：打开面板自动检测；摘要（总数/不存在/检测失败）+ 重新检测 + 一键移出 -->
+      <div id="projScanBar" class="proj-scan" aria-label="目录存在性检测">
+        <p id="projScanSummary" class="proj-scan-summary" role="status" aria-live="polite"></p>
+        <div class="proj-scan-acts">
+          <button type="button" class="btn small" id="projScanBtn">重新检测</button>
+          <button type="button" class="btn small warn" id="projRemoveMissingBtn">移出所有不存在目录</button>
+        </div>
+      </div>
+      <div id="projList" class="proj-list" aria-label="已注册项目"></div>
+      <section id="projBatchConfirm" class="proj-confirm hidden" aria-label="批量移出确认">
+        <p id="projBatchText"></p>
+        <div class="modal-foot">
+          <button type="button" class="btn" id="projBatchCancel">取消</button>
+          <button type="button" class="btn danger" id="projBatchOk">确认移出</button>
+        </div>
+      </section>
+      <section id="projConfirm" class="proj-confirm hidden" aria-label="移出确认">
+        <p id="projConfirmText"></p>
+        <div class="modal-foot">
+          <button type="button" class="btn" id="projRemoveCancel">取消</button>
+          <button type="button" class="btn danger" id="projRemoveOk">确认移出</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- REQ-20260911-001 待接受条目「✎ 修改」侧拉面板：居中编辑弹窗 + 全屏遮罩迁为右侧贴边通高面板，
+       容器几何与开合体验对齐「＋ 新建」（REQ-20260910-014 的 .side-panel）：无遮罩不压暗主界面、
+       头部（标题 / 说明 / ✕）常驻、内容区独立滚动。内容区三态：
+       读取中（#editLoading）/ 读取失败或缺节（#editError：原因 + 重试 + 关闭，不出现可提交的伪空表单）/
+       表单（#editForm）。字段、校验、接口与状态规则不变（仅 submitted 可改；保存走 /api/item/:id/content）。 -->
+  <div id="editModalWrap" class="side-panel hidden" role="dialog" aria-label="编辑条目">
+    <header class="side-panel-head">
+      <div class="side-panel-title">
+        <h3 id="editItemTitle">编辑条目</h3>
+        <p class="side-panel-scope" id="editScope">仅待接受条目可改</p>
+      </div>
+      <button type="button" class="icon-btn" id="editClose" aria-label="关闭编辑面板" title="关闭（Esc）">✕</button>
+    </header>
+    <div class="side-panel-body">
+      <p id="editLoading" class="muted edit-loading">正在读取描述…</p>
+      <div id="editError" class="edit-error hidden" role="alert">
+        <p id="editErrorText" class="edit-error-text"></p>
+        <div class="modal-foot">
+          <button type="button" class="btn" id="editErrorClose">关闭</button>
+          <button type="button" class="btn primary" id="editRetry">重试</button>
+        </div>
+      </div>
+      <form id="editForm" class="hidden">
+        <label class="field">标题（不超过 120 字）
+          <input id="eTitle" maxlength="120" autocomplete="off">
+        </label>
+        <label class="field">描述（多行，保存时整体替换对应章节）
+          <textarea id="eDesc" rows="8" placeholder="可留空，后续补充"></textarea>
+        </label>
+        <p id="editMsg" class="edit-msg" role="status" aria-live="polite"></p>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="editCancel">取消</button>
+          <button type="submit" class="btn primary" id="editSave">保存</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- REQ-20260911-007 待人工决策侧拉面板：条目决策表单（每个决策项一行：问题 + 作答框 + 补充说明），
+       底部「保存决策」；打开先读取决策项（加载态禁用提交、可关闭），保存支持部分作答草稿。
+       头部（标题 / 说明 / ✕）常驻，内容区独立滚动；作答 / 复工仅人工（Agent 调用被钩子拦截） -->
+  <div id="holdPanel" class="side-panel hidden" role="dialog" aria-label="人工决策">
+    <header class="side-panel-head">
+      <div class="side-panel-title">
+        <h3 id="holdPanelTitle">人工决策</h3>
+        <p class="side-panel-scope" id="holdPanelScope">逐项作答后复工；支持保存未答完的草稿</p>
+      </div>
+      <button type="button" class="icon-btn" id="holdPanelClose" aria-label="关闭人工决策面板" title="关闭（Esc）">✕</button>
+    </header>
+    <div class="side-panel-body">
+      <p id="holdPanelLoading" class="muted edit-loading">正在读取决策项…</p>
+      <div id="holdPanelError" class="edit-error hidden" role="alert">
+        <p id="holdPanelErrorText" class="edit-error-text"></p>
+        <div class="modal-foot">
+          <button type="button" class="btn" id="holdPanelErrorClose">关闭</button>
+          <button type="button" class="btn primary" id="holdPanelRetry">重试</button>
+        </div>
+      </div>
+      <form id="holdForm" class="hidden">
+        <p id="holdFormMeta" class="muted small" role="status"></p>
+        <div id="holdQuestions" class="hold-questions"></div>
+        <p id="holdPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="holdPanelCancel">关闭</button>
+          <button type="submit" class="btn primary" id="holdPanelSave">保存决策</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- REQ-20260910-007 快捷键帮助面板：居中模态，列出「操作 / 按键 / 生效条件」；
+       窄屏整体可滚动且头部 sticky（关闭按钮始终可达），开启期间 Tab/Shift+Tab 焦点圈定在面板内 -->
+  <div id="shortcutHelpWrap" class="modal-wrap hidden">
+    <div class="modal shortcut-help" role="dialog" aria-modal="true" aria-labelledby="shortcutHelpTitle">
+      <header class="modal-head">
+        <h3 id="shortcutHelpTitle">快捷键</h3>
+        <button type="button" class="icon-btn" id="shortcutHelpClose" aria-label="关闭快捷键帮助" title="关闭（Esc）">✕</button>
+      </header>
+      <table class="shortcut-table">
+        <thead>
+          <tr><th>按键</th><th>操作</th><th>生效条件</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd class="sk">/</kbd></td><td>聚焦当前模块搜索框</td><td>无弹窗且焦点不在可编辑区域</td></tr>
+          <tr><td><kbd class="sk">?</kbd></td><td>打开本快捷键帮助</td><td>焦点不在可编辑区域且无其他弹窗；重复按键不叠加面板</td></tr>
+          <tr><td><kbd class="sk">←</kbd> / <kbd class="sk">→</kbd></td><td>当前筛选列表中上一条 / 下一条详情</td><td>详情已打开、非输入态；边界停止，不循环</td></tr>
+          <tr><td><kbd class="sk">Esc</kbd></td><td>关闭最上层可关闭面板</td><td>一次只关一层；关闭后恢复至打开入口</td></tr>
+          <tr><td><kbd class="sk">Tab</kbd> / <kbd class="sk">Shift+Tab</kbd></td><td>顺序移动焦点</td><td>沿用原生顺序；本帮助开启时焦点留在帮助内</td></tr>
+        </tbody>
+      </table>
+      <p class="muted small shortcut-note">输入框、文本域、下拉选择、contenteditable 及中文输入法组合输入期间不触发以上快捷键；带 Ctrl / ⌘ / Alt 的组合键与未列出的按键保留浏览器默认行为。快捷键只触发现有界面入口，不直接接受、计划、删除条目或启动批次。</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- REQ-20260910-019 营销档案未保存切换项目确认：保存并切换 / 放弃 / 取消（取消回弹项目选择器；
+       保存失败弹窗保留，可重试或改选放弃 / 取消；本地草稿在放弃前不丢弃） -->
+  <div id="mktSwitchWrap" class="modal-wrap hidden" role="dialog" aria-modal="true" aria-labelledby="mktSwitchTitle">
+    <div class="modal mkt-switch-modal">
+      <header class="modal-head">
+        <h3 id="mktSwitchTitle">营销档案有未保存内容</h3>
+        <button type="button" class="icon-btn" id="mktSwitchClose" aria-label="关闭确认弹窗" title="关闭（等于取消）">✕</button>
+      </header>
+      <p id="mktSwitchText" class="mkt-switch-text"></p>
+      <footer class="modal-foot">
+        <button type="button" class="btn" id="mktSwitchCancel">取消</button>
+        <button type="button" class="btn warn" id="mktSwitchDiscard">放弃</button>
+        <button type="button" class="btn primary" id="mktSwitchSave">保存并切换</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="/marked.min.js"></script>
+  <!-- REQ-20260911-005：i18n 运行时翻译层（须在 app.js 之前加载；静态 HTML 先译，动态渲染由 MutationObserver 接住） -->
+  <script src="/i18n.js"></script>
+  <script src="/banner.js"></script>
+  <script src="/highlight.min.js"></script>
+  <script src="/oncall.js"></script>
+  <!-- REQ-20260909-003 需求文档引用讨论：需求抽屉区块（提示词/引用/纪要/应用），app.js 挂载 -->
+  <script src="/req-disc.js"></script>
+  <!-- REQ-20260910-019 营销模块：档案 / 定位证据 / 定价版本（在 app.js 之前加载，挂载 window.ATBMarketing） -->
+  <script src="/marketing.js"></script>
+  <!-- REQ-20260910-029 发布模块：Git 远端 / Apple App Store 发布流水线（在 app.js 之前加载，挂载 window.ATBRelease） -->
+  <script src="/release.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

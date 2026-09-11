@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260907-004",
+  "type": "requirement",
+  "title": "看板整体布局优化：统一导航、三类新建入口与列表工作区",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-005-1",
+  "createdAt": "2026-09-07T05:38:51.849Z",
+  "updatedAt": "2026-09-11T05:52:16.528Z",
+  "agentCompletedAt": "2026-09-07T06:59:46.689Z",
+  "lastReport": {
+    "at": "2026-09-07T06:59:46.689Z",
+    "coverage": 70,
+    "framework": "node:assert 静态契约 + node:vm 模拟 DOM（npm test 聚合）",
+    "summary": "四行布局重构完成：统一导航（讨论/需求/任务/文件+设置）、三类统一新建（含讨论单附件）、需求列表+详情并排工作区、移除看板与切换、任务/设置页面化、模块搜索与更名；新增 workbench-layout 13 用例并同步更新 16 个受影响测试，59 个测试文件全绿，服务冒烟通过",
+    "runId": "run-20260907-034"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T05:38:51.849Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-efdb"
+    },
+    {
+      "at": "2026-09-07T05:55:40.471Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T06:18:28.975Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-005-1",
+      "note": "认领（zcode-batch-005-1）"
+    },
+    {
+      "at": "2026-09-07T06:59:46.690Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-005-1",
+      "note": "上报测试报告（覆盖率 70%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.528Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-8327",
+      "note": "人工确认完成"
+    }
+  ]
+}

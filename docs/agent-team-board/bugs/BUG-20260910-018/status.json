@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-018",
+  "type": "bug",
+  "title": "排序下拉组件没有和搜索框平齐，请修复",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260910-032-02",
+  "createdAt": "2026-09-10T13:04:26.684Z",
+  "updatedAt": "2026-09-11T05:52:23.353Z",
+  "agentCompletedAt": "2026-09-10T15:16:58.467Z",
+  "lastReport": {
+    "at": "2026-09-10T15:16:58.467Z",
+    "coverage": 100,
+    "framework": "node:test",
+    "summary": "归因REQ-016（高度侧已由REQ-025修复并守护）。根因：定位组内搜索组>720px仍受基础.global-search的min-width:140px保底，组内不堆叠仅靠≤720px媒体查询emergent保证。修复：style.css新增.page-head .locate-group .module-search{min-width:0}（作用域限定），组内恒左右相邻不堆叠不裁切无横向滚动；flex-wrap:wrap与025等高32px口径原样保留。TDD：新增B1-B6六用例，跑红→绿；016/025回归与全量npm test（174文件）0失败。",
+    "runId": "run-20260910-180"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T13:04:26.684Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T13:04:26.685Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T13:18:25.857Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-211414-8565）"
+    },
+    {
+      "at": "2026-09-10T15:02:19.630Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-02",
+      "note": "认领（zcode-batch-20260910-032-02）"
+    },
+    {
+      "at": "2026-09-10T15:16:58.467Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-02",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.353Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1edd",
+      "note": "人工确认完成"
+    }
+  ]
+}

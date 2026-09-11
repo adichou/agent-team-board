@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-015",
+  "type": "requirement",
+  "title": "创建需求或 bug，支持创建并接受",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-18",
+  "createdAt": "2026-09-10T04:54:08.100Z",
+  "updatedAt": "2026-09-11T05:52:22.572Z",
+  "agentCompletedAt": "2026-09-10T07:52:35.891Z",
+  "lastReport": {
+    "at": "2026-09-10T07:52:35.891Z",
+    "coverage": 100,
+    "framework": "node:assert + vm 契约测试",
+    "summary": "创建并接受一步直达：core.createItem 增 accept（文档落盘后置 accepted+history 两条+refine 未完善，写状态失败回滚删目录）；CLI atb new --accept 与 /api/new accept:true（仅严格布尔）；弹窗底栏「取消|创建并接受|创建」按类型显隐、两按钮防重复、失败保留；state-guard 规则2b 拦 atb new --accept、规则3 拦 /api/new accept:true/accept=true；新增 12 用例两测试文件（先红后绿），全量 152 文件 0 失败",
+    "runId": "run-20260910-164"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T04:54:08.100Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T04:54:12.061Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T05:43:03.809Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-133648-c4da）"
+    },
+    {
+      "at": "2026-09-10T07:25:59.127Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-18",
+      "note": "认领（zcode-batch-031-18）"
+    },
+    {
+      "at": "2026-09-10T07:52:35.891Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-18",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.572Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5361",
+      "note": "人工确认完成"
+    }
+  ]
+}

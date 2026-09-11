@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260907-013",
+  "type": "requirement",
+  "title": "支持当前已有批次执行中时，可以创建新批次。没在执行中的新批次可以被删除。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-010-1",
+  "createdAt": "2026-09-07T15:35:05.866Z",
+  "updatedAt": "2026-09-11T05:52:17.616Z",
+  "agentCompletedAt": "2026-09-07T23:47:34.356Z",
+  "lastReport": {
+    "at": "2026-09-07T23:47:34.356Z",
+    "coverage": 9,
+    "framework": "node:test（自研用例聚合）",
+    "summary": "批次删除全栈：core deleteBatch（在途运行/needs_attention 拒绝，仅删批次账本、runs 与条目不动，队列动态前移）；CLI atb batch delete；API POST /api/batch/delete；看板排队列表项与当前批次（无在途）删除入口（uiConfirm 确认）；执行中面板新增「排队新批次」按钮复用创建流程。测试 batch-delete.test.mjs 9 用例（C1+D1-D8）全通过，npm test 74 文件回归 0 失败。",
+    "runId": "run-20260908-058"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T15:35:05.866Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T22:56:15.303Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T23:41:46.390Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-010-1",
+      "note": "认领（zcode-batch-010-1）"
+    },
+    {
+      "at": "2026-09-07T23:47:34.356Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-010-1",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.617Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-ca28",
+      "note": "人工确认完成"
+    }
+  ]
+}

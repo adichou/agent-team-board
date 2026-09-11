@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-009",
+  "type": "bug",
+  "title": "真实 codex exec resume 不支持适配器传入的 -C 参数",
+  "status": "done",
+  "parent": "REQ-20260906-003",
+  "owner": "codex-worker-claim-fix",
+  "createdAt": "2026-09-06T06:40:04.233Z",
+  "updatedAt": "2026-09-11T05:52:15.421Z",
+  "agentCompletedAt": "2026-09-06T10:12:49.956Z",
+  "lastReport": {
+    "at": "2026-09-06T10:12:49.956Z",
+    "coverage": null,
+    "framework": "node:assert + 假 CLI 同项续跑 + 本机 CLI 帮助解析",
+    "summary": "修复resume参数：仅新建传-C，恢复用spawn.cwd固定项目目录和确切会话ID，stdin提示词保持。A1新预期先红后绿，适配器12组、调度器19组通过；本机CLI0.153.4按实际构造参数执行--help解析通过，未向模型发送请求，不宣称真实会话恢复已验证。全库37文件中36通过，存量BUG-20260906-011失败，未测覆盖率。引入来源REQ-20260906-003；关联BUG-20260906-010预检修复。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T06:40:04.233Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-0a34"
+    },
+    {
+      "at": "2026-09-06T08:26:56.777Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T10:12:06.715Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "codex-worker-claim-fix",
+      "note": "认领（codex-worker-claim-fix）"
+    },
+    {
+      "at": "2026-09-06T10:12:49.957Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "codex-worker-claim-fix",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.421Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2ef6",
+      "note": "人工确认完成"
+    }
+  ]
+}

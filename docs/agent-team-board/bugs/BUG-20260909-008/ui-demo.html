@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260909-008 界面演示 — 不支持选择的列表去掉全选/全不选</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e3e6ea; --text: #24292f;
+    --muted: #6a737d; --primary: #1f6feb; --warn: #bf8700; --err: #cf222e;
+    --info-bg: #ddf4ff; --ok-bg: #dafbe1; --ok-text: #1a7f37; --info-text: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .demo-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 16px; background: #24292f; color: #fff; }
+  .demo-top .title { font-weight: 600; }
+  .demo-top .title .small { display: block; font-weight: 400; opacity: .75; }
+  .mode-switch { display: inline-flex; border: 1px solid #fff5; border-radius: 8px; overflow: hidden; }
+  .mode-switch button { border: 0; background: transparent; color: #fffa; padding: 6px 14px; }
+  .mode-switch button.active { background: #fff; color: #24292f; font-weight: 600; }
+  .demo-top .reset { border: 1px solid #fff5; background: transparent; color: #fffa; border-radius: 6px; padding: 4px 12px; }
+
+  main { max-width: 960px; margin: 0 auto; padding: 14px 16px 40px; }
+
+  .note { background: var(--info-bg); border: 1px solid #b6e3ff; color: var(--info-text); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 2px 12px; color: var(--muted); }
+  .chip.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .chip .cnt { font-size: 12px; opacity: .8; }
+
+  .caption { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .caption-left, .sel-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .caption-divider { width: 1px; height: 18px; background: var(--line); }
+  .sel-count { color: var(--muted); font-size: 13px; }
+
+  .btn { border: 1px solid var(--line); background: #f6f8fa; border-radius: 6px; padding: 4px 12px; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn.quiet { background: transparent; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.warn { background: #fff; border-color: var(--warn); color: var(--warn); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  select.sort { border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font-size: 12px; color: var(--muted); background: #fff; }
+
+  .result { border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: var(--ok-bg); color: var(--ok-text); }
+  .result.err { background: #ffebe9; color: var(--err); }
+
+  .list { display: flex; flex-direction: column; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 6px; border-bottom: 1px solid var(--line); cursor: default; }
+  .row:hover { background: #f6f8fa; }
+  .row .rid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--primary); }
+  .row .rtitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row input[type="checkbox"] { width: 15px; height: 15px; margin: 0; }
+
+  .empty-card { text-align: center; color: var(--muted); padding: 28px 0; }
+  .empty-card .big { font-size: 20px; }
+
+  .log { background: #0d1117; color: #c9d1d9; border-radius: 10px; padding: 10px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.7; max-height: 180px; overflow: auto; }
+  .log .t { color: #8b949e; }
+  .log .warn { color: #e3b341; }
+  .log .ok { color: #56d364; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend span::before { content: "■ "; }
+  .legend .l-bug { color: var(--err); } .legend .l-fix { color: var(--ok-text); } .legend .l-mut { color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="demo-top">
+  <div class="title">BUG-20260909-008 界面演示
+    <span class="small">不支持选择的列表（开发中 / 待测试 / 已完成），去掉全选和全不选按钮</span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <div class="mode-switch" role="group" aria-label="现状与期望切换">
+      <button type="button" id="modeBug" class="active">现状（缺陷）</button>
+      <button type="button" id="modeFix">期望（修复后）</button>
+    </div>
+    <button type="button" class="reset" id="btnReset" title="恢复演示初始数据与勾选">重置演示</button>
+  </div>
+</header>
+<main>
+  <div class="note" id="noteBox"></div>
+
+  <section class="panel" aria-label="需求模块列表演示">
+    <div class="chips" id="filterBar" role="group" aria-label="状态筛选档"></div>
+    <div class="caption">
+      <div class="caption-left">
+        <span id="reqCount" class="muted small">0 个条目</span>
+        <select class="sort" id="reqSort" title="列表排序（演示占位，不改变顺序）" aria-label="列表排序">
+          <option>最新更新</option>
+          <option>单号</option>
+        </select>
+        <button type="button" id="selectOperable" class="btn small quiet" title="全选：仅勾选当前筛选档内可见的可操作条目（待接受 / 已接受 / 已计划；叠搜索范围）">☑ 全选</button>
+        <button type="button" id="selectNone" class="btn small quiet" disabled title="全不选：仅取消当前筛选档的勾选">☐ 全不选</button>
+        <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始完善">▶ 开始完善</button>
+      </div>
+      <div id="selGroup" class="sel-group hidden" role="group" aria-label="批量操作">
+        <span class="caption-divider" aria-hidden="true"></span>
+        <span id="selCount" class="sel-count">已选 0 项</span>
+        <button type="button" id="acceptSelected" class="btn primary hidden" disabled>接受所选</button>
+        <button type="button" id="planAdd" class="btn primary hidden" disabled title="移入计划（排入开发计划）：勾选的已接受条目逐条置为已计划">移入计划</button>
+        <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受">驳回待接受</button>
+        <button type="button" id="planRemove" class="btn warn hidden" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
+      </div>
+    </div>
+    <div id="acceptResult" class="result hidden" role="status" aria-live="polite"></div>
+    <div id="reqList" class="list"></div>
+  </section>
+
+  <section class="panel" aria-label="演示说明">
+    <div class="legend small muted">
+      <span class="l-bug">现状：非选择档全选/全不选仍渲染（灰显禁用死控件）</span>
+      <span class="l-fix">期望：非选择档两按钮彻底消失，仅三选择档显示</span>
+      <span class="l-mut">对照真实代码：scripts/web/index.html 第 84–85 行 · scripts/web/app.js 第 1473 / 1557–1561 行</span>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="操作日志">
+    <div class="small muted" style="margin-bottom:6px;">操作与状态日志（含批量进行中防误触、空档空态反馈）</div>
+    <div class="log" id="logBox"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- 演示数据（模拟看板条目，status 即所在档位） ----------
+  var LANES = [
+    { key: 'submitted', label: '待接受' },
+    { key: 'accepted', label: '已接受' },
+    { key: 'planned', label: '已计划' },
+    { key: 'developing', label: '开发中' },
+    { key: 'confirming', label: '待测试' },
+    { key: 'done', label: '已完成' }
+  ];
+  // 选择能力仅覆盖三档（对应真实代码 LANE_SELECTION，app.js:1473）
+  var LANE_SELECTION = { submitted: 'acceptance', accepted: 'plan', planned: 'impl' };
+  function seed() {
+    return [
+      { id: 'REQ-20990101-101', title: '导出看板周报', status: 'submitted' },
+      { id: 'REQ-20990101-102', title: '列表键盘导航', status: 'submitted' },
+      { id: 'REQ-20990101-103', title: '列表支持分页', status: 'accepted' },
+      { id: 'REQ-20990101-104', title: '搜索结果高亮增强', status: 'accepted' },
+      { id: 'REQ-20990101-105', title: '深浅色适配', status: 'planned' },
+      { id: 'REQ-20990101-107', title: '任务面板改版', status: 'developing' },
+      { id: 'REQ-20990101-109', title: '讨论区消息折叠', status: 'confirming' },
+      { id: 'REQ-20990101-111', title: '看板初始化向导', status: 'done' },
+      { id: 'REQ-20990101-112', title: '附件预览', status: 'done' }
+    ];
+  }
+
+  var state = {
+    mode: 'bug',                 // bug = 现状（缺陷）；fix = 期望（修复后）
+    lane: 'submitted',
+    items: seed(),
+    sel: { acceptance: new Set(), plan: new Set(), impl: new Set() }, // 按档隔离的勾选集合
+    busy: false                  // 任一批量操作进行中（防误触）
+  };
+
+  var $ = function (s) { return document.querySelector(s); };
+  function log(msg, cls) {
+    var box = $('#logBox');
+    var t = new Date().toTimeString().slice(0, 8);
+    var div = document.createElement('div');
+    div.innerHTML = '<span class="t">[' + t + ']</span> <span class="' + (cls || '') + '">' + msg + '</span>';
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+  function laneItems(key) { return state.items.filter(function (it) { return it.status === key; }); }
+  function currentSel() {
+    var k = LANE_SELECTION[state.lane];
+    return k ? state.sel[k] : null;
+  }
+
+  // ---------- 档位 chips ----------
+  function renderChips() {
+    var bar = $('#filterBar');
+    bar.innerHTML = '';
+    LANES.forEach(function (l) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip' + (state.lane === l.key ? ' active' : '');
+      b.setAttribute('data-filter', l.key);
+      b.innerHTML = l.label + ' <span class="cnt">' + laneItems(l.key).length + '</span>';
+      b.addEventListener('click', function () {
+        state.lane = l.key;
+        log('切档 → ' + l.label + '（' + laneItems(l.key).length + ' 个条目）');
+        renderAll();
+      });
+      bar.appendChild(b);
+    });
+  }
+
+  // ---------- 列表头（核心演示区：全选/全不选的显隐口径） ----------
+  function syncToolbar() {
+    var selectable = !!LANE_SELECTION[state.lane];
+    var sel = currentSel();
+    var count = sel ? sel.size : 0;
+    var laneEmpty = laneItems(state.lane).length === 0;
+
+    $('#reqCount').textContent = laneItems(state.lane).length + ' 个条目';
+
+    // 全选：三选择档内，无可操作条目或批量进行中禁用；非选择档——
+    //   现状（缺陷）：仍渲染，仅灰显禁用（app.js:1557-1559 的 disabled 收敛）
+    //   期望（修复）：整体隐藏，不再渲染
+    var btnAll = $('#selectOperable');
+    var btnNone = $('#selectNone');
+    var showPair = selectable || state.mode === 'bug';
+    btnAll.classList.toggle('hidden', !showPair);
+    btnNone.classList.toggle('hidden', !showPair);
+    btnAll.disabled = state.busy || !selectable || laneEmpty;
+    btnNone.disabled = state.busy || count === 0;
+    if (!selectable) {
+      btnAll.title = '现状缺陷：本档无可勾选条目，此按钮永远不可用（期望：不显示）';
+      btnNone.title = '现状缺陷：本档无勾选，此按钮永远不可用（期望：不显示）';
+    } else {
+      btnAll.title = '全选：仅勾选当前筛选档内可见的可操作条目（叠搜索范围）';
+      btnNone.title = '全不选：仅取消当前筛选档的勾选';
+    }
+
+    // 档位快捷入口：仅已接受/已计划档显示（对照真实代码 #laneQuickEntry 口径）
+    var quick = $('#laneQuickEntry');
+    var qConf = state.lane === 'accepted' ? '▶ 开始完善' : state.lane === 'planned' ? '▶ 开始开发' : null;
+    quick.classList.toggle('hidden', !qConf);
+    if (qConf) quick.textContent = qConf;
+
+    // 右组批量操作：零勾选整体隐藏；动作按钮按档显隐
+    $('#selGroup').classList.toggle('hidden', count === 0);
+    $('#selCount').textContent = '已选 ' + count + ' 项';
+    var laneOfBtn = { acceptSelected: 'submitted', planAdd: 'accepted', planReject: 'accepted', planRemove: 'planned' };
+    Object.keys(laneOfBtn).forEach(function (id) {
+      $('#' + id).classList.toggle('hidden', state.lane !== laneOfBtn[id]);
+    });
+    $('#acceptSelected').textContent = state.busy && state.lane === 'submitted' ? '接受中…' : '接受所选';
+    $('#planAdd').textContent = state.busy && state.lane === 'accepted' ? '移入中…' : '移入计划';
+    $('#planReject').textContent = state.busy && state.lane === 'accepted' ? '驳回中…' : '驳回待接受';
+    $('#planRemove').textContent = state.busy && state.lane === 'planned' ? '移出中…' : '移出计划';
+    $('#acceptSelected').disabled = state.busy || count === 0;
+    $('#planAdd').disabled = state.busy || count === 0;
+    $('#planReject').disabled = state.busy || count === 0;
+    $('#planRemove').disabled = state.busy || count === 0;
+  }
+
+  // ---------- 列表行 ----------
+  function renderList() {
+    var list = $('#reqList');
+    var items = laneItems(state.lane);
+    list.innerHTML = '';
+    if (!items.length) {
+      var em = document.createElement('div');
+      em.className = 'empty-card';
+      em.innerHTML = '<div class="big">ǀ ǀ ǀ</div><div>本档暂无条目（空态）</div><div class="small">' +
+        (LANE_SELECTION[state.lane] ? '支持选择的档：有新条目后可勾选批量操作' : '不支持选择的档：无复选框、无全选/全不选') + '</div>';
+      list.appendChild(em);
+      return;
+    }
+    var sel = currentSel();
+    var selectable = !!sel;
+    items.forEach(function (it) {
+      var row = document.createElement('div');
+      row.className = 'row';
+      var checkHtml = selectable
+        ? '<input type="checkbox" aria-label="选择 ' + it.id + '"' + (sel.has(it.id) ? ' checked' : '') + (state.busy ? ' disabled' : '') + ' data-cid="' + it.id + '">'
+        : '<span class="muted small" title="本档不支持勾选（行首无复选框）">—</span>';
+      row.innerHTML = checkHtml +
+        '<span class="rid">' + it.id + '</span>' +
+        '<span class="rtitle">' + it.title + '</span>';
+      list.appendChild(row);
+    });
+    list.querySelectorAll('[data-cid]').forEach(function (c) {
+      c.addEventListener('change', function () {
+        var sel = currentSel();
+        if (!sel) return;
+        if (c.checked) sel.add(c.dataset.cid); else sel.delete(c.dataset.cid);
+        log((c.checked ? '勾选 ' : '取消勾选 ') + c.dataset.cid);
+        syncToolbar();
+      });
+    });
+  }
+
+  function renderResult(msg, isErr) {
+    var r = $('#acceptResult');
+    if (!msg) { r.classList.add('hidden'); r.textContent = ''; return; }
+    r.textContent = msg;
+    r.classList.toggle('err', !!isErr);
+    r.classList.remove('hidden');
+  }
+
+  function renderAll() { renderChips(); syncToolbar(); renderList(); }
+
+  // ---------- 交互：全选 / 全不选（仅当前档，其他档勾选保留） ----------
+  $('#selectOperable').addEventListener('click', function () {
+    if (state.busy) return;
+    var k = LANE_SELECTION[state.lane];
+    if (!k) return;
+    laneItems(state.lane).forEach(function (it) { state.sel[k].add(it.id); });
+    log('☑ 全选：勾选当前档 ' + laneItems(state.lane).length + ' 项（其他档勾选不动）');
+    syncToolbar(); renderList();
+  });
+  $('#selectNone').addEventListener('click', function () {
+    if (state.busy) return;
+    var k = LANE_SELECTION[state.lane];
+    if (!k) return;
+    state.sel[k] = new Set();
+    log('☐ 全不选：仅清当前档勾选（其他档保留）');
+    syncToolbar(); renderList();
+  });
+
+  // ---------- 交互：批量动作（模拟进行中防误触 → 完成流转 + 反馈） ----------
+  function runBatch(fn, doing, done) {
+    if (state.busy) return;
+    var sel = currentSel();
+    if (!sel || sel.size === 0) return;
+    state.busy = true;
+    log(doing + '（批量进行中：全选/全不选与复选框防误触禁用）', 'warn');
+    syncToolbar(); renderList();
+    setTimeout(function () {
+      fn(sel);
+      state.busy = false;
+      log('✓ ' + done, 'ok');
+      renderResult('✓ ' + done);
+      renderAll();
+    }, 1200);
+  }
+  $('#acceptSelected').addEventListener('click', function () {
+    runBatch(function (sel) {
+      state.items.forEach(function (it) { if (sel.has(it.id)) it.status = 'accepted'; });
+      state.sel.acceptance = new Set();
+    }, '接受所选 ' + state.sel.acceptance.size + ' 项', '已接受所选条目（待接受 → 已接受）');
+  });
+  $('#planAdd').addEventListener('click', function () {
+    runBatch(function (sel) {
+      state.items.forEach(function (it) { if (sel.has(it.id)) it.status = 'planned'; });
+      state.sel.plan = new Set();
+    }, '移入计划 ' + state.sel.plan.size + ' 项', '已移入计划（已接受 → 已计划，最旧优先进入开发队列）');
+  });
+  $('#planReject').addEventListener('click', function () {
+    runBatch(function (sel) {
+      state.items.forEach(function (it) { if (sel.has(it.id)) it.status = 'submitted'; });
+      state.sel.plan = new Set();
+    }, '驳回待接受 ' + state.sel.plan.size + ' 项', '已驳回待接受（已接受 → 待接受）');
+  });
+  $('#planRemove').addEventListener('click', function () {
+    runBatch(function (sel) {
+      state.items.forEach(function (it) { if (sel.has(it.id)) it.status = 'accepted'; });
+      state.sel.impl = new Set();
+    }, '移出计划 ' + state.sel.impl.size + ' 项', '已移出计划（已计划 → 已接受）');
+  });
+
+  // 快捷入口：仅导航，不创建任务
+  $('#laneQuickEntry').addEventListener('click', function () {
+    log('▶ ' + this.textContent + '：仅导航到任务模块对应面板（与勾选无关）');
+    renderResult('已跳转任务模块' + (state.lane === 'accepted' ? '「批量完善」' : '「批量开发」') + '面板（演示：仅导航）');
+  });
+
+  // ---------- 现状 / 期望 切换 ----------
+  function setMode(m) {
+    state.mode = m;
+    $('#modeBug').classList.toggle('active', m === 'bug');
+    $('#modeFix').classList.toggle('active', m === 'fix');
+    $('#noteBox').innerHTML = m === 'bug'
+      ? '<b>现状（缺陷）</b>：开发中 / 待测试 / 已完成档的行首没有复选框，但列表头仍渲染「☑ 全选」「☐ 全不选」并呈灰显禁用——永远不可点的死控件。请切到这三个档观察。'
+      : '<b>期望（修复后）</b>：仅 待接受 / 已接受 / 已计划 三档显示全选/全不选；其余三档两按钮彻底消失（隐藏或未渲染，而非灰显），列表头口径与右组批量区、快捷入口一致。';
+    log('演示模式 → ' + (m === 'bug' ? '现状（缺陷）' : '期望（修复后）'));
+    renderAll();
+  }
+  $('#modeBug').addEventListener('click', function () { setMode('bug'); });
+  $('#modeFix').addEventListener('click', function () { setMode('fix'); });
+  $('#btnReset').addEventListener('click', function () {
+    state.items = seed();
+    state.sel = { acceptance: new Set(), plan: new Set(), impl: new Set() };
+    state.busy = false;
+    renderResult('');
+    log('演示数据已重置');
+    renderAll();
+  });
+
+  // 初始化
+  setMode('bug');
+  log('提示：先在「待接受」档体验正常选择列表，再切到「开发中 / 待测试 / 已完成」观察缺陷');
+})();
+</script>
+</body>
+</html>

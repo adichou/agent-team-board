@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-017",
+  "type": "bug",
+  "title": "使用该功能报错。请修复",
+  "status": "done",
+  "parent": "REQ-20260907-003",
+  "owner": "zcode-batch-010-01",
+  "createdAt": "2026-09-07T15:36:59.949Z",
+  "updatedAt": "2026-09-11T05:52:17.664Z",
+  "agentCompletedAt": "2026-09-08T00:02:27.513Z",
+  "lastReport": {
+    "at": "2026-09-08T00:02:27.513Z",
+    "coverage": 100,
+    "framework": "node:test（serve-stale T1-T5 端到端+静态契约）",
+    "summary": "根因：常驻看板服务进程（02:51 启动）路由集固化，REQ-20260907-003 新增 /api/refine/* 未加载而静态前端已更新，新前端调用旧服务 404「未知接口」报错；且 atb serve 探活一律复用无法自愈。修复：health 暴露 pid/startedAt；atb serve 检测磁盘服务代码新于服务（或 health 无 startedAt）时 SIGTERM 优雅自动重启（health.pid 缺省回退 lsof，失败给手动指引）；前端 api() 对「未知接口」错误附 atb serve 重启指引。新增 serve-stale.test.mjs T1-T5（含用户现场复刻：无 startedAt 旧服务被定位替换）先红后绿，全量 75 测试文件 0 失败",
+    "runId": "run-20260908-059"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T15:36:59.949Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T22:56:15.313Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T23:56:33.024Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-010-01",
+      "note": "认领（zcode-batch-010-01）"
+    },
+    {
+      "at": "2026-09-08T00:02:27.513Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-010-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.664Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2872",
+      "note": "人工确认完成"
+    }
+  ]
+}

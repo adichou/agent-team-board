@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260910-001 演示 · 批量完善提示词残留 zcode 词语</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2329; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --accent-ink: #ffffff; --warn: #b45309; --warn-bg: #fef3c7;
+    --ok: #047857; --ok-bg: #ecfdf5; --err: #b91c1c; --err-bg: #fee2e2;
+    --chip: #eef2f7; --hl: #fde047; --code-bg: #0f172a; --code-ink: #e2e8f0;
+  }
+  html[data-theme="dark"] {
+    --bg: #111418; --panel: #1a1f26; --ink: #e5e7eb; --muted: #9ca3af; --line: #2b323b;
+    --accent: #3b82f6; --accent-ink: #ffffff; --warn: #fbbf24; --warn-bg: #3a2e10;
+    --ok: #34d399; --ok-bg: #0c2e22; --err: #f87171; --err-bg: #3b1414;
+    --chip: #232a33; --hl: #a16207; --code-bg: #0b1220; --code-ink: #d7e0ea;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--ink); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }
+  header.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  h1 { font-size: 17px; margin: 0; }
+  h1 .cid { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+  button, .btn {
+    font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; }
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 10px 0; border: 1px solid transparent; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .notice.err { background: var(--err-bg); color: var(--err); border-color: color-mix(in srgb, var(--err) 35%, transparent); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+  .status-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .chip { background: var(--chip); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .chip.st-run { color: var(--accent); }
+  .prompt-block pre {
+    background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 14px;
+    white-space: pre-wrap; word-break: break-all; font: 12.5px/1.7 ui-monospace, Menlo, Consolas, monospace;
+    max-height: 420px; overflow: auto; margin: 8px 0 0;
+  }
+  mark.hit { background: var(--hl); color: #111; border-radius: 3px; padding: 0 2px; font-weight: 600; }
+  .scanline { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .scanline .chip b { font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 8px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--chip); }
+  details { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; background: var(--panel); }
+  summary { cursor: pointer; font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: var(--bg); padding: 9px 18px; border-radius: 9px; opacity: 0;
+    pointer-events: none; transition: all .25s; max-width: 86vw; font-size: 13px;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .skeleton { border-radius: 8px; background: linear-gradient(90deg, var(--chip) 25%, var(--line) 45%, var(--chip) 65%); background-size: 200% 100%; animation: sw 1.1s infinite; height: 14px; margin: 8px 0; }
+  @keyframes sw { to { background-position: -200% 0; } }
+  footer { margin-top: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1><span class="cid">BUG-20260910-001</span> 批量完善提示词残留 zcode 词语 · 可交互演示</h1>
+    <div class="toolbar" style="margin:0">
+      <button id="themeBtn" title="切换深浅色">☀︎/☾ 深浅色</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <span class="muted small">演示场景（任务模块 → 批量完善 → 提示词页签）状态：</span>
+    <div class="seg" id="stateSeg">
+      <button data-state="normal" class="on">正常（在途批次）</button>
+      <button data-state="empty">空态（无批次）</button>
+      <button data-state="loading">加载中</button>
+      <button data-state="error">加载失败</button>
+    </div>
+  </div>
+  <div class="toolbar">
+    <span class="muted small">提示词版本对照：</span>
+    <div class="seg" id="verSeg">
+      <button data-ver="bug" class="on">缺陷现状（冻结旧口径）</button>
+      <button data-ver="fix">期望（展示层归一后）</button>
+    </div>
+    <button id="hlBtn" class="on" title="开关：高亮提示词中的执行端专属字样">◉ 高亮 zcode 字样</button>
+    <button id="copyBtn" class="primary">复制提示词（演示）</button>
+  </div>
+
+  <!-- 看板「批量完善 → 提示词」页签复刻 -->
+  <section class="panel" id="boardPanel">
+    <div class="status-line">
+      <span class="chip st-run" id="stChip">running</span>
+      <span class="cid" style="color:var(--accent)">RFB-20260909-022</span>
+      <span class="muted small">执行 Agent zcode（子代理模式） · 创建 2026-09-09 01:00 · 开发人员 未指定</span>
+    </div>
+    <div id="stateBody"></div>
+  </section>
+
+  <div class="notice warn" id="verdict" hidden></div>
+
+  <section class="panel">
+    <b>类似地方排查清单（点击行展开处置建议）</b>
+    <p class="muted small" style="margin:6px 0 0">对应 README「类似地方排查」节：修复时逐处给出「修 / 不修 + 理由」，此处为演示交互。</p>
+    <div id="scanList"></div>
+  </section>
+
+  <section class="panel">
+    <b>验收要点速览</b>
+    <table>
+      <thead><tr><th style="width:34%">入口</th><th>验收口径</th></tr></thead>
+      <tbody>
+        <tr><td>看板提示词页签 / 重新复制</td><td>全文检索不到「执行 Agent：zcode」「Zcode」「zcode-refine」「general-purpose」</td></tr>
+        <tr><td>CLI refine create（幂等回显）/ refine summary</td><td>回显文本满足同上口径</td></tr>
+        <tr><td>新建批次账本 prompt</td><td>与 buildRefinePrompt 现行通用输出一致（无回归）</td></tr>
+        <tr><td>在途兼容</td><td>旧前缀 zcode-refine-* 的 run 可正常 done/fail/release，next/done/check 不受影响</td></tr>
+        <tr><td>批量开发对齐</td><td>/api/batch/create、/api/batch/prompt 至少与批量完善归一口径一致（存量不透出点名 codex exec 的旧行）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="muted small">
+    单文件演示（内联 CSS/JS、无外网依赖、无构建）：复刻看板「批量完善 → 提示词」页签布局，提供现状/期望文本对照、zcode 字样高亮筛查、四态切换（正常/空/加载/失败）与深浅色适配。账本处置方式（是否回写 batch.json）为「待确认」，由 design.md 确定。
+  </footer>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  var ATB = 'node /Users/adichou/Documents/src/agent-team-board/scripts/atb.mjs';
+  var ROOT = '/Users/adichou/Documents/src/agent-team-board';
+
+  // 缺陷现状：RFB-20260909-022 账本冻结的旧口径提示词（节选关键行，与 batch.json prompt 一致）
+  var PROMPT_BUG = [
+    '你是当前项目的批量完善调度员，只负责派发与接收短回执。',
+    '项目：' + ROOT,
+    '完善批次：RFB-20260909-022',
+    '子代理模型配置：（默认） · 智能档位 high（来自设置「批量任务」，启动子代理时按此传递）。',
+    '',
+    '每轮新启动一个子 Agent，按执行流程完善本批一个已接受条目的文档。',
+    '执行 Agent：zcode。在 Zcode 本项目新建会话粘贴本提示词，每轮新启动一个 general-purpose 子 Agent 派发一项，',
+    '子代理会话命名统一为：RFB-20260909-022-refine-<序号>，与主调度会话区分。',
+    '每个子 Agent 只做一项；同一时间只运行一个；不要让子 Agent 再派发子 Agent。',
+    '',
+    'CLI 约定：atb 指 ' + ATB + '（下同）。',
+    '',
+    '子 Agent 流程（每项一个）：',
+    '1. 领取：atb refine next --by zcode-refine-<批次尾号>-<序号> --dir "' + ROOT + '"',
+    '   （返回条目、目录、缺失原因；stop 时按提示结束）',
+    '2. 阅读条目现有说明与项目代码/文档，直接编辑条目目录下的 markdown 补全：',
+    '   ……（完善要求略，同现行通用版）',
+    '3. 回执：atb refine done <RUN-ID> --summary "<补全要点>"（须真实改过文档）；',
+    '   无法完善用 atb refine fail <RUN-ID> --reason "<短句>"；认领冲突用 atb refine release。',
+    '',
+    '硬性约束：条目全程保持 accepted（已接受）；不要修改业务源码；不要修改条目 status.json；',
+    '不要调用 claim/report、不要写 test-report.md、不要 git commit；只编辑条目目录下 markdown（涉及 UI 的需求可另建约定的 ui-demo.html）。',
+    '4. 主会话核对：atb refine check --batch RFB-20260909-022 --dir "' + ROOT + '"',
+    '   nextAction=continue 时启动下一个子 Agent；stop 时结束。只接收短回执，不复制实施历史。'
+  ].join('\n');
+
+  // 期望：展示层归一后（对齐 buildRefinePrompt 现行通用版关键行）
+  var PROMPT_FIX = [
+    '你是当前项目的批量完善调度员，只负责派发与接收短回执。',
+    '项目：' + ROOT,
+    '完善批次：RFB-20260909-022',
+    '子代理模型与智能/推理档位：跟随主调度会话——启动每个子代理时，其模型与智能/推理档位必须与当前主调度会话保持一致：执行端支持显式指定时显式传入与会话一致的值，不支持的执行端不另行指定、依赖子代理默认继承主会话配置；不得改用其他静态值，也不得落到与主会话不同的默认档。',
+    '',
+    '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善本批',
+    '一个已接受条目的文档。子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+    '每个子代理只做一项；同一时间只运行一个；不要让子代理再派发子代理。',
+    '',
+    'CLI 约定：atb 指 ' + ATB + '（下同）。',
+    '',
+    '子代理流程（每项一个）：',
+    '1. 领取：atb refine next --by refine-<批次尾号>-<序号> --dir "' + ROOT + '"',
+    '   （返回条目、目录、缺失原因；stop 时按提示结束）',
+    '   领取/回执命令在子代理会话内执行（工作目录用 --dir 指定）。',
+    '2. 阅读条目现有说明与项目代码/文档，直接编辑条目目录下的 markdown 补全：',
+    '   ……（完善要求略，同现行通用版）',
+    '3. 回执：atb refine done <RUN-ID> --summary "<补全要点>"（须真实改过文档）；',
+    '   无法完善用 atb refine fail <RUN-ID> --reason "<短句>"；认领冲突用 atb refine release。',
+    '',
+    '硬性约束：条目全程保持 accepted（已接受）；不要修改业务源码；不要修改条目 status.json；',
+    '不要调用 claim/report、不要写 test-report.md、不要 git commit；只编辑条目目录下 markdown（涉及 UI 的需求可另建约定的 ui-demo.html）。',
+    '4. 主会话核对：atb refine check --batch RFB-20260909-022 --dir "' + ROOT + '"',
+    '   nextAction=continue 时派发下一个子代理；stop 时结束。主会话只接收规定的短回执，不复制子代理的完整文档内容。'
+  ].join('\n');
+
+  var HL_RE = /(执行 Agent：zcode|Zcode|zcode-refine|general-purpose|子代理模型配置：)/g;
+
+  var SCAN = [
+    { t: '批量完善存量批次冻结 prompt', d: 'refine/batches/ RFB-20260908-008~015、RFB-20260909-016~022 等账本 prompt 含「执行 Agent：zcode / Zcode / zcode-refine / general-purpose」；展示层 normalizePromptModelLine 只归一模型行，其余原样透出。', fix: '修：展示/回显层归一（或按 design.md 口径处置账本）' },
+    { t: '批量开发存量批次冻结 prompt', d: 'dispatch/batches/ batch-20260909-021~025 的「跟随主调度会话」行点名「codex exec 的 --model / model_reasoning_effort」（REQ-20260909-005 旧措辞）；且 /api/batch/create、/api/batch/prompt 返回原始 b.prompt，连模型行归一都没过。', fix: '修：开发侧透出接口对齐批量完善归一口径' },
+    { t: 'oncall 派单提示词', d: 'atb oncall dispatch --mode zcode 输出「复制到 Zcode 本项目新会话发送」；oncall 主调度提示词回传步骤固定 --mode zcode。双模式按端分叉属功能语义。', fix: '待确认：是否属本 Bug 范围（design.md 定）' },
+    { t: 'worker-spec 执行规范', d: 'skills/agent-team-board/worker-spec.md 标题「批量开发执行规范（Zcode worker）」、领取示例 --by zcode-batch-…；项目内冻结快照同款（按批冻结、存量不动）。', fix: '待确认：插件源是否随本 Bug 通用化' },
+    { t: '命令/技能文档示例', d: 'commands/dev.md 认领示例 --by zcode-…；SKILL.md「启动时选执行 Agent（zcode / codex）」为 REQ-20260909-011 已移除的旧口径。', fix: '待确认：文档口径是否一并修' },
+    { t: '内部兼容标识（排除）', d: 'state.refine.mode 缺省 zcode、旧 zcode 入口映射 develop、taskAgentModeText 存量批次口径、acquireRefineLock kind:zcode、zcode:// 深链（另一条目）、tests 夹具——均为代码内部标识/兼容逻辑，非提示词文案。', fix: '不修：登记排除理由' }
+  ];
+
+  var state = { mode: 'normal', ver: 'bug', hl: true };
+  var $ = function (s) { return document.querySelector(s); };
+
+  function toast(msg, ms) {
+    var el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(function () { el.classList.remove('show'); }, ms || 2400);
+  }
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function renderPrompt(text) {
+    if (!state.hl) return esc(text);
+    return esc(text).replace(new RegExp(HL_RE.source, 'g'), function (m) { return '<mark class="hit">' + m + '</mark>'; });
+  }
+  function countHits(text) {
+    var m = text.match(new RegExp(HL_RE.source, 'g')) || [];
+    var c = { total: m.length, ag: 0, zc: 0, pf: 0, gp: 0, ml: 0 };
+    m.forEach(function (x) {
+      if (x === '执行 Agent：zcode') c.ag++;
+      else if (x === 'Zcode') c.zc++;
+      else if (x === 'zcode-refine') c.pf++;
+      else if (x === 'general-purpose') c.gp++;
+      else if (x === '子代理模型配置：') c.ml++;
+    });
+    return c;
+  }
+
+  function renderState() {
+    var body = $('#stateBody');
+    var verdict = $('#verdict');
+    if (state.mode === 'loading') {
+      verdict.hidden = true;
+      body.innerHTML = '<p class="muted">加载中…</p><div class="skeleton" style="width:70%"></div><div class="skeleton" style="width:88%"></div><div class="skeleton" style="width:82%"></div><div class="skeleton" style="width:60%"></div>';
+      return;
+    }
+    if (state.mode === 'error') {
+      verdict.hidden = false;
+      verdict.className = 'notice err';
+      verdict.textContent = '接口异常（演示）：GET /api/refine/summary 失败——提示词页签会以 toast 报错并保留上次渲染；修复后各状态下展示/复制的文本均不得再出现 zcode 专属字样。';
+      body.innerHTML = '<div class="notice err">加载失败：无法读取完善批次（演示错误态）</div>';
+      return;
+    }
+    if (state.mode === 'empty') {
+      verdict.hidden = false;
+      verdict.className = 'notice warn';
+      verdict.textContent = '空态：暂无完善批次（或存量批次缺失 prompt 字段显示「暂无调度提示词」）。空态不暴露问题文本，仅作状态覆盖演示。';
+      body.innerHTML = '<p class="muted small">暂无调度提示词（存量批次可能缺失）。</p>';
+      return;
+    }
+    var text = state.ver === 'bug' ? PROMPT_BUG : PROMPT_FIX;
+    var c = countHits(text);
+    verdict.hidden = false;
+    if (state.ver === 'bug') {
+      verdict.className = 'notice warn';
+      verdict.innerHTML = '<b>缺陷现状</b>：提示词页签渲染账本冻结 prompt，' + c.total + ' 处执行端专属字样被原样透出（' +
+        '执行 Agent：zcode × ' + c.ag + '、Zcode × ' + c.zc + '、zcode-refine × ' + c.pf +
+        '、general-purpose × ' + c.gp + '、旧「子代理模型配置：」行 × ' + c.ml + '）。用户复制后在任意 Agent 会话执行会被旧口径误导。';
+    } else {
+      verdict.className = 'notice ok';
+      verdict.innerHTML = '<b>期望（展示层归一后）</b>：执行段对齐 buildRefinePrompt 通用版（「在当前项目的 Agent 会话中执行本提示词…」），领取前缀归一为 refine-…，模型行已是「跟随主调度会话」——全文命中执行端专属字样 0 处。';
+    }
+    body.innerHTML =
+      '<div class="prompt-block">' +
+      '<div class="toolbar" style="margin:0 0 6px">' +
+      '<span class="muted small">主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：</span>' +
+      '<button class="btn" id="recopy" title="重试复制不会创建新任务">重新复制</button>' +
+      '</div>' +
+      '<pre id="refinePrompt">' + renderPrompt(text) + '</pre>' +
+      '<div class="scanline small">' +
+      '<span class="chip">命中字样合计 <b>' + c.total + '</b></span>' +
+      '<span class="chip">执行 Agent：zcode <b>' + c.ag + '</b></span>' +
+      '<span class="chip">Zcode <b>' + c.zc + '</b></span>' +
+      '<span class="chip">zcode-refine <b>' + c.pf + '</b></span>' +
+      '<span class="chip">general-purpose <b>' + c.gp + '</b></span>' +
+      '<span class="chip">旧模型行 <b>' + c.ml + '</b></span>' +
+      '</div></div>';
+    var rc = $('#recopy');
+    if (rc) rc.addEventListener('click', function () { doCopy(text); });
+  }
+
+  function doCopy(text) {
+    var done = function () { toast('已复制提示词（演示）：' + countHits(text).total + ' 处专属字样将随文本进入剪贴板'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { toast('复制失败：请手动选择文本复制（演示降级）', 3000); });
+    } else {
+      done();
+    }
+  }
+
+  function renderScan() {
+    $('#scanList').innerHTML = SCAN.map(function (s, i) {
+      return '<details><summary>' + (i + 1) + '. ' + esc(s.t) + '</summary>' +
+        '<p class="small" style="margin:6px 0 4px">' + esc(s.d) + '</p>' +
+        '<p class="small" style="margin:0"><b>处置：</b>' + esc(s.fix) + '</p></details>';
+    }).join('');
+  }
+
+  $('#stateSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-state]');
+    if (!b) return;
+    state.mode = b.dataset.state;
+    this.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    renderState();
+  });
+  $('#verSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-ver]');
+    if (!b) return;
+    state.ver = b.dataset.ver;
+    this.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    renderState();
+  });
+  $('#hlBtn').addEventListener('click', function () {
+    state.hl = !state.hl;
+    this.classList.toggle('on', state.hl);
+    this.textContent = (state.hl ? '◉' : '○') + ' 高亮 zcode 字样';
+    renderState();
+  });
+  $('#copyBtn').addEventListener('click', function () { doCopy(state.ver === 'bug' ? PROMPT_BUG : PROMPT_FIX); });
+  $('#themeBtn').addEventListener('click', function () {
+    var root = document.documentElement;
+    var dark = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+    toast('已切换' + (dark ? '浅色' : '深色') + '（深浅色适配为可选项）');
+  });
+
+  renderScan();
+  renderState();
+})();
+</script>
+</body>
+</html>

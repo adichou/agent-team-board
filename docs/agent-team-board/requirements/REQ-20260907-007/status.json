@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260907-007",
+  "type": "requirement",
+  "title": "删除详细页面的一键派单功能，派单只能通过批量实施",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T13:51:21.822Z",
+  "updatedAt": "2026-09-11T05:52:17.281Z",
+  "agentCompletedAt": "2026-09-07T15:22:16.010Z",
+  "lastReport": {
+    "at": "2026-09-07T15:22:16.010Z",
+    "coverage": 100,
+    "framework": "node:assert + 自建 runner（npm test/run-all.mjs）",
+    "summary": "删除详情页一键派单：app.js 移除 dispatchBtnHtml/dispatchPrompt/launchZcode/launchCodex/flashDispatchBtn 及 data-dispatch 绑定（保留 copyDispatchText 供批量实施）；server.mjs 移除 POST /api/dispatch/codex/item 端点与未用 dispatch import；scheduler.mjs 移除 dispatchItem（tick/startRunForItem 自动派发不受影响）；style.css 移除 .dispatch-row/.dispatch-btn。契约测试改写为已移除防回归，全量 65 文件 0 失败",
+    "runId": "run-20260907-040"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T13:51:21.822Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T13:52:00.843Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T15:16:02.381Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T15:22:16.010Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.282Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f218",
+      "note": "人工确认完成"
+    }
+  ]
+}

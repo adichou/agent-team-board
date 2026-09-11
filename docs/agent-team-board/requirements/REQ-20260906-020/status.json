@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-020",
+  "type": "requirement",
+  "title": "待接受卡片「✓ 接受」按钮移至单号右侧",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-001-4",
+  "createdAt": "2026-09-06T11:27:43.604Z",
+  "updatedAt": "2026-09-11T05:52:15.705Z",
+  "agentCompletedAt": "2026-09-06T12:51:18.076Z",
+  "lastReport": {
+    "at": "2026-09-06T12:51:18.076Z",
+    "coverage": 5,
+    "framework": "node:assert 静态契约测试（pending-accept-inline.test.mjs）",
+    "summary": "待接受卡片「✓ 接受」按钮移入首行 .card-top 单号右侧（对齐抽屉关闭按钮形态），删除底部 .card-accept 行并清理样式；data-accept-id/点击不冒泡/单条接受/禁用同步不变。新增专项测试先红 3/5 后绿 5/5；npm test 41 文件仅存量 BUG-20260906-013 失败（与本项无关），日志见 dispatch/runs/run-20260906-004/impl-log.md",
+    "runId": "run-20260906-004"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T11:27:43.604Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-bd5f"
+    },
+    {
+      "at": "2026-09-06T11:39:49.936Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T12:47:18.999Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-001-4",
+      "note": "认领（zcode-batch-001-4）"
+    },
+    {
+      "at": "2026-09-06T12:51:18.076Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-001-4",
+      "note": "上报测试报告（覆盖率 5%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.705Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-18ee",
+      "note": "人工确认完成"
+    }
+  ]
+}

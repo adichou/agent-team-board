@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-012",
+  "type": "requirement",
+  "title": "app 版的布局优化",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-10",
+  "createdAt": "2026-09-10T03:29:32.891Z",
+  "updatedAt": "2026-09-11T05:52:22.244Z",
+  "agentCompletedAt": "2026-09-10T05:35:37.860Z",
+  "lastReport": {
+    "at": "2026-09-10T05:35:37.860Z",
+    "coverage": 9,
+    "framework": "node:assert 静态契约 + node:vm 行为（零依赖）",
+    "summary": "布局优化落地三件事：1) 顶栏不再显示项目路径——renderBoard 仅无项目时给简短引导（不含路径），#dataDir 空行由 .path:empty 隐藏，完整路径承接于「管理项目」弹窗（现状保留）；2) 模块页签（讨论/需求/任务/文件+设置）上移并入顶栏 brand 与操作区之间，原独立第二行取消，.view-tab 绑定与激活态不变，顶栏 nowrap、窄窗口页签横滑、≤640px 按组整行换行；3) 需求六档与讨论两态筛选迁为内容区左缘纵向竖排栏（#filterBar 移入 #reqView、disc-filters 纵向化，writing-mode:vertical-rl 从上到下直排，计数跟随；64px 固定窄条、竖向滚动六档均可到达），任务/文件/设置无纵向栏内容区占满；全局模块已随 BUG-20260910-004 移除为顶栏按钮+右侧面板，无模块级筛选条需迁移，面板内 chips 保持横向。Electron 壳新增 .module-nav no-drag 豁免，交通灯让位 78px 与拖动区注入样式共存。T1–T9 全过（先红后绿）；全量 143 个测试文件 0 失败；同步更新 view-tabs-right/workbench-layout/caption-toolbar 三处被替代旧契约；发现并登记 BUG-20260910-012（scheduler-unclaimed 既有 flaky，HEAD 基线 4/4 复现，与本条目无关）；ui-demo.html 需求阶段已生成且覆盖验收第 7 条未改动。覆盖率 9% 为改动源码范围口径（JS 行为分支全覆盖，静态资产以契约断言衡量）",
+    "runId": "run-20260910-156"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T03:29:32.891Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T03:29:47.319Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T03:58:12.314Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-115308-1e2a）"
+    },
+    {
+      "at": "2026-09-10T05:16:37.610Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-10",
+      "note": "认领（zcode-batch-031-10）"
+    },
+    {
+      "at": "2026-09-10T05:35:37.861Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-10",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.244Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-afca",
+      "note": "人工确认完成"
+    }
+  ]
+}

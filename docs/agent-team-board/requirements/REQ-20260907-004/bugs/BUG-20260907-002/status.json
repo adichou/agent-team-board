@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-002",
+  "type": "bug",
+  "title": "浏览器手动刷新需求界面无数据，若切换到其他栏目，再切换回来就有数据",
+  "status": "done",
+  "parent": "REQ-20260907-004",
+  "owner": "zcode-batch-006-1",
+  "createdAt": "2026-09-07T08:15:12.583Z",
+  "updatedAt": "2026-09-11T05:52:16.576Z",
+  "agentCompletedAt": "2026-09-07T09:26:56.215Z",
+  "lastReport": {
+    "at": "2026-09-07T09:26:56.215Z",
+    "coverage": 85,
+    "framework": "node:assert + node:vm 模拟 DOM 行为测试（npm test 聚合）",
+    "summary": "修复刷新后需求视图无数据：boot() 改为对解析视图统一调用 setView(viewParam)，默认 status 视图不再跳过容器初始化（#reqView 初始 hidden 仅 setView 移除）；引入来源 REQ-20260907-004。新增 refresh-default-view.test.mjs R1-R5（刷新可见/往返/深链/离线空态/静态契约），全量 60 个测试文件全绿",
+    "runId": "run-20260907-036"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T08:15:12.583Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T08:15:18.629Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T09:17:17.446Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-006-1",
+      "note": "认领（zcode-batch-006-1）"
+    },
+    {
+      "at": "2026-09-07T09:26:56.215Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-006-1",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.577Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-cdf1",
+      "note": "人工确认完成"
+    }
+  ]
+}

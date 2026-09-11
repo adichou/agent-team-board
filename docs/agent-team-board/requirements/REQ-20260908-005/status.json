@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260908-005",
+  "type": "requirement",
+  "title": "详情页面高度不要超过列表，要低于状态筛选行",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-013-1",
+  "createdAt": "2026-09-08T01:53:01.625Z",
+  "updatedAt": "2026-09-11T05:52:17.995Z",
+  "agentCompletedAt": "2026-09-08T03:21:58.801Z",
+  "lastReport": {
+    "at": "2026-09-08T03:21:58.801Z",
+    "coverage": 83,
+    "framework": "node:assert 静态契约测试（drawer-height.test.mjs D1–D5）+ run-all 全量回归",
+    "summary": "窄屏（≤1020px）详情抽屉与遮罩 #mask 的定位基准从视口改为需求工作区 .req-view（position:relative）：抽屉 fixed→absolute，顶边低于状态筛选行、高度与列表区一致；#mask 移入 #reqView 同域 absolute inset:0，状态筛选行及其以上不再被压暗/拦截。宽屏并排、滑入动画、返回入口不变；app.js 零改动。新增 drawer-height.test.mjs（5 用例）并更新 portrait-board P2 旧契约；run-all 81 文件全绿。执行中发现存量 flaky：execution-verifier V9 已登记 BUG-20260908-005。",
+    "runId": "run-20260908-068"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T01:53:01.625Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T01:57:26.706Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T03:15:46.457Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-013-1",
+      "note": "认领（zcode-batch-013-1）"
+    },
+    {
+      "at": "2026-09-08T03:21:58.801Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-013-1",
+      "note": "上报测试报告（覆盖率 83%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.995Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-65c6",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260829-001",
+  "type": "requirement",
+  "title": "看板页面自适应布局，铺满整个窗口",
+  "status": "done",
+  "parent": null,
+  "owner": "terminal",
+  "createdAt": "2026-08-29T15:35:31.712Z",
+  "updatedAt": "2026-09-03T01:41:49.662Z",
+  "agentCompletedAt": "2026-08-29T16:39:32.745Z",
+  "lastReport": {
+    "at": "2026-08-29T16:39:32.745Z",
+    "coverage": null,
+    "framework": "node:assert 契约测试 + 内置浏览器多尺寸实测",
+    "summary": "看板自适应布局完成：body 取消页面级滚动，四列以 minmax(0,1fr) 单行拉伸铺满视口（视口−顶栏）；新增 .col-cards 列内滚动容器（列头常驻）；≤1020px 降两列两行、≤640px 单列四行均分；抽屉/弹窗保留 vw 上限。TDD：新增 scripts/tests/layout.test.mjs（T1–T9 先红后绿全过），浏览器实测 1280/900/480 三档宽度均铺满无页面滚动、交互可用（T10）。过程中修复两个缺陷：轮询变更检测误含 generatedAt 导致每 2 秒全量重渲染、点击随机失效；640px 单列断点未重置行数致第 3/4 列被裁剪不可点。server 静态资源加 Cache-Control: no-store。版本 0.1.0→0.1.1。"
+  },
+  "history": [
+    {
+      "at": "2026-08-29T15:35:31.712Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-08-29T15:38:05.734Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-08-29T15:43:09.822Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "认领（terminal）"
+    },
+    {
+      "at": "2026-08-29T16:39:32.745Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-03T01:41:49.662Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": ""
+    }
+  ]
+}

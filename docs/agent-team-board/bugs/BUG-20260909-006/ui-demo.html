@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260909-006 界面演示 — 移除已计划列表「进入批量开发」</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e3e6ea; --text: #24292f;
+    --muted: #6a737d; --primary: #1f6feb; --warn: #bf8700; --err: #cf222e;
+    --info-bg: #ddf4ff; --ok-bg: #dafbe1; --warn-bg: #fff8c5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .demo-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 16px; background: #24292f; color: #fff; }
+  .demo-top .title { font-weight: 600; }
+  .demo-top .title .small { display: block; font-weight: 400; opacity: .75; }
+  .mode-switch { display: inline-flex; border: 1px solid #fff5; border-radius: 8px; overflow: hidden; }
+  .mode-switch button { border: 0; background: transparent; color: #fffa; padding: 6px 14px; }
+  .mode-switch button.active { background: #fff; color: #24292f; font-weight: 600; }
+  .fail-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #fffa; }
+  .fail-switch input { accent-color: var(--err); }
+
+  main { max-width: 980px; margin: 0 auto; padding: 14px 16px 40px; }
+
+  .viewnav { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; flex-wrap: wrap; }
+  .viewnav button { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 14px; color: var(--muted); }
+  .viewnav button.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 2px 12px; color: var(--muted); }
+  .chip.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  .caption { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .caption-left, .sel-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .caption-divider { width: 1px; height: 18px; background: var(--line); }
+  .sel-count { color: var(--muted); font-size: 13px; }
+
+  .btn { border: 1px solid var(--line); background: #f6f8fa; border-radius: 6px; padding: 4px 12px; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn.quiet { background: transparent; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.warn { background: #fff; border-color: var(--warn); color: var(--warn); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .list { display: flex; flex-direction: column; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 6px; border-bottom: 1px solid var(--line); cursor: default; }
+  .row:hover { background: #f6f8fa; }
+  .row .rid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--primary); }
+  .row .rtitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .state { font-size: 12px; border-radius: 4px; padding: 0 6px; }
+  .state.s-planned { background: var(--info-bg); color: #0969da; }
+  .state.s-accepted { background: var(--ok-bg); color: #1a7f37; }
+  .row input[type="checkbox"] { width: 15px; height: 15px; }
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 10px 0; background: #f6f8fa; color: var(--text); }
+  .notice.info { background: var(--info-bg); }
+  .notice.warn { background: var(--warn-bg); }
+  .empty { padding: 26px 0; text-align: center; color: var(--muted); }
+
+  .result { border-radius: 8px; padding: 8px 12px; margin: 10px 0; background: var(--ok-bg); font-size: 13px; }
+  .result.err { background: #ffebe9; }
+  .result ul { margin: 4px 0 0; padding-left: 20px; color: var(--err); font-size: 12px; }
+
+  .subtabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .subtabs .tab { border: 0; background: transparent; color: var(--muted); padding: 4px 10px; border-bottom: 2px solid transparent; }
+  .subtabs .tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+
+  .dev-start .cx-head-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  select, input[type="text"] { font: inherit; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+
+  .batch-stats { margin: 8px 0; font-size: 13px; }
+  .queue-box { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .q-row { display: flex; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .q-row:last-child { border-bottom: 0; }
+  .q-row .rid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--primary); }
+  .q-row .badge { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  .logbox { margin-top: 12px; }
+  .logbox b { font-size: 13px; }
+  .logbox ul { list-style: none; margin: 6px 0 0; padding: 8px 10px; background: #0d1117; color: #c9d1d9; border-radius: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; max-height: 150px; overflow: auto; }
+  .logbox li { padding: 1px 0; }
+  .logbox li.err { color: #ff7b72; }
+  .logbox li.ok { color: #7ee787; }
+  .logbox .placeholder { color: #6e7681; font-style: normal; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: #24292f; color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 13px; box-shadow: 0 4px 16px #0003; z-index: 30; }
+  .toast.err { background: var(--err); }
+
+  .notes { margin-top: 18px; }
+  .notes h3 { font-size: 14px; margin: 0 0 6px; }
+  .notes ol { margin: 0; padding-left: 20px; }
+  .notes li { margin: 3px 0; font-size: 13px; }
+  .notes .fixonly { color: #1a7f37; }
+  .notes .nowonly { color: var(--err); }
+  .reset-line { margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<header class="demo-top">
+  <div class="title">BUG-20260909-006 界面演示
+    <span class="small">移除「已计划」列表的『进入批量开发』勾选入口（批量开发队列已覆盖该能力）</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div class="mode-switch" role="tablist">
+      <button id="modeNow" class="active" type="button">现状（缺陷）</button>
+      <button id="modeFix" type="button">期望（修复后）</button>
+    </div>
+    <label class="fail-switch"><input type="checkbox" id="failSwitch"> 模拟接口失败</label>
+  </div>
+</header>
+
+<main>
+  <nav class="viewnav" aria-label="模块导航">
+    <button type="button" data-view="oncall">讨论</button>
+    <button type="button" data-view="status" class="active" id="navStatus">需求</button>
+    <button type="button" data-view="runs" id="navRuns">任务</button>
+    <button type="button" data-view="files">文件</button>
+    <button type="button" data-view="settings">设置</button>
+  </nav>
+
+  <!-- 需求模块：已计划档列表 -->
+  <section id="statusView" class="panel">
+    <div class="chips" id="filterChips"></div>
+    <div class="caption">
+      <div class="caption-left">
+        <span id="reqCount" class="muted small">0 个条目</span>
+        <button type="button" class="btn small quiet" id="selectOperable" title="全选：仅勾选当前筛选档内可见的可操作条目">☑ 全选</button>
+        <button type="button" class="btn small quiet" id="selectNone" disabled title="全不选：仅取消当前筛选档的勾选">☐ 全不选</button>
+      </div>
+      <div class="sel-group hidden" id="selGroup" role="group" aria-label="批量操作">
+        <span class="caption-divider" aria-hidden="true"></span>
+        <span class="sel-count" id="selCount">已选 0 项</span>
+        <button type="button" class="btn primary hidden" id="implGo" title="以勾选条目为范围进入批量开发；未勾选已计划条目时为全部候选">进入批量开发</button>
+        <button type="button" class="btn warn hidden" id="planRemove" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
+      </div>
+    </div>
+    <div class="result hidden" id="acceptResult" role="status" aria-live="polite"></div>
+    <div class="list" id="reqList"></div>
+    <div class="empty hidden" id="reqEmpty">当前筛选与搜索下没有条目。</div>
+  </section>
+
+  <!-- 任务模块：批量开发子面板 -->
+  <section id="runsView" class="panel hidden">
+    <div class="subtabs">
+      <button type="button" class="tab">批量完善</button>
+      <button type="button" class="tab active">批量开发</button>
+    </div>
+    <div id="runsLoading" class="empty">加载中…</div>
+    <div id="runsBody" class="hidden">
+      <section class="dev-start">
+        <div class="cx-head-line">
+          <label class="field-inline">执行 Agent
+            <select id="devMode">
+              <option value="" selected>选择执行 Agent…</option>
+              <option value="zcode">zcode（复制调度提示词）</option>
+              <option value="codex">codex（复制调度提示词）</option>
+            </select>
+          </label>
+          <label class="field-inline">开发人员
+            <input id="batchDev" type="text" maxlength="30" placeholder="如 张三（可留空）">
+          </label>
+          <button type="button" class="btn primary" id="devStart" disabled title="选择执行 Agent 后启动">启动</button>
+        </div>
+        <p class="muted small" id="queueHint"></p>
+      </section>
+      <div class="notice info hidden" id="scopeNotice"></div>
+      <div class="batch-stats" id="batchStats"></div>
+      <div class="notice hidden" id="noCandidate"></div>
+      <div class="queue-box" id="queueBox"></div>
+      <div class="logbox">
+        <b>网络请求日志（演示模拟）</b>
+        <ul id="reqLog"><li class="placeholder">（尚无请求；「现状」下勾选并进入批量开发后将出现 /api/dispatch/scope 推送）</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="notes panel">
+    <h3>演示要点</h3>
+    <ol>
+      <li class="nowonly">现状：勾选已计划条目 → 列表头出现「进入批量开发」；点击后向 <code>/api/dispatch/scope</code> 推送隐性派发范围，之后每次勾选变化都会静默重推（见请求日志），未勾选的已计划单不会被自动派发。</li>
+      <li class="nowonly">现状：范围提示只出现在任务模块（「本批范围：勾选 N 项」），需求列表页无任何范围标记；「进入批量开发」tooltip 声称「未勾选时为全部候选」，但零勾选时整组按钮隐藏，该说明不可达（死文案）。</li>
+      <li>两种状态下，顶栏「任务」→「批量开发」的「已计划队列（最旧优先）」都自动涵盖全部已计划未认领单，运行中新置计划的条目自动进入队列——即列表勾选入口在能力上完全冗余。</li>
+      <li class="fixonly">期望（修复后）：已计划档批量操作组只保留「移出计划」，不再出现「进入批量开发」按钮，也没有任何 scope 推送请求；开发入口唯一收敛为任务模块。</li>
+      <li>「移出计划」在两种状态下均可用（确认 → 逐条流转回已接受 → 结果反馈；打开「模拟接口失败」可看单项失败分列与勾选保留）；全部移出后为空态，队列侧显示「（空，等待已计划条目）」。</li>
+      <li>任务模块切换瞬间为「加载中」骨架（模拟面板拉取），勾选执行 Agent 前「启动」保持禁用。</li>
+    </ol>
+    <div class="reset-line"><button type="button" class="btn" id="resetData">重置演示数据</button></div>
+  </section>
+</main>
+
+<div class="toast hidden" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const SAMPLE = [
+    { id: 'REQ-20260908-031', title: '列表导出 CSV 支持按档位筛选', status: 'planned', createdAt: '2026-09-08T02:10:00Z' },
+    { id: 'REQ-20260908-044', title: '详情抽屉依赖关系支持跳转过滤', status: 'planned', createdAt: '2026-09-08T09:30:00Z' },
+    { id: 'REQ-20260909-012', title: '设置页运行参数表单校验提示统一', status: 'planned', createdAt: '2026-09-09T01:05:00Z' },
+    { id: 'BUG-20260909-003', title: '切档后排序记忆偶发丢失', status: 'planned', createdAt: '2026-09-09T02:40:00Z' },
+    { id: 'REQ-20260909-018', title: '待接受条目批量重命名（示例，已接受档）', status: 'accepted', createdAt: '2026-09-09T03:00:00Z' },
+  ];
+  const OTHER_COUNTS = { submitted: 2, developing: 1, confirming: 0, done: 3 };
+
+  const LANE_LABEL = { submitted: '待接受', accepted: '已接受', planned: '已计划', developing: '开发中', confirming: '待测试', done: '已完成' };
+
+  const state = {
+    mode: 'now',            // now = 现状（缺陷）；fix = 期望（修复后）
+    view: 'status',
+    items: [],
+    selected: new Set(),    // 已计划勾选集合（impl.selected）
+    scopeActive: false,     // 现状：已通过「进入批量开发」生效范围
+    scopeSig: '',
+    pending: false,         // 移出计划进行中
+    message: '',
+    failures: [],
+    failSim: false,
+  };
+
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function resetData() {
+    state.items = SAMPLE.map((x) => ({ ...x }));
+    state.selected = new Set();
+    state.scopeActive = false;
+    state.scopeSig = '';
+    state.pending = false;
+    state.message = '';
+    state.failures = [];
+    $('#reqLog').innerHTML = '<li class="placeholder">（尚无请求；「现状」下勾选并进入批量开发后将出现 /api/dispatch/scope 推送）</li>';
+    render();
+  }
+
+  function plannedItems() {
+    return state.items.filter((it) => it.status === 'planned')
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)) || String(a.id).localeCompare(String(b.id)));
+  }
+
+  function log(method, path, body, ok) {
+    const ul = $('#reqLog');
+    const ph = ul.querySelector('.placeholder');
+    if (ph) ph.remove();
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'err';
+    const t = new Date().toTimeString().slice(0, 8);
+    li.textContent = `[${t}] ${method} ${path}${body ? ' ' + JSON.stringify(body) : ''} → ${ok ? '200' : '500 ' + (state.failSim ? '模拟接口失败' : '')}`;
+    ul.prepend(li);
+  }
+
+  let toastTimer = null;
+  function toast(msg, err) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.toggle('err', !!err);
+    el.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
+  }
+
+  // 现状专属：范围推送（签名去重；失败回滚签名便于下次重试，对齐 pushImplScope 行为）
+  async function pushScope() {
+    if (state.mode !== 'now' || !state.scopeActive) return;
+    const ids = [...state.selected];
+    const sig = JSON.stringify(ids);
+    if (sig === state.scopeSig) return;
+    state.scopeSig = sig;
+    await new Promise((r) => setTimeout(r, 120)); // 模拟网络
+    log('POST', '/api/dispatch/scope', { ids }, !state.failSim);
+    if (state.failSim) {
+      state.scopeSig = '';
+      toast('推送派发范围失败：' + '模拟接口失败（下次同步重试，不静默丢范围）', true);
+    }
+    renderRuns();
+  }
+
+  function setView(v) {
+    state.view = v;
+    document.querySelectorAll('.viewnav button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
+    $('#statusView').classList.toggle('hidden', v !== 'status');
+    $('#runsView').classList.toggle('hidden', v !== 'runs');
+    if (v !== 'runs') return;
+    $('#runsLoading').classList.remove('hidden');
+    $('#runsBody').classList.add('hidden');
+    setTimeout(() => { // 模拟面板数据拉取（加载态）
+      $('#runsLoading').classList.add('hidden');
+      $('#runsBody').classList.remove('hidden');
+      renderRuns();
+    }, 420);
+  }
+
+  // 现状专属：enterBatchImpl —— 推送范围 + 跳任务模块
+  async function enterBatchImpl() {
+    if (state.mode !== 'now') return;
+    syncSelection();
+    if (state.selected.size) {
+      state.scopeActive = true;
+      await pushScope();
+    }
+    setView('runs');
+  }
+
+  // 勾选失效剪枝（演示内条目状态稳定，保留口径以对齐 syncImpl）
+  function syncSelection() {
+    const eligible = new Set(state.items.filter((it) => it.status === 'planned').map((it) => it.id));
+    for (const id of [...state.selected]) if (!eligible.has(id)) state.selected.delete(id);
+  }
+
+  async function removeFromPlan() {
+    if (state.pending) return;
+    syncSelection();
+    const selected = [...state.selected];
+    if (!selected.length) { toast('没有可移出计划的已计划条目', true); return; }
+    if (!window.confirm(`确定移出计划所选 ${selected.length} 条（退回已接受）？\n${selected.join('\n')}`)) return;
+    state.pending = true;
+    state.failures = [];
+    let ok = 0;
+    state.message = '正在移出计划 0 / ' + selected.length + '…';
+    renderResult();
+    for (const id of selected) {
+      await new Promise((r) => setTimeout(r, 320));
+      const fail = state.failSim && ok === 0 && state.failures.length === 0; // 首条模拟失败
+      log('POST', `/api/item/${id}/status`, { to: 'accepted' }, !fail);
+      if (fail) { state.failures.push({ id, error: '模拟接口失败' }); }
+      else {
+        const it = state.items.find((x) => x.id === id);
+        if (it) it.status = 'accepted';
+        state.selected.delete(id);
+        ok++;
+      }
+      state.message = `正在移出计划 ${ok + state.failures.length} / ${selected.length}…`;
+      renderResult();
+      renderStatus();
+    }
+    state.message = `移出计划完成：成功 ${ok} 条，失败 ${state.failures.length} 条`;
+    toast(state.message, state.failures.length > 0);
+    state.pending = false;
+    renderStatus();
+    renderRuns();
+  }
+
+  function renderChips() {
+    const counts = { ...OTHER_COUNTS };
+    for (const it of state.items) if (it.status === 'accepted') counts.accepted = (counts.accepted || 0) + 1;
+    counts.planned = state.items.filter((it) => it.status === 'planned').length;
+    $('#filterChips').innerHTML = ['submitted', 'accepted', 'planned', 'developing', 'confirming', 'done']
+      .map((k) => `<span class="chip ${k === 'planned' ? 'active' : ''}">${LANE_LABEL[k]} ${counts[k] ?? 0}</span>`).join('');
+  }
+
+  function renderResult() {
+    const el = $('#acceptResult');
+    if (!state.message && !state.failures.length) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.classList.toggle('err', state.failures.length > 0);
+    el.innerHTML = esc(state.message) + (state.failures.length
+      ? `<ul>${state.failures.map((f) => `<li>${esc(f.id)}：${esc(f.error)}</li>`).join('')}</ul>` : '');
+  }
+
+  function renderStatus() {
+    renderChips();
+    const planned = state.items.filter((it) => it.status === 'planned');
+    $('#reqCount').textContent = `${planned.length} 个条目`;
+    const rows = $('#reqList');
+    $('#reqEmpty').classList.toggle('hidden', planned.length > 0);
+    rows.replaceChildren(...planned.map((it) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <input type="checkbox" data-impl-id="${esc(it.id)}" aria-label="选择 ${esc(it.id)}" ${state.selected.has(it.id) ? 'checked' : ''} ${state.pending ? 'disabled' : ''}>
+        <span class="rid">${esc(it.id)}</span>
+        <span class="rtitle">${esc(it.title)}</span>
+        <span class="state s-planned">已计划</span>`;
+      row.querySelector('input').addEventListener('change', (e) => {
+        const id = e.target.dataset.implId;
+        if (e.target.checked) state.selected.add(id); else state.selected.delete(id);
+        renderStatus();
+        pushScope(); // 现状：范围生效后勾选变化即静默推送（修复后此链路不存在）
+      });
+      return row;
+    }));
+
+    const n = state.selected.size;
+    const group = $('#selGroup');
+    group.classList.toggle('hidden', n === 0); // REQ-20260909-002：零勾选整组隐藏
+    $('#selCount').textContent = `已选 ${n} 项`;
+    const implGo = $('#implGo');
+    implGo.classList.toggle('hidden', !(state.mode === 'now')); // 修复后：按钮整体移除
+    const planRemove = $('#planRemove');
+    planRemove.classList.toggle('hidden', false);
+    planRemove.disabled = state.pending || n === 0;
+    planRemove.textContent = state.pending ? '移出中…' : '移出计划';
+    $('#selectOperable').disabled = state.pending || planned.length === 0;
+    $('#selectNone').disabled = state.pending || n === 0;
+    renderResult();
+  }
+
+  function renderRuns() {
+    if (state.view !== 'runs') return;
+    const queue = plannedItems();
+    const preview = queue.length
+      ? queue.slice(0, 3).map((it) => it.id).join('、') + (queue.length > 3 ? ` 等 ${queue.length} 项` : '')
+      : '（空，等待已计划条目）';
+    $('#queueHint').textContent = `已计划队列（最旧优先）：${preview}——运行中新置计划的条目自动进入队列。启动 = 创建任务并复制调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）。`;
+    $('#batchStats').innerHTML = `已计划候选 <b>${queue.length}</b> · 受依赖阻塞 <b>0</b>（最旧优先，实时读取；运行中新置计划的条目自动进入队列）`;
+    $('#noCandidate').classList.toggle('hidden', queue.length > 0);
+    $('#noCandidate').textContent = '暂无已计划候选：请先在看板接受条目，并在详情页「移入计划」（仅已计划且未被认领的条目可入批）。';
+    $('#queueBox').replaceChildren(...queue.map((it, i) => {
+      const d = document.createElement('div');
+      d.className = 'q-row';
+      d.innerHTML = `<span class="rid">${esc(it.id)}</span><span>${esc(it.title)}</span><span class="badge">${i === 0 ? '下一个派发 · ' : ''}最旧优先 #${i + 1}</span>`;
+      return d;
+    }));
+    // 现状专属：范围 notice（修复后机制移除，永不出现）
+    const sn = $('#scopeNotice');
+    sn.classList.toggle('hidden', !(state.mode === 'now' && state.scopeActive));
+    if (state.mode === 'now' && state.scopeActive) {
+      sn.textContent = `本批范围：勾选 ${state.selected.size} 项 —— 仅自动派发勾选条目；清空选择或关闭自动派发后恢复全部已计划。`;
+    }
+  }
+
+  function render() {
+    renderStatus();
+    renderRuns();
+  }
+
+  // ---------- 事件绑定 ----------
+
+  document.querySelectorAll('.viewnav button').forEach((b) => {
+    if (b.dataset.view === 'status' || b.dataset.view === 'runs') {
+      b.addEventListener('click', () => setView(b.dataset.view));
+    } else {
+      b.addEventListener('click', () => toast('本演示仅覆盖「需求（已计划档）」与「任务（批量开发）」两个模块'));
+    }
+  });
+
+  $('#implGo').addEventListener('click', enterBatchImpl);
+  $('#planRemove').addEventListener('click', removeFromPlan);
+  $('#selectOperable').addEventListener('click', () => {
+    if (state.pending) return;
+    state.selected = new Set(state.items.filter((it) => it.status === 'planned').map((it) => it.id));
+    renderStatus();
+    pushScope();
+  });
+  $('#selectNone').addEventListener('click', () => {
+    if (state.pending) return;
+    state.selected = new Set();
+    renderStatus();
+    pushScope(); // 现状：清空勾选即推送空范围（恢复全部已计划）
+  });
+
+  $('#devMode').addEventListener('change', (e) => { $('#devStart').disabled = !e.target.value; });
+  $('#devStart').addEventListener('click', () => {
+    toast('演示不执行真实启动；实际行为 = 创建批量开发任务并复制主调度提示词');
+  });
+
+  $('#modeNow').addEventListener('click', () => setMode('now'));
+  $('#modeFix').addEventListener('click', () => setMode('fix'));
+  function setMode(m) {
+    state.mode = m;
+    $('#modeNow').classList.toggle('active', m === 'now');
+    $('#modeFix').classList.toggle('active', m === 'fix');
+    // 切到「期望」：范围机制整体不复存在——直接清空范围态，不产生任何 scope 请求
+    if (m === 'fix' && state.scopeActive) {
+      state.scopeActive = false;
+      state.scopeSig = '';
+    }
+    document.querySelectorAll('.notes .nowonly').forEach((el) => el.classList.toggle('hidden', m !== 'now'));
+    document.querySelectorAll('.notes .fixonly').forEach((el) => el.classList.toggle('hidden', m !== 'fix'));
+    render();
+    toast(m === 'now' ? '现状（缺陷）：勾选入口 + 隐性派发范围' : '期望（修复后）：仅「移出计划」，开发入口只在任务模块');
+  }
+
+  $('#failSwitch').addEventListener('change', (e) => { state.failSim = e.target.checked; });
+  $('#resetData').addEventListener('click', resetData);
+
+  resetData();
+})();
+</script>
+</body>
+</html>

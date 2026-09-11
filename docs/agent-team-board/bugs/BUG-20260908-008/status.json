@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-008",
+  "type": "bug",
+  "title": "设置界面去掉项目设置这个标题",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-8",
+  "createdAt": "2026-09-08T11:36:57.259Z",
+  "updatedAt": "2026-09-11T05:52:18.985Z",
+  "agentCompletedAt": "2026-09-08T14:32:45.553Z",
+  "lastReport": {
+    "at": "2026-09-08T14:32:45.553Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + vm 契约测试",
+    "summary": "移除 renderSettingsView 的 header.batch-head（h2 项目设置+span.path），设置视图自说明文案开始；新增 settings-title-removed.test.mjs 3 用例（动态渲染/静态契约/范围边界）跑红转绿；run-all 92 文件全绿；归因 REQ-20260907-004",
+    "runId": "run-20260908-086"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T11:36:57.259Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T12:02:05.252Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.322Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T14:22:06.440Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-8",
+      "note": "认领（zcode-batch-018-8）"
+    },
+    {
+      "at": "2026-09-08T14:32:45.553Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-8",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.985Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-16ff",
+      "note": "人工确认完成"
+    }
+  ]
+}

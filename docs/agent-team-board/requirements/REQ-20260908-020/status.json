@@ -1,0 +1,75 @@
+{
+  "id": "REQ-20260908-020",
+  "type": "requirement",
+  "title": "重构批量流程和任务管理。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-017-1",
+  "createdAt": "2026-09-08T08:32:47.810Z",
+  "updatedAt": "2026-09-11T05:52:18.846Z",
+  "agentCompletedAt": "2026-09-08T10:39:48.872Z",
+  "lastReport": {
+    "at": "2026-09-08T10:39:48.872Z",
+    "coverage": 85,
+    "framework": "node:assert/strict（数据层 + CLI 子进程 + HTTP 服务 + 前端静态契约）",
+    "summary": "重构批量流程与任务管理：①完善候选切已接受未完善单，每轮 next 实时吸收新接受单（吸收时逐项冻结基线）；②单级完善三态（未完善/完善中/已完善）落 refine/states.json 执行账本，accepted 进入一律重置未完善，完善中禁驳（CLI/UI 双侧）；③新增 refine/batch abort 终止（二次确认、剩余项 skipped 出局、在途 interrupted 注明人工终止、锁全释放、批次终止态）；④仅子代理模式，zcode/codex 双 Agent 差异化主调度提示词，批次落 agent 字段；⑤设置新增「批量任务」分区（Agent 展示 × 四路模型/智能档位，完善默认高/开发默认中）；⑥任务模块重构为「批量完善/批量开发」子面板，统一启动区+当前详情+暂停/终止+记录，Codex 后台 tab 隐藏（顶栏待处理徽标改跳设置，无死链）；看板已接受卡片/详情三态徽标可跳转。新增 tasks-refine 测试 10 例并更新 8 个既有测试文件，全量 88 个测试文件通过。",
+    "runId": "run-20260908-078"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T08:32:47.810Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T08:32:57.207Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T08:43:02.412Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-08T10:01:20.879Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T10:01:22.643Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T10:02:36.783Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-017-1",
+      "note": "认领（zcode-batch-017-1）"
+    },
+    {
+      "at": "2026-09-08T10:39:48.872Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-017-1",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.846Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-18da",
+      "note": "人工确认完成"
+    }
+  ]
+}

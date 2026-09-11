@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-014",
+  "type": "bug",
+  "title": "新建条目中的讨论单类型改为讨论",
+  "status": "done",
+  "parent": "REQ-20260907-001",
+  "owner": "zcode-batch-009-01",
+  "createdAt": "2026-09-07T13:50:48.020Z",
+  "updatedAt": "2026-09-11T05:52:17.234Z",
+  "agentCompletedAt": "2026-09-07T17:02:36.354Z",
+  "lastReport": {
+    "at": "2026-09-07T17:02:36.354Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约（npm test 聚合）",
+    "summary": "统一新建弹窗类型选项 ask 文案「讨论单（ASK）」→「讨论（ASK）」（index.html），与需求/Bug 选项同构；W6 新增逐字文案契约断言先红后绿，W9 同步「ASK 序列保留展示」断言口径；全量 npm test 70 文件 0 失败。引入来源：REQ-20260907-004（已核验）。",
+    "runId": "run-20260908-052"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T13:50:48.020Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T13:50:49.764Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T17:00:34.347Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-01",
+      "note": "认领（zcode-batch-009-01）"
+    },
+    {
+      "at": "2026-09-07T17:02:36.354Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.234Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-29e6",
+      "note": "人工确认完成"
+    }
+  ]
+}

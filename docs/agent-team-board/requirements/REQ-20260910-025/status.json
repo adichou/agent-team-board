@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-025",
+  "type": "requirement",
+  "title": "排序下拉组件要和搜索框平齐",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-31",
+  "createdAt": "2026-09-10T09:08:31.454Z",
+  "updatedAt": "2026-09-11T05:52:23.212Z",
+  "agentCompletedAt": "2026-09-10T12:34:21.793Z",
+  "lastReport": {
+    "at": "2026-09-10T12:34:21.793Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约测试",
+    "summary": "定位组内排序下拉与搜索框等高平齐：.page-head .locate-group 作用域同一声明块为 .sort-select 与 .module-search 显式同高 32px（border-box 含边框等高、居中沿用），排序下拉内边距放宽 0 8px；复用位置（讨论筛选条 .sort-select、面板 .search-input）与 016 布局/显隐/搜索交互零改动；A1-A6 先红后绿，全量 171 文件除偶发 ECONNRESET 重跑绿外全过",
+    "runId": "run-20260910-177"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T09:08:31.454Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T09:08:31.458Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T09:51:57.217Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-174629-7915）"
+    },
+    {
+      "at": "2026-09-10T12:27:15.693Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-31",
+      "note": "认领（zcode-batch-031-31）"
+    },
+    {
+      "at": "2026-09-10T12:34:21.794Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-31",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.213Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2317",
+      "note": "人工确认完成"
+    }
+  ]
+}

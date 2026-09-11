@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-006",
+  "type": "bug",
+  "title": "未认领未上报的 Codex 条目在续跑耗尽后被无限重新派发",
+  "status": "done",
+  "parent": "REQ-20260906-003",
+  "owner": "codex-worker-claim-fix",
+  "createdAt": "2026-09-06T06:40:04.134Z",
+  "updatedAt": "2026-09-11T05:52:15.275Z",
+  "agentCompletedAt": "2026-09-06T09:59:34.973Z",
+  "lastReport": {
+    "at": "2026-09-06T09:59:34.973Z",
+    "coverage": null,
+    "framework": "node:assert + 假 CLI 调度集成测试",
+    "summary": "修复未认领条目跨 run 无限重新派发：最近运行 blocked/failed/interrupted 时不自动重派，账本限制跨重新开启及重启生效，其他条目继续运行。新增 3 组测试先红（实际 5 run，预期 1）后绿，原 scheduler 17 组全过；未测全库覆盖率。引入来源：REQ-20260906-003。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T06:40:04.134Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-7c43"
+    },
+    {
+      "at": "2026-09-06T08:26:56.783Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T09:57:47.062Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "codex-worker-claim-fix",
+      "note": "认领（codex-worker-claim-fix）"
+    },
+    {
+      "at": "2026-09-06T09:59:34.974Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "codex-worker-claim-fix",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.275Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-10ed",
+      "note": "人工确认完成"
+    }
+  ]
+}

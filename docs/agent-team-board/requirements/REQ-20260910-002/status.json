@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-002",
+  "type": "requirement",
+  "title": "任务模块中的提示词要新增打开 zcode 工作区和打开 codex 工作区",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-1",
+  "createdAt": "2026-09-09T16:11:37.382Z",
+  "updatedAt": "2026-09-11T05:52:21.624Z",
+  "agentCompletedAt": "2026-09-10T00:40:09.976Z",
+  "lastReport": {
+    "at": "2026-09-10T00:40:09.976Z",
+    "coverage": 100,
+    "framework": "node:assert 契约/行为测试（vm 双沙箱）+ 实机深链验证",
+    "summary": "两子面板提示词页签新增并列「打开 Zcode/Codex 工作区」按钮（共用 workspaceOpenRowHtml + data-open-ws 绑定）：zcode 沿用官方 workspace/open 深链零回归；codex 经实机验证采用 codex://threads/new?path=（不传 prompt，不注入不发送；ChatGPT.app 无纯工作区路由，见 design D1）；新增只读端点 GET /api/workspace/apps 探测深链宿主，明确缺位才禁用+title 说明；未选项目按钮禁用+说明；完善侧缺 prompt 空态按钮随提示词隐藏。新增 workspace-entry-20260910-002.test.mjs 11 用例全绿；run-all 130 文件 0 失败（batch-ui U10/refine-ui/dispatch-launch U1 三处旧契约按新条目语义精化，见 test-report.md）",
+    "runId": "run-20260910-142"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T16:11:37.382Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T16:11:39.659Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T17:05:52.716Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-005808-5e89）"
+    },
+    {
+      "at": "2026-09-10T00:10:40.806Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "认领（zcode-batch-029-1）"
+    },
+    {
+      "at": "2026-09-10T00:40:09.976Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.624Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-bb17",
+      "note": "人工确认完成"
+    }
+  ]
+}

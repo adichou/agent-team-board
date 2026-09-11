@@ -1,0 +1,53 @@
+{
+  "id": "BUG-20260905-003",
+  "type": "bug",
+  "title": "Electron 壳窗口交通灯与看板顶栏文字重叠",
+  "status": "done",
+  "parent": "REQ-20260905-001",
+  "owner": "zcode-traffic-light-inset",
+  "createdAt": "2026-09-05T09:50:51.497Z",
+  "updatedAt": "2026-09-11T05:52:14.253Z",
+  "agentCompletedAt": "2026-09-05T16:19:50.036Z",
+  "lastReport": {
+    "at": "2026-09-05T16:19:50.036Z",
+    "coverage": 90,
+    "framework": "node:assert 自研测试脚本（静态契约+真实子进程集成，scripts/tests/electron-shell.test.mjs）",
+    "summary": "根因：REQ-20260905-001 的 Electron 壳采用 hiddenInset 后，交通灯悬浮窗口左上约 70px 宽，而顶栏 .topbar 左内边距仅 18px，遮挡 .brand 文字（引入来源：REQ-20260905-001）。修复：修在壳层——新增 electron/shell-css.mjs 纯 Node 模块导出 TRAFFIC_LIGHT_INSET_CSS（.topbar padding-left:78px），main.mjs 经 webContents.insertCSS 于 did-finish-load 注入（重载亦生效），scripts/web 零改动、浏览器直连不受影响。TDD：electron-shell 新增 V4 注入契约用例先红后绿（8/8），npm test 20 个测试文件回归全过。npm run app 视觉项待人工验收。"
+  },
+  "history": [
+    {
+      "at": "2026-09-05T09:50:51.497Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0905-99b9"
+    },
+    {
+      "at": "2026-09-05T11:07:22.869Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-05T16:15:13.111Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-traffic-light-inset",
+      "note": "认领（zcode-traffic-light-inset）"
+    },
+    {
+      "at": "2026-09-05T16:19:50.036Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-5776",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.253Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-334d",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-020",
+  "type": "bug",
+  "title": "看板整页空白不渲染：app.js 批量任务改动引入语法错误",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260910-032-07",
+  "createdAt": "2026-09-10T15:41:18.118Z",
+  "updatedAt": "2026-09-11T05:52:23.591Z",
+  "agentCompletedAt": "2026-09-10T17:54:53.636Z",
+  "lastReport": {
+    "at": "2026-09-10T17:54:53.636Z",
+    "coverage": 80,
+    "framework": "node --check + node:assert/vm 契约（npm test 全量 182 文件）",
+    "summary": "design.md 并发预警成真：语法错误已由 REQ-20260910-027（run-20260910-181）收尾时附带修复并写入工作区，本 run 未改 app.js，转为核验+归因：红证 /tmp 副本注入同病灶复现 SyntaxError（node --check 与全文 vm 求值双向对照），绿证 node --check 通过、定向 8 份（layout/marketing-ui/shortcuts/refresh-restore/batch-ui/discussion-ui/dev-setting-removed-027/workbench-layout）与全量 182 文件 0 失败；归因闭环（验收5）：补查 dispatch runs 账本定位引入方 REQ-20260910-027（时间线四证，atb list 核验），design.md 引入来源节与 README 头部行已更新；验收2 浏览器目验留人工",
+    "runId": "run-20260911-185"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T15:41:18.118Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0910-e9e6"
+    },
+    {
+      "at": "2026-09-10T15:41:36.228Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T15:48:30.407Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-234225-4258）"
+    },
+    {
+      "at": "2026-09-10T17:47:22.982Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-07",
+      "note": "认领（zcode-batch-20260910-032-07）"
+    },
+    {
+      "at": "2026-09-10T17:54:53.637Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-07",
+      "note": "上报测试报告（覆盖率 80%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.591Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-3995",
+      "note": "人工确认完成"
+    }
+  ]
+}

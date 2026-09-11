@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-017",
+  "type": "requirement",
+  "title": "新建条目中支持对截图进行双击放大查看",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-23",
+  "createdAt": "2026-09-10T07:26:52.045Z",
+  "updatedAt": "2026-09-11T05:52:22.808Z",
+  "agentCompletedAt": "2026-09-10T09:38:59.001Z",
+  "lastReport": {
+    "at": "2026-09-10T09:38:59.001Z",
+    "coverage": 8,
+    "framework": "node:assert + vm 模拟 DOM（项目自研测试脚本）",
+    "summary": "新建表单截图双击放大预览：常驻 #shotPreview 全屏遮罩（z-index 35 盖过新建侧拉面板）+ 三态反馈（加载中/大图/失败重试，token 防迟到结果回写）；renderShots 补「查看大图」按钮与双击绑定（单击/按钮双击不触发）；Esc/Tab 窗口捕获只关预览且焦点圈定，关闭恢复触发点；closeModal/openModal 同步清理；不改截图校验与提交口径。新测试 8 例全绿，全量 156 文件回归通过。",
+    "runId": "run-20260910-169"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T07:26:52.045Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T07:27:04.743Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T07:42:07.312Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-153859-a62e）"
+    },
+    {
+      "at": "2026-09-10T09:17:45.627Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-23",
+      "note": "认领（zcode-batch-031-23）"
+    },
+    {
+      "at": "2026-09-10T09:38:59.001Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-23",
+      "note": "上报测试报告（覆盖率 8%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.808Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-db9e",
+      "note": "人工确认完成"
+    }
+  ]
+}

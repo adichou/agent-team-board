@@ -1,0 +1,60 @@
+{
+  "id": "REQ-20260830-004",
+  "type": "requirement",
+  "title": "缺陷修复方案必须标注引入来源（哪个需求/Bug 引入）",
+  "status": "done",
+  "parent": null,
+  "owner": "terminal",
+  "createdAt": "2026-08-30T00:40:48.556Z",
+  "updatedAt": "2026-09-11T05:52:13.045Z",
+  "agentCompletedAt": "2026-08-30T02:43:12.747Z",
+  "lastReport": {
+    "at": "2026-08-30T02:43:12.747Z",
+    "coverage": null,
+    "framework": "node:assert 静态契约测试",
+    "summary": "引入来源规范 v2（按 2026-08-30 人工复核反馈修订：登记不填、修复必填）：/bug 登记 Bug 不再要求引入来源（登记时缺陷尚未定位），bug.md 仅留指引——归因在修复阶段完成；/dev 修复 Bug 时归因必填——根因分析（design.md 或 README）与 test-report 写明引入来源，来源 ID 用 atb list/show 核验真实存在（格式 REQ-/BUG-YYYYMMDD-NNN），写入 README 末尾「关联」节（样式同样例 BUG-20260830-001），三选一 REQ-/BUG-/未定位（附排查过程），禁止编造，已有来源直接引用、缺失排查补充；SKILL.md 数据规范与 TDD 流程同口径（登记不要求、修复阶段补写）。TDD 重走：traceability.test.mjs R1/R2/R4 断言先改先红（3 失败）→ 修订三份文档 → 6 条全绿；R7 三组既有测试回归全绿，运行时零改动。修订记录已写入本条目 README/design/test-cases。"
+  },
+  "history": [
+    {
+      "at": "2026-08-30T00:40:48.556Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-08-30T00:41:14.772Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-08-30T00:43:08.500Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "认领（terminal）"
+    },
+    {
+      "at": "2026-08-30T00:44:32.944Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-08-30T02:43:12.747Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.045Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-7819",
+      "note": "人工确认完成"
+    }
+  ]
+}

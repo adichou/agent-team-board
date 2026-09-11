@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REQ-20260910-026 全选/全不选图标化 · 操作按钮与开始完善同行</title>
+<style>
+:root{
+  --bg:#10151e; --panel:#1a2230; --panel2:#202a3c; --border:#39465e; --text:#e2e7f0;
+  --muted:#93a0b5; --accent:#8f8dff; --accent2:#aaa8ff; --warn:#d8a13a; --ok:#4fbf6b;
+  --err:#e06c5f; --chip:#243044;
+}
+html[data-theme="light"]{
+  --bg:#f3f5f9; --panel:#ffffff; --panel2:#eef1f6; --border:#c6cede; --text:#20293a;
+  --muted:#5c6880; --accent:#5b57d8; --accent2:#4a46c9; --warn:#a06a12; --ok:#2e9e4f;
+  --err:#c2453a; --chip:#e4e9f2;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:1080px;margin:24px auto;padding:0 16px 60px}
+h1{font-size:19px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:12.5px;margin:0 0 16px}
+.controls{display:flex;flex-wrap:wrap;gap:14px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.ctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ctl>b{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
+button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 11px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.42;cursor:not-allowed}
+button.on{border-color:var(--accent);color:var(--accent2);background:transparent}
+.primary{color:#fff;background:var(--accent);border-color:var(--accent)}
+html[data-theme="light"] .primary{color:#fff}
+.primary:hover:not(:disabled){filter:brightness(1.08)}
+.warn{color:var(--warn);border-color:var(--warn)}
+.stage{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.stage.narrow{max-width:520px}
+.stage .stageword{font-size:12px;color:var(--muted);margin:0 0 8px}
+/* —— 工具栏（对照 #reqCaption 契约：flex wrap、gap 8px、垂直居中） —— */
+.req-caption{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:2px 4px 10px;border-bottom:1px solid var(--border);margin-bottom:10px}
+.caption-hint{flex:none;color:var(--muted);font-size:12px}
+.btn{padding:5px 11px}
+.small{padding:4px 10px;font-size:12.5px}
+.icon{width:34px;padding:4px 0;font-size:15px;text-align:center;line-height:1.4}
+.icon:focus-visible,.btn:focus-visible,li input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.sel-group{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.sel-count{font-weight:600;font-size:12.5px;color:var(--accent2)}
+.sel-group .btn{padding:4px 10px;font-size:12px}
+.quick{margin-left:auto;flex:none}
+/* 调整后：批量动作组 + 快捷入口绑定同一行（整组换行，永不拆散） */
+.same-row{display:flex;align-items:center;flex-wrap:nowrap;gap:8px;margin-left:auto;min-width:0}
+.same-row .sel-group{flex-wrap:nowrap}
+.hidden{display:none !important}
+/* —— 结果反馈（对照 #acceptResult） —— */
+.result{margin:0 0 10px;padding:8px 12px;border-radius:8px;font-size:12.5px;background:var(--panel2);border:1px solid var(--border)}
+.result.ok{border-color:var(--ok)}
+.result.err{border-color:var(--err)}
+.result ul{margin:6px 0 0;padding-left:18px}
+.result.err li{color:var(--err)}
+/* —— 搜索 —— */
+.search{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.search input{flex:none;width:240px;font:inherit;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text)}
+.search .scope{font-size:12px;color:var(--muted)}
+/* —— 列表 —— */
+.list{display:flex;flex-direction:column;gap:6px}
+.row{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px}
+.row input[type="checkbox"]{width:15px;height:15px;accent-color:var(--accent)}
+.cid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--accent2)}
+.row .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{flex:none;font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:99px;padding:1px 8px}
+.badge.rf-unrefined{color:var(--warn);border-color:var(--warn)}
+.badge.rf-refining{color:var(--accent2);border-color:var(--accent)}
+.badge.rf-refined{color:var(--ok);border-color:var(--ok)}
+.empty-card{border:1px dashed var(--border);border-radius:8px;padding:26px;text-align:center;color:var(--muted)}
+/* —— 观察要点 / 线框 —— */
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.notes section{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.notes h2{font-size:13.5px;margin:0 0 8px}
+.notes ul,.notes ol{margin:0;padding-left:18px;font-size:12.5px;color:var(--muted)}
+.notes li{margin:4px 0}
+.notes code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--text);background:var(--chip);border-radius:4px;padding:1px 5px}
+pre.wire{font:11px/1.5 ui-monospace,Menlo,monospace;color:var(--muted);background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:auto;margin:8px 0 0}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--panel2);border:1px solid var(--accent);color:var(--text);border-radius:10px;padding:9px 16px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;max-width:80vw}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (max-width:760px){.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>REQ-20260910-026 · 全选/全不选图标化，操作按钮与「开始完善」同一行</h1>
+  <p class="sub">需求列表头工具栏（#reqCaption）UI 调整的可交互演示。示例数据与加载 / 失败反馈均为模拟，不写入看板。</p>
+
+  <div class="controls">
+    <div class="ctl"><b>对照</b>
+      <button type="button" data-mode="before">调整前</button>
+      <button type="button" data-mode="after" class="on">调整后</button>
+    </div>
+    <div class="ctl"><b>档位</b>
+      <button type="button" data-lane="submitted">待接受</button>
+      <button type="button" data-lane="accepted" class="on">已接受</button>
+      <button type="button" data-lane="planned">已计划</button>
+      <button type="button" data-lane="inprogress">开发中</button>
+    </div>
+    <div class="ctl"><b>工具栏宽度</b>
+      <button type="button" data-width="wide" class="on">宽（常规）</button>
+      <button type="button" data-width="narrow">窄</button>
+    </div>
+    <div class="ctl"><b>状态</b>
+      <button type="button" data-sc="normal" class="on">正常</button>
+      <button type="button" data-sc="empty">空</button>
+      <button type="button" data-sc="loading">加载</button>
+      <button type="button" data-sc="fail">失败</button>
+    </div>
+    <div class="ctl"><b>主题</b>
+      <button type="button" data-theme-toggle>深 / 浅切换</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <p class="stageword" id="stageWord"></p>
+    <div id="caption" class="req-caption"></div>
+    <div id="result" class="result hidden" role="status" aria-live="polite"></div>
+    <div class="search" id="searchWrap">
+      <span class="scope">🔍 搜索（叠入全选范围，所见即所选）</span>
+      <input id="q" type="text" placeholder="按编号 / 标题过滤，试试输入 002">
+      <span class="caption-hint" id="hitHint"></span>
+    </div>
+    <div id="list" class="list"></div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>观察要点</h2>
+      <ol>
+        <li><b>同行呈现</b>：切到「调整前 + 窄」，已选若干项后「▶ 开始完善」被换行挤到第二行；切「调整后 + 窄」，批量动作组与「▶ 开始完善」恒定同一行（整组兜底换行，永不拆散）。</li>
+        <li><b>图标化</b>：调整后全选 / 全不选仅保留 ☑ / ☐ 图标，悬浮有完整语义提示（title / aria-label 保留）。</li>
+        <li><b>仅作用当前档</b>：已接受档勾选两项 → 切到已计划档再切回，勾选保留；「全不选」只清当前档。</li>
+        <li><b>叠搜索</b>：输入关键词后点全选 = 只勾选当前档可见命中项（所见即所选）。</li>
+        <li><b>状态反馈</b>：正常（计数 / 显隐即时同步）、空（全选禁用 + 空态卡）、加载（防误触 + 「接受中…」进度）、失败（失败清单保留）。</li>
+        <li>「开发中」档：无全选 / 全不选、无批量动作、无快捷入口，不留空占位。</li>
+      </ol>
+    </section>
+    <section>
+      <h2>布局线框（窄宽度对照）</h2>
+      <pre class="wire">调整前（宽度不足，快捷入口被拆到第二行）：
+┌──────────────────────────────────────┐
+│ ☑ 全选  ☐ 全不选  已选2项 [移入计划][驳回待接受] │
+│                        [▶ 开始完善]  │ ← 落单一行
+└──────────────────────────────────────┘
+调整后（图标化 + 同一组恒同行）：
+┌──────────────────────────────────────┐
+│ [☑][☐]   已选2项 [移入计划][驳回待接受] [▶ 开始完善] │
+└──────────────────────────────────────┘
+（空间不足时整组换行，两按钮不拆散）</pre>
+    </section>
+  </div>
+
+  <div id="toast"></div>
+</main>
+
+<script>
+'use strict';
+/* ---------------- 数据（演示用） ---------------- */
+const DATA = {
+  submitted: [
+    { id: 'REQ-20990101-003', title: '列表支持按认领人筛选' },
+    { id: 'REQ-20990101-004', title: '详情页附件预览优化' },
+    { id: 'BUG-20990101-011', title: '切项目后筛选未重置' },
+  ],
+  accepted: [
+    { id: 'REQ-20990101-001', title: '状态标签支持组合筛选', badge: ['未完善', 'rf-unrefined'] },
+    { id: 'REQ-20990101-002', title: '批量驳回支持失败重试', badge: ['完善中', 'rf-refining'] },
+    { id: 'REQ-20990101-012', title: '看板导出 Markdown 快照', badge: ['已完善', 'rf-refined'] },
+    { id: 'REQ-20990101-013', title: '搜索高亮命中片段', badge: ['未完善', 'rf-unrefined'] },
+  ],
+  planned: [
+    { id: 'REQ-20990101-005', title: '计划队列拖拽排序' },
+    { id: 'REQ-20990101-006', title: '认领锁超时自动释放' },
+    { id: 'BUG-20990101-014', title: '计划页统计口径不一致' },
+  ],
+  inprogress: [
+    { id: 'REQ-20990101-007', title: '子代理回执解析容错', owner: 'dev-甲' },
+    { id: 'REQ-20990101-008', title: '状态铁律校验器增强', owner: 'dev-乙' },
+  ],
+};
+const LANES = {
+  submitted: { label: '待接受', selectable: true, quick: null,
+    actions: [{ id: 'accept', label: '接受所选', pending: '接受中…', doing: '正在接受', cls: 'primary' }] },
+  accepted: { label: '已接受', selectable: true, quick: { label: '▶ 开始完善', panel: '批量完善' },
+    actions: [
+      { id: 'planAdd', label: '移入计划', pending: '移入中…', doing: '正在移入', cls: 'primary' },
+      { id: 'planReject', label: '驳回待接受', pending: '驳回中…', doing: '正在驳回', cls: 'warn' }] },
+  planned: { label: '已计划', selectable: true, quick: { label: '▶ 开始开发', panel: '批量开发' },
+    actions: [{ id: 'planRemove', label: '移出计划', pending: '移出中…', doing: '正在移出', cls: 'warn' }] },
+  inprogress: { label: '开发中', selectable: false, quick: null, actions: [] },
+};
+
+/* ---------------- 状态 ---------------- */
+const state = {
+  mode: 'after', lane: 'accepted', width: 'wide', scenario: 'normal',
+  q: '',
+  sel: { submitted: new Set(), accepted: new Set(), planned: new Set() },
+  running: null,           // { actionId } 模拟批量进行中
+  result: null,            // { text, failures: [], ok: bool }
+};
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const laneConf = () => LANES[state.lane];
+const itemsOf = (lane) => DATA[lane || state.lane] || [];
+const visibleItems = () => {
+  const q = state.q.trim().toLowerCase();
+  const arr = state.scenario === 'empty' ? [] : itemsOf();
+  return q ? arr.filter((it) => (it.id + it.title).toLowerCase().includes(q)) : arr;
+};
+const curSel = () => (laneConf().selectable ? state.sel[state.lane] : new Set());
+const busy = () => state.scenario === 'loading' || Boolean(state.running);
+const laneBtns = (act) => document.querySelectorAll(`.controls [data-${act}]`);
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ---------------- 工具栏渲染（对照 #reqCaption 契约） ---------------- */
+function selectAllHtml() {
+  const conf = laneConf();
+  if (!conf.selectable) return '';
+  const dis = busy() || visibleItems().length === 0 ? ' disabled' : '';
+  const title = '全选：仅勾选当前筛选档内可见的可操作条目（待接受 / 已接受 / 已计划；叠搜索范围）';
+  if (state.mode === 'before') {
+    return `<button type="button" class="btn small" data-act="all" title="${title}"${dis}>☑ 全选</button>`;
+  }
+  return `<button type="button" class="btn icon" data-act="all" aria-label="全选" title="${title}"${dis}>☑</button>`;
+}
+function selectNoneHtml() {
+  const conf = laneConf();
+  if (!conf.selectable) return '';
+  const dis = busy() || curSel().size === 0 ? ' disabled' : '';
+  const title = '全不选：仅取消当前筛选档的勾选';
+  if (state.mode === 'before') {
+    return `<button type="button" class="btn small" data-act="none" title="${title}"${dis}>☐ 全不选</button>`;
+  }
+  return `<button type="button" class="btn icon" data-act="none" aria-label="全不选" title="${title}"${dis}>☐</button>`;
+}
+function selGroupHtml() {
+  const conf = laneConf();
+  const n = curSel().size;
+  if (!conf.selectable || n === 0) return '';
+  const btns = conf.actions.map((a) => {
+    const doing = busy() && (!state.running ? a.id === laneConf().actions[0].id : state.running.actionId === a.id);
+    return `<button type="button" class="btn ${a.cls}" data-act="batch:${a.id}"${busy() ? ' disabled' : ''}>${doing ? a.pending : a.label}</button>`;
+  }).join('');
+  return `<div class="sel-group" role="group" aria-label="批量操作"><span class="sel-count">已选 ${n} 项</span>${btns}</div>`;
+}
+function quickHtml() {
+  const conf = laneConf();
+  if (!conf.quick) return '';
+  return `<button type="button" class="btn small primary quick" data-act="quick" title="进入任务模块${conf.quick.panel}面板：仅导航，与勾选无关">${conf.quick.label}</button>`;
+}
+function renderCaption() {
+  const hint = state.q.trim() ? `<span class="caption-hint">搜索命中 ${visibleItems().length} 项</span>` : '';
+  const group = selGroupHtml();
+  const quick = quickHtml();
+  let inner;
+  if (state.mode === 'after') {
+    // 调整后：批量动作组 + 快捷入口绑定同一行（.same-row 永不拆散，空间不足整组换行）
+    inner = `${hint}${selectAllHtml()}${selectNoneHtml()}<div class="same-row">${group}${quick}</div>`;
+  } else {
+    // 调整前：selGroup 与快捷入口各自独立伸缩项，可分别换行
+    inner = `${hint}${selectAllHtml()}${selectNoneHtml()}${group}${quick}`;
+  }
+  $('#caption').innerHTML = inner;
+}
+
+/* ---------------- 列表 / 结果渲染 ---------------- */
+function renderList() {
+  const items = visibleItems();
+  const conf = laneConf();
+  if (!items.length) {
+    const why = state.scenario === 'empty'
+      ? '当前分类暂无条目（空状态）'
+      : state.q.trim() ? `无匹配「${esc(state.q.trim())}」的条目：清除关键词可恢复` : '当前分类暂无条目';
+    $('#list').innerHTML = `<div class="empty-card"><b>${why}</b><br><span style="font-size:12px">空档下全选禁用（无可操作项）、全不选禁用（零勾选）、无批量动作空占位</span></div>`;
+    return;
+  }
+  $('#list').innerHTML = items.map((it) => {
+    const left = conf.selectable
+      ? `<input type="checkbox" data-check="${it.id}" ${curSel().has(it.id) ? 'checked' : ''} ${busy() ? 'disabled' : ''} aria-label="勾选 ${it.id}">`
+      : `<span class="badge">认领 ${it.owner}</span>`;
+    const badge = it.badge ? `<span class="badge ${it.badge[1]}">${it.badge[0]}</span>` : '';
+    return `<div class="row">${left}<span class="cid">${it.id}</span><span class="title">${esc(it.title)}</span>${badge}</div>`;
+  }).join('');
+}
+function renderResult() {
+  const box = $('#result');
+  if (state.scenario === 'loading') {
+    const a = laneConf().actions[0];
+    const n = Math.max(curSel().size, 1);
+    box.className = 'result';
+    box.innerHTML = `${a.doing} 0 / ${n}…（演示模拟：批量进行中，全选 / 全不选 / 复选框 / 批量按钮均防误触禁用）`;
+    return;
+  }
+  if (state.running) { box.className = 'result'; box.innerHTML = `批量操作进行中…`; return; }
+  if (!state.result) { box.className = 'result hidden'; box.innerHTML = ''; return; }
+  box.className = 'result ' + (state.result.ok ? 'ok' : 'err');
+  box.innerHTML = esc(state.result.text) + (state.result.failures.length
+    ? `<ul>${state.result.failures.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '');
+}
+function renderStageWord() {
+  const w = state.width === 'narrow' ? '窄（模拟宽度不足，观察换行行为）' : '宽（常规桌面宽度，单行工具栏）';
+  $('#stage').classList.toggle('narrow', state.width === 'narrow');
+  $('#stageWord').textContent = `演示舞台 · ${w} · 当前档：${laneConf().label} · 状态：${{ normal: '正常', empty: '空', loading: '加载', fail: '失败' }[state.scenario]}`;
+}
+function renderControls() {
+  laneBtns('mode').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
+  laneBtns('lane').forEach((b) => b.classList.toggle('on', b.dataset.lane === state.lane));
+  laneBtns('width').forEach((b) => b.classList.toggle('on', b.dataset.width === state.width));
+  laneBtns('sc').forEach((b) => b.classList.toggle('on', b.dataset.sc === state.scenario));
+  $('#hitHint').textContent = state.q.trim() ? `命中 ${visibleItems().length} / ${itemsOf().length}` : '';
+}
+function renderAll() { renderControls(); renderStageWord(); renderCaption(); renderResult(); renderList(); }
+
+/* ---------------- 交互 ---------------- */
+function selectOperable() {  // 全选：当前档可见可操作项（叠搜索，所见即所选）
+  if (busy() || !laneConf().selectable) return;
+  visibleItems().forEach((it) => curSel().add(it.id));
+  renderAll();
+}
+function deselectOperable() { // 全不选：仅清当前档，其他档保留（BUG-20260907-016 契约）
+  if (busy() || !laneConf().selectable) return;
+  state.sel[state.lane] = new Set();
+  renderAll();
+}
+function runBatch(actionId) {
+  const a = laneConf().actions.find((x) => x.id === actionId);
+  const n = curSel().size;
+  if (!a || busy() || n === 0) return;
+  if (state.scenario === 'fail') { // 失败状态：演示部分成功 + 失败清单
+    const failId = [...curSel()][0];
+    state.result = { ok: false, text: `${a.label}部分成功：${Math.max(n - 1, 0)} 项成功，1 项失败（演示模拟）`,
+      failures: [`${failId}：服务端拦截（演示模拟错误，反馈与失败清单不被布局调整吞掉）`] };
+    renderAll();
+    return;
+  }
+  state.running = { actionId };
+  renderAll();
+  setTimeout(() => {
+    state.running = null;
+    state.sel[state.lane] = new Set();
+    state.result = { ok: true, text: `✓ 已${a.doing} ${n} 项（演示模拟，不写看板）`, failures: [] };
+    renderAll();
+  }, 900);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.mode) { state.mode = b.dataset.mode; renderAll(); return; }
+  if (b.dataset.lane) { state.lane = b.dataset.lane; renderAll(); return; }
+  if (b.dataset.width) { state.width = b.dataset.width; renderAll(); return; }
+  if (b.dataset.sc) {
+    state.scenario = b.dataset.sc; state.running = null; state.result = null;
+    if (state.scenario === 'loading') { // 预置勾选，演示「接受中…」与进度
+      const s = curSel(); if (laneConf().selectable) visibleItems().slice(0, 2).forEach((it) => s.add(it.id));
+    }
+    renderAll(); return;
+  }
+  if (b.hasAttribute('data-theme-toggle')) {
+    const h = document.documentElement;
+    h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark';
+    return;
+  }
+  const act = b.dataset.act;
+  if (act === 'all') return selectOperable();
+  if (act === 'none') return deselectOperable();
+  if (act === 'quick') {
+    const q = laneConf().quick;
+    toast(`已进入任务模块「${q.panel}」面板（演示：仅导航，不创建任务、与勾选无关）`);
+    return;
+  }
+  if (act && act.startsWith('batch:')) return runBatch(act.slice(6));
+});
+document.addEventListener('change', (e) => {
+  const id = e.target.dataset && e.target.dataset.check;
+  if (!id || busy()) return;
+  const s = curSel();
+  if (e.target.checked) s.add(id); else s.delete(id);
+  renderAll();
+});
+$('#q').addEventListener('input', (e) => { state.q = e.target.value; renderAll(); });
+
+renderAll();
+</script>
+</body>
+</html>

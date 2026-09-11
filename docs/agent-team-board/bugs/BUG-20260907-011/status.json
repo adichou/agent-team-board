@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-011",
+  "type": "bug",
+  "title": "文件横幅目录列表会话级缓存：模块切换不重新拉取，外部新增文件不可见",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.916Z",
+  "updatedAt": "2026-09-11T05:52:17.040Z",
+  "agentCompletedAt": "2026-09-07T16:43:38.117Z",
+  "lastReport": {
+    "at": "2026-09-07T16:43:38.117Z",
+    "coverage": 75,
+    "framework": "Node 内置测试 + 契约/VM 沙箱 harness（scripts/tests/file-board.test.mjs，含真实 server 集成）",
+    "summary": "新增 refreshBannerLayers：模块切回文件视图时对当前层栈快照逐层后台重拉 /api/fs 更新 entriesByPath 后重建条带；单飞防并发、单层失败保留旧缓存；initFileBoard 幂等直返退役；S1-S3 先红后绿，全量 69 个测试文件 0 失败；引入来源 REQ-20260906-007 已核验并写入 README 关联节",
+    "runId": "run-20260908-049"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.916Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-1f8a"
+    },
+    {
+      "at": "2026-09-07T15:09:45.061Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T16:39:32.841Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T16:43:38.117Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 75%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.040Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-263c",
+      "note": "人工确认完成"
+    }
+  ]
+}

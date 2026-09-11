@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260908-007",
+  "type": "requirement",
+  "title": "提供终端可直接运行的 shell 命令",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-012-01",
+  "createdAt": "2026-09-08T01:54:25.631Z",
+  "updatedAt": "2026-09-11T05:52:18.087Z",
+  "agentCompletedAt": "2026-09-08T02:14:28.929Z",
+  "lastReport": {
+    "at": "2026-09-08T02:14:28.929Z",
+    "coverage": 85,
+    "framework": "node:assert/strict + run-all.mjs",
+    "summary": "新增 bin/atb POSIX 包装器（穿透符号链接定位插件根、exec node atb.mjs、参数透传）与 atb cli install|uninstall|status 子命令（--to 指定目标目录以避开全局 --dir 旗标；缺省自动选 PATH 中可写候选目录；幂等、外来文件拒绝覆盖/删除；不依赖看板数据目录）；USAGE/SKILL.md/README 同步。新增 cli-shell.test.mjs 12 用例先红后绿，全量回归 80 个测试文件 0 失败。",
+    "runId": "run-20260908-066"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T01:54:25.631Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T01:54:42.654Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T02:06:25.836Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-012-01",
+      "note": "认领（zcode-batch-012-01）"
+    },
+    {
+      "at": "2026-09-08T02:14:28.930Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-012-01",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.087Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-17e9",
+      "note": "人工确认完成"
+    }
+  ]
+}

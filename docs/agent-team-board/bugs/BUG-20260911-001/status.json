@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260911-001",
+  "type": "bug",
+  "title": "BUG-20260910-018 这个问题还是没有解决。请重点关注和修复",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260910-032-08",
+  "createdAt": "2026-09-10T16:11:02.282Z",
+  "updatedAt": "2026-09-11T05:52:23.685Z",
+  "agentCompletedAt": "2026-09-10T18:05:07.716Z",
+  "lastReport": {
+    "at": "2026-09-10T18:05:07.716Z",
+    "coverage": 100,
+    "framework": "node:test",
+    "summary": "根因REQ-20260910-016：wrap断行按flex-basis 380px打包，018的min-width:0不参与断行，组宽<~466px(视口≲502px)搜索组仍换行堆叠。修复：定位组改flex-wrap:nowrap（组内恒同行，整组可下移）+≤480px隐藏辅助键位提示，最小支持视口320px显式化；32px等高沿用。新增C1-C7测试跑红转绿，更新016/025/018三处旧wrap断言；全量npm test 183文件0失败。真实页面视觉验收待人工。",
+    "runId": "run-20260911-186"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T16:11:02.282Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T16:11:02.283Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T16:20:25.970Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-001756-5d8a）"
+    },
+    {
+      "at": "2026-09-10T17:55:28.763Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-08",
+      "note": "认领（zcode-batch-20260910-032-08）"
+    },
+    {
+      "at": "2026-09-10T18:05:07.717Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-08",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.685Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0de9",
+      "note": "人工确认完成"
+    }
+  ]
+}

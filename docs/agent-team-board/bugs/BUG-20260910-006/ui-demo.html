@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-011 演示 · 新建条目类型下拉显示文字（对照缺陷 / 修复后）</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --line:#d8dce2; --ink:#24292f; --muted:#6a737d; --brand:#3b82f6; --focus:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); padding:20px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:12px; margin:0 0 14px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel); }
+  .seg button { border:0; background:transparent; padding:6px 12px; cursor:pointer; font:inherit; }
+  .seg button.on { background:var(--brand); color:#fff; }
+  .bar { margin-bottom:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .hint { font-size:12px; color:var(--muted); }
+  .form { max-width:420px; margin:0 auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .form label { display:block; font-size:13px; margin:10px 0 4px; color:var(--muted); }
+  select, input[type=text] { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; background:#fff; color:var(--ink); }
+  select:focus, input:focus { outline:none; border-color:var(--focus); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+  textarea { width:100%; min-height:64px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
+  .fields { border:1px dashed var(--line); border-radius:8px; padding:10px; margin-top:10px; font-size:13px; color:var(--muted); }
+  .actions { display:flex; gap:8px; margin-top:14px; }
+  .btn { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 14px; cursor:pointer; font:inherit; }
+  .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .msg { margin-top:10px; font-size:12px; min-height:18px; }
+  .msg.err { color:#c0392b; } .msg.ok { color:#1e7e34; }
+  .note { max-width:420px; margin:12px auto 0; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>新建条目「类型」下拉显示文字 —— 缺陷现象 / 修复后状态对照</h1>
+  <p class="sub">对应条目 BUG-20260910-006（说明文档完善补充的界面演示；替换后的最终文案条目标注待确认，演示以「讨论」示意）</p>
+
+  <div class="bar">
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on">缺陷现象</button>
+      <button type="button" data-mode="fixed">修复后状态</button>
+    </span>
+    <span class="hint" id="hint">缺陷态：选择「讨论」后下拉显示「讨论（开放式）」。</span>
+  </div>
+
+  <div class="form">
+    <label for="type">类型</label>
+    <select id="type"></select>
+    <label for="title">标题</label>
+    <input type="text" id="title" placeholder="必填" value="">
+    <label for="bg">背景</label>
+    <textarea id="bg">可留空的背景说明。</textarea>
+    <div class="fields" id="fields">请先选择类型。</div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="createBtn">创建</button>
+      <button type="button" class="btn" id="resetBtn">重置</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+  <p class="note">交互核对点：展开选择后收起显示确认后的同一名称；焦点边框清晰；标题为空阻止创建；背景为空仍可创建（沿既有流程）。</p>
+
+<script>
+  var mode = 'defect';
+  var el = function (id) { return document.getElementById(id); };
+  var opts = [
+    { v: 'req', defect: '需求', fixed: '需求', fields: '需求字段：描述 / 验收标准（示意）' },
+    { v: 'bug', defect: 'Bug', fixed: 'Bug', fields: 'Bug 字段：现象 / 复现步骤 / 期望行为 / 验收说明（示意）' },
+    { v: 'discuss', defect: '讨论（开放式）', fixed: '讨论', fields: '讨论字段：话题 / 参与人（示意）' }
+  ];
+  function render() {
+    el('type').innerHTML = opts.map(function (o) {
+      return '<option value="' + o.v + '">' + (mode === 'defect' ? o.defect : o.fixed) + '</option>';
+    }).join('');
+    syncFields();
+    el('hint').textContent = mode === 'defect'
+      ? '缺陷态：选择「讨论」后下拉显示「讨论（开放式）」（报告截图红框标出处）。'
+      : '修复态：收起后显示确认后的同一名称（示意文案「讨论」，最终以定案为准）。';
+  }
+  function syncFields() {
+    var cur = opts.filter(function (o) { return o.v === el('type').value; })[0] || opts[0];
+    el('fields').textContent = cur.fields;
+  }
+  el('type').addEventListener('change', syncFields);
+  el('createBtn').addEventListener('click', function () {
+    var msg = el('msg');
+    if (!el('title').value.trim()) {
+      msg.className = 'msg err'; msg.textContent = '创建被阻止：标题不能为空。';
+    } else {
+      msg.className = 'msg ok';
+      msg.textContent = '创建成功（示意）：' + el('title').value + ' · 背景为空不阻塞（' + (el('bg').value.trim() ? '已填' : '留空') + '）。';
+    }
+  });
+  el('resetBtn').addEventListener('click', function () { el('title').value = ''; el('bg').value = ''; el('msg').textContent = ''; });
+  el('modeSeg').addEventListener('click', function (e) {
+    if (e.target.dataset.mode) {
+      mode = e.target.dataset.mode;
+      [].forEach.call(this.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.dataset.mode === mode); });
+      render();
+    }
+  });
+  render();
+</script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-008",
+  "type": "requirement",
+  "title": "任务界面采用多页签布局优化",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-021-1",
+  "createdAt": "2026-09-09T04:26:20.936Z",
+  "updatedAt": "2026-09-11T05:52:20.542Z",
+  "agentCompletedAt": "2026-09-09T05:09:06.954Z",
+  "lastReport": {
+    "at": "2026-09-09T05:09:06.954Z",
+    "coverage": 18,
+    "framework": "node:assert 自研契约+vm",
+    "summary": "任务模块运行态改二级页签布局：一级页签（批量完善/批量开发）独立保留，运行态新增概况/队列/提示词/记录四分区（taskPaneShell 渲染壳+activateTaskPane 纯前端切换），pane 记忆 state.batch.pane/state.refine.pane 相互独立、轮询重渲染不重置；启动态/加载态不拆页签；存量 codex 深链不引入页签；全部操作控件零回退。新增 13 用例先红后绿，npm test 114 文件 0 失败",
+    "runId": "run-20260909-120"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T04:26:20.936Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T04:26:24.686Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T04:47:02.267Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T04:47:53.717Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-021-1",
+      "note": "认领（zcode-batch-021-1）"
+    },
+    {
+      "at": "2026-09-09T05:09:06.954Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-021-1",
+      "note": "上报测试报告（覆盖率 18%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.542Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f2a5",
+      "note": "人工确认完成"
+    }
+  ]
+}

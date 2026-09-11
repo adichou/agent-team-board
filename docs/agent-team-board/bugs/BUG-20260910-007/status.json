@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-007",
+  "type": "bug",
+  "title": "这里的操作按钮去掉中文，全部用图标表示，然后移到和单号同行",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-9",
+  "createdAt": "2026-09-10T03:19:38.188Z",
+  "updatedAt": "2026-09-11T05:52:22.141Z",
+  "agentCompletedAt": "2026-09-10T05:16:01.434Z",
+  "lastReport": {
+    "at": "2026-09-10T05:16:01.434Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约断言 + vm 行为断言（run-all.mjs）",
+    "summary": "列表行四操作改纯图标 ⧉/✓/✎/🗑 并与单号同排（card-top nowrap，极窄时单号省略+操作区局部滚动）；copyId 图标反馈换 ✓+就近 title 不回填长文案；归因 REQ-20260910-006；新建 B1–B8 契约测试先红后绿，同步 4 个既有断言，全量 142 个测试文件 0 失败",
+    "runId": "run-20260910-155"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T03:19:38.188Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T03:19:44.159Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T03:37:06.673Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-113518-9285）"
+    },
+    {
+      "at": "2026-09-10T05:02:43.101Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-9",
+      "note": "认领（zcode-batch-031-9）"
+    },
+    {
+      "at": "2026-09-10T05:16:01.434Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-9",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.141Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-3b75",
+      "note": "人工确认完成"
+    }
+  ]
+}

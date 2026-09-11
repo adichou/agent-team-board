@@ -1,0 +1,68 @@
+{
+  "id": "REQ-20260908-001",
+  "type": "requirement",
+  "title": "任务看板的批次记录上，需要显示每个单的标题，放到单号的后面",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-011-01",
+  "createdAt": "2026-09-07T23:47:49.323Z",
+  "updatedAt": "2026-09-11T05:52:17.756Z",
+  "agentCompletedAt": "2026-09-08T01:11:50.077Z",
+  "lastReport": {
+    "at": "2026-09-08T01:11:50.077Z",
+    "coverage": 5,
+    "framework": "node:assert 单测 + 静态契约（batch-core/batch-ui；run-all.mjs 全量 76 文件回归）",
+    "summary": "批次记录带条目标题：lib/batch.mjs listRuns 记录增加 title（条目删除容错空串，/api/batch/records 与 batchSummary.records 自动带出）；web/app.js recordsHtml 单号后渲染标题（shortOwner 截断 + title 悬停），任务搜索过滤纳入标题；style.css 增 .batch-record .rec-title。TDD：2 个新用例先红后绿，全量 76 测试文件通过。",
+    "runId": "run-20260908-062"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T23:47:49.323Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T00:27:43.896Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T00:42:32.240Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-08T00:45:15.523Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T01:07:15.685Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-011-01",
+      "note": "认领（zcode-batch-011-01）"
+    },
+    {
+      "at": "2026-09-08T01:11:50.077Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-011-01",
+      "note": "上报测试报告（覆盖率 5%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.756Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-d700",
+      "note": "人工确认完成"
+    }
+  ]
+}

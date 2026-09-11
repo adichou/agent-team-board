@@ -1,0 +1,75 @@
+{
+  "id": "REQ-20260910-030",
+  "type": "requirement",
+  "title": "在发布模块中支持将 electron app 构建成 mac app 和 Windows app",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-033-1",
+  "createdAt": "2026-09-10T15:50:29.958Z",
+  "updatedAt": "2026-09-11T05:52:23.638Z",
+  "agentCompletedAt": "2026-09-11T00:11:01.505Z",
+  "lastReport": {
+    "at": "2026-09-11T00:11:01.505Z",
+    "coverage": 16,
+    "framework": "node:assert/strict + 自制聚合 runner",
+    "summary": "发布模块新增「桌面应用（Electron）」第三可执行目标：五阶段流水线（冻结/只读预检/隔离worktree依赖安装/electron-builder逐平台构建/产物核验），产物记录路径·大小·SHA-256·源提交·工具版本·未签名标注；同目标互斥/重试/取消/中断恢复复用既有机制；前端平台多选·计划确认·产物页签与第三种chip；package.json补electron-builder build配置。新增 release-electron.test.mjs 16/16，全量184测试文件0失败",
+    "runId": "run-20260911-187"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T15:50:29.958Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T15:50:29.959Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T16:12:51.165Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-10T23:12:27.396Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T23:19:37.645Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-071330-0a2b）"
+    },
+    {
+      "at": "2026-09-10T23:52:23.114Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-033-1",
+      "note": "认领（zcode-batch-033-1）"
+    },
+    {
+      "at": "2026-09-11T00:11:01.505Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-033-1",
+      "note": "上报测试报告（覆盖率 16%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.638Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e8cd",
+      "note": "人工确认完成"
+    }
+  ]
+}

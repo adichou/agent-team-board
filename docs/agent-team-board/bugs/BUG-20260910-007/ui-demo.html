@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-011 演示 · 看板卡片操作区（对照缺陷 / 修复后）</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --line:#d8dce2; --ink:#24292f; --muted:#6a737d; --brand:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); padding:20px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:12px; margin:0 0 14px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel); }
+  .seg button { border:0; background:transparent; padding:6px 12px; cursor:pointer; font:inherit; }
+  .seg button.on { background:var(--brand); color:#fff; }
+  .hint { font-size:12px; color:var(--muted); }
+  .list { max-width:460px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; }
+  .card:active { border-color:var(--brand); }
+  /* 缺陷态：单号与操作分两行（.card-top 允许换行），操作为带中文文字的按钮 */
+  .top-defect .card-top { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .top-defect .row-acts { display:flex; gap:4px; width:100%; }
+  .top-defect .row-acts button { border:1px solid var(--line); background:#fff; border-radius:6px; padding:2px 8px; font:inherit; font-size:12px; cursor:pointer; }
+  /* 修复态：图标操作与单号同一行，不换行 */
+  .top-fixed .card-top { display:flex; align-items:center; gap:8px; }
+  .top-fixed .card-top .id { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); }
+  .top-fixed .row-acts { margin-left:auto; display:flex; gap:2px; }
+  .icon-btn { border:0; background:transparent; border-radius:6px; padding:3px 7px; cursor:pointer; font-size:14px; line-height:1; }
+  .icon-btn:hover, .icon-btn:focus { background:#eef2f7; outline:none; }
+  .ck { cursor:pointer; }
+  .title { margin:6px 0 2px; font-weight:600; }
+  .time { font-size:12px; color:var(--muted); }
+  .tip { position:fixed; display:none; background:#24292f; color:#fff; font-size:12px; border-radius:6px; padding:3px 8px; z-index:9; }
+  .msg { max-width:460px; margin:12px auto 0; font-size:12px; color:var(--muted); min-height:18px; }
+</style>
+</head>
+<body>
+  <h1>看板卡片操作区 —— 缺陷现象 / 修复后状态对照</h1>
+  <p class="sub">对应条目 BUG-20260910-007（说明文档完善补充的界面演示；图标含义与极窄宽度下的最终策略以开发定案为准）</p>
+
+  <div class="bar">
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on">缺陷现象</button>
+      <button type="button" data-mode="fixed">修复后状态</button>
+    </span>
+    <span class="hint" id="hint">缺陷态：四个带中文文字的操作按钮占据单号下方独立一行，卡片更高。</span>
+  </div>
+
+  <div class="list top-defect" id="list"></div>
+  <p class="msg" id="msg">悬停 / 键盘聚焦图标查看用途提示；点击卡片空白区域打开详情。</p>
+  <div class="tip" id="tip"></div>
+
+<script>
+  var mode = 'defect';
+  var el = function (id) { return document.getElementById(id); };
+  var items = [
+    { id: 'BUG-20260910-006', title: '新建条目类型下拉显示文字待调整', time: '2026-09-10 11:27', state: '待接受' },
+    { id: 'REQ-20260910-012', title: '顶栏布局与模块导航调整', time: '2026-09-10 11:20', state: '已接受' }
+  ];
+  var acts = [
+    { icon: '⧉', label: '复制', key: 'copy' },
+    { icon: '✓', label: '接受', key: 'accept' },
+    { icon: '✎', label: '修改', key: 'edit' },
+    { icon: '🗑', label: '删除', key: 'del' }
+  ];
+  function render() {
+    el('list').className = 'list ' + (mode === 'defect' ? 'top-defect' : 'top-fixed');
+    el('list').innerHTML = items.map(function (it, idx) {
+      var actHtml;
+      if (mode === 'defect') {
+        actHtml = '<span class="row-acts">' + acts.filter(function (a) { return it.state === '待接受' || a.key === 'copy'; })
+          .map(function (a) { return '<button type="button" data-act="' + a.key + '">' + (a.key === 'copy' ? '复制' : a.label === '接受' ? '✓ 接受' : a.label === '修改' ? '✎ 修改' : '🗑 删除') + '</button>'; }).join('') + '</span>';
+        return '<div class="card" data-idx="' + idx + '"><div class="card-top"><input type="checkbox" class="ck"><span class="id">' + it.id + '</span>' + actHtml + '</div><div class="title">' + it.title + '</div><div class="time">更新于 ' + it.time + '</div></div>';
+      }
+      actHtml = '<span class="row-acts">' + acts.filter(function (a) { return it.state === '待接受' || a.key === 'copy'; })
+        .map(function (a) { return '<button type="button" class="icon-btn" data-act="' + a.key + '" aria-label="' + a.label + '" title="' + a.label + '">' + a.icon + '</button>'; }).join('') + '</span>';
+      return '<div class="card" data-idx="' + idx + '"><div class="card-top"><input type="checkbox" class="ck"><span class="id">' + it.id + '</span>' + actHtml + '</div><div class="title">' + it.title + '</div><div class="time">更新于 ' + it.time + '</div></div>';
+    }).join('');
+    el('hint').textContent = mode === 'defect'
+      ? '缺陷态：四个带中文文字的操作按钮占据单号下方独立一行，卡片更高。'
+      : '修复态：操作改为纯图标并与单号同一行（单号可完整复制），卡片更矮。';
+  }
+  el('list').addEventListener('click', function (e) {
+    var act = e.target.closest('[data-act]');
+    if (act) {
+      var label = acts.filter(function (a) { return a.key === act.dataset.act; })[0].label;
+      el('msg').textContent = '动作反馈（示意）：' + label + ' · ' + items[+e.target.closest('.card').dataset.idx].id;
+      e.stopPropagation();
+      return;
+    }
+    if (e.target.classList.contains('ck')) return;
+    var card = e.target.closest('.card');
+    if (card) el('msg').textContent = '点击卡片空白区域：打开详情（示意）· ' + items[+card.dataset.idx].id;
+  });
+  el('modeSeg').addEventListener('click', function (e) {
+    if (e.target.dataset.mode) {
+      mode = e.target.dataset.mode;
+      [].forEach.call(this.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.dataset.mode === mode); });
+      render();
+    }
+  });
+  render();
+</script>
+</body>
+</html>

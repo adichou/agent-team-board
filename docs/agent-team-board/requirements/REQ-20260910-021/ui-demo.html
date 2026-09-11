@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REQ-20260910-021 效果与复盘 · 交互演示</title>
+<style>
+:root{--bg:#10151e;--panel:#171e2b;--card:#1a2230;--border:#394559;--text:#e2e7f0;--mut:#94a3bd;--acc:#8f8dff;--zero:#4fc58f;--err:#ffb5a6;--warn:#ffd27d;--chip:#232d40}
+html.light{--bg:#f2f4f8;--panel:#ffffff;--card:#ffffff;--border:#d7dde8;--text:#20293a;--mut:#5d6b84;--acc:#5a54d8;--zero:#178a56;--err:#c2452f;--warn:#9a6a00;--chip:#eef1f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,"PingFang SC",sans-serif}
+main{max-width:1100px;margin:26px auto;padding:0 18px 50px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:26px 0 10px}h3{font-size:14px;margin:0 0 8px;color:var(--mut)}
+.hint{color:var(--mut);font-size:13px;margin:0 0 14px}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+button,select,input,textarea{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
+button{cursor:pointer}button:disabled{opacity:.45;cursor:default}button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.link{background:none;border:none;color:var(--acc);padding:2px 4px;text-decoration:underline}
+.panel{border:1px solid var(--border);border-radius:14px;background:var(--panel);padding:16px}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.toolbar .spacer{flex:1}
+.notice{padding:10px 12px;margin:12px 0;border-radius:8px;background:var(--chip);color:var(--mut)}
+.notice.error{color:var(--err)}
+.badge{display:inline-block;font-size:12px;border:1px solid var(--border);border-radius:20px;padding:0 8px;margin-left:6px;color:var(--mut)}
+.badge.zero{color:var(--zero);border-color:var(--zero)}
+.badge.err{color:var(--err);border-color:var(--err)}
+.badge.acc{color:var(--acc);border-color:var(--acc)}
+.mut{color:var(--mut)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px}
+.card{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:12px;cursor:pointer}
+.card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.card .name{font-size:13px;color:var(--mut)}
+.card .val{font-size:22px;margin:4px 0 2px}
+.card .val .unit{font-size:12px;color:var(--mut);margin-left:4px}
+.card .meta{font-size:12px;color:var(--mut)}
+.cat{margin-top:16px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--mut);font-weight:600}
+td.err-cell{color:var(--err)}
+.chart{display:flex;align-items:flex-end;gap:12px;height:150px;padding:8px 4px 0}
+.cbar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;text-align:center;font-size:12px;color:var(--mut)}
+.cbar i{display:block;background:var(--acc);border-radius:4px 4px 0 0;height:var(--h,10%);margin-bottom:4px}
+.skel{border-radius:8px;background:linear-gradient(90deg,var(--chip) 25%,var(--card) 50%,var(--chip) 75%);background-size:200% 100%;animation:pulse 1.2s infinite;height:16px}
+@keyframes pulse{to{background-position:-200% 0}}
+.detail{border:1px solid var(--acc);border-radius:10px;background:var(--card);padding:14px;margin-top:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 18px;font-size:13px}
+.review{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:12px;margin-bottom:10px}
+.overlay{position:fixed;inset:0;background:rgba(4,8,16,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;z-index:10}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:760px;width:100%;max-height:82vh;overflow:auto;padding:18px}
+.modal h2{margin-top:0}.modal .row{margin-bottom:10px}.modal label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+.modal .full{width:100%}.modal .err-msg{color:var(--err);font-size:13px;margin:8px 0}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.steps{display:flex;gap:6px;font-size:12px;color:var(--mut);margin-bottom:12px;flex-wrap:wrap}
+.steps b{color:var(--acc)}
+.foot{margin-top:8px;font-size:12px;color:var(--mut)}
+pre{background:var(--chip);border-radius:8px;padding:10px;overflow:auto;font-size:12px}
+textarea{width:100%}
+</style>
+</head>
+<body>
+<main>
+<h1>效果与复盘（营销 · 效果页）</h1>
+<p class="hint">REQ-20260910-021 离线交互演示 · 数据均为样例，仅作用于本页 · 覆盖布局、交互与状态反馈（正常 / 空 / 加载 / 失败）</p>
+<div class="controls">
+  <label>演示状态
+    <select id="mode">
+      <option value="normal">正常</option>
+      <option value="empty">空（新项目）</option>
+      <option value="loading">加载中</option>
+      <option value="error">读取失败</option>
+    </select>
+  </label>
+  <button id="theme">切换浅色</button>
+</div>
+<div class="panel" id="page"></div>
+<p class="foot">实现说明：深浅色与键盘行为沿用宿主（本页 Esc 关闭弹层）；真实数据口径以开发阶段设计为准，未在演示中虚构的事实以「待确认」处理。</p>
+</main>
+<div class="overlay" id="overlay" hidden><div class="modal" role="dialog" aria-modal="true" id="modal"></div></div>
+<script>
+'use strict';
+const $=(s,el=document)=>el.querySelector(s);
+const CATS=['曝光','互动','持续关注','使用','商业'];
+const CAT_HINT={'持续关注':'关注类指标不跨平台求和，不展示伪去重总人数','商业':'不同币种分开呈现，不做默认换算'};
+const DEFS={
+ impressions:{name:'展示次数',cat:'曝光',unit:'次',kind:'期间增量',dedup:'不去重（平台计数）'},
+ likes:{name:'点赞',cat:'互动',unit:'次',kind:'事件次数',dedup:'不去重'},
+ subsNew:{name:'订阅新增',cat:'持续关注',unit:'人',kind:'期间增量',dedup:'按账号去重'},
+ starsNew:{name:'Star 新增',cat:'持续关注',unit:'个',kind:'期间增量',dedup:'按仓库事件去重'},
+ visitors:{name:'访客',cat:'使用',unit:'人',kind:'独立人数',dedup:'按设备在窗口内去重'},
+ activations:{name:'激活',cat:'使用',unit:'人',kind:'期间增量',dedup:'按账号去重'},
+ payers:{name:'付费人数',cat:'商业',unit:'人',kind:'期间增量',dedup:'按账号去重'},
+ revenue:{name:'收入',cat:'商业',unit:'CNY',kind:'期间增量',dedup:'不适用'}
+};
+let nextId=11;
+let obs=[
+ {id:1,metric:'subsNew',period:'09-01~09-07',value:0,source:'CSV 导入',channel:'官网',exp:'exp-landing',tz:'UTC+8',rev:2,at:'09-09 10:12',history:[{rev:1,value:1,reason:'初始导入',by:'CSV'},{rev:2,value:0,reason:'剔除重复订阅账号',by:'手工修订'}]},
+ {id:2,metric:'activations',period:'09-01~09-07',value:12,source:'手工记录',channel:'官网',exp:'exp-landing',tz:'UTC+8',rev:1,at:'09-08 21:40',history:[{rev:1,value:12,reason:'初始登记',by:'手工'}]},
+ {id:3,metric:'likes',period:'09-01~09-07',value:87,source:'手工记录',channel:'X',exp:'无',tz:'UTC+8',rev:1,at:'09-08 21:44',history:[{rev:1,value:87,reason:'初始登记',by:'手工'}]},
+ {id:4,metric:'starsNew',period:'09-01~09-07',value:34,source:'手工记录',channel:'无',exp:'无',tz:'UTC+8',rev:1,at:'09-08 21:47',history:[{rev:1,value:34,reason:'初始登记',by:'手工'}]},
+ {id:5,metric:'payers',period:'09-01~09-07',value:0,source:'手工记录',channel:'官网',exp:'无',tz:'UTC+8',rev:1,at:'09-08 21:50',history:[{rev:1,value:0,reason:'本周期无付费（真实零）',by:'手工'}]},
+ {id:6,metric:'subsNew',period:'08-25~08-31',value:3,source:'CSV 导入',channel:'官网',exp:'无',tz:'UTC+8',rev:1,at:'09-01 09:02',history:[{rev:1,value:3,reason:'初始导入',by:'CSV'}]},
+ {id:7,metric:'activations',period:'08-25~08-31',value:8,source:'手工记录',channel:'官网',exp:'无',tz:'UTC+8',rev:1,at:'09-01 09:05',history:[{rev:1,value:8,reason:'初始登记',by:'手工'}]},
+ {id:8,metric:'likes',period:'08-25~08-31',value:51,source:'手工记录',channel:'X',exp:'无',tz:'UTC+8',rev:1,at:'09-01 09:06',history:[{rev:1,value:51,reason:'初始登记',by:'手工'}]},
+ {id:9,metric:'starsNew',period:'08-25~08-31',value:21,source:'手工记录',channel:'无',exp:'无',tz:'UTC+8',rev:1,at:'09-01 09:07',history:[{rev:1,value:21,reason:'初始登记',by:'手工'}]},
+ {id:10,metric:'subsNew',period:'08-11~08-24',value:4,source:'手工记录',channel:'官网',exp:'exp-landing',tz:'UTC+8',rev:1,at:'08-25 10:00',history:[{rev:1,value:4,reason:'初始登记',by:'手工'}]}
+];
+let reviews=[
+ {id:'RV-1',period:'08-11~08-24',exp:'exp-landing',snap:'metrics@r1（固定）',status:'ok',target:'订阅新增 ≥ 5 人',actual:'4 人',conclusion:'落地页首屏价值表达不足，转化低于预期。',next:'下一周期对首屏标题做 A/B 实验。'}
+];
+const state={mode:'normal',range:'近 30 天',channel:'全部',exp:'全部',selected:null,histOpen:new Set(),message:''};
+let wiz=null;
+const CHANNELS=['官网','社群','X'],EXPS=['exp-landing','exp-pricing'];
+const CSV_HEADER='date_start,date_end,metric,value,currency,channel,experiment,source,tz';
+const SAMPLES={
+ valid:{label:'合法示例（8 行，渠道=社群）',text:CSV_HEADER+'\n2026-09-01,2026-09-07,展示次数,2100,次,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,点赞,45,次,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,Star 新增,12,个,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,激活,5,人,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,访客,230,人,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,订阅新增,3,人,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,收入,680,CNY,社群,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,付费人数,0,人,社群,,CSV 导入,UTC+8'},
+ errors:{label:'含错误示例（4 处错误）',text:CSV_HEADER+'\n2026-09-01,2026-09-07,订阅新增,2,人,官网,exp-landing,CSV 导入,UTC+8\n2026-09-01,2026-09-07,点赞,abc,次,X,,CSV 导入,UTC+8\n2026-13-01,2026-09-07,激活,5,人,官网,,CSV 导入,UTC+8\n2026-09-08,2026-09-07,收入,120,CNY,官网,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,跳出率,9,%,官网,,CSV 导入,UTC+8\n2026-09-01,2026-09-07,Star 新增,7,个,,,CSV 导入,UTC+8'},
+ dup:{label:'重复导入示例（与现有记录一致）',text:CSV_HEADER+'\n2026-09-01,2026-09-07,订阅新增,0,人,官网,exp-landing,CSV 导入,UTC+8\n2026-09-01,2026-09-07,激活,12,人,官网,exp-landing,CSV 导入,UTC+8\n2026-09-01,2026-09-07,点赞,87,次,X,,CSV 导入,UTC+8'},
+ conflict:{label:'值冲突示例（需选择修订 / 跳过）',text:CSV_HEADER+'\n2026-09-01,2026-09-07,订阅新增,5,人,官网,exp-landing,CSV 导入,UTC+8\n2026-09-01,2026-09-07,激活,20,人,官网,exp-landing,CSV 导入,UTC+8\n2026-09-01,2026-09-07,访客,260,人,官网,,CSV 导入,UTC+8'}
+};
+const FIELDS=[['start','开始日期'],['end','结束日期'],['metric','指标'],['value','值'],['currency','币种/单位'],['channel','渠道'],['experiment','实验'],['source','来源'],['tz','时区']];
+const DERIVED=[
+ {name:'订阅转化率',n:'subsNew',d:'visitors'},
+ {name:'激活率',n:'activations',d:'visitors',mismatch:'口径不一致：激活为期间增量、访客为独立人数，观察范围不同'},
+ {name:'付费率',n:'payers',d:'activations'}
+];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const label=(s,e)=>s.slice(5)+'~'+e.slice(5);
+const opt=(arr,cur)=>arr.map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`).join('');
+function filtered(){
+ if(state.mode==='empty')return[];
+ const rangeOk=p=>state.range==='近 7 天'?p==='09-01~09-07':true;
+ return obs.filter(r=>rangeOk(r.period)&&(state.channel==='全部'||r.channel===state.channel)&&(state.exp==='全部'||r.exp===state.exp));
+}
+const latest=k=>{const rs=filtered().filter(r=>r.metric===k);return rs.length?rs.reduce((a,b)=>b.id>a.id?b:a):null;};
+function valHtml(v,unit){
+ if(v===null||v===undefined)return '<span class="mut">未录入</span>';
+ if(v===0)return `<strong>0</strong><span class="badge zero">真实零</span>`;
+ return `<strong>${v}</strong><span class="unit">${esc(unit)}</span>`;
+}
+function derivedRow(d){
+ const nv=latest(d.n),dv=latest(d.d);let bad=null;
+ if(d.mismatch)bad=d.mismatch;
+ else if(dv===null)bad=`分母（${DEFS[d.d].name}）未录入：未知不折算为零`;
+ else if(dv.value===0)bad=`分母为零（${DEFS[d.d].name} = 0，真实零）`;
+ else if(nv===null||nv.value===null)bad=`分子（${DEFS[d.n].name}）未录入`;
+ const formula=`${DEFS[d.n].name} ÷ ${DEFS[d.d].name}`;
+ if(bad)return `<tr><td>${d.name}</td><td class="mut">${formula}</td><td><span class="badge err">不可计算</span></td><td class="mut">${esc(bad)}</td></tr>`;
+ return `<tr><td>${d.name}</td><td class="mut">${formula}</td><td>${(nv.value/dv.value*100).toFixed(1)}%</td><td class="mut">口径一致，可计算</td></tr>`;
+}
+function render(){
+ const m=state.mode,busy=m==='loading',err=m==='error';
+ const dis=busy||err?'disabled':'';
+ let cardsHtml='';
+ CATS.forEach(cat=>{
+  const defs=Object.keys(DEFS).filter(k=>DEFS[k].cat===cat);
+  cardsHtml+=`<div class="cat"><h3>${cat} ${CAT_HINT[cat]?'<span class="badge">'+CAT_HINT[cat]+'</span>':''}</h3><div class="cards">`;
+  cardsHtml+=busy?defs.map(()=>'<div class="card"><div class="skel"></div><div class="skel" style="margin-top:8px;width:60%"></div></div>').join(''):
+   defs.map(k=>{
+    const d=DEFS[k],r=latest(k);
+    const val=r?valHtml(r.value,d.unit):'<span class="mut">未录入</span>';
+    const meta=r?`${esc(r.source)} · ${esc(r.at)}${r.rev>1?' · r'+r.rev:''}`:'—';
+    return `<div class="card ${state.selected===k?'sel':''}" data-action="detail" data-metric="${k}" role="button" tabindex="0"><div class="name">${d.name} <span class="badge">${d.kind}</span></div><div class="val">${val}</div><div class="meta">${meta}</div></div>`;
+   }).join('');
+  cardsHtml+='</div></div>';
+ });
+ let detail='';
+ if(state.selected&&!busy&&!err){
+  const k=state.selected,d=DEFS[k],rs=filtered().filter(r=>r.metric===k);
+  detail=`<div class="detail"><h3 style="color:var(--text)">${d.name} · 定义与原始记录</h3>
+  <div class="grid2">
+   <div>单位：${esc(d.unit)}</div><div>口径：${esc(d.kind)}</div><div>去重口径：${esc(d.dedup)}</div><div>适用对象：渠道 / 实验 / 项目（待确认）</div><div>时间窗口：自然周（按渠道时区）</div>
+  </div>
+  ${rs.length?`<table style="margin-top:10px"><tr><th>期间</th><th>值</th><th>来源</th><th>渠道/实验</th><th>修订</th></tr>${rs.map(r=>`
+   <tr><td>${r.period}</td><td>${valHtml(r.value,d.unit)}</td><td>${esc(r.source)}</td><td>${esc(r.channel)} / ${esc(r.exp)}</td>
+   <td><button class="link" data-action="hist" data-id="${r.id}">r${r.rev} 历史</button>
+    ${state.histOpen.has(r.id)?`<div class="grid2" style="margin-top:6px">${r.history.map(h=>`<div>r${h.rev} = ${h.value===null?'未录入':h.value} · ${esc(h.reason)} · ${esc(h.by)}</div>`).join('')}</div>`:''}
+   </td></tr>`).join('')}</table>
+   <div class="actions" style="margin-top:10px"><button data-action="revise" data-metric="${k}">修订 / 录入此指标</button></div>`
+   :'<p class="notice">当前筛选下无记录：使用「修订 / 录入此指标」登记，未知留空、真实零填 0。</p>'}
+  </div>`;
+ }
+ let derived='';
+ if(!busy&&!err)derived=`<h2>派生指标（转化率）</h2><table><tr><th>指标</th><th>口径</th><th>值</th><th>说明</th></tr>${DERIVED.map(derivedRow).join('')}</table>`;
+ const chartRs=filtered().filter(r=>r.metric==='activations');
+ const periods=[...new Set(chartRs.map(r=>r.period))];
+ const max=Math.max(1,...chartRs.map(r=>r.value||0));
+ const chart=busy?'<div class="chart">'+[1,2,3,4].map(()=>'<div class="cbar"><div class="skel" style="height:70%"></div></div>').join('')+'</div>':
+  (periods.length?`<div class="chart">${periods.map(p=>{const v=chartRs.find(r=>r.period===p).value;return `<div class="cbar"><div>${v===null?'未录入':v}</div><i style="--h:${Math.round((v||0)/max*100)}%"></i><span>${p}</span></div>`;}).join('')}</div>`:'<p class="notice">暂无数据</p>');
+ const rowsHtml=busy?'':(filtered().length?filtered().slice().sort((a,b)=>b.id-a.id).map(r=>`<tr><td>${DEFS[r.metric].name}</td><td>${r.period}</td><td>${valHtml(r.value,DEFS[r.metric].unit)}</td><td>${DEFS[r.metric].kind} · ${esc(DEFS[r.metric].unit)}</td><td>${esc(r.source)}</td><td><button class="link" data-action="detail" data-metric="${r.metric}">r${r.rev}</button></td></tr>`).join(''):'<p class="notice">暂无观察记录——使用「录入指标」或「导入 CSV」开始；未知留空，真实零填 0。</p>');
+ const revHtml=busy?'':((state.mode==='empty'?[]:reviews).map(r=>`<div class="review"><div><b>${r.period}</b> · ${esc(r.exp)} · <span class="badge acc">${esc(r.snap)}</span> ${r.status==='insufficient'?'<span class="badge err">数据不足</span>':''}</div>
+  <div class="grid2" style="margin-top:6px"><div>目标：${r.status==='insufficient'?'—（数据不足）':esc(r.target)}</div><div>实际：${r.status==='insufficient'?'—（数据不足）':esc(r.actual)}</div></div>
+  <div style="margin-top:6px">结论：${esc(r.conclusion)}</div><div>下一步：${esc(r.next)}</div>
+  <div class="foot">依据已绑定快照 ${esc(r.snap)}，后续数据修订不改变本复盘依据。</div></div>`).join('')||'<p class="notice">暂无复盘记录。</p>');
+ const feedback=err?`<div class="notice error" role="alert">读取失败：无法读取观察存储（演示）。数据未被修改，未部分写入。<button data-action="retry">重试</button></div>`:
+  busy?'<div class="notice" role="status">正在加载效果数据，请稍候…</div>':
+  state.message?`<div class="notice" role="status">${esc(state.message)}</div>`:
+  '<div class="notice">点击指标卡片查看定义与原始记录；导入 CSV 走「字段映射 → 预览校验 → 确认」流程；派生指标仅在口径一致且分母有效时计算。</div>';
+ $('#page').innerHTML=`
+ <div class="toolbar">
+  <label>日期范围 <select data-k="range" ${dis}>${opt(['近 7 天','近 30 天','本季度'],state.range)}</select></label>
+  <label>渠道 <select data-k="channel" ${dis}>${opt(['全部',...CHANNELS],state.channel)}</select></label>
+  <label>实验 <select data-k="exp" ${dis}>${opt(['全部',...EXPS,'无'],state.exp)}</select></label>
+  <span class="spacer"></span>
+  <button data-action="entry" ${dis}>录入指标</button>
+  <button class="primary" data-action="import" ${dis}>导入 CSV</button>
+ </div>
+ <div id="feedback">${feedback}</div>
+ ${cardsHtml}${detail}${derived}
+ <h2>趋势 · 激活</h2><div id="chart">${chart}</div>
+ <h2>原始观察</h2><div id="obstable">${busy?'<div class="skel" style="height:120px"></div>':`<table><tr><th>指标</th><th>期间</th><th>值</th><th>口径</th><th>来源</th><th>修订</th></tr>${rowsHtml}</table><p class="foot">注：收入以 CNY 记录，与其他币种分开呈现，不做默认换算；粉丝 / 订阅 / Star 不跨平台求和；存量指标不跨日期相加。</p>`}</div>
+ <h2>复盘记录</h2><div id="reviews">${busy?'<div class="skel" style="height:80px"></div>':revHtml+`<button data-action="review" ${dis}>新建复盘</button>`}</div>`;
+}
+/* ---------- modal 基础 ---------- */
+function openModal(html){$('#modal').innerHTML=html;const o=$('#overlay');o.hidden=false;}
+function closeModal(){$('#overlay').hidden=true;wiz=null;}
+$('#overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal();});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&!$('#overlay').hidden)closeModal();
+ if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('card')){e.preventDefault();e.target.click();}
+});
+/* ---------- 手工录入 / 修订 ---------- */
+function openEntry(metric){
+ const k=metric||Object.keys(DEFS)[0],d=DEFS[k],r=latest(k);
+ const start=r&&r.period?r.period.split('~')[0]:null;
+ openModal(`<h2>录入指标（手工）</h2>
+ <p class="hint">未知值留空保存为「未录入」；真实零填 0；同口径同归属再次保存即修订，必须填写修改理由。</p>
+ <div class="row"><label>指标</label><select id="ef-metric" class="full">${Object.keys(DEFS).map(x=>`<option value="${x}" ${x===k?'selected':''}>${DEFS[x].name}（${DEFS[x].kind}）</option>`).join('')}</select></div>
+ <div class="grid2">
+  <div class="row"><label>值（未知留空）</label><input id="ef-value" placeholder="例如 12；真实零填 0"></div>
+  <div class="row"><label>单位 / 币种（随指标定义）</label><input value="${esc(d.unit)}" disabled></div>
+  <div class="row"><label>开始日期</label><input id="ef-start" value="${start?'2026-'+start:'2026-09-01'}"></div>
+  <div class="row"><label>结束日期</label><input id="ef-end" value="${start?'2026-'+r.period.split('~')[1]:'2026-09-07'}"></div>
+  <div class="row"><label>渠道归属</label><select id="ef-channel">${opt(['无',...CHANNELS],r?r.channel:'无')}</select></div>
+  <div class="row"><label>实验归属</label><select id="ef-exp">${opt(['无',...EXPS],r?r.exp:'无')}</select></div>
+  <div class="row"><label>时区</label><select>${opt(['UTC+8','UTC'],'UTC+8')}</select></div>
+  <div class="row"><label>来源 / 采集方式</label><input value="手工记录 · 人工登记" disabled></div>
+ </div>
+ <div class="row"><label>修改理由（修订时必填）</label><textarea id="ef-reason" rows="2" placeholder="例如：剔除重复账号后的修正值"></textarea></div>
+ <div class="err-msg" id="ef-err"></div>
+ <div class="actions"><button data-action="close">取消</button><button class="primary" data-action="entry-save">保存</button></div>`);
+}
+function saveEntry(){
+ const k=$('#ef-metric').value,d=DEFS[k],raw=$('#ef-value').value.trim();
+ const s=$('#ef-start').value.trim(),e=$('#ef-end').value.trim();
+ const ch=$('#ef-channel').value,ex=$('#ef-exp').value,reason=$('#ef-reason').value.trim();
+ const errs=[];
+ if(raw!==''&&!/^\d+(\.\d+)?$/.test(raw))errs.push('值不合法：需为非负数字；未知请留空，真实零填 0。');
+ const dt=/^\d{4}-\d{2}-\d{2}$/;
+ if(!dt.test(s)||!dt.test(e)||isNaN(Date.parse(s))||isNaN(Date.parse(e)))errs.push('日期不合法：需为有效的 YYYY-MM-DD 日期。');
+ else if(e<s)errs.push('截止日期早于开始日期。');
+ if(ex!=='无'&&ch==='无')errs.push('归属不合法：选择实验归属时必须同时指定渠道。');
+ const p=dt.test(s)&&dt.test(e)?label(s,e):'';
+ const existing=p?obs.find(r=>r.metric===k&&r.period===p&&r.channel===ch&&r.exp===ex):null;
+ if(existing&&!reason)errs.push('该口径与归属已有记录（r'+existing.rev+'），保存即修订：必须填写修改理由。');
+ if(errs.length){$('#ef-err').innerHTML=errs.map(esc).join('<br>');return;}
+ const value=raw===''?null:Number(raw);
+ if(existing){
+  existing.rev++;existing.value=value;existing.at='刚刚';existing.source='手工记录';
+  existing.history.push({rev:existing.rev,value,reason:reason||'（未填写）',by:'手工修订'});
+  state.message=`已保存：${d.name} = ${value===null?'未录入':value}${value===0?'（真实零）':''}，修订 r${existing.rev}，理由已记录，历史可追溯。`;
+ }else{
+  obs.push({id:nextId++,metric:k,period:p,value,source:'手工记录',channel:ch,exp:ex,tz:'UTC+8',rev:1,at:'刚刚',history:[{rev:1,value,reason:'初始登记',by:'手工'}]});
+  state.message=`已保存：${d.name} = ${value===null?'未录入':value}${value===0?'（真实零）':''}（新记录 r1）。`;
+ }
+ closeModal();state.selected=k;render();
+}
+/* ---------- CSV 导入向导 ---------- */
+function parseCsv(text){
+ const lines=text.split(/\n/).map(l=>l.trim()).filter(Boolean);
+ if(!lines.length)return{cols:[],rows:[]};
+ const cols=lines[0].split(',').map(c=>c.trim());
+ const rows=lines.slice(1).map((l,i)=>{const cs=l.split(',').map(c=>c.trim());const o={};cols.forEach((c,j)=>o[c]=cs[j]??'');o._n=i+1;return o;});
+ return{cols,rows};
+}
+function openImport(){wiz={step:0,sample:'valid',csv:SAMPLES.valid.text,map:null};renderImport();}
+function renderImport(){
+ const titles=['选择文件 / 样例','字段映射','预览校验','提交结果'];
+ const steps=`<div class="steps">${titles.map((t,i)=>i===wiz.step?`<b>${i+1}. ${t}</b>`:`<span>${i+1}. ${t}</span>`).join(' → ')}</div>`;
+ let body='';
+ if(wiz.step===0){
+  body=`<div class="row"><label>选择演示样例（也可直接编辑 CSV 文本）</label>
+  ${Object.keys(SAMPLES).map(k=>`<label style="display:inline-flex;align-items:center;gap:4px;margin-right:14px"><input type="radio" name="sample" value="${k}" ${wiz.sample===k?'checked':''}> ${SAMPLES[k].label}</label>`).join('')}</div>
+  <div class="row"><label>CSV 内容（UTF-8）</label><textarea id="wiz-csv" rows="8">${esc(wiz.csv)}</textarea></div>
+  <p class="foot">模板表头：${CSV_HEADER}（可点「载入模板表头」重置）。字段映射 → 预览校验 → 全部通过后一次原子提交。</p>
+  <div class="actions"><button data-action="wiz-template">载入模板表头</button><span class="spacer"></span><button data-action="close">取消</button><button class="primary" data-action="wiz-to1">下一步：字段映射</button></div>`;
+ }else if(wiz.step===1){
+  const {cols}=parseCsv(wiz.csv);
+  const guess={start:'date_start',end:'date_end',metric:'metric',value:'value',currency:'currency',channel:'channel',experiment:'experiment',source:'source',tz:'tz'};
+  body=`<div class="row"><label>将 CSV 列映射到系统字段（映射错误会在预览中暴露为行级错误）</label></div>
+  <div class="grid2">${FIELDS.map(([f,name])=>`<div class="row"><label>${name}</label><select data-map="${f}">${opt(['（不映射）',...cols],wiz.map?.[f]||guess[f])}</select></div>`).join('')}</div>
+  <div class="actions"><button data-action="wiz-to0">上一步</button><span class="spacer"></span><button data-action="close">取消</button><button class="primary" data-action="wiz-to2">下一步：预览校验</button></div>`;
+ }else if(wiz.step===2){
+  const pv=buildPreview();
+  const hard=pv.rows.filter(r=>r.err);
+  const conf=pv.rows.filter(r=>r.status==='conflict');
+  body=`<table><tr><th>行</th><th>指标 / 期间 / 归属</th><th>值</th><th>校验结果</th>${conf.length?'<th>冲突处理</th>':''}</tr>
+  ${pv.rows.map((r,i)=>`<tr class="${r.err?'':''}"><td>${r.n}</td><td>${esc(r.label)}</td><td>${esc(r.value)}</td>
+   <td class="${r.err?'err-cell':''}">${r.err?'<span class="badge err">错误</span> '+esc(r.err):r.status==='dup'?'<span class="badge zero">已存在 · 无变化</span>':r.status==='conflict'?`<span class="badge err">冲突</span> 现值 ${r.existing}`:'<span class="badge acc">新增</span>'}</td>
+   ${conf.length?`<td>${r.status==='conflict'?`<label style="display:inline-flex;gap:4px;margin-right:10px"><input type="radio" name="conf${i}" value="skip">跳过</label><label style="display:inline-flex;gap:4px"><input type="radio" name="conf${i}" value="revise">修订</label>`:''}</td>`:''}</tr>`).join('')}</table>
+  ${hard.length?`<div class="err-msg">存在 ${hard.length} 处错误（行号与原因见上）：全部校验通过后才可提交；当前未写入任何数据（原子提交，不部分写入）。</div>`:''}
+  ${conf.length?`<div class="row" style="margin-top:8px"><label>修订理由（选择「修订」时必填，将记入修订历史）</label><input id="wiz-reason" class="full" placeholder="例如：上游报表修正"></div>`:''}
+  <div class="actions"><button data-action="wiz-to1">上一步</button><span class="spacer"></span><button data-action="close">取消</button><button class="primary" data-action="wiz-submit" ${hard.length?'disabled':''}>${hard.length?'存在错误，禁止提交':'确认提交'}</button></div>`;
+ }else{
+  body=`<p class="notice" role="status">${esc(wiz.result)}</p>
+  <ul class="foot"><li>同一文件重复导入为无变化（幂等），不重复计数。</li><li>相同观察键但值不同：必须明确选择修订或跳过，不静默相加。</li><li>导入失败（存在错误行）时保留当前页面数据，不部分写入。</li></ul>
+  <div class="actions"><button class="primary" data-action="close">完成</button></div>`;
+ }
+ openModal(`<h2>导入 CSV</h2>${steps}${body}`);
+}
+function buildPreview(){
+ const {rows}=parseCsv(wiz.csv),map=wiz.map;
+ const out=[];
+ rows.forEach(r=>{
+  const get=f=>map[f]&&map[f]!=='（不映射）'?(r[map[f]]??''):'';
+  const mRaw=get('metric'),v=get('value'),s=get('start'),e=get('end');
+  const m=Object.keys(DEFS).find(k=>k===mRaw||DEFS[k].name===mRaw);
+  const ch=get('channel')||'无',ex=get('experiment')||'无';
+  const labelStr=`${mRaw||'?'} · ${s||'?'}~${e||'?'} · ${ch}/${ex}`;
+  let err=null,status='new',existing=null;
+  if(!m)err=`指标未定义：${mRaw||'（空）'}`;
+  else if(v!==''&&!/^\d+(\.\d+)?$/.test(v))err=`值不是数字：${v}`;
+  else if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!/^\d{4}-\d{2}-\d{2}$/.test(e)||isNaN(Date.parse(s))||isNaN(Date.parse(e)))err=`日期不合法：${s} ~ ${e}`;
+  else if(Date.parse(e)<Date.parse(s))err=`截止早于开始：${s} ~ ${e}`;
+  if(!err){
+   const p=label(s,e);
+   const hit=obs.find(o=>o.metric===m&&o.period===p&&o.channel===ch&&o.exp===ex);
+   if(hit){existing=hit.value;status=Number(v)===hit.value?'dup':'conflict';}
+   out.push({n:r._n,label:labelStr,value:v===''?'（空=未知）':v,err,status,existing,m,p,ch,ex,vn:v===''?null:Number(v)});
+  }else out.push({n:r._n,label:labelStr,value:v||'（空）',err});
+ });
+ return{rows:out};
+}
+function submitImport(){
+ const pv=buildPreview(),conf=pv.rows.filter(r=>r.status==='conflict');
+ let needReason=false,unresolved=0,revise=0,skip=0,add=0,dup=0;
+ conf.forEach((r,i)=>{
+  const c=document.querySelector(`input[name="conf${pv.rows.indexOf(r)}"]:checked`);
+  if(!c)unresolved++;
+  else if(c.value==='revise'){revise++;needReason=true;}
+  else skip++;
+ });
+ const reason=($('#wiz-reason')?.value||'').trim();
+ if(unresolved){alert('还有 '+unresolved+' 行冲突未选择处理方式（修订 / 跳过）。');return;}
+ if(needReason&&!reason){alert('已选择「修订」：必须填写修订理由。');return;}
+ pv.rows.forEach(r=>{
+  if(r.err)return;
+  if(r.status==='new'){obs.push({id:nextId++,metric:r.m,period:r.p,value:r.vn,source:'CSV 导入',channel:r.ch,exp:r.ex,tz:'UTC+8',rev:1,at:'刚刚',history:[{rev:1,value:r.vn,reason:'CSV 导入',by:'CSV'}]});add++;}
+  else if(r.status==='dup')dup++;
+  else if(r.status==='conflict'){
+   const i=pv.rows.indexOf(r),c=document.querySelector(`input[name="conf${i}"]:checked`);
+   if(c.value==='revise'){const hit=obs.find(o=>o.metric===r.m&&o.period===r.p&&o.channel===r.ch&&o.exp===r.ex);hit.rev++;hit.value=r.vn;hit.at='刚刚';hit.history.push({rev:hit.rev,value:r.vn,reason,by:'CSV 修订'});}
+  }
+ });
+ const parts=[];
+ if(add)parts.push(`新增 ${add} 条`);
+ if(dup)parts.push(`无变化 ${dup} 条（幂等）`);
+ if(revise)parts.push(`修订 ${revise} 条（理由已记录）`);
+ if(skip)parts.push(`跳过 ${skip} 条`);
+ wiz.result=`导入完成：${parts.join('，')||'无变化'}。未重复累计；本次为一次原子提交。`;
+ wiz.step=3;renderImport();
+ state.message=wiz.result;render();
+}
+/* ---------- 复盘 ---------- */
+function openReview(){
+ const maxRev=obs.length?Math.max(...obs.map(o=>o.rev)):1;
+ openModal(`<h2>新建复盘</h2>
+ <p class="hint">复盘绑定观察快照：保存后依据固定，后续指标修订不改变本复盘。数据不足时保存为「数据不足」，不伪造改善幅度。</p>
+ <div class="grid2">
+  <div class="row"><label>观察期开始</label><input id="rv-start" value="2026-08-25"></div>
+  <div class="row"><label>观察期结束</label><input id="rv-end" value="2026-09-07"></div>
+  <div class="row"><label>关联实验</label><select id="rv-exp">${opt(['无',...EXPS],'exp-landing')}</select></div>
+  <div class="row"><label>依据快照</label><select id="rv-snap">${opt(['metrics@最新（含 r'+maxRev+'）','metrics@r1（固定旧版）'],'metrics@最新（含 r'+maxRev+'）')}</select></div>
+  <div class="row"><label>目标</label><input id="rv-target" placeholder="例如：订阅新增 ≥ 5 人"></div>
+  <div class="row"><label>实际</label><input id="rv-actual" placeholder="数据不足时留空并按下方按钮保存"></div>
+ </div>
+ <div class="row"><label>结论</label><textarea id="rv-conclusion" rows="2"></textarea></div>
+ <div class="row"><label>下一步</label><textarea id="rv-next" rows="2"></textarea></div>
+ <div class="err-msg" id="rv-err"></div>
+ <div class="actions"><button data-action="close">取消</button><button data-action="rev-save-insuff">保存为「数据不足」</button><button class="primary" data-action="rev-save">保存复盘</button></div>`);
+}
+function saveReview(insuff){
+ const s=$('#rv-start').value.trim(),e=$('#rv-end').value.trim();
+ const target=$('#rv-target').value.trim(),actual=$('#rv-actual').value.trim();
+ const errs=[];
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!/^\d{4}-\d{2}-\d{2}$/.test(e)||e<s)errs.push('观察期日期不合法或结束早于开始。');
+ if(!insuff&&!target)errs.push('保存复盘需填写目标。');
+ if(!insuff&&!$('#rv-conclusion').value.trim())errs.push('保存复盘需填写结论。');
+ if(errs.length){$('#rv-err').innerHTML=errs.map(esc).join('<br>');return;}
+ reviews.unshift({id:'RV-'+(reviews.length+1),period:label(s,e),exp:$('#rv-exp').value,snap:$('#rv-snap').value,
+  status:insuff?'insufficient':'ok',target:target||'—',actual:insuff?'—':(actual||'—'),
+  conclusion:insuff?('数据不足：'+($('#rv-conclusion').value.trim()||'样本不足，无法判断，不计算改善幅度。')):$('#rv-conclusion').value.trim(),
+  next:$('#rv-next').value.trim()||'补充数据后复盘。'});
+ state.message=insuff?'复盘已保存为「数据不足」：不显示目标达成与改善幅度，后续补数后新建复盘。':'复盘已保存：依据已绑定快照，后续数据修订不改变本复盘依据。';
+ closeModal();render();
+}
+/* ---------- 事件 ---------- */
+document.addEventListener('click',e=>{
+ const el=e.target.closest('[data-action]');if(!el)return;
+ const a=el.dataset.action;
+ if(a==='theme'){const l=document.documentElement.classList.toggle('light');el.textContent=l?'切换深色':'切换浅色';}
+ else if(a==='retry'){state.mode='normal';$('#mode').value='normal';state.message='重试成功（演示）：数据恢复展示。';render();}
+ else if(a==='detail'){const k=el.dataset.metric;state.selected=state.selected===k?null:k;state.histOpen.clear();render();}
+ else if(a==='hist'){const id=Number(el.dataset.id);state.histOpen.has(id)?state.histOpen.delete(id):state.histOpen.add(id);render();}
+ else if(a==='entry')openEntry();
+ else if(a==='revise')openEntry(el.dataset.metric);
+ else if(a==='entry-save')saveEntry();
+ else if(a==='import')openImport();
+ else if(a==='review')openReview();
+ else if(a==='rev-save')saveReview(false);
+ else if(a==='rev-save-insuff')saveReview(true);
+ else if(a==='close')closeModal();
+ else if(a==='wiz-template'){wiz={step:0,sample:'valid',csv:CSV_HEADER+'\n2026-09-01,2026-09-07,订阅新增,3,人,官网,exp-landing,CSV 导入,UTC+8'};renderImport();}
+ else if(a==='wiz-to0'){wiz.step=0;renderImport();}
+ else if(a==='wiz-to1'){wiz.csv=$('#wiz-csv').value;wiz.step=1;wiz.map=null;renderImport();}
+ else if(a==='wiz-to2'){
+  wiz.map={};document.querySelectorAll('[data-map]').forEach(s=>wiz.map[s.dataset.map]=s.value);
+  wiz.step=2;renderImport();
+ }
+ else if(a==='wiz-submit')submitImport();
+});
+document.addEventListener('change',e=>{
+ if(e.target.id==='mode'){state.mode=e.target.value;state.message='';render();}
+ if(e.target.name==='sample'&&wiz&&wiz.step===0){wiz.sample=e.target.value;wiz.csv=SAMPLES[wiz.sample].text;renderImport();}
+ if(e.target.dataset.k){state[e.target.dataset.k]=e.target.value;state.message='';render();}
+});
+render();
+</script>
+</body>
+</html>

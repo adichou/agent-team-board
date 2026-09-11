@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260904-001",
+  "type": "requirement",
+  "title": "分派给 codex 和 zcode 的提示词增加一句：将当前会话名改为单号",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-session-rename",
+  "createdAt": "2026-09-04T15:36:03.750Z",
+  "updatedAt": "2026-09-11T05:52:14.065Z",
+  "agentCompletedAt": "2026-09-05T12:39:01.876Z",
+  "lastReport": {
+    "at": "2026-09-05T12:39:01.876Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约（scripts/tests/dispatch.test.mjs）",
+    "summary": "dispatchPrompt 两版提示词各加一句「请将当前会话名改为 <单号>」：codex 版置于句首接原 skill 指引，zcode 版在 /dev 行后追加独立一行（首行仍以 /dev <单号> 开头，自动标题含单号的效果保留）。TDD：dispatch.test.mjs 新增 P1.5 契约用例（断言改名句在模板中恰好出现两次且用 it.id 变量）先跑红，实现后跑绿；全量 20 个测试文件无回归。派发链路（剪贴板/深链/.command）未改动，无新增注入面。M1（真实派发后 Agent 会话名变为单号）待用户手工验收。"
+  },
+  "history": [
+    {
+      "at": "2026-09-04T15:36:03.750Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-05T08:10:15.256Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-05T12:36:47.780Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-session-rename",
+      "note": "认领（zcode-session-rename）"
+    },
+    {
+      "at": "2026-09-05T12:39:01.876Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0905-e41b",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.065Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-87b7",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>营销模块：渠道计划、推广实验与内容行动看板（REQ-20260910-020 演示）</title>
+<style>
+/* 设计令牌对齐宿主 style.css（浅色 / 深色随系统，可手动切换），与 REQ-20260910-019 演示保持一致 */
+:root{--bg:#f4f6f9;--panel:#ffffff;--text:#1b2434;--muted:#66748c;--border:#e2e7ef;--primary:#2563eb;--primary-soft:#eff6ff;--danger:#dc2626;--danger-soft:#fef2f2;--ok-c:#047857;--ok-bg:#ecfdf5;--info-c:#1d4ed8;--info-bg:#eff6ff;--warn-c:#b45309;--warn-bg:#fffbeb;--tbd-c:#7c3aed;--tbd-bg:rgba(124,58,237,.08)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0e131b;--panel:#161d29;--text:#e5eaf3;--muted:#8b98ad;--border:#2a3446;--primary:#3b82f6;--primary-soft:rgba(59,130,246,.14);--danger:#f87171;--danger-soft:rgba(248,113,113,.12);--ok-c:#34d399;--ok-bg:rgba(52,211,153,.1);--info-c:#93b4ff;--info-bg:rgba(59,130,246,.12);--warn-c:#fbbf24;--warn-bg:rgba(251,191,36,.1);--tbd-c:#c4b5fd;--tbd-bg:rgba(196,181,253,.12)}}
+:root[data-theme="dark"]{--bg:#0e131b;--panel:#161d29;--text:#e5eaf3;--muted:#8b98ad;--border:#2a3446;--primary:#3b82f6;--primary-soft:rgba(59,130,246,.14);--danger:#f87171;--danger-soft:rgba(248,113,113,.12);--ok-c:#34d399;--ok-bg:rgba(52,211,153,.1);--info-c:#93b4ff;--info-bg:rgba(59,130,246,.12);--warn-c:#fbbf24;--warn-bg:rgba(251,191,36,.1);--tbd-c:#c4b5fd;--tbd-bg:rgba(196,181,253,.12)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:1180px;margin:24px auto;padding:0 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+.hint{color:var(--muted);font-size:13px;margin:6px 0}
+.muted{color:var(--muted)}
+button,select,input,textarea{font:inherit;color:inherit}
+.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);cursor:pointer}
+.btn:hover:not([disabled]){border-color:var(--primary)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.sm{padding:3px 10px;font-size:13px}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn[disabled]{opacity:.55;cursor:default}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* 演示控制条 */
+.controls{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:14px 0;padding:10px 14px;background:var(--panel);border:1px dashed var(--border);border-radius:10px;font-size:14px}
+.controls select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+/* 仿宿主应用框架 */
+.app{border:1px solid var(--border);border-radius:14px;background:var(--bg);overflow:hidden;box-shadow:0 1px 3px rgba(20,30,50,.08),0 4px 14px rgba(20,30,50,.05)}
+.topbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border)}
+.brand{font-weight:700;white-space:nowrap}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.module-nav{display:flex;gap:4px;flex-wrap:wrap}
+.view-tab{padding:6px 12px;border-radius:8px;border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.view-tab.active{color:var(--primary);border-color:var(--primary);background:var(--primary-soft);font-weight:600}
+.view-tab[disabled]{cursor:not-allowed;opacity:.75}
+.top-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.top-actions select{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--panel);max-width:280px}
+.content{padding:16px}
+.mkt-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+.msg{min-height:22px;margin:4px 0 12px;font-size:14px;color:var(--info-c)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card h3{margin:0 0 8px;font-size:15px}
+.kv{margin:4px 0;font-size:14px}
+.kv b{color:var(--muted);font-weight:500;margin-right:6px}
+.field{margin-bottom:10px}
+.field>label{display:block;font-size:13px;color:var(--muted);margin-bottom:3px}
+.field input,.field select,.field textarea{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.field textarea{resize:vertical;min-height:52px}
+.field.err input,.field.err select,.field.err textarea{border-color:var(--danger)}
+.err-msg{color:var(--danger);font-size:12px;margin:3px 0 0}
+.btn-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.badge{font-size:11px;padding:1px 7px;border-radius:6px;white-space:nowrap}
+.b-ok{color:var(--ok-c);background:var(--ok-bg)}
+.b-info{color:var(--info-c);background:var(--info-bg)}
+.b-warn{color:var(--warn-c);background:var(--warn-bg)}
+.b-tbd{color:var(--tbd-c);background:var(--tbd-bg)}
+.b-danger{color:var(--danger);background:var(--danger-soft)}
+.lock{color:var(--muted);border:1px dashed var(--border);background:none}
+/* 工具栏与实验条 */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
+.toolbar select{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--panel);max-width:250px}
+.toolbar .spacer{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.only-narrow{display:none}
+.expbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 14px;font-size:13px}
+.chip{display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:var(--panel);cursor:pointer}
+.chip:hover{border-color:var(--primary)}
+/* 看板 */
+.board{display:grid;grid-template-columns:repeat(6,minmax(148px,1fr));gap:10px;align-items:start}
+@media (max-width:1100px){.board{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.col{background:transparent;border:1px dashed var(--border);border-radius:10px;padding:8px;min-height:110px}
+.col-head{font-size:13px;color:var(--muted);margin:2px 4px 8px;display:flex;justify-content:space-between;gap:6px}
+.acard{display:block;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:9px 10px;margin-bottom:8px;cursor:pointer;width:100%;text-align:left}
+.acard:hover{border-color:var(--primary)}
+.acard .t{font-weight:600;font-size:14px;line-height:1.4}
+.acard .meta{color:var(--muted);font-size:12px;margin-top:3px}
+.stage-badge{display:none}
+.col-empty{color:var(--muted);font-size:12px;padding:6px 4px}
+/* 窄屏：状态筛选 + 列表 */
+@media (max-width:880px){
+  .board{display:block}
+  .col{border:none;padding:0;min-height:0}
+  .col-head{display:none}
+  .col-empty{display:none}
+  .acard{margin-bottom:10px}
+  .stage-badge{display:inline-block}
+  .only-narrow{display:inline-flex}
+}
+/* 详情抽屉 */
+.drawer-wrap{position:fixed;inset:0;background:rgba(4,10,20,.45);z-index:20;display:flex;justify-content:flex-end}
+.drawer-wrap.hidden{display:none}
+.drawer{width:min(470px,100%);background:var(--panel);border-left:1px solid var(--border);height:100%;overflow-y:auto;padding:18px 20px 40px;box-shadow:-8px 0 30px rgba(0,0,0,.25)}
+.drawer h2{margin:0;font-size:17px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.drawer section{border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
+.drawer section>h3{margin:0 0 8px;font-size:14px;color:var(--muted);font-weight:600}
+.drawer .field input,.drawer .field select,.drawer .field textarea{background:var(--bg)}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{position:relative;padding:0 0 10px 16px;border-left:1px solid var(--border);font-size:13px;margin-left:4px}
+.tl li::before{content:"";position:absolute;left:-4px;top:6px;width:7px;height:7px;border-radius:50%;background:var(--primary)}
+.tl li .at{color:var(--muted);margin-right:6px}
+.reqcard{border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* 横幅与对话框 */
+.banner{border-radius:10px;padding:12px 14px;margin:0 0 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.banner p{margin:0;flex:1;min-width:200px}
+.banner.err{background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger)}
+.banner.warn{background:var(--warn-bg);color:var(--warn-c);border:1px solid var(--warn-c)}
+.overlay{position:fixed;inset:0;background:rgba(4,10,20,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:30}
+.overlay.hidden{display:none}
+.dialog{background:var(--panel);border:1px solid var(--border);border-radius:12px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.dialog h2{margin:0 0 8px;font-size:17px}
+.dialog p{margin:0 0 12px}
+.dialog .btn-row{justify-content:flex-end}
+/* 加载骨架 */
+.sk{background:linear-gradient(90deg,var(--border) 25%,var(--panel) 50%,var(--border) 75%);background-size:200% 100%;animation:sk 1.1s infinite;border-radius:8px;height:14px;margin:10px 0}
+@keyframes sk{to{background-position:-200% 0}}
+.w90{width:90%}.w70{width:70%}.w50{width:50%}.w30{width:30%}
+</style>
+</head>
+<body>
+<main>
+  <h1>REQ-20260910-020 · 营销与增长：渠道计划、推广实验与内容行动看板</h1>
+  <p class="hint">离线演示 · 单文件、无外网依赖 · 数据仅存于本页（sessionStorage 记住项目 / 页签 / 主题 / 演示数据，刷新后关联保持），不写入真实项目。示例数据仅用于演示。</p>
+
+  <div class="controls">
+    <label>演示状态
+      <select id="mode">
+        <option value="normal">正常</option>
+        <option value="empty">空（未初始化）</option>
+        <option value="loading">加载</option>
+        <option value="error">失败</option>
+      </select>
+    </label>
+    <label>主题
+      <select id="theme">
+        <option value="system">跟随系统</option>
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+      </select>
+    </label>
+    <button class="btn" data-action="sim-refresh" type="button">模拟刷新（验证关联保持）</button>
+    <button class="btn" data-action="reset-data" type="button">重置演示数据</button>
+  </div>
+  <p class="hint">说明：失败态作用于读取与所有写入（保存 / 状态推进 / 创建，失败保留已输入内容，可重试）；空态提供建渠道 / 建实验引导；过期未发布仅提示逾期，不自动发布。</p>
+
+  <div class="app">
+    <header class="topbar">
+      <span class="brand">智能体团队看板<small>营销模块演示</small></span>
+      <nav class="module-nav" aria-label="模块导航">
+        <button type="button" class="view-tab" data-action="host-tab" data-view="oncall">讨论</button>
+        <button type="button" class="view-tab" data-action="host-tab" data-view="status">需求</button>
+        <button type="button" class="view-tab" data-action="host-tab" data-view="runs">任务</button>
+        <button type="button" class="view-tab" data-action="host-tab" data-view="files">文件</button>
+        <button type="button" class="view-tab" data-action="host-tab" data-view="marketing">营销</button>
+        <button type="button" class="view-tab" data-action="host-tab" data-view="settings">设置</button>
+      </nav>
+      <div class="top-actions">
+        <label class="hint" for="projSel">项目</label>
+        <select id="projSel" aria-label="切换项目" title="同名但不同路径的两个项目，营销数据互相隔离">
+          <option value="p1">board — ~/src/board</option>
+          <option value="p2">board — ~/backup/board（未初始化）</option>
+        </select>
+      </div>
+    </header>
+    <section id="content" class="content" aria-live="polite"></section>
+  </div>
+</main>
+
+<!-- 行动详情抽屉 -->
+<div id="drawerWrap" class="drawer-wrap hidden" role="dialog" aria-modal="true" aria-label="行动详情">
+  <div id="drawer" class="drawer" role="document"></div>
+</div>
+
+<!-- 通用对话框：新建渠道 / 新建实验 / 新建行动 / 实验详情 / 停止 / 更正 / 创建开发需求 -->
+<div id="dialogWrap" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+  <div class="dialog" id="dlgBody"></div>
+</div>
+
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const SKEY='atb-demo-req-020';
+const nowTime=()=>new Date().toLocaleTimeString('zh-CN',{hour12:false});
+const today=()=>new Date().toISOString().slice(0,10);
+const clone=o=>JSON.parse(JSON.stringify(o));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isoDaysAgo=n=>{const d=new Date();d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);};
+
+/* ---- 状态机：草稿→待发布→已发布→观察中→已复盘；未复盘可停止 ---- */
+const STAGE_COLS=['draft','ready','published','observing','reviewed','stopped'];
+const STAGE_LABEL={draft:'草稿',ready:'待发布',published:'已发布',observing:'观察中',reviewed:'已复盘',stopped:'已停止'};
+const NEXT_STAGE={draft:'ready',ready:'published',published:'observing',observing:'reviewed'};
+const STAGE_BADGE={draft:'lock',ready:'b-info',published:'b-ok',observing:'b-warn',reviewed:'b-tbd',stopped:'b-danger'};
+const DECISION_LABEL={go:'继续',adjust:'调整',stop:'停止',undetermined:'暂不能判断'};
+const DECISION_BADGE={go:'b-ok',adjust:'b-warn',stop:'b-danger',undetermined:'b-tbd'};
+const TZS=['Asia/Shanghai','UTC','America/New_York','Europe/Berlin'];
+
+/* ---- 示例数据（演示用）。定价版本引用 REQ-20260910-019 的契约：v1 免费（当前）、v2 订阅 9 USD/月 ---- */
+const PRICING={versions:[{id:'v1',text:'免费'},{id:'v2',text:'订阅 · 9 USD/月'}],current:'v1'};
+const PROJECTS={p1:{name:'board',path:'~/src/board'},p2:{name:'board',path:'~/backup/board'}};
+
+function seedP1(){const y1=isoDaysAgo(6),y2=isoDaysAgo(1);return{initialized:true,reqSeq:31,
+ channels:[
+  {id:'ch-001',platform:'Reddit',link:'reddit.com/r/SideProject',audience:'英语独立开发者',language:'英语',format:'帖子',priority:'高',reason:'种子用户活跃，可匿名发帖验证',weeklyHours:'2',dataAccess:'子版块公开数据（手工周记录）',capabilities:'可发帖、可评论',createdAt:'2026-09-01'},
+  {id:'ch-002',platform:'Product Launch',link:'productlaunch.example/board',audience:'早期产品尝鲜者',language:'英语',format:'产品页 + 截图',priority:'中',reason:'新品目录带来长尾曝光',weeklyHours:'1',dataAccess:'后台访客数',capabilities:'可提交产品、可回复',createdAt:'2026-09-02'},
+  {id:'ch-003',platform:'V2EX',link:'v2ex.com/go/create',audience:'中文开发者',language:'简体中文',format:'分享帖',priority:'中',reason:'中文市场试水，零预算',weeklyHours:'1',dataAccess:'帖子回复通知',capabilities:'可发帖（需积分）',createdAt:'2026-09-05'},
+  {id:'ch-004',platform:'X / Twitter',link:'@board_demo（示例）',audience:'Build in Public 受众',language:'英语',format:'推文串',priority:'低',reason:'维护成本高，先观察',weeklyHours:'1',dataAccess:'账号后台（受限）',capabilities:'只读受限',createdAt:'2026-09-05'}],
+ experiments:[
+  {id:'exp-001',name:'Reddit 发帖验证点击率',hypothesis:'技术向帖子能为落地页带来稳定点击',metric:'落地页点击数',observeStart:'2026-09-01',observeEnd:'2026-09-14',success:'两周内 ≥80 次点击',currency:'USD',budget:'50',spent:'12',estHours:'6',actHours:'3',pricingVersion:'v1',source:null,final:'—（由行动复盘汇总，效果页见 REQ-20260910-021）'},
+  {id:'exp-002',name:'中文社区零预算试水',hypothesis:'中文开发者需要英文产品的中文介绍',metric:'有质量回复数',observeStart:'2026-09-05',observeEnd:'2026-09-19',success:'两周内 ≥10 条有质量回复',currency:'CNY',budget:'0',spent:'0',estHours:'4',actHours:'1',pricingVersion:'v2',source:null,final:'—（由行动复盘汇总，效果页见 REQ-20260910-021）'}],
+ activities:[
+  {id:'act-001',experimentId:'exp-001',channelId:'ch-001',title:'演示视频发布帖',content:'我们把需求、任务与讨论放进同一块看板，附 90 秒演示视频。\n要点：1) 状态与证据可追溯到条目；2) 多智能体任务并行跟进。\n欢迎反馈：',assets:['demo.mp4','cover.png'],planAt:y1+' 09:00',tz:'America/New_York',owner:'@ada',status:'reviewed',prevStage:'observing',publishAt:y1+' 10:20',publishLink:'https://reddit.com/r/SideProject/comments/demo001（示例）',credentialNote:'',reviewBasis:'观察期两周点击 96 次 ≥80（手工 CSV）；其中注册 6 人',decision:'adjust',stopReason:'',nextStep:'加大发帖频率并补充对比图文',copiedFrom:null,linkedReqs:[{id:'REQ-20260910-030',title:'落地页增加视频锚点与 UTM 埋点',status:'submitted'}],history:[{at:'09-01 09:12',text:'创建行动（草稿）'},{at:'09-01 15:40',text:'标记待发布'},{at:y1.slice(5)+' 10:20',text:'人工登记发布结果，标记已发布'},{at:'09-04 09:00',text:'开始观察'},{at:'09-07 11:30',text:'完成复盘：决策「调整」（数据充足）'},{at:'09-07 11:31',text:'创建关联 REQ-20260910-030（submitted，双向关联）'}]},
+  {id:'act-002',experimentId:'exp-001',channelId:'ch-001',title:'功能对比图文（草稿）',content:'与 Linear + Notion 组合的对比：',assets:['compare-table.md'],planAt:isoDaysAgo(-3)+' 09:00',tz:'America/New_York',owner:'@ada',status:'draft',prevStage:null,publishAt:'',publishLink:'',credentialNote:'',reviewBasis:'',decision:'',stopReason:'',nextStep:'补齐截图',copiedFrom:null,linkedReqs:[],history:[{at:'09-06 10:00',text:'创建行动（草稿）'}]},
+  {id:'act-003',experimentId:'exp-002',channelId:'ch-003',title:'中文社区分享帖',content:'做了一个看板式智能体团队协作工具，中文介绍如下：',assets:['shots/01.png'],planAt:y2+' 10:00',tz:'Asia/Shanghai',owner:'@ben',status:'ready',prevStage:'draft',publishAt:'',publishLink:'',credentialNote:'',reviewBasis:'',decision:'',stopReason:'',nextStep:'确认发帖积分',copiedFrom:null,linkedReqs:[],history:[{at:'09-06 16:20',text:'创建行动（草稿）'},{at:'09-08 09:30',text:'标记待发布'}]},
+  {id:'act-004',experimentId:'exp-002',channelId:'ch-003',title:'功能问答跟进帖',content:'针对评论区的三个高频问题做统一回答：',assets:[],planAt:y1+' 20:00',tz:'Asia/Shanghai',owner:'@ben',status:'observing',prevStage:'published',publishAt:y1+' 21:05',publishLink:'',credentialNote:'该社区帖子需登录查看，无法提供公开链接；发布凭据：发布账号后台截图已存档（示例）',reviewBasis:'',decision:'',stopReason:'',nextStep:'',copiedFrom:null,linkedReqs:[],history:[{at:'09-05 14:00',text:'创建行动（草稿）'},{at:'09-05 19:40',text:'标记待发布'},{at:y1.slice(5)+' 21:05',text:'人工登记发布结果（凭据说明），标记已发布'},{at:'09-06 08:00',text:'开始观察'}]},
+  {id:'act-005',experimentId:'exp-001',channelId:'ch-002',title:'Product Launch 首发页',content:'产品页文案：需求-任务-讨论同源的证据链。',assets:['hero.png'],planAt:'2026-09-03 00:00',tz:'UTC',owner:'@ada',status:'published',prevStage:'ready',publishAt:'2026-09-03 02:10',publishLink:'https://productlaunch.example/board（示例）',credentialNote:'',reviewBasis:'',decision:'',stopReason:'',nextStep:'观察一周后复盘',copiedFrom:null,linkedReqs:[],history:[{at:'09-02 10:00',text:'创建行动（草稿）'},{at:'09-02 18:00',text:'标记待发布'},{at:'09-03 02:10',text:'人工登记发布结果，标记已发布'}]},
+  {id:'act-006',experimentId:'exp-002',channelId:'ch-004',title:'X 推文串（尝试）',content:'Build in Public 周更：',assets:[],planAt:'2026-09-06 12:00',tz:'UTC',owner:'@ben',status:'stopped',prevStage:'ready',publishAt:'',publishLink:'',credentialNote:'',reviewBasis:'',decision:'',stopReason:'账号数据获取受限且非目标语言市场优先，停止尝试',nextStep:'',copiedFrom:null,linkedReqs:[],history:[{at:'09-06 09:00',text:'创建行动（草稿）'},{at:'09-06 09:50',text:'标记待发布'},{at:'09-06 15:00',text:'停止：账号数据获取受限且非目标语言市场优先'}]}]};}
+let mk={p1:seedP1(),p2:null};
+
+/* ---- 演示状态 ---- */
+const state={project:'p1',view:'marketing',mode:'normal',theme:'system',busy:false,refreshing:false,message:'',writeError:'',filters:{channel:'',experiment:'',status:''},drawerId:null,drawerErrors:{},dialog:null};
+let dialogForm=null;
+
+/* ---- 会话恢复：数据快照 + 项目 / 页签 / 主题 ---- */
+function persist(){try{sessionStorage.setItem(SKEY,JSON.stringify({v:1,project:state.project,theme:state.theme,mktTab:'channels-actions',data:mk}));}catch(_){}}
+function restore(){try{const s=JSON.parse(sessionStorage.getItem(SKEY)||'{}');if(!s||s.v!==1)return;
+  if(PROJECTS[s.project])state.project=s.project;
+  if(['system','light','dark'].includes(s.theme))state.theme=s.theme;
+  if(s.data&&s.data.p1&&Array.isArray(s.data.p1.channels))mk=s.data;}catch(_){}}
+function applyTheme(){const r=document.documentElement;if(state.theme==='light'||state.theme==='dark')r.dataset.theme=state.theme;else delete r.dataset.theme;}
+function msg(t){state.message=t;}
+
+/* ---- 帮助 ---- */
+const channel=id=>mk[state.project].channels.find(c=>c.id===id);
+const experiment=id=>mk[state.project].experiments.find(e=>e.id===id);
+const activity=id=>mk[state.project].activities.find(a=>a.id===id);
+const nextId=(list,prefix)=>list.reduce((x,o)=>Math.max(x,parseInt(String(o.id).split('-')[1])||0),0)+1;
+const priceText=id=>{const p=PRICING.versions.find(v=>v.id===id);return p?p.text:'未知';};
+const money=(v,cur,isBudget)=>v===''||v==null?'未知 '+cur:(Number(v)===0&&isBudget?`0 ${cur}（零预算）`:`${v} ${cur}`);
+const overdue=a=>a.status==='ready'&&a.planAt&&a.planAt.slice(0,10)<today();
+const stageBadge=s=>`<span class="badge ${STAGE_BADGE[s]}">${STAGE_LABEL[s]}</span>`;
+function field(key,label,control,err){return `<div class="field${err?' err':''}"><label>${label}</label>${control}${err?`<p class="err-msg" role="alert">${esc(err)}</p>`:''}</div>`;}
+const inp=(key,val,ph='')=>`<input data-f="${key}" value="${esc(val)}"${ph?` placeholder="${esc(ph)}"`:''}>`;
+const ta=(key,val)=>`<textarea data-f="${key}" rows="2">${esc(val)}</textarea>`;
+const selHtml=(key,val,opts)=>`<select data-f="${key}">${opts.map(o=>`<option${o===val?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+const numOk=v=>v===''||v==null||(!isNaN(Number(v))&&Number(v)>=0);
+
+/* ---- 营销页签 ---- */
+function mktTabsHtml(){return `<nav class="mkt-tabs" aria-label="营销页签">
+  <button type="button" class="view-tab" disabled title="由 REQ-20260910-019 交付，见其 ui-demo.html">概览</button>
+  <button type="button" class="view-tab" disabled title="由 REQ-20260910-019 交付，见其 ui-demo.html">定位与定价</button>
+  <button type="button" class="view-tab active" aria-pressed="true">渠道与行动</button>
+  <button type="button" class="view-tab" disabled title="由 REQ-20260910-021 交付，尚未实现">效果与复盘<span class="badge lock">暂不可用</span></button>
+</nav>
+<p class="hint">本演示聚焦「渠道与行动」页；渠道是长期触点，实验是一个推广假设，行动是一篇内容或一次发布。刷新后恢复项目与页签。</p>
+<p id="msg" class="msg" role="status" aria-live="polite">${esc(state.message)}</p>`;}
+
+function skeletonHtml(){return `<div class="card"><p class="muted">正在读取渠道与行动数据…</p>
+  <div class="sk w90"></div><div class="sk w70"></div><div class="sk w50"></div><div class="sk w30"></div></div>`;}
+
+function emptyHtml(){const p=PROJECTS[state.project];return `<div class="card"><h3>尚未建立渠道或实验</h3>
+  <p class="kv">项目 <b>${esc(p.name)}</b>（${esc(p.path)}）还没有渠道与实验数据（docs/agent-team-board/marketing/channels/、experiments/）。</p>
+  <p class="hint">渠道是长期触点，实验是一个待验证假设；渠道建议只是假设，不预设所有项目适合相同平台。行动需挂在实验与渠道下，请先创建其一。</p>
+  <div class="btn-row">
+    <button class="btn primary" data-action="new-channel" type="button">＋ 新建渠道</button>
+    <button class="btn primary" data-action="new-experiment" type="button">＋ 新建实验</button>
+  </div></div>`;}
+
+/* ---- 看板 ---- */
+function filteredActs(){const d=mk[state.project],f=state.filters;
+  return d.activities.filter(a=>(!f.channel||a.channelId===f.channel)&&(!f.experiment||a.experimentId===f.experiment)&&(!f.status||a.status===f.status));}
+function hasFilter(){const f=state.filters;return !!(f.channel||f.experiment||f.status);}
+
+function boardHtml(){const d=mk[state.project],f=state.filters;
+  const chOpts=['',...d.channels.map(c=>c.id)];
+  const exOpts=['',...d.experiments.map(e=>e.id)];
+  const canAct=d.channels.length>0&&d.experiments.length>0;
+  const acts=filteredActs();
+  let noMatch='';
+  if(!acts.length&&hasFilter())noMatch=`<div class="banner warn" role="status"><p>当前筛选（${[f.channel&&('渠道 '+f.channel),f.experiment&&('实验 '+f.experiment),f.status&&STAGE_LABEL[f.status]].filter(Boolean).join(' · ')}）没有匹配行动。</p>
+    <button class="btn" data-action="clear-filters" type="button">清除筛选</button></div>`;
+  else if(hasFilter())noMatch=`<p class="hint">已筛选：${[f.channel&&('渠道 '+f.channel),f.experiment&&('实验 '+f.experiment),f.status&&STAGE_LABEL[f.status]].filter(Boolean).join(' · ')} · 匹配 ${acts.length} 条 <button class="btn sm" data-action="clear-filters" type="button">清除筛选</button></p>`;
+  const chips=d.experiments.map(e=>`<button type="button" class="chip" data-action="open-exp" data-id="${esc(e.id)}" title="点击查看实验详情">
+      <b>${esc(e.id)}</b>${esc(e.name)}<span class="muted">${money(e.budget,e.currency,true)}</span><span class="badge b-info">进行中</span></button>`).join('');
+  const cols=STAGE_COLS.map(s=>{
+    const list=acts.filter(a=>a.status===s);
+    const cards=list.map(a=>{const c=channel(a.channelId),e=experiment(a.experimentId);
+      return `<button type="button" class="acard" data-action="open-act" data-id="${esc(a.id)}">
+        <span class="stage-badge badge ${STAGE_BADGE[a.status]}">${STAGE_LABEL[a.status]}</span>
+        <div class="t">${esc(a.title)}</div>
+        <div class="meta">${esc(c?c.platform:'—')} · ${esc(e?e.id:'—')}</div>
+        <div class="meta">计划 ${esc(a.planAt||'未定')} ${esc(a.tz?`(${a.tz.split('/')[1]||a.tz})`:'')}</div>
+        <div class="meta">主指标：${esc(e?e.metric:'—')} · ${esc(a.owner||'未指派')}</div>
+        ${overdue(a)?'<div class="badge b-danger">逾期</div>':''}
+      </button>`;}).join('');
+    return `<div class="col"><div class="col-head"><span>${STAGE_LABEL[s]}</span><span>${list.length}</span></div>${cards||'<div class="col-empty">（空）</div>'}</div>`;}).join('');
+  return `<div class="toolbar">
+    <label class="hint" for="fltCh">渠道</label>
+    <select id="fltCh" data-action-change="filter-channel"><option value="">全部渠道</option>${d.channels.map(c=>`<option value="${esc(c.id)}"${f.channel===c.id?' selected':''}>${esc(c.platform)} · ${esc(c.id)}</option>`).join('')}</select>
+    <label class="hint" for="fltEx">实验</label>
+    <select id="fltEx" data-action-change="filter-experiment"><option value="">全部实验</option>${d.experiments.map(e=>`<option value="${esc(e.id)}"${f.experiment===e.id?' selected':''}>${esc(e.id)} ${esc(e.name)}</option>`).join('')}</select>
+    <label class="hint only-narrow" for="fltSt">状态</label>
+    <select id="fltSt" class="only-narrow" data-action-change="filter-status"><option value="">全部状态</option>${STAGE_COLS.map(s=>`<option value="${s}"${f.status===s?' selected':''}>${STAGE_LABEL[s]}</option>`).join('')}</select>
+    <div class="spacer">
+      <button class="btn" data-action="new-channel" type="button">＋ 渠道</button>
+      <button class="btn" data-action="new-experiment" type="button">＋ 实验</button>
+      <button class="btn primary" data-action="new-activity" type="button" ${canAct?'':'disabled title="需先创建至少一个渠道和一个实验"'}>＋ 行动</button>
+    </div>
+  </div>
+  <div class="expbar"><span class="hint">实验（点击查看详情）：</span>${chips||'<span class="hint">暂无实验</span>'}
+    <span class="hint">费用按币种独立展示，不做跨币种换算；实验绑定创建时的定价版本（当前定价 ${esc(PRICING.current)}）。</span></div>
+  ${noMatch}
+  <div class="board">${cols}</div>
+  ${state.writeError?`<div class="banner err" role="alert" style="margin-top:12px"><p>${esc(state.writeError)} 可重试同一操作。</p></div>`:''}`;}
+
+/* ---- 详情抽屉 ---- */
+function drawerHtml(a){const c=channel(a.channelId),e=experiment(a.experimentId),d=mk[state.project],err=state.drawerErrors;
+  const dIn=(k,v)=>`<input data-dfield="${k}" value="${esc(v)}">`;
+  const dTa=(k,v,r=4)=>`<textarea data-dfield="${k}" rows="${r}">${esc(v)}</textarea>`;
+  /* 状态推进区 */
+  let advance='';
+  if(a.status==='draft')advance=`<div class="btn-row"><button class="btn primary" data-action="mark-ready" type="button">标记待发布</button><span class="hint">需内容草稿与计划时间已填写；标记不发送任何内容。</span></div>`;
+  else if(a.status==='ready')advance=`${overdue(a)?`<div class="banner warn"><p>已过计划时间（${esc(a.planAt)}），仅提示逾期，不会自动发布。</p></div>`:''}
+    ${field('publishAt','发布时间（必填）',`<input type="datetime-local" data-dfield="publishAt" value="${esc(a.publishAt?a.publishAt.replace(' ','T'):'')}">`,err.publishAt)}
+    ${field('publishLink','发布链接（与凭据说明至少填一项）',dIn('publishLink',a.publishLink),err.publishLink)}
+    ${field('credentialNote','发布凭据说明（无公开链接时必填）',dTa('credentialNote',a.credentialNote,2),err.credentialNote)}
+    <div class="btn-row"><button class="btn primary" data-action="publish-submit" type="button">登记并标记已发布</button><span class="hint">人工登记后才展示已发布。</span></div>`;
+  else if(a.status==='published')advance=`<div class="btn-row"><button class="btn primary" data-action="start-observe" type="button">开始观察</button><span class="hint">进入观察期后依据实验观察窗口复盘。</span></div>`;
+  else if(a.status==='observing')advance=`
+    ${field('reviewBasis','结果依据（必填，绑定观察数据来源）',dTa('reviewBasis',a.reviewBasis),err.reviewBasis)}
+    ${field('decision','决策（必选）',`<select data-dfield="decision"><option value="">请选择</option><option value="go"${a.decision==='go'?' selected':''}>继续</option><option value="adjust"${a.decision==='adjust'?' selected':''}>调整</option><option value="stop"${a.decision==='stop'?' selected':''}>停止</option><option value="undetermined"${a.decision==='undetermined'?' selected':''}>暂不能判断（数据不足）</option></select>`,err.decision)}
+    <div class="btn-row"><button class="btn primary" data-action="review-submit" type="button">完成复盘</button><span class="hint">「暂不能判断」不等同验证成功。</span></div>`;
+  if(a.status!=='reviewed'&&a.status!=='stopped')advance+=`<div class="btn-row"><button class="btn danger" data-action="stop-open" type="button">停止（记录原因）</button></div>`;
+  if(a.status==='reviewed'||a.status==='stopped')advance+=`<div class="btn-row"><button class="btn primary" data-action="copy-exp" data-id="${esc(a.id)}" type="button">复制为新实验</button><span class="hint">产生新实验与新草稿行动，保留来源与历史。</span></div>`;
+  /* 结果展示 */
+  let result='';
+  if(a.publishAt||a.publishLink||a.credentialNote)result+=`<p class="kv"><b>发布时间</b>${esc(a.publishAt||'—')}</p><p class="kv"><b>发布链接</b>${esc(a.publishLink||'—')}</p>${a.credentialNote?`<p class="kv"><b>凭据说明</b>${esc(a.credentialNote)}</p>`:''}`;
+  if(a.status==='reviewed')result+=`<p class="kv"><b>复盘依据</b>${esc(a.reviewBasis||'—')}</p><p class="kv"><b>决策</b>${a.decision?`<span class="badge ${DECISION_BADGE[a.decision]}">${DECISION_LABEL[a.decision]}</span>`:'—'}${a.decision==='undetermined'?'（数据不足，不等同验证成功）':''}</p>`;
+  if(a.status==='stopped')result+=`<p class="kv"><b>停止原因</b>${esc(a.stopReason||'—')}</p>`;
+  if(a.copiedFrom)result+=`<p class="kv"><b>复制来源</b>${esc(a.copiedFrom)}</p>`;
+  /* 关联 REQ */
+  const reqs=a.linkedReqs.map(r=>`<div class="reqcard"><b>${esc(r.id)}</b>${esc(r.title)}<span class="badge b-tbd">${esc(r.status)}</span><span class="badge lock">双向关联</span>
+    <button class="btn sm" data-action="req-goto" data-id="${esc(r.id)}" type="button">打开</button></div>`).join('');
+  const reqArea=`${reqs||'<p class="hint">暂无关联开发需求。</p>'}
+    <div class="btn-row"><button class="btn" data-action="req-open-dlg" data-id="${esc(a.id)}" type="button">${a.linkedReqs.length?'重试创建（不重复）':'创建开发需求'}</button>
+    <span class="hint">人工创建后进入 submitted 并双向关联，不自动接受或实施。</span></div>`;
+  const hist=a.history.map(h=>`<li><span class="at">${esc(h.at)}</span>${esc(h.text)}</li>`).join('');
+  const corr=(a.prevStage&&a.status!=='draft')?`<button class="btn sm" data-action="correct-open" type="button">更正状态（回退到「${STAGE_LABEL[a.prevStage]}」，记录原因）</button>`:'';
+  return `<h2>${esc(a.title)} ${stageBadge(a.status)} ${overdue(a)?'<span class="badge b-danger">逾期</span>':''}</h2>
+  <p class="hint">${esc(a.id)} · <button class="btn sm" data-action="open-exp" data-id="${esc(a.experimentId)}" type="button">查看实验</button> <button class="btn sm" data-action="close-drawer" type="button">关闭</button></p>
+  ${state.writeError?`<div class="banner err" role="alert"><p>${esc(state.writeError)}</p></div>`:''}
+  <section><h3>基本信息</h3>
+    <p class="kv"><b>渠道</b>${esc(c?c.platform+' · '+c.link:'—')}</p>
+    <p class="kv"><b>实验</b>${esc(e?e.id+' '+e.name:'—')}</p>
+    <p class="kv"><b>主指标</b>${esc(e?e.metric:'—')}（成功标准：${esc(e?e.success:'—')}）</p>
+    ${field('owner','负责人',dIn('owner',a.owner))}
+    <div class="field"><label>计划时间与时区</label>
+      <div style="display:flex;gap:8px"><input type="datetime-local" data-dfield="planAt" value="${esc(a.planAt?a.planAt.replace(' ','T'):'')}" style="flex:1">
+      <select data-dfield="tz">${TZS.map(t=>`<option${a.tz===t?' selected':''}>${t}</option>`).join('')}</select></div></div>
+    ${field('nextStep','下一步',dIn('nextStep',a.nextStep))}
+    <div class="btn-row"><button class="btn" data-action="save-act" type="button">保存修改</button><span class="hint">保存失败时内容保留，可重试。</span></div>
+  </section>
+  <section><h3>内容素材</h3>
+    ${field('content','内容草稿',dTa('content',a.content))}
+    ${field('assets','素材引用（每行一个）',dTa('assets',(a.assets||[]).join('\n'),2))}
+    <div class="btn-row"><button class="btn" data-action="copy-content" type="button">复制文案</button><span class="hint">仅复制到剪贴板，不发送任何内容。</span></div>
+  </section>
+  <section><h3>结果与关联</h3>${result||''}${advance}
+    <p class="hint" style="margin-top:10px">关联开发需求</p>${reqArea}
+  </section>
+  <section><h3>操作历史（更正保留记录）</h3><ul class="tl">${hist}</ul><div class="btn-row">${corr}</div></section>`;}
+
+function renderDrawer(){const w=$('#drawerWrap');
+  if(!state.drawerId){w.classList.add('hidden');return;}
+  const a=activity(state.drawerId);
+  if(!a){state.drawerId=null;w.classList.add('hidden');return;}
+  w.classList.remove('hidden');
+  $('#drawer').innerHTML=drawerHtml(a);}
+
+/* ---- 对话框 ---- */
+function openDialog(type,data){state.dialog=type;dialogForm=clone(data);state.dialogErrors={};renderDialog();}
+function closeDialog(){state.dialog=null;dialogForm=null;state.dialogErrors={};$('#dialogWrap').classList.add('hidden');}
+function dlg(title,body,extra=''){return `<h2 id="dlgTitle">${title}</h2>${body}<div class="btn-row">${extra}</div>`;}
+
+function renderDialog(){if(!state.dialog)return;const t=state.dialog,f=dialogForm,e=state.dialogErrors;let html='';
+  if(t==='channel')html=dlg('新建渠道（可编辑空模板）',
+    field('platform','平台（必填）',inp('platform',f.platform),e.platform)+field('link','账号 / 社区链接（必填）',inp('link',f.link),e.link)+
+    field('audience','目标受众（必填）',inp('audience',f.audience),e.audience)+field('language','市场语言',selHtml('language',f.language,['英语','简体中文','双语','其他']))+
+    field('format','内容形式',inp('format',f.format))+field('priority','优先级',selHtml('priority',f.priority,['高','中','低']))+
+    field('reason','选择理由（必填，待验证假设）',ta('reason',f.reason),e.reason)+field('weeklyHours','每周投入（小时）',inp('weeklyHours',f.weeklyHours),e.weeklyHours)+
+    field('dataAccess','获取数据方式',inp('dataAccess',f.dataAccess))+field('capabilities','可用能力',ta('capabilities',f.capabilities)),
+    `<button class="btn primary" data-action="channel-save" type="button">保存渠道</button><button class="btn" data-action="dialog-cancel" type="button">取消</button>`);
+  else if(t==='experiment')html=dlg('新建实验（一个推广假设及验证目标）',
+    field('name','实验名称（必填）',inp('name',f.name),e.name)+field('hypothesis','假设（必填）',ta('hypothesis',f.hypothesis),e.hypothesis)+
+    field('metric','主指标（必填）',inp('metric',f.metric),e.metric)+
+    `<div style="display:flex;gap:8px">${field('observeStart','观察开始',`<input type="date" data-f="observeStart" value="${esc(f.observeStart)}">`,e.observeStart)}${field('observeEnd','观察结束',`<input type="date" data-f="observeEnd" value="${esc(f.observeEnd)}">`,e.observeEnd)}</div>`+
+    field('success','成功标准',inp('success',f.success))+
+    `<div style="display:flex;gap:8px">${field('currency','币种（独立展示，不换算）',selHtml('currency',f.currency,['USD','CNY','EUR']))}${field('budget','预算（0 为零预算，留空为未知）',inp('budget',f.budget),e.budget)}</div>`+
+    field('spent','实际支出（可留空）',inp('spent',f.spent),e.spent)+
+    `<div style="display:flex;gap:8px">${field('estHours','预计工时',inp('estHours',f.estHours))}${field('actHours','实际工时（可留空）',inp('actHours',f.actHours))}</div>`+
+    field('pricingVersion',`绑定定价版本（创建后不随当前定价改变；当前为 ${PRICING.current}）`,selHtml('pricingVersion',f.pricingVersion,PRICING.versions.map(v=>v.id))),
+    `<button class="btn primary" data-action="exp-save" type="button">保存实验</button><button class="btn" data-action="dialog-cancel" type="button">取消</button>`);
+  else if(t==='activity'){const d=mk[state.project];
+    html=dlg('新建行动（一篇内容或一次发布）',
+    field('experimentId','所属实验（必选）',`<select data-f="experimentId"><option value="">请选择</option>${d.experiments.map(x=>`<option value="${esc(x.id)}"${f.experimentId===x.id?' selected':''}>${esc(x.id)} ${esc(x.name)}</option>`).join('')}</select>`,e.experimentId)+
+    field('channelId','渠道（必选）',`<select data-f="channelId"><option value="">请选择</option>${d.channels.map(x=>`<option value="${esc(x.id)}"${f.channelId===x.id?' selected':''}>${esc(x.platform)} · ${esc(x.link)}</option>`).join('')}</select>`,e.channelId)+
+    field('title','标题（必填）',inp('title',f.title),e.title)+
+    `<div style="display:flex;gap:8px">${field('planDate','计划日期（必填）',`<input type="date" data-f="planDate" value="${esc(f.planDate)}">`,e.planDate)}${field('planTime','计划时间',`<input type="time" data-f="planTime" value="${esc(f.planTime)}">`)}${field('tz','时区',`<select data-f="tz">${TZS.map(z=>`<option${f.tz===z?' selected':''}>${z}</option>`).join('')}</select>`)}</div>`+
+    field('owner','负责人',inp('owner',f.owner))+field('content','内容草稿（标记待发布前必填）',`<textarea data-f="content" rows="3">${esc(f.content)}</textarea>`)+
+    field('nextStep','下一步',inp('nextStep',f.nextStep)),
+    `<button class="btn primary" data-action="act-save" type="button">保存行动（草稿）</button><button class="btn" data-action="dialog-cancel" type="button">取消</button>`);}
+  else if(t==='stop'||t==='correct')html=dlg(t==='stop'?`停止行动（当前：${STAGE_LABEL[f.status]}）`:`更正状态：${STAGE_LABEL[f.status]} → ${STAGE_LABEL[f.prevStage]}`,
+    field('reason','原因（必填，将记入操作历史）',`<textarea data-f="reason" rows="2">${esc(f.reason)}</textarea>`,e.reason)+
+    (t==='stop'?'<p>停止后不可推进，可通过「复制为新实验」再尝试；历史保留。</p>':'<p>更正为误操作保留记录：操作历史会追加更正说明。</p>'),
+    `<button class="btn primary" data-action="${t==='stop'?'stop-confirm':'correct-confirm'}" type="button">确认</button><button class="btn" data-action="dialog-cancel" type="button">取消</button>`);
+  else if(t==='req')html=dlg('创建开发需求（人工触发）',
+    field('title','REQ 标题（必填）',inp('title',f.title),e.title)+
+    `<p class="hint">创建后进入 submitted，与本行动双向关联；重复创建不会产生新 REQ，不自动接受或实施。</p>`,
+    `<button class="btn primary" data-action="req-create" type="button">创建（submitted）</button><button class="btn" data-action="dialog-cancel" type="button">取消</button>`);
+  else if(t==='expDetail'){const x=experiment(f.id);if(!x){closeDialog();return;}
+    const acts=mk[state.project].activities.filter(a=>a.experimentId===x.id);
+    html=dlg(`实验 ${esc(x.id)}`,
+    `<p class="kv"><b>名称</b>${esc(x.name)}</p><p class="kv"><b>假设</b>${esc(x.hypothesis)}</p>
+    <p class="kv"><b>主指标</b>${esc(x.metric)}（成功标准：${esc(x.success)}）</p>
+    <p class="kv"><b>观察期</b>${esc(x.observeStart)} → ${esc(x.observeEnd)}</p>
+    <p class="kv"><b>预算</b>${money(x.budget,x.currency,true)} · <b>实际支出</b>${money(x.spent,x.currency)}（按币种独立展示）</p>
+    <p class="kv"><b>工时</b>预计 ${esc(x.estHours)}h / 实际 ${esc(x.actHours||'—')}h</p>
+    <p class="kv"><b>定价版本</b>${esc(x.pricingVersion)}（${esc(priceText(x.pricingVersion))}，创建时绑定；当前定价为 ${esc(PRICING.current)}，修改当前定价不改变历史实验绑定版本）</p>
+    ${x.source?`<p class="kv"><b>复制来源</b>${esc(x.source)}</p>`:''}
+    <p class="kv"><b>最终决策</b>${esc(x.final)}</p>
+    <p class="kv"><b>行动 ${acts.length} 条</b></p><ul class="tl" style="margin-bottom:12px">${acts.map(a=>`<li><span class="at">${esc(a.id)}</span>${esc(a.title)} ${stageBadge(a.status)}</li>`).join('')||'<li>（暂无行动，可新建）</li>'}</ul>`,
+    `<button class="btn" data-action="dialog-cancel" type="button">关闭</button>`);}
+  $('#dlgBody').innerHTML=html;$('#dialogWrap').classList.remove('hidden');
+  const first=$('#dlgBody .field.err input,#dlgBody .field.err textarea,#dlgBody .field.err select');if(first)first.focus();}
+
+/* ---- 渲染 ---- */
+function render(){persist();applyTheme();
+  document.querySelectorAll('.module-nav .view-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));
+  $('#projSel').value=state.project;
+  let html='';
+  if(state.view!=='marketing'){html=`<div class="card"><p class="kv">此演示仅覆盖新增的「营销」模块；当前模块沿用现有看板界面（未在演示中实现）。</p>
+    <button class="btn" data-action="host-tab" data-view="marketing" type="button">返回营销</button></div>`;}
+  else{
+    html+=mktTabsHtml();
+    if(state.refreshing||state.mode==='loading')html+=skeletonHtml();
+    else if(state.mode==='error')html+=`<div class="banner err" role="alert"><p>读取渠道与行动数据失败：experiments/exp-001/experiment.json 解析错误（演示）。</p><button class="btn" data-action="retry-read" type="button">重试</button></div>`;
+    else if(!mk[state.project]||!mk[state.project].initialized||state.mode==='empty')html+=emptyHtml();
+    else html+=boardHtml();}
+  $('#content').innerHTML=html;
+  renderDrawer();}
+
+/* ---- 写入模拟：失败保留草稿，可重试 ---- */
+function write(label,applyFn){if(state.busy)return;
+  state.busy=true;msg('正在'+label+'…');render();
+  setTimeout(()=>{state.busy=false;
+    if(state.mode==='error'){state.writeError=label+'失败：无法写入营销数据文件（演示）。修改已保留，可重试。';msg(label+'失败，内容已保留。');}
+    else{state.writeError='';applyFn();}
+    render();},550);}
+function hist(a,text){a.history.push({at:nowTime().slice(0,5),text});}
+
+/* ---- 校验 ---- */
+function validateChannel(){const e={},f=dialogForm;
+  if(!f.platform)e.platform='请填写平台';
+  if(!f.link)e.link='请填写账号 / 社区链接';
+  if(!f.audience)e.audience='请填写目标受众';
+  if(!f.reason)e.reason='请填写选择理由（待验证假设）';
+  if(!numOk(f.weeklyHours))e.weeklyHours='需为不小于 0 的数字，或留空表示未知';
+  state.dialogErrors=e;return !Object.keys(e).length;}
+function validateExperiment(){const e={},f=dialogForm;
+  if(!f.name)e.name='请填写实验名称';
+  if(!f.hypothesis)e.hypothesis='请填写假设';
+  if(!f.metric)e.metric='请填写主指标';
+  if(!numOk(f.budget))e.budget='预算需为不小于 0 的数字（0 表示零预算，留空表示未知）';
+  if(!numOk(f.spent))e.spent='实际支出需为不小于 0 的数字，或留空';
+  if(f.observeStart&&f.observeEnd&&f.observeEnd<f.observeStart)e.observeEnd='观察结束需不早于开始';
+  state.dialogErrors=e;return !Object.keys(e).length;}
+function validateActivity(){const e={},f=dialogForm;
+  if(!f.experimentId)e.experimentId='请选择所属实验';
+  if(!f.channelId)e.channelId='请选择渠道';
+  if(!f.title)e.title='请填写标题';
+  if(!f.planDate)e.planDate='请填写计划日期';
+  state.dialogErrors=e;return !Object.keys(e).length;}
+
+/* ---- 事件 ---- */
+document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const a=b.dataset.action,d=mk[state.project];
+  switch(a){
+    case 'host-tab':state.view=b.dataset.view;msg('');render();break;
+    case 'clear-filters':state.filters={channel:'',experiment:'',status:''};msg('已清除筛选。');render();break;
+    case 'new-channel':if(!d||!d.initialized)mk[state.project]=mk[state.project]&&mk[state.project].initialized?mk[state.project]:{initialized:true,reqSeq:31,channels:[],experiments:[],activities:[]};
+      if(state.mode==='empty'){state.mode='normal';$('#mode').value='normal';}
+      openDialog('channel',{platform:'',link:'',audience:'',language:'英语',format:'帖子',priority:'中',reason:'',weeklyHours:'',dataAccess:'',capabilities:''});break;
+    case 'new-experiment':if(!d||!d.initialized)mk[state.project]=mk[state.project]&&mk[state.project].initialized?mk[state.project]:{initialized:true,reqSeq:31,channels:[],experiments:[],activities:[]};
+      if(state.mode==='empty'){state.mode='normal';$('#mode').value='normal';}
+      openDialog('experiment',{name:'',hypothesis:'',metric:'',observeStart:today(),observeEnd:'',success:'',currency:'USD',budget:'',spent:'',estHours:'',actHours:'',pricingVersion:PRICING.current});break;
+    case 'new-activity':if(!d||!d.channels.length||!d.experiments.length)break;
+      openDialog('activity',{experimentId:state.filters.experiment||'',channelId:state.filters.channel||'',title:'',planDate:today(),planTime:'09:00',tz:TZS[0],owner:'',content:'',nextStep:''});break;
+    case 'open-act':state.drawerId=b.dataset.id;state.drawerErrors={};msg('');render();break;
+    case 'close-drawer':state.drawerId=null;state.writeError='';render();break;
+    case 'open-exp':{if(state.drawerId){/* 保持抽屉 */}openDialog('expDetail',{id:b.dataset.id});break;}
+    case 'save-act':{const act=activity(state.drawerId);if(!act)break;
+      write('保存行动 '+act.id,()=>{msg('已保存 '+act.id+' · '+nowTime());});break;}
+    case 'copy-content':{const act=activity(state.drawerId);if(!act)break;
+      const txt=act.content||'';
+      const ok=()=>msg('文案已复制到剪贴板（未发送任何内容）· '+nowTime());
+      const fb=()=>{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();try{document.execCommand('copy');ok();}catch(_){msg('复制失败：请手动选择文本复制。');}t.remove();};
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(ok,fb);else fb();render();break;}
+    case 'mark-ready':{const act=activity(state.drawerId);if(!act)break;
+      const errs={};if(!act.content)errs.content='标记待发布前需填写内容草稿';if(!act.planAt)errs.planAt='请填写计划时间';
+      if(Object.keys(errs).length){state.drawerErrors={};msg('验证未通过：状态未改变。'+Object.values(errs).join('；'));render();
+        const el=$('#drawer [data-dfield="content"]');if(errs.content&&el){el.style.borderColor='var(--danger)';el.focus();}break;}
+      write('标记待发布',()=>{act.prevStage=act.status;act.status='ready';hist(act,'标记待发布（未发送内容）');msg('已标记待发布；内容不会被自动发送。');});break;}
+    case 'publish-submit':{const act=activity(state.drawerId);if(!act)break;
+      const errs={};if(!act.publishAt)errs.publishAt='标记已发布必须有发布时间';
+      if(!act.publishLink&&!act.credentialNote){errs.publishLink='发布链接与凭据说明至少填一项';errs.credentialNote='无公开链接时请填写凭据说明';}
+      if(Object.keys(errs).length){state.drawerErrors=errs;msg('验证未通过：状态保持「'+STAGE_LABEL[act.status]+'」。'+Object.values(errs).join('；'));render();break;}
+      write('登记发布结果',()=>{act.prevStage=act.status;act.status='published';state.drawerErrors={};hist(act,'人工登记发布结果，标记已发布'+(act.publishLink?'（链接）':'（凭据说明）'));msg('已人工登记发布结果并标记已发布。');});break;}
+    case 'start-observe':{const act=activity(state.drawerId);if(!act)break;
+      write('开始观察',()=>{act.prevStage=act.status;act.status='observing';hist(act,'开始观察');msg('进入观察期。');});break;}
+    case 'review-submit':{const act=activity(state.drawerId);if(!act)break;
+      const errs={};if(!act.reviewBasis)errs.reviewBasis='复盘需记录结果依据';if(!act.decision)errs.decision='请选择决策';
+      if(Object.keys(errs).length){state.drawerErrors=errs;msg('验证未通过：状态保持「'+STAGE_LABEL[act.status]+'」。'+Object.values(errs).join('；'));render();break;}
+      write('完成复盘',()=>{act.prevStage=act.status;act.status='reviewed';state.drawerErrors={};hist(act,'完成复盘：决策「'+DECISION_LABEL[act.decision]+'」'+(act.decision==='undetermined'?'（数据不足，不等同验证成功）':''));msg('已完成复盘'+(act.decision==='undetermined'?'（数据不足，不等同验证成功）':'')+'。');});break;}
+    case 'stop-open':{const act=activity(state.drawerId);if(!act)break;openDialog('stop',{status:act.status,reason:''});break;}
+    case 'stop-confirm':{const act=activity(state.drawerId);if(!act)break;
+      if(!dialogForm.reason){state.dialogErrors={reason:'请填写停止原因'};renderDialog();break;}
+      const stopReason=dialogForm.reason;closeDialog();
+      write('停止行动',()=>{act.prevStage=act.status;act.status='stopped';act.stopReason=stopReason;hist(act,'停止：'+stopReason);msg('已停止并记录原因；可复制为新实验再尝试。');});break;}
+    case 'correct-open':{const act=activity(state.drawerId);if(!act||!act.prevStage)break;
+      openDialog('correct',{status:act.status,prevStage:act.prevStage,reason:''});break;}
+    case 'correct-confirm':{const act=activity(state.drawerId);if(!act)break;
+      if(!dialogForm.reason){state.dialogErrors={reason:'请填写更正原因'};renderDialog();break;}
+      const from=act.status,to=act.prevStage,reason=dialogForm.reason;closeDialog();
+      write('更正状态',()=>{act.status=to;act.prevStage=null;hist(act,`更正：${STAGE_LABEL[from]} → ${STAGE_LABEL[to]}（原因：${reason}）`);msg('已更正并记录历史。');});break;}
+    case 'copy-exp':{const act=activity(b.dataset.id);if(!act)break;const ex=experiment(act.experimentId);if(!ex)break;
+      write('复制为新实验',()=>{const d2=mk[state.project];
+        const nExp='exp-'+String(nextId(d2.experiments,'exp')).padStart(3,'0');
+        d2.experiments.push({id:nExp,name:ex.name+'（重试）',hypothesis:ex.hypothesis,metric:ex.metric,observeStart:today(),observeEnd:'',success:ex.success,currency:ex.currency,budget:ex.budget,spent:'',estHours:ex.estHours,actHours:'',pricingVersion:PRICING.current,source:ex.id,final:'—（由行动复盘汇总，效果页见 REQ-20260910-021）'});
+        const nAct='act-'+String(nextId(d2.activities,'act')).padStart(3,'0');
+        d2.activities.push({id:nAct,experimentId:nExp,channelId:act.channelId,title:act.title,content:act.content,assets:clone(act.assets||[]),planAt:'',tz:act.tz,owner:act.owner,status:'draft',prevStage:null,publishAt:'',publishLink:'',credentialNote:'',reviewBasis:'',decision:'',stopReason:'',nextStep:'',copiedFrom:act.id+'（'+ex.id+'）',linkedReqs:[],history:[{at:nowTime().slice(0,5),text:`复制为新实验 ${nExp}（来源：${act.id} / ${ex.id}，行动置为草稿）`}]});
+        msg(`已复制为新实验 ${nExp}（新 ID，保留来源 ${ex.id}）；新行动 ${nAct} 为草稿。`);state.drawerId=nAct;});
+      break;}
+    case 'req-open-dlg':{const act=activity(b.dataset.id);if(!act)break;
+      openDialog('req',{title:'为「'+act.title+'」配置落地页与埋点'});break;}
+    case 'req-create':{const act=activity(state.drawerId);if(!act)break;
+      if(!dialogForm.title){state.dialogErrors={title:'请填写 REQ 标题'};renderDialog();break;}
+      const title=dialogForm.title;closeDialog();
+      write('创建开发需求',()=>{if(act.linkedReqs.length){msg('检测到已关联 '+act.linkedReqs[0].id+'，未重复创建。');return;}
+        const d2=mk[state.project];const rid='REQ-20260910-0'+(d2.reqSeq++);
+        act.linkedReqs.push({id:rid,title,status:'submitted'});hist(act,`创建关联 ${rid}（submitted，双向关联）`);
+        msg(`已创建 ${rid}（submitted）并与 ${act.id} 双向关联；不自动接受或实施。`);});break;}
+    case 'req-goto':msg('宿主中将跳转到 '+b.dataset.id+' 详情（本演示不实现跳转，关联可追溯）。');render();break;
+    case 'retry-read':state.mode='normal';$('#mode').value='normal';msg('重试成功（演示）。');render();break;
+    case 'sim-refresh':state.refreshing=true;msg('');render();
+      setTimeout(()=>{state.refreshing=false;const p=PROJECTS[state.project];
+        const d2=mk[state.project];msg(`已恢复：项目 ${p.name}（${p.path}）· 营销 · 渠道与行动。渠道 ${d2.channels.length} / 实验 ${d2.experiments.length} / 行动 ${d2.activities.length}，关联保持（sessionStorage）。`);render();},600);break;
+    case 'reset-data':try{sessionStorage.removeItem(SKEY);}catch(_){}
+      mk={p1:seedP1(),p2:null};state.filters={channel:'',experiment:'',status:''};state.drawerId=null;state.writeError='';state.dialog=null;$('#dialogWrap').classList.add('hidden');msg('已重置演示数据。');render();break;
+    case 'dialog-cancel':closeDialog();render();break;
+    case 'channel-save':if(!validateChannel()){msg('验证未通过：请检查标红字段。');renderDialog();break;}
+      {const f2=clone(dialogForm);closeDialog();
+      write('保存渠道',()=>{const d2=mk[state.project];const id='ch-'+String(nextId(d2.channels,'ch')).padStart(3,'0');
+        d2.channels.push({id,platform:f2.platform,link:f2.link,audience:f2.audience,language:f2.language,format:f2.format,priority:f2.priority,reason:f2.reason,weeklyHours:f2.weeklyHours,dataAccess:f2.dataAccess,capabilities:f2.capabilities,createdAt:today()});
+        msg('已创建渠道 '+id+'（建议为待验证假设）。');});}break;
+    case 'exp-save':if(!validateExperiment()){msg('验证未通过：请检查标红字段。');renderDialog();break;}
+      {const f2=clone(dialogForm);closeDialog();
+      write('保存实验',()=>{const d2=mk[state.project];const id='exp-'+String(nextId(d2.experiments,'exp')).padStart(3,'0');
+        d2.experiments.push({id,name:f2.name,hypothesis:f2.hypothesis,metric:f2.metric,observeStart:f2.observeStart,observeEnd:f2.observeEnd,success:f2.success,currency:f2.currency,budget:f2.budget,spent:f2.spent,estHours:f2.estHours,actHours:f2.actHours,pricingVersion:f2.pricingVersion,source:null,final:'—（由行动复盘汇总，效果页见 REQ-20260910-021）'});
+        msg(`已创建实验 ${id}（绑定定价版本 ${f2.pricingVersion}，${f2.budget==='0'?'零预算':''}）。`);});}break;
+    case 'act-save':if(!validateActivity()){msg('验证未通过：请检查标红字段。');renderDialog();break;}
+      {const f2=clone(dialogForm);closeDialog();
+      write('保存行动',()=>{const d2=mk[state.project];const id='act-'+String(nextId(d2.activities,'act')).padStart(3,'0');
+        d2.activities.push({id,experimentId:f2.experimentId,channelId:f2.channelId,title:f2.title,content:f2.content,assets:[],planAt:(f2.planDate||'')+(f2.planTime?' '+f2.planTime:''),tz:f2.tz,owner:f2.owner,status:'draft',prevStage:null,publishAt:'',publishLink:'',credentialNote:'',reviewBasis:'',decision:'',stopReason:'',nextStep:f2.nextStep,copiedFrom:null,linkedReqs:[],history:[{at:nowTime().slice(0,5),text:'创建行动（草稿）'}]});
+        msg('已创建行动 '+id+'（草稿）。');});}break;
+  }});
+
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset){
+  if(t.dataset.f&&state.dialog&&dialogForm!=null){dialogForm[t.dataset.f]=t.value;return;}
+  if(t.dataset.dfield&&state.drawerId){const act=activity(state.drawerId);if(!act)return;const k=t.dataset.dfield;
+    if(k==='assets')act.assets=t.value.split('\n').filter(x=>x.trim());
+    else if(k==='planAt'||k==='publishAt')act[k]=t.value?t.value.replace('T',' '):'';
+    else act[k]=t.value;
+    return;}}});
+
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
+  const act=t.dataset.actionChange;
+  if(act==='filter-channel'){state.filters.channel=t.value;msg('');render();}
+  else if(act==='filter-experiment'){state.filters.experiment=t.value;msg('');render();}
+  else if(act==='filter-status'){state.filters.status=t.value;msg('');render();}
+  else if(t.dataset.f&&state.dialog&&dialogForm!=null)dialogForm[t.dataset.f]=t.value;
+  else if(t.dataset.dfield&&state.drawerId){const a2=activity(state.drawerId);if(a2&&(t.dataset.dfield==='decision'||t.dataset.dfield==='tz'))a2[t.dataset.dfield]=t.value;}});
+
+$('#projSel').addEventListener('change',e=>{const pid=e.target.value;if(pid===state.project)return;
+  state.project=pid;state.filters={channel:'',experiment:'',status:''};state.drawerId=null;state.writeError='';msg('已切换项目；营销数据按项目隔离。');render();});
+$('#mode').addEventListener('change',e=>{state.mode=e.target.value;state.writeError='';msg('');render();});
+$('#theme').addEventListener('change',e=>{state.theme=e.target.value;render();});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(!$('#dialogWrap').classList.contains('hidden')){closeDialog();render();}
+    else if(!$('#drawerWrap').classList.contains('hidden')){state.drawerId=null;render();}}});
+$('#drawerWrap').addEventListener('click',e=>{if(e.target.id==='drawerWrap'){state.drawerId=null;render();}});
+$('#dialogWrap').addEventListener('click',e=>{if(e.target.id==='dialogWrap'){closeDialog();render();}});
+
+/* ---- 启动：会话恢复 + 首次渲染 ---- */
+restore();
+$('#mode').value=state.mode;$('#theme').value=state.theme;
+render();
+</script>
+</body>
+</html>

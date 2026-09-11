@@ -1,0 +1,53 @@
+{
+  "id": "BUG-20260903-001",
+  "type": "bug",
+  "title": "点击操作按钮后，单状态变化了，导致过滤条件也变化了。",
+  "status": "done",
+  "parent": "REQ-20260901-001",
+  "owner": "zcode-drawer-nav-freeze",
+  "createdAt": "2026-09-02T23:47:41.566Z",
+  "updatedAt": "2026-09-11T05:52:13.786Z",
+  "agentCompletedAt": "2026-09-05T08:57:51.225Z",
+  "lastReport": {
+    "at": "2026-09-05T08:57:51.225Z",
+    "coverage": 80,
+    "framework": "node:assert 静态契约（drawer-nav.test.mjs）+ run-all 全量回归",
+    "summary": "修复：详情页导航范围改为打开抽屉时冻结。根因是 drawerNeighbors 按当前条目实时 status 过滤（四次修订引入），点接受/驳回等操作按钮状态流转后过滤条件跟着漂移进新状态列表。实现：新增 scopeIdsFor 生成打开时刻的同状态序列快照存入 state.drawer.navIds，drawerNeighbors 优先用快照并剔除已删单号、快照缺失回退实时过滤；prev/next 导航 openDrawer(target.id, true) 沿用快照，点卡片/跳转链接仍按新条目重算；当前条目流转后保留快照位次，i/N 不跳变。TDD：D2 重写+新增 B1–B3 先红（4 失败）→ 实现后全绿；run-all 18 个测试文件 0 失败。引入来源：REQ-20260901-001（已核验，归因写入 README 关联节）。B5 浏览器实测留人工复核。"
+  },
+  "history": [
+    {
+      "at": "2026-09-02T23:47:41.566Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-05T08:34:12.584Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-05T08:53:13.254Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-drawer-nav-freeze",
+      "note": "认领（zcode-drawer-nav-freeze）"
+    },
+    {
+      "at": "2026-09-05T08:57:51.225Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0905-4fee",
+      "note": "上报测试报告（覆盖率 80%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.786Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e5d2",
+      "note": "人工确认完成"
+    }
+  ]
+}

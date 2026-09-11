@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260907-006",
+  "type": "requirement",
+  "title": "去掉全部需求的过滤条件",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-007-1",
+  "createdAt": "2026-09-07T13:48:35.548Z",
+  "updatedAt": "2026-09-11T05:52:17.184Z",
+  "agentCompletedAt": "2026-09-07T14:27:39.381Z",
+  "lastReport": {
+    "at": "2026-09-07T14:27:39.381Z",
+    "coverage": 100,
+    "framework": "node 契约/沙箱测试（npm test）",
+    "summary": "移除需求模块第四行状态筛选条：index.html 删 #filterBar；app.js 删 reqFilter/REQ_FILTERS/applyReqFilter/renderFilterBar/事件委托，visibleItems 简化为全量，空态文案只提搜索；style.css 删 .filter-bar/.filter-chip/.filter-count。laneOf/LANE_LABEL 行状态展示与讨论模块筛选保留。新增 req-filter-removed.test.mjs（5 用例，TDD 先红后绿），同步更新 workbench-layout W5、confirm-lane T3/T5、pending-alignment R5、view-tabs-style V3、refresh-default-view 初始 hidden 集；npm test 65 文件全部通过。",
+    "runId": "run-20260907-038"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T13:48:35.548Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T13:48:37.545Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T14:17:12.222Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-007-1",
+      "note": "认领（zcode-batch-007-1）"
+    },
+    {
+      "at": "2026-09-07T14:27:39.382Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-007-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.184Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-c972",
+      "note": "人工确认完成"
+    }
+  ]
+}

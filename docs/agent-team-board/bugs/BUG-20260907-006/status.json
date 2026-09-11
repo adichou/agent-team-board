@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-006",
+  "type": "bug",
+  "title": "状态守卫可被引号拆词绕过：atb st\"\"atus / ac\"\"cepted 形态执行人工专属流转不被拦截",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.736Z",
+  "updatedAt": "2026-09-11T05:52:16.808Z",
+  "agentCompletedAt": "2026-09-07T15:58:39.311Z",
+  "lastReport": {
+    "at": "2026-09-07T15:58:39.311Z",
+    "coverage": 100,
+    "framework": "node:assert 子进程守卫实测 + run-all 全量回归",
+    "summary": "引号拆词绕过修复：bash 模式新增成对引号词内拼接归一 stripPairedQuotes（st\"\"atus→status、ac\"\"cepted→accepted），关键词 token 与 status.json/人工 API 路径子串均改在归一化文本上匹配；改写意图检测保留原始 seg（shellTokens 本就引号感知，避免 's/>/x/' 的 > 被误判重定向，Green 阶段实测 B1 回归并修正）。TDD：Red Q1–Q4 精准失败，Green 后 code-guard 24 命名用例全绿，run-all 67 个测试文件 0 失败；README 原样复现 stdin 喂入实测 exit 2。引入来源：未定位（排查过程见 README 关联节）。",
+    "runId": "run-20260907-044"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.736Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-ec7b"
+    },
+    {
+      "at": "2026-09-07T15:09:45.010Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T15:48:41.781Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T15:58:39.311Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.808Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5d65",
+      "note": "人工确认完成"
+    }
+  ]
+}

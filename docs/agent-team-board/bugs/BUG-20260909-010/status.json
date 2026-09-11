@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-010",
+  "type": "bug",
+  "title": "新建单带上截图后，在详情界面没有显示截图",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-023-3",
+  "createdAt": "2026-09-09T05:34:28.382Z",
+  "updatedAt": "2026-09-11T05:52:20.822Z",
+  "agentCompletedAt": "2026-09-09T08:55:11.434Z",
+  "lastReport": {
+    "at": "2026-09-09T08:55:11.434Z",
+    "coverage": 1,
+    "framework": "node:assert + vm",
+    "summary": "前端创建前预检收敛版本错配静默丢截图：app.js 新增 shotServeSupportsAttachments 只读探测条目附件端点，判定口径对齐 BUG-20260909-005（未知接口 404=服务过旧）；submitNew 带附件先预检，过旧拒绝提交并给 atb serve 自愈指引、保留弹窗与截图，无附件不预检（S5 兼容）。新增 item-shot-ui U8（TDD 先红后绿），全量 npm test 119 文件 0 失败；真实 8888 新进程实测预检 URL 返回 400 业务错误不误拦。归因 REQ-20260909-009（atb list 核验），方案与理由记入 design.md；服务端与既有防护零改动。",
+    "runId": "run-20260909-126"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T05:34:28.382Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T05:34:35.037Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T08:10:07.431Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T08:47:44.192Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-023-3",
+      "note": "认领（zcode-batch-023-3）"
+    },
+    {
+      "at": "2026-09-09T08:55:11.435Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-023-3",
+      "note": "上报测试报告（覆盖率 1%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.822Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-7d3f",
+      "note": "人工确认完成"
+    }
+  ]
+}

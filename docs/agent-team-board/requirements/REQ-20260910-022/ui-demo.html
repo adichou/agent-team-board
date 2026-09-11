@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REQ-20260910-022 project-growth 工作流 · 交互演示</title>
+<style>
+:root{--bg:#10151e;--panel:#171e2b;--card:#1a2230;--border:#394559;--text:#e2e7f0;--mut:#94a3bd;--acc:#8f8dff;--zero:#4fc58f;--err:#ffb5a6;--warn:#ffd27d;--chip:#232d40}
+html.light{--bg:#f2f4f8;--panel:#ffffff;--card:#ffffff;--border:#d7dde8;--text:#20293a;--mut:#5d6b84;--acc:#5a54d8;--zero:#178a56;--err:#c2452f;--warn:#9a6a00;--chip:#eef1f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,"PingFang SC",sans-serif}
+main{max-width:1120px;margin:26px auto;padding:0 18px 50px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:26px 0 10px}h3{font-size:14px;margin:0 0 8px;color:var(--mut)}
+.hint{color:var(--mut);font-size:13px;margin:0 0 14px}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+button,select,input,textarea{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
+button{cursor:pointer}button:disabled{opacity:.45;cursor:default}button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.link{background:none;border:none;color:var(--acc);padding:2px 4px;text-decoration:underline}
+button.demo-ctl{border-style:dashed;color:var(--mut)}
+.panel{border:1px solid var(--border);border-radius:14px;background:var(--panel);padding:16px}
+.topbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);font-size:14px}
+.topbar .proj{border:1px solid var(--border);border-radius:8px;padding:4px 10px;background:var(--card)}
+.topbar .mod{color:var(--mut);cursor:default}
+.topbar .mod.on{color:var(--text);font-weight:600;border-bottom:2px solid var(--acc)}
+.modnav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 0}
+.modnav .tab{border-radius:20px;padding:4px 14px;color:var(--mut);background:none}
+.modnav .tab.on{color:var(--text);border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.modnav .spacer{flex:1}
+.ai-btn{border-color:var(--acc);color:var(--acc)}
+.notice{padding:10px 12px;margin:12px 0;border-radius:8px;background:var(--chip);color:var(--mut)}
+.notice.error{color:var(--err)}.notice.warn{color:var(--warn)}.notice.ok{color:var(--zero)}
+.badge{display:inline-block;font-size:12px;border:1px solid var(--border);border-radius:20px;padding:0 8px;margin-left:6px;color:var(--mut)}
+.badge.zero{color:var(--zero);border-color:var(--zero)}
+.badge.err{color:var(--err);border-color:var(--err)}
+.badge.acc{color:var(--acc);border-color:var(--acc)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.mut{color:var(--mut)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px}
+.card{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:12px}
+.card .name{font-size:13px;color:var(--mut)}
+.card .val{font-size:18px;margin:4px 0 2px}
+.card .meta{font-size:12px;color:var(--mut)}
+.pagehead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.pagehead h3{margin:0;color:var(--text);font-size:15px}
+.pagehead .spacer{flex:1}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--mut);font-weight:600}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 18px;font-size:13px}
+.overlay{position:fixed;inset:0;background:rgba(4,8,16,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;z-index:10}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:820px;width:100%;max-height:84vh;overflow:auto;padding:18px}
+.modal h2{margin-top:0}.modal .row{margin-bottom:10px}.modal label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+.modal .full{width:100%}.modal .err-msg{color:var(--err);font-size:13px;margin:8px 0}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+pre{background:var(--chip);border-radius:8px;padding:10px;overflow:auto;font-size:12px;white-space:pre-wrap;word-break:break-all}
+textarea{width:100%}
+.draft-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:10px 0}
+.dbox{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:10px;font-size:13px}
+.dbox h4{margin:0 0 6px;font-size:13px;color:var(--mut)}
+.dbox ul{margin:0;padding-left:18px}.dbox li{margin-bottom:6px}
+.cand{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:12px;margin-bottom:10px}
+.cand .ttl{font-weight:600}
+.cand .kv{font-size:13px;color:var(--mut);margin-top:4px}
+.cand .ops{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.cand.adopted{border-color:var(--zero)}
+.cand.kept{opacity:.75}
+.foot{margin-top:8px;font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<h1>project-growth 工作流（营销模块 · AI 辅助）</h1>
+<p class="hint">REQ-20260910-022 离线交互演示 · 数据均为样例，仅作用于本页 · 覆盖布局、交互与状态反馈（正常 / 技能缺失 / 空项目 / 输入过期 / 保存失败）</p>
+<div class="controls">
+  <label>演示状态
+    <select id="mode">
+      <option value="normal">正常</option>
+      <option value="noskill">技能缺失（外部 skill 未安装）</option>
+      <option value="empty">空（新项目无营销档案）</option>
+      <option value="stale">输入过期（档案已并发更新）</option>
+      <option value="savefail">保存失败（回执写入失败）</option>
+    </select>
+  </label>
+  <button id="theme">切换浅色</button>
+</div>
+<div class="panel">
+  <div class="topbar">
+    <span class="proj">项目：agent-team-board（演示） ▾</span>
+    <span class="mod">讨论</span><span class="mod">需求</span><span class="mod">任务</span><span class="mod">文件</span><span class="mod on">营销</span><span class="mod">设置</span>
+  </div>
+  <div class="modnav">
+    <button class="tab on" data-tab="overview">概览</button>
+    <button class="tab" data-tab="positioning">定位与定价</button>
+    <button class="tab" data-tab="channels">渠道与行动</button>
+    <button class="tab" data-tab="metrics">效果与复盘</button>
+    <span class="spacer"></span>
+    <button class="ai-btn" data-action="panel-any">✦ AI 辅助</button>
+  </div>
+  <div id="feedback"></div>
+  <div id="tab"></div>
+</div>
+<h2>AI 运行记录（agent-runs）</h2>
+<div class="panel" id="runs"></div>
+<p class="foot">实现说明：真实系统中回执由外部 Agent 会话通过统一 CLI/API 写入（命令为规划示意，实际以开发阶段设计为准）；本页「模拟回执到达」等虚线按钮为演示模拟控件。深浅色与键盘行为沿用宿主（本页 Esc 关闭弹层）。</p>
+</main>
+<div class="overlay" id="overlay" hidden><div class="modal" role="dialog" aria-modal="true" id="modal"></div></div>
+<script>
+'use strict';
+const $=(s,el=document)=>el.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const opt=(arr,cur)=>arr.map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`).join('');
+
+/* ---------- 五类入口与外部技能（候选，coreyhaines31/marketingskills，引入前均为未安装状态以“缺失”场景演示） ---------- */
+const TYPES={
+ positioning:{name:'梳理定位',page:'定位与定价',goal:'基于现有定位档案与项目 README，梳理目标受众、差异点与未决问题，输出可采纳的定位更新候选。'},
+ pricing:{name:'分析定价',page:'定位与定价',goal:'基于档案、定价历史版本与指标快照，给出下一周期候选定价方案、建议理由与验证方法。'},
+ channels:{name:'制定渠道计划',page:'渠道与行动',goal:'基于档案与现有渠道 / 实验，提出新渠道与实验候选，标注为待验证假设并给出验证标准。'},
+ content:{name:'生成内容',page:'渠道与行动',goal:'基于定位档案与实验目标，生成具体行动的内容草稿（人工复制发布，不自动发送）。'},
+ review:{name:'复盘',page:'效果与复盘',goal:'基于指定观察期的指标快照与实验记录生成复盘草稿；数据不足时输出补采建议，不生成虚构结论。'}
+};
+const SKILLS_BY_TYPE={
+ positioning:['product-marketing'],
+ pricing:['pricing','product-marketing'],
+ channels:['marketing-plan','social'],
+ content:['content-strategy','copywriting'],
+ review:['analytics','attribution']
+};
+const INPUTS_BY_TYPE={
+ positioning:[['positioning.md',2],['profile.json',3],['README.md',null]],
+ pricing:[['profile.json',3],['pricing/v1.json',1],['pricing/v2.json',1],['positioning.md',2]],
+ channels:[['profile.json',3],['channels/*.json',1],['experiments/exp-landing.json',3]],
+ content:[['profile.json',3],['experiments/exp-landing.json',3],['activities/act-*.json',1]],
+ review:[['metrics/observations（快照 metrics@r2）',2],['experiments/exp-landing.json',3],['activities/act-*.json',1],['reviews/RV-1.md',1]]
+};
+
+/* ---------- 回执草稿样例（均为演示数据） ---------- */
+const DRAFTS={
+ positioning:{
+  facts:['项目模块已覆盖需求 / 任务 / 文件全流程协作（README.md@当前）','既有访谈 n=2 提到「跨会话状态不清晰」痛点（positioning.md@v2 证据 E3）'],
+  assumptions:['目标受众更偏向 3~10 人小团队负责人而非独立开发者'],
+  toConfirm:['个人开发者细分场景的需求强度'],
+  evidence:['README.md（当前版本）','positioning.md@v2#E3','agent-runs/run-001/draft.md'],
+  missing:['目标市场语言偏好在 profile.json 中未记录','访谈样本 n=2，不足以支撑结论'],
+  candidates:[
+   {id:'c1',kind:'定位',title:'差异点补充：跨会话可追溯的团队协作记录',reason:'现有差异点未覆盖访谈中提到的可追溯需求',verify:'下周期访谈 5 名目标用户确认表述',adoptTo:'positioning.md@v3（差异点小节）'},
+   {id:'c2',kind:'假设',title:'目标受众假设：3~10 人小团队负责人',reason:'访谈样本集中于该画像，但 n=2 样本不足，只能作为假设',verify:'渠道行动收集 20 份问卷后复核',adoptTo:'positioning.md@v3（假设小节，显式标记「假设」）'}
+  ]},
+ pricing:{
+  facts:['定价 v2（订阅 ¥29/月）运行 4 周，付费人数 0（真实零，metrics@r2）','竞品 A 订阅 $9/月；竞品 B 买断 $49（positioning.md@v2 竞品表）'],
+  assumptions:['价格可能不是唯一阻碍：激活→付费漏斗中间数据未采集','目标用户对买断制接受度可能更高（访谈 2/2 提及，样本不足）'],
+  toConfirm:['¥29 是否高于目标用户心理价位'],
+  evidence:['metrics@r2（09-01~09-07 快照）','pricing/v2.json@r1','positioning.md@v2#竞品'],
+  missing:['付费转化漏斗中间数据未采集','竞品 B 功能范围未核实'],
+  candidates:[
+   {id:'c1',kind:'定价',title:'候选定价 v3：订阅 ¥19/月（年付 ¥190）',reason:'低于竞品 A、贴近访谈提到的心理价位区间',verify:'exp-pricing 半流量 A/B，观察付费转化是否 ≥1%',adoptTo:'pricing/v3.json（候选版本，不自动成为当前方案）'},
+   {id:'c2',kind:'定价',title:'候选定价 v3b：买断 ¥99（含 1 年更新）',reason:'访谈偏好一次性付费，但样本不足，仅作候选',verify:'落地页价格页 A/B 两种模式同时展示',adoptTo:'pricing/v3.json（候选版本，不自动成为当前方案）'}
+  ]},
+ channels:{
+  facts:['现有渠道：官网、X，均为「待验证假设」（channels@r1）','exp-landing 观察中，主指标=订阅新增，当前 0（真实零）'],
+  assumptions:['目标用户聚集于开发者社区（V2EX / 即刻）','短视频渠道投入产出比低（无数据支撑，纯假设）'],
+  toConfirm:['目标用户活跃社区的具体版块与规则'],
+  evidence:['channels/*.json@r1','experiments/exp-landing.json@r3','metrics@r2'],
+  missing:['各社区发帖规则与限制未核实','现有渠道未积累足够观察数据'],
+  candidates:[
+   {id:'c1',kind:'渠道',title:'新渠道候选：开发者社区（V2EX / 即刻）',reason:'与受众假设匹配，发帖成本低于视频制作',verify:'2 周内发 3 帖，观察新增订阅是否 ≥3',adoptTo:'channels/ch-dev.json（待验证假设，不自动标记已验证）'},
+   {id:'c2',kind:'实验',title:'新实验：社区首发帖（成功标准：订阅新增 ≥3）',reason:'承接新渠道的验证需求',verify:'观察 09-15~09-28，定价绑定当前版本 v2',adoptTo:'experiments/exp-community.json（草稿状态，人工确认后开始）'}
+  ]},
+ content:{
+  facts:['act-1（落地页文案）已发布，观察中（activities@r1）','产品阶段=验证，主指标=激活人数（profile.json@v3）'],
+  assumptions:['技术叙事比营销话术更能打动目标受众'],
+  toConfirm:['社区帖的合适篇幅与代码示例比例'],
+  evidence:['profile.json@v3','experiments/exp-landing.json@r3','activities/act-1/content.md'],
+  missing:['尚无已验证的高转化文案样本'],
+  candidates:[
+   {id:'c1',kind:'行动',title:'社区帖草稿：《用看板管理多 Agent 协作的 3 周实践》',reason:'差异化叙事直指目标受众痛点，附真实截图',verify:'发布后 2 周观察点击与新增订阅（人工复制发布，不自动发送）',adoptTo:'activities/act-3/content.md（行动草稿，人工复制发布）'}
+  ]},
+ review:{
+  facts:['09-01~09-07：订阅新增 0（真实零）、激活 12（metrics@r2）','exp-landing 主指标目标：订阅新增 ≥5'],
+  assumptions:['激活 12 说明流量可到达，订阅 0 更可能是首屏转化问题而非流量问题'],
+  toConfirm:['访客数据未录入，无法计算订阅转化率'],
+  evidence:['metrics@r2 快照','experiments/exp-landing.json@r3','reviews/RV-1.md'],
+  missing:['访客（分母）未录入，转化率不可计算'],
+  candidates:[
+   {id:'c1',kind:'复盘',title:'复盘 RV-2：exp-landing 首期未达标（0 < 5）',reason:'激活与订阅差距指向首屏转化，但缺乏访客分母，只能作为假设',verify:'结论绑定 metrics@r2；下一周期修改首屏标题后再验证，并补采访客',adoptTo:'experiments/exp-landing/reviews/RV-2.md（依据固定为 metrics@r2）'}
+  ]},
+ reviewNoData:{
+  insufficient:true,
+  facts:['09-08~09-14 观察期尚无任何观察记录（未录入 ≠ 0）'],
+  assumptions:[],
+  toConfirm:['该观察期是否已实际开始收集数据'],
+  evidence:['metrics/observations（该周期无记录）'],
+  missing:['订阅新增 / 激活 / 访客均无数据','无法计算任何转化率或改善幅度'],
+  advice:['建议先补采：订阅新增、激活、访客（分母）三项基础指标','数据录入后再生成复盘，本周期不输出结论'],
+  candidates:[]
+ }
+};
+
+/* ---------- 档案与运行记录 ---------- */
+let archive=null,runs=[],nextRun=3;
+const state={mode:'normal',tab:'overview',message:''};
+function buildArchive(mode){
+ const a={
+  profile:{ver:3,stage:'验证',goal:'验证首次使用价值',metric:'激活人数'},
+  positioning:{ver:2,audience:'3~10 人小团队负责人（假设）',pain:'跨会话状态不清晰',diff:'多 Agent 协作看板 + 状态铁律'},
+  evidence:[['事实','现有用户访谈 n=2 提到跨会话状态不清晰'],['假设','受众为小团队负责人'],['待确认','个人开发者需求强度']],
+  pricing:[{v:'v1',mode:'买断 ¥19',status:'候选'},{v:'v2',mode:'订阅 ¥29/月',status:'当前'}],
+  channels:[{name:'官网',status:'待验证假设'},{name:'X',status:'待验证假设'}],
+  experiments:[{id:'exp-landing',name:'落地页首屏实验',status:'观察中',rev:3}],
+  contents:[],
+  metrics:[['订阅新增','0（真实零）'],['激活','12'],['点赞','87'],['Star 新增','34']],
+  reviews:[{id:'RV-1',period:'08-11~08-24',snap:'metrics@r1',conclusion:'首屏价值表达不足，转化低于预期。'}],
+  init:true
+ };
+ if(mode==='empty'){a.init=false}
+ if(mode==='stale'){a.experiments[0].rev=4;a.experiments[0].note='r4（已被并发更新：补充了预算字段）'}
+ return a;
+}
+function currentVer(ref){
+ if(ref==='profile.json')return archive.profile?archive.profile.ver:undefined;
+ if(ref==='positioning.md')return archive.positioning?archive.positioning.ver:undefined;
+ if(ref==='experiments/exp-landing.json'){const e=archive.experiments&&archive.experiments.find(x=>x.id==='exp-landing');return e?e.rev:undefined}
+ if(ref==='channels/*.json')return archive.channels&&archive.channels.length?1:undefined;
+ return undefined;
+}
+function buildRuns(mode){
+ if(mode==='empty')return[];
+ return[
+  {id:'run-001',type:'positioning',inputs:[{ref:'positioning.md',ver:1},{ref:'profile.json',ver:2},{ref:'README.md',ver:null}],
+   status:'done',session:'外部 Agent 会话 A（演示）',at:'09-09 15:20',
+   summary:'输出 2 条事实、1 条假设；候选 2 项：采纳 1 项（差异点 → positioning.md@v2），保留草稿 1 项。',
+   draftRef:'agent-runs/run-001/draft.md',result:'success',
+   adopted:['差异点补充：跨会话可追溯（写入 positioning.md@v2）'],kept:['受众细分假设（样本不足）'],continueOf:null},
+  {id:'run-002',type:'channels',inputs:INPUTS_BY_TYPE.channels.map(([r,v])=>({ref:r,ver:v})),
+   status:'copied',session:null,at:'09-10 17:10',summary:null,
+   draftRef:null,result:'waiting',adopted:[],kept:[],continueOf:null}
+ ];
+}
+function resetMode(m){
+ state.mode=m;archive=buildArchive(m);runs=buildRuns(m);state.message='已切换演示场景：「'+$('#mode option:checked').text+'」，页面数据已重置为该场景初始状态。';render();
+}
+
+/* ---------- 提示词生成（示意） ---------- */
+function promptHeader(run,type,fallback,emptyProject){
+ const t=TYPES[type];
+ const lines=[
+ '# project-growth 任务提示词（'+t.name+'）',
+ '- 项目：agent-team-board（演示项目路径 /demo/agent-team-board）；只允许访问该项目授权范围内的路径。',
+ '- 执行方式：本提示词由界面复制而来，在可访问项目文件的 Agent 会话中人工执行；界面不自动运行任何模型。',
+ '- 营销资料目录：docs/agent-team-board/marketing/'
+ ];
+ if(emptyProject){
+  lines.push('- 输入：营销档案不存在（docs/agent-team-board/marketing/ 未初始化，演示）。仅可读取项目 README.md，输出必须标注「档案缺失，仅基于 README 与通用方法」。');
+ }else{
+  lines.push('- 输入（请严格按引用版本读取，不得读取其他项目）：');
+  run.inputs.forEach(i=>lines.push('  · '+i.ref+(i.ver!==null&&i.ver!==undefined?' @ r'+i.ver:'（无版本要求）')));
+ }
+ if(run.continueOf){
+  lines.push('- 历史结果（务必先读取后再继续）：agent-runs/'+run.continueOf+'/draft.md 及其采纳记录（见运行记录），不要重复已采纳内容。');
+ }
+ lines.push('- 目标任务：'+t.goal);
+ if(type==='review')lines.push('- 观察期：'+run.obs+'（复盘结论必须引用该期实际指标快照；该期无数据时输出「数据不足」与补采建议，不生成虚构业绩或因果结论）');
+ lines.push(
+  '- 输出要求：区分 事实 / 假设 / 待确认；每条结论附证据引用及版本；列出缺失信息、建议理由与验证方法；候选价格不得写成已生效，候选渠道不得写成已验证。',
+  '- 保存协议：完成后通过统一 CLI 写回草稿（命令为规划示意）：',
+  '    node scripts/atb.mjs marketing agent-run save --task '+run.id+' --draft <草稿文件>',
+  '  未收到写入回执不得宣称已保存；不要直接修改 pricing/、positioning.md、channels/ 等正式档案；候选行动一律先入草稿，由用户显式采纳。'
+ );
+ lines.push(fallback
+  ?'- 技能调用：（兜底模式）外部 skill 未安装，请以通用营销方法人工完成分析，并在输出中注明「未经外部 skill」。'
+  :'- 技能调用：可按需调用外部 skill：'+SKILLS_BY_TYPE[type].join('、')+'（来源 coreyhaines31/marketingskills，固定已核验版本与许可，按需加载）。');
+ return lines.join('\n');
+}
+function continuePrompt(run){
+ const t=TYPES[run.type];
+ return ['# project-growth 继续任务提示词（'+t.name+' · 接续 '+run.id+'）',
+ '- 项目与资料目录同上一任务（读取当前版本，不使用旧版本号）。',
+ '- 历史引用（务必先读取）：',
+ '  · agent-runs/'+run.id+'/draft.md（上次草稿）',
+ '  · 采纳记录：'+(run.adopted.length?run.adopted.join('；'):'无'),
+ '  · 保留草稿：'+(run.kept.length?run.kept.join('；'):'无'),
+ '- 任务：基于上次草稿继续深化或更新，聚焦未采纳项与缺失信息；输出要求与保存协议同上次任务。',
+ '- 保存协议（示意）：node scripts/atb.mjs marketing agent-run save --task <新任务ID> --draft <草稿文件>（引用上次任务 ID 以便追溯）'
+ ].join('\n');
+}
+
+/* ---------- 页面渲染 ---------- */
+function statusBadge(r){
+ switch(r.status){
+  case 'copied':return '<span class="badge warn">等待回执 · 尚未收到结果</span>';
+  case 'receipt':return '<span class="badge acc">草稿待处理</span>';
+  case 'done':return '<span class="badge zero">已处理</span>';
+  case 'failed':return '<span class="badge err">保存失败（草稿保留）</span>';
+  case 'stale':return '<span class="badge err">输入基线过期（未写入）</span>';
+  default:return '';
+ }
+}
+function renderTab(){
+ if(!archive.init){
+  $('#tab').innerHTML='<div class="notice warn">营销档案未初始化（演示：docs/agent-team-board/marketing/ 不存在）。请先在「定位与定价」页初始化档案（见 REQ-20260910-019 演示）。AI 辅助仍可打开，但将提示资料缺失并提供仅基于 README 的兜底提示词。</div>';
+  return;
+ }
+ const aiBtns={
+  overview:'<button class="ai-btn" data-action="panel" data-type="positioning">✦ 梳理定位</button> <button class="ai-btn" data-action="panel" data-type="pricing">✦ 分析定价</button>',
+  positioning:'<button class="ai-btn" data-action="panel" data-type="positioning">✦ 梳理定位</button> <button class="ai-btn" data-action="panel" data-type="pricing">✦ 分析定价</button>',
+  channels:'<button class="ai-btn" data-action="panel" data-type="channels">✦ 制定渠道计划</button> <button class="ai-btn" data-action="panel" data-type="content">✦ 生成内容</button>',
+  metrics:'<button class="primary" data-action="panel" data-type="review">✦ 生成复盘草稿</button>'
+ }[state.tab];
+ let body='';
+ if(state.tab==='overview'){
+  body='<div class="cards">'+
+   [['产品阶段',archive.profile.stage],['阶段目标',archive.profile.goal],['主指标',archive.profile.metric]].map(([n,v])=>`<div class="card"><div class="name">${n}</div><div class="val">${esc(v)}</div></div>`).join('')+'</div>'+
+   '<div class="grid2" style="margin-top:12px"><div>定位摘要：受众 ${esc(archive.positioning.audience)} · 痛点 ${esc(archive.positioning.pain)}（positioning.md@v'+archive.positioning.ver+'）</div>'+
+   '<div>当前定价：'+esc(archive.pricing.find(p=>p.status==='当前')?.mode||'—')+'（'+archive.pricing.filter(p=>p.status!=='当前').length+' 个候选版本未生效）</div>'+
+   '<div>下一步：完成 exp-landing 观察并补采访客数据</div></div>';
+ }else if(state.tab==='positioning'){
+  body='<div class="grid2"><div>受众：'+esc(archive.positioning.audience)+'</div><div>差异点：'+esc(archive.positioning.diff)+'</div><div>痛点：'+esc(archive.positioning.pain)+'</div></div>'+
+   '<h3 style="margin-top:14px">证据</h3><table><tr><th>类型</th><th>内容</th></tr>'+archive.evidence.map(e=>`<tr><td><span class="badge ${e[0]==='事实'?'zero':e[0]==='假设'?'warn':''}">${e[0]}</span></td><td>${esc(e[1])}</td></tr>`).join('')+'</table>'+
+   '<h3 style="margin-top:14px">定价版本</h3><table><tr><th>版本</th><th>方案</th><th>状态</th></tr>'+archive.pricing.map(p=>`<tr><td>${p.v}</td><td>${esc(p.mode)}</td><td>${p.status==='当前'?'<span class="badge zero">当前</span>':'<span class="badge">候选（未生效）</span>'}</td></tr>`).join('')+'</table>';
+ }else if(state.tab==='channels'){
+  body='<div class="cards">'+archive.channels.map(c=>`<div class="card"><div class="name">渠道</div><div class="val">${esc(c.name)}</div><div class="meta"><span class="badge warn">${esc(c.status)}</span></div></div>`).join('')+'</div>'+
+   '<h3 style="margin-top:14px">实验</h3><table><tr><th>ID</th><th>名称</th><th>状态</th><th>版本</th></tr>'+archive.experiments.map(e=>`<tr><td>${e.id}</td><td>${esc(e.name)}</td><td>${esc(e.status)}</td><td>r${e.rev}${e.note?' <span class="badge err">'+esc(e.note)+'</span>':''}</td></tr>`).join('')+'</table>'+
+   (archive.contents.length?'<h3 style="margin-top:14px">行动内容草稿（AI 采纳后）</h3>'+archive.contents.map(c=>`<div class="cand"><div class="ttl">${esc(c.title)}</div><div class="kv">人工复制发布，不自动发送</div><div class="ops"><button data-action="copy-text" data-kind="行动文案" data-title="${esc(c.title)}">复制文案</button></div></div>`).join(''):'');
+ }else{
+  body='<div class="cards">'+archive.metrics.map(([n,v])=>`<div class="card"><div class="name">${n}</div><div class="val">${esc(v)}</div><div class="meta">metrics@r2 · 09-01~09-07</div></div>`).join('')+'</div>'+
+   '<h3 style="margin-top:14px">复盘记录</h3>'+archive.reviews.map(r=>`<div class="cand"><div class="ttl">${r.id} · ${esc(r.period)} <span class="badge acc">依据 ${esc(r.snap)}</span></div><div class="kv">${esc(r.conclusion)}</div></div>`).join('')+
+   '<p class="foot">复盘引用固定快照；数据不足的周期不生成结论。</p>';
+ }
+ $('#tab').innerHTML='<div class="pagehead"><h3>'+({overview:'概览',positioning:'定位与定价',channels:'渠道与行动',metrics:'效果与复盘'}[state.tab])+'</h3><span class="spacer"></span>'+aiBtns+'</div>'+body;
+}
+function renderRuns(){
+ const mode=state.mode;
+ const rows=runs.map(r=>{
+  const t=TYPES[r.type];
+  const inputs=r.inputs.map(i=>i.ref+(i.ver!==null&&i.ver!==undefined?'@r'+i.ver:'')).join(' · ');
+  let ops='';
+  if(r.status==='copied')ops='<button class="demo-ctl" data-action="receipt" data-id="'+r.id+'">模拟回执到达（演示）</button>';
+  if(r.status==='receipt')ops='<button data-action="draft" data-id="'+r.id+'">处理草稿</button> <button class="demo-ctl" data-action="receipt-dup" data-id="'+r.id+'">模拟重复提交回执（演示）</button>';
+  if(r.status==='done')ops='<button data-action="info" data-id="'+r.id+'">运行详情</button> <button class="demo-ctl" data-action="receipt-dup" data-id="'+r.id+'">模拟重复提交回执（演示）</button>';
+  if(r.status==='failed')ops='<button data-action="draft" data-id="'+r.id+'">查看保留的草稿</button> <button data-action="retry-save" data-id="'+r.id+'">重试保存</button>';
+  if(r.status==='stale')ops='<button data-action="rebuild" data-id="'+r.id+'">按当前版本重建任务</button> <button data-action="info" data-id="'+r.id+'">详情</button>';
+  return `<tr><td>${r.id}${r.continueOf?'<br><span class="mut">接续 '+r.continueOf+'</span>':''}</td><td>${t.name}</td><td style="max-width:320px">${esc(inputs)}</td><td>${statusBadge(r)}</td><td>${r.at||'—'}</td><td style="white-space:nowrap">${ops}</td></tr>`;
+ }).join('');
+ $('#runs').innerHTML=mode==='empty'
+  ?'<p class="notice">暂无运行记录（新项目）：从各页右上角 AI 入口复制任务提示词后，这里会登记任务并显示「尚未收到结果」。</p>'
+  :'<table><tr><th>任务 ID</th><th>类型</th><th>输入引用及版本</th><th>状态</th><th>写入时间</th><th>操作</th></tr>'+rows+'</table><p class="foot">每次运行保存：任务 ID、来源会话（可得时）、输入引用及版本、输出摘要、草稿引用、写入时间与执行结果。点「运行详情」查看完整回执要素。</p>';
+}
+function render(){
+ renderTab();renderRuns();
+ const m=state.mode;
+ let fb;
+ if(m==='noskill')fb='<div class="notice warn">project-growth 所需外部 skill 未安装（演示）：当前任务将列出能力缺口，并提供不含外部 skill 调用的手工提示词兜底；系统不会假称已运行外部 skill。</div>';
+ else if(m==='stale')fb='<div class="notice warn">档案已并发更新：experiments/exp-landing.json 已升至 r4。正在等待回执的旧任务（输入基于 r3）将在回执到达时被提示「输入基线过期」，需按当前版本重建后再采纳。</div>';
+ else if(m==='savefail')fb='<div class="notice error">保存失败场景（演示）：回执到达时写入 agent-runs 将失败——提示错误并保留草稿内容，旧成果不受影响，可重试。</div>';
+ else if(m==='empty')fb='<div class="notice warn">空项目场景（演示）：无营销档案，AI 面板将提示「无法读取项目资料」，仅提供基于 README 的兜底提示词。</div>';
+ else fb=state.message?'<div class="notice ok" role="status">'+esc(state.message)+'</div>':'<div class="notice">从各页右上角入口打开任务面板 → 复制提示词（仅复制，不执行）→ 在外部会话执行 → 回执写入后逐项处理草稿。虚线按钮为演示模拟控件。</div>';
+ $('#feedback').innerHTML=fb;
+}
+
+/* ---------- 任务面板 ---------- */
+let panel=null; // {type,runId,fallback,empty,obs}
+function openPanel(type){
+ panel={type:type||'positioning',runId:null,fallback:state.mode==='noskill',empty:state.mode==='empty',obs:'08-11~09-07（有指标快照 metrics@r2）'};
+ renderPanel();
+}
+function renderPanel(){
+ const t=TYPES[panel.type];
+ const skills=SKILLS_BY_TYPE[panel.type];
+ const skillHtml=panel.fallback
+  ?'<div class="notice warn">技能缺失：'+skills.join('、')+' 未安装（coreyhaines31/marketingskills 尚未引入，演示）。能力缺口如上；将复制<strong>手工提示词兜底</strong>（不含外部 skill 调用），输出质量可能受限，且不会假称已运行外部 skill。</div>'
+  :'<div class="grid2"><div>外部 skill（按需加载）：<span class="badge acc">'+skills.join('</span> <span class="badge acc">')+'</span></div><div>版本与许可：已固定核验版本（演示）</div></div>';
+ const inputs=panel.empty
+  ?'<div class="notice error">无法读取项目资料：docs/agent-team-board/marketing/ 不存在（演示）。未读取任何档案输入；兜底提示词仅基于项目 README，输出将标注「档案缺失」。</div>'
+  :'<table><tr><th>资料引用</th><th>任务输入版本</th><th>当前版本</th><th>一致性</th></tr>'+INPUTS_BY_TYPE[panel.type].map(([ref,v])=>{
+    const cur=currentVer(ref);
+    const taskVer=cur??v;
+    return `<tr><td>${esc(ref)}</td><td>${taskVer===null?'（无版本要求）':'r'+taskVer}</td><td>${cur===undefined?'—':'r'+cur}</td><td>${taskVer===null||cur===undefined||taskVer===cur?'<span class="badge zero">一致</span>':'<span class="badge err">档案已更新（以当前版本为准）</span>'}</td></tr>`;
+   }).join('')+'</table>';
+ const obsHtml=panel.type==='review'
+  ?'<div class="row"><label>复盘观察期</label><label style="display:inline-flex;gap:4px;margin-right:14px"><input type="radio" name="obs" value="has" checked> 08-11~09-07（有指标快照 metrics@r2）</label><label style="display:inline-flex;gap:4px"><input type="radio" name="obs" value="none"> 09-08~09-14（无观察记录）</label></div>'
+  :'';
+ const run=panel.runId?runs.find(r=>r.id===panel.runId):null;
+ let promptHtml='';
+ if(run&&run.status==='copied'){
+  promptHtml='<h3>任务提示词（已复制）</h3><pre>'+esc(run.prompt)+'</pre>'+
+   '<div class="notice warn" role="status">提示词已复制到剪贴板（仅复制，不执行）。当前状态：<strong>尚未收到结果</strong>——回执由外部会话写入后，此处与运行记录才会更新；没有回执不宣称已保存。</div>'+
+   '<div class="actions"><button class="demo-ctl" data-action="receipt" data-id="'+run.id+'">模拟外部会话执行完成 · 回执到达（演示）</button></div>';
+ }
+ openModal(`<h2>project-growth 任务 · ${t.name}</h2>
+  <p class="hint">入口页：${t.page}（五类入口可在下方切换）· 目标任务：${t.goal}</p>
+  <div class="row"><label>任务入口</label><select id="panel-type">${Object.keys(TYPES).map(k=>`<option value="${k}" ${k===panel.type?'selected':''}>${TYPES[k].name}</option>`).join('')}</select></div>
+  ${obsHtml}${skillHtml}
+  <h3>将使用的项目资料（按引用版本读取，不读取其他项目）</h3>${inputs}
+  ${promptHtml}
+  <div class="actions"><button data-action="close">关闭</button><button class="primary" data-action="copy-prompt">${panel.fallback||panel.empty?'复制兜底任务提示词':'复制任务提示词'}</button></div>`);
+}
+function copyPrompt(){
+ const type=panel.type;
+ const run={id:'run-'+String(nextRun++).padStart(3,'0'),type,
+  inputs:panel.empty?[{ref:'README.md',ver:null}]:INPUTS_BY_TYPE[type].map(([r,v])=>({ref:r,ver:currentVer(r)??v})),
+  status:'copied',session:null,at:'刚刚',summary:null,draftRef:null,result:'waiting',adopted:[],kept:[],
+  continueOf:panel.runId||null,obs:$('input[name=obs]:checked')?.value==='none'?'09-08~09-14（无观察记录）':'08-11~09-07（有指标快照 metrics@r2）'};
+ run.prompt=promptHeader(run,type,panel.fallback,panel.empty);
+ runs.unshift(run);panel.runId=run.id;panel.type=type;
+ copyText(run.prompt,'任务提示词');
+ state.message='已复制任务提示词并登记 '+run.id+'（等待回执 · 尚未收到结果）。提示词仅复制到剪贴板，界面不自动执行。';
+ renderPanel();render();
+}
+async function copyText(text,label){
+ try{await navigator.clipboard.writeText(text);state.message=label+' 已复制到剪贴板（仅复制，不执行）。';}
+ catch(e){state.message='剪贴板在当前环境不可用（演示）：'+label+' 已生成于面板中，可全选后手动复制。';}
+}
+
+/* ---------- 回执 ---------- */
+function findRun(id){return runs.find(r=>r.id===id)}
+function loadDraft(run){
+ const d=run.type==='review'&&run.obs&&run.obs.indexOf('无观察记录')>=0?DRAFTS.reviewNoData:DRAFTS[run.type];
+ run.draft=JSON.parse(JSON.stringify(d));
+ run.draftWarn=state.mode==='empty'?'输入资料缺失：以下输出仅基于 README 与通用方法（兜底，演示）。':null;
+}
+function simulateReceipt(id){
+ const run=findRun(id);if(!run)return;
+ const stale=(run.inputs||[]).filter(i=>{const c=currentVer(i.ref);return c!==undefined&&i.ver!==null&&i.ver!==undefined&&c>i.ver});
+ if(stale.length){
+  run.status='stale';run.at='刚刚';run.result='rejected:stale';
+  run.summary='回执被拒绝：输入基线过期（'+stale.map(s=>s.ref+' 任务输入 r'+s.ver+' < 当前 r'+currentVer(s.ref)).join('；')+'）。未写入任何草稿。';
+  state.message='输入基线过期：任务创建后档案已变化，回执未写入。请按当前版本重建任务并重新执行（旧草稿不落地，不会覆盖他人更新）。';
+  closeModal();render();return;
+ }
+ if(state.mode==='savefail'){
+  loadDraft(run);run.status='failed';run.at='刚刚';run.result='error:write-failed';
+  state.message='保存失败：写入 agent-runs/'+run.id+' 失败（演示）。草稿内容已保留在面板中未丢失，旧成果未受影响；可重试保存。';
+  closeModal();openDraft(run.id);render();return;
+ }
+ loadDraft(run);
+ run.status='receipt';run.at='刚刚';run.session='外部 Agent 会话（演示）';run.result='success';
+ run.draftRef='agent-runs/'+run.id+'/draft.md';
+ run.summary=run.draft.insufficient?'数据不足：输出补采建议，未生成结论。':'输出 '+run.draft.facts.length+' 条事实、'+run.draft.assumptions.length+' 条假设；候选 '+run.draft.candidates.length+' 项待逐项处理。';
+ state.message='回执已写入 '+run.id+'：草稿待处理——请逐项编辑 / 采纳 / 保留草稿；未采纳项保留在草稿中。';
+ openDraft(run.id);render();
+}
+function simulateDupReceipt(id){
+ const run=findRun(id);if(!run)return;
+ if(run.status!=='receipt'&&run.status!=='done'){state.message='尚未收到首次回执，无「重复提交」可言（演示）。';render();return}
+ state.message='重复回执：任务 ID 相同（'+run.id+'），幂等跳过，未重复保存、草稿引用不变。';render();
+}
+function retrySave(id){
+ const run=findRun(id);if(!run||run.status!=='failed')return;
+ run.status='receipt';run.result='success';run.draftRef='agent-runs/'+run.id+'/draft.md';
+ state.message='重试保存成功：草稿已写入 '+run.id+'（此前失败的草稿内容与本次一致，未丢失）。';
+ openDraft(run.id);render();
+}
+function rebuildRun(id){
+ const old=findRun(id);if(!old)return;
+ const run={id:'run-'+String(nextRun++).padStart(3,'0'),type:old.type,
+  inputs:INPUTS_BY_TYPE[old.type].map(([r,v])=>({ref:r,ver:currentVer(r)??v})),
+  status:'copied',session:null,at:'刚刚',summary:null,draftRef:null,result:'waiting',adopted:[],kept:[],continueOf:null,
+  obs:old.obs};
+ run.prompt=promptHeader(run,old.type,panel?panel.fallback&&state.mode==='noskill':false,false);
+ runs.unshift(run);old.status='stale';
+ state.message='已按当前版本重建任务 '+run.id+'（输入引用已更新），请复制新提示词在外部会话重新执行；旧回执未写入。';
+ closeModal();render();
+}
+
+/* ---------- 草稿处理 ---------- */
+function openDraft(id){
+ const run=findRun(id);if(!run||!run.draft)return;
+ const d=run.draft;
+ const sec=(title,arr)=>`<div class="dbox"><h4>${title}</h4><ul>${(arr||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="mut">—</li>'}</ul></div>`;
+ const candHtml=d.insufficient
+  ?'<div class="notice warn">数据不足：该观察期无观察记录（未录入 ≠ 0）。本草稿仅输出补采建议，不生成业绩结论或因果判断；补采后再生成复盘。</div><div class="dbox"><h4>补采建议</h4><ul>'+d.advice.map(a=>`<li>${esc(a)}</li>`).join('')+'</ul></div>'
+  :d.candidates.map(c=>{
+   const adopted=run.adopted.includes(c.id),kept=run.kept.includes(c.id);
+   const cls=adopted?'adopted':kept?'kept':'';
+   return `<div class="cand ${cls}"><div class="ttl"><span class="badge acc">${esc(c.kind)}</span> ${esc(c.title)} ${adopted?'<span class="badge zero">已采纳</span>':kept?'<span class="badge">保留草稿</span>':''}</div>
+    <div class="kv">建议理由：${esc(c.reason)}</div><div class="kv">验证方法：${esc(c.verify)}</div><div class="kv">显式采纳后写入：${esc(c.adoptTo)}</div>
+    <div class="ops">${(!adopted&&!kept)?`<button data-action="cand-edit" data-id="${run.id}" data-cid="${c.id}">编辑</button> <button class="primary" data-action="cand-adopt" data-id="${run.id}" data-cid="${c.id}">采纳</button> <button data-action="cand-keep" data-id="${run.id}" data-cid="${c.id}">保留草稿</button>`:''}</div></div>`;
+  }).join('');
+ openModal(`<h2>返回草稿 · ${run.id}（${TYPES[run.type].name}${run.obs?' · '+esc(run.obs):''}）</h2>
+  <div class="grid2"><div>来源会话：${esc(run.session||'—')}</div><div>回执时间：${esc(run.at)}</div><div>草稿引用：${esc(run.draftRef||'（未写入）')}</div><div>输入引用：${run.inputs.map(i=>esc(i.ref)+(i.ver!=null?'@r'+i.ver:'')).join(' · ')}</div></div>
+  ${run.status==='failed'?'<div class="notice error">保存失败：草稿内容已保留在本面板（未写入 agent-runs），旧成果不受影响。关闭后可在运行记录中「重试保存」。</div>':''}
+  ${run.draftWarn?'<div class="notice warn">'+esc(run.draftWarn)+'</div>':''}
+  <div class="draft-cols">${sec('事实',d.facts)}${sec('假设',d.assumptions)}${sec('待确认',d.toConfirm)}</div>
+  <h3>证据引用</h3><div class="dbox"><ul>${d.evidence.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></div>
+  <h3 style="margin-top:14px">候选行动（逐项处理：编辑 → 采纳 / 保留草稿）</h3>${candHtml}
+  <h3 style="margin-top:14px">缺失信息</h3><div class="dbox"><ul>${d.missing.map(m=>`<li>${esc(m)}</li>`).join('')}</ul></div>
+  <div class="actions"><button class="demo-ctl" data-action="receipt-dup" data-id="${run.id}">模拟重复提交回执（演示）</button><span style="flex:1"></span><button data-action="close">关闭</button><button data-action="continue-prompt" data-id="${run.id}">复制继续任务提示词</button></div>`);
+}
+function settle(run){
+ const d=run.draft;
+ if(d.candidates.every(c=>run.adopted.includes(c.id)||run.kept.includes(c.id))){
+  run.status='done';run.result='success';
+  run.summary='候选 '+(d.candidates.length)+' 项：采纳 '+run.adopted.length+' 项，保留草稿 '+run.kept.length+' 项。';
+ }
+}
+function adoptCand(id,cid){
+ const run=findRun(id);if(!run)return;
+ const c=run.draft.candidates.find(x=>x.id===cid);if(!c)return;
+ if(run.draft.insufficient){state.message='数据不足的草稿没有候选行动可采纳（演示）。';render();return}
+ /* 显式采纳 → 写入正式档案；候选不自动生效 */
+ let msg='';
+ if(c.kind==='定价'){
+  const nv='v'+(archive.pricing.length+1);
+  archive.pricing.push({v:nv,mode:c.title.replace(/^候选定价 [^：]+：/,''),status:'候选'});
+  msg='已写入候选版本 '+nv+'（pricing/'+nv+'.json）。当前方案未改变——候选价格不自动生效，需在「定位与定价」页显式设为当前。';
+ }else if(c.kind==='定位'){
+  archive.positioning.ver++;archive.evidence.push(['假设',c.title]);
+  msg='定位档案已更新（positioning.md@v'+archive.positioning.ver+'），采纳内容标记为「假设」待验证。';
+ }else if(c.kind==='渠道'){
+  archive.channels.push({name:c.title.replace(/^新渠道候选：/,''),status:'待验证假设'});
+  msg='渠道已写入 channels/（状态=待验证假设）：候选渠道不自动变为已验证，需按验证方法执行实验。';
+ }else if(c.kind==='实验'){
+  archive.experiments.push({id:'exp-community',name:'社区首发帖',status:'草稿',rev:1});
+  msg='实验已写入 experiments/exp-community.json（草稿状态）：开始观察前仍需人工确认。';
+ }else if(c.kind==='行动'){
+  archive.contents.push({title:c.title});
+  msg='行动草稿已写入 activities/：内容仅生成草稿，人工复制发布，不自动发送。';
+ }else if(c.kind==='复盘'){
+  archive.reviews.unshift({id:'RV-2',period:run.obs||'08-11~09-07',snap:'metrics@r2',conclusion:c.title+'（'+c.reason+'）'});
+  msg='复盘已写入并绑定快照 metrics@r2：后续数据修订不改变本复盘依据。';
+ }
+ run.adopted.push(cid);settle(run);
+ state.message='已采纳 1 项：'+msg+(run.status==='done'?' 本任务全部候选处理完毕。':'');
+ openDraft(run.id);render();
+}
+function keepCand(id,cid){
+ const run=findRun(id);if(!run)return;
+ const c=run.draft.candidates.find(x=>x.id===cid);if(!c)return;
+ run.kept.push(cid);settle(run);
+ state.message='已保留草稿（未写入正式档案）：候选保留在 agent-runs/'+run.id+'，可随时重新处理。';
+ openDraft(run.id);render();
+}
+function editCand(id,cid){
+ const run=findRun(id);if(!run)return;
+ const c=run.draft.candidates.find(x=>x.id===cid);if(!c)return;
+ openModal(`<h2>编辑候选（${esc(c.kind)}）</h2>
+  <div class="row"><label>标题 / 内容</label><textarea id="ce-title" rows="3" class="full">${esc(c.title)}</textarea></div>
+  <div class="row"><label>验证方法</label><textarea id="ce-verify" rows="2" class="full">${esc(c.verify)}</textarea></div>
+  <div class="err-msg" id="ce-err"></div>
+  <div class="actions"><button data-action="close">取消</button><button class="primary" data-action="cand-edit-save" data-id="${run.id}" data-cid="${cid}">保存编辑</button></div>`);
+}
+function saveCandEdit(id,cid){
+ const run=findRun(id);const c=run&&run.draft.candidates.find(x=>x.id===cid);if(!c)return;
+ const t=$('#ce-title').value.trim(),v=$('#ce-verify').value.trim();
+ if(!t){$('#ce-err').textContent='标题 / 内容不能为空。';return}
+ c.title=t;c.verify=v||c.verify;c.edited=true;
+ state.message='候选已编辑（保存回草稿，尚未采纳）：编辑结果保留在 '+run.id+' 草稿中。';
+ openDraft(run.id);render();
+}
+function continueTask(id){
+ const run=findRun(id);if(!run)return;
+ const txt=continuePrompt(run);
+ const type=panel?panel.type:run.type;const keepType=run.type;
+ openModal(`<h2>继续任务提示词（接续 ${run.id}）</h2>
+  <p class="hint">接续提示词包含历史草稿与采纳记录引用，可粘贴到新的外部会话继续任务（跨会话接续）。</p>
+  <pre>${esc(txt)}</pre>
+  <div class="actions"><button data-action="close">关闭</button><button class="primary" data-action="continue-copy" data-id="${run.id}">复制并登记新任务</button></div>`);
+}
+function continueCopy(id){
+ const old=findRun(id);if(!old)return;
+ const run={id:'run-'+String(nextRun++).padStart(3,'0'),type:old.type,
+  inputs:INPUTS_BY_TYPE[old.type].map(([r,v])=>({ref:r,ver:currentVer(r)??v})),
+  status:'copied',session:null,at:'刚刚',summary:null,draftRef:null,result:'waiting',adopted:[],kept:[],continueOf:old.id,obs:old.obs};
+ run.prompt=continuePrompt(old);
+ runs.unshift(run);
+ copyText(run.prompt,'继续任务提示词');
+ state.message='已复制继续任务提示词并登记 '+run.id+'（接续 '+old.id+'，含历史引用）；尚未收到结果。';
+ closeModal();render();
+}
+
+/* ---------- 运行详情 ---------- */
+function openRunInfo(id){
+ const run=findRun(id);if(!run)return;
+ const kv=(k,v)=>`<div><span class="mut">${k}：</span>${v}</div>`;
+ openModal(`<h2>运行详情 · ${run.id}（${TYPES[run.type].name}）</h2>
+  <div class="grid2">
+  ${kv('任务 ID',esc(run.id))}${kv('来源会话',esc(run.session||'—（可得时记录）'))}
+  ${kv('输入引用及版本',run.inputs.map(i=>esc(i.ref)+(i.ver!=null?'@r'+i.ver:'')).join(' · '))}
+  ${kv('输出摘要',esc(run.summary||'—（尚未收到回执）'))}
+  ${kv('草稿引用',esc(run.draftRef||'—'))}${kv('写入时间',esc(run.at||'—'))}
+  ${kv('执行结果',esc(run.result||'—'))}
+  ${kv('接续自',run.continueOf?esc(run.continueOf):'—')}
+  </div>
+  ${run.adopted.length||run.kept.length?'<h3 style="margin-top:12px">采纳记录</h3><div class="dbox"><ul>'+run.adopted.map(a=>`<li><span class="badge zero">已采纳</span> ${esc(a)}</li>`).join('')+run.kept.map(a=>`<li><span class="badge">保留草稿</span> ${esc(a)}</li>`).join('')+'</ul></div>':''}
+  ${run.prompt?'<h3 style="margin-top:12px">任务提示词（留档）</h3><pre>'+esc(run.prompt)+'</pre>':''}
+  <div class="actions"><button data-action="close">关闭</button></div>`);
+}
+
+/* ---------- modal 基础 ---------- */
+function openModal(html){$('#modal').innerHTML=html;$('#overlay').hidden=false}
+function closeModal(){$('#overlay').hidden=true;panel=null}
+$('#overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#overlay').hidden)closeModal()});
+
+/* ---------- 事件 ---------- */
+document.addEventListener('click',e=>{
+ const el=e.target.closest('[data-action]');if(!el)return;
+ const a=el.dataset.action,id=el.dataset.id,cid=el.dataset.cid;
+ if(a==='theme'){const l=document.documentElement.classList.toggle('light');el.textContent=l?'切换深色':'切换浅色'}
+ else if(a==='close')closeModal();
+ else if(a==='panel')openPanel(el.dataset.type);
+ else if(a==='panel-any')openPanel(null);
+ else if(a==='copy-prompt')copyPrompt();
+ else if(a==='receipt')simulateReceipt(id);
+ else if(a==='receipt-dup')simulateDupReceipt(id);
+ else if(a==='retry-save')retrySave(id);
+ else if(a==='rebuild')rebuildRun(id);
+ else if(a==='draft')openDraft(id);
+ else if(a==='info')openRunInfo(id);
+ else if(a==='cand-adopt')adoptCand(id,cid);
+ else if(a==='cand-keep')keepCand(id,cid);
+ else if(a==='cand-edit')editCand(id,cid);
+ else if(a==='cand-edit-save')saveCandEdit(id,cid);
+ else if(a==='continue-prompt')continueTask(id);
+ else if(a==='continue-copy')continueCopy(id);
+ else if(a==='copy-text'){copyText(el.dataset.title+'（演示文案样例）','行动文案');render()}
+});
+document.addEventListener('change',e=>{
+ if(e.target.id==='mode')resetMode(e.target.value);
+ if(e.target.id==='panel-type'&&panel){panel.type=e.target.value;panel.runId=null;panel.fallback=state.mode==='noskill';panel.empty=state.mode==='empty';renderPanel()}
+ if(e.target.name==='obs'&&panel){/* 观察期在选择时即时读取，无需处理 */}
+});
+document.addEventListener('click',e=>{ // 页签切换（无 data-action）
+ const t=e.target.closest('[data-tab]');if(!t)return;
+ state.tab=t.dataset.tab;state.message='';
+ document.querySelectorAll('.modnav .tab').forEach(b=>b.classList.toggle('on',b===t));
+ render();
+});
+archive=buildArchive(state.mode);runs=buildRuns(state.mode);render();
+</script>
+</body>
+</html>

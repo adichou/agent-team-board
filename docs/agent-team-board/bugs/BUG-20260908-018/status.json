@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-018",
+  "type": "bug",
+  "title": "执行记录为什么没有显示完所有的单",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-01",
+  "createdAt": "2026-09-08T14:06:15.323Z",
+  "updatedAt": "2026-09-11T05:52:19.460Z",
+  "agentCompletedAt": "2026-09-08T16:13:00.319Z",
+  "lastReport": {
+    "at": "2026-09-08T16:13:00.319Z",
+    "coverage": 3,
+    "framework": "node:test(静态契约+HTTP集成)",
+    "summary": "完善面板执行记录静默截断修复：refineSummary()/api/refine/current 新增 recordsTotal(首屏仍5条)；前端 refineRecordsHtml 渲染「加载更多(x/N)/共 N 条」、loadRefineRecords 走既有 /api/refine/records 每页10条增量补齐；refreshRefine 按 recordsLoaded 保持已加载深度不回退。新增用例 refine-store R18/refine-serve R11c/refine-ui R12-11；全量95文件0失败；存量 RFB-20260908-009(18条)验证通过、RFB-20260908-008(5条)不回归。归因 REQ-20260907-003。",
+    "runId": "run-20260909-097"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T14:06:15.323Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T14:07:45.148Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T15:33:28.120Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T16:07:59.198Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-01",
+      "note": "认领（zcode-batch-018-01）"
+    },
+    {
+      "at": "2026-09-08T16:13:00.320Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-01",
+      "note": "上报测试报告（覆盖率 3%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.460Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6ead",
+      "note": "人工确认完成"
+    }
+  ]
+}

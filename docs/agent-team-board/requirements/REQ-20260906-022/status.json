@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-022",
+  "type": "requirement",
+  "title": "批次结束后在看板提供创建下一批入口",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-next-batch-entry",
+  "createdAt": "2026-09-06T14:23:27.176Z",
+  "updatedAt": "2026-09-11T05:52:15.939Z",
+  "agentCompletedAt": "2026-09-06T14:42:11.304Z",
+  "lastReport": {
+    "at": "2026-09-06T14:42:11.304Z",
+    "coverage": 100,
+    "framework": "静态契约测试（node:assert，scripts/tests/next-batch-entry.test.mjs）+ 浏览器 DOM 验证",
+    "summary": "纯前端实现：① renderZcodeBatchPanel 运行视图新增 batchDone（status==='finished' 且 remaining===0）分支，渲染完成通知（复用 /api/batch/current 的 notice）与「创建下一批」按钮（#batchNext，primary），未结束批次不显示；② #batchNext 复用 createBatchAndCopy()：同一 /api/batch/create、携带当前勾选集合 ids、创建后复制提示词并刷新切到新批次；上限缺省与创建面板一致（勾选 N→N，未勾选→20）；③ createBatchAndCopy 按 res.created 区分提示，幂等返回未结束旧批时如实提示「未新建批次」，消除误导。TDD：N1–N5 先红后绿；全量回归 42 文件仅 detail-close-btn T2 存量失败（改动前已存在，另有在册 Bug 011/012/013，误登记的 BUG-20260906-016 已标注重复请人工忽略）。浏览器实测：本机已结束批次 batch-20260906-001 抽屉正确显示通知与按钮。服务端零改动（finished 后可新建已由 batch-core 既有用例覆盖）。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T14:23:27.176Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-bbfd"
+    },
+    {
+      "at": "2026-09-06T14:30:29.308Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T14:36:58.782Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-next-batch-entry",
+      "note": "认领（zcode-next-batch-entry）"
+    },
+    {
+      "at": "2026-09-06T14:42:11.305Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-b6f5",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.939Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-75cf",
+      "note": "人工确认完成"
+    }
+  ]
+}

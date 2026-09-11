@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260908-023 演示 — 已终止/已结束的开发批次可被暂停操作复活</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #1f2328; --muted: #6b7280; --line: #e4e7ec;
+    --warn-bg: #fff7e6; --warn-ink: #9a6700; --warn-line: #f0d47a;
+    --info-bg: #eaf3ff; --info-ink: #0b5cad; --info-line: #b6d4f5;
+    --ok-bg: #e9f7ee; --ok-ink: #1a7f37; --ok-line: #a9dcb9;
+    --err-bg: #fdecec; --err-ink: #c0392b; --err-line: #f2b8b5;
+    --btn: #ffffff; --btn-ink: #1f2328; --btn-line: #c9ced6;
+    --btn-warn-bg: #ffb02e; --btn-warn-ink: #3d2b00;
+    --btn-danger-bg: #ffffff; --btn-danger-ink: #c0392b; --btn-danger-line: #f2b8b5;
+    --btn-primary-bg: #2563eb; --btn-primary-ink: #ffffff;
+    --chip-running-bg: #dcf5e3; --chip-running-ink: #1a7f37;
+    --chip-paused-bg: #fdeeda; --chip-paused-ink: #9a6700;
+    --chip-aborted-bg: #fbdddd; --chip-aborted-ink: #c0392b;
+    --chip-finished-bg: #e2e8f0; --chip-finished-ink: #475569;
+    --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10141a; --card: #1a2029; --ink: #e6e9ee; --muted: #9aa4b2; --line: #2c3440;
+      --warn-bg: #3a2f14; --warn-ink: #ffd88a; --warn-line: #6b5a22;
+      --info-bg: #14283d; --info-ink: #9cc8f5; --info-line: #274b6e;
+      --ok-bg: #14321f; --ok-ink: #8fd6a4; --ok-line: #2a5c3b;
+      --err-bg: #3d1a17; --err-ink: #f2a49b; --err-line: #6e2d27;
+      --btn: #232b36; --btn-ink: #e6e9ee; --btn-line: #3a4452;
+      --btn-warn-bg: #b47416; --btn-warn-ink: #1c1200;
+      --btn-danger-bg: #232b36; --btn-danger-ink: #f2a49b; --btn-danger-line: #6e2d27;
+      --btn-primary-bg: #2f6fed; --btn-primary-ink: #ffffff;
+      --chip-running-bg: #14321f; --chip-running-ink: #8fd6a4;
+      --chip-paused-bg: #3a2f14; --chip-paused-ink: #ffd88a;
+      --chip-aborted-bg: #3d1a17; --chip-aborted-ink: #f2a49b;
+      --chip-finished-bg: #262e3a; --chip-finished-ink: #9aa4b2;
+      --code-bg: #0d1117;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--ink);
+         font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--card);
+             border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: var(--btn); color: var(--btn-ink); padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--btn-primary-bg); color: var(--btn-primary-ink); }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .toolbar .grow { flex: 1; }
+  button.btn { border: 1px solid var(--btn-line); background: var(--btn); color: var(--btn-ink);
+               border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn.warn { background: var(--btn-warn-bg); color: var(--btn-warn-ink); border-color: transparent; }
+  button.btn.danger { color: var(--btn-danger-ink); border-color: var(--btn-danger-line); background: var(--btn-danger-bg); }
+  button.btn.primary { background: var(--btn-primary-bg); color: var(--btn-primary-ink); border-color: transparent; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent;
+          border-radius: 50%; vertical-align: -2px; margin-right: 5px; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .panel h2 { font-size: 15px; margin: 0 0 10px; }
+  .stline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .chip { border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+  .chip.running { background: var(--chip-running-bg); color: var(--chip-running-ink); }
+  .chip.paused { background: var(--chip-paused-bg); color: var(--chip-paused-ink); }
+  .chip.aborted { background: var(--chip-aborted-bg); color: var(--chip-aborted-ink); }
+  .chip.finished { background: var(--chip-finished-bg); color: var(--chip-finished-ink); }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .notice { border-radius: 8px; padding: 7px 10px; margin: 6px 0; font-size: 13px; border: 1px solid; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+  .notice.info { background: var(--info-bg); color: var(--info-ink); border-color: var(--info-line); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--ok-line); }
+  .notice.err { background: var(--err-bg); color: var(--err-ink); border-color: var(--err-line); }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 14px; margin: 10px 0; }
+  .meta label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  .records { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 8px 0; max-height: 168px; overflow: auto; }
+  .records .rec { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .records .rec:last-child { border-bottom: none; }
+  .r-reported { color: var(--ok-ink); } .r-skipped, .r-interrupted { color: var(--muted); }
+  .r-inflight { color: var(--info-ink); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+  pre.json { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+             font-size: 12px; overflow: auto; margin: 6px 0; font-family: ui-monospace, Menlo, monospace; }
+  .empty { text-align: center; padding: 26px 0; color: var(--muted); }
+  .empty .btn { margin-top: 8px; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 30; max-width: 78vw; }
+  .toast { border-radius: 8px; padding: 8px 12px; font-size: 13px; border: 1px solid; box-shadow: 0 4px 14px rgba(0,0,0,.16);
+           background: var(--card); color: var(--ink); border-color: var(--line); }
+  .toast.err { background: var(--err-bg); color: var(--err-ink); border-color: var(--err-line); }
+  .toast.ok { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--ok-line); }
+  .confirm { position: fixed; inset: 0; background: rgba(0,0,0,.38); display: flex; align-items: center; justify-content: center; z-index: 40; }
+  .confirm .box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; max-width: 420px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260908-023 — 已终止/已结束的开发批次可被「暂停后续」复活</h1>
+  <p class="sub">模拟看板「任务 → 批量开发」面板。切换模式对比 Bug 现状与修复后期望；事实依据：<code>scripts/lib/batch.mjs</code> pauseBatch / abortBatch、<code>scripts/server.mjs</code> /api/batch/pause、<code>scripts/web/app.js</code> renderImplPanel。</p>
+
+  <div class="toolbar">
+    <span class="small muted">模式：</span>
+    <div class="seg" role="group" aria-label="演示模式">
+      <button type="button" id="modeBug" class="on">Bug 现状（可复现）</button>
+      <button type="button" id="modeFixed">修复后期望</button>
+    </div>
+    <label class="switch"><input type="checkbox" id="simFail"> 模拟请求失败（网络错误反馈）</label>
+    <span class="grow"></span>
+    <button type="button" class="btn" id="btnRefresh" title="模拟面板轮询刷新"><span id="refreshSpin" class="spin hidden"></span>轮询刷新</button>
+    <button type="button" class="btn danger" id="btnReset" title="清空演示数据，回到空态（尚无批次）">重置演示</button>
+  </div>
+
+  <div class="panel" id="batchPanel">
+    <h2>任务 · 批量开发 <span class="muted small">（演示面板）</span></h2>
+    <div id="panelBody"></div>
+  </div>
+
+  <div class="panel">
+    <h2>批次数据检视（等价于 status.json 字段）</h2>
+    <pre class="json" id="jsonView"></pre>
+    <div class="legend" id="queueNote"></div>
+  </div>
+
+  <p class="legend">说明：本页为纯前端模拟（内存态、定时器推进执行），不访问任何后端；「Bug 现状」模式还原 pauseBatch 无终态判断时的状态污染，「修复后期望」模式按 BUG-20260908-015 同口径（终态拒绝 + 入口透传 + 终态隐藏按钮）演示。深浅色跟随系统设置。</p>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<div id="confirmHost"></div>
+
+<script>
+(function () {
+  'use strict';
+  var MODE = { bug: 'bug', fixed: 'fixed' };
+  var st = { mode: MODE.bug, simFail: false, batch: null, records: [], seq: 0, timer: null, pending: null };
+
+  var $ = function (id) { return document.getElementById(id); };
+  function toast(msg, kind) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(function () { t.remove(); }, 3600);
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  }); }
+  function nextId() { st.seq += 1; return 'run-20260908-' + String(st.seq).padStart(3, '0'); }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // ---- 数据口径（对齐 scripts/lib/batch.mjs 字段） ----
+  function createBatch() {
+    st.records = []; st.seq = 0;
+    st.batch = {
+      batchId: 'batch-20260908-001', status: 'running',
+      abortRequested: false, aborted: false, pauseRequested: false, currentRunId: null,
+      total: 5, done: 0, items: ['REQ-20260908-002', 'REQ-20260908-005', 'REQ-20260908-008', 'REQ-20260908-011', 'REQ-20260908-014'],
+      current: 1 // 当前执行 items 下标（1 = 第二项，首项已上报）
+    };
+    st.records.push({ runId: nextId(), item: st.batch.items[0], result: 'reported', at: '09-08 14:02', summary: '开发完成并上报' });
+    st.batch.done = 1;
+    st.batch.currentRunId = nextId();
+    st.records.push({ runId: st.batch.currentRunId, item: st.batch.items[1], result: 'in-flight', at: '09-08 14:05' });
+    render(); scheduleTick();
+  }
+  function terminalReason(b) { // 修复后期望：对齐 refineBatchTerminalReason 口径
+    if (!b) return null;
+    if (b.abortRequested || b.aborted) return '任务已人工终止，不能暂停/恢复';
+    if (b.status === 'finished') return '任务已结束，不能暂停/恢复';
+    return null;
+  }
+  function batchDone(b) { return b.status === 'finished' && remaining(b) === 0; }
+  function remaining(b) {
+    var handled = new Set(st.records.map(function (r) { return r.item; }));
+    return b.items.filter(function (x) { return !handled.has(x); }).length;
+  }
+
+  // ---- 请求层（模拟 HTTP / CLI 调用，含加载态与失败反馈） ----
+  function request(kind, arg) {
+    st.pending = kind;
+    render();
+    return sleep(500).then(function () {
+      st.pending = null;
+      if (st.simFail) { toast('请求失败：模拟网络错误（500）', 'err'); render(); return; }
+      if (kind === 'pause') doPause(arg);
+      if (kind === 'abort') doAbort();
+      render();
+    });
+  }
+
+  // pauseBatch 演示：bug 模式无终态判断；fixed 模式先做终态拒绝（入口透传明确错误）
+  function doPause(paused) {
+    var b = st.batch;
+    if (!b) { toast('尚无批次：请先创建批次', 'err'); return; }
+    if (st.mode === MODE.fixed) {
+      var reason = terminalReason(b);
+      if (reason) { toast('batch pause 被拒绝：' + reason, 'err'); return; }
+    }
+    // —— 以下为现状 pauseBatch 逻辑（scripts/lib/batch.mjs 949–960 行）——
+    b.pauseRequested = Boolean(paused);
+    var active = !!b.currentRunId && !terminalishRun();
+    if (paused && !active) b.status = 'paused';
+    else if (!paused && b.status === 'paused') b.status = 'running';
+    if (!paused && b.status === 'running') toast('已恢复后续领取，worker 可继续领取下一项', 'ok');
+    else toast('已请求暂停后续领取（在途执行不受影响）', 'ok');
+  }
+  function terminalishRun() { // 在途演示里不区分终态字段，运行中即 active
+    var r = st.records.find(function (x) { return x.runId === st.batch.currentRunId; });
+    return !r || r.result !== 'in-flight';
+  }
+  function doAbort() { // abortBatch（batch.mjs 991–1023 行）
+    var b = st.batch;
+    if (!b) return;
+    if (b.abortRequested) { toast('任务已终止（幂等返回）'); return; }
+    for (var i = 0; i < st.records.length; i++) {
+      if (st.records[i].result === 'in-flight') {
+        st.records[i].result = 'interrupted';
+        st.records[i].summary = '人工终止任务';
+      }
+    }
+    var handled = new Set(st.records.map(function (r) { return r.item; }));
+    b.items.forEach(function (item) {
+      if (!handled.has(item)) {
+        st.records.push({ runId: nextId(), item: item, result: 'skipped', at: '09-08 14:12', summary: '任务终止，剩余项出局' });
+      }
+    });
+    b.abortRequested = true; b.aborted = true; b.currentRunId = null; b.status = 'finished';
+    toast('任务已终止：停止派发后续项，剩余项已出局', 'ok');
+  }
+
+  // ---- 执行推进（演示「运行中」与正常收尾） ----
+  function scheduleTick() {
+    if (st.timer) clearInterval(st.timer);
+    st.timer = setInterval(tick, 2200);
+  }
+  function tick() {
+    var b = st.batch;
+    if (!b || st.pending) return;
+    if (b.status !== 'running' || b.pauseRequested || b.abortRequested) return;
+    var cur = st.records.find(function (x) { return x.runId === b.currentRunId; });
+    if (cur) { cur.result = 'reported'; cur.summary = '开发完成并上报'; b.done += 1; }
+    b.currentRunId = null;
+    var handled = new Set(st.records.map(function (r) { return r.item; }));
+    var next = b.items.find(function (x) { return !handled.has(x); });
+    if (next) {
+      b.currentRunId = nextId();
+      st.records.push({ runId: b.currentRunId, item: next, result: 'in-flight', at: '09-08 14:1' + st.records.length });
+    } else {
+      b.status = 'finished'; // 正常收尾（remaining=0 → finished，无 aborted 标记）
+      toast('本批范围已处理完毕', 'ok');
+    }
+    render();
+  }
+
+  // ---- 渲染 ----
+  function chipOf(b) {
+    if (b.aborted) return { cls: 'aborted', text: '已终止' };
+    return { cls: b.status, text: { running: '运行中', paused: '已暂停', finished: '已结束' }[b.status] || b.status };
+  }
+  function render() {
+    var host = $('panelBody');
+    if (!st.batch) { // 空态
+      host.innerHTML =
+        '<div class="empty">尚无批次：条目接受后即可创建开发批次。<br>' +
+        '<button type="button" class="btn primary" id="btnCreate">创建批次（5 项候选）</button></div>';
+      $('btnCreate').addEventListener('click', function () {
+        toast('已创建批次 batch-20260908-001（待启动 → 运行中）', 'ok');
+        createBatch();
+      });
+    } else {
+      var b = st.batch, chip = chipOf(b), done = batchDone(b);
+      var notices = '';
+      if (b.aborted) notices += '<div class="notice warn">任务已人工终止：在途子代理请在对应子代理会话人工停止。</div>';
+      if (b.pauseRequested) notices += '<div class="notice info">已请求暂停后续领取；在途执行不受影响。</div>';
+      if (done && !b.aborted) notices += '<div class="notice ok">本批范围已处理完毕。</div>';
+      if (st.pending === 'refresh') notices = '<div class="notice info"><span class="spin"></span>正在拉取 /api/batch/current …</div>' + notices;
+
+      var recRows = st.records.slice().reverse().map(function (r) {
+        return '<div class="rec"><span class="cid">' + esc(r.item) + '</span>' +
+          '<span class="r-' + r.result + '">' + esc(r.result) + '</span>' +
+          '<span class="muted small">' + esc(r.summary || '') + ' · ' + esc(r.at) + '</span></div>';
+      }).join('');
+
+      // 按钮渲染口径：现状——暂停按钮不区分终态（Bug 根因）；修复后——终态隐藏，与终止按钮 batchDone 隐藏同口径
+      var showPause = st.mode === MODE.fixed ? !terminalReason(b) : true;
+      var pauseBtn = st.pending === 'pause'
+        ? '<button type="button" class="btn ' + (b.pauseRequested ? 'primary' : 'warn') + '" disabled><span class="spin"></span>请求中…</button>'
+        : '<button type="button" class="btn ' + (b.pauseRequested ? 'primary' : 'warn') + '" id="btnPause" title="pauseBatch：只阻止领取下一项，不停止在途执行">' + (b.pauseRequested ? '恢复后续领取' : '暂停后续') + '</button>';
+      var abortBtn = st.pending === 'abort'
+        ? '<button type="button" class="btn danger" disabled><span class="spin"></span>请求中…</button>'
+        : (done ? '' : '<button type="button" class="btn danger" id="btnAbort" title="停止派发后续项；剩余项出局；在途子代理需在对应会话人工停止">终止任务</button>');
+
+      host.innerHTML =
+        '<div class="stline"><span class="chip ' + chip.cls + '">' + esc(chip.text) + '</span>' +
+        '<span class="cid">' + esc(b.batchId) + '</span>' +
+        '<span class="muted small">执行 Agent zcode（子代理模式） · 创建 09-08 14:00 · ' +
+        (st.mode === MODE.fixed ? '修复后期望' : 'Bug 现状') + '</span></div>' + notices +
+        '<div class="meta">' +
+        '<div><label>当前条目</label><span class="cid">' + (b.currentRunId ? esc(b.items[Math.min(b.current, b.items.length - 1)]) : (done ? '—' : '等待领取下一项')) + '</span></div>' +
+        '<div><label>计数</label><span>' + b.done + ' 上报 / 0 失败 / 出局 ' + st.records.filter(function (r) { return r.result === 'skipped' || r.result === 'interrupted'; }).length + ' / 待处理 ' + remaining(b) + '（共 ' + b.total + '）</span></div>' +
+        '<div><label>开发人员</label><span>未指定</span></div>' +
+        '<div><label>最后活动</label><span>09-08 14:' + String(5 + st.records.length).padStart(2, '0') + '</span></div>' +
+        '</div>' +
+        '<div class="records">' + (recRows || '<div class="muted small">（暂无批次记录）</div>') + '</div>' +
+        '<div class="actions">' + (showPause ? pauseBtn : '') + abortBtn +
+        '<button type="button" class="btn danger" id="btnDelete" title="该批次当前无在途执行；删除仅移除批次账本">删除本批次</button></div>' +
+        '<p class="muted small">「暂停后续」只阻止领取下一项；立即停止正在运行的工具请到 Zcode 原生任务界面操作。</p>';
+
+      var bp = $('btnPause');
+      if (bp) bp.addEventListener('click', function () { request('pause', !b.pauseRequested); });
+      var ba = $('btnAbort');
+      if (ba) ba.addEventListener('click', confirmAbort);
+      $('btnDelete').addEventListener('click', function () {
+        if (terminalishRun() === false) { toast('该批次有在途执行，删除被拒绝（400）', 'err'); return; }
+        st.batch = null; st.records = [];
+        toast('已删除批次：仅移除批次账本，条目与运行记录不受影响', 'ok');
+        render();
+      });
+    }
+    renderJson();
+  }
+  function confirmAbort() { // 二次确认弹层
+    var host = $('confirmHost');
+    host.innerHTML =
+      '<div class="confirm" role="dialog" aria-modal="true"><div class="box">' +
+      '<strong>确认终止任务？</strong><p class="muted small">停止派发后续项；剩余项出局（skipped）；在途子代理需在对应会话人工停止。此操作不可撤销。</p>' +
+      '<div class="actions"><button type="button" class="btn danger" id="cfYes">确认终止</button>' +
+      '<button type="button" class="btn" id="cfNo">取消</button></div></div></div>';
+    $('cfYes').addEventListener('click', function () { host.innerHTML = ''; request('abort'); });
+    $('cfNo').addEventListener('click', function () { host.innerHTML = ''; });
+  }
+  function renderJson() {
+    var b = st.batch;
+    var view = b
+      ? { batchId: b.batchId, status: b.status, abortRequested: b.abortRequested, aborted: b.aborted,
+          pauseRequested: b.pauseRequested, currentRunId: b.currentRunId,
+          inUnfinishedQueue: b.status !== 'finished' }
+      : { batch: null, note: '尚无批次：/api/batch/current 返回创建表单数据（启动区可见）' };
+    $('jsonView').textContent = JSON.stringify(view, null, 2);
+    var q = $('queueNote');
+    if (b) {
+      var revived = b.status !== 'finished';
+      q.innerHTML = revived
+        ? '⚠ unfinishedBatches（status !== \'finished\'）已纳入该批次 → queueHeadBatch 队首；/api/batch/current 缺省解析队首，' +
+          (b.aborted ? '已终止批次被当作“当前任务”展示，创建新批的启动区被占用。' : '面板持续展示该未结束批次。')
+        : '✓ 批次 status=finished：不在 unfinishedBatches 队列；面板走 latestBatch 兜底（已结束批次展示 / 创建下一批入口）。';
+    } else {
+      q.textContent = '空态：无未结束批次，启动区（创建批次）可见。';
+    }
+  }
+
+  // ---- 工具栏 ----
+  $('modeBug').addEventListener('click', function () {
+    st.mode = MODE.bug; $('modeBug').classList.add('on'); $('modeFixed').classList.remove('on');
+    toast('切换到 Bug 现状：已终止批次仍渲染「暂停后续」，pauseBatch 无终态判断'); render();
+  });
+  $('modeFixed').addEventListener('click', function () {
+    st.mode = MODE.fixed; $('modeFixed').classList.add('on'); $('modeBug').classList.remove('on');
+    toast('切换到修复后期望：终态批次隐藏「暂停后续」，入口透传明确错误'); render();
+  });
+  $('simFail').addEventListener('change', function () {
+    st.simFail = this.checked;
+    toast(this.checked ? '已开启模拟请求失败：下一次操作将返回网络错误' : '已关闭模拟请求失败');
+  });
+  $('btnRefresh').addEventListener('click', function () { // 轮询刷新的加载态反馈
+    if (st.pending) return;
+    st.pending = 'refresh'; render();
+    setTimeout(function () { st.pending = null; render(); }, 700);
+  });
+  $('btnReset').addEventListener('click', function () {
+    if (st.timer) clearInterval(st.timer);
+    st.batch = null; st.records = []; st.pending = null; st.seq = 0;
+    toast('演示已重置：回到空态（尚无批次）'); render();
+  });
+
+  // 初始：直接进入运行中的批次，便于演示
+  createBatch();
+  toast('已创建演示批次（运行中）：可先「终止任务」再点「暂停后续」对比两种模式');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-010",
+  "type": "bug",
+  "title": "Codex 静态预检误报可运行而当前项目首次执行即被拒绝",
+  "status": "done",
+  "parent": "REQ-20260906-003",
+  "owner": "codex-worker-claim-fix",
+  "createdAt": "2026-09-06T06:40:04.266Z",
+  "updatedAt": "2026-09-11T05:52:15.472Z",
+  "agentCompletedAt": "2026-09-06T10:12:06.684Z",
+  "lastReport": {
+    "at": "2026-09-06T10:12:06.684Z",
+    "coverage": null,
+    "framework": "node:assert + HTTP/假 CLI 集成回归 + 本机 CLI 只读参数验证",
+    "summary": "已修复预检误报和启动诊断隐藏：实际核验可执行权限/版本/新建及续跑参数/Git约束/目录访问；非Git兼容提供默认关闭的显式项目设置，新建/续跑/模型验证统一传参且保留本机沙箱与审批。项目和参数失败保留真实stderr并暂停执行器。修正resume不支持-C问题。适配器12组、API7组、调度19组、未认领3组全过；全库37文件中36通过，存量BUG-20260906-011失败，未测覆盖率。真实CLI0.153.4帮助参数通过，未调用模型。服务已重启生效并恢复选中范围；本项目非Git选项尚未开启，REQ-20260906-006仍accepted。引入来源REQ-20260906-003。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T06:40:04.266Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-2c09"
+    },
+    {
+      "at": "2026-09-06T08:26:56.766Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T09:59:35.010Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "codex-worker-claim-fix",
+      "note": "认领（codex-worker-claim-fix）"
+    },
+    {
+      "at": "2026-09-06T10:12:06.684Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "codex-worker-claim-fix",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.472Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5ef8",
+      "note": "人工确认完成"
+    }
+  ]
+}

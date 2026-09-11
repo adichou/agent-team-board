@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-024",
+  "type": "bug",
+  "title": "已计划界面中的单子不需要再显示已计划标签了",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T15:49:54.963Z",
+  "updatedAt": "2026-09-11T05:52:19.884Z",
+  "agentCompletedAt": "2026-09-08T18:06:01.096Z",
+  "lastReport": {
+    "at": "2026-09-08T18:06:01.096Z",
+    "coverage": 100,
+    "framework": "node:assert vm 契约测试（planned-chip-dedup 4/4）+ 全量 run-all 100 文件回归",
+    "summary": "reqRowEl 对 lane=planned 分支收敛：已计划档内卡片不再渲染与档位重复的「已计划」chip；行悬停 LANE_HINT 与详情抽屉状态字段保留状态语义，其余五档 chip 不变。新增 scripts/tests/planned-chip-dedup.test.mjs（T1 跑红复现→修复跑绿，T2-T4 回归护栏）；README 验收指定的 planned-state/impl-entry-ui/accepted-batch-entry/card-flag-dedup 四套及全量 run-all 100 个测试文件全部通过。引入来源归因 REQ-20260908-010（经 atb list 核验），已写入 design.md 引入来源节与 README 头部行。",
+    "runId": "run-20260909-106"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T15:49:54.963Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T16:17:15.314Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T16:32:49.646Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T18:02:12.321Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T18:06:01.096Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.884Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e02a",
+      "note": "人工确认完成"
+    }
+  ]
+}

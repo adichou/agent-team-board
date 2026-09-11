@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-019",
+  "type": "bug",
+  "title": "全选和全不选的图标要使用更标准的图标",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260910-032-06",
+  "createdAt": "2026-09-10T15:16:41.107Z",
+  "updatedAt": "2026-09-11T05:52:23.545Z",
+  "agentCompletedAt": "2026-09-10T17:46:20.422Z",
+  "lastReport": {
+    "at": "2026-09-10T17:46:20.422Z",
+    "coverage": 5,
+    "framework": "node:assert/strict 静态契约 + vm 行为",
+    "summary": "全选/全不选图标标准化：U+2611/U+2610 投票框字形改为自绘内联 SVG（带勾方框/空方框，13×13、等线宽 1.6、stroke=currentColor 随主题与 hover 变色、aria-hidden；语义仍由按钮 aria-label/title 承载），彻底摆脱系统字体回退漂移；.req-caption .btn.icon-act 盒口径 26×24/13px 保持并追加 inline-flex 居中承载 SVG，BUG-20260910-017 的 icon-check 降字号修补规则随字形移除（视觉重量改由 SVG 固定 13×13 承载）；app.js 仅注释同步、逻辑零改动。新增 bug-select-icon-svg-20260910-019 共 5 用例先红后绿；同步修正 caption-toolbar-icons-20260910-026 T1、bug-caption-select-icon-size-20260910-017 T1/T2、selection-lane-scope S1 四处字形断言为 SVG 口径（红 8 处→全绿）；四份相关测试 26 用例 0 失败；全量 182 测试文件仅 body-limit 偶发 ECONNRESET（不涉及本单文件，单独重跑 3/3 通过）。归因引入来源 REQ-20260910-026（atb list 核验存在）；自研论证与开源评估见 design.md；跨环境渲染形态与视觉观感待人工验收",
+    "runId": "run-20260911-184"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T15:16:41.107Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T15:16:41.107Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T15:22:48.814Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-231804-98a3）"
+    },
+    {
+      "at": "2026-09-10T17:24:53.081Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-06",
+      "note": "认领（zcode-batch-20260910-032-06）"
+    },
+    {
+      "at": "2026-09-10T17:46:20.422Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-06",
+      "note": "上报测试报告（覆盖率 5%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.545Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-b32b",
+      "note": "人工确认完成"
+    }
+  ]
+}

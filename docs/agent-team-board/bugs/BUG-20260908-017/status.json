@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-017",
+  "type": "bug",
+  "title": "Bug 单的说明完善如果设计 UI 部分也要提供 UI Demo",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-18",
+  "createdAt": "2026-09-08T13:08:18.657Z",
+  "updatedAt": "2026-09-11T05:52:19.412Z",
+  "agentCompletedAt": "2026-09-08T16:07:19.082Z",
+  "lastReport": {
+    "at": "2026-09-08T16:07:19.082Z",
+    "coverage": 100,
+    "framework": "node:test（node:assert/strict 自聚合用例，refine-store.test.mjs S13/S4/R1/P1 + npm test 95 文件）",
+    "summary": "涉及 UI 的 Bug 完善口径与需求对齐：analyzeItemDocs 抽共用 uiDemoReasons（bug 以现象+期望行为节探测），界面展示节+ui-demo.html 演示三查同需求侧文案；两处 refine 提示词、atb CLI 用法与 next 提示、web 面板描述、SKILL.md 批量完善节同步；新增 S13 全阶梯用例、改写 S4/R1 夹具、P1 增断言；npm test 95 文件全绿，端到端冒烟通过；引入来源 REQ-20260908-021 已归因写入 design.md 与 README 头部",
+    "runId": "run-20260908-096"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T13:08:18.657Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T14:07:45.141Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T15:33:28.113Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T15:59:56.270Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-18",
+      "note": "认领（zcode-batch-018-18）"
+    },
+    {
+      "at": "2026-09-08T16:07:19.082Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-18",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.412Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e08b",
+      "note": "人工确认完成"
+    }
+  ]
+}

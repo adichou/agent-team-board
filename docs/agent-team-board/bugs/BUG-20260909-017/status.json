@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-017",
+  "type": "bug",
+  "title": "批量完善的提示词中依然含有子代理模型配置的相关内容表述，应和批量开发一样保持一致。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-027-4",
+  "createdAt": "2026-09-09T12:57:40.259Z",
+  "updatedAt": "2026-09-11T05:52:21.293Z",
+  "agentCompletedAt": "2026-09-09T15:51:45.919Z",
+  "lastReport": {
+    "at": "2026-09-09T15:51:45.919Z",
+    "coverage": 100,
+    "framework": "node:assert 契约测试（run-all.mjs）",
+    "summary": "归因 REQ-20260908-020（005/011 转向后残留）。生成层统一：buildRefinePrompt/generatePrompt 移除 manual 固定行分支，任何模型入参一律注入 FOLLOW_SESSION_PROMPT_LINE，旧行不再可生成；展示/回显归一：task-settings 新增 normalizePromptModelLine，refineBatchPublicView、atb/server refine create 回显接入，存量 14 个完善批次账本不回写（历史原样，design.md 已声明处置口径）；新建批次口径正确；refine next/done/check 不回归。新增 bug-model-line-20260909-017.test.mjs 先红后绿，model-follow-session T5/T6 manual 断言随新契约翻转，全量 126 测试文件 0 失败",
+    "runId": "run-20260909-135"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T12:57:40.259Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T12:57:49.655Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T13:08:55.700Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260909-210436-67b6）"
+    },
+    {
+      "at": "2026-09-09T15:41:31.399Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-027-4",
+      "note": "认领（zcode-batch-027-4）"
+    },
+    {
+      "at": "2026-09-09T15:51:45.920Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-027-4",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.293Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-d327",
+      "note": "人工确认完成"
+    }
+  ]
+}

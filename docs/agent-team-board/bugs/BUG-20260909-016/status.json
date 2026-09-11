@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-016",
+  "type": "bug",
+  "title": "设置界面描述精简",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-026-1",
+  "createdAt": "2026-09-09T12:08:19.691Z",
+  "updatedAt": "2026-09-11T05:52:21.102Z",
+  "agentCompletedAt": "2026-09-09T12:24:56.911Z",
+  "lastReport": {
+    "at": "2026-09-09T12:24:56.911Z",
+    "coverage": 96,
+    "framework": "node:assert+vm 契约测试（settings-copy-simplify-20260909-016.test.mjs）",
+    "summary": "设置「批量任务」分区文案精简（仅改文案不改行为）：分区说明 119→39 字、开关说明 93→27 字、title 与可见说明统一为同一短句，合计 212→66 字，语义四要点保留；「可在任意一种 Agent 会话粘贴执行」口径移出设置分区（批量开发/完善页签启动说明仍承载）。新建 6 例契约测试先红后绿；同步更新 task-settings-simplify-20260909-001 T8 与 refine-auto-plan A9 断言；npm test 全量 123 文件 0 失败。引入来源归因 REQ-20260909-011+REQ-20260909-010（atb list 核验），已写入 design.md 与 README 头部。",
+    "runId": "run-20260909-132"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T12:08:19.691Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T12:08:23.258Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T12:15:33.486Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260909-200858-5c91）"
+    },
+    {
+      "at": "2026-09-09T12:17:09.516Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-026-1",
+      "note": "认领（zcode-batch-026-1）"
+    },
+    {
+      "at": "2026-09-09T12:24:56.911Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-026-1",
+      "note": "上报测试报告（覆盖率 96%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.102Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-8d26",
+      "note": "人工确认完成"
+    }
+  ]
+}

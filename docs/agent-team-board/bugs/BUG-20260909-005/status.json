@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-005",
+  "type": "bug",
+  "title": "打开需求说明中的 ui-demo.html，浏览器报错",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-1",
+  "createdAt": "2026-09-09T00:20:37.197Z",
+  "updatedAt": "2026-09-11T05:52:20.305Z",
+  "agentCompletedAt": "2026-09-09T02:21:38.492Z",
+  "lastReport": {
+    "at": "2026-09-09T02:21:38.492Z",
+    "coverage": 92,
+    "framework": "node:assert/strict + 真实 HTTP 集成 + vm 沙箱（scripts/tests/item-demo-link.test.mjs）",
+    "summary": "修复演示链接版本错配裸 JSON。【引入来源：BUG-20260908-021（引入条目演示端点与前端 linkupDocDemo 链接接管，已 atb show 核验；版本错配类型归纳自 BUG-20260907-017）】1) app.js 新增 guardDemoLinkDemoClick→guardDemoLinkClick 点击预检：同步开 about:blank 占位保用户手势→预检 fetch；命中「未知接口」JSON（服务过旧）关占位标签并 toast 给 atb serve 自愈指引；正常则编程式 noopener（tab.opener=null）后真实导航（保留服务端 CSP 沙箱）；网络异常兜底导航；中键/修饰键/弹窗被拦交还原生行为。2) server.mjs API 最终兜底按形态分流：GET+Accept 含 text/html（浏览器直接导航）回人读过旧指引页 sendApiMissHtmlPage，fetch 形态「未知接口」JSON 契约不变。3) Electron 壳过旧检测本 Bug 不扩展（豁免理由见 design.md）。TDD：item-demo-link 新增 D8/U5 并升级 U4（先红后绿），全量 110 个测试文件 0 失败（含 serve-stale/dispatch-api 回归）。旧进程直接证据已取得：本机 8888 服务 pid76113 startedAt=01:20:02Z 早于磁盘 server.mjs/app.js mtime（01:49/01:53Z）。防护（白名单/防穿越/2MB/CSP/跨站）一概未放宽。",
+    "runId": "run-20260909-115"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T00:20:37.197Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T00:20:45.999Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:26:24.125Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T02:11:19.270Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "认领（zcode-batch-019-1）"
+    },
+    {
+      "at": "2026-09-09T02:21:38.493Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.305Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1c4b",
+      "note": "人工确认完成"
+    }
+  ]
+}

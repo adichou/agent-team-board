@@ -1,0 +1,53 @@
+{
+  "id": "BUG-20260830-001",
+  "type": "bug",
+  "title": "顶栏「看板/文件」按钮在窄窗口遮挡路径文字",
+  "status": "done",
+  "parent": "REQ-20260830-002",
+  "owner": "loop-session",
+  "createdAt": "2026-08-29T17:20:08.078Z",
+  "updatedAt": "2026-09-03T01:43:45.993Z",
+  "agentCompletedAt": "2026-08-29T23:43:25.569Z",
+  "lastReport": {
+    "at": "2026-08-29T23:43:25.569Z",
+    "coverage": 5,
+    "framework": "node:assert CSS 契约测试",
+    "summary": "修复顶栏窄窗口遮挡：.brand-text 增加 min-width:0 使路径省略号生效；.path 的 max-width 由 46vw 改为 100%（交给 flex 收缩）；.view-tabs/.top-actions 增加 flex:none 防压缩错位；≤640px 顶栏 flex-wrap:wrap 换行降级（brand 占整行）。新增 scripts/tests/topbar-overflow.test.mjs 5 用例先红后绿，layout/file-board/multi-project/loop-mode 回归全过。多宽度真实浏览器目验建议人工在 /board 760px/640px 下复核。"
+  },
+  "history": [
+    {
+      "at": "2026-08-29T17:20:08.078Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-08-29T23:38:51.535Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-08-29T23:42:28.185Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "loop-session",
+      "note": "认领（loop-session）"
+    },
+    {
+      "at": "2026-08-29T23:43:25.569Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告（覆盖率 5%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-03T01:43:45.993Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": ""
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-001",
+  "type": "bug",
+  "title": "批量完善的提示词还有 zcode 的词语，请修复，一并排查下其他类似地方的实现",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-1",
+  "createdAt": "2026-09-09T16:00:28.578Z",
+  "updatedAt": "2026-09-11T05:52:21.481Z",
+  "agentCompletedAt": "2026-09-09T23:27:19.840Z",
+  "lastReport": {
+    "at": "2026-09-09T23:27:19.840Z",
+    "coverage": 85,
+    "framework": "node:assert + CLI/HTTP 集成（scripts/tests/run-all.mjs）",
+    "summary": "新增 normalizePromptForDisplay 展示层全量归一（存量完善三变体/开发侧旧行/旧领取前缀，账本不回写），切换 8 处透出点（refine publicView+create、开发 create/prompt/current+CLI），插件源 worker-spec/SKILL/dev.md 通用化，oncall 与会话名约定不修（结论见 design.md）；新增 13 用例跑红转绿，全量 128 文件 0 失败，真实 48 存量账本归一零残留",
+    "runId": "run-20260910-139"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T16:00:28.578Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T16:00:34.970Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T16:37:56.103Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-003249-6e04）"
+    },
+    {
+      "at": "2026-09-09T23:14:21.992Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "认领（zcode-batch-029-1）"
+    },
+    {
+      "at": "2026-09-09T23:27:19.840Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.482Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-00c9",
+      "note": "人工确认完成"
+    }
+  ]
+}
