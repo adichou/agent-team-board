@@ -1,0 +1,112 @@
+[
+  {
+    "key": "Z-A1",
+    "req": "REQ-20260906-002",
+    "priority": "P1",
+    "title": "全依赖阻塞批次已结束但 check 仍返回 continue",
+    "observed": "只有受阻候选时，next 返回 stop=blocked 并把批次置为 finished；随后 check 仍返回 nextAction=continue、blocked=0、remaining=1。",
+    "expected": "全受阻时主调度收到 stop 和准确阻塞计数，不再派发空 worker。",
+    "steps": "隔离项目建立 A、B；令 A 依赖未 done 的 B；limit=1 创建只含 A 的批次；依次调用 check、next、check。",
+    "source": "scripts/lib/batch.mjs:checkBatch/batchState/nextItem",
+    "bugId": "BUG-20260906-001"
+  },
+  {
+    "key": "Z-A2",
+    "req": "REQ-20260906-002",
+    "priority": "P1",
+    "title": "手工先认领时 Zcode 批次仍可认领另一项导致项目并行实施",
+    "observed": "先由 manual-worker claim A，再创建批次并由 batch-worker next/claim B，两个条目同时 in-progress 且 owner 不同。",
+    "expected": "手工、Zcode、Codex 任一入口先占用项目后，其余实施入口都被阻塞。",
+    "steps": "隔离项目建立并接受 A、B；手工 claim A；创建 Zcode 批次；next 后 claim B。",
+    "source": "scripts/lib/core.mjs:claim/assertNoImplConflict；scripts/lib/batch.mjs:nextItem",
+    "bugId": "BUG-20260906-002"
+  },
+  {
+    "key": "Z-A3",
+    "req": "REQ-20260906-002",
+    "priority": "P1",
+    "title": "Zcode 失败待核对仍释放项目锁允许其他入口继续实施",
+    "observed": "failed 回执带 safeToContinue=false 后，批次显示 needs_attention，但 impl.lock 已删除，手工还能 claim 另一条目。",
+    "expected": "无法确认工作区可继续时暂停项目，并让其他入口遵守该暂停。",
+    "steps": "隔离项目 next/claim A；提交 failed、safeToContinue=false 回执；检查项目锁并手工 claim B。",
+    "source": "scripts/lib/batch.mjs:finishRun；scripts/lib/core.mjs:claim",
+    "bugId": "BUG-20260906-003"
+  },
+  {
+    "key": "C-A1",
+    "req": "REQ-20260906-003",
+    "priority": "P1",
+    "title": "Codex 完成核对接受缺少 runId 的报告",
+    "observed": "当前 run 有明确 runId，但新 report 未传 --run，lastReport.runId=null，verifyCompletion 仍返回 reported=true。",
+    "expected": "自动运行的报告必须关联本次 runId；旧调用兼容不能充当本次自动执行的完成证据。",
+    "steps": "隔离项目 claim 条目；建立 startedAt 早于报告的当前 run；report 不带 --run；调用 verifyCompletion。",
+    "source": "scripts/lib/execution-verifier.mjs:verifyCompletion",
+    "bugId": "BUG-20260906-004"
+  },
+  {
+    "key": "C-A2",
+    "req": "REQ-20260906-003",
+    "priority": "P2",
+    "title": "Codex 依赖全部阻塞时错误显示队列已空",
+    "observed": "已有 accepted 候选但依赖未满足，调度器 waiting.kind=empty，界面显示队列已空而没有依赖原因。",
+    "expected": "显示依赖阻塞及需完成的前置条目，和空队列明确区分。",
+    "steps": "隔离项目建立 accepted 条目并让它依赖 submitted 前置条目；启用假 CLI 调度器后查看 status。",
+    "source": "scripts/lib/scheduler.mjs:selectCandidate；scripts/web/app.js:CX_WAITING_LABEL",
+    "bugId": "BUG-20260906-005"
+  },
+  {
+    "key": "C-A3",
+    "req": "REQ-20260906-003",
+    "priority": "P1",
+    "title": "未认领未上报的 Codex 条目在续跑耗尽后被无限重新派发",
+    "observed": "假 CLI 正常结束但未认领未上报，每次按默认最多追加 2 轮后 blocked；条目仍 accepted，又被新建 run 处理。450ms 观察窗口内已出现多份同条目运行记录。",
+    "expected": "有限续跑耗尽后阻塞该条目或暂停执行器，人工重试前不得自动创建新的尝试。",
+    "steps": "隔离项目只接受一项；使用 fake-codex 的 no-report 模式，maxResumeRounds=2；持续调度，等首个 blocked 后再观察 450ms。",
+    "source": "scripts/lib/scheduler.mjs:selectCandidate/settleAttempt",
+    "bugId": "BUG-20260906-006"
+  },
+  {
+    "key": "C-A4",
+    "req": "REQ-20260906-003",
+    "priority": "P1",
+    "title": "网络退避期间停止当前执行后重试仍会唤起新进程",
+    "observed": "网络失败进入退避后调用 stopCurrent 返回 ok；退避结束时进程启动次数仍从 1 增为 2，cancelRequested=true 与 phase=running 同时存在。",
+    "expected": "停止请求撤销待执行重试，并在确认停止后结束运行，不复活旧执行。",
+    "steps": "隔离项目启用 net-error 假 CLI；设退避 600ms；等待 retriesUsed=1 后 stopCurrent；再观察 850ms。",
+    "source": "scripts/lib/scheduler.mjs:scheduleRetry/stopCurrent",
+    "bugId": "BUG-20260906-007"
+  },
+  {
+    "key": "C-A5",
+    "req": "REQ-20260906-003",
+    "priority": "P1",
+    "title": "执行详情恢复本项未绑定当前 runId 可能恢复其他条目",
+    "observed": "有两个可恢复 interrupted 记录时，选择较早记录恢复，实际恢复较新的另一项。前端发送空请求体，服务和 scheduler 均不接收选中的 runId。",
+    "expected": "恢复必须绑定用户当前查看的 runId、itemId 和原 threadId，并核对 owner 和执行状态。",
+    "steps": "隔离项目创建两个带不同 threadId 的 interrupted 账本；请求恢复较早 run，核对返回 runId；对照前端恢复按钮请求体。",
+    "source": "scripts/web/app.js:cxResumeItem；scripts/server.mjs:resume-item；scripts/lib/scheduler.mjs:resumeItem",
+    "bugId": "BUG-20260906-008"
+  },
+  {
+    "key": "C-P1",
+    "req": "REQ-20260906-003",
+    "priority": "P1",
+    "title": "真实 codex exec resume 不支持适配器传入的 -C 参数",
+    "observed": "本机 codex-cli 0.153.4 执行适配器构造的 exec resume <ID> --json -C <project> -，立即退出 2，报 unexpected argument '-C' found，尚未进入会话或模型调用。PATH CLI 和自动探测到的 ChatGPT 内置 CLI 均复现。",
+    "expected": "按 exec 与 exec resume 各自支持的参数构造命令，真实同项恢复能够进入指定会话。",
+    "steps": "通过 startCodexExec 传入 resumeThreadId 和绝对 projectRoot，使用真实 CLI；核对 args、退出码和 stderr。",
+    "source": "scripts/lib/codex-adapter.mjs:buildExecArgs",
+    "bugId": "BUG-20260906-009"
+  },
+  {
+    "key": "C-P2",
+    "req": "REQ-20260906-003",
+    "priority": "P1",
+    "title": "Codex 静态预检误报可运行而当前项目首次执行即被拒绝",
+    "observed": "当前项目无 Git 仓库，预检 allOk=true 且宣称参数已核验；实际 exec 退出 1，提示 Not inside a trusted directory and --skip-git-repo-check was not specified；恢复参数也未实际核验。",
+    "expected": "静态预检区分版本存在、参数兼容、项目运行约束和权限适配，失败条件下阻止开启并展示真实原因。",
+    "steps": "在当前项目调用 GET /api/dispatch/preflight；再用适配器和预检探测到的真实 CLI 执行最小提示词；比较 allOk、退出码与 stderr。",
+    "source": "scripts/server.mjs:staticPreflight；scripts/lib/codex-adapter.mjs:buildExecArgs",
+    "bugId": "BUG-20260906-010"
+  }
+]

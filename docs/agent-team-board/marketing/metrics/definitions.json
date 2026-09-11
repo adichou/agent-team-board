@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-10T14:56:10.688Z",
+  "definitions": [
+    {
+      "key": "impressions",
+      "name": "展示次数",
+      "category": "exposure",
+      "kind": "events",
+      "unit": "次",
+      "dedup": "不去重（平台计数）",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "plays",
+      "name": "播放次数",
+      "category": "exposure",
+      "kind": "events",
+      "unit": "次",
+      "dedup": "不去重（平台计数）",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "likes",
+      "name": "点赞",
+      "category": "engagement",
+      "kind": "events",
+      "unit": "次",
+      "dedup": "不去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "comments",
+      "name": "评论",
+      "category": "engagement",
+      "kind": "events",
+      "unit": "次",
+      "dedup": "不去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "favorites",
+      "name": "收藏",
+      "category": "engagement",
+      "kind": "events",
+      "unit": "次",
+      "dedup": "不去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "followersTotal",
+      "name": "粉丝总数",
+      "category": "following",
+      "kind": "stock",
+      "unit": "人",
+      "dedup": "按平台账号；不跨平台求和",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "subscribersTotal",
+      "name": "订阅总数",
+      "category": "following",
+      "kind": "stock",
+      "unit": "人",
+      "dedup": "按平台账号；不跨平台求和",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "starsTotal",
+      "name": "Star 总数",
+      "category": "following",
+      "kind": "stock",
+      "unit": "个",
+      "dedup": "按仓库；不跨平台求和",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "followersNew",
+      "name": "粉丝新增",
+      "category": "following",
+      "kind": "delta",
+      "unit": "人",
+      "dedup": "按平台账号去重；不跨平台求和",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "subsNew",
+      "name": "订阅新增",
+      "category": "following",
+      "kind": "delta",
+      "unit": "人",
+      "dedup": "按账号去重；不跨平台求和",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "starsNew",
+      "name": "Star 新增",
+      "category": "following",
+      "kind": "delta",
+      "unit": "个",
+      "dedup": "按仓库事件去重；不跨平台求和",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "visitors",
+      "name": "访客",
+      "category": "usage",
+      "kind": "unique",
+      "unit": "人",
+      "dedup": "按设备在观察窗口内去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "downloads",
+      "name": "下载",
+      "category": "usage",
+      "kind": "delta",
+      "unit": "次",
+      "dedup": "平台计数不去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "activations",
+      "name": "激活",
+      "category": "usage",
+      "kind": "delta",
+      "unit": "人",
+      "dedup": "按账号去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "retained",
+      "name": "留存人数",
+      "category": "usage",
+      "kind": "unique",
+      "unit": "人",
+      "dedup": "按账号在窗口内去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "payers",
+      "name": "付费人数",
+      "category": "commercial",
+      "kind": "delta",
+      "unit": "人",
+      "dedup": "按账号去重",
+      "money": false,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "revenue",
+      "name": "收入",
+      "category": "commercial",
+      "kind": "delta",
+      "unit": "",
+      "dedup": "不适用",
+      "money": true,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    },
+    {
+      "key": "refunds",
+      "name": "退款金额",
+      "category": "commercial",
+      "kind": "delta",
+      "unit": "",
+      "dedup": "不适用",
+      "money": true,
+      "origin": "builtin",
+      "createdAt": "2026-09-10T14:56:10.688Z"
+    }
+  ]
+}

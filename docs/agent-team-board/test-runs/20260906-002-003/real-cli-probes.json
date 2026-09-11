@@ -1,0 +1,32 @@
+[
+  {
+    "mode": "new",
+    "args": [
+      "exec",
+      "--json",
+      "-C",
+      "/private/tmp/atb-realcli-probe-BE291a",
+      "-"
+    ],
+    "code": 1,
+    "stderr": "Not inside a trusted directory and --skip-git-repo-check was not specified.\n",
+    "threadId": null,
+    "projectRoot": "/private/tmp/atb-realcli-probe-BE291a"
+  },
+  {
+    "mode": "resume",
+    "args": [
+      "exec",
+      "resume",
+      "fixture-does-not-exist",
+      "--json",
+      "-C",
+      "/private/tmp/atb-realcli-probe-BE291a",
+      "-"
+    ],
+    "code": 2,
+    "stderr": "error: unexpected argument '-C' found\n\n  tip: to pass '-C' as a value, use '-- -C'\n\nUsage: codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]\n\nFor more information, try '--help'.\n",
+    "threadId": null,
+    "projectRoot": "/private/tmp/atb-realcli-probe-BE291a"
+  }
+]

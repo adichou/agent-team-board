@@ -1,0 +1,595 @@
+{
+  "at": "2026-09-08T17:06:48.953Z",
+  "snapshot": "/var/folders/m6/bj96jycd1v9d1mnvfnlb9_nr0000gn/T/atb-final-0909-r6XseB",
+  "items": [
+    {
+      "id": "REQ-20260907-001",
+      "title": "Oncall 咨询看板：咨询单创建、批量/单条派单回复，富文本与截图展示，支持 zcode 与 codex",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-06T18:52:18.217Z",
+      "lastReport": {
+        "at": "2026-09-06T18:52:18.217Z",
+        "coverage": 82,
+        "framework": "node:assert 脚本测试（npm test / run-all 聚合）",
+        "summary": "Oncall 咨询看板全链路：新增 lib/oncall-store.mjs（ASK 独立序列、pending/answering/answered/failed 状态流转、追问轮次、附件图片白名单≤8MB、派单账本）；CLI atb oncall new/list/show/ask/answer/dispatch（zcode 主调度提示词含会话命名指令 oncall-日期-客服）；server 增 /api/oncall/* 与 codex 后台执行器（复用 startCodexExec，final-message 自动回传、失败分类记因、串行执行、不占 impl.lock）；前端 web/oncall.js Oncall 视图（列表状态筛选、新建含截图上传与粘贴、批量派单客服人员记忆、详情 Markdown 渲染+内联截图+点击放大、单条问询追问、失败重派、codex 未就绪隐藏入口）。新增 6 个测试文件 16 用例全绿，全量 56 个测试文件回归 0 失败。",
+        "runId": "run-20260907-026"
+      }
+    },
+    {
+      "id": "REQ-20260907-002",
+      "title": "批量实施批次关联开发人员：调度会话命名与看板展示",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-06T19:04:44.173Z",
+      "lastReport": {
+        "at": "2026-09-06T19:04:44.173Z",
+        "coverage": 85,
+        "framework": "node:assert 脚本测试（npm test / run-all 聚合）",
+        "summary": "批次关联开发人员：createBatch/generatePrompt 新增 developer（≤30 字符、拒换行控制字符、空→null），提示词追加「请将当前会话名改为：<batchId>-<开发人员>」，未填与既往逐字一致；CLI --dev、summary/create 输出与 batchPublicView 带 developer（未填显示未指定）；/api/batch/create 透传并回显、current 的 batch/queue 携带 developer、无批次响应附 gitUser 预填；前端创建区 #batchDev 输入（maxlength 30、localStorage atb.batch.dev 记忆、git user.name 首次预填、重渲染保留已输入值），面板 meta-grid 与排队批次展示开发人员（缺字段回退未指定，账本不迁移）；check/receipt 协议载荷不变。新增 8 用例（core D1-D4、cli 2、serve 1、ui U14）全绿，全量 56 个测试文件 0 失败",
+        "runId": "run-20260907-027"
+      }
+    },
+    {
+      "id": "REQ-20260907-003",
+      "title": "需求完善：待接受需求与 Bug 批量补全文档，支持 Zcode / Codex 派发",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T14:13:41.564Z",
+      "lastReport": {
+        "at": "2026-09-07T14:13:41.564Z",
+        "coverage": 92,
+        "framework": "node:test（静态契约+端到端）",
+        "summary": "新增需求完善子系统：refine-store 数据层（完整性分析/RFB批次与运行账本/指纹基线冻结/幂等与出局保护/done-fail回执校验/check协议）+ atb refine CLI 九个子命令 + server /api/refine/* 与 codex 逐项后台执行器（文档变更核验、锁忙重试、重启恢复）+ 看板待接受列「需求完善」入口与任务模块子面板（候选缺失原因/进度/记录文档链接）；全程保持 submitted、不占 impl.lock；新增测试 R1~R12（store/cli/serve/ui），全量 64 个测试文件 0 失败",
+        "runId": "run-20260907-037"
+      }
+    },
+    {
+      "id": "REQ-20260907-004",
+      "title": "看板整体布局优化：统一导航、三类新建入口与列表工作区",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T06:59:46.689Z",
+      "lastReport": {
+        "at": "2026-09-07T06:59:46.689Z",
+        "coverage": 70,
+        "framework": "node:assert 静态契约 + node:vm 模拟 DOM（npm test 聚合）",
+        "summary": "四行布局重构完成：统一导航（讨论/需求/任务/文件+设置）、三类统一新建（含讨论单附件）、需求列表+详情并排工作区、移除看板与切换、任务/设置页面化、模块搜索与更名；新增 workbench-layout 13 用例并同步更新 16 个受影响测试，59 个测试文件全绿，服务冒烟通过",
+        "runId": "run-20260907-034"
+      }
+    },
+    {
+      "id": "REQ-20260907-005",
+      "title": "待确认改为待测试。已完成界面去掉待确认按钮。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T09:15:14.117Z",
+      "lastReport": {
+        "at": "2026-09-07T09:15:14.117Z",
+        "coverage": 100,
+        "framework": "node 契约/沙箱测试（npm test）",
+        "summary": "前端展示层更名「待确认」为「待测试」（LANE_LABEL/LANE_HINT/筛选档/角标/详情页提示），新增 testFlagHtml 使已完成(done)视图不再渲染待测试角标与「已上报完成」提示（agentCompletedAt 保留不清空）；同步 style.css 注释、README 两处文案与 confirm-lane/workbench-layout/detail-close-btn 断言；先红后绿，npm test 59 文件 556 用例全过。",
+        "runId": "run-20260907-035"
+      }
+    },
+    {
+      "id": "REQ-20260907-006",
+      "title": "去掉全部需求的过滤条件",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T14:27:39.381Z",
+      "lastReport": {
+        "at": "2026-09-07T14:27:39.381Z",
+        "coverage": 100,
+        "framework": "node 契约/沙箱测试（npm test）",
+        "summary": "移除需求模块第四行状态筛选条：index.html 删 #filterBar；app.js 删 reqFilter/REQ_FILTERS/applyReqFilter/renderFilterBar/事件委托，visibleItems 简化为全量，空态文案只提搜索；style.css 删 .filter-bar/.filter-chip/.filter-count。laneOf/LANE_LABEL 行状态展示与讨论模块筛选保留。新增 req-filter-removed.test.mjs（5 用例，TDD 先红后绿），同步更新 workbench-layout W5、confirm-lane T3/T5、pending-alignment R5、view-tabs-style V3、refresh-default-view 初始 hidden 集；npm test 65 文件全部通过。",
+        "runId": "run-20260907-038"
+      }
+    },
+    {
+      "id": "REQ-20260907-007",
+      "title": "删除详细页面的一键派单功能，派单只能通过批量实施",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T15:22:16.010Z",
+      "lastReport": {
+        "at": "2026-09-07T15:22:16.010Z",
+        "coverage": 100,
+        "framework": "node:assert + 自建 runner（npm test/run-all.mjs）",
+        "summary": "删除详情页一键派单：app.js 移除 dispatchBtnHtml/dispatchPrompt/launchZcode/launchCodex/flashDispatchBtn 及 data-dispatch 绑定（保留 copyDispatchText 供批量实施）；server.mjs 移除 POST /api/dispatch/codex/item 端点与未用 dispatch import；scheduler.mjs 移除 dispatchItem（tick/startRunForItem 自动派发不受影响）；style.css 移除 .dispatch-row/.dispatch-btn。契约测试改写为已移除防回归，全量 65 文件 0 失败",
+        "runId": "run-20260907-040"
+      }
+    },
+    {
+      "id": "REQ-20260907-008",
+      "title": "讨论视图精简：删除头部说明区，状态筛选与需求栏样式统一并去掉「全部」",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T23:04:36.173Z",
+      "lastReport": {
+        "at": "2026-09-07T23:04:36.173Z",
+        "coverage": 5,
+        "framework": "node:assert + run-all.mjs",
+        "summary": "讨论视图精简：删头部说明区（新建统一顶栏「＋ 新建」）；筛选 chip 改 filter-chip+filter-count 与需求栏一致并弃用 oc-filter；去「全部」档缺省「待回复」；空态指向顶栏。新增 oncall-view-lean.test.mjs（4 用例先红后绿），更新 req-filter-removed T5 断言，全量 71 测试文件 0 失败。",
+        "runId": "run-20260908-054"
+      }
+    },
+    {
+      "id": "REQ-20260907-009",
+      "title": "选择可操作项只显示当前选择状态的条目",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T23:10:38.881Z",
+      "lastReport": {
+        "at": "2026-09-07T23:10:38.881Z",
+        "coverage": 6,
+        "framework": "node:assert + node:vm",
+        "summary": "选择可操作项改为仅全选当前筛选档内可见可操作条目（叠搜索）：待接受档只选待接受、已接受档只选已接受未认领、其余档禁用；禁用条件与点击结果同口径，title 同步更新；手动勾选跨档保留与 BUG-20260907-015 主场景均验证不回退。N1-N6 先红后绿，全量 71 测试文件通过",
+        "runId": "run-20260908-055"
+      }
+    },
+    {
+      "id": "REQ-20260907-011",
+      "title": "待接受需求和 Bug 可以由用户自行更改标题。已接受的需求可以驳回变为待接受",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T23:25:55.966Z",
+      "lastReport": {
+        "at": "2026-09-07T23:25:55.966Z",
+        "coverage": null,
+        "framework": "node:native test runner（run-all.mjs 聚合，72 文件）",
+        "summary": "待接受改标题+驳回接受：core.renameItem（仅 submitted，status.title 与文档首行同步+history 留痕）+ TRANSITIONS 新增人工回退边 accepted→submitted；CLI atb rename；POST /api/item/:id/title 与网页流转白名单放行；UI 新增页面内 uiPrompt 输入框、卡片/详情页改标题按钮、详情页驳回接受按钮、接受可撤销。新增 rename-reject.test.mjs 12 用例全绿；联动更新 3 个既有契约测试；npm test 72 文件 0 失败；CLI 冒烟通过",
+        "runId": "run-20260908-056"
+      }
+    },
+    {
+      "id": "REQ-20260907-012",
+      "title": "已接受的需求或 Bug 不要在列表界面或详细内容界面显示已接受便签，应呈现是否已进入批次",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T23:37:33.511Z",
+      "lastReport": {
+        "at": "2026-09-07T23:37:33.511Z",
+        "coverage": 100,
+        "framework": "node:test（vm 沙箱 + lib 单测 + 真实 server 集成）",
+        "summary": "已接受条目列表/详情不再显示「已接受」便签，改呈是否已进入批次：batch.mjs 新增 batchEntryIndex（未结束批次 candidates→最早批次）；/api/board 与 /api/item/:id 为 accepted 附加 batchEntry（null=未入批，非 accepted 不附加）；前端卡片与详情状态 chip 渲染「已入批次/未入批次」（悬停含批次号与批次状态），notice 按入批与否给指引，列表签名含 batchEntry 自动刷新；新增 accepted-batch-entry.test.mjs（L1-L6+S1-S2）先红后绿，npm test 73 文件 0 失败",
+        "runId": "run-20260908-057"
+      }
+    },
+    {
+      "id": "REQ-20260907-013",
+      "title": "支持当前已有批次执行中时，可以创建新批次。没在执行中的新批次可以被删除。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-07T23:47:34.356Z",
+      "lastReport": {
+        "at": "2026-09-07T23:47:34.356Z",
+        "coverage": 9,
+        "framework": "node:test（自研用例聚合）",
+        "summary": "批次删除全栈：core deleteBatch（在途运行/needs_attention 拒绝，仅删批次账本、runs 与条目不动，队列动态前移）；CLI atb batch delete；API POST /api/batch/delete；看板排队列表项与当前批次（无在途）删除入口（uiConfirm 确认）；执行中面板新增「排队新批次」按钮复用创建流程。测试 batch-delete.test.mjs 9 用例（C1+D1-D8）全通过，npm test 74 文件回归 0 失败。",
+        "runId": "run-20260908-058"
+      }
+    },
+    {
+      "id": "REQ-20260908-001",
+      "title": "任务看板的批次记录上，需要显示每个单的标题，放到单号的后面",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T01:11:50.077Z",
+      "lastReport": {
+        "at": "2026-09-08T01:11:50.077Z",
+        "coverage": 5,
+        "framework": "node:assert 单测 + 静态契约（batch-core/batch-ui；run-all.mjs 全量 76 文件回归）",
+        "summary": "批次记录带条目标题：lib/batch.mjs listRuns 记录增加 title（条目删除容错空串，/api/batch/records 与 batchSummary.records 自动带出）；web/app.js recordsHtml 单号后渲染标题（shortOwner 截断 + title 悬停），任务搜索过滤纳入标题；style.css 增 .batch-record .rec-title。TDD：2 个新用例先红后绿，全量 76 测试文件通过。",
+        "runId": "run-20260908-062"
+      }
+    },
+    {
+      "id": "REQ-20260908-002",
+      "title": "所有列表提供排序功能。已完成的需求或 bug 默认只显示最新的 100 项，其他的需要通过搜索获取",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T01:29:23.139Z",
+      "lastReport": {
+        "at": "2026-09-08T01:29:23.139Z",
+        "coverage": 6,
+        "framework": "node:assert 单测 + vm 沙箱 + 静态契约（list-sort 新增；run-all.mjs 全量 77 文件回归）",
+        "summary": "需求视图五档列表新增排序下拉（最新更新默认/最早更新/最新创建/最早创建/单号，localStorage 记忆）；已完成档默认仅显示最新 100 项（计数 100/N 提示用搜索获取，搜索期间不截断）；讨论视图列表同款排序（四时间键）；TDD 8 用例先红后绿，全量 77 测试文件通过",
+        "runId": "run-20260908-063"
+      }
+    },
+    {
+      "id": "REQ-20260908-003",
+      "title": "支持待接受的需求删除",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T01:38:48.175Z",
+      "lastReport": {
+        "at": "2026-09-08T01:38:48.175Z",
+        "coverage": 100,
+        "framework": "node:assert 单测 + node:http 真实服务集成 + UI 静态/沙箱契约（scripts/tests/item-delete.test.mjs，10 用例）",
+        "summary": "core.deleteItem 仅删 submitted（需求/Bug；有下属 Bug 先拒并指引）+ server DELETE /api/item/:id（受既有跨站防护）+ 网页卡片/详情页删除按钮（页面内 danger uiConfirm，删后刷新并关抽屉）+ CLI atb delete；单号计数器不回退；全量回归 78 文件通过",
+        "runId": "run-20260908-064"
+      }
+    },
+    {
+      "id": "REQ-20260908-004",
+      "title": "回退 CI 看板",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T03:09:29.954Z",
+      "lastReport": {
+        "at": "2026-09-08T03:09:29.954Z",
+        "coverage": 100,
+        "framework": "node:test 风格自研用例（scripts/tests/revert-ci-board.test.mjs）",
+        "summary": "回退 REQ-20260902-002 引入的 CI 看板：删除 lib/ci-store.mjs / web/ci.js / tests/ci-board.test.mjs；server.mjs 移除 /api/ci/* 路由、selfRestart、ATB_BIND_RETRY 绑定重试与 server.json 端口持久化（端口恢复 ATB_PORT>8888）；index.html 去 CI 页签与容器、app.js 去 ci 视图注册、style.css 去 .ci-* 样式；同步回退 workbench-layout W2 与 default-port V1 契约。TDD：revert-ci-board 用例先红后绿 5/5，npm test 80 文件 0 失败。",
+        "runId": "run-20260908-067"
+      }
+    },
+    {
+      "id": "REQ-20260908-005",
+      "title": "详情页面高度不要超过列表，要低于状态筛选行",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T03:21:58.801Z",
+      "lastReport": {
+        "at": "2026-09-08T03:21:58.801Z",
+        "coverage": 83,
+        "framework": "node:assert 静态契约测试（drawer-height.test.mjs D1–D5）+ run-all 全量回归",
+        "summary": "窄屏（≤1020px）详情抽屉与遮罩 #mask 的定位基准从视口改为需求工作区 .req-view（position:relative）：抽屉 fixed→absolute，顶边低于状态筛选行、高度与列表区一致；#mask 移入 #reqView 同域 absolute inset:0，状态筛选行及其以上不再被压暗/拦截。宽屏并排、滑入动画、返回入口不变；app.js 零改动。新增 drawer-height.test.mjs（5 用例）并更新 portrait-board P2 旧契约；run-all 81 文件全绿。执行中发现存量 flaky：execution-verifier V9 已登记 BUG-20260908-005。",
+        "runId": "run-20260908-068"
+      }
+    },
+    {
+      "id": "REQ-20260908-006",
+      "title": "详情页面的操作按钮要改成横向布局",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T02:01:17.855Z",
+      "lastReport": {
+        "at": "2026-09-08T02:01:17.855Z",
+        "coverage": 80,
+        "framework": "node:test 静态契约（CSS/模板正则断言）",
+        "summary": "详情抽屉中栏 .drawer-actions-center 由纵向堆叠改为横向一行（flex-direction:row + wrap + 居中），行内按钮 flex:none 不折行、序号 nowrap；纯 CSS 改动，模板与交互不动。新增 drawer-actions-row.test.mjs（H1–H4），全量 79 个测试文件通过。",
+        "runId": "run-20260908-065"
+      }
+    },
+    {
+      "id": "REQ-20260908-007",
+      "title": "提供终端可直接运行的 shell 命令",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T02:14:28.929Z",
+      "lastReport": {
+        "at": "2026-09-08T02:14:28.929Z",
+        "coverage": 85,
+        "framework": "node:assert/strict + run-all.mjs",
+        "summary": "新增 bin/atb POSIX 包装器（穿透符号链接定位插件根、exec node atb.mjs、参数透传）与 atb cli install|uninstall|status 子命令（--to 指定目标目录以避开全局 --dir 旗标；缺省自动选 PATH 中可写候选目录；幂等、外来文件拒绝覆盖/删除；不依赖看板数据目录）；USAGE/SKILL.md/README 同步。新增 cli-shell.test.mjs 12 用例先红后绿，全量回归 80 个测试文件 0 失败。",
+        "runId": "run-20260908-066"
+      }
+    },
+    {
+      "id": "REQ-20260908-009",
+      "title": "去掉 bug 单的归属需求选项，默认都是独立 Bug，然后需要在 Bug 单的设计说明书中明确表明引入问题的源单是什么",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T03:36:27.182Z",
+      "lastReport": {
+        "at": "2026-09-08T03:36:27.182Z",
+        "coverage": 92,
+        "framework": "node:test（node:assert/strict 自研 runner）",
+        "summary": "Bug 一律独立创建：CLI/usage 去掉 --req；core.createItem 拒绝 bug+parent、目录固定顶层 bugs/；bugReadme 去归属行，新增 bugDesign 模板（引入来源三选一指引）随创建落盘 design.md；/api/new 带 parent 返回 400；web 表单去归属下拉与 parent 提交；SKILL/bug.md/dev.md 归因落点同步为 design「引入来源（源单）」节；存量归属经 moveBug 兼容。新增 bug-standalone-origin.test.mjs 8 用例，全量 82 个测试文件通过",
+        "runId": "run-20260908-069"
+      }
+    },
+    {
+      "id": "REQ-20260908-010",
+      "title": "批量实施应改名为批量开发，方案应优化为提供一个已计划的状态分类，按照已计划的单自动串行处理。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T06:00:13.292Z",
+      "lastReport": {
+        "at": "2026-09-08T06:00:13.292Z",
+        "coverage": 87,
+        "framework": "node:test（run-all 聚合 + vm 沙箱 UI 测试 + 真 server/假 CLI 集成）",
+        "summary": "新增 planned（已计划）状态：状态机 accepted↔planned/in-progress、claim 同等认领；state-guard 把 planned 纳入人工专属拦截（atb status 与 curl 两通道）；选单口径 accepted→planned 且最旧优先（纯创建时间序）；batch nextItem 实时吸收新置计划条目（不受 limit 截断、排除其他批次冻结项）；任务模块统一「开发启动」（zcode=批次+提示词待启动 / codex=自动派发开关，未选模式禁用）+ 已计划队列预览；详情页置计划/移出计划（免确认可撤销）、列表批量移出计划（逐条流转+成败分列）、筛选六档含已计划；「批量实施」全面更名「批量开发」（web/CLI/server/skill/dev.md/batch-execution.md 等）；存量未结束批次剩余 accepted 候选按出局收尾、需人工置计划（本项目在途 batch-20260908-014 同样适用）。新增 planned-state.test.mjs 15 用例，同步更新 scheduler/batch-*/impl-*/codex-*/dispatch-api 等 20+ 既有测试，npm test 85 文件全绿（另两次全量各出现 1 个不同偶发，单独复跑均通过）。",
+        "runId": "run-20260908-072"
+      }
+    },
+    {
+      "id": "REQ-20260908-011",
+      "title": "修改单需支持修改标题和描述。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T13:28:58.185Z",
+      "lastReport": {
+        "at": "2026-09-08T13:28:58.185Z",
+        "coverage": 90,
+        "framework": "Node 原生断言脚本（node:assert/strict + vm 沙箱 + 真实 HTTP/CLI 子进程）",
+        "summary": "core 新增 editItem（仅 submitted，标题+描述一次改完，先全量校验再落盘保证原子性，README 需求「## 描述」/Bug「## 现象」节整体替换，空描述写回（待补充），history 一条留痕；renameItem 保留兼容）；server 新增 POST /api/item/:id/content；CLI rename 支持 --desc（- 走 stdin，标题可省略）；前端 uiPrompt 升级双字段 uiEditForm（预填/取消/Esc/遮罩/保存中禁用/失败保留可重试），editItem 预填 README 描述节并提交 /content，无变化前端先拦截；按钮文案消歧：✎ 改标题/描述 + 修改提示词。新增 edit-content.test.mjs 19 用例全绿，同步更新 rename-reject/edit-prompt 被替换契约断言，npm test 全量 89 文件 0 失败。待确认项按 design 默认方案落地（见 design.md 实施记录）。",
+        "runId": "run-20260908-079"
+      }
+    },
+    {
+      "id": "REQ-20260908-012",
+      "title": "Bug 单的说明文档中，针对引入来源单的描述需放置开头",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T13:35:59.202Z",
+      "lastReport": {
+        "at": "2026-09-08T13:35:59.202Z",
+        "coverage": 100,
+        "framework": "node:test（node:assert/strict 自研 runner）",
+        "summary": "引入来源速览行落 Bug README 开头头部元信息区（- 引入来源：… 行，创建行之前，正例 BUG-20260907-017），与 REQ-20260908-009 的 design.md『引入来源（源单）』详述节叠加不回退；SKILL.md/bug.md/dev.md 三处口径同步，末尾『关联』节降级为可选补充；traceability R2/R4 增开头头部断言+防旧口径回潮反向断言，新增 R5b 正例守护，7/7 绿；全量 89 测试文件 0 失败；运行时零改动（bugReadme 模板未动，mtime 核验）；存量 Bug 不回填留人工定夺；REQ-20260830-004 修订记录追加因果链一行",
+        "runId": "run-20260908-080"
+      }
+    },
+    {
+      "id": "REQ-20260908-013",
+      "title": "讨论单的问题正文改为可选，如果用户没有填则复制标题作为正文。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T13:42:37.056Z",
+      "lastReport": {
+        "at": "2026-09-08T13:42:37.056Z",
+        "coverage": 100,
+        "framework": "node:test 风格自研断言（assert/strict + vm 沙箱）",
+        "summary": "讨论单创建正文可空：store 层 createTicket 空白 question 回退已 trim 标题（唯一落点）；前端 submitNew 删拦截、标签/placeholder 注明可留空＝以标题作为正文；CLI atb oncall new 去 die 并同步两处用法文案。test-cases 13/13 用例全过，run-all 90 文件 0 失败；标题必填/追问必填口径不变",
+        "runId": "run-20260908-081"
+      }
+    },
+    {
+      "id": "REQ-20260908-014",
+      "title": "需求完善批次每一轮上报需在主调度会话中显示单号和标题",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T06:40:09.082Z",
+      "lastReport": {
+        "at": "2026-09-08T06:40:09.082Z",
+        "coverage": 92,
+        "framework": "node:assert/strict 自制 runner（npm test → scripts/tests/run-all.mjs）",
+        "summary": "refine 完善批次每轮上报显示单号+标题：run 账本领取时快照 itemTitle（zcode 领取/出局/codex 入队三入口），done/failed 回执、check.current、records 记录均增补 title；历史运行回退实时读条目标题，条目已删返回 null 不报错；回执/check 仍 ≤2KiB。R11 与 R10 追加断言先红后绿，全量 87 测试文件失败 0",
+        "runId": "run-20260908-075"
+      }
+    },
+    {
+      "id": "REQ-20260908-015",
+      "title": "需求完善功能只需完善说明文档即可，设计文档是开发时需要写的。说明文档需要有 UI 设计，需要有界面展示。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T09:01:31.696Z",
+      "lastReport": {
+        "at": "2026-09-08T09:01:31.696Z",
+        "coverage": 100,
+        "framework": "node:test 风格自研脚本（refine-store/cli/serve/ui，run-all 全量 87 文件）",
+        "summary": "完善判定收敛到 README：analyzeItemDocs 删除 design/test-cases 原因，新增界面展示两层判定（UI 词表定案 11 词，涉及 UI 需界面展示/界面展示待补充）；两处提示词、atb refine 用法与 next 下一步行、commands/req.md、SKILL.md、fake-codex 夹具同步口径；S1-S10/P1/C1/H1/F1 全通过，全量 87 文件 0 失败",
+        "runId": "run-20260908-077"
+      }
+    },
+    {
+      "id": "REQ-20260908-017",
+      "title": "创建完单后直接返回列表即可",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T13:57:53.121Z",
+      "lastReport": {
+        "at": "2026-09-08T13:57:53.121Z",
+        "coverage": 24,
+        "framework": "node:assert/strict + vm 沙箱行为测试（scripts/tests/run-all.mjs）",
+        "summary": "创建完单后只关弹窗/进模块/刷列表/toast，不再自动导航：submitNew 删 openDrawer(st.id) 与 reveal(t.id)；poll 删「已定位新建条目」toast+跳转，detectNewItem 收敛为纯基线登记（README 要求保留）；oncall.js 删无调用方的 reveal；同步改写 new-item-nav/oncall-question-optional/workbench-layout 契约（旧静态切片标记已失效改函数体提取）。全量 90 测试文件 0 失败；M1/M2 宽窄屏人工验收留待确认。",
+        "runId": "run-20260908-083"
+      }
+    },
+    {
+      "id": "REQ-20260908-018",
+      "title": "已接受列表要要支持批量移入计划",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T06:21:38.667Z",
+      "lastReport": {
+        "at": "2026-09-08T06:21:38.667Z",
+        "coverage": 9,
+        "framework": "node:test（vm 沙箱 UI 测试）",
+        "summary": "已接受列表支持批量移入计划：已接受行常驻复选框（不冒泡/跨档保留/叠搜索/轮询剪枝）+ 工具条「移入计划（N）」按钮，逐条 POST to=planned 绑定项目、二次确认、进度与成败分列、单项失败不回滚、pending 防重入；合并计数升级三档格式；选择可操作项/清空选择/切项目三桶协同。服务端零改动。新增 plan-batch-move.test.mjs 9 用例先红后绿，更新 impl-entry-ui 3 处计数断言，npm test 86 文件 0 失败。",
+        "runId": "run-20260908-073"
+      }
+    },
+    {
+      "id": "REQ-20260908-019",
+      "title": "批量执行去掉上限的设置",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T07:09:07.107Z",
+      "lastReport": {
+        "at": "2026-09-08T07:09:07.107Z",
+        "coverage": 92,
+        "framework": "node:test",
+        "summary": "移除批次上限设置：createBatch 候选按范围全量冻结、批次记录不写 limit、BATCH_LIMIT_* 常量删除；CLI batch create 去掉 --limit（传入提示已移除），usage/输出/摘要视图去上限；/api/batch/create 忽略 body.limit 且响应不回显，/api/batch/current 同步；Web 创建面板删上限输入框、状态行去上限；settings.json 不再写/读 defaults.batchLimit，存量字段原样保留；SKILL.md 与 batch-execution.md 文档同步。Z02a/Z02d/S2/serve/E7/U6/N5/T1 等用例先行改写跑红（8 处）后实现跑绿，全量 87 测试文件 0 失败。测试中发现 impl-scope S1 既有偶发排序翻转（同毫秒创建 tiebreak 按 id 使 BUG 先于 REQ，非本次引入），已登记 BUG-20260908-007。",
+        "runId": "run-20260908-076"
+      }
+    },
+    {
+      "id": "REQ-20260908-020",
+      "title": "重构批量流程和任务管理。",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T10:39:48.872Z",
+      "lastReport": {
+        "at": "2026-09-08T10:39:48.872Z",
+        "coverage": 85,
+        "framework": "node:assert/strict（数据层 + CLI 子进程 + HTTP 服务 + 前端静态契约）",
+        "summary": "重构批量流程与任务管理：①完善候选切已接受未完善单，每轮 next 实时吸收新接受单（吸收时逐项冻结基线）；②单级完善三态（未完善/完善中/已完善）落 refine/states.json 执行账本，accepted 进入一律重置未完善，完善中禁驳（CLI/UI 双侧）；③新增 refine/batch abort 终止（二次确认、剩余项 skipped 出局、在途 interrupted 注明人工终止、锁全释放、批次终止态）；④仅子代理模式，zcode/codex 双 Agent 差异化主调度提示词，批次落 agent 字段；⑤设置新增「批量任务」分区（Agent 展示 × 四路模型/智能档位，完善默认高/开发默认中）；⑥任务模块重构为「批量完善/批量开发」子面板，统一启动区+当前详情+暂停/终止+记录，Codex 后台 tab 隐藏（顶栏待处理徽标改跳设置，无死链）；看板已接受卡片/详情三态徽标可跳转。新增 tasks-refine 测试 10 例并更新 8 个既有测试文件，全量 88 个测试文件通过。",
+        "runId": "run-20260908-078"
+      }
+    },
+    {
+      "id": "REQ-20260908-021",
+      "title": "完善需求时的 UI 设计要使用 html 进行可交互设计展示",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T14:06:51.410Z",
+      "lastReport": {
+        "at": "2026-09-08T14:06:51.410Z",
+        "coverage": 15,
+        "framework": "node:test（自研断言式用例 runner，scripts/tests/*.test.mjs）",
+        "summary": "完善阶段 UI 展示升级为可交互 html 演示：analyzeItemDocs 演示三查（缺 ui-demo.html/占位/README 节未链接，兜底与 Bug 判定不变）；DOC_FILES/docsFingerprint 纳入 ui-demo.html，只改演示文件的 done 可过核验；两处提示词与 SKILL.md/req.md/atb/server/fake-codex 口径同步，质量门槛固化为 UI_DEMO_QUALITY 常量；refine 五套件与 run-all 90 文件全绿",
+        "runId": "run-20260908-084"
+      }
+    },
+    {
+      "id": "REQ-20260908-022",
+      "title": "支持就单一需求和 Agent 进行讨论的功能",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T14:20:50.031Z",
+      "lastReport": {
+        "at": "2026-09-08T14:20:50.031Z",
+        "coverage": 85,
+        "framework": "node:assert/strict + 自研聚合（npm test / run-all.mjs）",
+        "summary": "讨论单新增可选 reqId 需求绑定：store 层创建校验（仅 REQ- 且存在）+卡片/按需过滤+reqContext（README/design/test-cases 全文，需求删除 missing 不崩）；oncall show 与 codex worker 提示词自动注入需求文档上下文；CLI oncall new --req / list --req / show 归属展示；server 新增 /api/oncall/tickets?req=；Web 需求抽屉「需求讨论」区块（2 秒轮询刷新）+统一弹窗关联需求输入（抽屉发起预填只读）、讨论卡片/抽屉归属徽标 atb:open-req 双向跳转。新增 oncall-req-bind.test.mjs（R1-R7），全量 91 测试文件 0 失败，未绑定老单零回归。",
+        "runId": "run-20260908-085"
+      }
+    },
+    {
+      "id": "REQ-20260908-025",
+      "title": "完善文档指纹算法版本化，避免基线口径不一致导致误报",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T16:22:01.330Z",
+      "lastReport": {
+        "at": "2026-09-08T16:22:01.330Z",
+        "coverage": 100,
+        "framework": "node:assert/strict + run-all 聚合脚本",
+        "summary": "指纹自带 v2: 版本前缀，FINGERPRINT_VERSIONS 注册表(v1三文档/v2四文件)为唯一事实源；三处比对点统一走 docsUnchangedSince 按基线版本口径重算；存量裸 sha1 任一已知口径匹配=未编辑，领取/重排队重冻结就地升级；升级登记纪律成文(refine-store 注释+design)；新增 F1~F6 先红后绿，全量 96 测试文件 0 失败",
+        "runId": "run-20260909-098"
+      }
+    },
+    {
+      "id": "REQ-20260908-026",
+      "title": "优化批量任务管理界面与 Agent 配置",
+      "status": "in-progress",
+      "agentCompletedAt": "2026-09-08T17:05:54.919Z",
+      "lastReport": {
+        "at": "2026-09-08T17:05:54.919Z",
+        "coverage": 78,
+        "framework": "Node 原生测试（静态契约 + vm 沙箱渲染 + 数据层用例；npm test 98 文件全绿）",
+        "summary": "任务模块按已确认 Demo 改造：两类启动按钮统一「启动」、复制成功统一「任务已创建、提示词已复制，请在对应项目会话粘贴发送」（失败保留任务给重新复制/手动复制）；运行面板计数改「已处理/异常/处理中/待处理」并加当前项耗时与阶段化占位（终态不显示等待领取）；待处理队列与本轮处理记录均只展示最近 2 条（最近 X 条/共 N 条，移除加载更多与全量列表，账本与计数不截断，记录四列表格含类型/状态/第 N 次/重新执行）；暂停文案「暂停后续领取」、开发面板终态隐藏暂停恢复、终止确认补「保留本轮记录」；任务设置改四列表格（执行 Agent/子代理模型/推理强度/是否隐藏 × Codex、Zcode 两行），允许全部隐藏（启动禁用并提示）；数据层新增 batch.retryRun / refine.retryRefineRun（核验占用与业务状态、不自动改状态、幂等重排队、attempt 尝试计数）与 /api/{batch,refine}/retry 路由，终态重试由前端以单条目重建新任务并复制提示词承接；/api/batch/current 增 pending 与 recordsTotal",
+        "runId": "run-20260909-100"
+      }
+    }
+  ],
+  "excluded": [
+    {
+      "id": "REQ-20260908-023",
+      "title": "批量完善和批量开发生成的提示词要包含对当前会话上下文长度的判断，如果过长要提示用户使用新的会话",
+      "status": "submitted"
+    },
+    {
+      "id": "REQ-20260908-024",
+      "title": "支持批量测试流程",
+      "status": "submitted"
+    },
+    {
+      "id": "REQ-20260908-027",
+      "title": "选择功能混乱，需要重构",
+      "status": "planned"
+    }
+  ],
+  "hashes": {
+    "scripts/atb.mjs": "3350c3d63ea005e64d7b61339cbb4489514faa393f890f0f08b4d8131fae3777",
+    "scripts/lib/batch.mjs": "261d584f21ce2ceb14a81793b9c94a54afd749a448e825e9a1fbc129d00e6885",
+    "scripts/lib/codex-adapter.mjs": "007cf82e63f2a10d37cb94a19773aa066e28ea33222ff870293a8fb29a39c3ff",
+    "scripts/lib/codex-model-config.mjs": "27877e17ea254c73df538f7498f19d3e3b66c2d1045419a2bf5fec3696e43ccf",
+    "scripts/lib/codex-preflight.mjs": "07e022e1e53f7cbe45a39870583cb9ab0149a430b99776dde77b4e1b78d0f19f",
+    "scripts/lib/core.mjs": "aeb969505c059910a4fe862ef494d62b6a8c680584ba632aef46272f14ec8faf",
+    "scripts/lib/dispatch-store.mjs": "09e11fbbd64fd8c1a2155083b0a0b6d2cf64fc228bd8b03e3fae006706bed644",
+    "scripts/lib/dispatch.mjs": "2023904f5f9d1f014264db466023cfbb556a295536cd27e07fd705484a587ef5",
+    "scripts/lib/execution-verifier.mjs": "39f8d6d36ac7eb3195fa609bf077b531b537550b4f0ad313ddbbe34a435c7ffe",
+    "scripts/lib/oncall-store.mjs": "21a2f296edcc53145d0d10882b46cd34ce33fbbdab59ac34059a68daf5905bab",
+    "scripts/lib/refine-states.mjs": "5f7cd3f4c73b89ad451fc5e07b9bbd05fc81275cff85209fc79dad0d8202b84b",
+    "scripts/lib/refine-store.mjs": "2af8fe11cc4bcb63d304ecebfac5d698f52277db09c4a7bec8f9091be90f4c93",
+    "scripts/lib/scheduler.mjs": "9f709f52a0a7fbc53849e0b93f65cfe4cf065b0537b05e7cc0b74d9d0c3c48cd",
+    "scripts/lib/task-settings.mjs": "216a83e9e51f6f30531e81cbf3516f82b57e2e69fae67cea5815e0895f1a068e",
+    "scripts/server.mjs": "61329b02659b7a65b988073dfe3e64a450b12b7f3453c481f85b8149b1a3bc0c",
+    "scripts/state-guard.mjs": "66a4d97f9c40b9abb3a86180653ab4c7ccd5cb4f9353fa4b02f100eee3db2bb3",
+    "scripts/tests/accept-ui.test.mjs": "3b16b98bd63a10feadff4259a9928fe629989b07a942be622cdd6e6a2ba51943",
+    "scripts/tests/accepted-batch-entry.test.mjs": "55d22aac61f2b43354ed5b51d2f170d6aee628b8f0ff23836db96263551f46cb",
+    "scripts/tests/actor-name.test.mjs": "d1b309138165c43b09cdc621cde9afdb5ff5c208976d40654d79f30a9cbb24b8",
+    "scripts/tests/batch-cli.test.mjs": "5e0583d32e14ff70bdc3e486853ab2e16480206618c3ff05ff6d2e56419569cc",
+    "scripts/tests/batch-core.test.mjs": "882932d48fe2ca2e9be4388a44e83815ed9aa4a635a9f1d86eae18937ab17e31",
+    "scripts/tests/batch-delete.test.mjs": "48d6c5ce76ee64c8d3f075c74c5170303f0aedd6c36a4b7a006be5f76752983d",
+    "scripts/tests/batch-queue.test.mjs": "4061b98d92bd5685b2993d63e196ca95b1808d5cd5eff2a3e9fe578b048d747e",
+    "scripts/tests/batch-serve.test.mjs": "73483f22692fcf32ecdc59efd24e9caee95e71b147477c7ecc5ddd2e1b55300a",
+    "scripts/tests/batch-title-removed.test.mjs": "3f03d50e884c88c8c8b7953ade49cbc3caf485f09a2740a286b15df7be3b635e",
+    "scripts/tests/batch-ui.test.mjs": "10e383f3d6b2e0e1043b1b9eea6c593aaa95b3d2a4fae6dda52823e16d7f2d52",
+    "scripts/tests/body-limit.test.mjs": "f4aefb52454e534576ade3efb0f4917289f476463ac858bf7c7c5383c250ade0",
+    "scripts/tests/bug-standalone-origin.test.mjs": "0bc5db48f13c66270e2ada35d66dd2a3198374f8fc7e71d6f4dcf6c66eff4c38",
+    "scripts/tests/card-flag-dedup.test.mjs": "1967670a2534f7b6e5d4d68342fb354f76abc8d58c3eb0e6a52e68011f7485b9",
+    "scripts/tests/claim-msg.test.mjs": "2859ecc988f92fe7dc17c6e0ff7fa02bc99c2b793ea5741b4f8500d966ae0271",
+    "scripts/tests/cli-shell.test.mjs": "291ffd9876da040a9df59af6c5ed1835bc053f30db48efc1f08e371d15b3da25",
+    "scripts/tests/code-guard.test.mjs": "ff86c7dca80e7c3598906292925020cbb0f8280e126acd79e011f9e9244a50ff",
+    "scripts/tests/codex-adapter.test.mjs": "9a51280465a20224051be36e119a743f4a4b1f2c1697d4a63b8f93cbf069b0ec",
+    "scripts/tests/codex-hooks.test.mjs": "596c8823a7d07dbb92af0499445ea9fecdbed3eb04bb5b55631b5a1b171db2f7",
+    "scripts/tests/codex-model-api.test.mjs": "4104d300edfd7d25def03ca7a76f7e9edbe9b287165accafa871780009141756",
+    "scripts/tests/codex-model-config.test.mjs": "42f007431ea6281bb080679dc445cbc547e894c43b2bcca4f3c3e3f4a5195d9d",
+    "scripts/tests/codex-model-dispatch.test.mjs": "1aac9a9f0547478361e0cf545b371d3bc847b707c94d130a1f5aa3fb65d0a1f6",
+    "scripts/tests/codex-ui.test.mjs": "92bf88c6cd844e4c9ef28dc235a2604ba8b0d210344afb72225afa4e1523612b",
+    "scripts/tests/confirm-dialog.test.mjs": "7ab84b9b52024eee1c59322b6c6db3bee7b761ec80fec0c8e9308ac8fc44e2b7",
+    "scripts/tests/confirm-lane.test.mjs": "7ed74c82302964390958325ce41da020197ca64982dc3ff9fa2183bff19d264b",
+    "scripts/tests/copy-id.test.mjs": "7150c9e81af601fa5a1a943e08475336eb4acf5fd67193d96c3b989ef121263b",
+    "scripts/tests/default-port.test.mjs": "9d0bb51420df1d2ca800fa97f35b2519a6f69996937a7710fee0c089b406e23c",
+    "scripts/tests/detail-close-btn.test.mjs": "7ea5617304066224fd4e2c008c60db67ebe0d11862d5973aa23c4b1af4fa6313",
+    "scripts/tests/dispatch-api.test.mjs": "feb5ff78ba4225d8bbf612349849752700fe21f8a35bbfac803b5aace55235f8",
+    "scripts/tests/dispatch-launch.test.mjs": "04dc58b31dd076356cbdd436a60ab76ffc509482edd84ea6861e3f85b41f3d4a",
+    "scripts/tests/dispatch-store.test.mjs": "20b2d44b5369bcf9199eb11b99aeee13c54190bed647fc2bfd8bc6678e616a9e",
+    "scripts/tests/dispatch.test.mjs": "35d86dc108f0b4e08942721536274d468be0753c971f8ec6b4abaf30a0366a64",
+    "scripts/tests/drawer-actions-row.test.mjs": "aec8b54e6ae6b2632e104294869bf64666c3ec1b5e96a6ad5ab066757b1f7d9e",
+    "scripts/tests/drawer-height.test.mjs": "cf9740137be5128b19c3e9a3498346cb65ee0e6e8ea7f4102b229ef128e7e62f",
+    "scripts/tests/drawer-nav.test.mjs": "5e06ec7697359bc96dc1f169ee407061515e07998f9df7e7839a29c4f7044663",
+    "scripts/tests/drawer-undo.test.mjs": "25692d2872d3f0f6d1cefc4ada89acabf05238520904d417f417e666c0df25ac",
+    "scripts/tests/edit-content.test.mjs": "d147894ee53113c401e5849a99ec695ebe92758e2a31e43e03b4a0f00a1adef4",
+    "scripts/tests/edit-prompt.test.mjs": "7bfd8d56fed23fd374b282ddc32198bfeabe4772ec07536362154eae81f5b60e",
+    "scripts/tests/electron-shell.test.mjs": "11a76a6dc5ca30223073a5873e7daab8580732c8732be0575eaef6a670b6f172",
+    "scripts/tests/execution-verifier.test.mjs": "7746d71f88a1548e5e230207bdff0aeee812293aa1b5032597def7d051e54827",
+    "scripts/tests/file-board.test.mjs": "b4735006f522640afb0aedaf316a88e5a65586b6c882212f15557cf7e4611d15",
+    "scripts/tests/file-splitter.test.mjs": "ed95073bcaa6c2ef67e0a72183e0d587ebf26d693c4b6491bc8802ce9f15dc2b",
+    "scripts/tests/fixtures/fake-codex.mjs": "dde147c7934378aa19012fcde94f658076ea5242270292e413dbaeb1fbb85c6f",
+    "scripts/tests/global-search-ui.test.mjs": "d07e557871782f6d4ed0d0dcd4a54efa8b8c24d1b55232af7b4b4e802dd5c265",
+    "scripts/tests/impl-entry-ui.test.mjs": "f7d201b9da2a977a042317b56b4367b7f7e762f2651414e76d754be615973170",
+    "scripts/tests/impl-scope.test.mjs": "b984d5b11f3a0ccef687ffe1f4bf542f6f03b56eff6152e880ecfb8ff1ccc114",
+    "scripts/tests/item-delete.test.mjs": "544bbe6e9f4c090d3a3654560880c3afb2c68224afb5a518b47d23e15d6dc499",
+    "scripts/tests/layout.test.mjs": "26042a81e9f5178471d775bcdc334aa66a48547585a426b479efc5da038afb52",
+    "scripts/tests/list-sort.test.mjs": "eb55927d3c837d43dfe7f53a75f245713d0959a4ab883870b10c07d2f774e784",
+    "scripts/tests/lock-lifecycle.test.mjs": "77529c4bdde236099cfaded97ad34f271459bc0b224cfd5cf566d27e6c0fdb8a",
+    "scripts/tests/logo-poll-badge.test.mjs": "20cf8c8ffb81f54114a0297f24b43a652e422940d0aa115e2fb91eeb770e131f",
+    "scripts/tests/loop-mode.test.mjs": "7a84f4dc0f8c3e07f911bcd183a2534bc99eb0bdf5492b057e5836b24d6901b8",
+    "scripts/tests/multi-project.test.mjs": "244e1679d73509d811f2fc3829b8af0b49adbc56c5ba6a93fdb7f8c2d2e72504",
+    "scripts/tests/new-item-nav.test.mjs": "45c4c8c9b3fd2863110d4961c8259f0bc9770303595d02b86e17552b0f1db120",
+    "scripts/tests/next-batch-entry.test.mjs": "a7c821d16a5c678d7e618e60b0e7984ef1a858db4b6983c49a6c2696a4607469",
+    "scripts/tests/oncall-cli.test.mjs": "3a67042b600613a63b4d6759e0c1b12781c890663cf7e253239850ab51b79b1f",
+    "scripts/tests/oncall-dispatch.test.mjs": "d565d818bc7a74d4cde6c9f4dd54f69ca0367ecf4be4fcf409c22b28345ae036",
+    "scripts/tests/oncall-isolation.test.mjs": "6a780e68776ea7d6d5d9a4273c5ecab05899d7bc9f7c6800f22ea1476e3c5f95",
+    "scripts/tests/oncall-question-optional.test.mjs": "b99be6880087b858b0d9bff87d55ba452d7f066c53836c3ede74df8d1a478f81",
+    "scripts/tests/oncall-req-bind.test.mjs": "d3f33de443f592568502070cabc467036ab1df45e6196d64783ed345e880c143",
+    "scripts/tests/oncall-serve.test.mjs": "ee3495994f17a35017c760c464e0050f7175b8eef841dd036bde55061f533df7",
+    "scripts/tests/oncall-store.test.mjs": "701bf18cad184e1b60762eb2623d52e83a77824bc5b475f83439d77f18ba0c81",
+    "scripts/tests/oncall-ui.test.mjs": "3b14b120ba282a7d0acbd885f3dbf1b5eb954d2385770c8d48959b4afc188bec",
+    "scripts/tests/oncall-view-lean.test.mjs": "4aba168bc1f1e7d200e3d915ea205012230b10e71fd3d7c43f8aafd1909a6c2f",
+    "scripts/tests/origin-guard.test.mjs": "02819ca347c4f047b7178bed8a0323e95daebc3875a939db50f39b9ae8d3161a",
+    "scripts/tests/pending-accept-inline.test.mjs": "82d09482fc2f895bf485893e623c2b1794322d96093f4c48217ca52d64b29b3a",
+    "scripts/tests/pending-alignment.test.mjs": "8ede9355f43e77858898ac168e7157ce0529090f07a8f74412dce28caed35ff9",
+    "scripts/tests/plan-batch-move.test.mjs": "99e038b19f66fa10f7371ea0d11949f4cb409cd9a77544f8de5f53c797f280c6",
+    "scripts/tests/plan-wording.test.mjs": "66f4b307ad3dc5ace7b9461c499dd6588d5e60b0b653bac6542fdd3eac7d5b5b",
+    "scripts/tests/planned-state.test.mjs": "9ed943ab079fd77e8a108fe70e97fadc1bd51208286b130461c8273285f1839a",
+    "scripts/tests/portrait-board.test.mjs": "081cfdf202f6f796f951f67afc31c352e9cc5dbdd30c4cd788fd89b27ea44f94",
+    "scripts/tests/receipt-usage-hint.test.mjs": "9e86f63253dd79c46fc0b7cde3c54a6d5e2696810ba55a2955542e2ad9724777",
+    "scripts/tests/refine-claim-baseline.test.mjs": "18056f75db422024006df4a88cb252b14cb796e04f0c703ef1c69d16a253e297",
+    "scripts/tests/refine-cli.test.mjs": "4fb538f5c0e7928f3e5b7c3e526472da7504e389ab926d5eed51d6cfac8b11d4",
+    "scripts/tests/refine-fingerprint-version.test.mjs": "cb4e62d554bd39846c5d1cf3868e35b452942b09a1de87cf9444214a864893fb",
+    "scripts/tests/refine-reaccept.test.mjs": "4f0de1ae70b03bb331cb0e197905615e31bd6d1fea8c6e7477b3ddee46dcecde",
+    "scripts/tests/refine-serve.test.mjs": "e1a06bf6ddd675d30dcc8606e7163e53842d150561601c23f84df394c036972d",
+    "scripts/tests/refine-store.test.mjs": "1f18a360ddf6e2dddafcecb5ea2c1da0ee5f0c97b70f0580da743cb1ddc10ad9",
+    "scripts/tests/refine-ui.test.mjs": "13ca375168e26abb22a5cbfd9ed99bcc6f8c3b42bc296a57b6fc62d0027ec8f4",
+    "scripts/tests/refresh-default-view.test.mjs": "d2a01c210f6762644ec63752885a4dd8477365f70cfb39641ffe17011c981beb",
+    "scripts/tests/rename-reject.test.mjs": "e763085a4ae91cc4623d60d56260e31060009374142915bdc1f0657c663f205f",
+    "scripts/tests/req-filter-removed.test.mjs": "047a25e9225bcaa5fdc9f779f5d512b63bf9d37e60771975c759ef1de690e90c",
+    "scripts/tests/revert-ci-board.test.mjs": "c315dab62785e3c25b1a0e7ef8ad99aa114eb490e0d00b21ec462d9557df45fe",
+    "scripts/tests/run-all.mjs": "81fc1346ec9b67080f90aba198721cae23a2a4af32834ee133e2ea930029fbe7",
+    "scripts/tests/scheduler-unclaimed.test.mjs": "10ddd5bfbc21bc83e9754ff7d1fd3a318d6dd7ed2c67359d95399ae7281329ab",
+    "scripts/tests/scheduler.test.mjs": "110b45c273147652194641b811f70e34f06d064e57b4ce4d3b82e82750d21723",
+    "scripts/tests/search-api.test.mjs": "73d4535f876f9460ce10e47abb12f4a17df3d29eb0bf28aa2acc8605449526bb",
+    "scripts/tests/serve-stale.test.mjs": "1f02ccd9c0d439cfd4023c475bb8618d04ac8852de2562f0cf6c99fe19778b28",
+    "scripts/tests/serve.test.mjs": "c45db2dac48008706041b1d17073981f074e453247576f5eb7d25768c428a7df",
+    "scripts/tests/settings-title-removed.test.mjs": "57dcfc40ca87bac3fe3768b9bec9705bde9aa29e3f8273790da72cd2566d9f3d",
+    "scripts/tests/shutdown-forced-exit.test.mjs": "6a2dbb71818dd16f3b313fa490aae104ede5d943483417fc3a8c20bcacf7f193",
+    "scripts/tests/skill-desc.test.mjs": "4ecbe2473c3b14d21189ece20ec354d857f6053293c05438b52342d28f8a388b",
+    "scripts/tests/tasks-panel-26.test.mjs": "d85e801dab5721f3ae91215566c3ed450c0da2d67ff5cd76adc3859ca2866aa1",
+    "scripts/tests/tasks-refine.test.mjs": "9c8f5252ecceb0e9b083a28d5c0f0c901252b386f495ea14532e00e643ad434d",
+    "scripts/tests/tasks-retry.test.mjs": "55338ae912ff7d8e03a438f285318aa44b83bba6ffe4d9b7aa816394991641e3",
+    "scripts/tests/topbar-overflow.test.mjs": "088c71e9e4f0d6711342ecf38b7dde880633a853abea9c4e63e086abd6ce603a",
+    "scripts/tests/traceability.test.mjs": "cf4383fe2a5562384b19127fc97c192b8f786b2d6fb33b07bca26da782e0ba58",
+    "scripts/tests/type-chip-removed.test.mjs": "913510d927cb9e5bdc743025bef8c188f2066763d1442a9fca564e181282188d",
+    "scripts/tests/view-tabs-right.test.mjs": "f2a240f8d3e5d76bb6e103350d91039d7af99c29abb69621b0bd62dcaf51a6d3",
+    "scripts/tests/view-tabs-style.test.mjs": "e650b445b7524caa19a27e57e2fccdbc45ec42e3df8599f8a30955fcbd645b84",
+    "scripts/tests/workbench-layout.test.mjs": "8859428a7dc8a7371b7a826149b71998a05acd8e50807d34c240e109529d8904",
+    "scripts/web/app.js": "b4ab5c1d86a01c631fcf7a521320f605b34352215d7a52f96c594d48916a1779",
+    "scripts/web/banner.js": "417552365ab630fad9ac9ecb8a4042299703520ee0777dc4dc04c91d5effd979",
+    "scripts/web/highlight-github-dark.min.css": "9f208d022102b1d0c7aebfecd8e42ca7997d5de636649d2b31ea63093d809019",
+    "scripts/web/highlight-github.min.css": "3a9a5def8b9c311e5ae43abde85c63133185eed4f0d9f67fea4b00a8308cf066",
+    "scripts/web/highlight.min.js": "471ef9ae90c407af440fcdc48edfeeb562106b3267bd12d99071c162fb52ed32",
+    "scripts/web/index.html": "dd05c378c6039f657ce10f35691036e92dc8347e050ea0cc4a89746286a2ee98",
+    "scripts/web/marked.min.js": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894",
+    "scripts/web/oncall.js": "c989b5412856e746de080c21c04a5bbbdbb27eadb1c5959d83ab1e916af9debb",
+    "scripts/web/splitter.js": "07f7f8bb0c24951b19e9f255abd7f2344c7d1e8c82e7027621b90547bc8b09e0",
+    "scripts/web/style.css": "f8037d7c8db8142b69895c0cd76e8664ebe180eaf3b264645369c4b1fab70b04",
+    "scripts/web/wunderbaum.css": "41ac06eb4483e7349b5602fd7399e75f5262b45a1c0759dd6e7b136e8fd45012",
+    "scripts/web/wunderbaum.umd.min.js": "bf537c8f492218d0c0bdc6416b4c63f2bb6e5c42834b0131c8acfb7c7560da60"
+  }
+}

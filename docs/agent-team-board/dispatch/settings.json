@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "codex": {
+    "enabled": false,
+    "cliPath": "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "cliPathExplicit": true,
+    "timeoutMin": 60,
+    "retries": 2,
+    "resumeAfterRestart": false,
+    "allowNonGit": true,
+    "maxResumeRounds": 2,
+    "cancelGraceSec": 10
+  },
+  "counters": {
+    "batch": 40,
+    "run": 205
+  },
+  "defaults": {
+    "batchLimit": 20
+  }
+}

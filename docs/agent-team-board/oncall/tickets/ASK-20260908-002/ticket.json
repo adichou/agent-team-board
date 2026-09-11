@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "id": "ASK-20260908-002",
+  "title": "RFB-20260908-001 已经无人分析，请终止",
+  "status": "archived",
+  "createdAt": "2026-09-08T02:58:33.451Z",
+  "updatedAt": "2026-09-09T08:37:09.705Z",
+  "rounds": [
+    {
+      "no": 1,
+      "mode": "zcode",
+      "staff": null,
+      "by": "oncall-20260908-未指定",
+      "dispatchedAt": "2026-09-08T02:58:41.398Z",
+      "answeredAt": "2026-09-08T03:03:31.692Z",
+      "error": null,
+      "attachments": []
+    }
+  ],
+  "dispatches": [],
+  "history": [
+    {
+      "at": "2026-09-08T02:58:33.451Z",
+      "from": null,
+      "to": "pending",
+      "by": "board",
+      "note": "创建咨询单"
+    },
+    {
+      "at": "2026-09-08T02:58:41.398Z",
+      "from": "pending",
+      "to": "answering",
+      "by": "board",
+      "note": "派单（zcode）"
+    },
+    {
+      "at": "2026-09-08T03:03:31.692Z",
+      "from": "answering",
+      "to": "answered",
+      "by": "oncall-20260908-未指定",
+      "note": "第 1 轮回答回传（zcode）"
+    },
+    {
+      "at": "2026-09-09T08:37:09.705Z",
+      "from": "answered",
+      "to": "archived",
+      "by": "board",
+      "note": "归档讨论（保留纪要与已创建条目）"
+    }
+  ]
+}

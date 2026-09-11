@@ -1,0 +1,135 @@
+{
+  "experimentId": "atb-codex-ab-20260907-qhce5o3f",
+  "date": "2026-09-07",
+  "stage": "synthetic-pilot",
+  "model": "gpt-6-astra",
+  "reasoningEffort": "xhigh",
+  "serviceTier": "default",
+  "codexCliVersion": "0.153.4",
+  "workerConcurrency": 1,
+  "normalization": {
+    "totalTokens": "input_tokens + output_tokens",
+    "cachedInputTokens": "input_tokens 的子集，不重复相加",
+    "reasoningOutputTokens": "output_tokens 的子集，不重复相加",
+    "contextMetric": "每次请求 last_token_usage.input_tokens 的最大值，只作为上下文压力代理"
+  },
+  "tasks": [
+    {
+      "id": "P01",
+      "difficulty": "light",
+      "frozenExecutionInputSha256": "5f6c1d06a9fe7eb1e74d02c451e2134c2021c866be6958dbe88c61adb83214e5"
+    },
+    {
+      "id": "P02",
+      "difficulty": "medium",
+      "frozenExecutionInputSha256": "76298baae490d510fca6387b1f4ccaf2b736c7b317adee035ed572250f1cfae9"
+    }
+  ],
+  "arms": {
+    "A": {
+      "description": "一个主调度会话，每项创建一个 fork_turns=none 的新子 Agent",
+      "inputTokens": 671174,
+      "cachedInputTokens": 608128,
+      "outputTokens": 6759,
+      "totalTokens": 677933,
+      "observedModelRequests": 31,
+      "passed": 2,
+      "planned": 2,
+      "activeWallTimeSeconds": 328.952,
+      "peakRequestInputTokens": 26217,
+      "compactions": 0,
+      "coordinator": {
+        "threadId": "01a07a5e-2c39-7262-a79d-7dde8b28f2b0",
+        "inputTokens": 288715,
+        "cachedInputTokens": 264064,
+        "outputTokens": 1114,
+        "totalTokens": 289829,
+        "observedModelRequests": 14,
+        "firstRequestInputTokens": 19495,
+        "peakRequestInputTokens": 21682,
+        "processExitCode": 1,
+        "terminalError": "usage_limit_exceeded after both task checks passed, while producing the final summary"
+      },
+      "workers": [
+        {
+          "taskId": "P01",
+          "threadId": "01a07a5e-742f-72e0-bfd2-b24ca491af10",
+          "parentThreadId": "01a07a5e-2c39-7262-a79d-7dde8b28f2b0",
+          "inputTokens": 102012,
+          "cachedInputTokens": 75264,
+          "outputTokens": 894,
+          "totalTokens": 102906,
+          "observedModelRequests": 5,
+          "firstRequestInputTokens": 19088,
+          "peakRequestInputTokens": 21290,
+          "verificationExitCode": 0
+        },
+        {
+          "taskId": "P02",
+          "threadId": "01a07a5f-ce42-7290-ad83-29a1aebd3cdd",
+          "parentThreadId": "01a07a5e-2c39-7262-a79d-7dde8b28f2b0",
+          "inputTokens": 280447,
+          "cachedInputTokens": 268800,
+          "outputTokens": 4751,
+          "totalTokens": 285198,
+          "observedModelRequests": 12,
+          "firstRequestInputTokens": 19088,
+          "peakRequestInputTokens": 26217,
+          "verificationExitCode": 0
+        }
+      ]
+    },
+    "B": {
+      "description": "普通后台程序每项启动一个全新的 codex exec",
+      "inputTokens": 336265,
+      "cachedInputTokens": 291712,
+      "outputTokens": 4233,
+      "totalTokens": 340498,
+      "observedModelRequests": 16,
+      "passed": 2,
+      "planned": 2,
+      "activeWallTimeSeconds": 266.891,
+      "peakRequestInputTokens": 24409,
+      "compactions": 0,
+      "workers": [
+        {
+          "taskId": "P01",
+          "threadId": "01a07bd8-c590-7243-ab80-8499cbc02880",
+          "inputTokens": 164130,
+          "cachedInputTokens": 146816,
+          "outputTokens": 1056,
+          "totalTokens": 165186,
+          "observedModelRequests": 8,
+          "firstRequestInputTokens": 19068,
+          "peakRequestInputTokens": 21513,
+          "verificationExitCode": 0,
+          "processExitCode": 0
+        },
+        {
+          "taskId": "P02",
+          "threadId": "01a07bda-f461-7a90-8d41-ed15a2e8e2fa",
+          "inputTokens": 172135,
+          "cachedInputTokens": 144896,
+          "outputTokens": 3177,
+          "totalTokens": 175312,
+          "observedModelRequests": 8,
+          "firstRequestInputTokens": 19068,
+          "peakRequestInputTokens": 24409,
+          "verificationExitCode": 0,
+          "processExitCode": 0
+        }
+      ]
+    }
+  },
+  "comparison": {
+    "aToBRatio": 1.9910,
+    "aTokenIncreasePercent": 99.10,
+    "aCoordinatorSharePercent": 42.75,
+    "aWorkerOnlyIncreasePercent": 13.98,
+    "aActiveWallTimeIncreasePercent": 23.25,
+    "aPeakRequestInputIncreasePercent": 7.41
+  },
+  "excludedSetupAttempt": {
+    "reason": "首次 A 启动未显式继承本机代理，请求在模型执行前超时；夹具未改变且没有可归一化模型用量。修正后 A、B 均显式使用相同本机代理。"
+  }
+}

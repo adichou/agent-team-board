@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260911-010",
+  "type": "requirement",
+  "title": "回退批量 Commit 的相关功能，但需保留已完成需求的 commit 号显示这个功能",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-040-4",
+  "createdAt": "2026-09-11T15:33:33.667Z",
+  "updatedAt": "2026-09-11T17:40:00.507Z",
+  "agentCompletedAt": "2026-09-11T17:40:00.507Z",
+  "lastReport": {
+    "at": "2026-09-11T17:40:00.507Z",
+    "coverage": 90,
+    "framework": "node:assert/strict + 真实 git 临时仓库/服务进程子进程集成 + 前端 vm/静态契约（run-all.mjs 聚合）",
+    "summary": "回退人工批量Commit：commit-store裁剪为共享内核；atb commit旧命令组明确报错零副作用；服务端5路由404，item-status换源REQ-009索引（git-flow批量索引，一commit可关联多单号）；看板移除批量Commit页签/已完成档快捷入口/全局CMT简报，徽标四态保留；guard去CMT豁免。新增回退测试12例，全量203文件通过。",
+    "runId": "run-20260912-205"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T15:33:33.667Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T15:33:33.667Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T15:41:26.495Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-233627-67a2）"
+    },
+    {
+      "at": "2026-09-11T17:00:28.514Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-040-4",
+      "note": "认领（zcode-batch-040-4）"
+    },
+    {
+      "at": "2026-09-11T17:40:00.507Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-040-4",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    }
+  ]
+}

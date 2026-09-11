@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "ASK-20260909-002",
+  "title": "如何清理不需要的项目目录",
+  "reqId": null,
+  "status": "archived",
+  "createdAt": "2026-09-09T08:46:49.217Z",
+  "updatedAt": "2026-09-10T07:23:24.250Z",
+  "finishPromptAt": null,
+  "publishedAt": null,
+  "created": {},
+  "rounds": [],
+  "history": [
+    {
+      "at": "2026-09-09T08:46:49.217Z",
+      "by": "board",
+      "note": "创建开放式讨论"
+    },
+    {
+      "at": "2026-09-10T07:23:24.250Z",
+      "from": "discussing",
+      "to": "archived",
+      "by": "board",
+      "note": "归档讨论（保留纪要与已创建条目）"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "agents": {
+    "refine": [
+      "zcode",
+      "codex"
+    ],
+    "develop": [
+      "zcode",
+      "codex"
+    ]
+  },
+  "models": {
+    "refine": {
+      "zcode": {
+        "source": "follow",
+        "model": "",
+        "level": "high"
+      },
+      "codex": {
+        "source": "follow",
+        "model": "",
+        "level": "high"
+      }
+    },
+    "develop": {
+      "zcode": {
+        "source": "follow",
+        "model": "",
+        "level": "medium"
+      },
+      "codex": {
+        "source": "follow",
+        "model": "",
+        "level": "medium"
+      }
+    }
+  },
+  "refine": {
+    "autoPlanAfterDone": true
+  }
+}

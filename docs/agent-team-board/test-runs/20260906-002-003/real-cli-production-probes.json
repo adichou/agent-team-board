@@ -1,0 +1,79 @@
+{
+  "results": [
+    {
+      "mode": "new",
+      "cliPath": "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "version": "codex-cli 0.153.4",
+      "args": [
+        "exec",
+        "--json",
+        "-C",
+        "/Users/adichou/Documents/src/agent-team-board",
+        "-"
+      ],
+      "code": 1,
+      "stderr": "Not inside a trusted directory and --skip-git-repo-check was not specified.\n",
+      "threadId": null
+    },
+    {
+      "mode": "resume",
+      "cliPath": "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "version": "codex-cli 0.153.4",
+      "args": [
+        "exec",
+        "resume",
+        "fixture-does-not-exist",
+        "--json",
+        "-C",
+        "/Users/adichou/Documents/src/agent-team-board",
+        "-"
+      ],
+      "code": 2,
+      "stderr": "error: unexpected argument '-C' found\n\n  tip: to pass '-C' as a value, use '-- -C'\n\nUsage: codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]\n\nFor more information, try '--help'.\n",
+      "threadId": null
+    }
+  ],
+  "preflight": {
+    "checks": [
+      {
+        "id": "cli",
+        "ok": true,
+        "label": "codex CLI 可执行",
+        "detail": "/Applications/ChatGPT.app/Contents/Resources/codex"
+      },
+      {
+        "id": "cli-version",
+        "ok": true,
+        "label": "CLI 版本",
+        "detail": "codex-cli 0.153.4"
+      },
+      {
+        "id": "exec-args",
+        "ok": true,
+        "label": "exec --json / -C / resume 参数",
+        "detail": "已按本机 CLI 帮助核验（codex-cli 0.153.1 实测）"
+      },
+      {
+        "id": "project",
+        "ok": true,
+        "label": "项目与看板数据目录",
+        "detail": "/Users/adichou/Documents/src/agent-team-board"
+      },
+      {
+        "id": "atb-cli",
+        "ok": true,
+        "label": "atb 工具入口",
+        "detail": "/Users/adichou/Documents/src/agent-team-board/scripts/atb.mjs"
+      },
+      {
+        "id": "config",
+        "ok": true,
+        "label": "运行配置合法",
+        "detail": "单项时限 60 分钟 · 网络重试 2 次 · 重启续跑 关"
+      }
+    ],
+    "cliPath": "/Applications/ChatGPT.app/Contents/Resources/codex",
+    "allOk": true,
+    "note": "以上为静态检查，不向模型发送请求；模型可达性请用「验证模型可达」按钮单独触发"
+  }
+}

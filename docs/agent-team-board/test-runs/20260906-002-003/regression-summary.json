@@ -1,0 +1,167 @@
+[
+  {
+    "suite": "actor-name.test.mjs",
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "suite": "batch-cli.test.mjs",
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "suite": "batch-core.test.mjs",
+    "pass": 20,
+    "fail": 0
+  },
+  {
+    "suite": "batch-serve.test.mjs",
+    "pass": 1,
+    "fail": 0
+  },
+  {
+    "suite": "batch-ui.test.mjs",
+    "pass": 13,
+    "fail": 0
+  },
+  {
+    "suite": "claim-msg.test.mjs",
+    "pass": 3,
+    "fail": 0
+  },
+  {
+    "suite": "code-guard.test.mjs",
+    "pass": 15,
+    "fail": 0
+  },
+  {
+    "suite": "codex-adapter.test.mjs",
+    "pass": 11,
+    "fail": 0
+  },
+  {
+    "suite": "codex-ui.test.mjs",
+    "pass": 10,
+    "fail": 0
+  },
+  {
+    "suite": "copy-id.test.mjs",
+    "pass": 4,
+    "fail": 0
+  },
+  {
+    "suite": "default-port.test.mjs",
+    "pass": 8,
+    "fail": 0
+  },
+  {
+    "suite": "detail-close-btn.test.mjs",
+    "pass": 3,
+    "fail": 1
+  },
+  {
+    "suite": "dispatch-api.test.mjs",
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "suite": "dispatch-launch.test.mjs",
+    "pass": 12,
+    "fail": 0
+  },
+  {
+    "suite": "dispatch-store.test.mjs",
+    "pass": 11,
+    "fail": 0
+  },
+  {
+    "suite": "dispatch.test.mjs",
+    "pass": 5,
+    "fail": 0
+  },
+  {
+    "suite": "drawer-nav.test.mjs",
+    "pass": 7,
+    "fail": 0
+  },
+  {
+    "suite": "electron-shell.test.mjs",
+    "pass": 8,
+    "fail": 0
+  },
+  {
+    "suite": "execution-verifier.test.mjs",
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "suite": "file-board.test.mjs",
+    "pass": 11,
+    "fail": 0
+  },
+  {
+    "suite": "file-splitter.test.mjs",
+    "pass": 7,
+    "fail": 0
+  },
+  {
+    "suite": "layout.test.mjs",
+    "pass": 10,
+    "fail": 0
+  },
+  {
+    "suite": "lock-lifecycle.test.mjs",
+    "pass": 8,
+    "fail": 0
+  },
+  {
+    "suite": "loop-mode.test.mjs",
+    "pass": 7,
+    "fail": 0
+  },
+  {
+    "suite": "multi-project.test.mjs",
+    "pass": 8,
+    "fail": 0
+  },
+  {
+    "suite": "pending-alignment.test.mjs",
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "suite": "portrait-board.test.mjs",
+    "pass": 7,
+    "fail": 0
+  },
+  {
+    "suite": "scheduler.test.mjs",
+    "pass": 17,
+    "fail": 0
+  },
+  {
+    "suite": "serve.test.mjs",
+    "pass": 3,
+    "fail": 0
+  },
+  {
+    "suite": "skill-desc.test.mjs",
+    "pass": 4,
+    "fail": 0
+  },
+  {
+    "suite": "topbar-overflow.test.mjs",
+    "pass": 5,
+    "fail": 0
+  },
+  {
+    "suite": "traceability.test.mjs",
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "suite": "view-tabs-style.test.mjs",
+    "pass": 6,
+    "fail": 0
+  }
+]

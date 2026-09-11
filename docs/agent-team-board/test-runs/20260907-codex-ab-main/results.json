@@ -1,0 +1,1558 @@
+{
+  "experimentId": "atb-codex-ab-main-20260907-v1",
+  "stage": "completed",
+  "model": "gpt-5.6-luna",
+  "reasoningEffort": "high",
+  "normalization": {
+    "totalTokensFormula": "inputTokens + outputTokens",
+    "cachedInputTokensAreSubsetOfInput": true,
+    "reasoningOutputTokensAreSubsetOfOutput": true,
+    "contextProxy": "每个 session 的 last_token_usage.input_tokens 峰值"
+  },
+  "quality": {
+    "passed": 40,
+    "total": 40,
+    "retries": 0
+  },
+  "sessionRoleCounts": {
+    "coordinator": 4,
+    "worker-subagent": 20,
+    "worker-root": 20
+  },
+  "groups": {
+    "R1-A": {
+      "arm": "A",
+      "passed": 10,
+      "totalTasks": 10,
+      "sessionCount": 12,
+      "workerSessionCount": 10,
+      "coordinatorSessionCount": 2,
+      "tokens": {
+        "inputTokens": 4104946,
+        "cachedInputTokens": 3743744,
+        "outputTokens": 68242,
+        "reasoningOutputTokens": 34263,
+        "totalTokens": 4173188
+      },
+      "workerTokens": {
+        "inputTokens": 2403356,
+        "cachedInputTokens": 2151168,
+        "outputTokens": 61420,
+        "reasoningOutputTokens": 33125,
+        "totalTokens": 2464776
+      },
+      "coordinatorTokens": {
+        "inputTokens": 1701590,
+        "cachedInputTokens": 1592576,
+        "outputTokens": 6822,
+        "reasoningOutputTokens": 1138,
+        "totalTokens": 1708412
+      },
+      "coordinatorTokenSharePercent": 40.94,
+      "peakRequestInputTokens": 39733,
+      "medianWorkerFirstRequestInputTokens": 16813.0,
+      "medianWorkerPeakRequestInputTokens": 25571.0,
+      "coordinatorPeakRequestInputTokens": 29254,
+      "compactionEvents": 0,
+      "timing": {
+        "activeSeconds": 1597.869,
+        "elapsedSpanSeconds": 1789.525,
+        "betweenProcessGapSeconds": 191.656,
+        "processes": [
+          {
+            "label": "R1-A",
+            "startedAt": "2026-09-07T15:04:22.424547+00:00",
+            "endedAt": "2026-09-07T15:14:59.357443+00:00",
+            "seconds": 636.932896,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-A-S2",
+            "startedAt": "2026-09-07T15:18:11.013429+00:00",
+            "endedAt": "2026-09-07T15:34:11.949403+00:00",
+            "seconds": 960.935974,
+            "exitCode": 0,
+            "timedOut": false
+          }
+        ]
+      }
+    },
+    "R1-B": {
+      "arm": "B",
+      "passed": 10,
+      "totalTasks": 10,
+      "sessionCount": 10,
+      "workerSessionCount": 10,
+      "coordinatorSessionCount": 0,
+      "tokens": {
+        "inputTokens": 2513860,
+        "cachedInputTokens": 2232576,
+        "outputTokens": 63818,
+        "reasoningOutputTokens": 32797,
+        "totalTokens": 2577678
+      },
+      "workerTokens": {
+        "inputTokens": 2513860,
+        "cachedInputTokens": 2232576,
+        "outputTokens": 63818,
+        "reasoningOutputTokens": 32797,
+        "totalTokens": 2577678
+      },
+      "coordinatorTokens": {
+        "inputTokens": 0,
+        "cachedInputTokens": 0,
+        "outputTokens": 0,
+        "reasoningOutputTokens": 0,
+        "totalTokens": 0
+      },
+      "coordinatorTokenSharePercent": 0,
+      "peakRequestInputTokens": 35473,
+      "medianWorkerFirstRequestInputTokens": 16623.0,
+      "medianWorkerPeakRequestInputTokens": 26403.0,
+      "coordinatorPeakRequestInputTokens": 0,
+      "compactionEvents": 0,
+      "timing": {
+        "activeSeconds": 1598.19,
+        "elapsedSpanSeconds": 1598.748,
+        "betweenProcessGapSeconds": 0.557,
+        "processes": [
+          {
+            "label": "R1-B-M01",
+            "startedAt": "2026-09-07T15:36:02.599505+00:00",
+            "endedAt": "2026-09-07T15:37:48.533343+00:00",
+            "seconds": 105.933838,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M02",
+            "startedAt": "2026-09-07T15:37:48.590657+00:00",
+            "endedAt": "2026-09-07T15:39:05.052438+00:00",
+            "seconds": 76.461781,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M03",
+            "startedAt": "2026-09-07T15:39:05.107282+00:00",
+            "endedAt": "2026-09-07T15:40:44.764894+00:00",
+            "seconds": 99.657612,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M04",
+            "startedAt": "2026-09-07T15:40:44.812787+00:00",
+            "endedAt": "2026-09-07T15:42:37.491179+00:00",
+            "seconds": 112.678392,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M05",
+            "startedAt": "2026-09-07T15:42:37.547981+00:00",
+            "endedAt": "2026-09-07T15:45:25.863448+00:00",
+            "seconds": 168.315467,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M06",
+            "startedAt": "2026-09-07T15:45:25.911802+00:00",
+            "endedAt": "2026-09-07T15:48:57.489158+00:00",
+            "seconds": 211.577356,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M07",
+            "startedAt": "2026-09-07T15:48:57.553743+00:00",
+            "endedAt": "2026-09-07T15:50:21.968914+00:00",
+            "seconds": 84.415171,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M08",
+            "startedAt": "2026-09-07T15:50:22.031187+00:00",
+            "endedAt": "2026-09-07T15:54:24.909643+00:00",
+            "seconds": 242.878456,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M09",
+            "startedAt": "2026-09-07T15:54:24.975154+00:00",
+            "endedAt": "2026-09-07T15:58:33.258776+00:00",
+            "seconds": 248.283622,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R1-B-M10",
+            "startedAt": "2026-09-07T15:58:33.358650+00:00",
+            "endedAt": "2026-09-07T16:02:41.347026+00:00",
+            "seconds": 247.988376,
+            "exitCode": 0,
+            "timedOut": false
+          }
+        ]
+      }
+    },
+    "R2-B": {
+      "arm": "B",
+      "passed": 10,
+      "totalTasks": 10,
+      "sessionCount": 10,
+      "workerSessionCount": 10,
+      "coordinatorSessionCount": 0,
+      "tokens": {
+        "inputTokens": 2571249,
+        "cachedInputTokens": 2296832,
+        "outputTokens": 67195,
+        "reasoningOutputTokens": 36776,
+        "totalTokens": 2638444
+      },
+      "workerTokens": {
+        "inputTokens": 2571249,
+        "cachedInputTokens": 2296832,
+        "outputTokens": 67195,
+        "reasoningOutputTokens": 36776,
+        "totalTokens": 2638444
+      },
+      "coordinatorTokens": {
+        "inputTokens": 0,
+        "cachedInputTokens": 0,
+        "outputTokens": 0,
+        "reasoningOutputTokens": 0,
+        "totalTokens": 0
+      },
+      "coordinatorTokenSharePercent": 0,
+      "peakRequestInputTokens": 38065,
+      "medianWorkerFirstRequestInputTokens": 16623.0,
+      "medianWorkerPeakRequestInputTokens": 26886.5,
+      "coordinatorPeakRequestInputTokens": 0,
+      "compactionEvents": 0,
+      "timing": {
+        "activeSeconds": 1463.148,
+        "elapsedSpanSeconds": 1463.728,
+        "betweenProcessGapSeconds": 0.58,
+        "processes": [
+          {
+            "label": "R2-B-M01",
+            "startedAt": "2026-09-07T22:58:09.056756+00:00",
+            "endedAt": "2026-09-07T22:59:27.692825+00:00",
+            "seconds": 78.636069,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M02",
+            "startedAt": "2026-09-07T22:59:27.753465+00:00",
+            "endedAt": "2026-09-07T23:00:30.261510+00:00",
+            "seconds": 62.508045,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M03",
+            "startedAt": "2026-09-07T23:00:30.313402+00:00",
+            "endedAt": "2026-09-07T23:02:19.713380+00:00",
+            "seconds": 109.399978,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M04",
+            "startedAt": "2026-09-07T23:02:19.755130+00:00",
+            "endedAt": "2026-09-07T23:03:32.563773+00:00",
+            "seconds": 72.808643,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M05",
+            "startedAt": "2026-09-07T23:03:32.604242+00:00",
+            "endedAt": "2026-09-07T23:06:39.061983+00:00",
+            "seconds": 186.457741,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M06",
+            "startedAt": "2026-09-07T23:06:39.128012+00:00",
+            "endedAt": "2026-09-07T23:09:02.081495+00:00",
+            "seconds": 142.953483,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M07",
+            "startedAt": "2026-09-07T23:09:02.115326+00:00",
+            "endedAt": "2026-09-07T23:10:29.907478+00:00",
+            "seconds": 87.792152,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M08",
+            "startedAt": "2026-09-07T23:10:29.953828+00:00",
+            "endedAt": "2026-09-07T23:14:08.445964+00:00",
+            "seconds": 218.492136,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M09",
+            "startedAt": "2026-09-07T23:14:08.525166+00:00",
+            "endedAt": "2026-09-07T23:18:21.243068+00:00",
+            "seconds": 252.717902,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-B-M10",
+            "startedAt": "2026-09-07T23:18:21.402482+00:00",
+            "endedAt": "2026-09-07T23:22:32.784730+00:00",
+            "seconds": 251.382248,
+            "exitCode": 0,
+            "timedOut": false
+          }
+        ]
+      }
+    },
+    "R2-A": {
+      "arm": "A",
+      "passed": 10,
+      "totalTasks": 10,
+      "sessionCount": 12,
+      "workerSessionCount": 10,
+      "coordinatorSessionCount": 2,
+      "tokens": {
+        "inputTokens": 4459529,
+        "cachedInputTokens": 4159232,
+        "outputTokens": 72364,
+        "reasoningOutputTokens": 34121,
+        "totalTokens": 4531893
+      },
+      "workerTokens": {
+        "inputTokens": 2927310,
+        "cachedInputTokens": 2710016,
+        "outputTokens": 66419,
+        "reasoningOutputTokens": 33239,
+        "totalTokens": 2993729
+      },
+      "coordinatorTokens": {
+        "inputTokens": 1532219,
+        "cachedInputTokens": 1449216,
+        "outputTokens": 5945,
+        "reasoningOutputTokens": 882,
+        "totalTokens": 1538164
+      },
+      "coordinatorTokenSharePercent": 33.94,
+      "peakRequestInputTokens": 43467,
+      "medianWorkerFirstRequestInputTokens": 16813.0,
+      "medianWorkerPeakRequestInputTokens": 27653.5,
+      "coordinatorPeakRequestInputTokens": 28611,
+      "compactionEvents": 0,
+      "timing": {
+        "activeSeconds": 1549.441,
+        "elapsedSpanSeconds": 1563.008,
+        "betweenProcessGapSeconds": 13.568,
+        "processes": [
+          {
+            "label": "R2-A-S1",
+            "startedAt": "2026-09-07T23:24:23.157368+00:00",
+            "endedAt": "2026-09-07T23:35:31.552410+00:00",
+            "seconds": 668.395042,
+            "exitCode": 0,
+            "timedOut": false
+          },
+          {
+            "label": "R2-A-S2",
+            "startedAt": "2026-09-07T23:35:45.120081+00:00",
+            "endedAt": "2026-09-07T23:50:26.165842+00:00",
+            "seconds": 881.045761,
+            "exitCode": 0,
+            "timedOut": false
+          }
+        ]
+      }
+    }
+  },
+  "rounds": {
+    "R1": {
+      "A": 4173188,
+      "B": 2577678,
+      "aToBRatio": 1.619,
+      "aExtraPercent": 61.9
+    },
+    "R2": {
+      "A": 4531893,
+      "B": 2638444,
+      "aToBRatio": 1.7176,
+      "aExtraPercent": 71.76
+    }
+  },
+  "arms": {
+    "A": {
+      "groups": [
+        "R1-A",
+        "R2-A"
+      ],
+      "passed": 20,
+      "totalTasks": 20,
+      "tokens": {
+        "inputTokens": 8564475,
+        "cachedInputTokens": 7902976,
+        "outputTokens": 140606,
+        "reasoningOutputTokens": 68384,
+        "totalTokens": 8705081
+      },
+      "activeSeconds": 3147.31,
+      "sessionCount": 24
+    },
+    "B": {
+      "groups": [
+        "R1-B",
+        "R2-B"
+      ],
+      "passed": 20,
+      "totalTasks": 20,
+      "tokens": {
+        "inputTokens": 5085109,
+        "cachedInputTokens": 4529408,
+        "outputTokens": 131013,
+        "reasoningOutputTokens": 69573,
+        "totalTokens": 5216122
+      },
+      "activeSeconds": 3061.338,
+      "sessionCount": 20
+    },
+    "aToBTokenRatio": 1.6689,
+    "aExtraTokenPercent": 66.89,
+    "aToBActiveTimeRatio": 1.0281,
+    "aExtraActiveTimePercent": 2.81
+  },
+  "difficultyWorkerBreakdown": {
+    "light": {
+      "tasks": [
+        "M01",
+        "M02",
+        "M03",
+        "M04"
+      ],
+      "A": {
+        "executions": 8,
+        "workerTokens": 1714292,
+        "medianPeakRequestInputTokens": 23669.5
+      },
+      "B": {
+        "executions": 8,
+        "workerTokens": 1547528,
+        "medianPeakRequestInputTokens": 22964.5
+      },
+      "aToBWorkerTokenRatio": 1.1078,
+      "aExtraWorkerTokenPercent": 10.78
+    },
+    "medium": {
+      "tasks": [
+        "M05",
+        "M06",
+        "M07",
+        "M08"
+      ],
+      "A": {
+        "executions": 8,
+        "workerTokens": 2175177,
+        "medianPeakRequestInputTokens": 27297.0
+      },
+      "B": {
+        "executions": 8,
+        "workerTokens": 2233595,
+        "medianPeakRequestInputTokens": 29437.5
+      },
+      "aToBWorkerTokenRatio": 0.9738,
+      "aExtraWorkerTokenPercent": -2.62
+    },
+    "complex": {
+      "tasks": [
+        "M09",
+        "M10"
+      ],
+      "A": {
+        "executions": 4,
+        "workerTokens": 1569036,
+        "medianPeakRequestInputTokens": 38188.5
+      },
+      "B": {
+        "executions": 4,
+        "workerTokens": 1434999,
+        "medianPeakRequestInputTokens": 36120.5
+      },
+      "aToBWorkerTokenRatio": 1.0934,
+      "aExtraWorkerTokenPercent": 9.34
+    }
+  },
+  "audit": {
+    "allFortyFrozenChecksPass": true,
+    "allTwentyAChildrenHaveExactlyOneTaskReference": true,
+    "parentMarkersFoundInChildren": 0,
+    "excludedSetupSessionIds": [
+      "01a07c63-44a7-7111-8ab3-adb8942cb65f"
+    ],
+    "failedR1ASeventhSpawnIncludedInCoordinatorUsage": true,
+    "productionBoardChanged": false
+  },
+  "sessions": [
+    {
+      "sessionId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "parentThreadId": null,
+      "group": "R1-A",
+      "arm": "A",
+      "role": "coordinator",
+      "label": "R1-A",
+      "taskId": null,
+      "promptTaskRefs": [],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-04-22-01a07c66-1ead-7fe3-9263-9926d87215ec.jsonl",
+      "inputTokens": 918023,
+      "cachedInputTokens": 861440,
+      "outputTokens": 4315,
+      "reasoningOutputTokens": 841,
+      "totalTokens": 922338,
+      "requestCount": 35,
+      "firstRequestInputTokens": 17965,
+      "peakRequestInputTokens": 29254,
+      "lastRequestInputTokens": 29254,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c72-c368-76e1-9d6d-82eade98977e",
+      "parentThreadId": null,
+      "group": "R1-A",
+      "arm": "A",
+      "role": "coordinator",
+      "label": "R1-A-S2",
+      "taskId": null,
+      "promptTaskRefs": [],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-18-11-01a07c72-c368-76e1-9d6d-82eade98977e.jsonl",
+      "inputTokens": 783567,
+      "cachedInputTokens": 731136,
+      "outputTokens": 2507,
+      "reasoningOutputTokens": 297,
+      "totalTokens": 786074,
+      "requestCount": 36,
+      "firstRequestInputTokens": 17295,
+      "peakRequestInputTokens": 23666,
+      "lastRequestInputTokens": 23666,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c66-a630-7163-a3db-343d001ad53b",
+      "parentThreadId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c66-a630-7163-a3db-343d001ad53b",
+      "taskId": "M01",
+      "promptTaskRefs": [
+        "M01"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-04-57-01a07c66-a630-7163-a3db-343d001ad53b.jsonl",
+      "inputTokens": 175881,
+      "cachedInputTokens": 159488,
+      "outputTokens": 2215,
+      "reasoningOutputTokens": 810,
+      "totalTokens": 178096,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 20886,
+      "lastRequestInputTokens": 20886,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c67-c967-7063-8235-1617c536cd52",
+      "parentThreadId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c67-c967-7063-8235-1617c536cd52",
+      "taskId": "M02",
+      "promptTaskRefs": [
+        "M02"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-06-11-01a07c67-c967-7063-8235-1617c536cd52.jsonl",
+      "inputTokens": 187088,
+      "cachedInputTokens": 164608,
+      "outputTokens": 1948,
+      "reasoningOutputTokens": 603,
+      "totalTokens": 189036,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 24064,
+      "lastRequestInputTokens": 24064,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c68-ce8f-7222-9864-9b373225ff4c",
+      "parentThreadId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c68-ce8f-7222-9864-9b373225ff4c",
+      "taskId": "M03",
+      "promptTaskRefs": [
+        "M03"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-07-18-01a07c68-ce8f-7222-9864-9b373225ff4c.jsonl",
+      "inputTokens": 235697,
+      "cachedInputTokens": 212480,
+      "outputTokens": 3428,
+      "reasoningOutputTokens": 1792,
+      "totalTokens": 239125,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 26505,
+      "lastRequestInputTokens": 26505,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c6a-4628-7672-9ea0-48a518b02d0b",
+      "parentThreadId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c6a-4628-7672-9ea0-48a518b02d0b",
+      "taskId": "M04",
+      "promptTaskRefs": [
+        "M04"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-08-54-01a07c6a-4628-7672-9ea0-48a518b02d0b.jsonl",
+      "inputTokens": 132056,
+      "cachedInputTokens": 122112,
+      "outputTokens": 2197,
+      "reasoningOutputTokens": 990,
+      "totalTokens": 134253,
+      "requestCount": 7,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 20300,
+      "lastRequestInputTokens": 20300,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c6b-5e8a-7242-8fa1-20f88814e87f",
+      "parentThreadId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c6b-5e8a-7242-8fa1-20f88814e87f",
+      "taskId": "M05",
+      "promptTaskRefs": [
+        "M05"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-10-06-01a07c6b-5e8a-7242-8fa1-20f88814e87f.jsonl",
+      "inputTokens": 204412,
+      "cachedInputTokens": 183040,
+      "outputTokens": 5731,
+      "reasoningOutputTokens": 2986,
+      "totalTokens": 210143,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 25889,
+      "lastRequestInputTokens": 25889,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c6d-7378-7a82-a9e9-f088caa85dcd",
+      "parentThreadId": "01a07c66-1ead-7fe3-9263-9926d87215ec",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c6d-7378-7a82-a9e9-f088caa85dcd",
+      "taskId": "M06",
+      "promptTaskRefs": [
+        "M06"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-12-22-01a07c6d-7378-7a82-a9e9-f088caa85dcd.jsonl",
+      "inputTokens": 241000,
+      "cachedInputTokens": 225536,
+      "outputTokens": 5324,
+      "reasoningOutputTokens": 2945,
+      "totalTokens": 246324,
+      "requestCount": 11,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 25253,
+      "lastRequestInputTokens": 25253,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c73-45f0-73c1-b6df-eb0fc50e2e77",
+      "parentThreadId": "01a07c72-c368-76e1-9d6d-82eade98977e",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c73-45f0-73c1-b6df-eb0fc50e2e77",
+      "taskId": "M07",
+      "promptTaskRefs": [
+        "M07"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-18-44-01a07c73-45f0-73c1-b6df-eb0fc50e2e77.jsonl",
+      "inputTokens": 192742,
+      "cachedInputTokens": 160512,
+      "outputTokens": 3971,
+      "reasoningOutputTokens": 1915,
+      "totalTokens": 196713,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 24539,
+      "lastRequestInputTokens": 24539,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c74-fe6f-7672-b95b-d57ec271a7de",
+      "parentThreadId": "01a07c72-c368-76e1-9d6d-82eade98977e",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c74-fe6f-7672-b95b-d57ec271a7de",
+      "taskId": "M08",
+      "promptTaskRefs": [
+        "M08"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-20-37-01a07c74-fe6f-7672-b95b-d57ec271a7de.jsonl",
+      "inputTokens": 253382,
+      "cachedInputTokens": 218624,
+      "outputTokens": 11387,
+      "reasoningOutputTokens": 6904,
+      "totalTokens": 264769,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 33251,
+      "lastRequestInputTokens": 33251,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c78-ce86-7140-a734-35ca352dbf28",
+      "parentThreadId": "01a07c72-c368-76e1-9d6d-82eade98977e",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c78-ce86-7140-a734-35ca352dbf28",
+      "taskId": "M09",
+      "promptTaskRefs": [
+        "M09"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-24-47-01a07c78-ce86-7140-a734-35ca352dbf28.jsonl",
+      "inputTokens": 461187,
+      "cachedInputTokens": 408832,
+      "outputTokens": 13732,
+      "reasoningOutputTokens": 7206,
+      "totalTokens": 474919,
+      "requestCount": 15,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 39733,
+      "lastRequestInputTokens": 39733,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c7d-68ab-7542-ac38-824f0471db5e",
+      "parentThreadId": "01a07c72-c368-76e1-9d6d-82eade98977e",
+      "group": "R1-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07c7d-68ab-7542-ac38-824f0471db5e",
+      "taskId": "M10",
+      "promptTaskRefs": [
+        "M10"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-29-48-01a07c7d-68ab-7542-ac38-824f0471db5e.jsonl",
+      "inputTokens": 319911,
+      "cachedInputTokens": 295936,
+      "outputTokens": 11487,
+      "reasoningOutputTokens": 6974,
+      "totalTokens": 331398,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 32767,
+      "lastRequestInputTokens": 32767,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c83-1d45-7c80-af34-e9a8cb7c8bbd",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M01",
+      "taskId": "M01",
+      "promptTaskRefs": [
+        "M01"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-36-02-01a07c83-1d45-7c80-af34-e9a8cb7c8bbd.jsonl",
+      "inputTokens": 184712,
+      "cachedInputTokens": 164608,
+      "outputTokens": 2993,
+      "reasoningOutputTokens": 1321,
+      "totalTokens": 187705,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 23820,
+      "lastRequestInputTokens": 23820,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c84-bb4b-7851-97f0-d3a39efa6da1",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M02",
+      "taskId": "M02",
+      "promptTaskRefs": [
+        "M02"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-37-48-01a07c84-bb4b-7851-97f0-d3a39efa6da1.jsonl",
+      "inputTokens": 161815,
+      "cachedInputTokens": 132096,
+      "outputTokens": 2372,
+      "reasoningOutputTokens": 1052,
+      "totalTokens": 164187,
+      "requestCount": 8,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 23258,
+      "lastRequestInputTokens": 23258,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c85-e633-7973-b863-2710a079567f",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M03",
+      "taskId": "M03",
+      "promptTaskRefs": [
+        "M03"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-39-05-01a07c85-e633-7973-b863-2710a079567f.jsonl",
+      "inputTokens": 142505,
+      "cachedInputTokens": 125184,
+      "outputTokens": 3329,
+      "reasoningOutputTokens": 1966,
+      "totalTokens": 145834,
+      "requestCount": 7,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 22671,
+      "lastRequestInputTokens": 22671,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c87-6bad-7e43-be62-6168a36c66c4",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M04",
+      "taskId": "M04",
+      "promptTaskRefs": [
+        "M04"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-40-44-01a07c87-6bad-7e43-be62-6168a36c66c4.jsonl",
+      "inputTokens": 229691,
+      "cachedInputTokens": 208128,
+      "outputTokens": 3893,
+      "reasoningOutputTokens": 1696,
+      "totalTokens": 233584,
+      "requestCount": 11,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 25103,
+      "lastRequestInputTokens": 25103,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c89-240b-7d10-ad4d-c28c004c6673",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M05",
+      "taskId": "M05",
+      "promptTaskRefs": [
+        "M05"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-42-37-01a07c89-240b-7d10-ad4d-c28c004c6673.jsonl",
+      "inputTokens": 270305,
+      "cachedInputTokens": 236544,
+      "outputTokens": 6964,
+      "reasoningOutputTokens": 3788,
+      "totalTokens": 277269,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 27703,
+      "lastRequestInputTokens": 27703,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c8b-b5b5-7273-9cf7-a84e936b5658",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M06",
+      "taskId": "M06",
+      "promptTaskRefs": [
+        "M06"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-45-25-01a07c8b-b5b5-7273-9cf7-a84e936b5658.jsonl",
+      "inputTokens": 333691,
+      "cachedInputTokens": 302848,
+      "outputTokens": 8335,
+      "reasoningOutputTokens": 4575,
+      "totalTokens": 342026,
+      "requestCount": 13,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 31731,
+      "lastRequestInputTokens": 31731,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c8e-f06e-7ba3-af71-60a331250e7f",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M07",
+      "taskId": "M07",
+      "promptTaskRefs": [
+        "M07"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-48-57-01a07c8e-f06e-7ba3-af71-60a331250e7f.jsonl",
+      "inputTokens": 160122,
+      "cachedInputTokens": 132096,
+      "outputTokens": 2704,
+      "reasoningOutputTokens": 1037,
+      "totalTokens": 162826,
+      "requestCount": 8,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 22071,
+      "lastRequestInputTokens": 22071,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c90-3a6d-7120-b550-cd459366804f",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M08",
+      "taskId": "M08",
+      "promptTaskRefs": [
+        "M08"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-50-22-01a07c90-3a6d-7120-b550-cd459366804f.jsonl",
+      "inputTokens": 371850,
+      "cachedInputTokens": 343552,
+      "outputTokens": 10670,
+      "reasoningOutputTokens": 5251,
+      "totalTokens": 382520,
+      "requestCount": 14,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 31076,
+      "lastRequestInputTokens": 31076,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c93-ef6b-7952-ae6c-d7a1872c3ea5",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M09",
+      "taskId": "M09",
+      "promptTaskRefs": [
+        "M09"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-54-25-01a07c93-ef6b-7952-ae6c-d7a1872c3ea5.jsonl",
+      "inputTokens": 295607,
+      "cachedInputTokens": 257024,
+      "outputTokens": 11084,
+      "reasoningOutputTokens": 5456,
+      "totalTokens": 306691,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 29796,
+      "lastRequestInputTokens": 29796,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07c97-b9a5-72f3-a113-4196de17d3c6",
+      "parentThreadId": null,
+      "group": "R1-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R1-B-M10",
+      "taskId": "M10",
+      "promptTaskRefs": [
+        "M10"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/07/rollout-2026-09-07T23-58-33-01a07c97-b9a5-72f3-a113-4196de17d3c6.jsonl",
+      "inputTokens": 363562,
+      "cachedInputTokens": 330496,
+      "outputTokens": 11474,
+      "reasoningOutputTokens": 6655,
+      "totalTokens": 375036,
+      "requestCount": 13,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 35473,
+      "lastRequestInputTokens": 35473,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "parentThreadId": null,
+      "group": "R2-A",
+      "arm": "A",
+      "role": "coordinator",
+      "label": "R2-A-S1",
+      "taskId": null,
+      "promptTaskRefs": [],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-24-23-01a07e2f-e513-7d11-89a4-1162c66abdd5.jsonl",
+      "inputTokens": 935718,
+      "cachedInputTokens": 892928,
+      "outputTokens": 3407,
+      "reasoningOutputTokens": 524,
+      "totalTokens": 939125,
+      "requestCount": 36,
+      "firstRequestInputTokens": 17519,
+      "peakRequestInputTokens": 28611,
+      "lastRequestInputTokens": 28611,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e3a-4cf6-75d1-a007-674cfd262254",
+      "parentThreadId": null,
+      "group": "R2-A",
+      "arm": "A",
+      "role": "coordinator",
+      "label": "R2-A-S2",
+      "taskId": null,
+      "promptTaskRefs": [],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-35-45-01a07e3a-4cf6-75d1-a007-674cfd262254.jsonl",
+      "inputTokens": 596501,
+      "cachedInputTokens": 556288,
+      "outputTokens": 2538,
+      "reasoningOutputTokens": 358,
+      "totalTokens": 599039,
+      "requestCount": 27,
+      "firstRequestInputTokens": 17295,
+      "peakRequestInputTokens": 23913,
+      "lastRequestInputTokens": 23913,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e30-3aa5-77f3-98fe-5e6639755480",
+      "parentThreadId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e30-3aa5-77f3-98fe-5e6639755480",
+      "taskId": "M01",
+      "promptTaskRefs": [
+        "M01"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-24-45-01a07e30-3aa5-77f3-98fe-5e6639755480.jsonl",
+      "inputTokens": 270400,
+      "cachedInputTokens": 250624,
+      "outputTokens": 3156,
+      "reasoningOutputTokens": 1096,
+      "totalTokens": 273556,
+      "requestCount": 13,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 23074,
+      "lastRequestInputTokens": 23074,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e31-9da0-79f3-ac4d-75324347a055",
+      "parentThreadId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e31-9da0-79f3-ac4d-75324347a055",
+      "taskId": "M02",
+      "promptTaskRefs": [
+        "M02"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-26-15-01a07e31-9da0-79f3-ac4d-75324347a055.jsonl",
+      "inputTokens": 205763,
+      "cachedInputTokens": 191232,
+      "outputTokens": 2240,
+      "reasoningOutputTokens": 885,
+      "totalTokens": 208003,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 26602,
+      "lastRequestInputTokens": 26602,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e32-8c79-7b90-91f0-6a2221c9f72a",
+      "parentThreadId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e32-8c79-7b90-91f0-6a2221c9f72a",
+      "taskId": "M03",
+      "promptTaskRefs": [
+        "M03"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-27-17-01a07e32-8c79-7b90-91f0-6a2221c9f72a.jsonl",
+      "inputTokens": 230352,
+      "cachedInputTokens": 216320,
+      "outputTokens": 3378,
+      "reasoningOutputTokens": 1642,
+      "totalTokens": 233730,
+      "requestCount": 11,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 23506,
+      "lastRequestInputTokens": 23506,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e33-f601-7193-9d4c-f56486e84e8b",
+      "parentThreadId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e33-f601-7193-9d4c-f56486e84e8b",
+      "taskId": "M04",
+      "promptTaskRefs": [
+        "M04"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-28-49-01a07e33-f601-7193-9d4c-f56486e84e8b.jsonl",
+      "inputTokens": 254728,
+      "cachedInputTokens": 240640,
+      "outputTokens": 3765,
+      "reasoningOutputTokens": 1753,
+      "totalTokens": 258493,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 23833,
+      "lastRequestInputTokens": 23833,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e35-6270-7800-be55-3411fbac2120",
+      "parentThreadId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e35-6270-7800-be55-3411fbac2120",
+      "taskId": "M05",
+      "promptTaskRefs": [
+        "M05"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-30-22-01a07e35-6270-7800-be55-3411fbac2120.jsonl",
+      "inputTokens": 378041,
+      "cachedInputTokens": 355328,
+      "outputTokens": 7330,
+      "reasoningOutputTokens": 2481,
+      "totalTokens": 385371,
+      "requestCount": 16,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 28705,
+      "lastRequestInputTokens": 28705,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e37-f88c-7240-bcb6-b26086501796",
+      "parentThreadId": "01a07e2f-e513-7d11-89a4-1162c66abdd5",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e37-f88c-7240-bcb6-b26086501796",
+      "taskId": "M06",
+      "promptTaskRefs": [
+        "M06"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-33-12-01a07e37-f88c-7240-bcb6-b26086501796.jsonl",
+      "inputTokens": 296636,
+      "cachedInputTokens": 277504,
+      "outputTokens": 5777,
+      "reasoningOutputTokens": 3353,
+      "totalTokens": 302413,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 29236,
+      "lastRequestInputTokens": 29236,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e3a-89bf-7f30-b303-83cefd107c67",
+      "parentThreadId": "01a07e3a-4cf6-75d1-a007-674cfd262254",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e3a-89bf-7f30-b303-83cefd107c67",
+      "taskId": "M07",
+      "promptTaskRefs": [
+        "M07"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-36-00-01a07e3a-89bf-7f30-b303-83cefd107c67.jsonl",
+      "inputTokens": 219669,
+      "cachedInputTokens": 200192,
+      "outputTokens": 4197,
+      "reasoningOutputTokens": 1951,
+      "totalTokens": 223866,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 25160,
+      "lastRequestInputTokens": 25160,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e3c-171e-7b21-93e2-320814b5c58f",
+      "parentThreadId": "01a07e3a-4cf6-75d1-a007-674cfd262254",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e3c-171e-7b21-93e2-320814b5c58f",
+      "taskId": "M08",
+      "promptTaskRefs": [
+        "M08"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-37-42-01a07e3c-171e-7b21-93e2-320814b5c58f.jsonl",
+      "inputTokens": 334351,
+      "cachedInputTokens": 301568,
+      "outputTokens": 11227,
+      "reasoningOutputTokens": 5494,
+      "totalTokens": 345578,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 43467,
+      "lastRequestInputTokens": 43467,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e3f-9412-7861-b37b-251e6528ac30",
+      "parentThreadId": "01a07e3a-4cf6-75d1-a007-674cfd262254",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e3f-9412-7861-b37b-251e6528ac30",
+      "taskId": "M09",
+      "promptTaskRefs": [
+        "M09"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-41-31-01a07e3f-9412-7861-b37b-251e6528ac30.jsonl",
+      "inputTokens": 343953,
+      "cachedInputTokens": 316416,
+      "outputTokens": 12521,
+      "reasoningOutputTokens": 6797,
+      "totalTokens": 356474,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 36644,
+      "lastRequestInputTokens": 36644,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e43-7c50-7b81-a744-e47dcae6e217",
+      "parentThreadId": "01a07e3a-4cf6-75d1-a007-674cfd262254",
+      "group": "R2-A",
+      "arm": "A",
+      "role": "worker-subagent",
+      "label": "01a07e43-7c50-7b81-a744-e47dcae6e217",
+      "taskId": "M10",
+      "promptTaskRefs": [
+        "M10"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-45-47-01a07e43-7c50-7b81-a744-e47dcae6e217.jsonl",
+      "inputTokens": 393417,
+      "cachedInputTokens": 360192,
+      "outputTokens": 12828,
+      "reasoningOutputTokens": 7787,
+      "totalTokens": 406245,
+      "requestCount": 13,
+      "firstRequestInputTokens": 16813,
+      "peakRequestInputTokens": 41378,
+      "lastRequestInputTokens": 41378,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e17-e040-7c62-b95d-2b1e24575512",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M01",
+      "taskId": "M01",
+      "promptTaskRefs": [
+        "M01"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T06-58-09-01a07e17-e040-7c62-b95d-2b1e24575512.jsonl",
+      "inputTokens": 195956,
+      "cachedInputTokens": 178688,
+      "outputTokens": 3060,
+      "reasoningOutputTokens": 1432,
+      "totalTokens": 199016,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 21546,
+      "lastRequestInputTokens": 21546,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e19-13a5-7ff3-a792-05860c696856",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M02",
+      "taskId": "M02",
+      "promptTaskRefs": [
+        "M02"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T06-59-27-01a07e19-13a5-7ff3-a792-05860c696856.jsonl",
+      "inputTokens": 172401,
+      "cachedInputTokens": 146176,
+      "outputTokens": 2375,
+      "reasoningOutputTokens": 1155,
+      "totalTokens": 174776,
+      "requestCount": 9,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 21049,
+      "lastRequestInputTokens": 21049,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e1a-0807-73f3-a3ce-94fe5c78629e",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M03",
+      "taskId": "M03",
+      "promptTaskRefs": [
+        "M03"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-00-30-01a07e1a-0807-73f3-a3ce-94fe5c78629e.jsonl",
+      "inputTokens": 238719,
+      "cachedInputTokens": 209152,
+      "outputTokens": 4472,
+      "reasoningOutputTokens": 2493,
+      "totalTokens": 243191,
+      "requestCount": 11,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 24897,
+      "lastRequestInputTokens": 24897,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e1b-b384-7750-92fe-8bc9ee7b5bd3",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M04",
+      "taskId": "M04",
+      "promptTaskRefs": [
+        "M04"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-02-19-01a07e1b-b384-7750-92fe-8bc9ee7b5bd3.jsonl",
+      "inputTokens": 196377,
+      "cachedInputTokens": 171520,
+      "outputTokens": 2858,
+      "reasoningOutputTokens": 981,
+      "totalTokens": 199235,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 21563,
+      "lastRequestInputTokens": 21563,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e1c-d014-70d0-95b8-65ac3cfb0017",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M05",
+      "taskId": "M05",
+      "promptTaskRefs": [
+        "M05"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-03-32-01a07e1c-d014-70d0-95b8-65ac3cfb0017.jsonl",
+      "inputTokens": 234326,
+      "cachedInputTokens": 203264,
+      "outputTokens": 9044,
+      "reasoningOutputTokens": 5965,
+      "totalTokens": 243370,
+      "requestCount": 10,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 28876,
+      "lastRequestInputTokens": 28876,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e1f-a8b5-7b23-8259-0548a3c53cc2",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M06",
+      "taskId": "M06",
+      "promptTaskRefs": [
+        "M06"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-06-39-01a07e1f-a8b5-7b23-8259-0548a3c53cc2.jsonl",
+      "inputTokens": 289125,
+      "cachedInputTokens": 261376,
+      "outputTokens": 5906,
+      "reasoningOutputTokens": 3456,
+      "totalTokens": 295031,
+      "requestCount": 11,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 32423,
+      "lastRequestInputTokens": 32423,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e21-d73c-7030-928f-e65a5a6d4f5c",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M07",
+      "taskId": "M07",
+      "promptTaskRefs": [
+        "M07"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-09-02-01a07e21-d73c-7030-928f-e65a5a6d4f5c.jsonl",
+      "inputTokens": 161830,
+      "cachedInputTokens": 146432,
+      "outputTokens": 3917,
+      "reasoningOutputTokens": 2164,
+      "totalTokens": 165747,
+      "requestCount": 8,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 22531,
+      "lastRequestInputTokens": 22531,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e23-2e61-77e3-a373-396bd81e56ff",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M08",
+      "taskId": "M08",
+      "promptTaskRefs": [
+        "M08"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-10-29-01a07e23-2e61-77e3-a373-396bd81e56ff.jsonl",
+      "inputTokens": 354332,
+      "cachedInputTokens": 316928,
+      "outputTokens": 10474,
+      "reasoningOutputTokens": 5610,
+      "totalTokens": 364806,
+      "requestCount": 14,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 29999,
+      "lastRequestInputTokens": 29999,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e26-842c-7312-9c31-05b5a3089dd2",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M09",
+      "taskId": "M09",
+      "promptTaskRefs": [
+        "M09"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-14-08-01a07e26-842c-7312-9c31-05b5a3089dd2.jsonl",
+      "inputTokens": 350848,
+      "cachedInputTokens": 322560,
+      "outputTokens": 12729,
+      "reasoningOutputTokens": 6753,
+      "totalTokens": 363577,
+      "requestCount": 12,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 36768,
+      "lastRequestInputTokens": 36768,
+      "compactionEvents": 0
+    },
+    {
+      "sessionId": "01a07e2a-5ff7-7b32-98dc-bbe77b9e7c77",
+      "parentThreadId": null,
+      "group": "R2-B",
+      "arm": "B",
+      "role": "worker-root",
+      "label": "R2-B-M10",
+      "taskId": "M10",
+      "promptTaskRefs": [
+        "M10"
+      ],
+      "markerLeakedFromParent": false,
+      "rollout": "/Users/adichou/.codex/sessions/2026/09/08/rollout-2026-09-08T07-18-21-01a07e2a-5ff7-7b32-98dc-bbe77b9e7c77.jsonl",
+      "inputTokens": 377335,
+      "cachedInputTokens": 340736,
+      "outputTokens": 12360,
+      "reasoningOutputTokens": 6767,
+      "totalTokens": 389695,
+      "requestCount": 13,
+      "firstRequestInputTokens": 16623,
+      "peakRequestInputTokens": 38065,
+      "lastRequestInputTokens": 38065,
+      "compactionEvents": 0
+    }
+  ]
+}

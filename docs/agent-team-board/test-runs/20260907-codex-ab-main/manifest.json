@@ -1,0 +1,173 @@
+{
+  "experimentId": "atb-codex-ab-main-20260907-v1",
+  "date": "2026-09-07",
+  "stage": "completed",
+  "sampleType": "synthetic",
+  "taskCount": 10,
+  "difficultyDistribution": {
+    "light": 4,
+    "medium": 4,
+    "complex": 2
+  },
+  "tasks": [
+    "M01",
+    "M02",
+    "M03",
+    "M04",
+    "M05",
+    "M06",
+    "M07",
+    "M08",
+    "M09",
+    "M10"
+  ],
+  "groupOrder": [
+    "R1-A",
+    "R1-B",
+    "R2-B",
+    "R2-A"
+  ],
+  "executionsPlanned": 40,
+  "aCoordinatorSessionsPlanned": 4,
+  "workerConcurrency": 1,
+  "model": "gpt-5.6-luna",
+  "reasoningEffort": "high",
+  "serviceTier": "default",
+  "codexCliVersion": "0.153.4",
+  "baselineAggregateSha256": "d5e648ac0ac41e0df9c81161c33f1468de740c761bca00b3dd71b1a4af315ec7",
+  "workspaceCopies": [
+    "R1-A",
+    "R1-B",
+    "R2-B",
+    "R2-A"
+  ],
+  "baselineVerification": {
+    "allFortyChecksFailBeforeImplementation": true,
+    "referenceImplementationPassesAllTenChecks": true,
+    "allWorkspaceAggregateHashesEqual": true,
+    "persistentRequirementCopiesMatchFrozenInputs": true
+  },
+  "astraPilotReference": {
+    "pilotTwoTaskPairedTotal": 1018431,
+    "linearMainEstimate": 10184310,
+    "estimateWithThirtyPercentReserve": 13239603,
+    "note": "该估算来自 Astra/xhigh，与 Luna/high 主测不是同模型，只保留为容量参考，不作为预测或判定值。"
+  },
+  "capacityAtPreparation": {
+    "fiveHourUsedPercent": 23,
+    "fiveHourResetsAt": "2026-09-08T01:29:34+08:00",
+    "weeklyUsedPercent": 71,
+    "weeklyResetsAt": "2026-09-13T16:04:57+08:00",
+    "fullResetCreditAvailable": 1,
+    "resetCreditAuthorized": false,
+    "resetCreditWillBeUsed": false
+  },
+  "terraPreflight": {
+    "result": "MODEL_OK",
+    "reasoningEffort": "high",
+    "inputTokens": 17077,
+    "cachedInputTokens": 6912,
+    "outputTokens": 6,
+    "totalTokens": 17083,
+    "includedInMainResults": false
+  },
+  "lunaPreflight": {
+    "result": "MODEL_OK",
+    "reasoningEffort": "high",
+    "inputTokens": 15512,
+    "cachedInputTokens": 9984,
+    "outputTokens": 6,
+    "totalTokens": 15518,
+    "includedInMainResults": false
+  },
+  "capacityBeforeMain": {
+    "fiveHourUsedPercent": 40,
+    "weeklyUsedPercent": 74
+  },
+  "excludedSetupAttempts": [
+    {
+      "group": "R1-A",
+      "reason": "CLI spawn_agent 使用 fork_context 而不是桌面协作工具的 fork_turns；在派发前按提示停止，工作区未改变。",
+      "inputTokens": 38944,
+      "cachedInputTokens": 27136,
+      "outputTokens": 344,
+      "totalTokens": 39288,
+      "includedInMainResults": false
+    }
+  ],
+  "runtimeProtocolDeviation": {
+    "observedIn": "R1-A after M06",
+    "error": "agent thread limit reached",
+    "effect": "单个主调度会话无法创建第 7 个新子 Agent；A 组必须按 6+4 拆成两个主调度会话。",
+    "measurementPolicy": "R1 的失败派发和两个主调度会话全部计入；R2 预先按相同 6+4 分段。"
+  },
+  "roundOne": {
+    "R1-A": {
+      "passed": 10,
+      "total": 10,
+      "coordinatorSegments": 2
+    },
+    "R1-B": {
+      "passed": 10,
+      "total": 10,
+      "independentRootSessions": 10
+    }
+  },
+  "capacityStopAfterRoundOne": {
+    "recordedAt": "2026-09-08T00:03:21+08:00",
+    "fiveHourUsedPercent": 94,
+    "fiveHourResetsAt": "2026-09-08T01:29:34+08:00",
+    "weeklyUsedPercent": 83,
+    "weeklyResetsAt": "2026-09-13T16:04:57+08:00",
+    "fullResetCreditAvailable": 1,
+    "fullResetCreditUsed": false,
+    "nextGroup": "R2-B"
+  },
+  "capacityResumeBeforeRoundTwo": {
+    "fiveHourUsedPercent": 0,
+    "weeklyUsedPercent": 83,
+    "fullResetCreditUsed": false
+  },
+  "completedResult": {
+    "quality": {
+      "A": "20/20",
+      "B": "20/20",
+      "retries": 0
+    },
+    "rounds": {
+      "R1": {
+        "aTokens": 4173188,
+        "bTokens": 2577678,
+        "aExtraPercent": 61.90
+      },
+      "R2": {
+        "aTokens": 4531893,
+        "bTokens": 2638444,
+        "aExtraPercent": 71.76
+      }
+    },
+    "combined": {
+      "aTokens": 8705081,
+      "bTokens": 5216122,
+      "aExtraPercent": 66.89,
+      "aCoordinatorTokens": 3246576,
+      "aCoordinatorSharePercent": 37.30,
+      "aWorkerExtraPercent": 4.65,
+      "aExtraActiveTimePercent": 2.81
+    },
+    "sessionsIncluded": 44,
+    "contextCompactions": 0,
+    "parentMarkerLeaks": 0,
+    "allFrozenChecksPass": true,
+    "fullResetCreditUsed": false,
+    "resultsFile": "results.json"
+  },
+  "capacityAfterMain": {
+    "fiveHourUsedPercent": 29,
+    "weeklyUsedPercent": 87,
+    "fullResetCreditAvailable": 1,
+    "fullResetCreditUsed": false
+  },
+  "productionBoardChanged": false,
+  "executionRoot": "/private/tmp/atb-codex-ab-main-20260907-v1"
+}

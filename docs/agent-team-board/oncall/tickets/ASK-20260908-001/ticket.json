@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "id": "ASK-20260908-001",
+  "title": "为什么驳回接受在网页上不能操作？反而要 ATB 来操作？",
+  "status": "archived",
+  "createdAt": "2026-09-08T00:31:46.541Z",
+  "updatedAt": "2026-09-09T08:37:14.417Z",
+  "rounds": [
+    {
+      "no": 1,
+      "mode": "zcode",
+      "staff": null,
+      "by": "oncall-20260908-未指定",
+      "dispatchedAt": "2026-09-08T00:32:30.521Z",
+      "answeredAt": "2026-09-08T00:35:31.041Z",
+      "error": null,
+      "attachments": []
+    }
+  ],
+  "dispatches": [],
+  "history": [
+    {
+      "at": "2026-09-08T00:31:46.541Z",
+      "from": null,
+      "to": "pending",
+      "by": "board",
+      "note": "创建咨询单"
+    },
+    {
+      "at": "2026-09-08T00:32:30.521Z",
+      "from": "pending",
+      "to": "answering",
+      "by": "board",
+      "note": "派单（zcode）"
+    },
+    {
+      "at": "2026-09-08T00:35:31.041Z",
+      "from": "answering",
+      "to": "answered",
+      "by": "oncall-20260908-未指定",
+      "note": "第 1 轮回答回传（zcode）"
+    },
+    {
+      "at": "2026-09-09T08:37:14.417Z",
+      "from": "answered",
+      "to": "archived",
+      "by": "board",
+      "note": "归档讨论（保留纪要与已创建条目）"
+    }
+  ]
+}

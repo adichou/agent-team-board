@@ -1,0 +1,161 @@
+{
+  "id": "REL-20260911-001",
+  "schemaVersion": 1,
+  "target": "electron",
+  "status": "failed",
+  "parentId": null,
+  "createdAt": "2026-09-11T00:24:39.418Z",
+  "updatedAt": "2026-09-11T00:24:39.470Z",
+  "config": {
+    "platforms": [
+      "mac"
+    ],
+    "macArch": "arm64",
+    "version": "0.1.0",
+    "outDir": "dist",
+    "appName": "Agent Team Board"
+  },
+  "frozen": {
+    "sourceOid": "0f84698e7f0a5c998d5cc29911b5438663adabb7",
+    "appName": "Agent Team Board",
+    "projectVersion": "0.1.0",
+    "version": "0.1.0",
+    "platforms": [
+      "mac"
+    ],
+    "macArch": "arm64",
+    "outDir": "dist",
+    "declared": {
+      "electron": "^37.2.0",
+      "electron-builder": "^25.1.8"
+    }
+  },
+  "stages": [
+    {
+      "key": "freeze",
+      "label": "配置冻结",
+      "status": "done",
+      "startedAt": "2026-09-11T00:24:39.426Z",
+      "endedAt": "2026-09-11T00:24:39.439Z",
+      "error": null,
+      "result": {
+        "sourceOid": "0f84698e7f0a5c998d5cc29911b5438663adabb7",
+        "appName": "Agent Team Board",
+        "projectVersion": "0.1.0",
+        "version": "0.1.0",
+        "platforms": [
+          "mac"
+        ],
+        "macArch": "arm64",
+        "outDir": "dist",
+        "declared": {
+          "electron": "^37.2.0",
+          "electron-builder": "^25.1.8"
+        }
+      }
+    },
+    {
+      "key": "local-precheck",
+      "label": "本地预检",
+      "status": "failed",
+      "startedAt": "2026-09-11T00:24:39.440Z",
+      "endedAt": "2026-09-11T00:24:39.470Z",
+      "error": {
+        "message": "工作区有未提交修改（ommands/board.md、commands/dev.md、electron/main.mjs、electron/shell-css.mjs、package.json 等）：请先在看板提交功能完成提交后再构建（系统不自动 add/commit/stash）",
+        "kind": "dirty"
+      },
+      "result": {
+        "files": [
+          "ommands/board.md",
+          "commands/dev.md",
+          "electron/main.mjs",
+          "electron/shell-css.mjs",
+          "package.json",
+          "scripts/atb.mjs",
+          "scripts/lib/batch.mjs",
+          "scripts/lib/core.mjs",
+          "scripts/lib/dispatch.mjs",
+          "scripts/lib/oncall-store.mjs",
+          "scripts/lib/refine-store.mjs",
+          "scripts/lib/scheduler.mjs",
+          "scripts/lib/task-settings.mjs",
+          "scripts/server.mjs",
+          "scripts/state-guard.mjs",
+          "scripts/tests/accept-ui.test.mjs",
+          "scripts/tests/accepted-batch-entry.test.mjs",
+          "scripts/tests/agent-generic-20260909-011.test.mjs",
+          "scripts/tests/batch-cli.test.mjs",
+          "scripts/tests/batch-core.test.mjs"
+        ]
+      }
+    },
+    {
+      "key": "deps-install",
+      "label": "依赖安装",
+      "status": "pending",
+      "startedAt": null,
+      "endedAt": null,
+      "error": null,
+      "result": null
+    },
+    {
+      "key": "build",
+      "label": "桌面构建",
+      "status": "pending",
+      "startedAt": null,
+      "endedAt": null,
+      "error": null,
+      "result": null
+    },
+    {
+      "key": "verify",
+      "label": "产物核验",
+      "status": "pending",
+      "startedAt": null,
+      "endedAt": null,
+      "error": null,
+      "result": null
+    }
+  ],
+  "evidence": [
+    {
+      "at": "2026-09-11T00:24:39.440Z",
+      "kind": "freeze",
+      "note": "阶段完成：freeze"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-09-11T00:24:39.418Z",
+      "action": "create",
+      "by": "board",
+      "note": "创建草稿（桌面应用（Electron））"
+    },
+    {
+      "at": "2026-09-11T00:24:39.424Z",
+      "action": "precheck",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:24:39.426Z",
+      "action": "stage:freeze:start",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:24:39.440Z",
+      "action": "stage:freeze:done",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:24:39.440Z",
+      "action": "stage:local-precheck:start",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:24:39.470Z",
+      "action": "stage:local-precheck:failed",
+      "by": "board"
+    }
+  ],
+  "simulated": false
+}

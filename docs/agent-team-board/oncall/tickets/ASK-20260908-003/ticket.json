@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "ASK-20260908-003",
+  "title": "BUG-20260908-018 refine · 09-08 22:09 冻结后文档已被人工编辑，基线失效是什么意思？",
+  "status": "archived",
+  "createdAt": "2026-09-08T14:12:45.488Z",
+  "updatedAt": "2026-09-09T08:37:02.589Z",
+  "rounds": [
+    {
+      "no": 1,
+      "mode": "zcode",
+      "staff": null,
+      "by": "oncall-20260908-未指定",
+      "dispatchedAt": "2026-09-08T14:13:49.604Z",
+      "answeredAt": "2026-09-08T14:17:23.065Z",
+      "error": null,
+      "attachments": []
+    }
+  ],
+  "dispatches": [],
+  "history": [
+    {
+      "at": "2026-09-08T14:12:45.488Z",
+      "from": null,
+      "to": "pending",
+      "by": "board",
+      "note": "创建咨询单"
+    },
+    {
+      "at": "2026-09-08T14:13:49.604Z",
+      "from": "pending",
+      "to": "answering",
+      "by": "board",
+      "note": "派单（zcode）"
+    },
+    {
+      "at": "2026-09-08T14:17:23.065Z",
+      "from": "answering",
+      "to": "answered",
+      "by": "oncall-20260908-未指定",
+      "note": "第 1 轮回答回传（zcode）"
+    },
+    {
+      "at": "2026-09-09T08:36:59.972Z",
+      "from": "board",
+      "to": "生成收尾提示词（等待纪要）",
+      "by": "atb",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T08:37:02.589Z",
+      "from": "answered",
+      "to": "archived",
+      "by": "board",
+      "note": "归档讨论（保留纪要与已创建条目）"
+    }
+  ],
+  "finishPromptAt": "2026-09-09T08:36:59.972Z"
+}

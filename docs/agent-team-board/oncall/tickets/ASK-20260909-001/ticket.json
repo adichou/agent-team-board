@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "ASK-20260909-001",
+  "title": "请针对文件模块的布局进行优化，需要和讨论模块集成",
+  "reqId": null,
+  "status": "discussing",
+  "createdAt": "2026-09-09T08:39:44.305Z",
+  "updatedAt": "2026-09-09T08:39:44.305Z",
+  "finishPromptAt": null,
+  "publishedAt": null,
+  "created": {},
+  "rounds": [],
+  "history": [
+    {
+      "at": "2026-09-09T08:39:44.305Z",
+      "by": "board",
+      "note": "创建开放式讨论"
+    }
+  ]
+}

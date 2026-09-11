@@ -1,0 +1,13 @@
+{
+  "root": "/var/folders/m6/bj96jycd1v9d1mnvfnlb9_nr0000gn/T/atb-ui-0909-FUVWcp",
+  "dataDir": "/var/folders/m6/bj96jycd1v9d1mnvfnlb9_nr0000gn/T/atb-ui-0909-FUVWcp/docs/agent-team-board",
+  "ids": {
+    "sub": "REQ-20260909-001",
+    "bug": "BUG-20260909-001",
+    "acc": "REQ-20260909-002",
+    "plan": "REQ-20260909-003",
+    "testing": "REQ-20260909-004"
+  },
+  "snapshot": "/var/folders/m6/bj96jycd1v9d1mnvfnlb9_nr0000gn/T/atb-audit-0909-K5Tj82",
+  "port": 18889
+}

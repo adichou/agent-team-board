@@ -1,0 +1,38 @@
+{
+  "at": "2026-09-06T16:09:30.937Z",
+  "node": "v17.8.0",
+  "evidence": [
+    {
+      "id": "Z-A1 全部依赖受阻时 check 应停止，不能反复派空 worker",
+      "pass": true
+    },
+    {
+      "id": "Z-A2 手工先认领时 Zcode 批次不得再实施另一项",
+      "pass": true
+    },
+    {
+      "id": "Z-A3 失败且 safeToContinue=false 应保留项目实施占用",
+      "pass": true
+    },
+    {
+      "id": "C-A1 缺少 runId 的新报告不能作为本次完成证据",
+      "pass": true
+    },
+    {
+      "id": "C-A2 依赖受阻应显示阻塞原因，不能称为队列已空",
+      "pass": true
+    },
+    {
+      "id": "C-A3 未认领未上报且续跑耗尽后不能无限重新派同项",
+      "pass": true
+    },
+    {
+      "id": "C-A4 网络退避期间停止当前执行不得在退避结束后复活",
+      "pass": true
+    },
+    {
+      "id": "C-A5 恢复本项必须绑定用户所选 runId",
+      "pass": true
+    }
+  ]
+}
