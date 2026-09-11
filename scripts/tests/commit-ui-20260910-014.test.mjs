@@ -2,7 +2,8 @@
 // BUG-20260910-014 批量 Commit UI —— REQ-20260911-010 回退后保留部分测试
 // 批量 Commit 面板（页签/启动区/运行面板/记录/创建/暂停/终止）已随人工批量提交流程回退
 // 移除（回退契约见 commit-rollback-20260911-010.test.mjs）；本文件只守保留下来的
-// 已完成条目提交状态徽标与详情字段（未提交/已提交+提交号/加载失败重试/hash 复制）。
+// 已完成条目提交状态徽标与详情字段。BUG-20260912-003 调整展示格式：无「已提交」徽标与
+// 「N 个提交号」折叠，5 位短号直显、双击复制完整 hash（未提交/加载失败重试口径不变）。
 // 用法：node scripts/tests/commit-ui-20260910-014.test.mjs
 
 import assert from 'node:assert/strict';
@@ -26,12 +27,14 @@ function commitBadgeVm(it, commitStatus) {
   assert.ok(fn, '应存在 commitBadgeHtml');
   const hashList = js.match(/function commitHashListHtml\([^)]*\)[\s\S]*?\n\}/);
   assert.ok(hashList, '应存在 commitHashListHtml');
+  const shortFn = js.match(/function commitShortHash\([^)]*\)[\s\S]*?\n\}/);
+  assert.ok(shortFn, '应存在 commitShortHash（BUG-20260912-003 短号口径）');
   const ctx = { state: { commitStatus }, esc: String };
   vm.createContext(ctx);
-  return vm.runInContext(`${hashList[0]}\n${fn[0]}\ncommitBadgeHtml(${JSON.stringify(it)}, { expandable: true })`, ctx);
+  return vm.runInContext(`${shortFn[0]}\n${hashList[0]}\n${fn[0]}\ncommitBadgeHtml(${JSON.stringify(it)}, { inline: true })`, ctx);
 }
 
-t('U6 徽标：done 默认未提交；有索引记录显示已提交并可展开全部 hash；非 done 不渲染', () => {
+t('U6 徽标：done 默认未提交；有索引记录原位直显短提交号（无「已提交」徽标/折叠）；非 done 不渲染', () => {
   const h1 = '3f7a1c9d2e4b5a6f7c8d9e0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c';
   const h2 = 'aa11bb22cc33dd44ee55ff6677889900aabbccddeeff00112233445566778899';
   const st = { map: {}, error: null };
@@ -45,12 +48,14 @@ t('U6 徽标：done 默认未提交；有索引记录显示已提交并可展开
   // 待测试（in-progress 已上报）同样渲染（REQ-20260911-009）
   const ip = commitBadgeVm({ id: 'REQ-1', status: 'in-progress', agentCompletedAt: '2026-09-11T00:00:00Z' }, st);
   assert.match(ip, /未提交/, '待测试条目默认未提交');
-  // 有索引记录：已提交 + 全部完整 hash 可展开（REQ-20260911-010：一单可关联多 commit，多提交号展开保留）
+  // 有索引记录（REQ-20260911-010：一单可关联多 commit）：BUG-20260912-003 原位直显短号，
+  // 无「已提交」徽标与折叠层；完整 hash 保留在 title 与复制口径
   const cm = commitBadgeVm({ id: 'REQ-1', status: 'done' }, { map: { 'REQ-1': { commits: [h1, h2] } }, error: null });
-  assert.match(cm, /已提交/, '有索引记录显示已提交');
-  assert.ok(cm.includes(h1) && cm.includes(h2), '展开后可见全部完整 hash');
-  assert.match(cm, new RegExp(`data-copy-hash="${h1}"`), 'hash 有复制按钮');
-  assert.match(cm, /2 个提交号|提交号/, '可展开多提交号');
+  assert.doesNotMatch(cm, /已提交/, '不渲染「已提交」徽标（BUG-20260912-003）');
+  assert.doesNotMatch(cm, /commit-hashes\b|个提交号|<details/, '不再有「N 个提交号」折叠层');
+  assert.match(cm, /commit-hash-list/, '原徽标位直显提交号列表');
+  assert.match(cm, new RegExp(`data-copy-hash="${h1}"`), '复制口径保留完整 hash');
+  assert.match(cm, new RegExp(`data-copy-hash="${h2}"`), '多提交号并列且各自可复制');
 });
 
 t('U7 加载失败：显示「提交状态加载失败」+ 重试入口，不伪装成未提交；列表签名含提交状态', () => {
@@ -88,13 +93,13 @@ t('U8 详情页：done 条目基本信息区含「提交状态」字段（未提
 
 /* ---------- U9 样式 ---------- */
 
-t('U9 样式：徽标三态 / hash 列表样式保留', () => {
+t('U9 样式：徽标两态 / 短号列表样式保留；「已提交」徽标样式随 BUG-20260912-003 移除', () => {
   assert.match(css, /\.commit-badge\b/, '徽标基础样式');
   assert.match(css, /\.cm-uncommitted\b/, '未提交态样式');
-  assert.match(css, /\.cm-committed\b/, '已提交态样式');
+  assert.doesNotMatch(css, /cm-committed/, '「已提交」徽标样式随 BUG-20260912-003 移除');
   assert.match(css, /\.cm-error\b/, '加载失败态样式');
   assert.match(css, /\.commit-hash-list\b/, 'hash 列表样式');
-  assert.match(css, /\.commit-hash\b/, 'hash 文本样式（完整 hash 换行可见）');
+  assert.match(css, /\.commit-hash\b/, 'hash 文本样式（5 位短号直显、双击复制）');
 });
 
 let failed = 0;

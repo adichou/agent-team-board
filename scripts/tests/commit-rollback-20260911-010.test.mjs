@@ -290,16 +290,17 @@ t('R9 全局看板回退：类型档/标签/前缀兜底/计数分支无 commit�
   assert.ok(!serverSrc.includes("unfinishedCommitBatches"), '服务端不应再读 CMT 批次账本');
 });
 
-t('R10 徽标保留（换源四态）：commitBadgeHtml/commitHashListHtml/refreshCommitStatus/retryCommitStatus 保留；数据源 /api/commit/item-status；多提交号展开保留', () => {
+t('R10 徽标保留（换源四态）：commitBadgeHtml/commitHashListHtml/refreshCommitStatus/retryCommitStatus 保留；数据源 /api/commit/item-status；提交号直显（BUG-20260912-003：短号无徽标无折叠）', () => {
   for (const keep of ['function commitBadgeHtml', 'function commitHashListHtml', 'function commitStatusDetailHtml',
     'async function refreshCommitStatus', 'async function retryCommitStatus', 'function bindCommitWidgets',
-    '/api/commit/item-status', 'commit-status-cell-wide', '提交状态加载失败', '未提交', '个提交号']) {
+    '/api/commit/item-status', 'commit-status-cell-wide', '提交状态加载失败', '未提交']) {
     assert.ok(appJs.includes(keep), `app.js 应保留 ${keep}`);
   }
   assert.match(appJs, /function commitBadgeHtml[\s\S]{0,600}cm-uncommitted/, '未提交态保留');
-  assert.match(appJs, /function commitBadgeHtml[\s\S]{0,800}cm-committed/, '已提交态保留');
+  assert.doesNotMatch(appJs, /cm-committed/, '「已提交」徽标随 BUG-20260912-003 移除（原位直显短提交号）');
+  assert.match(appJs, /function commitBadgeHtml[\s\S]{0,900}commitHashListHtml/, '列表卡有记录时直显提交号列表');
   assert.match(appJs, /function commitBadgeHtml[\s\S]{0,900}data-commit-retry/, '失败重试态保留');
-  assert.match(appJs, /function commitHashListHtml[\s\S]{0,400}data-copy-hash/, 'hash 列表复制按钮保留');
+  assert.match(appJs, /function commitHashListHtml[\s\S]{0,400}data-copy-hash/, 'hash 列表复制入口保留（双击复制完整值）');
   assert.match(appJs, /function commitStatusDetailHtml[\s\S]{0,400}commitHashListHtml/, '详情页复用 hash 列表渲染');
 });
 
