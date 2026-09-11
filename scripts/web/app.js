@@ -7083,9 +7083,11 @@ function gitWorkflowAreaHtml() {
   }
   const d = g.data || { isRepo: false, branch: null, devExists: false };
   const onDev = d.isRepo && d.branch === 'dev' && d.devExists;
+  // BUG-20260912-001：分支名与 dev 状态词各包一层 <span>——拆成独立文本节点后，
+  // 英文词典的全文匹配才能逐段命中（整句动态回填会把「已存在/未创建」原样带进英文）。
   const statusLine = !d.isRepo
     ? '当前分支：—（不是 git 仓库）'
-    : `当前分支：${esc(d.branch || '未知')} · dev 分支：${d.devExists ? '已存在' : '未创建'}`;
+    : `当前分支：<span>${esc(d.branch || '未知')}</span> · dev 分支：<span>${d.devExists ? '已存在' : '未创建'}</span>`;
   const btn = onDev
     ? `<button type="button" class="btn" id="gwInit" disabled>已在 dev 分支</button>`
     : `<button type="button" class="btn primary" id="gwInit"${(!d.isRepo || g.busy) ? ' disabled' : ''}>初始化 dev 分支</button>`;
