@@ -3899,9 +3899,17 @@ function resolveDocSelection(sel, view) {
   };
 }
 
-// 文档磁盘路径（口径同 req-disc 引用复制 docPath：<项目根>/docs/agent-team-board/requirements/<单号>/<文档名>）
-function docRefPath(projectRoot, itemId, name) {
-  const rel = `docs/agent-team-board/requirements/${itemId}/${name}`;
+// 文档磁盘路径（BUG-20260913-003：按条目类型 / 归属拼装真实磁盘位置，口径同 core.mjs resolveItemDir——
+// 需求 requirements/<单号>/；独立 Bug bugs/<编号>/；归属需求的 Bug requirements/<REQ>/bugs/<编号>/）
+function docRefPath(projectRoot, itemId, name, parent = null) {
+  let rel;
+  if (itemId.startsWith('REQ-')) {
+    rel = `docs/agent-team-board/requirements/${itemId}/${name}`;
+  } else if (parent) {
+    rel = `docs/agent-team-board/requirements/${parent}/bugs/${itemId}/${name}`;
+  } else {
+    rel = `docs/agent-team-board/bugs/${itemId}/${name}`;
+  }
   return projectRoot ? `${projectRoot}/${rel}` : rel;
 }
 
@@ -3980,7 +3988,8 @@ async function onDocCtxDiscuss() {
 function onDocCtxMenu(e) {
   const view = $('#docView');
   if (!view || !e.target || typeof e.target.closest !== 'function' || !view.contains(e.target)) return;
-  if (state.drawer.item?.type !== 'requirement') return; // 仅需求详情抽屉（README 默认口径，Bug 单不启用）
+  const dtype = state.drawer.item?.type;
+  if (dtype !== 'requirement' && dtype !== 'bug') return; // 需求/Bug 详情抽屉启用（BUG-20260913-003：Bug 单同口径），讨论等其余类型不启用
   if (e.target.closest('a, img')) return; // 链接/图片：放行原生菜单（复制链接/存图保留）
   const name = state.drawer.doc;
   if (!name || state.drawer.tab !== name) return; // 未创建/加载中/加载失败态：不弹菜单
@@ -3990,7 +3999,7 @@ function onDocCtxMenu(e) {
   if (selInfo) ref = selInfo; // 有选中：所选文字 + 对应源行（范围）
   else if (pointEl) ref = { start: Number(pointEl.dataset.docStart), end: Number(pointEl.dataset.docEnd), text: null }; // 无选中：落点块行范围
   if (!ref) return; // 落点未标注（占位/配对失准区）：放行原生
-  const path = docRefPath(state.project, state.drawer.id, name);
+  const path = docRefPath(state.project, state.drawer.id, name, state.drawer.item?.parent || null);
   e.preventDefault();
   openDocCtxMenu(e.clientX, e.clientY, {
     name,
@@ -6923,7 +6932,7 @@ $('#selectNone').addEventListener('click', deselectOperable); // REQ-20260908-02
 // 点击不创建任务、不弹确认（创建仍由面板内「启动」承接）
 $('#laneQuickEntry')?.addEventListener('click', () => gotoRuns(state.reqFilter === 'accepted' ? 'refine' : 'develop'));
 $('#mask').addEventListener('click', closeDrawer);
-// REQ-20260909-014：需求抽屉文档页签右键「讨论」菜单（document 级委托绑定一次，#docView 随抽屉重建不重绑）
+// REQ-20260909-014 / BUG-20260913-003：需求与 Bug 抽屉文档页签右键「讨论」菜单（document 级委托绑定一次，#docView 随抽屉重建不重绑）
 document.addEventListener('contextmenu', onDocCtxMenu);
 document.addEventListener('keydown', onGlobalKeydown); // REQ-20260910-007：全局单键快捷键唯一注册点（具名处理器定义于绑定区之前）
 // 帮助面板入口接线（顶栏按钮 / 关闭按钮 / 遮罩点击，均走 open/closeShortcutHelp 同一守卫）
