@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260913-005",
+  "type": "bug",
+  "title": "版本提示词与回答回填中的提示词复制，要增加批量任务类似的去 XX 会话的功能",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-047-1",
+  "createdAt": "2026-09-13T12:18:58.999Z",
+  "updatedAt": "2026-09-13T13:30:57.295Z",
+  "agentCompletedAt": "2026-09-13T13:30:57.295Z",
+  "lastReport": {
+    "at": "2026-09-13T13:30:57.295Z",
+    "coverage": 15,
+    "framework": "node 原生 assert（scripts/tests/*.test.mjs）",
+    "summary": "AI 完善弹窗补「去新建 Zcode/Codex 会话」入口：自建同款探测状态机（模块级缓存，fire-and-forget 不阻断复制回填）；点击先复制本弹窗 buildPrompt(v) 再跳深链（不带 prompt），失败不静默、busy 防重；未选项目/未检测到守卫与任务面板同口径；探测重渲染保留回答草稿；i18n 补新文案与既有复制 toast。新增 15 例先红后绿，npm test 215 文件全过。归因 REQ-20260913-001。",
+    "runId": "run-20260913-216"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T12:18:58.999Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-13T12:18:59.000Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-13T12:29:47.365Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-202033-ab67）"
+    },
+    {
+      "at": "2026-09-13T13:02:38.673Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-047-1",
+      "note": "认领（zcode-batch-047-1）"
+    },
+    {
+      "at": "2026-09-13T13:30:57.295Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-047-1",
+      "note": "上报测试报告（覆盖率 15%），待人工确认完成"
+    }
+  ]
+}
