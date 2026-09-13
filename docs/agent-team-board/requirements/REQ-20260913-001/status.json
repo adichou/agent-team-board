@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260913-001",
+  "type": "requirement",
+  "title": "添加一个构建模块，支持版本管理。模块位置在需求模块和任务模块之间",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-043-2",
+  "createdAt": "2026-09-12T23:31:25.150Z",
+  "updatedAt": "2026-09-13T08:03:46.421Z",
+  "agentCompletedAt": "2026-09-13T08:03:46.421Z",
+  "lastReport": {
+    "at": "2026-09-13T08:03:46.421Z",
+    "coverage": 100,
+    "framework": "node:test-style custom scripts/tests/run-all.mjs (210 files) + vm 行为测试",
+    "summary": "新增构建模块(build)：顶栏页签需求→构建→任务→设置；版本计划BLD编号(draft→merging→merged/failed,可重试续传)；条目↔commit关联增删/换选/全选；提示词与回答回填两段式弹窗；合并入main经git worktree隔离执行(不触碰用户工作区,与release互斥409)；分支浏览+fetch --prune/push(-u首推)；非git引导空态；i18n+深浅色+快照+深链。新增build-store/build-git/build.js与3测试文件18例，既有7处导航断言同步，全量210测试文件失败0。",
+    "runId": "run-20260913-212"
+  },
+  "history": [
+    {
+      "at": "2026-09-12T23:31:25.150Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-12T23:31:25.151Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-12T23:43:41.033Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-073501-5004）"
+    },
+    {
+      "at": "2026-09-13T07:15:09.682Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-043-2",
+      "note": "认领（zcode-batch-043-2）"
+    },
+    {
+      "at": "2026-09-13T08:03:46.421Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-043-2",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
