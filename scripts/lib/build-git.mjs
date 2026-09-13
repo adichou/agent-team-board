@@ -1,0 +1,182 @@
+// REQ-20260913-001 构建模块 Git 执行层（build-git）—— server.mjs 使用，全部 spawnSync 本机 git。
+// 只提供 design.md 落定的六类操作：分支列表（只读）、分支提交记录（只读）、同步远端
+// fetch --all --prune（受限写）、推送分支 push（受限写，首推建立上游）、合并入 main
+//（受限写：临时工作树隔离执行 + 逐条目 --no-ff 合并 + 冲突即 abort，不触碰当前工作区）。
+// 除此外不提供任何 git 写操作（无 pull / rebase / 删分支 / 改历史）。
+
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { AtbError } from './core.mjs';
+
+const GIT_TIMEOUT_MS = 120_000;
+// 临时工作树根：优先系统临时目录；不可用（或挂载不允许执行 git）时回退项目内 .git/atb-tmp
+function realTmpdir() {
+  try {
+    const p = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-wt-probe-'));
+    fs.rmSync(p, { recursive: true, force: true });
+    return os.tmpdir();
+  } catch {
+    return '.git/atb-tmp';
+  }
+}
+// ref 名校验：防参数注入（不以 - 开头；仅安全字符；不含 .. ；无空白与 git 非法字符）
+const REF_RE = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
+
+function gitRaw(root, args, timeout = GIT_TIMEOUT_MS) {
+  return spawnSync('git', args, { cwd: root, encoding: 'utf8', timeout });
+}
+
+function gitOk(root, args, label) {
+  const r = gitRaw(root, args);
+  if (r.status !== 0) {
+    const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 4).join('；');
+    throw new AtbError(`${label || `git ${args[0]}`}失败${detail ? `：${detail}` : ''}`.slice(0, 400));
+  }
+  return String(r.stdout || '');
+}
+
+export function isGitRepo(root) {
+  const r = gitRaw(root, ['rev-parse', '--is-inside-work-tree']);
+  return r.status === 0 && String(r.stdout).trim() === 'true';
+}
+
+export function assertRefName(branch) {
+  const name = String(branch || '').trim();
+  if (!name || !REF_RE.test(name) || name.includes('..') || name.endsWith('.lock') || name.includes('//')) {
+    throw new AtbError(`分支名不合法：${branch || '（空）'}`);
+  }
+  return name;
+}
+
+// 只读：当前分支 + 本地分支 + 远端分支（origin/xxx 短名；排除 origin/HEAD 指针）。
+export function listBranches(root) {
+  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [] };
+  const current = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim() || null;
+  const local = String(gitRaw(root, ['branch', '--format=%(refname:short)']).stdout || '')
+    .split('\n').map((s) => s.trim()).filter(Boolean);
+  const remote = String(gitRaw(root, ['branch', '-r', '--format=%(refname:short)']).stdout || '')
+    .split('\n').map((s) => s.trim())
+    .filter((s) => s && !s.endsWith('/HEAD'));
+  return { isRepo: true, current, local, remote };
+}
+
+// 只读：指定分支最近提交记录（hash / 短 hash / 说明 / 作者 / 时间）。
+export function branchLog(root, branch, limit = 50) {
+  const ref = assertRefName(branch);
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
+  const n = Math.max(1, Math.min(200, Number(limit) || 50));
+  gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
+  const out = gitOk(root, ['log', ref, `-n`, String(n), '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '读取提交记录');
+  const commits = [];
+  for (const line of out.split('\n')) {
+    if (!line.trim()) continue;
+    const [hash, short, author, date, ...rest] = line.split('\t');
+    commits.push({ hash, short, author, date, subject: rest.join('\t') });
+  }
+  return { branch: ref, commits };
+}
+
+// 受限写：同步远端（fetch --all --prune；附带清理失效远端分支引用——design.md 落定口径）。
+export function fetchRemote(root) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再同步远端');
+  const r = gitRaw(root, ['fetch', '--all', '--prune']);
+  const output = String(r.stderr || r.stdout || '').trim();
+  if (r.status !== 0) throw new AtbError(`同步远端失败：${output.split('\n').filter(Boolean).slice(0, 4).join('；')}`.slice(0, 400));
+  return { ok: true, output: output.slice(0, 800) };
+}
+
+function remoteNames(root) {
+  return String(gitRaw(root, ['remote']).stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+}
+
+// 本地分支是否已建立上游跟踪；返回 { remote, merge } 或 null。
+function upstreamOf(root, branch) {
+  const r = gitRaw(root, ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`]);
+  if (r.status !== 0) return null;
+  const full = String(r.stdout || '').trim(); // 形如 origin/dev
+  const i = full.indexOf('/');
+  if (i <= 0) return null;
+  return { remote: full.slice(0, i), merge: full.slice(i + 1) };
+}
+
+// 受限写：推送本地分支到远端。未建立上游跟踪的分支首推加 -u 建立跟踪（design.md 落定口径）。
+export function pushBranch(root, { remote, branch } = {}) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再推送分支');
+  const ref = assertRefName(branch);
+  const rm = String(remote || '').trim();
+  if (!REF_RE.test(rm)) throw new AtbError(`远端名不合法：${rm || '（空）'}`);
+  if (!remoteNames(root).includes(rm)) throw new AtbError(`远端 ${rm} 未配置（git remote add ${rm} <url>）`);
+  gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '本地分支不存在');
+  const hadUpstream = upstreamOf(root, ref);
+  const args = hadUpstream && hadUpstream.remote === rm
+    ? ['push', rm, ref]
+    : ['push', '-u', rm, ref];
+  const r = gitRaw(root, args);
+  if (r.status !== 0) {
+    const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 4).join('；');
+    throw new AtbError(`推送 ${ref} 到 ${rm} 失败：${detail}`.slice(0, 400));
+  }
+  return { ok: true, setUpstream: !(hadUpstream && hadUpstream.remote === rm), remoteBranch: `${rm}/${ref}`, hadUpstream: !!hadUpstream };
+}
+
+// 合并前置校验（只读，状态变更前由服务端调用）：非仓库 / main 缺失 / 提交缺失 / detached。
+// 工作区不再要求干净：合并经临时工作树执行（见 mergeCommitsIntoMain），不触碰当前工作区。
+// 返回当前分支（仅用于记录 baseBranch；合并本身不切分支）。
+export function precheckMerge(root, items = []) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再合并入 main');
+  const baseBranch = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim();
+  if (!baseBranch) throw new AtbError('当前处于 detached HEAD，无法自动合并；请先切到一个本地分支');
+  gitOk(root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], 'main 分支不存在');
+  for (const it of items) {
+    const r = gitRaw(root, ['rev-parse', '--verify', '--quiet', `${it.commit}^{commit}`]);
+    if (r.status !== 0) throw new AtbError(`提交不存在：${it.itemId} → ${String(it.commit).slice(0, 12)}`);
+  }
+  return baseBranch;
+}
+
+// 受限写：把版本所选条目的 commit 逐条合并入 main（--no-ff 保留合并语义，消息含版本与条目号）。
+// 执行隔离（design.md 落定口径）：当前分支非 main 时，在 os.tmpdir() 建临时工作树检出 main，
+// 逐条 merge 后移除——全程不切换、不触碰用户当前工作区（未提交改动保留、不被卷入，脏工作区不阻塞）；
+// 单条失败即中止并 git merge --abort，已成功条目保持已合并（重试只补未合并，幂等续传：
+// 已在 main 的提交再合并返回 Already up to date，结果仍为成功）。
+export function mergeCommitsIntoMain(root, { versionId, versionName, items = [] } = {}) {
+  const baseBranch = precheckMerge(root, items);
+  const results = [];
+  const warnings = [];
+  const inPlace = baseBranch === 'main'; // 当前就在 main：原地合并，无需临时工作树
+  let wt = null;
+  if (!inPlace) {
+    wt = path.join(realTmpdir(), `atb-merge-${versionId || 'v'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    const r = gitRaw(root, ['worktree', 'add', wt, 'main']);
+    if (r.status !== 0) {
+      const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+      throw new AtbError(`创建合并工作树失败：${detail}`.slice(0, 300));
+    }
+  }
+  const cwd = inPlace ? root : wt;
+  try {
+    for (const it of items) {
+      const msg = `build: ${versionName || versionId} 合并 ${it.itemId}（${versionId}）`;
+      const r = gitRaw(cwd, ['merge', '--no-ff', '-m', msg, it.commit]);
+      if (r.status === 0) {
+        results.push({ itemId: it.itemId, commit: it.commit, ok: true });
+        continue;
+      }
+      const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+      gitRaw(cwd, ['merge', '--abort']); // 冲突现场清理（best-effort，不吞并报错）
+      results.push({ itemId: it.itemId, commit: it.commit, ok: false, error: detail.slice(0, 300) || '合并失败' });
+      break; // 逐条推进：一条失败即中止，保留已成功条目供重试续传
+    }
+  } finally {
+    if (wt) {
+      const rm = gitRaw(root, ['worktree', 'remove', '--force', wt]);
+      if (rm.status !== 0) {
+        gitRaw(root, ['worktree', 'prune']);
+        warnings.push(`临时合并工作树清理失败（${String(rm.stderr || '').trim().slice(0, 120)}），可忽略或手动 git worktree prune`);
+      }
+    }
+  }
+  return { results, baseBranch, warnings };
+}

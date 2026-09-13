@@ -10,6 +10,27 @@
 // ---------- 英文词典（静态精确：键 = 中文原文全文） ----------
 const EN = {
   '智能体团队看板': 'Agent Team Board',
+  // REQ-20260913-001 构建模块（顶栏页签 + 模块副标题 + 搜索 + 高频标签）
+  '构建': 'Build',
+  '版本计划与分支，集中在这里': 'Version plans and branches, all in one place',
+  '搜版本 / 单号 / 分支…': 'Search versions / items / branches…',
+  '版本计划': 'Version plans',
+  '分支浏览': 'Branches',
+  '新建版本': 'New version',
+  '创建版本计划': 'Create version plan',
+  '添加条目': 'Add items',
+  '添加所选条目': 'Add selected items',
+  '合并入 main': 'Merge into main',
+  '重试合并入 main': 'Retry merge into main',
+  '提示词与回答回填': 'Prompt & answer backfill',
+  '复制提示词': 'Copy prompt',
+  '解析并预览': 'Parse & preview',
+  '同步远端': 'Sync remote',
+  '推送': 'Push',
+  '计划中': 'Planning',
+  '合并中': 'Merging',
+  '已合并': 'Merged',
+  '关键词在版本列表内前端过滤（版本名 / 单号），不发请求': 'Keywords filter the version list client-side (name / item id); no request is made',
   // REQ-20260911-009 设置页「Git 工作流」分区（dev 分支初始化）
   'Git 工作流': 'Git workflow',
   '正在获取 Git 状态…': 'Loading Git status…',
@@ -717,6 +738,8 @@ const EN = {
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
 const EN_DYNAMIC = {
+  // REQ-20260913-001 构建模块搜索反馈（命中数动态拼接）
+  '命中 ◇ / 共 ◇ 个版本（按版本名 / 单号）': '$1 of $2 versions matched (by name / item id)',
   // REQ-20260911-009 Git 工作流：状态/失败就近反馈（动态拼接）
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
   '失败：◇（可重试；已存在的分支不会重复创建）': 'Failed: $1 (retryable; an existing branch is never re-created)',

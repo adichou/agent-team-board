@@ -2986,6 +2986,73 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   .release-toolbar #relNewBtn { margin-left: 0; }
 }
 
+/* ---------- REQ-20260913-001 构建模块：版本计划 / 分支浏览（复用 rel-* 分栏与面板范式） ---------- */
+.build-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px 18px;
+  overflow: auto;
+}
+.bld-toolbar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+.bld-tabs { margin: 0 0 12px; }
+/* 版本详情：名称 / 描述行内编辑 */
+.bld-name, .bld-desc { cursor: pointer; border-radius: 6px; padding: 1px 4px; }
+.bld-name:hover, .bld-desc:hover { background: var(--bg); }
+.bld-desc { display: inline-block; font-size: 13.5px; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bld-edit-row { display: flex; gap: 8px; align-items: flex-start; }
+.bld-edit-row .bld-name-input, .bld-edit-row .bld-desc-input {
+  flex: 1; min-width: 0; font: inherit; padding: 5px 9px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text);
+}
+.bld-desc-block { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+/* 关联条目与 commit 区 */
+.bld-items { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.bld-items-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bld-item-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bld-item-row + .bld-item-row { border-top: 1px dashed var(--border); padding-top: 6px; }
+.bld-item-id { font-weight: 600; white-space: nowrap; }
+.bld-item-title { color: var(--muted); font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-item-row .bld-commit-sel, .bld-cand .bld-commit-sel {
+  font: inherit; font-size: 12.5px; padding: 3px 6px; max-width: 130px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text);
+}
+.bld-merge-note { margin: 6px 0 0; }
+/* 面板内条目选择（全选 / 全不选） */
+.bld-pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-cand { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.bld-cand.off { opacity: 0.6; }
+.bld-cand-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 回填弹窗两段式 */
+.bld-prompt-box, .bld-answer-box { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.bld-prompt-box textarea, .bld-answer-box textarea {
+  font: inherit; font-size: 12.5px; width: 100%; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 10px;
+}
+.bld-prompt-box textarea { resize: vertical; }
+.bld-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+/* 分支浏览 */
+.bld-branch-split { grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); }
+.bld-branch-tools { display: flex; gap: 8px; margin-bottom: 8px; }
+.bld-branch-group { margin-bottom: 10px; }
+.bld-group-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.bld-branch {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px;
+  cursor: pointer; font-size: 13.5px;
+}
+.bld-branch:hover { background: var(--bg); }
+.bld-branch.bld-cur { background: var(--bg); }
+.bld-branch .bld-push { margin-left: auto; }
+.bld-log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.bld-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bld-log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
+.bld-log code { font-size: 12px; color: var(--info-text); }
+.bld-log li .muted { margin-left: auto; }
+@media (max-width: 960px) {
+  .bld-branch-split { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ---------- REQ-20260911-007 待人工确认持久聚合区（需求列表下方，空态整体隐藏） ---------- */
 /* 列表区弹性占满、聚合区固定高度内滚动：卡片操作与时间线不把页面推长 */
 .hold-area {

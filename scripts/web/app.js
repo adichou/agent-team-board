@@ -154,6 +154,8 @@ function saveViewSnapshot() {
     marketing: window.ATBMarketing?.snapshot?.() || null,
     // REQ-20260910-029：发布模块浏览态（选中运行 / 页签 / 筛选）
     release: window.ATBRelease?.snapshot?.() || null,
+    // REQ-20260913-001：构建模块浏览态（子页签 / 选中版本 / 当前分支）
+    build: window.ATBBuild?.snapshot?.() || null,
     files: state.banner.layers.length ? {
       layers: state.banner.layers,
       activeFile: state.banner.activeFile,
@@ -202,6 +204,8 @@ async function applyViewSnapshot(snap) {
   if (snap.marketing && typeof snap.marketing === 'object') window.ATBMarketing?.restoreView?.(snap.marketing);
   // REQ-20260910-029：发布模块浏览态——暂存待 enter 时数据到位后落位（运行已删则回落列表）
   if (snap.release && typeof snap.release === 'object') window.ATBRelease?.restoreView?.(snap.release);
+  // REQ-20260913-001：构建模块浏览态——暂存待 enter 时数据到位后落位（版本已删则回落列表）
+  if (snap.build && typeof snap.build === 'object') window.ATBBuild?.restoreView?.(snap.build);
   // 文件模块：层栈与当前文件暂存，initFileBoard 首次初始化时逐层展开消费（失效逐层回落）
   // REQ-20260909-013：文件模块暂隐藏——跳过其快照层栈落位（隐藏期间不初始化文件横幅；恢复后照常）
   if (!HIDDEN_VIEWS.has('files') && snap.files && Array.isArray(snap.files.layers) && snap.files.layers.length) {
@@ -1054,6 +1058,8 @@ const MD_EXT = new Set(['md', 'markdown']);
 // release 副标题沿用 BUG-20260911-002 通用化文案，不回退渠道枚举口径）
 const MODULE_SUB = {
   status: '从想法到验收，跟进每一项工作',
+  // REQ-20260913-001：构建模块（版本管理 + 分支浏览与同步）插在需求与任务之间
+  build: '版本计划与分支，集中在这里',
   runs: '进度、队列与结果集中在这里',
   settings: '',
 };
@@ -1061,9 +1067,10 @@ const MODULE_SUB = {
 // REQ-20260907-004：模块视图（讨论 / 需求 / 任务 / 文件 / 营销 / 发布 / 设置）。
 // REQ-20260910-019：新增营销模块（档案 / 定位与定价 / 渠道与行动 / 效果与复盘四页签，后两页暂不可用）。
 // REQ-20260910-029：新增发布模块（Git 远端 / Apple App Store 发布流水线，插在营销与设置之间）。
+// REQ-20260913-001：新增构建模块（版本管理 + 分支浏览与同步，插在需求与任务之间）。
 // BUG-20260910-004：全局任务总览不再是主视图（入口移至顶栏「管理项目」右侧，打开右侧面板），
 // 旧 view=global 深链 / 快照 / 浏览器回放经 setView 收敛为打开面板，见 setView 内分支
-const VIEWS = ['status', 'oncall', 'runs', 'files', 'marketing', 'release', 'settings'];
+const VIEWS = ['status', 'oncall', 'build', 'runs', 'files', 'marketing', 'release', 'settings'];
 
 // REQ-20260909-013：讨论（oncall）/ 文件（files）模块暂态隐藏开关——暂态隐藏，不是功能删除。
 // 仅收敛界面入口与间接跳转（顶栏按钮、详情讨论纪要、来源讨论、搜索跨模块入口、旧深链 / 快照回落），
@@ -1113,6 +1120,12 @@ function setView(v) {
   // REQ-20260910-029：发布模块（enter 幂等：只读拉取与轮询，不触发任何执行）
   $('#releaseView').classList.toggle('hidden', v !== 'release');
   if (v === 'release') window.ATBRelease?.enter(state.project);
+  // REQ-20260913-001：构建模块（enter 幂等：只读拉取版本与分支数据，不触发任何 git 写操作）
+  $('#buildView').classList.toggle('hidden', v !== 'build');
+  if (v === 'build') {
+    window.ATBBuild?.enter(state.project);
+    window.ATBBuild?.setQuery(state.search.q); // 搜索词随模块解释：构建按版本名 / 单号前端过滤
+  }
   // BUG-20260910-004：全局任务总览改为顶栏入口 + 右侧面板（#globalPanel），不再占主视图容器
   $('#settingsView').classList.toggle('hidden', v !== 'settings');
   state.batch.open = v === 'runs';
@@ -1160,6 +1173,8 @@ const SEARCH_DEBOUNCE_MS = 250; // 输入防抖
 // REQ-20260909-013：讨论 / 文件模块随入口暂态隐藏，其占位符与范围标签项一并移出（恢复时按 design.md 加回）
 const SEARCH_PLACEHOLDER = {
   status: '搜需求 / Bug / 文档…',
+  // REQ-20260913-001：构建模块搜索为前端过滤（版本名 / 单号 / 分支名）
+  build: '搜版本 / 单号 / 分支…',
   runs: '搜任务、编号或执行器…',
 };
 
@@ -1167,6 +1182,7 @@ const SEARCH_PLACEHOLDER = {
 // 不再只靠占位符表达范围；语义与 SEARCH_PLACEHOLDER 同键（设置模块无搜索，整组隐藏）
 const SEARCH_SCOPE = {
   status: '需求',
+  build: '构建',
   runs: '任务',
 };
 
@@ -1212,8 +1228,9 @@ function clearSearch() {
   }
   syncSearchClearBtn();
   saveViewSnapshot(); // REQ-20260910-001：清空后的空关键词进入快照
-  // 讨论/任务为前端过滤：清空即时恢复全量
+  // 讨论/任务/构建为前端过滤：清空即时恢复全量
   if (state.view === 'oncall') window.ATBOncall?.setQuery('');
+  if (state.view === 'build') window.ATBBuild?.setQuery('');
   if (state.view === 'runs' && state.batchData) { state.batchSig = ''; renderBatchDrawer(); }
   renderSearchHits();
   renderBoard();
@@ -1227,9 +1244,15 @@ async function runSearch() {
   s.error = null; // 新一轮搜索开始：上一次失败说明不再保留（重试成功的口径一致）
   syncSearchClearBtn();
   saveViewSnapshot(); // REQ-20260910-001：关键词落定即进入快照（结果不进快照，恢复后按模块重新解释）
-  // REQ-20260907-004：讨论按标题/编号前端过滤；任务按编号/标题/执行器前端过滤，不发 API
+  // REQ-20260907-004：讨论按标题/编号前端过滤；任务按编号/标题/执行器前端过滤，不发 API；
+  // REQ-20260913-001：构建按版本名 / 单号前端过滤，不发 API
   if (state.view === 'oncall') {
     window.ATBOncall?.setQuery(q);
+    renderSearchHits();
+    return;
+  }
+  if (state.view === 'build') {
+    window.ATBBuild?.setQuery(q);
     renderSearchHits();
     return;
   }
@@ -1367,6 +1390,12 @@ function renderSearchFeedback() {
   } else if (view === 'runs') {
     // BUG-20260910-009：两面板列表真实按关键词前端过滤后，口径说明与行为一致
     body = '<span class="hits-note">关键词在下方面板内前端过滤（编号 / 标题 / 执行器；排队批次含批次号），不发请求</span>';
+  } else if (view === 'build') {
+    // REQ-20260913-001：构建模块搜索为前端过滤（版本名 / 单号）
+    const st = window.ATBBuild?.searchStats?.();
+    body = st
+      ? `<span class="hits-note">命中 ${st.matched} / 共 ${st.total} 个版本（按版本名 / 单号）</span>`
+      : '<span class="hits-note">关键词在版本列表内前端过滤（版本名 / 单号），不发请求</span>';
   }
   const truncated = remote && s.res && !stale && (s.res.truncated || []).length
     ? '<span class="hits-trunc">仅显示部分结果（每类前 50 条），请缩小关键词</span>'
