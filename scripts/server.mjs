@@ -2018,10 +2018,12 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
 //   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
-//   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex）
+//   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
+//                                    BUG-20260913-001：仅已完成 done 条目进入候选）
 //   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
 //   GET  /api/build/branch-log        指定分支最近提交（≤50 条：hash/short/subject/author/date）
-//   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit）
+//   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
+//                                    BUG-20260913-001：非 done 条目拒绝纳入）
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
 //   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
@@ -2061,17 +2063,21 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/candidates') {
     const board = requireBoard();
     const idx = gitFlow.itemCommitStatusIndex(board, root);
-    const items = core.listItems(board).map((it) => {
-      const rec = idx.get(it.id);
-      return {
-        itemId: it.id,
-        title: it.title || '',
-        status: it.status,
-        type: it.type,
-        commits: rec ? [...rec.commits] : [],
-        lastCommittedAt: rec ? rec.lastCommittedAt : null,
-      };
-    });
+    // BUG-20260913-001：仅已完成（done）条目可纳入版本——候选在数据源头收窄，
+    // 「新建版本」与「添加条目」两面板共用本接口，口径保持一致。
+    const items = core.listItems(board)
+      .filter((it) => it.status === 'done')
+      .map((it) => {
+        const rec = idx.get(it.id);
+        return {
+          itemId: it.id,
+          title: it.title || '',
+          status: it.status,
+          type: it.type,
+          commits: rec ? [...rec.commits] : [],
+          lastCommittedAt: rec ? rec.lastCommittedAt : null,
+        };
+      });
     return sendJson(res, 200, { items });
   }
   if (req.method === 'GET' && pathname === '/api/build/branches') {
@@ -2085,12 +2091,18 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return runPost(async (body) => {
       const board = requireBoard();
       if (!buildGit.isGitRepo(root)) throw new core.AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再创建版本计划');
-      const known = new Set(core.listItems(board).map((it) => it.id));
+      const boardItems = new Map(core.listItems(board).map((it) => [it.id, it]));
       const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
       const items = Array.isArray(body.items) ? body.items : [];
       for (const it of items) {
-        if (!known.has(String(it?.itemId || ''))) {
-          throw new core.AtbError(`条目 ${it?.itemId || '（空）'} 不在本看板中，无法纳入版本`);
+        const id = String(it?.itemId || '');
+        const boardItem = boardItems.get(id);
+        if (!boardItem) {
+          throw new core.AtbError(`条目 ${id || '（空）'} 不在本看板中，无法纳入版本`);
+        }
+        // BUG-20260913-001：与候选口径一致，未完成（非 done）条目拒绝纳入版本（数据口径兜底）
+        if (boardItem.status !== 'done') {
+          throw new core.AtbError(`条目 ${id} 尚未完成（当前状态：${boardItem.status}）：仅已完成（done）的需求单 / Bug 单可纳入版本计划`);
         }
       }
       const version = buildStore.createVersion(board, {
@@ -2112,8 +2124,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (body.action === 'add') {
-        const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
+        const itemsAll = core.listItems(board);
+        const byId = new Map(itemsAll.map((it) => [it.id, it]));
+        const titles = new Map(itemsAll.map((it) => [it.id, it.title]));
         const items = (Array.isArray(body.items) ? body.items : []).map((it) => ({ ...it, title: titles.get(String(it?.itemId || '')) || v.items.find((x) => x.itemId === it?.itemId)?.title || '' }));
+        // BUG-20260913-001：「添加条目」与新建版本同口径——未完成（非 done）条目拒绝加入
+        for (const it of items) {
+          const boardItem = byId.get(String(it?.itemId || ''));
+          if (boardItem && boardItem.status !== 'done') {
+            throw new core.AtbError(`条目 ${it?.itemId} 尚未完成（当前状态：${boardItem.status}）：仅已完成（done）的需求单 / Bug 单可纳入版本计划`);
+          }
+        }
         return sendJson(res, 200, { version: buildStore.addItems(board, body.id, items) });
       }
       if (body.action === 'remove') {
