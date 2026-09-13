@@ -74,6 +74,10 @@ t('S1~S10 /api/build* 全链路', async () => {
   const dataDirA = core.dataDirFrom(projA);
   const reqA = core.createItem(dataDirA, { type: 'requirement', title: '演示需求一', by: 'test' });
   const reqB = core.createItem(dataDirA, { type: 'requirement', title: '演示需求二', by: 'test' });
+  // BUG-20260913-001 口径：仅已完成（done）条目可纳入版本 / 出现候选，先推到 done
+  for (const it of [reqA, reqB]) {
+    for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDirA, it.id, s, { by: 'test' });
+  }
   fs.writeFileSync(path.join(projA, 'f1.txt'), `feat ${reqA.id}\n`);
   git(projA, ['add', '-A']);
   git(projA, ['commit', '-m', `feat: 演示需求一 ${reqA.id}`]);
