@@ -22,7 +22,8 @@ const EN = {
   '添加所选条目': 'Add selected items',
   '合并入 main': 'Merge into main',
   '重试合并入 main': 'Retry merge into main',
-  '提示词与回答回填': 'Prompt & answer backfill',
+  // BUG-20260913-004：「提示词与回答回填」更名「AI 完善」（按钮迁入版本卡片，弹窗标题同步）
+  'AI 完善': 'AI refine',
   '复制提示词': 'Copy prompt',
   '解析并预览': 'Parse & preview',
   '同步远端': 'Sync remote',
