@@ -234,7 +234,7 @@ t('G6 前端静态契约：顶栏入口 + 右侧面板 / 拉取 / 跳转 / 样�
   const css = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'style.css'), 'utf8');
   assert.match(html, /id="btnGlobal"/, '顶栏应有「全局」入口按钮（管理项目右侧）');
   assert.match(html, /id="globalPanel"/, '应有 #globalPanel 侧边面板容器');
-  assert.match(js, /const VIEWS = \['status', 'oncall', 'runs', 'files', 'marketing', 'release', 'settings'\]/, 'VIEWS 不再含 global（BUG-20260910-004：非主视图；REQ-20260910-019 增 marketing）');
+  assert.match(js, /const VIEWS = \['status', 'oncall', 'build', 'runs', 'files', 'marketing', 'release', 'settings'\]/, 'VIEWS 不再含 global（BUG-20260910-004：非主视图；REQ-20260910-019 增 marketing；REQ-20260913-001 增 build）');
   assert.match(js, /function openGlobalPanel\(/, '应有 openGlobalPanel 面板开合');
   assert.match(js, /function refreshGlobal\(/, '应有 refreshGlobal 数据拉取');
   assert.match(js, /function renderGlobalView\(/, '应有 renderGlobalView 渲染');

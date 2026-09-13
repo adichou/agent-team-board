@@ -115,7 +115,7 @@ t('T3 静态：模块页签并入顶栏（brand 后、top-actions 前），独�
   assert.ok(iTop < iBrand && iBrand < iNav && iNav < iActions && iActions < iHeadEnd,
     '顶栏内顺序应为 brand → module-nav → top-actions');
   assert.ok(iHeadEnd < iPageHead, '顶栏结束后直接进入第三行（原第二行消失）');
-  for (const [view, label] of [['status', '需求'], ['runs', '任务'], ['settings', '设置']]) {
+  for (const [view, label] of [['status', '需求'], ['build', '构建'], ['runs', '任务'], ['settings', '设置']]) {
     assert.match(html, new RegExp(`class="view-tab[^"]*" data-view="${view}"`), `「${label}」页签保留`);
   }
   // REQ-20260909-013：讨论 / 文件页签暂态隐藏（恢复步骤见条目 design.md）

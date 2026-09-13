@@ -65,7 +65,7 @@ t('B2 第二行模块导航移除「全局」：只剩项目模块，无重复�
   assert.doesNotMatch(nav[0], /data-view="global"/, '模块导航不得再含全局入口（避免重复入口）');
   const order = [...nav[0].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
   // REQ-20260909-013 起讨论 / 文件、REQ-20260911-002 起营销 / 发布入口暂态隐藏（恢复见各条目 design.md）
-  assert.deepEqual(order, ['status', 'runs', 'settings'],
+  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], // REQ-20260913-001 新增构建
     '导航顺序应为 需求/任务 + 末位设置（全局已移至顶栏；讨论 / 文件 / 营销 / 发布暂隐藏）');
 });
 
@@ -107,7 +107,7 @@ t('B4 开合交互：打开幂等不叠加、aria 同步、焦点进入；关闭
 });
 
 t('B5 打开面板不切换模块：global 不再是主视图，旧深链 / 快照 / 回放收敛为打开面板', () => {
-  assert.match(js, /const VIEWS = \['status', 'oncall', 'runs', 'files', 'marketing', 'release', 'settings'\]/, 'VIEWS 不应再含 global（主视图收敛为模块列表；REQ-20260910-019 增 marketing）');
+  assert.match(js, /const VIEWS = \['status', 'oncall', 'build', 'runs', 'files', 'marketing', 'release', 'settings'\]/, 'VIEWS 不应再含 global（主视图收敛为模块列表；REQ-20260910-019 增 marketing；REQ-20260913-001 增 build）');
   const setV = fnBody(js, 'setView');
   assert.match(setV, /v === 'global'[\s\S]{0,200}openGlobalPanel\(\)/, "setView('global') 应收敛为打开面板");
   const beforeGuard = setV.slice(0, setV.indexOf('openGlobalPanel'));

@@ -31,7 +31,7 @@ t('T2 index.html 无 CI 页签与视图容器', () => {
   const nav = html.match(/<nav class="module-nav"[\s\S]*?<\/nav>/);
   assert.ok(nav, '缺少模块导航');
   const order = [...nav[0].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['status', 'runs', 'settings'], '导航应为 需求/任务 + 末位设置（讨论 / 文件 / 营销 / 发布暂隐藏；全局移至顶栏）');
+  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], '导航应为 需求/构建/任务 + 末位设置（讨论 / 文件 / 营销 / 发布暂隐藏；全局移至顶栏；REQ-20260913-001 新增构建）');
 });
 
 t('T3 app.js 无 ci 视图注册与 ATBCi 引用', () => {
