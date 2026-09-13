@@ -25,6 +25,9 @@ const EN = {
   // BUG-20260913-004：「提示词与回答回填」更名「AI 完善」（按钮迁入版本卡片，弹窗标题同步）
   'AI 完善': 'AI refine',
   '复制提示词': 'Copy prompt',
+  // BUG-20260913-005：版本回填弹窗「去新建 XX 会话」入口——既有复制 toast 一并补齐词条
+  '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方': '✓ Prompt copied — paste it into the Agent, run it, then paste the answer back below',
+  '剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制': 'Clipboard unavailable: select all (⌘A) in the prompt box and copy manually',
   '解析并预览': 'Parse & preview',
   '同步远端': 'Sync remote',
   '推送': 'Push',
@@ -881,6 +884,12 @@ const EN_DYNAMIC = {
   '已计划队列（最旧优先）：◇——运行中新置计划的条目自动进入队列。启动 = 创建任务并复制调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）；提示词通用，可在任意一种 Agent 会话粘贴执行。': 'Planned queue (oldest first): $1 — items planned while running join automatically. Start = create the task and copy the dispatch prompt (copied ≠ running; it counts as running only after the run is registered). The prompt is agent-agnostic and can run in any Agent session.',
   '自动复制当前面板最新主调度提示词后打开 Codex 新会话（◇）：深链不传提示词，不会自动发送，请粘贴发送': 'Copy this panel\'s latest dispatch prompt automatically, then open a new Codex session at $1: the deep link carries no prompt and never auto-sends — paste and send it yourself',
   '自动复制当前面板最新主调度提示词后打开 Zcode（◇）：深链只打开工作区，会话需手动新建并粘贴提示词': 'Copy this panel\'s latest dispatch prompt automatically, then open Zcode at $1: the deep link only opens the workspace; create the session manually and paste the prompt',
+  // BUG-20260913-005：版本回填弹窗「去新建 XX 会话」（先复制本弹窗版本提示词后跳深链，口径同任务面板）
+  '✓ 已复制提示词并请求打开 ◇（◇）：请在新建会话中粘贴发送；回答仍粘贴回本弹窗': '✓ Prompt copied and requested opening $1 ($2): paste and send it in the new session; paste the answer back into this modal',
+  '复制失败：已请求打开 ◇（◇），请点弹窗内「复制提示词」手动复制后再粘贴；回答仍粘贴回本弹窗': 'Copy failed: requested opening $1 ($2); use "Copy prompt" in this modal to copy manually, then paste; the answer goes back into this modal',
+  '自动复制本弹窗版本提示词后打开 Zcode（◇）：深链只打开工作区，会话需手动新建并粘贴提示词': 'Copy this modal\'s version prompt automatically, then open Zcode at $1: the deep link only opens the workspace; create the session manually and paste the prompt',
+  '自动复制本弹窗版本提示词后打开 Codex 新会话（◇）：深链不传提示词，不会自动发送，请粘贴发送': 'Copy this modal\'s version prompt automatically, then open a new Codex session at $1: the deep link carries no prompt and never auto-sends — paste and send it yourself',
+  '当前弹窗暂无版本提示词；已请求打开 ◇（◇）': 'No version prompt in this modal; requested opening $1 ($2)',
   '待处理 ◇': '$1 pending',
   '待处理队列◇': 'Pending queue$1',
   '成功 ◇ 项，跳过 ◇ 项，失败 ◇ 项。': '$1 succeeded, $2 skipped, $3 failed.',

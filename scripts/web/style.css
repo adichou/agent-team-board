@@ -3035,6 +3035,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 10px;
 }
 .bld-prompt-box textarea { resize: vertical; }
+/* BUG-20260913-005：回填弹窗上段「去新建 XX 会话」入口行——复用任务面板 .ws-entry-link 链接
+   样式与状态说明口径，弹窗内独立一行 flex-wrap，窄屏自动换行；深浅色沿用现有变量 */
+.bld-session-entry { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
 .bld-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 /* 分支浏览 */
 .bld-branch-split { grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); }
