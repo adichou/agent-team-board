@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-006 演示 · 分支浏览「无远端分支」空态缺解释</title>
+<style>
+  /* 配色沿用 scripts/web/style.css 的明暗两套变量（prefers-color-scheme 自动适配） */
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --text: #1b2434;
+    --muted: #66748c;
+    --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20, 30, 50, 0.08), 0 4px 14px rgba(20, 30, 50, 0.06);
+    --primary: #2563eb;
+    --warn: #dc2626;
+    --ok-bg: #ecfdf5;
+    --ok-text: #047857;
+    --info-bg: #eff6ff;
+    --info-text: #1d4ed8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b;
+      --panel: #161d29;
+      --text: #e5eaf3;
+      --muted: #8b98ad;
+      --border: #263041;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+      --primary: #3b82f6;
+      --warn: #f87171;
+      --ok-bg: #052e1c;
+      --ok-text: #6ee7b7;
+      --info-bg: #0b1d3a;
+      --info-text: #93c5fd;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 20px 16px 80px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示页框架 ---------- */
+  .demo-head { max-width: 980px; margin: 0 auto 14px; }
+  .demo-head h1 { font-size: 17px; margin: 0 0 4px; }
+  .demo-head .meta { font-size: 12.5px; }
+
+  .demo-controls {
+    max-width: 980px; margin: 0 auto 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 12px 14px;
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+  }
+  .demo-controls label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  select {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+    background: var(--panel); color: var(--muted); border: none;
+  }
+  .seg button.on-defect { background: var(--warn); color: #fff; }
+  .seg button.on-fixed { background: var(--primary); color: #fff; }
+  .btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn.small { font-size: 12.5px; padding: 3px 10px; }
+  .btn.quiet { background: transparent; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+
+  .observe {
+    max-width: 980px; margin: 0 auto 14px; padding: 10px 14px;
+    background: var(--info-bg); color: var(--info-text);
+    border-radius: 10px; font-size: 13px;
+  }
+  .observe strong { display: block; margin-bottom: 2px; }
+
+  /* ---------- 模拟看板：构建模块 ---------- */
+  .board {
+    max-width: 980px; margin: 0 auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .board-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600;
+  }
+  .board-head .chip { font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 9px; background: var(--warn); color: #fff; }
+  .rel-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); }
+  .rel-tab {
+    font: inherit; font-size: 13.5px; padding: 7px 14px; cursor: pointer;
+    background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  }
+  .rel-tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+
+  .rel-split { display: flex; min-height: 380px; }
+  .rel-list { width: 46%; border-right: 1px solid var(--border); padding: 12px 14px; overflow-y: auto; }
+  .rel-detail { flex: 1; padding: 12px 16px; overflow-y: auto; }
+  @media (max-width: 700px) { .rel-split { flex-direction: column; } .rel-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border); } }
+
+  .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 12px; }
+  .bld-branch-group { margin-bottom: 14px; }
+  .bld-group-head { font-size: 12px; color: var(--muted); letter-spacing: 0.4px; margin-bottom: 6px; }
+  .bld-branch {
+    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .bld-branch:hover { background: var(--bg); }
+  .bld-branch.sel { background: var(--info-bg); border-color: var(--info-text); }
+  .bld-branch span:first-child { flex: 1; }
+  .bld-cur strong { font-weight: 650; }
+  .st { font-size: 11px; border-radius: 99px; padding: 1px 8px; }
+  .st-run { background: var(--info-bg); color: var(--info-text); }
+  .bld-push.attn { outline: 2px solid var(--primary); outline-offset: 1px; animation: nudge 1.2s ease-in-out infinite; }
+  @keyframes nudge { 50% { outline-color: transparent; } }
+
+  /* 期望修复后的解释块（演示页对「修复后空态」的拟真） */
+  .bld-fix-hint {
+    border-left: 3px solid var(--info-text); background: var(--info-bg);
+    padding: 8px 12px; border-radius: 0 8px 8px 0; display: grid; gap: 2px;
+  }
+  .bld-fix-hint strong { color: var(--info-text); font-size: 13px; }
+
+  .rel-form-err { color: var(--warn); font-size: 13px; }
+  .bld-log-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  ul.bld-log { list-style: none; margin: 0; padding: 0; }
+  ul.bld-log li { padding: 7px 2px; border-bottom: 1px dashed var(--border); display: grid; gap: 2px; }
+  ul.bld-log li:last-child { border-bottom: none; }
+
+  /* ---------- 弹窗 / toast ---------- */
+  .rel-modal-wrap {
+    position: fixed; inset: 0; background: rgba(10, 16, 26, 0.45); z-index: 30;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .rel-modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: min(420px, 94vw); padding: 16px 18px;
+  }
+  .rel-modal h3 { margin: 0 0 10px; font-size: 15px; }
+  .rel-modal .field { display: grid; gap: 4px; font-size: 13px; margin-bottom: 10px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); border-radius: 99px; padding: 9px 20px;
+    font-size: 13px; z-index: 40; box-shadow: var(--shadow); max-width: 80vw;
+    transition: opacity 0.25s;
+  }
+  .toast.err { background: var(--warn); color: #fff; }
+  .toast.hidden { opacity: 0; pointer-events: none; }
+
+  .demo-foot { max-width: 980px; margin: 14px auto 0; font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<header class="demo-head">
+  <h1>BUG-20260914-006 · 分支浏览「无远端分支」空态缺解释</h1>
+  <p class="meta muted small">
+    交互演示（单文件 / 离线）。下方为构建模块「分支浏览」子页的拟真复刻（scripts/web/build.js
+    <code>renderBranchesPane()</code> / <code>doFetch()</code>），数据全部为模拟，不会执行真实 git 命令。
+    用顶部「场景」与「缺陷现状 / 期望修复后」开关对照观察「远端」分组空态。
+  </p>
+</header>
+
+<div class="demo-controls" role="group" aria-label="演示控制">
+  <label>场景
+    <select id="demoScene" aria-label="选择模拟场景">
+      <option value="s1" selected>① 远端仓库为空（本 Bug 触发场景）</option>
+      <option value="s2">② 本地未同步，远端有分支</option>
+      <option value="s3">③ 正常：已同步，远端有分支</option>
+      <option value="s4">④ 分支读取失败（错误态）</option>
+    </select>
+  </label>
+  <label>对照
+    <span class="seg" role="radiogroup" aria-label="缺陷现状或期望修复后">
+      <button type="button" id="modeDefect" class="on-defect" role="radio" aria-checked="true">缺陷现状</button>
+      <button type="button" id="modeFixed" role="radio" aria-checked="false">期望修复后</button>
+    </span>
+  </label>
+  <button type="button" class="btn" id="demoReset">重置演示</button>
+</div>
+
+<div class="observe" id="observeBox" aria-live="polite"></div>
+
+<main class="board" aria-label="构建模块分支浏览子页（模拟）">
+  <div class="board-head">构建 <span class="chip">分支浏览 · 模拟</span></div>
+  <nav class="rel-tabs" aria-label="构建子页签">
+    <button type="button" class="rel-tab" id="tabVersions">版本计划</button>
+    <button type="button" class="rel-tab active" id="tabBranches" aria-current="page">分支浏览</button>
+  </nav>
+  <div class="rel-split">
+    <div class="rel-list" aria-label="分支列表">
+      <div class="bld-branch-tools">
+        <button type="button" class="btn small" id="bldFetchBtn" title="fetch --all --prune：拉取远端最新并清理失效引用">⟳ 和远端同步</button>
+        <button type="button" class="btn small quiet" id="bldBranchRefresh">刷新</button>
+      </div>
+      <div id="branchList"></div>
+    </div>
+    <div class="rel-detail" aria-label="提交记录">
+      <div class="bld-log-head"><strong id="logTitle">提交记录</strong><button type="button" class="btn small quiet" id="bldLogRefresh" hidden>刷新</button></div>
+      <div id="logBody"></div>
+    </div>
+  </div>
+</main>
+
+<footer class="demo-foot muted">
+  说明：① 本演示仅覆盖「分支浏览」子页；「版本计划」页签为占位。② 真实界面中「未配置远端（git remote 为空）/ 非 git 仓库」的既有空态不在本 Bug 范围内，修复不得影响（见 README 验收标准 4）。③ 「期望修复后」空态文案为方向性示意，最终形态以开发阶段 design.md 定案为准。
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 模拟仓库数据 ---------- */
+  var COMMITS = {
+    'dev': [
+      { h: 'a1f30c2e', s: 'refine: 补全 BUG-20260914-006 界面展示文档', a: 'refine-1', d: '2026-09-14 12:39' },
+      { h: '9b77d1f0', s: 'docs: 登记看板条目与回执规范', a: 'atb', d: '2026-09-13 21:02' },
+      { h: '3ce88a15', s: 'feat(build): 分支浏览子页与和远端同步', a: 'dev', d: '2026-09-13 18:44' }
+    ],
+    'main': [
+      { h: 'c0ffee10', s: 'chore: 初始提交', a: 'atb', d: '2026-09-12 09:15' }
+    ]
+  };
+  var CURRENT = 'dev';
+  var LOCAL = ['dev', 'main'];
+  var REMOTE_AFTER_SYNC = ['origin/dev', 'origin/main'];
+
+  /* 场景语义：
+     s1 远端仓库为空：同步成功后 remote 仍为 []（本 Bug 触发场景，本仓库当前即此状态）
+     s2 本地未同步：初始 remote 为 []，同步成功后出现 origin/*
+     s3 正常：初始即已同步，remote 有 origin/*
+     s4 读取失败：初始 phase=error，重试一次后按 s1 数据加载；出错期间同步亦失败 */
+  var SCENES = {
+    s1: { remote: [], synced: false, error: false },
+    s2: { remote: [], synced: false, error: false, afterSync: REMOTE_AFTER_SYNC },
+    s3: { remote: REMOTE_AFTER_SYNC.slice(), synced: true, error: false },
+    s4: { remote: [], synced: false, error: true }
+  };
+
+  var state = {
+    scene: 's1',
+    mode: 'defect',            // defect = 当前源码行为；fixed = 期望修复后
+    phase: 'loading',          // loading | loaded | error
+    remote: [],
+    synced: false,
+    errorOnce: false,          // s4 是否已重试成功
+    selected: null,            // 右栏当前展示的分支
+    syncBusy: false,
+    pushBusy: false,
+    pushConfirm: null          // { branch }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var timers = {};
+
+  function initScene() {
+    var s = SCENES[state.scene];
+    state.remote = s.remote.slice();
+    state.synced = s.synced;
+    state.selected = null;
+    state.syncBusy = false;
+    state.pushBusy = false;
+    state.pushConfirm = null;
+    state.errorOnce = false;
+    state.phase = 'loading';
+    render();
+    timers.load = setTimeout(function () {
+      state.phase = s.error ? 'error' : 'loaded';
+      render();
+    }, 550);
+  }
+
+  /* ---------- 空态文案：缺陷 vs 修复（本 Bug 核心） ---------- */
+  function remoteEmptyHtml() {
+    if (state.mode === 'defect') {
+      // 当前源码行为（scripts/web/build.js 约 1021 行）：两种成因共用同一句，且同步后不变
+      return '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>';
+    }
+    if (!state.synced) {
+      // 修复方向 b：未同步的初始空态——解释成因并引导同步
+      return '<p class="muted small">本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取。</p>';
+    }
+    // 修复方向 a：同步成功后仍为空——解释真实成因（远端仓库为空）并引导推送
+    return '<div class="bld-fix-hint" role="note">'
+      + '<strong>远端仓库尚无任何分支（从未推送）。</strong>'
+      + '<span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。'
+      + '可在「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>';
+  }
+
+  function pushNeedsAtten() {
+    return state.mode === 'fixed' && state.synced && state.remote.length === 0 && state.phase === 'loaded';
+  }
+
+  /* ---------- 渲染 ---------- */
+  function esc(x) { return String(x).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function render() {
+    renderBranchList();
+    renderLog();
+    renderModal();
+    renderObserve();
+
+    var fetchBtn = $('bldFetchBtn');
+    fetchBtn.disabled = state.syncBusy;
+    fetchBtn.textContent = state.syncBusy ? '同步中…' : '⟳ 和远端同步';
+    $('bldBranchRefresh').disabled = state.syncBusy;
+    $('bldLogRefresh').hidden = !state.selected;
+
+    $('modeDefect').className = state.mode === 'defect' ? 'on-defect' : '';
+    $('modeFixed').className = state.mode === 'fixed' ? 'on-fixed' : '';
+    $('modeDefect').setAttribute('aria-checked', String(state.mode === 'defect'));
+    $('modeFixed').setAttribute('aria-checked', String(state.mode === 'fixed'));
+  }
+
+  function renderBranchList() {
+    var el = $('branchList');
+    if (state.phase === 'loading') {
+      el.innerHTML = '<p class="muted">加载分支中…</p>';
+      return;
+    }
+    if (state.phase === 'error') {
+      el.innerHTML = '<p class="rel-form-err" role="alert">分支读取失败：无法运行 git：exit 128（模拟：仓库读取故障）'
+        + ' <button type="button" class="btn small" id="bldBranchRetry">重试</button></p>';
+      $('bldBranchRetry').addEventListener('click', retryLoad);
+      return;
+    }
+    var cur = branchRow(CURRENT, true);
+    var others = LOCAL.filter(function (x) { return x !== CURRENT; }).map(function (x) { return branchRow(x, false); }).join('');
+    var remote = state.remote.map(function (x) {
+      var sel = state.selected === x;
+      return '<div class="bld-branch bld-remote' + (sel ? ' sel' : '') + '" data-branch="' + esc(x) + '" role="button" tabindex="0"><span>' + esc(x) + '</span></div>';
+    }).join('');
+    var remoteHtml = remote || remoteEmptyHtml();
+    var pushAttn = pushNeedsAtten() ? ' attn' : '';
+    el.innerHTML =
+      '<div class="bld-branch-group"><div class="bld-group-head">本地</div>' + cur + (others || '<p class="muted small">（无其他本地分支）</p>') + '</div>'
+      + '<div class="bld-branch-group"><div class="bld-group-head">远端</div>' + remoteHtml + '</div>';
+    Array.prototype.forEach.call(el.querySelectorAll('.bld-branch'), function (row) {
+      var name = row.getAttribute('data-branch');
+      var act = function () { selectBranch(name); };
+      row.addEventListener('click', act);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+    });
+    Array.prototype.forEach.call(el.querySelectorAll('.bld-push'), function (btn) {
+      btn.addEventListener('click', function (e) { e.stopPropagation(); openPushConfirm(btn.getAttribute('data-push')); });
+    });
+  }
+
+  function branchRow(name, isCurrent) {
+    var sel = state.selected === name;
+    if (isCurrent) {
+      return '<div class="bld-branch bld-cur' + (sel ? ' sel' : '') + '" data-branch="' + esc(name) + '" role="button" tabindex="0">'
+        + '<strong>' + esc(name) + '</strong> <span class="st st-run">当前</span></div>';
+    }
+    return '<div class="bld-branch' + (sel ? ' sel' : '') + '" data-branch="' + esc(name) + '" role="button" tabindex="0"><span>' + esc(name) + '</span>'
+      + '<button type="button" class="btn small quiet bld-push' + (pushNeedsAtten() ? ' attn' : '') + '" data-push="' + esc(name) + '" title="推送到远端">推送</button></div>';
+  }
+
+  function commitsOf(branch) {
+    if (COMMITS[branch]) return COMMITS[branch];
+    var local = String(branch).split('/').slice(1).join('/') || branch;
+    return COMMITS[local] || [];
+  }
+
+  function renderLog() {
+    var title = $('logTitle');
+    var body = $('logBody');
+    if (!state.selected) {
+      title.textContent = '提交记录';
+      body.innerHTML = '<div class="muted">点击左侧分支查看提交记录</div>';
+      return;
+    }
+    title.textContent = state.selected;
+    var cs = commitsOf(state.selected);
+    if (!cs.length) { body.innerHTML = '<p class="muted small">该分支暂无提交</p>'; return; }
+    body.innerHTML = '<ul class="bld-log">' + cs.map(function (c) {
+      return '<li><code>' + esc(c.h) + '</code> <span>' + esc(c.s) + '</span>'
+        + '<span class="muted small">' + esc(c.a) + ' · ' + esc(c.d) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderModal() {
+    var old = $('bldPushWrap');
+    if (old) old.remove();
+    if (!state.pushConfirm) return;
+    var p = state.pushConfirm;
+    var remoteNames = state.remote.length ? [state.remote[0].split('/')[0]] : ['origin'];
+    var hasUp = state.remote.some(function (r) { return r === 'origin/' + p.branch || r.endsWith('/' + p.branch); });
+    var wrap = document.createElement('div');
+    wrap.className = 'rel-modal-wrap';
+    wrap.id = 'bldPushWrap';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-label', '推送分支确认');
+    wrap.innerHTML =
+      '<div class="rel-modal"><h3>推送分支 ' + esc(p.branch) + '</h3>'
+      + '<div class="rel-modal-body">'
+      + '<label class="field">目标远端<select class="bld-push-remote">'
+      + remoteNames.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('')
+      + '</select></label>'
+      + '<p class="muted small">' + (hasUp
+        ? '该分支已有远端分支：本次推送将更新 origin/' + esc(p.branch) + '。'
+        : '该分支尚未建立上游跟踪：首推将加 -u 建立跟踪。') + '</p>'
+      + '</div>'
+      + '<footer class="modal-foot">'
+      + '<button type="button" class="btn" id="bldPushCancel"' + (state.pushBusy ? ' disabled' : '') + '>取消</button>'
+      + '<button type="button" class="btn primary" id="bldPushGo"' + (state.pushBusy ? ' disabled' : '') + '>' + (state.pushBusy ? '推送中…' : '确认推送') + '</button>'
+      + '</footer></div>';
+    document.body.appendChild(wrap);
+    $('bldPushCancel').addEventListener('click', function () { state.pushConfirm = null; render(); });
+    $('bldPushGo').addEventListener('click', doPush);
+    wrap.addEventListener('click', function (e) { if (e.target === wrap && !state.pushBusy) { state.pushConfirm = null; render(); } });
+  }
+
+  function renderObserve() {
+    var box = $('observeBox');
+    var modeTxt = state.mode === 'defect' ? '缺陷现状' : '期望修复后';
+    var txt;
+    if (state.scene === 's1') {
+      txt = state.mode === 'defect'
+        ? '远端仓库为空（origin 已配置、GitHub 从未推送、本地无跟踪引用）。点「⟳ 和远端同步」成功后，「远端」分组仍是同一句「先『和远端同步』…」——刚同步完却被告知要先同步，且无从得知真实原因是远端为空。这就是本 Bug。'
+        : state.synced
+          ? '同步成功后仍为空 → 空态改为解释「远端仓库尚无任何分支（从未推送）」，并把「本地」分组的「推送」按钮高亮为出路；推送成功后 origin/* 出现，闭环完成。'
+          : '未同步的初始空态先解释「本地无远端跟踪分支」并引导同步——与「远端为空」区分开。先点一次「⟳ 和远端同步」看切换。';
+    } else if (state.scene === 's2') {
+      txt = '本地未同步、远端实际有分支。' + (state.synced
+        ? '同步成功后 origin/* 已出现——这是空态的另一种成因（缺 fetch 而非远端为空），修复后的初始文案引导同步是对的。'
+        : '初始「远端」分组同样为空，但成因与场景①不同（缺 fetch）。点「⟳ 和远端同步」后分支出现。');
+    } else if (state.scene === 's3') {
+      txt = '正常路径（验收标准 2）：本地已 fetch，远端分组正常列出 origin/*，修复后不出现任何新提示。可点击分支查看提交记录，或在本地分支上走「推送」确认流程。';
+    } else {
+      txt = state.phase === 'error'
+        ? '错误态（状态反馈）：列表读取失败时显示「分支读取失败：<原因>」并提供「重试」；此时点「⟳ 和远端同步」会以红色 toast 报「✕ 同步远端失败」。点「重试」恢复。'
+        : '重试成功后回到正常空态（按当前「' + modeTxt + '」口径渲染）。';
+    }
+    box.innerHTML = '<strong>观察要点（' + modeTxt + '）</strong>' + esc(txt);
+  }
+
+  /* ---------- 交互 ---------- */
+  function selectBranch(name) {
+    state.selected = name;
+    render();
+  }
+
+  function doFetch() {
+    if (state.syncBusy) return;
+    state.syncBusy = true;
+    render();
+    timers.sync = setTimeout(function () {
+      state.syncBusy = false;
+      if (state.phase === 'error') {
+        toast('✕ 同步远端失败：无法访问远端仓库（模拟）', true);
+        render();
+        return;
+      }
+      toast('✓ 已同步远端（fetch --prune）');
+      state.synced = true;
+      var after = SCENES[state.scene].afterSync;
+      if (after) state.remote = after.slice();
+      state.phase = 'loading';
+      render();
+      timers.load = setTimeout(function () { state.phase = 'loaded'; render(); }, 450);
+    }, 900);
+  }
+
+  function retryLoad() {
+    state.phase = 'loading';
+    state.errorOnce = true;
+    render();
+    timers.load = setTimeout(function () { state.phase = 'loaded'; render(); }, 550);
+  }
+
+  function refresh() {
+    if (state.syncBusy) return;
+    state.phase = 'loading';
+    render();
+    timers.load = setTimeout(function () {
+      state.phase = SCENES[state.scene].error && !state.errorOnce ? 'error' : 'loaded';
+      render();
+    }, 500);
+  }
+
+  function openPushConfirm(branch) {
+    if (state.pushBusy || state.pushConfirm) return;
+    state.pushConfirm = { branch: branch };
+    render();
+  }
+
+  function doPush() {
+    var p = state.pushConfirm;
+    if (!p || state.pushBusy) return;
+    state.pushBusy = true;
+    render();
+    timers.push = setTimeout(function () {
+      state.pushConfirm = null;
+      state.pushBusy = false;
+      var rb = 'origin/' + p.branch;
+      if (state.remote.indexOf(rb) < 0) state.remote.push(rb);
+      toast('✓ 已推送 ' + p.branch + ' → ' + rb + '（已建立上游跟踪）');
+      render();
+    }, 800);
+  }
+
+  /* ---------- toast（口径同 app.js：底部居中胶囊，约 3.2s 自动隐藏） ---------- */
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var el = $('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      el.className = 'toast hidden';
+      el.setAttribute('role', 'status');
+      document.body.appendChild(el);
+    }
+    el.className = 'toast' + (isErr ? ' err' : '');
+    el.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.add('hidden'); }, 3200);
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  $('bldFetchBtn').addEventListener('click', doFetch);
+  $('bldBranchRefresh').addEventListener('click', refresh);
+  $('bldLogRefresh').addEventListener('click', function () {
+    var keep = state.selected;
+    state.selected = null;
+    selectBranch(keep);
+    toast('✓ 已刷新提交记录');
+  });
+  $('demoScene').addEventListener('change', function (e) {
+    state.scene = e.target.value;
+    initScene();
+  });
+  $('modeDefect').addEventListener('click', function () { state.mode = 'defect'; render(); });
+  $('modeFixed').addEventListener('click', function () { state.mode = 'fixed'; render(); });
+  $('demoReset').addEventListener('click', function () {
+    state.scene = 's1';
+    state.mode = 'defect';
+    $('demoScene').value = 's1';
+    initScene();
+    toast('已重置演示');
+  });
+  $('tabVersions').addEventListener('click', function () {
+    toast('演示仅覆盖「分支浏览」子页，「版本计划」为占位页签');
+  });
+  $('tabBranches').addEventListener('click', function () { /* 已在本页 */ });
+
+  initScene();
+})();
+</script>
+</body>
+</html>

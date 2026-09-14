@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-006",
+  "type": "bug",
+  "title": "分支浏览「无远端分支」空态缺解释：远端仓库为空与本地未同步不可区分",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-11",
+  "createdAt": "2026-09-14T03:57:22.995Z",
+  "updatedAt": "2026-09-14T05:09:01.849Z",
+  "agentCompletedAt": "2026-09-14T05:09:01.849Z",
+  "lastReport": {
+    "at": "2026-09-14T05:09:01.849Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + 真实临时 git 仓库集成 + 前端 vm 行为测试",
+    "summary": "分支浏览远端空态三分支修复：listBranches 增 remotes 字段（git remote 本地读）；前端区分「未配置远端（保持既有文案）/ 已配置未同步（解释本地无跟踪分支并引导同步，说明同步后仍空=远端为空可推送）/ 本会话同步成功后仍为空（bld-remote-hint 解释块断言远端仓库尚无任何分支（从未推送）并引导推送，推送按钮 attn 高亮）」；新增 8 用例先红后绿，20260914-003/005 载荷显式化，全量 225 文件复跑 0 失败（body-limit 偶发为已登记 BUG-20260914-007）；引入来源归因 REQ-20260913-001（design.md）",
+    "runId": "run-20260914-227"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T03:57:22.995Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0914-3238"
+    },
+    {
+      "at": "2026-09-14T04:38:49.329Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T04:44:26.377Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-123946-b54a）"
+    },
+    {
+      "at": "2026-09-14T04:54:35.515Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-11",
+      "note": "认领（zcode-batch-048-11）"
+    },
+    {
+      "at": "2026-09-14T05:09:01.849Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-11",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

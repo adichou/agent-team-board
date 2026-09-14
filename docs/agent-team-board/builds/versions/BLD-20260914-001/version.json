@@ -1783,10 +1783,122 @@
       "title": "操作提示出现多个已，请定位",
       "mergedAt": null,
       "mergeError": null
+    },
+    {
+      "itemId": "REQ-20260913-001",
+      "commit": "5e8076bd48836b6febcf02a9a3229d8765916a61",
+      "title": "添加一个构建模块，支持版本管理。模块位置在需求模块和任务模块之间",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260913-001",
+      "commit": "528fc679c53c5417791cfc1e0237fb0a0097dd71",
+      "title": "版本创建时应该允许关联的需求范围是已完成的需求或 bug，其他都不应该出现在这个范围内。",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260913-002",
+      "commit": "708ff4f282612c59d55fbb1886c534fb831a2c65",
+      "title": "新建版本和版本查看界面的需求或 bug 如果标题过长，需要显示 tips",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260913-003",
+      "commit": "737687572cf53541478e454851bddfdeb61429d0",
+      "title": "bug 单的文档也要支持讨论菜单，参考需求的文档",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260913-004",
+      "commit": "f164e8009fb09a5372ef4a065f91e5be0fd2ef90",
+      "title": "版本的提示词与回答回填，合并入 main 两个按钮位置需要改到左侧列表项目中，参考需求列表的设计。",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260913-005",
+      "commit": "aa0666b3bb5b2e7e74fbfd5cf104aca64064ae51",
+      "title": "版本提示词与回答回填中的提示词复制，要增加批量任务类似的去 XX 会话的功能",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "REQ-20260913-003",
+      "commit": "a934a5eef137fe1d80cf6f5b69ee114c5eeefe72",
+      "title": "批量任务去掉批次概念，每次启动到结束就实时执行当前的任务",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260913-006",
+      "commit": "e950cf04650149a8711b04572b6166674786b8ac",
+      "title": "批量实施 auto-commit 漏提交业务源码：预留时已脏的 build.js 永远不入任何单的提交，HEAD 上已提交的 test/biz 组合自相矛盾 zcode-batch-047-1",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "REQ-20260913-004",
+      "commit": "0c925dad4aba99ca48621b6e1a1e577425135176",
+      "title": "支持版本删除",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "REQ-20260913-005",
+      "commit": "5981565919cd74061c61db9b02e83c3e63addb44",
+      "title": "批量完善和批量开发的文案改为 AI 分析和 AI 开发，要全面排查整改",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "REQ-20260913-006",
+      "commit": "b2511b1c26c442ddf0b3b88c6d9a4a35b9f7a376",
+      "title": "版本计划 AI 完善界面支持针对 AI 完善的标题和文本进行修改后再保存",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260914-001",
+      "commit": "941dfaae9ca5636308ab9562803694ac7e6503d8",
+      "title": "AI 分析任务中重复显示了“本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）”，请修复",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260914-002",
+      "commit": "864f7177320bc3e7e695356258a7aa0cb2e0f162",
+      "title": "版本计划中关联条目与 commit 无法全选，新建版本计划中也无法全选",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260914-003",
+      "commit": "e94ffeb44dbab3fcec8d0cc29d222e4af8f74d54",
+      "title": "为什么会显示无其他本地分支的？main 分支应该是要显示的",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260914-004",
+      "commit": "a2bdbd8c5e4b10dca952228ff138d6298fd81ded",
+      "title": "已经纳入版本的条目不应该再出现在其他版本的关联列表或新建版本的关联列表中",
+      "mergedAt": null,
+      "mergeError": null
+    },
+    {
+      "itemId": "BUG-20260914-005",
+      "commit": "139fee665a9e4e691f4cfc9ad766c672dd693fa0",
+      "title": "分支浏览里面的同步远端按钮文案改为“和远端同步”",
+      "mergedAt": null,
+      "mergeError": null
     }
   ],
   "createdAt": "2026-09-14T02:31:16.200Z",
-  "updatedAt": "2026-09-14T02:43:45.391Z",
+  "updatedAt": "2026-09-14T04:37:34.955Z",
   "merge": {
     "startedAt": null,
     "finishedAt": null,
