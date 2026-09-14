@@ -1,13 +1,17 @@
 'use strict';
 // 构建模块前端（REQ-20260913-001，版本管理 + 分支浏览与同步）—— 由 app.js 在 view=build 时激活。
 // 界面：模块内两个子页签——版本计划（默认）：左版本列表 + 右版本详情（信息编辑 / 条目 ↔ commit 关联
-// 与增删 / 提示词与回答回填 / 合并入 main）；分支浏览：左分支列表（当前 / 本地 / 远端分组）+ 右提交记录。
+// 与增删）；版本操作（AI 完善 / 合并入 main / 删除）直接放在左侧每张版本卡片内
+//（BUG-20260913-004 参照需求列表行内操作口径；删除为 REQ-20260913-004）；分支浏览：左分支列表
+//（当前 / 本地 / 远端分组）+ 右提交记录。
 // 语义边界（与后端一致，design.md 落定口径）：
 //   - 仅已完成（done）的需求单 / Bug 单可纳入版本（BUG-20260913-001）：新建版本 / 添加条目
 //     候选只列 done 条目（后端接口已收窄，前端再过滤一次防御旧数据）；无候选时给明确空态；
 //   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选（全选只纳入有 commit 候选的条目）；
 //   - 「提示词与回答回填」为同一弹窗两段式：上段复制提示词、下段粘贴回答解析回填，无需关闭再打开；
 //   - 合并入 main 前弹确认框（列 commit 清单），确认即授权；执行中禁用重复触发；
+//   - 删除版本（REQ-20260913-004）必经确认弹窗：按状态差异化提示（draft/failed 不可恢复，
+//     merged 仅移除看板记录；merging 禁删）；执行中确认键禁用防重复，成功后列表与详情同步回落；
 //   - 分支浏览只读；同步仅「同步远端（fetch --prune）」与本地分支「推送」两个显式入口；
 //   - 非 git 仓库显示引导空态，不出现可点击但必然失败的入口。
 // 状态机：loading → ready | error（读取失败重试）。
@@ -32,9 +36,14 @@ const ATBBuild = (() => {
     createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, busy, error }
     addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, busy, error }
     answer: null,        // { verId, text, parsed, error, busy }  提示词与回答回填弹窗
+    // BUG-20260913-005：弹窗「去新建 XX 会话」宿主探测——状态机与 app.js state.workspaceApps
+    // 同款；模块级缓存且不随 enter(project) 重置（宿主安装是机器级事实，与项目无关）
+    workspaceApps: { zcode: undefined, codex: undefined, loaded: false, probing: false, failed: false },
     mergeConfirm: null,  // { verId }
     pushConfirm: null,   // { branch }
     mergeBusy: false,
+    deleteConfirm: null, // { verId } REQ-20260913-004 删除确认弹窗
+    deleteBusy: false,
     branches: null,      // /api/build/branches 响应
     branchesPhase: 'idle', // idle | loading | error
     branchesError: null,
@@ -51,7 +60,8 @@ const ATBBuild = (() => {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const fmtTime = (iso) => (iso ? String(iso).replace('T', ' ').slice(0, 16) : '—');
   const short = (h) => String(h || '').slice(0, 8);
-  const toast = (m) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m); } catch { /* 测试环境无 toast */ } };
+  // BUG-20260913-005：透传 isErr（错误 toast 与普通提示在任务面板口径下有样式差异）
+  const toast = (m, isErr) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m, isErr); } catch { /* 测试环境无 toast */ } };
 
   function api(path, opts = {}) {
     const sep = path.includes('?') ? '&' : '?';
@@ -137,12 +147,14 @@ const ATBBuild = (() => {
         project: project ?? null, phase: 'loading', error: null, data: null, tab: 'versions',
         selVerId: null, edit: null, createPanel: null, addPanel: null, answer: null,
         mergeConfirm: null, pushConfirm: null, mergeBusy: false,
+        deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
         logBranch: null, branchLog: null, logPhase: 'idle', syncBusy: false, pushBusy: false,
         rendered: false, pendingRestore: state.pendingRestore,
       });
       render(); // 拉取前先呈现加载态
     }
+    refreshWorkspaceApps(); // BUG-20260913-005：宿主探测预热（fire-and-forget，loaded 后为 no-op）
     if (!state.data || changed) {
       await refresh();
       if (state.pendingRestore && state.phase === 'ready') {
@@ -258,8 +270,12 @@ const ATBBuild = (() => {
     }
   }
 
+  function findVersion(id) {
+    return (state.data?.versions || []).find((v) => v.id === id) || null;
+  }
+
   function selVersion() {
-    return (state.data?.versions || []).find((v) => v.id === state.selVerId) || null;
+    return findVersion(state.selVerId);
   }
 
   async function saveInfo(id, patch) {
@@ -334,33 +350,142 @@ const ATBBuild = (() => {
     }
   }
 
-  /* ---------- 提示词与回答回填（同一弹窗两段式） ---------- */
+  /* ---------- AI 完善（提示词与回答回填，同一弹窗两段式） ---------- */
 
-  function openAnswerModal() {
-    const v = selVersion();
+  // BUG-20260913-004：入口迁入版本卡片后按 verId 打开（对按钮所在卡片生效）；
+  // 不带参时回落当前选中版本（向后兼容），带参但版本已不存在时不弹窗。
+  function openAnswerModal(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
     state.answer = { verId: v.id, text: '', parsed: null, error: null, busy: false, copied: false };
     render();
+    refreshWorkspaceApps(); // BUG-20260913-005：入口探测（fire-and-forget；loaded / 进行中 / 已失败不重探）
+  }
+
+  // BUG-20260913-005：剪贴板写入，返回布尔（与任务面板 copyDispatchText 同口径）；
+  // 失败 toast 由调用方给完整补救指引，不在此处重复提示
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch { /* 剪贴板不可用：走失败分支 */ }
+    return false;
   }
 
   async function copyPrompt() {
     const a = state.answer;
     if (!a) return;
-    const v = selVersion();
+    const v = findVersion(a.verId);
     if (!v) return;
-    const text = buildPrompt(v);
+    const copied = await copyText(buildPrompt(v));
+    a.copied = copied;
+    if (copied) toast('✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方');
+    else toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制');
+    render();
+  }
+
+  // BUG-20260913-005：弹窗内「去新建 XX 会话」点击——与任务面板 copyPromptAndOpenSession 同构
+  // （BUG-20260910-005 / REQ-20260911-008 口径）：先复制本弹窗当前版本提示词（buildPrompt(v)），
+  // 复制动作完成后才触发深链跳转（zcode 只打开工作区、codex 落在新会话输入框，均不传 prompt、
+  // 不自动发送）；失败不静默且深链打开不依赖复制成败；busy 防重复点击（在途点击直接忽略）。
+  // 版本提示词为前端本地生成，无「提示词获取失败」分支；版本缺失（弹窗已关）仅作防御路径。
+  let bldSessionBusy = false;
+  async function copyPromptAndOpenSession(agent, url) {
+    if (bldSessionBusy) return;
+    bldSessionBusy = true;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        a.copied = true;
-        toast('✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方');
-        render();
+      const label = agent === 'codex' ? 'Codex 新会话' : 'Zcode 工作区';
+      const v = state.answer ? findVersion(state.answer.verId) : null;
+      const prompt = v ? buildPrompt(v) : '';
+      if (!prompt) {
+        location.href = url;
+        toast(`当前弹窗暂无版本提示词；已请求打开 ${label}（${state.project}）`);
         return;
       }
-    } catch { /* 剪贴板不可用：降级为手动全选复制 */ }
-    a.copied = false;
-    toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制');
-    render();
+      const copied = await copyText(prompt); // 失败时由下方 toast 给手动复制补救指引
+      location.href = url;
+      if (copied) {
+        toast(`✓ 已复制提示词并请求打开 ${label}（${state.project}）：请在新建会话中粘贴发送；回答仍粘贴回本弹窗`);
+      } else {
+        toast(`复制失败：已请求打开 ${label}（${state.project}），请点弹窗内「复制提示词」手动复制后再粘贴；回答仍粘贴回本弹窗`, true);
+      }
+    } finally {
+      bldSessionBusy = false;
+    }
+  }
+
+  // BUG-20260913-005：弹窗「去新建 XX 会话」宿主探测——状态机与任务面板（app.js
+  // refreshWorkspaceApps）同款：probing 标记进行中；成功置 loaded（zcode/codex 为明确 boolean）；
+  // 失败置 failed 且不置 loaded（保持未知，不当作未安装），重试走 force（「重新检测」）。
+  // 探测异步 fire-and-forget，结束仅在弹窗打开时重渲染刷出最终态，不阻断复制与回填。
+  async function refreshWorkspaceApps(force = false) {
+    const w = state.workspaceApps;
+    if (w.loaded || w.probing || (w.failed && !force)) return;
+    w.probing = true;
+    w.failed = false;
+    try {
+      const r = await fetch('/api/workspace/apps'); // 全局只读接口（不挂 /api/build 前缀）
+      if (!r.ok) throw new Error(`探测失败（${r.status}）`);
+      const d = await r.json();
+      w.zcode = !!d.zcode;
+      w.codex = !!d.codex;
+      w.loaded = true;
+    } catch {
+      w.failed = true; // 保持未知：不置 loaded、不当作未安装；手动「重新检测」恢复
+    } finally {
+      w.probing = false;
+      // 入口只在回填弹窗内：仅在弹窗打开时刷最终态；刷前先保留未解析草稿防丢输入
+      if (state.answer) { syncAnswerDraft(); render(); }
+    }
+  }
+
+  // 探测结束重渲染前，把回答框当前值同步回 state.answer.text，避免丢用户已粘贴未解析的草稿；
+  function syncAnswerDraft() {
+    const a = state.answer;
+    if (!a) return;
+    const view = $('#buildView');
+    if (!view) return;
+    const input = $('.bld-answer-input', view);
+    if (input) a.text = input.value ?? a.text;
+  }
+
+  // BUG-20260913-005：弹窗上段「去新建 XX 会话」入口（参照任务面板 newSessionLinksHtml 口径，
+  // BUG-20260910-005 / REQ-20260911-008）。取材与 title 均为本弹窗版本提示词（非主调度提示词）；
+  // 状态机同款：检测中显示检测态（不把未知当未检测到）；失败给说明 +「重新检测」+ 手动打开指引
+  // （不砍入口区）；未检测到宿主该端禁用 +（未检测到）；未选项目两端禁用 + title 说明。
+  function answerSessionLinksHtml() {
+    const w = state.workspaceApps;
+    if (w.failed && !w.loaded) {
+      return '<span class="muted small">客户端检测失败：无法确认本机 Zcode / Codex 是否可用</span>'
+        + '<a class="ws-entry-link" href="#" data-bld-ws-retry title="重新检测本机 Zcode / Codex 客户端（只读存在性检查）">重新检测</a>'
+        + '<span class="muted small">或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词</span>';
+    }
+    if (w.probing || !w.loaded) {
+      return '<span class="muted small">正在检测本机 Agent 客户端…</span>';
+    }
+    const noProject = !state.project;
+    const cfg = [
+      { agent: 'zcode', label: '去新建 Zcode 会话',
+        okTitle: `自动复制本弹窗版本提示词后打开 Zcode（${state.project}）：深链只打开工作区，会话需手动新建并粘贴提示词`,
+        missingTitle: '未检测到 ZCode.app（zcode:// 深链宿主）：可能未安装或装在非默认路径；可直接打开 Zcode 手动新建会话并粘贴提示词' },
+      { agent: 'codex', label: '去新建 Codex 会话',
+        okTitle: `自动复制本弹窗版本提示词后打开 Codex 新会话（${state.project}）：深链不传提示词，不会自动发送，请粘贴发送`,
+        missingTitle: '未检测到 ChatGPT.app（codex:// 深链宿主）：可能未安装或装在非默认路径；可直接打开 ChatGPT 手动新建会话并粘贴提示词' },
+    ];
+    return cfg.map((c) => {
+      if (w[c.agent] === false) {
+        return `<a class="ws-entry-link is-off" aria-disabled="true" data-bld-new-session="${c.agent}" title="${esc(c.missingTitle)}">${c.label}<span class="ws-entry-note">（未检测到）</span></a>`;
+      }
+      if (noProject) {
+        return `<a class="ws-entry-link is-off" aria-disabled="true" data-bld-new-session="${c.agent}" title="未选择项目：请先在顶栏选择项目后再新建会话">${c.label}</a>`;
+      }
+      const url = c.agent === 'codex'
+        ? `codex://threads/new?path=${encodeURIComponent(state.project)}`
+        : `zcode://workspace/open?path=${encodeURIComponent(state.project)}`;
+      return `<a class="ws-entry-link" href="${url}" data-bld-new-session="${c.agent}" title="${esc(c.okTitle)}">${c.label}</a>`;
+    }).join('');
   }
 
   function parseAnswerPreview() {
@@ -395,15 +520,15 @@ const ATBBuild = (() => {
 
   /* ---------- 合并入 main ---------- */
 
-  function openMergeConfirm() {
-    const v = selVersion();
+  function openMergeConfirm(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
     if (!v || state.mergeBusy) return;
     state.mergeConfirm = { verId: v.id };
     render();
   }
 
   async function doMerge() {
-    const v = selVersion();
+    const v = findVersion(state.mergeConfirm?.verId);
     if (!v || state.mergeBusy) return;
     state.mergeConfirm = null;
     state.mergeBusy = true;
@@ -420,6 +545,40 @@ const ATBBuild = (() => {
     } finally {
       state.mergeBusy = false;
       await refresh();
+    }
+  }
+
+  /* ---------- 删除版本（REQ-20260913-004） ---------- */
+
+  // 打开删除确认弹窗：按所在卡片版本定位（无参回落当前选中，向后兼容）；
+  // 已有删除弹窗 / 删除执行中 / 合并执行中不再开新弹窗（弹窗打开期间列表不可再触发其他删除）。
+  function openDeleteConfirm(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
+    if (!v || state.deleteConfirm || state.deleteBusy || state.mergeBusy) return;
+    state.deleteConfirm = { verId: v.id };
+    render();
+  }
+
+  // 确认删除：执行期间弹窗保持展示、确认键禁用防重复触发；成功关闭弹窗、刷新列表
+  // （选中失效回落既有规则：取列表最新，空则显示空态）；失败关闭弹窗、toast 错误、
+  // 数据保持原状（版本仍留在列表，可重新打开弹窗重试）。
+  async function doDelete() {
+    const v = findVersion(state.deleteConfirm?.verId);
+    if (!v || state.deleteBusy) return;
+    state.deleteBusy = true;
+    render();
+    try {
+      const r = await post('/version/delete', { id: v.id });
+      if (!r.ok) throw new Error(await errOf(r, '删除失败'));
+      state.deleteConfirm = null;
+      toast(`✓ 已删除版本（${v.id}）`);
+      await refresh();
+    } catch (e) {
+      state.deleteConfirm = null;
+      toast(`✕ 删除失败：${e.message}`, true);
+    } finally {
+      state.deleteBusy = false;
+      render();
     }
   }
 
@@ -531,11 +690,23 @@ const ATBBuild = (() => {
         ? '<div class="rel-empty-mini muted">没有匹配的版本（按名称 / 单号过滤）</div>'
         : '<div class="rel-empty-mini muted">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
     }
-    return versions.map((v) => `
+    // BUG-20260913-004：版本操作直接放在每张卡片内（参照需求列表 row-acts 口径），
+    // 状态禁用/文案规则逐卡继承原详情底部逻辑；mergeBusy 为全局口径（执行中禁所有卡片的合并键）。
+    return versions.map((v) => {
+      const mergeLabel = v.status === 'failed' ? '重试合并入 main' : '合并入 main';
+      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${v.status === 'merging' ? ` disabled title="合并中，请稍候……"` : ''} aria-label="AI 完善 ${esc(v.id)}"${v.status === 'merging' ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
+      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? ` disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
+      // REQ-20260913-004 删除键：排在两键之后、quiet 危险弱化样式（不抢主操作）；
+      // merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（与合并键一并禁用）。
+      const delDisabled = v.status === 'merging' || state.mergeBusy;
+      const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
+      return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><strong>${esc(v.name || v.id)}</strong> ${statusChip(v.status)}</div>
         <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
-      </div>`).join('');
+        <div class="card-acts">${answerBtn}${mergeBtn}${delBtn}</div>
+      </div>`;
+    }).join('');
   }
 
   function renderCandidateRows(p, panelKey, disabledIds) {
@@ -625,11 +796,7 @@ const ATBBuild = (() => {
           ${itemRows || '<p class="muted small">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}
         </div>
         ${mergeState}
-        <footer class="rel-acts">
-          <button type="button" class="btn" id="bldAnswerBtn" ${v.status === 'merging' ? 'disabled' : ''} title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析">提示词与回答回填</button>
-          <button type="button" class="btn primary" id="bldMergeBtn" ${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? `disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
-        </footer>
-      </div>`;
+      </div>`; // BUG-20260913-004：原 footer.rel-acts（AI 完善 / 合并入 main）已迁入左侧版本卡片，详情不再重复渲染
   }
 
   function renderAnswerModal() {
@@ -637,15 +804,16 @@ const ATBBuild = (() => {
     if (!a) return '';
     const v = (state.data?.versions || []).find((x) => x.id === a.verId);
     return `
-      <div class="rel-modal-wrap" id="bldAnswerWrap" role="dialog" aria-label="提示词与回答回填">
+      <div class="rel-modal-wrap" id="bldAnswerWrap" role="dialog" aria-label="AI 完善">
         <div class="rel-modal">
-          <h3>提示词与回答回填（${esc(v?.id || '')}）</h3>
+          <h3>AI 完善（${esc(v?.id || '')}）</h3>
           <div class="rel-modal-body">
             <p class="muted small">上段：复制提示词交给 Agent；下段：把回答粘贴回来，解析预览后应用——全程无需关闭本弹窗。</p>
             <div class="bld-prompt-box">
               <textarea class="bld-prompt-text" rows="7" readonly>${esc(v ? buildPrompt(v) : '')}</textarea>
               <button type="button" class="btn small primary" id="bldCopyPrompt">复制提示词</button>
               ${a.copied ? '<span class="muted small">已复制 ✓</span>' : ''}
+              <div class="bld-session-entry">${answerSessionLinksHtml()}</div>
             </div>
             <div class="bld-answer-box">
               <label class="field">Agent 回答（粘贴后点「解析并预览」）
@@ -708,6 +876,33 @@ const ATBBuild = (() => {
           <footer class="modal-foot">
             <button type="button" class="btn" id="bldPushCancel">取消</button>
             <button type="button" class="btn primary" id="bldPushGo" ${state.pushBusy ? 'disabled' : ''}>确认推送</button>
+          </footer>
+        </div>
+      </div>`;
+  }
+
+  // REQ-20260913-004 删除确认弹窗（沿用 rel-modal 居中口径）：正文列名称 / 状态 / 关联单数，
+  // 按状态给差异化不可恢复提示；确认键危险主样式，执行期间（deleteBusy）双键禁用防重复触发。
+  function renderDeleteConfirm() {
+    const m = state.deleteConfirm;
+    if (!m) return '';
+    const v = (state.data?.versions || []).find((x) => x.id === m.verId);
+    if (!v) { state.deleteConfirm = null; return ''; }
+    const statusHint = v.status === 'merged'
+      ? '仅删除看板版本记录，不影响已合并入 main 的提交与代码。'
+      : '删除后不可恢复，关联条目与 commit 关联一并移除；条目本身可重新纳入其他版本。';
+    return `
+      <div class="rel-modal-wrap" id="bldDeleteWrap" role="dialog" aria-label="删除版本确认">
+        <div class="rel-modal">
+          <h3>删除版本（${esc(v.id)}）</h3>
+          <div class="rel-modal-body">
+            <p>版本「<strong>${esc(v.name || v.id)}</strong>」当前状态：${statusChip(v.status)}，共 ${v.items.length} 个关联单。</p>
+            <p class="muted small">${statusHint}</p>
+            <p class="muted small">此操作不可撤销，请确认后再继续。</p>
+          </div>
+          <footer class="modal-foot">
+            <button type="button" class="btn" id="bldDeleteCancel"${state.deleteBusy ? ' disabled' : ''}>取消</button>
+            <button type="button" id="bldDeleteGo"${state.deleteBusy ? ' disabled' : ''} class="btn danger">${state.deleteBusy ? '删除中…' : '确认删除'}</button>
           </footer>
         </div>
       </div>`;
@@ -801,7 +996,8 @@ const ATBBuild = (() => {
       ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）的需求单 / Bug 单可加入本版本（已在本版本中的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
       ${renderAnswerModal()}
       ${renderMergeConfirm()}
-      ${renderPushConfirm()}`;
+      ${renderPushConfirm()}
+      ${renderDeleteConfirm()}`;
     bindCommon(view);
     state.rendered = true;
   }
@@ -840,14 +1036,59 @@ const ATBBuild = (() => {
     for (const el of view.querySelectorAll('[data-commit-item]')) {
       el.addEventListener('change', () => itemAction('commit', { itemId: el.dataset.commitItem, commit: el.value }));
     }
-    // 操作区
-    q('#bldAnswerBtn')?.addEventListener('click', openAnswerModal);
-    q('#bldMergeBtn')?.addEventListener('click', openMergeConfirm);
-    // 回填弹窗（同一弹窗内完成复制 → 粘贴 → 解析 → 应用）
+    // 卡片行内操作（BUG-20260913-004：按钮迁入版本卡片，按所在卡片版本绑定；
+    // .rel-list 点击处理已忽略 button 点击，点按钮不会改变选中态）
+    for (const el of view.querySelectorAll('[data-ver-answer]')) {
+      el.addEventListener('click', () => openAnswerModal(el.dataset.verAnswer));
+    }
+    for (const el of view.querySelectorAll('[data-ver-merge]')) {
+      el.addEventListener('click', () => openMergeConfirm(el.dataset.verMerge));
+    }
+    // REQ-20260913-004 删除确认（按所在卡片版本打开；遮罩点击关闭，执行中不关防误触）
+    for (const el of view.querySelectorAll('[data-ver-delete]')) {
+      el.addEventListener('click', () => openDeleteConfirm(el.dataset.verDelete));
+    }
+    q('#bldDeleteCancel')?.addEventListener('click', () => {
+      if (state.deleteBusy) return;
+      state.deleteConfirm = null;
+      render();
+    });
+    q('#bldDeleteGo')?.addEventListener('click', doDelete);
+    q('#bldDeleteWrap')?.addEventListener('click', (e) => {
+      if (state.deleteBusy || e.target !== e.currentTarget) return;
+      state.deleteConfirm = null;
+      render();
+    });
+    // 回填弹窗（同一弹窗内完成复制 → 粘贴 → 解析 → 编辑 → 应用）
     q('#bldCopyPrompt')?.addEventListener('click', copyPrompt);
     q('#bldParseBtn')?.addEventListener('click', parseAnswerPreview);
     q('#bldApplyBtn')?.addEventListener('click', applyParsed);
     q('#bldAnswerClose')?.addEventListener('click', () => { state.answer = null; render(); });
+    // BUG-20260913-005：弹窗内「去新建 XX 会话」——守卫与点击口径同任务面板
+    // （未选项目 / 未检测到 → 仅 toast 说明，不复制不导航；守卫通过后先复制本弹窗提示词后跳深链）。
+    // 单一触发路径（preventDefault 后统一按最新 state.project 构造深链），键盘 Enter 同路径。
+    for (const el of view.querySelectorAll('[data-bld-new-session]')) {
+      el.addEventListener('click', (ev) => {
+        ev?.preventDefault?.();
+        const agent = el.dataset.bldNewSession;
+        if (!state.project) {
+          toast('未选择项目：请先在顶栏选择项目后再新建会话', true);
+          return;
+        }
+        if (state.workspaceApps[agent] === false) {
+          toast(agent === 'codex'
+            ? '未检测到 ChatGPT.app：可能未安装或装在非默认路径，可直接打开 ChatGPT 手动新建会话并粘贴提示词'
+            : '未检测到 ZCode.app：可能未安装或装在非默认路径，可直接打开 Zcode 手动新建会话并粘贴提示词', true);
+          return;
+        }
+        const url = agent === 'codex'
+          ? `codex://threads/new?path=${encodeURIComponent(state.project)}`
+          : `zcode://workspace/open?path=${encodeURIComponent(state.project)}`;
+        copyPromptAndOpenSession(agent, url); // fire-and-forget：先复制后跳转（含失败/空态 toast）
+      });
+    }
+    // 探测失败后的「重新检测」（force 绕过 failed 防重，探测结束自动刷出结果）
+    q('[data-bld-ws-retry]')?.addEventListener('click', (ev) => { ev?.preventDefault?.(); refreshWorkspaceApps(true); });
     // 合并确认
     q('#bldMergeCancel')?.addEventListener('click', () => { state.mergeConfirm = null; render(); });
     q('#bldMergeGo')?.addEventListener('click', doMerge);
@@ -896,6 +1137,7 @@ const ATBBuild = (() => {
   document.addEventListener?.('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (state.pushConfirm) { state.pushConfirm = null; render(); return; }
+    if (state.deleteConfirm) { if (!state.deleteBusy) { state.deleteConfirm = null; render(); } return; }
     if (state.mergeConfirm) { state.mergeConfirm = null; render(); return; }
     if (state.answer) { state.answer = null; render(); return; }
     if (state.createPanel || state.addPanel) { state.createPanel = null; state.addPanel = null; render(); }
@@ -908,6 +1150,9 @@ const ATBBuild = (() => {
     openCreatePanel, openAddPanel, selectBranch,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, parseAnswer, buildPrompt,
+    // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
+    // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
+    openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };

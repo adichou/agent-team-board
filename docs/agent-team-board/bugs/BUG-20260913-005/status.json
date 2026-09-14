@@ -2,11 +2,11 @@
   "id": "BUG-20260913-005",
   "type": "bug",
   "title": "版本提示词与回答回填中的提示词复制，要增加批量任务类似的去 XX 会话的功能",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-047-1",
   "createdAt": "2026-09-13T12:18:58.999Z",
-  "updatedAt": "2026-09-13T13:30:57.295Z",
+  "updatedAt": "2026-09-14T02:44:29.315Z",
   "agentCompletedAt": "2026-09-13T13:30:57.295Z",
   "lastReport": {
     "at": "2026-09-13T13:30:57.295Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-047-1",
       "note": "上报测试报告（覆盖率 15%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:29.315Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

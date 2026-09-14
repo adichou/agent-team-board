@@ -2,11 +2,11 @@
   "id": "BUG-20260913-004",
   "type": "bug",
   "title": "版本的提示词与回答回填，合并入 main 两个按钮位置需要改到左侧列表项目中，参考需求列表的设计。",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-046-1",
   "createdAt": "2026-09-13T11:47:36.031Z",
-  "updatedAt": "2026-09-13T12:36:30.380Z",
+  "updatedAt": "2026-09-14T02:44:32.199Z",
   "agentCompletedAt": "2026-09-13T12:36:30.380Z",
   "lastReport": {
     "at": "2026-09-13T12:36:30.380Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-046-1",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:32.199Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
