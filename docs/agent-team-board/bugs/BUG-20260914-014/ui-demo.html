@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-014 回退 BUG-20260914-010 — 界面演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1f2328; --muted: #6a737d;
+    --border: #d8dee4; --warn: #d97706; --warn-bg: #fff7e6;
+    --info-text: #0969da; --info-bg: #ddf4ff; --primary: #1f6feb;
+    --error-bg: #ffebe9; --error-text: #cf222e; --ok: #1a7f37;
+    --skel: #e8ebef;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --warn: #e3a008; --warn-bg: #2d2200;
+    --info-text: #58a6ff; --info-bg: #0c2d57; --primary: #388bfd;
+    --error-bg: #3d1a1c; --error-text: #ff7b72; --ok: #3fb950;
+    --skel: #21262d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header.demo-head h1 { font-size: 18px; margin: 0 0 4px; }
+  header.demo-head p { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
+  .badge { display: inline-block; border: 1px solid var(--border); border-radius: 10px; padding: 0 8px; font-size: 11.5px; color: var(--muted); vertical-align: 1px; }
+
+  /* 控制条 */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 14px;
+  }
+  .ctl-group { display: flex; align-items: center; gap: 6px; }
+  .ctl-label { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: none; background: var(--panel); color: var(--text); padding: 4px 12px;
+    font-size: 12.5px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--primary); color: #fff; }
+  button.act {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 4px 10px; font-size: 12.5px; cursor: pointer;
+  }
+  button.act:hover:not(:disabled) { background: var(--info-bg); }
+  button.act:disabled { opacity: 0.45; cursor: default; }
+  button.act.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .poll-tip { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .poll-tip b { color: var(--info-text); font-weight: 600; }
+
+  /* 主布局：看板片段 + 旁证 */
+  .cols { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(300px, 380px); gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .card h2 { font-size: 13.5px; margin: 0 0 8px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .side { display: flex; flex-direction: column; gap: 14px; }
+
+  /* 需求列表示意 */
+  .req-row {
+    display: flex; gap: 8px; align-items: baseline; padding: 6px 4px;
+    border-bottom: 1px dashed var(--border); font-size: 13px;
+  }
+  .req-row .id { color: var(--info-text); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .req-row .st { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  /* ⚠ 待人工确认聚合区（复刻看板） */
+  .hold-area {
+    margin-top: 12px; border: 1px solid var(--warn); border-radius: 10px;
+    padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--panel);
+  }
+  .hold-area-head { font-weight: 700; font-size: 13.5px; }
+  .hold-area-sub { margin: 0 0 2px; color: var(--muted); font-size: 12px; }
+  .hold-group-head { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .hold-group-foot { margin: 0; color: var(--muted); font-size: 12px; }
+  .hold-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card-top .id { color: var(--info-text); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .flag { border-radius: 10px; padding: 0 8px; font-size: 11.5px; }
+  .flag.hold-flag { border: 1px solid var(--warn); color: var(--warn); background: var(--warn-bg); }
+  .muted.small { color: var(--muted); font-size: 12px; }
+  .card-top .btn { margin-left: auto; }
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { background: var(--info-bg); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .card-title { margin-top: 4px; font-size: 13px; }
+  .hold-detail { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; font-size: 12.5px; }
+  .hold-detail p { margin: 4px 0 2px; }
+  .hold-paths { margin: 0 0 6px; padding-left: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 1px; overflow-wrap: anywhere; font-size: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .hold-reason { margin: 0 0 4px; font-size: 12.5px; }
+
+  /* 状态反馈 */
+  .skel { border-radius: 8px; background: linear-gradient(90deg, var(--skel) 25%, var(--panel) 50%, var(--skel) 75%); background-size: 200% 100%; animation: shine 1.2s infinite; height: 58px; }
+  @keyframes shine { to { background-position: -200% 0; } }
+  .err-bar {
+    display: flex; align-items: center; gap: 10px; border: 1px solid var(--error-text);
+    background: var(--error-bg); color: var(--error-text); border-radius: 8px; padding: 8px 12px; font-size: 12.5px;
+  }
+  .gone-note { color: var(--muted); font-size: 12.5px; font-style: italic; text-align: center; padding: 10px 0; }
+
+  /* 旁证卡 */
+  pre.json {
+    margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); font: 11.5px/1.55 ui-monospace, Menlo, Consolas, monospace;
+    overflow-x: auto; white-space: pre; color: var(--text);
+  }
+  pre.json .k { color: var(--info-text); }
+  pre.json .s { color: var(--ok); }
+  pre.json .c { color: var(--muted); }
+  .notice-box { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+  .notice-box .line { display: block; }
+  .notice-box .line.held { color: var(--warn); }
+  .notice-box .line.ok { color: var(--muted); }
+  .diff-chip { display: inline-block; font-size: 11px; border-radius: 10px; padding: 0 8px; margin-left: 6px; vertical-align: 1px; }
+  .diff-chip.del { border: 1px dashed var(--error-text); color: var(--error-text); }
+  .diff-chip.add { border: 1px dashed var(--ok); color: var(--ok); }
+  footer { margin-top: 16px; color: var(--muted); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>BUG-20260914-014 回退 BUG-20260914-010 <span class="badge">界面演示</span></h1>
+    <p>回退将移除看板「⚠ 待人工确认」区中 BUG-010 新增的「◇ 待人工提交」分组（及 batch check / /api/holds 两条旁证通道）。
+       暂扣数据取自真实账本 dispatch/runs/run-20260914-221 / 223~226 / 232；「待人工决策」卡片为示意。</p>
+  </header>
+
+  <div class="controls">
+    <div class="ctl-group">
+      <span class="ctl-label">形态</span>
+      <div class="seg" id="modeSeg">
+        <button type="button" data-mode="before" class="on">回退前（010 实现）</button>
+        <button type="button" data-mode="after">回退后（期望）</button>
+      </div>
+    </div>
+    <div class="ctl-group">
+      <span class="ctl-label">状态</span>
+      <div class="seg" id="stateSeg">
+        <button type="button" data-view="normal" class="on">正常</button>
+        <button type="button" data-view="loading">加载</button>
+        <button type="button" data-view="error">失败</button>
+        <button type="button" data-view="empty">空</button>
+      </div>
+    </div>
+    <button type="button" class="act" id="btnNewHold">模拟新一轮产生暂扣</button>
+    <button type="button" class="act" id="btnTheme">切换深浅色</button>
+    <span class="poll-tip" id="pollTip">2 秒主轮询：<b>第 1 轮</b>（暂扣的出现 / 提交后消失经轮询生效，仅回退前形态）</span>
+  </div>
+
+  <div class="cols">
+    <!-- 看板片段 -->
+    <section class="card">
+      <h2>Status Board 片段 — 需求模块列表</h2>
+      <p class="sub">列表下方为「⚠ 待人工确认」聚合区（复刻 REQ-20260911-007 结构 + BUG-20260914-010 新增分组）</p>
+      <div class="req-row"><span class="id">REQ-20260913-005</span><span>分支浏览与同步远端</span><span class="st">done</span></div>
+      <div class="req-row"><span class="id">REQ-20260913-006</span><span>AI 完善弹窗回填编辑表单</span><span class="st">done</span></div>
+      <div class="req-row"><span class="id">REQ-20260914-001</span><span>（其他条目示意）</span><span class="st">in-progress</span></div>
+      <div id="holdAreaHost"></div>
+    </section>
+
+    <!-- 旁证通道 -->
+    <div class="side">
+      <section class="card">
+        <h2>旁证一：atb batch check notice <span id="chipNotice" class="diff-chip del">回退后此行消失</span></h2>
+        <p class="sub">收尾 stop 场景 notice 对照</p>
+        <div class="notice-box" id="noticeBox"></div>
+      </section>
+      <section class="card">
+        <h2>旁证二：GET /api/holds 响应 <span id="chipJson" class="diff-chip del">回退后无 pendingCommits 字段</span></h2>
+        <p class="sub">截取关键字段（items 为 hold 决策清单）</p>
+        <pre class="json" id="jsonBox"></pre>
+      </section>
+      <section class="card">
+        <h2>旁证三：调度提示词指令 <span id="chipPrompt" class="diff-chip del">回退后此指令移除</span></h2>
+        <div class="notice-box" id="promptBox"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer>单文件演示（内联 CSS/JS、无外网依赖）：形态开关对照缺陷与修复；正常 / 加载 / 失败 / 空四态可切；明细展开、模拟提交后消失、模拟新一轮暂扣均经 2 秒轮询生效（仅回退前形态可用）。</footer>
+</div>
+
+<script>
+'use strict';
+// ---------- 数据（暂扣部分取自真实账本 dispatch/runs/*/auto-commit.json） ----------
+const ADVICE = '人工核对该路径中「预留前改动 / 本单改动」的归属后整文件提交（提交消息带单号），再补提交暂扣的 test/业务路径；自动提交不做猜测归属，也不会拆分 hunk。';
+const INITIAL_PENDING = [
+  { runId: 'run-20260914-221', itemId: 'REQ-20260913-006', itemTitle: 'AI 完善弹窗回填编辑表单', createdAt: '2026-09-14T05:22:00Z',
+    pendingManual: ['scripts/web/build.js'],
+    heldGroups: { test: ['scripts/tests/build-answer-edit-20260913-006.test.mjs'], biz: ['scripts/web/style.css'] } },
+  { runId: 'run-20260914-223', itemId: 'BUG-20260914-002', itemTitle: '版本计划中关联条目与 commit 无法勾选', createdAt: '2026-09-14T05:40:00Z',
+    pendingManual: ['scripts/web/build.js'],
+    heldGroups: { test: ['scripts/tests/bug-build-pick-all-render-20260914-002.test.mjs'], biz: [] } },
+  { runId: 'run-20260914-224', itemId: 'BUG-20260914-003', itemTitle: '为什么会显示无其他本地分支的？main 分支缺失', createdAt: '2026-09-14T05:55:00Z',
+    pendingManual: ['scripts/web/build.js', 'scripts/web/style.css'],
+    heldGroups: { test: ['scripts/tests/bug-branch-main-missing-20260914-003.test.mjs'], biz: ['scripts/lib/git-flow.mjs'] } },
+  { runId: 'run-20260914-225', itemId: 'BUG-20260914-004', itemTitle: '已纳入版本的条目不应该再出现在其他版本候选里', createdAt: '2026-09-14T06:05:00Z',
+    pendingManual: ['scripts/web/build.js'],
+    heldGroups: { test: ['scripts/tests/build-serve.test.mjs', 'scripts/tests/build-ui.test.mjs', 'scripts/tests/bug-build-candidate-occupied-20260914-004.test.mjs'], biz: ['scripts/lib/build-store.mjs', 'scripts/server.mjs'] } },
+  { runId: 'run-20260914-226', itemId: 'BUG-20260914-005', itemTitle: '分支浏览里面的同步远端按钮文案改为「和远端同步」', createdAt: '2026-09-14T06:12:00Z',
+    pendingManual: ['scripts/web/build.js'],
+    heldGroups: { test: ['scripts/tests/bug-sync-btn-wording-20260914-005.test.mjs'], biz: ['scripts/web/i18n.js'] } },
+  { runId: 'run-20260914-232', itemId: 'BUG-20260914-010', itemTitle: '批量开发暂扣待人工提交的改动缺少人工提醒通道', createdAt: '2026-09-14T06:20:50Z',
+    pendingManual: ['scripts/lib/git-flow.mjs', 'scripts/server.mjs', 'scripts/web/i18n.js', 'scripts/web/style.css'],
+    heldGroups: { test: ['scripts/tests/bug-held-notice-20260914-010.test.mjs'], biz: ['scripts/lib/batch.mjs', 'scripts/web/app.js'] } },
+];
+const NEXT_HOLD = { runId: 'run-20260914-239', itemId: 'BUG-20260914-016', itemTitle: '（示意）新一轮批量开发产生的新暂扣单', createdAt: '2026-09-14T08:00:00Z',
+  pendingManual: ['scripts/web/build.js'], heldGroups: { test: [], biz: ['scripts/web/app.js'] } };
+// 「待人工决策」（hold declare）卡片：示意数据，实际以 holds/holds.json 为准
+const DECISION_ITEMS = [
+  { itemId: 'REQ-20260914-002', title: '（示意）worker 声明受阻待人工决策的条目', unanswered: 2, total: 3, reason: '两个方案需要人工拍板（示意）' },
+];
+
+// ---------- 状态 ----------
+const state = {
+  mode: 'before',           // before = 回退前（010 实现）after = 回退后（期望）
+  view: 'normal',           // normal / loading / error / empty
+  pending: INITIAL_PENDING.map((p) => ({ ...p })),
+  committed: new Set(),     // 已模拟人工提交，等下一轮轮询消失
+  incoming: null,           // 模拟新一轮产生暂扣，等下一轮轮询出现
+  expanded: new Set(),      // 待人工提交卡片明细展开
+  pollRound: 1,
+};
+
+const $ = (sel) => document.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const alivePending = () => state.pending.filter((p) => !state.committed.has(p.runId));
+const pathCount = (p) => p.pendingManual.length + p.heldGroups.test.length + p.heldGroups.biz.length;
+
+// ---------- 渲染：聚合区 ----------
+function sectionHtml(label, paths) {
+  if (!paths.length) return '';
+  return `<p class="muted small">${esc(label)}</p><ul class="hold-paths">${paths.map((x) => `<li title="${esc(x)}">${esc(x)}</li>`).join('')}</ul>`;
+}
+function pendingCardHtml(p) {
+  const expanded = state.expanded.has(p.runId);
+  const total = pathCount(p);
+  const committed = state.committed.has(p.runId);
+  const detail = expanded ? `<div class="hold-detail">
+      ${sectionHtml('待人工核对路径：', p.pendingManual)}
+      ${sectionHtml('随单暂扣 test 组：', p.heldGroups.test)}
+      ${sectionHtml('随单暂扣业务组：', p.heldGroups.biz)}
+      <p class="muted small">处理建议：${esc(ADVICE)}</p>
+      <p class="muted small">账本：docs/agent-team-board/dispatch/runs/${esc(p.runId)}/auto-commit.json</p>
+    </div>` : '';
+  return `<article class="hold-card">
+    <div class="card-top">
+      <span class="id">${esc(p.itemId)}</span>
+      <span class="flag hold-flag">⚠ 待人工提交</span>
+      <span class="muted small">暂扣 ${total} 路径${committed ? ' · 已人工提交，下轮消失' : ''}</span>
+      <button type="button" class="btn" data-pending-toggle="${esc(p.runId)}">${expanded ? '收起明细' : '明细'}</button>
+      <button type="button" class="btn" data-pending-commit="${esc(p.runId)}" ${committed ? 'disabled' : ''}>模拟人工提交</button>
+    </div>
+    <div class="card-title">${esc(p.itemTitle)}</div>
+    ${detail}
+  </article>`;
+}
+function decisionCardHtml(h) {
+  return `<article class="hold-card">
+    <div class="card-top">
+      <span class="id">${esc(h.itemId)}</span>
+      <span class="flag hold-flag">⚠ 等人工决策</span>
+      <span class="muted small">未答 ${h.unanswered}/${h.total}</span>
+      <button type="button" class="btn">补决策</button>
+      <button type="button" class="btn">复工</button>
+    </div>
+    <div class="card-title">${esc(h.title)}</div>
+    <p class="hold-reason">受阻原因：${esc(h.reason)}</p>
+  </article>`;
+}
+function renderHolds() {
+  const host = $('#holdAreaHost');
+  // 回退后形态：暂扣通道整体不存在
+  const decisions = state.view === 'empty' ? [] : DECISION_ITEMS;
+  const pending = state.mode === 'before' ? alivePending() : [];
+  const anyContent = decisions.length + pending.length > 0;
+
+  if (state.view === 'empty') {
+    host.innerHTML = `<div class="gone-note">（空态：无待决策且无暂扣，「⚠ 待人工确认」聚合区整体隐藏、不占版面）</div>`;
+    return;
+  }
+  if (state.view === 'loading') {
+    host.innerHTML = `<div class="hold-area" aria-busy="true">
+      <div class="hold-area-head">⚠ 待人工确认</div>
+      <p class="muted small">正在加载待确认清单…</p>
+      <div class="skel"></div><div class="skel"></div>
+    </div>`;
+    return;
+  }
+  if (state.view === 'error') {
+    host.innerHTML = `<div class="hold-area">
+      <div class="hold-area-head">⚠ 待人工确认</div>
+      <div class="err-bar"><span>待确认清单加载失败：/api/holds 请求失败（保留上次数据口径的演示）</span>
+        <button type="button" class="btn" id="btnRetry">重试</button></div>
+    </div>`;
+    $('#btnRetry').addEventListener('click', () => { setView('loading'); setTimeout(() => setView('normal'), 800); });
+    return;
+  }
+  if (!anyContent) {
+    host.innerHTML = `<div class="gone-note">（两组均空：「⚠ 待人工确认」聚合区整体隐藏）</div>`;
+    return;
+  }
+
+  const head = `<div class="hold-area">
+    <div class="hold-area-head">⚠ 待人工确认（${decisions.length + pending.length}）</div>
+    <p class="hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失</p>`;
+  const decisionGroup = decisions.length
+    ? `${state.mode === 'before' ? `<div class="hold-group-head">◇ 待人工决策（${decisions.length}）</div>` : ''}${decisions.map(decisionCardHtml).join('')}`
+    : '';
+  const pendingGroup = pending.length
+    ? `<div class="hold-group-head">◇ 待人工提交（${pending.length}）</div>${pending.map(pendingCardHtml).join('')}
+       <p class="hold-group-foot">人工核对后整文件提交（消息带单号）即自动消失</p>`
+    : '';
+  const afterNote = state.mode === 'after'
+    ? `<p class="gone-note">（回退后：「待人工提交」分组整体消失${alivePending().length ? `——仍有 ${alivePending().length} 单暂扣在账本中，但界面零展示（回到 010 实现前状态）` : ''}）</p>`
+    : '';
+  host.innerHTML = head + decisionGroup + pendingGroup + afterNote + `</div>`;
+
+  for (const btn of host.querySelectorAll('[data-pending-toggle]')) {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.pendingToggle;
+      if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+      renderHolds();
+    });
+  }
+  for (const btn of host.querySelectorAll('[data-pending-commit]')) {
+    btn.addEventListener('click', () => {
+      state.committed.add(btn.dataset.pendingCommit);
+      renderHolds(); // 先标记「已提交，下轮消失」；真正移除等 2 秒轮询
+      renderSide();
+    });
+  }
+}
+
+// ---------- 渲染：旁证通道 ----------
+function renderSide() {
+  const before = state.mode === 'before';
+  const heldCount = (before && state.view !== 'empty') ? alivePending().length : 0;
+  $('#chipNotice').textContent = before ? '回退后此行消失' : '已随回退移除';
+  $('#chipNotice').className = 'diff-chip ' + (before ? 'del' : 'add');
+  $('#chipJson').textContent = before ? '回退后无 pendingCommits 字段' : '已随回退移除';
+  $('#chipJson').className = 'diff-chip ' + (before ? 'del' : 'add');
+  $('#chipPrompt').textContent = before ? '回退后此指令移除' : '已随回退移除';
+  $('#chipPrompt').className = 'diff-chip ' + (before ? 'del' : 'add');
+
+  $('#noticeBox').innerHTML = (before && heldCount > 0)
+    ? `<span class="line ok">本轮队列已处理完毕：实时队列已取空，可启动新一轮</span>
+       <span class="line held">ⓘ ${heldCount} 单有暂扣待人工提交，明细见 dispatch/runs/*/auto-commit.json</span>`
+    : `<span class="line ok">本轮队列已处理完毕：实时队列已取空，可启动新一轮</span>`;
+
+  const emptyView = state.view === 'empty';
+  const j = { count: emptyView ? 0 : DECISION_ITEMS.length, items: emptyView ? [] : ['<hold 决策清单 1 项，略>'] };
+  if (before) {
+    j.pendingCommits = {
+      count: heldCount,
+      items: [`<${heldCount} 个暂扣运行：runId / itemId / pendingManual / heldGroups，略>`],
+    };
+  }
+  $('#jsonBox').innerHTML = `{\n  <span class="k">"count"</span>: <span class="s">${j.count}</span>,\n  <span class="k">"items"</span>: [${j.items.map((s) => `\n    <span class="s">"${esc(s)}"</span>`).join(',')}${j.items.length ? '\n  ' : ''}]${j.pendingCommits ? `,${'\n'}  <span class="k">"pendingCommits"</span>: {${'\n'}    <span class="k">"count"</span>: <span class="s">${j.pendingCommits.count}</span>,${'\n'}    <span class="k">"items"</span>: [${j.pendingCommits.items.map((s) => `${'\n'}      <span class="s">"${esc(s)}"</span>`).join(',')}${'\n'}    ]${'\n'}  }` : ''}${'\n'}}${before ? '' : '\n<span class="c">// 回退后：响应不含 pendingCommits 字段（gitFlow.pendingManualRuns 已随回退删除）</span>'}`;
+
+  $('#promptBox').innerHTML = before
+    ? `<span class="line ok">…主会话只接收规定的短回执，并调用最小核对入口…</span>
+       <span class="line held">回执 JSON 出现 autoCommit.pendingManual 时：该单有改动被暂扣待人工提交，立即向用户报告单号与暂扣路径数，不得当作普通成功回执。</span>`
+    : `<span class="line ok">…主会话只接收规定的短回执，并调用最小核对入口…</span>
+       <span class="line ok">（010 新增的 pendingManual 报告指令已随回退移除）</span>`;
+}
+
+// ---------- 控制 ----------
+function setMode(mode) {
+  state.mode = mode;
+  for (const b of $('#modeSeg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.mode === mode);
+  $('#btnNewHold').disabled = mode === 'after';
+  renderHolds(); renderSide();
+}
+function setView(view) {
+  state.view = view;
+  for (const b of $('#stateSeg').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+  renderHolds(); renderSide();
+}
+for (const b of $('#modeSeg').querySelectorAll('button')) b.addEventListener('click', () => setMode(b.dataset.mode));
+for (const b of $('#stateSeg').querySelectorAll('button')) b.addEventListener('click', () => setView(b.dataset.view));
+
+$('#btnNewHold').addEventListener('click', () => {
+  if (state.mode !== 'before' || state.incoming) return;
+  state.incoming = { ...NEXT_HOLD };
+  $('#btnNewHold').disabled = true;
+  $('#pollTip').innerHTML = '已产生新暂扣单，等待 2 秒轮询自动出现…';
+});
+
+$('#btnTheme').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme
+    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+});
+
+// ---------- 2 秒主轮询（演示暂扣的出现 / 消失；仅回退前形态有该通道） ----------
+setInterval(() => {
+  state.pollRound += 1;
+  if (state.mode === 'before') {
+    if (state.committed.size) {
+      state.pending = state.pending.filter((p) => !state.committed.has(p.runId));
+      state.committed.clear();
+    }
+    if (state.incoming) {
+      state.pending.push(state.incoming);
+      state.pending.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)) || String(a.runId).localeCompare(String(b.runId)));
+      state.incoming = null;
+      $('#btnNewHold').disabled = false;
+    }
+    $('#pollTip').innerHTML = `2 秒主轮询：<b>第 ${state.pollRound} 轮</b>（暂扣的出现 / 提交后消失经轮询生效，仅回退前形态）`;
+    renderHolds(); renderSide();
+  }
+}, 2000);
+
+renderHolds(); renderSide();
+</script>
+</body>
+</html>
