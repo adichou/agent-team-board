@@ -19,7 +19,8 @@
 //   - 合并入 main 前弹确认框（列 commit 清单），确认即授权；执行中禁用重复触发；
 //   - 删除版本（REQ-20260913-004）必经确认弹窗：按状态差异化提示（draft/failed 不可恢复，
 //     merged 仅移除看板记录；merging 禁删）；执行中确认键禁用防重复，成功后列表与详情同步回落；
-//   - 分支浏览只读；同步仅「同步远端（fetch --prune）」与本地分支「推送」两个显式入口；
+//   - 分支浏览只读；同步仅「和远端同步（fetch --prune）」（原「同步远端」，BUG-20260914-005 更名）
+//     与本地分支「推送」两个显式入口；
 //   - 非 git 仓库显示引导空态，不出现可点击但必然失败的入口。
 // 状态机：loading → ready | error（读取失败重试）。
 
@@ -1017,7 +1018,7 @@ const ATBBuild = (() => {
         : '';
       list = `
         <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local || '<p class="muted small">（无其他本地分支）</p>'}${mainHint}</div>
-        <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || '<p class="muted small">（无远端分支：先「同步远端」或推送本地分支）</p>'}</div>`;
+        <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>'}</div>`;
     }
     const log = state.logBranch ? (() => {
       if (state.logPhase === 'loading') return '<p class="muted">加载提交记录中…</p>';
@@ -1032,7 +1033,7 @@ const ATBBuild = (() => {
       <div class="rel-split bld-branch-split">
         <div class="rel-list" aria-label="分支列表">
           <div class="bld-branch-tools">
-            <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune：拉取远端最新并清理失效引用">${state.syncBusy ? '同步中…' : '⟳ 同步远端'}</button>
+            <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune：拉取远端最新并清理失效引用">${state.syncBusy ? '同步中…' : '⟳ 和远端同步'}</button>
             <button type="button" class="btn small quiet" id="bldBranchRefresh">刷新</button>
           </div>
           ${list}

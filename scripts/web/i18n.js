@@ -37,7 +37,9 @@ const EN = {
   '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方': '✓ Prompt copied — paste it into the Agent, run it, then paste the answer back below',
   '剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制': 'Clipboard unavailable: select all (⌘A) in the prompt box and copy manually',
   '解析并预览': 'Parse & preview',
-  '同步远端': 'Sync remote',
+  // BUG-20260914-005：分支浏览同步按钮更名「和远端同步」。⟳ 前缀与文案同处一个文本节点，
+  // 全文命中需键含前缀；旧键「同步远端」（原值 Sync remote）随更名清理。
+  '⟳ 和远端同步': '⟳ Sync with remote',
   '推送': 'Push',
   '计划中': 'Planning',
   '合并中': 'Merging',
