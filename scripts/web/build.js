@@ -1227,8 +1227,10 @@ const ATBBuild = (() => {
         : '';
       return errBar + countBar + listHtml + eof + logPagerHtml(page, pages, size, total);
     })() : '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
-    // REQ-20260914-002：搜索行（分支名 + 刷新下方）——关键词输入 + 搜索触发 + 清除入口；
-    // 执行中禁用防重复触发；清除入口仅在已有生效关键词时出现（无匹配空态内另有同口径入口）
+    // REQ-20260914-002：搜索控件——关键词输入 + 搜索触发 + 清除入口；执行中禁用防重复触发；
+    // 清除入口仅在已有生效关键词时出现（无匹配空态内另有同口径入口）。
+    // BUG-20260914-016：搜索控件并入 bld-log-head 头部行（与分支名同一行），
+    // 不再在头部行下方独占一行；搜索行为与状态反馈口径不变。
     const searchRow = state.logBranch ? `
           <div class="bld-log-search" role="search">
             <input type="search" id="bldLogSearchInput" placeholder="搜提交说明 / 作者 / hash…" value="${esc(state.logQueryInput)}" aria-label="搜索提交记录"${state.logPhase === 'loading' ? ' disabled' : ''}>
@@ -1245,8 +1247,8 @@ const ATBBuild = (() => {
           ${list}
         </div>
         <div class="rel-detail" aria-label="提交记录">
-          <div class="bld-log-head"><strong>${esc(state.logBranch || '提交记录')}</strong>
-            ${state.logBranch ? '<button type="button" class="btn small quiet" id="bldLogRefresh">刷新</button>' : ''}</div>${searchRow}
+          <div class="bld-log-head"><strong>${esc(state.logBranch || '提交记录')}</strong>${searchRow}
+            ${state.logBranch ? '<button type="button" class="btn small quiet" id="bldLogRefresh">刷新</button>' : ''}</div>
           ${log}
         </div>
       </div>`;

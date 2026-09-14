@@ -7,9 +7,10 @@
 - 声明：2026-09-14T12:22:41.991Z（auto-commit） · 运行 run-20260914-242
 - 原因：自动提交失败：git add失败：fatal: Unable to create '/Users/adichou/Documents/src/agent-team-board
 
-- 最近核验：2026-09-14 12:24:50 未通过
-  - 仍有 12 个本单路径未入库：docs/agent-team-board/.gitignore、docs/agent-team-board/bugs/BUG-20260914-016/README.md、docs/agent-team-board/bugs/BUG-20260914-016/confirmations.md、docs/agent-team-board/bugs/BUG-20260914-016/design.md、docs/agent-team-board/bugs/BUG-20260914-016/status.json 等 12 个
+- 最近核验：2026-09-14 12:53:44 未通过
+  - 测试未通过（npm test 退出码 1）：提交后内容验证失败
 
 事件留痕：
 - 2026-09-14 12:22:41 declared（auto-commit）：自动提交失败：git add失败：fatal: Unable to create '/Users/adichou/Documents/src/agent-team-board
 - 2026-09-14 12:24:50 verified（board）：核验未通过（1 项）
+- 2026-09-14 12:53:44 confirm-rejected（board）：测试未通过（npm test 退出码 1）：提交后内容验证失败
