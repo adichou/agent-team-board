@@ -3260,6 +3260,8 @@ function setConfirmPanelView(mode) {
 
 function confirmPanelMsg(text, isErr = false) {
   const el = $('#confirmPanelMsg');
+  // 首次打开时表单尚未渲染，消息节点不存在，不应阻断详情加载。
+  if (!el) return;
   el.textContent = text;
   el.classList.toggle('err', isErr);
 }
