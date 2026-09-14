@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>支持版本删除 · 构建模块交互演示（REQ-20260913-004）</title>
+<style>
+:root{
+  --bg:#eef2f8;--card:#fff;--ink:#213047;--muted:#61718a;--line:#b7c3d6;
+  --btn:#eaf0ff;--btnink:#203d77;--primary:#2b5bd7;--primaryink:#fff;
+  --ok:#1c7c43;--okbg:#e8f6ee;--warn:#9a6700;--warnbg:#fdf3d7;
+  --err:#b3261e;--errbg:#fbeae9;--run:#1f6feb;--runbg:#e7f0fe;--graybg:#eef1f5;
+  --danger:#b3261e;--dangerbg:#fff;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#141a24;--card:#1e2632;--ink:#e7edf6;--muted:#9aa8bd;--line:#3a4759;
+    --btn:#28374e;--btnink:#bcd0f5;--primary:#5b8cff;--primaryink:#0d1526;
+    --ok:#7fd8a1;--okbg:#1f3329;--warn:#e3b341;--warnbg:#3a3222;
+    --err:#ff8f88;--errbg:#3a2422;--run:#7db1ff;--runbg:#1f2c42;--graybg:#262f3d;
+    --danger:#ff8f88;--dangerbg:#2a1a18}
+}
+html.force-light{--bg:#eef2f8;--card:#fff;--ink:#213047;--muted:#61718a;--line:#b7c3d6;
+  --btn:#eaf0ff;--btnink:#203d77;--primary:#2b5bd7;--primaryink:#fff;
+  --ok:#1c7c43;--okbg:#e8f6ee;--warn:#9a6700;--warnbg:#fdf3d7;
+  --err:#b3261e;--errbg:#fbeae9;--run:#1f6feb;--runbg:#e7f0fe;--graybg:#eef1f5;
+  --danger:#b3261e;--dangerbg:#fff}
+html.force-dark{--bg:#141a24;--card:#1e2632;--ink:#e7edf6;--muted:#9aa8bd;--line:#3a4759;
+  --btn:#28374e;--btnink:#bcd0f5;--primary:#5b8cff;--primaryink:#0d1526;
+  --ok:#7fd8a1;--okbg:#1f3329;--warn:#e3b341;--warnbg:#3a3222;
+  --err:#ff8f88;--errbg:#3a2422;--run:#7db1ff;--runbg:#1f2c42;--graybg:#262f3d;
+  --danger:#ff8f88;--dangerbg:#2a1a18}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:7px;background:var(--btn);color:var(--btnink);padding:5px 11px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--primary);color:var(--primaryink);border-color:transparent}
+button.danger{background:var(--dangerbg);color:var(--danger);border-color:var(--danger)}
+button.quiet{background:transparent;color:var(--muted)}
+button.small{padding:2px 9px;font-size:12.5px;border-radius:6px}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+/* 顶栏 */
+.topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600}
+.brand .logo{display:inline-flex;width:26px;height:26px;align-items:center;justify-content:center;background:var(--primary);color:var(--primaryink);border-radius:7px}
+.module-nav{display:flex;gap:4px;flex-wrap:wrap}
+.module-nav button{border-color:transparent;background:transparent;color:var(--muted);border-radius:8px;padding:5px 12px}
+.module-nav button.active{background:var(--btn);color:var(--btnink);font-weight:600}
+/* 模块头 */
+.page-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px 0;max-width:1180px;margin:0 auto;width:100%}
+.page-head h2{font-size:17px;margin:0}
+.page-head .sub{color:var(--muted);font-size:13px}
+.page-head input{margin-left:auto;font:inherit;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);min-width:220px}
+/* 演示控制条 */
+.demo-bar{max-width:1180px;margin:10px auto 0;padding:8px 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--warnbg);border:1px dashed var(--warn);border-radius:9px;font-size:12.5px}
+.demo-bar .grp{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.demo-bar button{padding:2px 9px;font-size:12.5px;border-radius:6px}
+.demo-bar button.on{background:var(--primary);color:var(--primaryink)}
+.demo-bar .sep{width:1px;height:16px;background:var(--warn)}
+.demo-bar label{display:flex;gap:5px;align-items:center;cursor:pointer}
+/* 主区：左列表 + 右详情 */
+.main{display:flex;gap:12px;max-width:1180px;margin:12px auto;padding:0 16px 24px;width:100%;align-items:flex-start}
+.ver-list{flex:1 1 380px;min-width:300px;display:flex;flex-direction:column;gap:8px}
+.ver-detail{flex:1.5 1 460px;min-width:300px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-height:300px}
+.list-head{display:flex;align-items:center;gap:8px;padding:0 2px}
+.list-head strong{font-size:14px}
+.list-head .btn{margin-left:auto}
+.rel-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.rel-card:hover{border-color:var(--primary)}
+.rel-card.sel{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset}
+.rel-card .t{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rel-card .t strong{font-size:14px}
+.rel-card .meta{color:var(--muted);font-size:12.5px;margin-top:2px}
+.card-acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
+/* 状态 chip */
+.st{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.st.draft{background:var(--graybg);color:var(--muted)}
+.st.merging{background:var(--runbg);color:var(--run)}
+.st.merged{background:var(--okbg);color:var(--ok)}
+.st.failed{background:var(--errbg);color:var(--err)}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid var(--run);border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-1px;margin-right:4px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* 详情 */
+.det-head h3{margin:0 0 2px;font-size:15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.det-block{margin-top:12px}
+.det-block .lbl{color:var(--muted);font-size:12.5px;display:block}
+.det-desc{border:1px dashed var(--line);border-radius:8px;padding:6px 10px;margin-top:4px;font-size:13px}
+.items-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.items-head .btn{margin-left:auto}
+.item-row{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13px;flex-wrap:wrap}
+.item-row .iid{font-weight:600;white-space:nowrap}
+.item-row .itl{flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.commit-pill{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--graybg);border-radius:6px;padding:1px 7px}
+.note{border-radius:9px;padding:8px 12px;font-size:13px;margin-top:12px}
+.note.ok{background:var(--okbg);color:var(--ok)}
+.note.err{background:var(--errbg);color:var(--err)}
+.note.run{background:var(--runbg);color:var(--run)}
+/* 空态 / 加载 / 失败占位 */
+.placeholder{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px 18px;text-align:center}
+.placeholder h3{margin:0 0 6px;font-size:15px}
+.skel-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.skel{height:13px;border-radius:6px;background:linear-gradient(90deg,var(--graybg) 25%,var(--btn) 45%,var(--graybg) 65%);background-size:200% 100%;animation:sk 1.1s infinite;margin:8px 0}
+@keyframes sk{to{background-position:-200% 0}}
+.errbox{background:var(--errbg);color:var(--err);border-radius:9px;padding:10px 12px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+/* 确认弹窗 */
+.modal-wrap{position:fixed;inset:0;background:rgba(10,16,26,.45);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:12px;max-width:520px;width:100%;padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.modal h3{margin:0 0 10px;font-size:15px}
+.modal ul{margin:8px 0;padding-left:20px}
+.modal li{margin:3px 0;font-size:13px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+/* toast */
+.toast-wrap{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:60;max-width:380px}
+.toast{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:9px;padding:9px 13px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.18);animation:tin .18s ease-out}
+.toast.err{border-left-color:var(--err);color:var(--err)}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (max-width:960px){.main{flex-direction:column}.ver-list,.ver-detail{width:100%}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="logo">ATB</span> Agent Team Board</div>
+  <nav class="module-nav">
+    <button type="button">需求</button>
+    <button type="button" class="active">构建</button>
+    <button type="button">任务</button>
+    <button type="button">设置</button>
+  </nav>
+</header>
+
+<div class="page-head">
+  <h2>构建</h2>
+  <span class="sub">版本计划 · 演示聚焦「删除版本」（REQ-20260913-004）</span>
+  <input type="search" placeholder="搜索版本 / 单号（演示不做过滤）" aria-label="模块搜索框">
+</div>
+
+<div class="demo-bar" role="group" aria-label="演示控制条">
+  <span class="grp"><strong>场景：</strong>
+    <button type="button" data-scene="normal" class="on">正常</button>
+    <button type="button" data-scene="mergeBusy">合并执行中</button>
+    <button type="button" data-scene="loading">加载中</button>
+    <button type="button" data-scene="loadError">加载失败</button>
+    <button type="button" data-scene="empty">空列表</button>
+  </span>
+  <span class="sep"></span>
+  <label><input type="checkbox" id="simFail"> 模拟删除失败（服务端报错）</label>
+  <span class="sep"></span>
+  <button type="button" id="themeBtn">深浅色切换</button>
+  <button type="button" id="resetBtn">重置演示数据</button>
+</div>
+
+<main class="main">
+  <section class="ver-list" aria-label="版本列表">
+    <div class="list-head">
+      <strong>版本计划</strong>
+      <button type="button" class="small" disabled title="演示不含新建流程">＋ 新建版本</button>
+    </div>
+    <div id="verList"></div>
+  </section>
+  <section class="ver-detail" id="verDetail" aria-label="版本详情"></section>
+</main>
+
+<div id="modalRoot"></div>
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* 演示数据（页面内存虚构；状态机与文案口径对齐 scripts/lib/build-store.mjs） */
+const INIT_VERSIONS = [
+  { id:'BLD-20260913-003', name:'2026-09-13 修复批次', status:'draft',
+    description:'收纳批量任务与完善流程的三笔修复，待确认后合并入 main。',
+    items:[{itemId:'REQ-20260913-003',title:'批量任务去掉批次概念',commit:'8f2c41ab09d7e5c6310a9b8d7e2f4a5c6b8d9e01'},
+           {itemId:'BUG-20260913-002',title:'完善子代理认领冲突未释放',commit:'c19d02ef34a5b6c7d8e9f0a1b2c3d4e5f6071829'}] },
+  { id:'BLD-20260913-002', name:'构建模块体验修复', status:'merging',
+    description:'版本卡片操作入口与条目纳入口径的修复。',
+    items:[{itemId:'BUG-20260913-004',title:'版本操作迁入版本卡片',commit:'a1b2c3d4e5f60718293a4b5c6d7e8f9012345d67'}] },
+  { id:'BLD-20260913-001', name:'构建模块首版', status:'merged',
+    description:'构建模块数据层、服务端路由与前端首个可用版本。',
+    items:[{itemId:'REQ-20260913-001',title:'添加构建模块，支持版本管理',commit:'0f1e2d3c4b5a69788796a5b4c3d2e1f00918a726'},
+           {itemId:'REQ-20260913-002',title:'状态分类区域上移',commit:'7261d909fe5a4b3c2d1e0f9a8b7c6d5e4f302918'}] },
+  { id:'BLD-20260912-005', name:'2026-09-12 发布前清理', status:'failed',
+    description:'含一个已合并条目与一个合并失败条目，可重试或放弃。',
+    items:[{itemId:'BUG-20260912-011',title:'发布页签深链回落异常',commit:'d67e8f90123a4b5c6d7e8f9a0b1c2d3e4f506172',merged:true},
+           {itemId:'REQ-20260912-001',title:'任务面板筛选优化',commit:'9876a5b4c3d2e1f00918a72635b4c3d2e1f00918',mergeError:'冲突：README.md 与 main 不一致'}] },
+];
+const STATUS_LABEL = { draft:'计划中', merging:'合并中', merged:'已合并', failed:'失败' };
+const short = (h)=>h.slice(0,7);
+
+let state = { scene:'normal', versions:INIT_VERSIONS.map(v=>({...v, items:v.items.map(i=>({...i}))})),
+              selId:INIT_VERSIONS[0].id, simFail:false, theme:'auto', deleting:false };
+
+/* ---------- 工具 ---------- */
+const $ = (sel)=>document.querySelector(sel);
+const esc = (s)=>String(s??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg, isErr){
+  const el=document.createElement('div');
+  el.className='toast'+(isErr?' err':'');
+  el.textContent=msg;
+  $('#toastWrap').appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .25s';setTimeout(()=>el.remove(),260);},2600);
+}
+const chip = (s)=>`<span class="st ${s}">${s==='merging'?'<span class="spin"></span>':''}${STATUS_LABEL[s]||s}</span>`;
+const findVer = (id)=>state.versions.find(v=>v.id===id);
+
+/* ---------- 渲染：版本列表 ---------- */
+function renderVersionList(){
+  const root=$('#verList');
+  if(state.scene==='loading'){
+    root.innerHTML='<div class="skel-card"><div class="skel" style="width:40%"></div><div class="skel" style="width:70%"></div></div>'
+      +'<div class="skel-card"><div class="skel" style="width:55%"></div><div class="skel" style="width:80%"></div></div>';
+    return;
+  }
+  if(state.scene==='loadError'){
+    root.innerHTML=`<div class="errbox">✕ 版本列表加载失败：服务暂不可用（演示）
+      <button type="button" class="small" id="retryLoad">重试</button></div>`;
+    $('#retryLoad').addEventListener('click',()=>{state.scene='normal';syncDemoBar();renderAll();});
+    return;
+  }
+  if(state.scene==='empty' || !state.versions.length){
+    root.innerHTML='<div class="placeholder muted">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
+    return;
+  }
+  const busy = state.scene==='mergeBusy';
+  root.innerHTML=state.versions.map((v)=>{
+    const lock = v.status==='merging';
+    const delTitle = lock ? '合并中，不可删除' : busy ? '合并执行中，暂不可删除' : '删除该版本（不可恢复）';
+    return `
+    <div class="rel-card${v.id===state.selId?' sel':''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0"
+         aria-label="版本 ${esc(v.name)}，${STATUS_LABEL[v.status]}">
+      <div class="t"><strong>${esc(v.name)}</strong> ${chip(v.status)}</div>
+      <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 2026-09-13</div>
+      <div class="card-acts">
+        <button type="button" class="small quiet" data-act="answer" data-id="${esc(v.id)}"${busy?' disabled':''}>AI 完善</button>
+        <button type="button" class="small primary" data-act="merge" data-id="${esc(v.id)}"
+          ${lock||v.status==='merged'||busy?` disabled title="${v.status==='merged'?'已合并入 main':'合并中，请勿重复触发'}"`:''}>${v.status==='failed'?'重试合并入 main':'合并入 main'}</button>
+        <button type="button" class="small quiet" data-act="del" data-id="${esc(v.id)}"
+          ${lock||busy?' disabled':''} title="${delTitle}" aria-label="删除版本 ${esc(v.id)}">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+  root.querySelectorAll('[data-act]').forEach((b)=>{
+    b.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const {act,id}=b.dataset;
+      if(act==='del') openDeleteConfirm(id);
+      else if(act==='merge') toast('（演示）本演示聚焦「删除版本」，合并确认流程不在此展开');
+      else if(act==='answer') toast('（演示）「AI 完善」弹窗见 REQ-20260913-001，此处不展开');
+    });
+  });
+  root.querySelectorAll('.rel-card').forEach((card)=>{
+    const go=()=>{state.selId=card.dataset.verId;renderAll();};
+    card.addEventListener('click',go);
+    card.addEventListener('keydown',(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}});
+  });
+}
+
+/* ---------- 渲染：右侧详情 ---------- */
+function renderDetail(){
+  const root=$('#verDetail');
+  if(state.scene==='loading'){
+    root.innerHTML='<div class="skel" style="width:30%"></div><div class="skel" style="width:60%"></div><div class="skel" style="width:45%"></div>';
+    return;
+  }
+  if(state.scene==='loadError'){
+    root.innerHTML='<div class="placeholder muted">版本详情不可用（列表加载失败）</div>';
+    return;
+  }
+  const v=findVer(state.selId);
+  if(state.scene==='empty' || !v){
+    root.innerHTML='<div class="placeholder muted">点击左侧版本查看详情</div>';
+    return;
+  }
+  const lockItems=['merging','merged'].includes(v.status);
+  const busy = state.scene==='mergeBusy';
+  const mergeNote = v.status==='merging'
+    ? '<div class="note run">合并中，请稍候……（执行中已禁用重复触发、条目增删与版本删除）</div>'
+    : v.status==='failed'
+      ? `<div class="note err">合并失败：${esc(v.items.find(i=>i.mergeError)?.mergeError||'')}（可重试，只补未合并条目；也可删除放弃该版本）</div>`
+      : v.status==='merged'
+        ? '<div class="note ok">已合并入 main：提交已在 main 分支；删除本版本仅移除看板记录，不影响代码。</div>'
+        : '';
+  root.innerHTML=`
+    <div class="det-head">
+      <h3>${esc(v.name)} ${chip(v.status)}</h3>
+      <p class="muted small">${esc(v.id)} · 目标分支 main · 更新 2026-09-13</p>
+    </div>
+    <div class="det-block"><span class="lbl">描述</span><div class="det-desc">${v.description?esc(v.description):'<span class="muted">（无描述）</span>'}</div></div>
+    <div class="det-block">
+      <div class="items-head"><strong>关联条目与 commit</strong>
+        <button type="button" class="small" ${lockItems||busy?'disabled title="合并中/已合并状态锁定条目增删"':''}>＋ 添加条目</button>
+      </div>
+      ${v.items.map((it)=>`
+        <div class="item-row">
+          <span class="iid">${esc(it.itemId)}</span>
+          <span class="itl" title="${esc(it.title||'')}">${esc(it.title||'')}</span>
+          <span class="commit-pill">${esc(short(it.commit))}</span>
+          ${it.merged?'<span class="st merged" title="已合并入 main">✓</span>':it.mergeError?'<span class="st failed" title="'+esc(it.mergeError)+'">✕</span>':''}
+          <button type="button" class="small quiet" ${lockItems||busy?'disabled title="合并中/已合并状态锁定条目增删"':''}>移出</button>
+        </div>`).join('')}
+    </div>
+    ${mergeNote}`;
+}
+
+/* ---------- 删除确认弹窗 ---------- */
+function openDeleteConfirm(id){
+  const v=findVer(id);
+  if(!v||v.status==='merging'||state.scene==='mergeBusy') return;
+  const mergedNote = v.status==='merged'
+    ? '<p class="muted small">该版本已合并入 main：<strong>仅删除看板版本记录</strong>，不影响已合并入 main 的提交与代码。</p>'
+    : '<p class="muted small">删除后不可恢复；关联条目与 commit 关联一并移除，条目可随后重新纳入其他版本。</p>';
+  $('#modalRoot').innerHTML=`
+    <div class="modal-wrap" id="delWrap" role="dialog" aria-label="删除版本确认">
+      <div class="modal">
+        <h3>删除版本（${esc(v.id)}）</h3>
+        <ul>
+          <li>版本名称：<strong>${esc(v.name)}</strong></li>
+          <li>状态：${STATUS_LABEL[v.status]}</li>
+          <li>关联单数：${v.items.length} 个（${v.items.map(i=>esc(i.itemId)).join('、')}）</li>
+        </ul>
+        ${mergedNote}
+        <p class="muted small">确认即授权删除 <code>&lt;dataDir&gt;/builds/versions/${esc(v.id)}/</code> 整目录；删除后不可恢复。</p>
+        <div class="modal-foot">
+          <button type="button" id="delCancel">取消</button>
+          <button type="button" class="danger" id="delGo">确认删除</button>
+        </div>
+      </div>
+    </div>`;
+  $('#delCancel').addEventListener('click',closeDeleteConfirm);
+  $('#delWrap').addEventListener('click',(e)=>{if(e.target.id==='delWrap')closeDeleteConfirm();});
+  $('#delGo').addEventListener('click',()=>doDelete(v));
+  $('#delGo').focus();
+}
+function closeDeleteConfirm(){ $('#modalRoot').innerHTML=''; }
+function doDelete(v){
+  const btn=$('#delGo');
+  if(!btn||btn.disabled) return;
+  btn.disabled=true; btn.textContent='删除中……';
+  setTimeout(()=>{ // 模拟服务端往返
+    if(state.simFail){
+      closeDeleteConfirm();
+      toast(`✕ 删除失败：${v.id} 删除失败（演示：服务端返回错误）`,true);
+      return; // 版本保留在列表中，可重试
+    }
+    state.versions=state.versions.filter(x=>x.id!==v.id);
+    if(state.selId===v.id) state.selId=state.versions.length?state.versions[0].id:null;
+    closeDeleteConfirm();
+    toast(`✓ 已删除版本（${v.id}）`);
+    if(!state.versions.length) toast('版本列表已清空：可点「＋ 新建版本」重新创建');
+    renderAll();
+  },650);
+}
+
+/* ---------- 演示控制条 ---------- */
+function syncDemoBar(){
+  document.querySelectorAll('[data-scene]').forEach((b)=>b.classList.toggle('on',b.dataset.scene===state.scene));
+  $('#simFail').checked=state.simFail;
+}
+document.querySelectorAll('[data-scene]').forEach((b)=>{
+  b.addEventListener('click',()=>{
+    state.scene=b.dataset.scene;
+    if(state.scene==='empty') state.selId=null;
+    if(state.scene==='normal'&&!state.versions.length) state.versions=INIT_VERSIONS.map(v=>({...v,items:v.items.map(i=>({...i}))}));
+    if(state.scene==='normal'&&!findVer(state.selId)) state.selId=state.versions[0]?.id||null;
+    closeDeleteConfirm(); syncDemoBar(); renderAll();
+  });
+});
+$('#simFail').addEventListener('change',(e)=>{state.simFail=e.target.checked;});
+$('#resetBtn').addEventListener('click',()=>{
+  state={...state,scene:'normal',versions:INIT_VERSIONS.map(v=>({...v,items:v.items.map(i=>({...i}))})),selId:INIT_VERSIONS[0].id,simFail:false};
+  closeDeleteConfirm(); syncDemoBar(); renderAll(); toast('演示数据已重置');
+});
+$('#themeBtn').addEventListener('click',()=>{
+  const order=['auto','light','dark'];
+  state.theme=order[(order.indexOf(state.theme)+1)%3];
+  document.documentElement.classList.remove('force-light','force-dark');
+  if(state.theme!=='auto') document.documentElement.classList.add('force-'+state.theme);
+  toast(state.theme==='auto'?'深浅色：跟随系统':state.theme==='light'?'深浅色：浅色':'深浅色：深色');
+});
+
+function renderAll(){ renderVersionList(); renderDetail(); }
+syncDemoBar();
+renderAll();
+</script>
+</body>
+</html>
