@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-001",
+  "type": "bug",
+  "title": "AI 分析任务中重复显示了“本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）”，请修复",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "BUG-20260914-001",
+  "createdAt": "2026-09-14T02:00:17.003Z",
+  "updatedAt": "2026-09-14T02:29:53.807Z",
+  "agentCompletedAt": "2026-09-14T02:29:53.807Z",
+  "lastReport": {
+    "at": "2026-09-14T02:29:53.807Z",
+    "coverage": 100,
+    "framework": "node:test（vm 提取真实渲染函数的静态契约测试 + 全量 run-all）",
+    "summary": "概况页收尾提示重复修复：renderRefinePanel 新增 doneNoticeOnly 守卫（与 checkRefineBatch 收尾分支同口径），正常收尾态服务端 notice 改由绿色 notice ok 条单条承接、文案与 CLI refine check 逐字一致；i18n 词典键同步统一措辞；新增 7 例专项测试（含前端兜底与服务端权威文案源码级比对防漂移），run-all 220 文件全通过；引入来源归因 REQ-20260907-003（design.md 详述）",
+    "runId": "run-20260914-222"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T02:00:17.003Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T02:00:17.005Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T02:05:44.392Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-100121-902f）"
+    },
+    {
+      "at": "2026-09-14T02:20:01.518Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "BUG-20260914-001",
+      "note": "认领（BUG-20260914-001）"
+    },
+    {
+      "at": "2026-09-14T02:29:53.808Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "BUG-20260914-001",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
