@@ -1445,6 +1445,11 @@ async function runCmd(rest) {
     } else {
       console.log(`= ${r.itemId} 自动提交跳过/未完成（${ac.status}）：${ac.reason || '无'}`);
     }
+    // BUG-20260913-006：待人工路径显式提示，不静默留脏
+    if (Array.isArray(ac.pendingManual) && ac.pendingManual.length) {
+      console.log(`! ${ac.pendingManual.length} 个预留前已脏且本单动过的路径待人工核对提交：`);
+      for (const p of ac.pendingManual) console.log(`  ? ${p}`);
+    }
     return;
   }
 

@@ -875,6 +875,10 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
     receipt.autoCommit = {
       status: autoCommit.status,
       commits: (autoCommit.commits || []).map((c) => c.hash),
+      // BUG-20260913-006：待人工路径随回执显式上抛（预留前已脏且本单动过，不静默留脏）
+      ...(Array.isArray(autoCommit.pendingManual) && autoCommit.pendingManual.length
+        ? { pendingManual: autoCommit.pendingManual.slice(0, 20) }
+        : {}),
       ...(autoCommit.reason ? { reason: autoCommit.reason } : {}),
     };
   }
