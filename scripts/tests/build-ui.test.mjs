@@ -232,6 +232,107 @@ t('N7d 分支浏览渲染：当前/本地/远端分组与提交记录', async ()
   assert.match(inner2, new RegExp(H1.slice(0, 7)), '短 hash 渲染');
 });
 
+/* ---------- N7e BUG-20260914-009 提交记录分页 ---------- */
+
+t('N7e 提交记录分页：默认 50/offset 请求、页码与进度渲染、翻到末页、翻页失败保留旧内容可重试、切分支重置、每页条数切换、空分支无分页', async () => {
+  const st = statePayload();
+  const h = setup({ state: st, candidates: candidatesPayload() });
+  h.sandbox.__branches = { isRepo: true, current: 'dev', local: ['dev', 'main'], remote: [] };
+  h.sandbox.__logReqs = [];
+  h.sandbox.__logFail = false;
+  h.sandbox.__logTotal = 137;
+  h.sandbox.fetch = async (url, opts) => {
+    const up = new URL(String(url), 'http://local');
+    if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(st)) };
+    if (up.pathname === '/api/build/branches') return { ok: true, json: async () => JSON.parse(JSON.stringify(h.sandbox.__branches)) };
+    if (up.pathname === '/api/build/branch-log') {
+      h.sandbox.__logReqs.push(up.pathname + up.search);
+      if (h.sandbox.__logFail) return { ok: false, status: 500, json: async () => ({ error: 'boom' }) };
+      const total = h.sandbox.__logTotal;
+      if (total === 0) return { ok: true, json: async () => ({ branch: up.searchParams.get('branch'), commits: [], total: 0, limit: Number(up.searchParams.get('limit') || 50), offset: Number(up.searchParams.get('offset') || 0) }) };
+      const limit = Number(up.searchParams.get('limit') || 50);
+      const offset = Number(up.searchParams.get('offset') || 0);
+      const n = Math.max(0, Math.min(limit, total - offset));
+      const commits = Array.from({ length: n }, (_, i) => ({ hash: H1, short: H1.slice(0, 7), subject: `提交 ${offset + i + 1}`, author: 'T', date: '2026-09-13T01:00:00.000Z' }));
+      return { ok: true, json: async () => ({ branch: up.searchParams.get('branch'), commits, total, limit, offset }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+  await h.run(`window.ATBBuild.enter('/p/a')`);
+  await h.run(`window.ATBBuild.setTab('branches')`);
+  await new Promise((r) => setTimeout(r, 10));
+  const reqs = () => h.sandbox.__logReqs;
+  const inner = () => h.run(`document.querySelector('#buildView').innerHTML`);
+
+  // 首屏：请求带 limit/offset；分页条渲染页码 + 进度 + 上一页禁用；未到末页无「已到末尾」
+  h.run(`window.ATBBuild.selectBranch('dev')`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /[?&]limit=50&offset=0/, '首屏请求 limit=50&offset=0');
+  assert.match(inner(), /第 1–50 条 \/ 共 137 条/, '进度信息「第 1–50 条 / 共 137 条」');
+  assert.match(inner(), /data-pg="2"/, '页码按钮渲染（共 3 页）');
+  assert.match(inner(), /data-pg="prev" disabled/, '首页上一页禁用');
+  assert.match(inner(), /aria-current="page"/, '当前页高亮标记');
+  assert.doesNotMatch(inner(), /已到末尾/, '未到末页不出现末页反馈');
+
+  // 翻页：offset 跟随页码；进度区间更新
+  h.run(`window.ATBBuild.gotoLogPage(2)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /[?&]limit=50&offset=50/, '第 2 页请求 offset=50');
+  assert.match(inner(), /第 51–100 条 \/ 共 137 条/, '第 2 页进度区间');
+
+  // 末页：区间收口、「已到末尾」反馈、下一页禁用（可翻至分支首个提交）
+  h.run(`window.ATBBuild.gotoLogPage(3)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /[?&]limit=50&offset=100/, '第 3 页请求 offset=100');
+  assert.match(inner(), /第 101–137 条 \/ 共 137 条/, '末页进度区间收口');
+  assert.match(inner(), /已到末尾 · 共 137 条提交/, '末页「已到末尾」反馈');
+  assert.match(inner(), /data-pg="next" disabled/, '末页下一页禁用');
+
+  // 翻页失败：保留已加载内容与页码，行内错误 + 重试入口；重试成功恢复
+  h.sandbox.__logFail = true;
+  h.run(`window.ATBBuild.gotoLogPage(1)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /第 101–137 条 \/ 共 137 条/, '翻页失败保留已加载页内容');
+  assert.match(inner(), /提交记录读取失败：boom/, '行内错误信息');
+  assert.match(inner(), /id="bldLogRetry"/, '失败提供重试按钮');
+  h.sandbox.__logFail = false;
+  h.run(`window.ATBBuild.retryLogPage()`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /第 1–50 条 \/ 共 137 条/, '重试成功加载目标页');
+  assert.doesNotMatch(inner(), /提交记录读取失败/, '错误条消失');
+
+  // 切换分支重置回第一页
+  h.run(`window.ATBBuild.gotoLogPage(2)`);
+  await new Promise((r) => setTimeout(r, 10));
+  h.run(`window.ATBBuild.selectBranch('main')`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /branch=main&limit=50&offset=0/, '切换分支重置回第一页');
+
+  // 每页条数切换：回第一页并按新 limit 请求
+  h.run(`window.ATBBuild.setLogPageSize(100)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /[?&]limit=100&offset=0/, '每页条数切换按新 limit 从第一页请求');
+  assert.match(inner(), /第 1–100 条 \/ 共 137 条/, '新每页条数进度区间');
+
+  // 空分支：无分页控件
+  h.sandbox.__logTotal = 0;
+  h.run(`window.ATBBuild.selectBranch('dev')`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /该分支暂无提交/, '空分支提示保持');
+  assert.doesNotMatch(inner(), /bld-log-pager/, '空分支不出分页控件');
+});
+
+t('N7f 分页静态契约：data-pg / 每页条数下拉 / 重试按钮在 bindCommon 绑定；分页条与末页反馈样式类存在', () => {
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-pg\]'\)/, 'bindCommon 循环绑定 data-pg 分页按钮');
+  assert.match(buildJs, /#bldLogSize/, 'bindCommon 绑定每页条数下拉');
+  assert.match(buildJs, /#bldLogRetry/, 'bindCommon 绑定翻页失败重试按钮');
+  assert.match(buildJs, /bld-log-pager/, '渲染分页条容器类');
+  assert.match(buildJs, /bld-log-eof/, '渲染末页反馈类');
+  const css = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
+  assert.match(css, /\.bld-log-pager/, 'style.css 含分页条样式');
+  assert.match(css, /\.bld-log-eof/, 'style.css 含末页反馈样式');
+});
+
 /* ---------- N9 REQ-20260913-004 版本删除 ---------- */
 
 const ver = (id, name, status = 'draft') => ({

@@ -193,6 +193,46 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=--upload-pack%3Devil`);
     assert.equal(r.status, 400, '非法 ref 拒绝');
 
+    // S8b BUG-20260914-009 分页：独立分支 long 造 62 个提交（commit-tree 不动工作区），
+    // 验证默认 50 + total、limit/offset 跨页取数、翻到分支首个提交、非法参数归一、超界空页
+    git(projA, ['branch', 'long', 'dev']);
+    {
+      let parent = git(projA, ['rev-parse', 'long']);
+      const tree = git(projA, ['rev-parse', 'long^{tree}']);
+      for (let i = 1; i <= 62; i++) {
+        parent = git(projA, ['commit-tree', tree, '-p', parent, '-m', `bulk ${i}`]);
+        git(projA, ['update-ref', 'refs/heads/long', parent]);
+      }
+    }
+    // long 总数 = dev 既有 2 个（init + feat）+ bulk 62 = 64
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.total, 64, '默认响应带 total 总数');
+    assert.equal(r.json.limit, 50, '默认 limit=50');
+    assert.equal(r.json.offset, 0, '默认 offset=0');
+    assert.equal(r.json.commits.length, 50, '缺省仍取最近 50 条（首屏兼容口径）');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=20&offset=40`);
+    assert.equal(r.json.total, 64, '分页响应 total 不变');
+    assert.equal(r.json.commits.length, 20, 'limit=20&offset=40 取 20 条');
+    assert.equal(r.json.commits[0].subject, 'bulk 22', 'offset 偏移后从第 41 新条开始（新→旧）');
+    assert.equal(r.json.commits[19].subject, 'bulk 3', '页尾为第 60 新条');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=50&offset=62`);
+    assert.equal(r.json.commits.length, 2, '末页只剩 2 条');
+    assert.equal(r.json.commits[1].subject, 'init', '可翻到分支首个提交');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=10000`);
+    assert.equal(r.json.limit, 500, '超大 limit 归一到上限 500（>200 旧顶不再截断）');
+    assert.equal(r.json.commits.length, 64, 'limit 上限内 64 条全量可达');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=-5`);
+    assert.equal(r.json.limit, 1, '负数 limit 归一为 1');
+    assert.equal(r.json.commits.length, 1, '归一后返回 1 条');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=abc&offset=-3`);
+    assert.equal(r.json.limit, 50, '非数字 limit 走缺省 50');
+    assert.equal(r.json.offset, 0, '负数 offset 归一为 0');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&offset=1000`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.commits, [], 'offset 超过 total 返回空页不报错');
+    assert.equal(r.json.total, 64, '超界响应 total 仍正确');
+
     // S6 合并入 main：成功置 merged、逐条 mergedAt、main 含所选提交、切回原分支 dev
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
     assert.equal(r.status, 200, `合并应成功：${r.text}`);

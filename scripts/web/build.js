@@ -61,8 +61,12 @@ const ATBBuild = (() => {
     branchesPhase: 'idle', // idle | loading | error
     branchesError: null,
     logBranch: null,
-    branchLog: null,     // { branch, commits }
+    branchLog: null,     // { branch, commits, total, limit, offset }（BUG-20260914-009：total 供分页）
     logPhase: 'idle',
+    logError: null,      // 翻页失败行内错误（保留已加载内容时展示；首次加载失败走 logPhase='error'）
+    logPage: 1,          // BUG-20260914-009：当前渲染页（1 起）
+    logPageSize: 50,     // 每页条数（20/50/100）
+    logRetryTarget: null, // 翻页失败后重试的目标页
     syncBusy: false,
     pushBusy: false,
     rendered: false,
@@ -113,6 +117,31 @@ const ATBBuild = (() => {
   // 全选口径：只纳入有 commit 候选的条目（无提交条目自动跳过并提示）
   function selectableCandidates(items) {
     return (items || []).filter((x) => Array.isArray(x.commits) && x.commits.length > 0);
+  }
+
+  // BUG-20260914-009：提交记录分页条（纯函数，渲染与测试共用）——上一页 / 页码（首末 + 当前±1，
+  // 中间折叠 …）/ 下一页 + 每页条数下拉（20/50/100）+「第 x–y 条 / 共 N 条」进度。
+  function logPagerHtml(page, pages, size, total) {
+    const p = Math.max(1, Math.min(pages, page));
+    const start = (p - 1) * size;
+    const len = Math.max(0, Math.min(size, total - start));
+    const want = [];
+    for (let i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - p) <= 1) want.push(i);
+      else if (want[want.length - 1] !== '…') want.push('…');
+    }
+    const nums = want.map((w) => w === '…'
+      ? '<span class="bld-log-gap">…</span>'
+      : `<button type="button" data-pg="${w}"${w === p ? ' class="on" aria-current="page"' : ''}>${w}</button>`).join('');
+    const sizes = [20, 50, 100].map((n) => `<option value="${n}"${n === size ? ' selected' : ''}>${n} 条/页</option>`).join('');
+    return `
+      <div class="bld-log-pager" role="navigation" aria-label="提交记录分页">
+        <button type="button" data-pg="prev"${p <= 1 ? ' disabled' : ''}>上一页</button>
+        ${nums}
+        <button type="button" data-pg="next"${p >= pages ? ' disabled' : ''}>下一页</button>
+        <select id="bldLogSize" aria-label="每页条数">${sizes}</select>
+        <span class="bld-log-range">第 ${start + 1}–${start + len} 条 / 共 ${total} 条</span>
+      </div>`;
   }
 
   function buildPrompt(v) {
@@ -173,7 +202,9 @@ const ATBBuild = (() => {
         mergeConfirm: null, pushConfirm: null, mergeBusy: false,
         deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
-        logBranch: null, branchLog: null, logPhase: 'idle', syncBusy: false, pushBusy: false,
+        logBranch: null, branchLog: null, logPhase: 'idle', logError: null,
+        logPage: 1, logPageSize: 50, logRetryTarget: null, // BUG-20260914-009：分页状态随项目切换重置
+        syncBusy: false, pushBusy: false,
         remoteSynced: false, // BUG-20260914-006：本会话是否已成功同步远端——空态区分依据
         rendered: false, pendingRestore: state.pendingRestore,
       });
@@ -208,22 +239,65 @@ const ATBBuild = (() => {
     render();
   }
 
-  async function selectBranch(branch) {
+  // BUG-20260914-009：选中分支查看提交记录（分页）——切换分支重置回第一页（page 可省略）。
+  function selectBranch(branch, page = 1) {
     state.logBranch = branch;
+    return loadLog(page);
+  }
+
+  // 加载指定页提交记录：请求带 limit/offset；翻页失败保留已加载内容（页码回退）+
+  // 行内错误与重试入口；首次加载失败维持原口径（清空 + error 态）。
+  async function loadLog(page = 1) {
+    const branch = state.logBranch;
+    if (!branch) return;
+    const prev = { page: state.logPage, data: state.branchLog, branch: state.branchLog?.branch };
+    state.logPage = Math.max(1, Math.floor(page) || 1);
     state.logPhase = 'loading';
+    state.logError = null;
     render();
     try {
-      const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}`);
+      const size = state.logPageSize;
+      const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}&limit=${size}&offset=${(state.logPage - 1) * size}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       state.branchLog = data;
       state.logPhase = 'idle';
+      state.logRetryTarget = null;
     } catch (e) {
-      state.branchLog = null;
-      state.logPhase = 'error';
       state.logError = e.message;
+      if (prev.data && prev.branch === branch) {
+        // 翻页/换页失败：保留已加载页内容与页码，重试重发目标页
+        state.logPage = prev.page;
+        state.logPhase = 'idle';
+        state.logRetryTarget = Math.max(1, Math.floor(page) || 1);
+      } else {
+        state.branchLog = null;
+        state.logPhase = 'error';
+      }
     }
     render();
+  }
+
+  function gotoLogPage(page) {
+    if (!state.logBranch) return;
+    const total = Number(state.branchLog?.total ?? 0);
+    const pages = Math.max(1, Math.ceil(total / state.logPageSize));
+    const p = Math.max(1, Math.min(pages, Math.floor(page) || 1));
+    if (p === state.logPage && state.logPhase === 'idle' && !state.logError) return;
+    loadLog(p);
+  }
+
+  function retryLogPage() {
+    const target = state.logRetryTarget;
+    state.logRetryTarget = null;
+    loadLog(target ?? state.logPage);
+  }
+
+  function setLogPageSize(size) {
+    const n = [20, 50, 100].includes(Number(size)) ? Number(size) : 50;
+    if (n === state.logPageSize && !state.logError) return;
+    state.logPageSize = n;
+    if (state.logBranch) loadLog(1); // 换每页条数回第一页
   }
 
   /* ---------- 版本计划：创建 / 编辑 / 条目 ---------- */
@@ -1037,9 +1111,21 @@ const ATBBuild = (() => {
       if (state.logPhase === 'error') return `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError || '')}</p>`;
       const commits = state.branchLog?.commits || [];
       if (!commits.length) return '<p class="muted small">该分支暂无提交</p>';
-      return `<ul class="bld-log">${commits.map((c) => `<li>
+      // BUG-20260914-009：分页展示全部提交（替代 50 条静默截断）——翻页失败保留旧内容时
+      // 在列表上方显示行内错误 + 重试（重发失败时的目标页）
+      const errBar = state.logError ? `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError)} <button type="button" class="btn small" id="bldLogRetry">重试</button></p>` : '';
+      const listHtml = `<ul class="bld-log">${commits.map((c) => `<li>
         <code>${esc(c.short || c.hash.slice(0, 8))}</code> <span>${esc(c.subject)}</span>
         <span class="muted small">${esc(c.author)} · ${esc(fmtTime(c.date))}</span></li>`).join('')}</ul>`;
+      const total = Number(state.branchLog?.total ?? commits.length);
+      const size = state.logPageSize;
+      const pages = Math.max(1, Math.ceil(total / size));
+      const page = Math.min(Math.max(1, state.logPage), pages);
+      const start = (page - 1) * size;
+      const eof = page === pages
+        ? `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条提交（可翻至分支首个提交）</div>`
+        : '';
+      return errBar + listHtml + eof + logPagerHtml(page, pages, size, total);
     })() : '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
     return `
       <div class="rel-split bld-branch-split">
@@ -1231,7 +1317,18 @@ const ATBBuild = (() => {
     q('#bldFetchBtn')?.addEventListener('click', doFetch);
     q('#bldBranchRefresh')?.addEventListener('click', loadBranches);
     q('#bldBranchRetry')?.addEventListener('click', loadBranches);
-    q('#bldLogRefresh')?.addEventListener('click', () => state.logBranch && selectBranch(state.logBranch));
+    // BUG-20260914-009：刷新=重新加载当前页；翻页失败重试重发目标页
+    q('#bldLogRefresh')?.addEventListener('click', () => state.logBranch && loadLog(state.logPage));
+    q('#bldLogRetry')?.addEventListener('click', retryLogPage);
+    q('#bldLogSize')?.addEventListener('change', (e) => setLogPageSize(Number(e.target?.value)));
+    for (const el of view.querySelectorAll('[data-pg]')) {
+      el.addEventListener('click', () => {
+        const v = el.dataset.pg;
+        if (v === 'prev') gotoLogPage(state.logPage - 1);
+        else if (v === 'next') gotoLogPage(state.logPage + 1);
+        else gotoLogPage(Number(v));
+      });
+    }
     for (const el of view.querySelectorAll('[data-branch]')) {
       el.addEventListener('click', (e) => {
         if (e.target?.closest?.('button')) return;
@@ -1259,8 +1356,10 @@ const ATBBuild = (() => {
   return {
     enter, refresh, setTab, setQuery, snapshot, restoreView, notifyState: notify,
     openCreatePanel, openAddPanel, selectBranch,
+    // BUG-20260914-009：提交记录分页行为接缝（测试与翻页交互）
+    gotoLogPage, setLogPageSize, retryLogPage,
     // 纯函数接缝（测试与面板复用）
-    doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt,
+    doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
     // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
     openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,

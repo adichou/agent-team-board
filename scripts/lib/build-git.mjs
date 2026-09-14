@@ -64,20 +64,25 @@ export function listBranches(root) {
   return { isRepo: true, current, local, remote, remotes: remoteNames(root) };
 }
 
-// 只读：指定分支最近提交记录（hash / 短 hash / 说明 / 作者 / 时间）。
-export function branchLog(root, branch, limit = 50) {
+// 只读：指定分支提交记录（分页，新→旧）。BUG-20260914-009：放开原「默认 50 / 上限 200 且无翻页」
+// 截断——limit 缺省 50、归一 clamp [1,500]；offset 缺省 0、负数归 0（git log -n + --skip 偏移）；
+// 附 rev-list --count 总数 total，响应 { branch, commits, total, limit, offset }，
+// offset ≥ total 时返回空页（前端按 total 计算页码不会请求，接口层保持宽容不报错）。
+export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   const ref = assertRefName(branch);
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
-  const n = Math.max(1, Math.min(200, Number(limit) || 50));
+  const n = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
+  const skip = Math.max(0, Math.floor(Number(offset) || 0));
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
-  const out = gitOk(root, ['log', ref, `-n`, String(n), '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '读取提交记录');
+  const total = Number(gitOk(root, ['rev-list', '--count', ref], '统计提交总数').trim()) || 0;
+  const out = gitOk(root, ['log', ref, '-n', String(n), '--skip', String(skip), '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '读取提交记录');
   const commits = [];
   for (const line of out.split('\n')) {
     if (!line.trim()) continue;
     const [hash, short, author, date, ...rest] = line.split('\t');
     commits.push({ hash, short, author, date, subject: rest.join('\t') });
   }
-  return { branch: ref, commits };
+  return { branch: ref, commits, total, limit: n, offset: skip };
 }
 
 // 受限写：同步远端（fetch --all --prune；附带清理失效远端分支引用——design.md 落定口径）。

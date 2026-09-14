@@ -3080,8 +3080,19 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
 .bld-log code { font-size: 12px; color: var(--info-text); }
 .bld-log li .muted { margin-left: auto; }
+/* BUG-20260914-009 提交记录分页条 + 末页反馈（跟随系统深浅色变量） */
+.bld-log-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.bld-log-pager button { min-width: 30px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+.bld-log-pager button:hover:not(:disabled):not(.on) { background: var(--info-bg); }
+.bld-log-pager button.on { background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; }
+.bld-log-pager button:disabled { opacity: 0.45; cursor: default; }
+.bld-log-gap { color: var(--muted); }
+.bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+.bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }
+.bld-log-eof { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; }
 @media (max-width: 960px) {
   .bld-branch-split { grid-template-columns: minmax(0, 1fr); }
+  .bld-log-range { margin-left: 0; width: 100%; }
 }
 
 /* ---------- REQ-20260911-007 待人工确认持久聚合区（需求列表下方，空态整体隐藏） ---------- */
