@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>构建模块 UI 演示 · REQ-20260913-001</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --panel-2:#f0f2f5; --border:#d9dee5; --border-soft:#e7eaef;
+    --text:#1f2328; --muted:#6a737d; --primary:#2563eb; --primary-weak:#e8effd;
+    --ok:#1a7f37; --ok-weak:#e2f5e8; --warn:#9a6700; --warn-weak:#fff3d6;
+    --err:#cf222e; --err-weak:#ffebe9; --chip:#eef1f4; --shadow:0 8px 28px rgba(20,30,50,.14);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  html[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1d242e; --border:#30363d; --border-soft:#252c35;
+    --text:#e6edf3; --muted:#8b949e; --primary:#4d8dff; --primary-weak:#17263f;
+    --ok:#3fb950; --ok-weak:#12301c; --warn:#d29922; --warn-weak:#33290e;
+    --err:#f85149; --err-weak:#3d1416; --chip:#21262d; --shadow:0 8px 28px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif}
+  button{font:inherit;color:inherit;cursor:pointer}
+  input,textarea,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:5px 8px}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--primary);outline-offset:1px}
+  h1,h2,h3{margin:0}
+  ul{list-style:none;margin:0;padding:0}
+  .hidden{display:none !important}
+  .muted{color:var(--muted)}
+  .mono{font-family:var(--mono);font-size:12px}
+
+  /* ── 顶栏：需求 → 构建 → 任务 → 设置 ── */
+  .topbar{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo-badge{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:var(--primary-weak);color:var(--primary);font-size:17px}
+  .brand h1{font-size:16px}
+  .demo-badge{font-size:11px;color:var(--warn);border:1px solid var(--warn);border-radius:99px;padding:0 8px}
+  .module-nav{display:flex;gap:4px;background:var(--panel-2);border-radius:8px;padding:3px}
+  .view-tab{border:0;background:transparent;border-radius:6px;padding:5px 14px;color:var(--muted)}
+  .view-tab:hover{color:var(--text)}
+  .view-tab.active{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .top-actions{margin-left:auto;display:flex;gap:8px}
+  .btn{border:1px solid var(--border);background:var(--panel);border-radius:6px;padding:5px 12px}
+  .btn:hover{border-color:var(--muted)}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.danger{background:var(--err);border-color:var(--err);color:#fff}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.small{padding:3px 10px;font-size:13px}
+
+  /* ── 第三行：模块副标题 + 模块搜索 ── */
+  .page-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 18px;flex-wrap:wrap}
+  .module-sub{margin:0;color:var(--muted)}
+  .module-search{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:4px 10px;min-width:280px}
+  .search-scope{color:var(--muted);font-size:12px;border-right:1px solid var(--border);padding-right:8px}
+  .module-search input{border:0;flex:1;padding:2px 0;background:transparent}
+  .module-search input:focus{outline:none}
+  .search-clear{border:0;background:transparent;color:var(--muted);padding:0 2px}
+
+  main{padding:0 18px 40px}
+  .subtabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px}
+  .subtab{border:0;background:transparent;padding:8px 16px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .subtab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+  .split{display:grid;grid-template-columns:330px 1fr;gap:14px;align-items:start}
+  @media (max-width:960px){.split{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border-soft)}
+  .panel-head h2{font-size:14px}
+  .panel-body{padding:12px 14px}
+
+  /* 状态 chip */
+  .chip{display:inline-block;font-size:12px;border-radius:99px;padding:1px 10px;white-space:nowrap}
+  .chip.planned{background:var(--primary-weak);color:var(--primary)}
+  .chip.merging{background:var(--warn-weak);color:var(--warn)}
+  .chip.merging::before{content:"◌ ";animation:spin 1.2s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .chip.merged{background:var(--ok-weak);color:var(--ok)}
+  .chip.failed{background:var(--err-weak);color:var(--err)}
+
+  /* 版本列表 */
+  .version-list li{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border-soft);cursor:pointer}
+  .version-list li:hover{background:var(--panel-2)}
+  .version-list li.selected{background:var(--primary-weak);box-shadow:inset 3px 0 0 var(--primary)}
+  .v-name{font-weight:600}
+  .v-meta{color:var(--muted);font-size:12px;margin-left:auto;text-align:right}
+  .strip{margin:10px 14px;padding:8px 12px;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:10px}
+  .strip.loading{background:var(--panel-2);color:var(--muted)}
+  .strip.error{background:var(--err-weak);color:var(--err)}
+  .empty-card{margin:14px;padding:22px;text-align:center;border:1px dashed var(--border);border-radius:10px;color:var(--muted)}
+  .empty-card h3{font-size:14px;color:var(--text);margin-bottom:6px}
+  .skeleton{margin:10px 14px;height:38px;border-radius:8px;background:linear-gradient(90deg,var(--panel-2) 25%,var(--chip) 50%,var(--panel-2) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite}
+  @keyframes shimmer{to{background-position:-200% 0}}
+
+  /* 版本详情 */
+  .detail-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .detail-head .v-name{font-size:17px}
+  .detail-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft)}
+  .detail-section h3{font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:600}
+  .kv{display:flex;gap:8px;align-items:flex-start}
+  .kv .k{color:var(--muted);white-space:nowrap;padding-top:6px}
+  textarea.desc{width:100%;min-height:72px;resize:vertical}
+  .item-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-soft);border-radius:8px;margin-bottom:8px;flex-wrap:wrap}
+  .item-row .title{flex:1;min-width:160px}
+  .item-row select{max-width:250px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .fail-box{background:var(--err-weak);color:var(--err);border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ok-box{background:var(--ok-weak);color:var(--ok);border-radius:8px;padding:8px 12px;margin-bottom:10px}
+
+  /* 分支浏览 */
+  .branch-group{padding:4px 0}
+  .branch-group .group-label{font-size:12px;color:var(--muted);padding:6px 14px 2px}
+  .branch-list li{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;font-family:var(--mono);font-size:12.5px}
+  .branch-list li:hover{background:var(--panel-2)}
+  .branch-list li.selected{background:var(--primary-weak);box-shadow:inset 3px 0 0 var(--primary)}
+  .badge-current{font-size:11px;color:var(--ok);background:var(--ok-weak);border-radius:99px;padding:0 8px;font-family:inherit}
+  .branch-list .push-btn{margin-left:auto;padding:1px 10px;font-size:12px}
+  .commit-list li{display:flex;gap:12px;padding:9px 14px;border-bottom:1px solid var(--border-soft);align-items:baseline}
+  .commit-list .hash{color:var(--primary);font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .commit-list .subject{flex:1}
+  .commit-list .who{color:var(--muted);font-size:12px;white-space:nowrap}
+  .merge-note{margin:0 14px 10px;padding:7px 10px;background:var(--panel-2);border-radius:8px;font-size:12px;color:var(--muted)}
+
+  /* 演示控制条 */
+  .demo-bar{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border-top:1px solid var(--border);padding:8px 18px;font-size:12.5px;color:var(--muted);z-index:40}
+  .demo-bar .seg{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .demo-bar .seg button{border:0;background:var(--panel);padding:3px 10px;font-size:12px;color:var(--muted)}
+  .demo-bar .seg button.on{background:var(--primary);color:#fff}
+  body{padding-bottom:52px}
+
+  /* 侧拉面板与弹窗 */
+  .overlay{position:fixed;inset:0;background:rgba(10,14,22,.45);z-index:50;display:flex}
+  .side-panel{margin-left:auto;width:min(480px,100%);height:100%;background:var(--panel);border-left:1px solid var(--border);box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .side-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+  .side-body{flex:1;overflow:auto;padding:14px 16px}
+  .side-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border)}
+  .modal-wrap{align-items:center;justify-content:center}
+  .modal{width:min(640px,94vw);max-height:86vh;background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .modal .side-body{padding:16px 18px}
+  .x{border:0;background:transparent;font-size:16px;color:var(--muted);padding:2px 6px}
+  .check-row{display:flex;gap:8px;align-items:flex-start;padding:8px 6px;border-bottom:1px dashed var(--border-soft)}
+  .check-row .cid{font-family:var(--mono);font-size:12px;color:var(--primary);white-space:nowrap}
+  .check-row .title{flex:1}
+  .check-row .cmt{margin-top:4px}
+  .no-commit{font-size:12px;color:var(--warn);background:var(--warn-weak);border-radius:6px;padding:2px 8px}
+  .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .preview-grid .box{border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:56px;white-space:pre-wrap}
+  .preview-grid .label{font-size:12px;color:var(--muted);margin-bottom:4px}
+  .preview-grid .new{border-color:var(--ok)}
+  .step-h{font-size:13px;color:var(--muted);font-weight:600;margin:16px 0 6px}
+  .sel-toolbar{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+
+  /* toast */
+  #toasts{position:fixed;right:18px;bottom:60px;z-index:99;display:flex;flex-direction:column;gap:8px}
+  .toast{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:8px;padding:8px 14px;box-shadow:var(--shadow);animation:pop .18s ease-out;max-width:380px}
+  .toast.ok{border-left-color:var(--ok)}
+  .toast.err{border-left-color:var(--err)}
+  .toast.info{border-left-color:var(--primary)}
+  @keyframes pop{from{transform:translateY(8px);opacity:0}}
+</style>
+</head>
+<body>
+
+<!-- 顶栏：模块页签顺序 = 需求 → 构建（本演示）→ 任务 → 设置，体现新模块的导航位置 -->
+<header class="topbar">
+  <div class="brand">
+    <span class="logo-badge">▦</span>
+    <h1>智能体团队看板</h1>
+    <span class="demo-badge">UI 演示 · 仅构建模块可交互</span>
+  </div>
+  <nav class="module-nav" aria-label="模块导航">
+    <button type="button" class="view-tab" data-view="status">需求</button>
+    <button type="button" class="view-tab active" data-view="build" aria-current="page">构建</button>
+    <button type="button" class="view-tab" data-view="runs">任务</button>
+    <button type="button" class="view-tab" data-view="settings">设置</button>
+  </nav>
+  <div class="top-actions">
+    <button type="button" id="btnTheme" class="btn" title="切换深浅色">🌗 深浅色</button>
+  </div>
+</header>
+
+<!-- 第三行：模块副标题 + 模块搜索（搜索口径：搜版本 / 单号 / 分支名） -->
+<section class="page-head">
+  <p class="module-sub">构建 · 版本计划与分支浏览（顶栏位置：需求与任务之间；正式实现由 app.js setView 切换）</p>
+  <div class="module-search" title="搜索当前模块">
+    <span aria-hidden="true">⌕</span>
+    <span class="search-scope">构建</span>
+    <input id="searchInput" type="search" placeholder="搜版本名称 / 单号…" aria-label="搜索版本">
+    <button type="button" id="searchClear" class="search-clear hidden" aria-label="清除搜索">✕</button>
+  </div>
+</section>
+
+<main>
+  <div class="subtabs" role="tablist" aria-label="构建模块子页签">
+    <button type="button" id="tabVersions" class="subtab active" role="tab" aria-selected="true">版本计划</button>
+    <button type="button" id="tabBranches" class="subtab" role="tab" aria-selected="false">分支浏览</button>
+  </div>
+
+  <!-- ══ 子页签一：版本计划 ══ -->
+  <section id="paneVersions" class="split" role="tabpanel" aria-label="版本计划">
+    <aside class="panel">
+      <div class="panel-head">
+        <h2>版本列表</h2>
+        <button type="button" id="btnNewVersion" class="btn primary small">＋ 新建版本</button>
+      </div>
+      <div id="versionStateBar"></div>
+      <ul id="versionList" class="version-list"></ul>
+      <div id="versionEmpty" class="empty-card hidden">
+        <h3>暂无版本计划</h3>
+        <p>点「＋ 新建版本」，按需求单 / Bug 单创建版本计划。</p>
+      </div>
+    </aside>
+    <section class="panel">
+      <div class="panel-body" id="versionDetail"></div>
+    </section>
+  </section>
+
+  <!-- ══ 子页签二：分支浏览（只读） ══ -->
+  <section id="paneBranches" class="split hidden" role="tabpanel" aria-label="分支浏览">
+    <aside class="panel">
+      <div class="panel-head">
+        <h2>分支</h2>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="btnSyncBranches" class="btn small" title="fetch 拉取最新远端分支与提交信息">同步远端</button>
+          <button type="button" id="btnRefreshBranches" class="btn small">刷新</button>
+        </div>
+      </div>
+      <div id="branchStateBar"></div>
+      <ul id="branchList" class="branch-list"></ul>
+      <div id="branchEmpty" class="empty-card hidden">
+        <h3>当前项目不是 git 仓库</h3>
+        <p>请先在终端完成 git 初始化（或经 atb init 新项目初始化）后再使用分支浏览。</p>
+      </div>
+    </aside>
+    <section class="panel">
+      <div class="panel-head"><h2 id="commitTitle">提交记录</h2></div>
+      <div id="commitStateBar"></div>
+      <p class="merge-note">浏览与提交记录只读；「同步远端」拉取最新远端分支与提交信息（fetch），本地分支可「推送」到远端（显式确认）；合并入 main 仅在「版本计划」的版本操作中、确认后执行。</p>
+      <ul id="commitList" class="commit-list"></ul>
+    </section>
+  </section>
+</main>
+
+<!-- 演示控制条（仅演示用；正式实现中各状态由真实接口驱动） -->
+<div class="demo-bar" role="region" aria-label="演示控制">
+  <span>演示控制（仅演示用）</span>
+  <span>数据状态</span>
+  <div class="seg" id="segMode">
+    <button type="button" data-mode="normal" class="on">正常</button>
+    <button type="button" data-mode="loading">加载中</button>
+    <button type="button" data-mode="empty">空态</button>
+    <button type="button" data-mode="error">失败</button>
+    <button type="button" data-mode="nogit">非Git仓库</button>
+  </div>
+  <span>合并入 main 结果</span>
+  <div class="seg" id="segMerge">
+    <button type="button" data-merge="ok" class="on">成功</button>
+    <button type="button" data-merge="fail">模拟失败</button>
+  </div>
+</div>
+
+<!-- 新建版本：右侧侧拉面板 -->
+<div id="newPanelWrap" class="overlay hidden">
+  <aside class="side-panel" role="dialog" aria-modal="true" aria-label="新建版本计划">
+    <div class="side-head"><h2>新建版本计划</h2><button type="button" class="x" data-close="newPanelWrap" aria-label="关闭">✕</button></div>
+    <div class="side-body">
+      <p class="muted" style="margin-top:0">按需求单 / Bug 单创建：勾选条目并为每条选择对应 commit（候选来自条目 ↔ commit 关联索引）；顶部可「全选 / 全不选」。</p>
+      <div class="kv" style="margin-bottom:12px">
+        <span class="k">版本名</span>
+        <input id="newVName" style="flex:1" placeholder="如 v1.0.0（默认命名规则待确认）">
+      </div>
+      <h3 style="font-size:13px;color:var(--muted)">选择条目与 commit</h3>
+      <div class="sel-toolbar">
+        <button type="button" id="btnSelAll" class="btn small">全选</button>
+        <button type="button" id="btnSelNone" class="btn small">全不选</button>
+        <span id="selCount" class="muted" style="font-size:12px">已选 0 / 可选 0 项</span>
+      </div>
+      <div id="newItemList"></div>
+    </div>
+    <div class="side-foot">
+      <button type="button" class="btn" data-close="newPanelWrap">取消</button>
+      <button type="button" id="btnCreateVersion" class="btn primary">创建版本计划</button>
+    </div>
+  </aside>
+</div>
+
+<!-- 版本添加条目：右侧侧拉面板（复用新建版本的选择范式，候选不含已在本版本中的条目） -->
+<div id="pickPanelWrap" class="overlay hidden">
+  <aside class="side-panel" role="dialog" aria-modal="true" aria-label="添加条目到版本">
+    <div class="side-head"><h2>添加条目到版本</h2><button type="button" class="x" data-close="pickPanelWrap" aria-label="关闭">✕</button></div>
+    <div class="side-body">
+      <p class="muted" style="margin-top:0">把需求单 / Bug 单加入当前版本：勾选条目并选 commit（已在本版本中的条目不再出现；暂无 commit 的条目不可纳入）。</p>
+      <div class="sel-toolbar">
+        <button type="button" id="btnPickAll" class="btn small">全选</button>
+        <button type="button" id="btnPickNone" class="btn small">全不选</button>
+        <span id="pickCount" class="muted" style="font-size:12px">已选 0 / 可选 0 项</span>
+      </div>
+      <div id="pickItemList"></div>
+    </div>
+    <div class="side-foot">
+      <button type="button" class="btn" data-close="pickPanelWrap">取消</button>
+      <button type="button" id="btnAddPicked" class="btn primary">添加到版本</button>
+    </div>
+  </aside>
+</div>
+
+<!-- 提示词与回答回填弹窗（同一弹窗两段式：① 复制提示词 → ② 粘贴回答解析回填，无需关闭再打开） -->
+<div id="agentModalWrap" class="overlay modal-wrap hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="提示词与回答回填">
+    <div class="side-head"><h2>提示词与回答回填</h2><button type="button" class="x" data-close="agentModalWrap" aria-label="关闭">✕</button></div>
+    <div class="side-body">
+      <p class="muted" style="margin-top:0">① 复制提示词发给 Agent；收到回答后无需关闭本弹窗，直接粘贴到 ② 回填区，解析应用即完成回填。</p>
+      <h3 class="step-h">① 复制提示词发给 Agent</h3>
+      <textarea id="promptText" class="desc mono" readonly style="min-height:160px"></textarea>
+      <div class="actions"><button type="button" id="btnCopyPrompt" class="btn primary small">复制提示词</button></div>
+      <h3 class="step-h">② 粘贴 Agent 回答，自动回填</h3>
+      <textarea id="answerText" class="desc" placeholder="版本名称: …&#10;版本描述: …"></textarea>
+      <div id="parseFeedback" style="margin-top:10px"></div>
+      <div id="parsePreview" class="preview-grid hidden" style="margin-top:10px">
+        <div><div class="label">当前名称</div><div class="box" id="pvOldName"></div></div>
+        <div><div class="label">解析出的新名称</div><div class="box new" id="pvNewName"></div></div>
+        <div><div class="label">当前描述</div><div class="box" id="pvOldDesc"></div></div>
+        <div><div class="label">解析出的新描述</div><div class="box new" id="pvNewDesc"></div></div>
+      </div>
+    </div>
+    <div class="side-foot">
+      <button type="button" class="btn" data-close="agentModalWrap">关闭</button>
+      <button type="button" id="btnParse" class="btn">解析并预览</button>
+      <button type="button" id="btnApplyParse" class="btn primary hidden">应用更新</button>
+    </div>
+  </div>
+</div>
+
+<!-- 合并入 main 确认弹窗 -->
+<div id="mergeModalWrap" class="overlay modal-wrap hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="确认合并入 main">
+    <div class="side-head"><h2>确认合并入 main</h2><button type="button" class="x" data-close="mergeModalWrap" aria-label="关闭">✕</button></div>
+    <div class="side-body">
+      <p class="muted" style="margin-top:0">写操作需显式确认。以下 commit 将按版本计划合并入 <code>main</code>：</p>
+      <ul id="mergeCommitList" class="commit-list" style="border:1px solid var(--border-soft);border-radius:8px"></ul>
+      <p class="muted" style="font-size:12px">合并中期间本版本的操作与编辑将禁用；与发布（release）模块运行的互斥口径待确认，正式实现以 design.md 为准。</p>
+    </div>
+    <div class="side-foot">
+      <button type="button" class="btn" data-close="mergeModalWrap">取消</button>
+      <button type="button" id="btnMergeConfirm" class="btn danger">确认合并</button>
+    </div>
+  </div>
+</div>
+
+<!-- 推送分支确认弹窗（写远端操作需显式确认） -->
+<div id="pushModalWrap" class="overlay modal-wrap hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="确认推送分支">
+    <div class="side-head"><h2>确认推送分支</h2><button type="button" class="x" data-close="pushModalWrap" aria-label="关闭">✕</button></div>
+    <div class="side-body">
+      <p class="muted" style="margin-top:0">推送为写远端操作，需显式确认：</p>
+      <p id="pushTarget" style="font-weight:600;margin:8px 0"></p>
+      <p class="muted" style="font-size:12px;margin-bottom:0">推送只更新远端与本地引用，不改工作区文件；同步不自动轮询、不后台重试（口径待确认）。</p>
+    </div>
+    <div class="side-foot">
+      <button type="button" class="btn" data-close="pushModalWrap">取消</button>
+      <button type="button" id="btnPushConfirm" class="btn primary">确认推送</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ============ 演示数据（mock，仅演示；正式实现走服务端接口） ============ */
+const STATUS_TEXT = { planned:"计划中", merging:"合并中", merged:"已合并", failed:"失败" };
+
+let versions = [
+  { id:"V-20260912-01", name:"v0.9.0-rc1", status:"merged", updatedAt:"2026-09-12 18:20",
+    desc:"首个内部试用版本：顶栏模块页签上移、搜索反馈条统一、发布模块流水线。",
+    items:[
+      { reqId:"REQ-20260910-012", title:"模块页签上移并入顶栏", commits:["3f8a1c2","7b9d0e1"], sel:"3f8a1c2" },
+      { reqId:"REQ-20260910-009", title:"统一搜索反馈条", commits:["c2d3e4f"], sel:"c2d3e4f" },
+      { reqId:"REQ-20260910-029", title:"发布模块（Git / Apple 流水线）", commits:["aa11bb2","cc33dd4","ee55ff6"], sel:"cc33dd4" },
+    ]},
+  { id:"V-20260912-02", name:"v1.0.0", status:"planned", updatedAt:"2026-09-13 08:05",
+    desc:"第一个正式版本候选：界面语言切换、定位组断行修复、待处理计数入口。",
+    items:[
+      { reqId:"REQ-20260911-005", title:"界面语言切换（中 ⇄ EN）", commits:["b1c2d3e"], sel:"b1c2d3e" },
+      { reqId:"BUG-20260911-001", title:"定位组换行断行复发", commits:["f4a5b6c","d7e8f9a"], sel:"f4a5b6c" },
+      { reqId:"REQ-20260906-024", title:"模型待处理计数入口", commits:["0aa1bb2"], sel:"0aa1bb2" },
+    ]},
+  { id:"V-20260912-03", name:"v1.1.0-热修", status:"failed", updatedAt:"2026-09-13 07:40",
+    failReason:"模拟：合并冲突 src/web/app.js（正式实现显示 git 输出摘要）",
+    desc:"紧急热修：快捷键在中文输入法组合输入期间误触发。",
+    items:[
+      { reqId:"BUG-20260910-007", title:"快捷键输入态保护", commits:["9e8d7c6"], sel:"9e8d7c6" },
+    ]},
+];
+
+const candidateItems = [
+  { id:"REQ-20260910-019", title:"营销模块（概览 / 定位定价 / 渠道 / 复盘）", commits:["1a2b3c4"] },
+  { id:"REQ-20260911-002", title:"营销 / 发布入口同口径暂态隐藏", commits:["5d6e7f8","9a0b1c2"] },
+  { id:"BUG-20260910-018", title:"定位组内搜索组全宽断行", commits:["3c4d5e6"] },
+  { id:"REQ-20260913-001", title:"构建模块（本条目，尚未提交）", commits:[] },
+];
+
+const branchData = {
+  current:"dev",
+  groups:[
+    { label:"本地分支", list:["dev","main","feat/version-plan"] },
+    { label:"远端分支", list:["origin/dev","origin/main","origin/feat/version-plan","origin/release/v0.9"] },
+  ],
+};
+function commitsFor(branch){
+  const pool = {
+    "dev":[["9e8d7c6","feat: 构建模块版本计划草稿（演示）","张三","2026-09-13 07:40"],["b1c2d3e","feat: 界面语言切换 REQ-20260911-005","李四","2026-09-12 16:02"],["f4a5b6c","fix: 定位组断行 BUG-20260911-001","张三","2026-09-12 10:31"],["0aa1bb2","feat: 模型待处理计数入口 REQ-20260906-024","王五","2026-09-11 19:44"]],
+    "main":[["7ff1e20","Merge branch 'dev'：v0.9.0-rc1","release-bot","2026-09-12 18:26"],["3f8a1c2","feat: 模块页签上移并入顶栏 REQ-20260910-012","李四","2026-09-10 15:12"],["c2d3e4f","feat: 统一搜索反馈条 REQ-20260910-009","张三","2026-09-10 11:08"]],
+  };
+  if (pool[branch]) return pool[branch].map(c=>({hash:c[0],subject:c[1],author:c[2],date:c[3]}));
+  const seed = [...branch].reduce((s,ch)=>s+ch.charCodeAt(0),0);
+  const subjects = ["chore: 同步依赖","feat: 模块渲染拆分","fix: 窄屏分栏回归","docs: 条目文档补全","refine: 批量完善"];
+  return subjects.map((s,i)=>({hash:(seed*7+i*13).toString(16).slice(0,7).padEnd(7,"a"),subject:s,author:i%2?"李四":"张三",date:"2026-09-1"+((i%9))+" 1"+i%6+":1"+i}));
+}
+
+/* ============ 通用：toast / 弹窗 ============ */
+const $ = (id)=>document.getElementById(id);
+function toast(msg, type="info"){
+  const t = document.createElement("div");
+  t.className = "toast "+type; t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(()=>t.remove(), 2600);
+}
+function openOverlay(id){ $(id).classList.remove("hidden"); }
+function closeOverlay(id){ $(id).classList.add("hidden"); }
+document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>closeOverlay(b.dataset.close)));
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape") document.querySelectorAll(".overlay:not(.hidden)").forEach(o=>o.classList.add("hidden")); });
+
+/* ============ 顶栏页签：仅构建可交互，其余给说明反馈 ============ */
+document.querySelectorAll(".view-tab").forEach(b=>{
+  b.addEventListener("click",()=>{
+    if(b.dataset.view==="build") return;
+    toast("UI 演示仅实现「构建」模块；正式实现中页签切换由 app.js setView() 统一驱动。","info");
+  });
+});
+
+/* ============ 子页签切换 ============ */
+function switchSub(which){
+  const v = which==="versions";
+  $("tabVersions").classList.toggle("active",v); $("tabVersions").setAttribute("aria-selected",v);
+  $("tabBranches").classList.toggle("active",!v); $("tabBranches").setAttribute("aria-selected",!v);
+  $("paneVersions").classList.toggle("hidden",!v);
+  $("paneBranches").classList.toggle("hidden",v);
+}
+$("tabVersions").addEventListener("click",()=>switchSub("versions"));
+$("tabBranches").addEventListener("click",()=>switchSub("branches"));
+
+/* ============ 数据状态（演示控制） ============ */
+let mode = "normal";       // normal | loading | empty | error | nogit
+let mergeSim = "ok";       // ok | fail
+let selectedVid = versions[1].id;
+let selectedBranch = branchData.current;
+let keyword = "";
+
+$("segMode").addEventListener("click",(e)=>{
+  const b = e.target.closest("button[data-mode]"); if(!b) return;
+  mode = b.dataset.mode;
+  $("segMode").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+  if(mode==="nogit" || mode==="empty") selectedBranch = branchData.current;
+  renderAll();
+});
+$("segMerge").addEventListener("click",(e)=>{
+  const b = e.target.closest("button[data-merge]"); if(!b) return;
+  mergeSim = b.dataset.merge;
+  $("segMerge").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+  toast(mergeSim==="ok"?"合并结果演示改为：成功":"合并结果演示改为：模拟失败（验证失败反馈与重试）","info");
+});
+
+/* ============ 搜索 ============ */
+$("searchInput").addEventListener("input",(e)=>{
+  keyword = e.target.value.trim().toLowerCase();
+  $("searchClear").classList.toggle("hidden",!keyword);
+  renderVersionList();
+});
+$("searchClear").addEventListener("click",()=>{ $("searchInput").value=""; keyword=""; $("searchClear").classList.add("hidden"); renderVersionList(); $("searchInput").focus(); });
+
+/* ============ 版本列表渲染 ============ */
+function filteredVersions(){
+  if(!keyword) return versions;
+  return versions.filter(v=>v.name.toLowerCase().includes(keyword)||v.id.toLowerCase().includes(keyword)||v.items.some(i=>i.reqId.toLowerCase().includes(keyword)));
+}
+function renderVersionState(){
+  const bar = $("versionStateBar"); bar.innerHTML="";
+  if(mode==="loading"){ bar.innerHTML='<div class="strip loading">◌ 正在加载版本列表…</div>'; }
+  if(mode==="error"){ const d=document.createElement("div"); d.className="strip error";
+    d.innerHTML="<span>接口失败（模拟）：无法加载版本列表。</span>"; const b=document.createElement("button");
+    b.className="btn small"; b.textContent="重试"; b.addEventListener("click",()=>{ mode="normal"; syncSeg(); renderAll(); toast("已重新加载（模拟）","ok"); });
+    d.appendChild(b); bar.appendChild(d); }
+}
+function renderVersionList(){
+  renderVersionState();
+  const ul = $("versionList"); ul.innerHTML="";
+  const empty = $("versionEmpty");
+  if(mode==="loading"){
+    empty.classList.add("hidden");
+    for(let i=0;i<3;i++){ const li=document.createElement("li"); li.innerHTML='<div class="skeleton" style="margin:0;width:100%"></div>'; ul.appendChild(li); }
+    return;
+  }
+  if(mode==="error"){ empty.classList.add("hidden"); return; }
+  if(mode==="nogit"){
+    empty.classList.remove("hidden");
+    empty.innerHTML='<h3>当前项目不是 git 仓库</h3><p>版本计划依赖 git 提交关联，请先完成 git 初始化（对齐 /api/git/init-dev 的非仓库拒绝口径）。</p>';
+    return;
+  }
+  const list = mode==="empty"?[]:filteredVersions();
+  if(!list.length){
+    empty.classList.remove("hidden");
+    empty.innerHTML = keyword
+      ? '<h3>没有匹配的版本</h3><p>换个关键词，或清空搜索恢复列表。</p>'
+      : '<h3>暂无版本计划</h3><p>点「＋ 新建版本」，按需求单 / Bug 单创建版本计划。</p>';
+    return;
+  }
+  empty.classList.add("hidden");
+  for(const v of list){
+    const li = document.createElement("li");
+    if(v.id===selectedVid) li.classList.add("selected");
+    li.innerHTML = '<span class="v-name">'+v.name+'</span><span class="chip '+v.status+'">'+STATUS_TEXT[v.status]+'</span>'
+      + '<span class="v-meta">'+v.items.length+' 单<br>'+v.updatedAt+'</span>';
+    li.addEventListener("click",()=>{ selectedVid=v.id; renderVersionList(); renderVersionDetail(); });
+    ul.appendChild(li);
+  }
+}
+
+/* ============ 版本详情渲染 ============ */
+function renderVersionDetail(){
+  const box = $("versionDetail");
+  const v = versions.find(x=>x.id===selectedVid);
+  if(mode==="loading"){ box.innerHTML='<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton" style="width:60%"></div>'; return; }
+  if(mode==="error"){ box.innerHTML='<div class="strip error" style="margin:0">加载版本详情失败（模拟）。</div>'; return; }
+  if(!v || mode==="nogit" || (mode==="empty")){ box.innerHTML='<p class="muted">选择左侧版本查看详情，或新建版本计划。</p>'; return; }
+
+  const locked = v.status==="merging";
+  const entryLock = locked || v.status==="merged"; // 已合并锁定条目增删：防合并记录失真（口径待确认，design.md 落实）
+  const failHtml = v.status==="failed" && v.failReason
+    ? '<div class="fail-box"><span>合并失败：'+v.failReason+'</span><button type="button" class="btn small" data-act="merge">重试合并</button></div>' : "";
+  const itemsHtml = v.items.map((it,idx)=>{
+    const opts = it.commits.map(h=>'<option value="'+h+'"'+(h===it.sel?" selected":"")+'>'+h+'</option>').join("");
+    return '<div class="item-row">'
+      + '<span class="mono" style="color:var(--primary)">'+it.reqId+'</span>'
+      + '<span class="title">'+it.title+'</span>'
+      + (it.commits.length
+          ? '<label class="muted" style="font-size:12px">commit <select data-item="'+idx+'" '+(locked?"disabled":"")+'>'+opts+'</select></label>'
+          : '<span class="no-commit">该条目暂无关联 commit（先完成开发提交）</span>')
+      + '<button type="button" class="btn small" data-remove="'+idx+'" '+(entryLock?"disabled":"")+'>移出</button>'
+      + '</div>';
+  }).join("") || '<p class="muted">尚未关联条目。</p>';
+
+  box.innerHTML =
+    '<div class="detail-head"><span class="v-name">'+v.name+'</span>'
+    + '<span class="chip '+v.status+'">'+STATUS_TEXT[v.status]+'</span>'
+    + '<span class="muted" style="font-size:12px;margin-left:auto">'+v.id+' · 更新 '+v.updatedAt+'</span></div>'
+    + failHtml
+    + '<div class="detail-section"><h3>版本信息（名称与描述可修改）</h3>'
+    +   '<div class="kv"><span class="k">名称</span><input id="edName" style="flex:1" value="'+v.name.replace(/"/g,"&quot;")+'" '+(locked?"disabled":"")+'></div>'
+    +   '<div class="kv" style="margin-top:8px"><span class="k">描述</span><textarea id="edDesc" class="desc" '+(locked?"disabled":"")+'>'+v.desc.replace(/&/g,"&amp;").replace(/</g,"&lt;")+'</textarea></div>'
+    +   '<div class="actions"><button type="button" class="btn small primary" data-act="save" '+(locked?"disabled":"")+'>保存信息</button></div>'
+    + '</div>'
+    + '<div class="detail-section"><h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>关联条目与 commit（按需求单 / Bug 单选择对应提交）</span><button type="button" class="btn small" data-act="additem" '+(entryLock?"disabled":"")+'>＋ 添加条目</button></h3>'+itemsHtml+'</div>'
+    + '<div class="detail-section"><h3>操作</h3><div class="actions">'
+    +   '<button type="button" class="btn" data-act="agent" '+(locked?"disabled":"")+'>提示词与回答回填</button>'
+    +   '<button type="button" class="btn danger" data-act="merge" '+(v.status==="merged"||locked?"disabled":"")+'>合并入 main</button>'
+    + '</div><p class="muted" style="font-size:12px;margin-bottom:0">合并为写操作：需确认后执行；合并中禁用编辑与重复触发；与 release 运行的互斥口径待确认。</p></div>';
+
+  box.querySelectorAll("select[data-item]").forEach(sel=>{
+    sel.addEventListener("change",()=>{ v.items[+sel.dataset.item].sel = sel.value; toast("已切换该条目参与合并的 commit："+sel.value,"info"); });
+  });
+  box.querySelectorAll("[data-act]").forEach(b=>b.addEventListener("click",()=>detailAction(b.dataset.act,v)));
+  box.querySelectorAll("[data-remove]").forEach(b=>b.addEventListener("click",()=>{
+    const removed=v.items.splice(+b.dataset.remove,1)[0];
+    v.updatedAt=now();
+    renderVersionList(); renderVersionDetail();
+    toast("已移出 "+removed.reqId+"（可重新添加）","info");
+  }));
+}
+
+function detailAction(act,v){
+  if(act==="save"){
+    const name=$("edName").value.trim(), desc=$("edDesc").value;
+    if(!name){ toast("版本名称不能为空","err"); return; }
+    v.name=name; v.desc=desc; v.updatedAt=now();
+    renderVersionList(); renderVersionDetail();
+    toast("✓ 版本信息已保存","ok");
+  } else if(act==="agent"){
+    const lines = v.items.map(it=>"  - "+it.reqId+"："+it.title+"（commit "+(it.sel||"未选择")+"）").join("\n");
+    $("promptText").value =
+      "请为以下版本计划拟定名称与描述。\n\n版本内条目与对应提交：\n"+lines+
+      "\n\n当前名称："+v.name+"\n当前描述："+(v.desc||"（空）")+
+      "\n\n输出格式（严格遵循两行标记，便于看板自动解析）：\n版本名称: <不超过 40 字>\n版本描述: <3–6 行要点，可换行>";
+    // 同一弹窗两段式：打开时重置下段回填区，等待粘贴 Agent 回答
+    $("answerText").value=""; $("parseFeedback").innerHTML=""; $("parsePreview").classList.add("hidden");
+    $("btnParse").classList.remove("hidden"); $("btnApplyParse").classList.add("hidden");
+    $("agentModalWrap").dataset.vid=v.id;
+    openOverlay("agentModalWrap");
+  } else if(act==="additem"){
+    openItemPicker(v);
+  } else if(act==="merge"){
+    $("mergeModalWrap").dataset.vid=v.id;
+    $("mergeCommitList").innerHTML = v.items.map(it=>'<li><span class="hash">'+(it.sel||"----")+'</span><span class="subject">'+it.reqId+' '+it.title+'</span></li>').join("");
+    openOverlay("mergeModalWrap");
+  }
+}
+
+/* ============ 条目勾选列表（新建版本 / 添加条目共用，支持全选 / 全不选） ============ */
+const newSel = new Map();
+let newListCtl = null;
+function checkListHtml(items, pfx){
+  return items.map((it,i)=>{
+    const opts = it.commits.map(h=>'<option value="'+h+'">'+h+'</option>').join("");
+    return '<div class="check-row"><input type="checkbox" id="'+pfx+i+'" data-i="'+i+'">'
+      + '<span class="cid">'+it.id+'</span><span class="title">'+it.title
+      + (it.commits.length
+          ? '<div class="cmt"><label class="muted" style="font-size:12px">commit <select data-c="'+i+'" disabled>'+opts+'</select></label></div>'
+          : '<div class="cmt"><span class="no-commit">暂无关联 commit，勾选后该条不可参与合并</span></div>')
+      + '</span></div>';
+  }).join("");
+}
+function bindCheckList(root, items, selMap, countEl){
+  const selectable = items.filter(i=>i.commits.length).length;
+  const updateCount = ()=>{ if(countEl) countEl.textContent = "已选 "+selMap.size+" / 可选 "+selectable+" 项"; };
+  const setChecked = (ck, checked)=>{
+    const it = items[+ck.dataset.i];
+    const sel = root.querySelector('select[data-c="'+ck.dataset.i+'"]');
+    if(checked){
+      if(!it.commits.length){ ck.checked=false; toast("「"+it.id+"」暂无关联 commit：先完成开发提交，再参与版本计划。","err"); return false; }
+      selMap.set(it.id,{item:it,commit:sel.value}); sel.disabled=false;
+    } else { selMap.delete(it.id); if(sel) sel.disabled=true; }
+    return true;
+  };
+  const all = (on)=>{
+    let picked=0, skipped=0;
+    items.forEach((it,i)=>{
+      const ck=root.querySelector('input[data-i="'+i+'"]');
+      if(on){
+        if(!it.commits.length){ ck.checked=false; skipped++; return; }
+        ck.checked=true; setChecked(ck,true); picked++;
+      } else { ck.checked=false; setChecked(ck,false); }
+    });
+    updateCount();
+    if(on) toast(skipped ? "已全选 "+picked+" 项；"+skipped+" 项暂无关联 commit 已跳过" : "✓ 已全选 "+picked+" 项", skipped?"info":"ok");
+    else toast("已清空选择","info");
+  };
+  root.querySelectorAll("input[type=checkbox]").forEach(ck=>{
+    ck.addEventListener("change",()=>{ setChecked(ck, ck.checked); updateCount(); });
+  });
+  root.querySelectorAll("select[data-c]").forEach(sel=>{
+    sel.addEventListener("change",()=>{ const it=items[+sel.dataset.c]; if(selMap.has(it.id)) selMap.get(it.id).commit=sel.value; });
+  });
+  updateCount();
+  return { all };
+}
+function renderNewPanel(){
+  $("newItemList").innerHTML = checkListHtml(candidateItems, "ck-n-");
+  newSel.clear();
+  newListCtl = bindCheckList($("newItemList"), candidateItems, newSel, $("selCount"));
+}
+$("btnSelAll").addEventListener("click",()=>{ if(newListCtl) newListCtl.all(true); });
+$("btnSelNone").addEventListener("click",()=>{ if(newListCtl) newListCtl.all(false); });
+
+/* ============ 版本条目添加（复用新建选择范式） ============ */
+const pickSel = new Map();
+let pickCtl = null, pickVid = null;
+function openItemPicker(v){
+  pickVid = v.id; pickSel.clear();
+  const list = candidateItems.filter(c=>!v.items.some(i=>i.reqId===c.id));
+  const listBox = $("pickItemList");
+  if(list.length){
+    listBox.innerHTML = checkListHtml(list, "ck-p-");
+    pickCtl = bindCheckList(listBox, list, pickSel, $("pickCount"));
+  } else {
+    listBox.innerHTML = '<p class="muted" style="margin:8px 0">候选条目已全部在本版本中（或暂无可选条目）。</p>';
+    $("pickCount").textContent = "已选 0 / 可选 0 项";
+    pickCtl = null;
+  }
+  $("pickPanelWrap").dataset.vid = v.id;
+  openOverlay("pickPanelWrap");
+}
+$("btnPickAll").addEventListener("click",()=>{ if(pickCtl) pickCtl.all(true); });
+$("btnPickNone").addEventListener("click",()=>{ if(pickCtl) pickCtl.all(false); });
+$("btnAddPicked").addEventListener("click",()=>{
+  const v = versions.find(x=>x.id===pickVid);
+  if(!v) return;
+  if(!pickSel.size){ toast("请至少选择一个条目","err"); return; }
+  let added=0;
+  for(const {item,commit} of pickSel.values()){
+    v.items.push({ reqId:item.id, title:item.title, commits:item.commits, sel:commit });
+    added++;
+  }
+  v.updatedAt=now();
+  closeOverlay("pickPanelWrap");
+  renderVersionList(); renderVersionDetail();
+  toast("✓ 已添加 "+added+" 个条目到 "+v.name,"ok");
+});
+$("btnNewVersion").addEventListener("click",()=>{
+  if(mode==="nogit"){ toast("当前项目不是 git 仓库：请先完成 git 初始化。","err"); return; }
+  if(mode==="error"){ toast("版本列表加载失败，请先重试。","err"); return; }
+  $("newVName").value=""; renderNewPanel(); openOverlay("newPanelWrap");
+});
+$("btnCreateVersion").addEventListener("click",()=>{
+  if(!newSel.size){ toast("请至少选择一个条目（未选条目不可创建）","err"); return; }
+  const name=$("newVName").value.trim();
+  if(!name){ toast("请填写版本名称（默认命名规则待确认）","err"); return; }
+  const v={ id:"V-20260913-"+String(versions.length+1).padStart(2,"0"), name, status:"planned", updatedAt:now(), desc:"",
+    items:[...newSel.values()].map(({item,commit})=>({reqId:item.id,title:item.title,commits:item.commits,sel:commit})) };
+  versions.unshift(v); selectedVid=v.id;
+  closeOverlay("newPanelWrap");
+  renderVersionList(); renderVersionDetail();
+  toast("✓ 已创建版本计划 "+name+"（计划中）","ok");
+});
+
+/* ============ 提示词与回答回填（同一弹窗两段式） ============ */
+$("btnCopyPrompt").addEventListener("click",async()=>{
+  const text=$("promptText").value;
+  try{ await navigator.clipboard.writeText(text); toast("✓ 提示词已复制到剪贴板","ok"); }
+  catch{ $("promptText").select(); toast("剪贴板不可用：已全选文本，请手动 ⌘/Ctrl+C 复制","info"); }
+});
+$("btnParse").addEventListener("click",()=>{
+  const raw=$("answerText").value;
+  const mN=raw.match(/^\s*版本名称\s*[:：]\s*(.+)$/m);
+  const mD=raw.match(/^\s*版本描述\s*[:：]\s*([\s\S]*?)(?:\n\s*\n|$)/m);
+  const fb=$("parseFeedback");
+  if(!mN && !mD){
+    fb.innerHTML='<div class="strip error" style="margin:0">解析失败：未找到「版本名称: / 版本描述:」标记。已粘贴原文保留，可修改后重试，或关闭改用手动编辑。</div>';
+    toast("解析失败（原文未丢失）","err"); return;
+  }
+  const v=versions.find(x=>x.id===$("agentModalWrap").dataset.vid);
+  window.__parse={ name:(mN?mN[1].trim():""), desc:(mD?mD[1].trim():"") };
+  $("pvOldName").textContent=v.name; $("pvNewName").textContent=window.__parse.name||"（未提供，保持原值）";
+  $("pvOldDesc").textContent=v.desc||"（空）"; $("pvNewDesc").textContent=window.__parse.desc||"（未提供，保持原值）";
+  $("parsePreview").classList.remove("hidden");
+  $("btnParse").classList.add("hidden"); $("btnApplyParse").classList.remove("hidden");
+  fb.innerHTML='<div class="strip loading" style="margin:0">解析成功，请对比预览后确认应用；应用前不覆盖原值。</div>';
+});
+$("btnApplyParse").addEventListener("click",()=>{
+  const v=versions.find(x=>x.id===$("agentModalWrap").dataset.vid);
+  if(window.__parse.name) v.name=window.__parse.name;
+  if(window.__parse.desc) v.desc=window.__parse.desc;
+  v.updatedAt=now();
+  closeOverlay("agentModalWrap");
+  renderVersionList(); renderVersionDetail();
+  toast("✓ 已按 Agent 回答更新版本名称与描述","ok");
+});
+
+/* ============ 合并入 main ============ */
+$("btnMergeConfirm").addEventListener("click",()=>{
+  const v=versions.find(x=>x.id===$("mergeModalWrap").dataset.vid);
+  closeOverlay("mergeModalWrap");
+  v.status="merging"; v.updatedAt=now();
+  renderVersionList(); renderVersionDetail();
+  toast("已开始合并入 main（合并中，操作已禁用）","info");
+  setTimeout(()=>{
+    if(mergeSim==="fail"){ v.status="failed"; v.failReason="模拟：合并冲突 src/web/app.js"; toast("✗ 合并入 main 失败（可重试）","err"); }
+    else { v.status="merged"; v.failReason=null; toast("✓ 已合并入 main："+v.name,"ok"); }
+    v.updatedAt=now();
+    renderVersionList(); renderVersionDetail();
+  },1200);
+});
+
+/* ============ 分支浏览 ============ */
+function renderBranchState(){
+  const bar=$("branchStateBar"); bar.innerHTML="";
+  if(mode==="loading") bar.innerHTML='<div class="strip loading">◌ 正在加载分支…</div>';
+}
+function renderBranchList(){
+  renderBranchState();
+  const ul=$("branchList"), empty=$("branchEmpty"); ul.innerHTML="";
+  if(mode==="nogit"){ empty.classList.remove("hidden"); $("commitList").innerHTML=""; $("commitTitle").textContent="提交记录"; return; }
+  empty.classList.add("hidden");
+  if(mode==="loading"){ for(let i=0;i<4;i++){ const li=document.createElement("li"); li.innerHTML='<div class="skeleton" style="margin:0;width:80%"></div>'; ul.appendChild(li);} $("commitList").innerHTML=""; return; }
+  if(mode==="error"){ const d=document.createElement("div"); d.className="strip error"; d.style.margin="10px 14px";
+    d.innerHTML="<span>分支加载失败（模拟）。</span>"; const b=document.createElement("button"); b.className="btn small"; b.textContent="重试";
+    b.addEventListener("click",()=>{ mode="normal"; syncSeg(); renderAll(); }); d.appendChild(b); bar.appendChild(d); ul.innerHTML=""; return; }
+  for(const g of branchData.groups){
+    const gi=document.createElement("li"); gi.className="branch-group"; gi.style.padding="0";
+    gi.innerHTML='<div class="group-label">'+g.label+'</div>'; ul.appendChild(gi);
+    for(const br of g.list){
+      const li=document.createElement("li");
+      if(br===selectedBranch) li.classList.add("selected");
+      li.innerHTML='<span>'+br+'</span>'+(br===branchData.current?'<span class="badge-current">当前</span>':'')
+        + (g.label==="本地分支" ? '<button type="button" class="btn small push-btn" data-push="'+br+'">推送</button>' : '');
+      li.addEventListener("click",()=>{ selectedBranch=br; renderBranchList(); renderCommits(); });
+      ul.appendChild(li);
+    }
+  }
+}
+function renderCommits(){
+  const ul=$("commitList"); ul.innerHTML="";
+  const bar=$("commitStateBar"); bar.innerHTML="";
+  if(mode==="nogit"){ $("commitTitle").textContent="提交记录"; return; }
+  $("commitTitle").textContent="提交记录 · "+selectedBranch;
+  if(mode==="loading"){ bar.innerHTML='<div class="strip loading">◌ 正在加载 '+selectedBranch+' 的提交记录…</div>'; return; }
+  if(mode==="error"){ bar.innerHTML='<div class="strip error">提交记录加载失败（模拟）。</div>'; ul.innerHTML=""; return; }
+  const list=commitsFor(selectedBranch);
+  if(!list.length){ ul.innerHTML='<li class="muted" style="display:block">该分支暂无提交记录。</li>'; return; }
+  for(const c of list){
+    const li=document.createElement("li");
+    li.innerHTML='<span class="hash">'+c.hash+'</span><span class="subject">'+c.subject+'</span><span class="who">'+c.author+' · '+c.date+'</span>';
+    ul.appendChild(li);
+  }
+}
+$("btnRefreshBranches").addEventListener("click",()=>{
+  if(mode==="nogit"){ toast("当前项目不是 git 仓库。","err"); return; }
+  renderBranchList(); renderCommits(); toast("已刷新（模拟）","ok");
+});
+
+/* ============ 分支同步（同步远端 fetch / 推送本地分支，显式触发的受限写操作） ============ */
+let syncing=false, pushBranch=null;
+$("btnSyncBranches").addEventListener("click",()=>{
+  if(mode==="nogit"){ toast("当前项目不是 git 仓库。","err"); return; }
+  if(syncing) return;
+  syncing=true;
+  $("btnSyncBranches").disabled=true; $("btnRefreshBranches").disabled=true;
+  $("branchStateBar").innerHTML='<div class="strip loading">◌ 正在同步远端（fetch 拉取最新分支与提交信息）…</div>';
+  setTimeout(()=>{
+    syncing=false;
+    $("btnSyncBranches").disabled=false; $("btnRefreshBranches").disabled=false;
+    const remote=branchData.groups.find(g=>g.label==="远端分支");
+    if(mode!=="nogit" && remote && !remote.list.includes("origin/feat/login-flow")) remote.list.push("origin/feat/login-flow");
+    renderBranchList(); renderCommits();
+    toast("✓ 已同步远端：远端分支与提交信息已更新","ok");
+  },1200);
+});
+$("branchList").addEventListener("click",(e)=>{
+  const b=e.target.closest("[data-push]"); if(!b) return;
+  if(mode==="nogit") return;
+  if(syncing){ toast("正在同步远端，请稍候再推送。","info"); return; }
+  pushBranch=b.dataset.push;
+  const tracked=branchData.groups.some(g=>g.list.includes("origin/"+pushBranch));
+  $("pushTarget").textContent="将把本地分支 "+pushBranch+" 推送到 origin/"+pushBranch+(tracked?"（更新远端已有分支）":"（首推，建立上游跟踪）");
+  openOverlay("pushModalWrap");
+});
+$("btnPushConfirm").addEventListener("click",()=>{
+  if(!pushBranch) return;
+  const br=pushBranch; pushBranch=null;
+  closeOverlay("pushModalWrap");
+  toast("正在推送 "+br+" …","info");
+  setTimeout(()=>{
+    const remote=branchData.groups.find(g=>g.label==="远端分支");
+    if(mode!=="nogit" && remote && !remote.list.includes("origin/"+br)) remote.list.push("origin/"+br);
+    renderBranchList(); renderCommits();
+    toast("✓ 已推送 "+br+" 到 origin/"+br,"ok");
+  },1000);
+});
+
+/* ============ 深浅色 ============ */
+const prefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+function applyTheme(){ /* html[data-theme] 由 toggle 设置；初始跟随系统 */ }
+if(prefersDark.matches) document.documentElement.dataset.theme="dark";
+$("btnTheme").addEventListener("click",()=>{
+  const html=document.documentElement;
+  html.dataset.theme = html.dataset.theme==="dark" ? "light" : "dark";
+  toast("已切换为"+(html.dataset.theme==="dark"?"深色":"浅色"),"info");
+});
+
+/* ============ 汇总渲染 ============ */
+function syncSeg(){ $("segMode").querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.mode===mode)); }
+function now(){ const d=new Date(); const p=n=>String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes()); }
+function renderAll(){ renderVersionList(); renderVersionDetail(); renderBranchList(); renderCommits(); }
+renderAll();
+</script>
+</body>
+</html>

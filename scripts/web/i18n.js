@@ -775,9 +775,14 @@ const EN_DYNAMIC = {
   '⚑ Agent 已上报完成◇，请人工测试。': '⚑ Agent reported completion$1; please test manually.',
   '⚠ 图片加载失败：◇（超过 8MB 或读取异常）': '⚠ Image failed to load: $1 (over 8MB or read error)',
   '⚠ 文件横幅初始化失败：◇': '⚠ File banner failed to initialize: $1',
-  '✓ ◇ 已◇': '✓ $1 $2',
+  // BUG-20260912-004：泛化兜底词条 '✓ ◇ 已◇' 移除——其英文模板 '✓ $1 $2' 无 ASCII 锚点，
+  // 反向模式会命中纯中文提示并自馈叠字（「已已已…确认完成」）；具体动作标签一律用精确
+  // 双向词条（✓ ◇ 已确认完成 / 已接受 / 已移出计划 / 下方两条驳回提示等），
+  // 未收录标签按「未命中保持原文」降级原则处理（该源码模板片段见 ALLOWLIST 豁免说明）。
   '✓ ◇ 已接受': '✓ $1 accepted',
   '✓ ◇ 已移出计划': '✓ $1 removed from plan',
+  '✓ ◇ 已驳回完成（退回开发）': '✓ $1 rejected completion (back to development)',
+  '✓ ◇ 已驳回接受（退回待接受）': '✓ $1 rejected acceptance (back to pending)',
   '✓ ◇ 标题与描述已更新': '✓ $1 title & description updated',
   '✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（完善任务 ◇，候选 ◇，子代理模式；状态：待启动）': '✓ Task created and prompt copied; paste it into a session of the corresponding project (refine task $1, $2 candidates, subagent mode; status: prepared)',
   '✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（批次 ◇ 已加入队列，排第 ◇ 位，当前批次结束后自动开始）': '✓ Task created and prompt copied; paste it into a session of the corresponding project (batch $1 queued at position $2; starts automatically after the current batch)',
@@ -969,6 +974,11 @@ const ALLOWLIST = {
   '## 描述': 'markdown 章节定位逻辑键（编辑面板提取/替换 README 节），非界面展示文案',
   '## 现象': 'markdown 章节定位逻辑键（Bug README 节），非界面展示文案',
   'Switch to English · 当前：中文': '语言按钮初始悬浮提示本身即双语；运行时由 applyLang 直接改写，无需词典',
+  // BUG-20260912-004：app.js「✓ ${id} 已${label}」toast 模板的源码形态，键值随 label 动态实例化，
+  // 不作为词典键直译。具体标签均有精确 EN_DYNAMIC 词条（已确认完成 / 已接受 / 已移出计划 /
+  // 已驳回完成（退回开发） / 已驳回接受（退回待接受））；原泛化兜底键 '✓ ◇ 已◇' 因反向模式
+  // 无英文锚点会自匹配中文提示叠字而移除，新增未收录标签按「未命中保持原文」降级。
+  '✓ ◇ 已◇': 'toast 动态模板源码形态（label 动态），具体标签各有精确词条；泛化兜底键因反向自匹配叠字移除（BUG-20260912-004）',
 };
 
 // ---------- 运行时 ----------
