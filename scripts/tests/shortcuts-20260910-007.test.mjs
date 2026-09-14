@@ -71,7 +71,7 @@ const INITIALLY_HIDDEN = [
   '#reqView', '#board', '#emptyState', '#filterBar', '#docHits', '#fileView', '#oncallView',
   '#oncallLightbox', '#runsView', '#globalPanel', '#settingsView', '#modalWrap', '#projModalWrap',
   '#shortcutHelpWrap', '#mask', '#shotPreview', '#editModalWrap',,
-  '#holdPanel',
+  '#holdPanel', '#confirmPanel',
 ];
 
 function setup({ board = defaultBoard() } = {}) {

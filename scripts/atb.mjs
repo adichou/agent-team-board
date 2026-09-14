@@ -19,6 +19,7 @@ import * as taskSettings from './lib/task-settings.mjs';
 import * as growth from './lib/growth-store.mjs';
 import * as hold from './lib/hold-store.mjs';
 import * as holdStates from './lib/hold-states.mjs';
+import * as confirmStore from './lib/confirm-store.mjs';
 import * as gitFlow from './lib/git-flow.mjs';
 
 const args = process.argv.slice(2);
@@ -83,6 +84,10 @@ const USAGE = `atb —— 智能体团队看板 CLI
   atb hold resume <ID> [--by 人工]             人工复工（决策齐备 → 条目回已计划队列重新取单）
   atb hold cancel <ID> [--note 说明] [--by 人工]
                                                人工作废声明（条目状态不变）
+  atb confirm list [--all]                     挂起确认清单（自动提交不完整 / AI 分析问题；REQ-20260914-001）
+  atb confirm show <ID>                        单条详情（文件状态 / 问题与作答 / 核验结果 / 事件留痕）
+  atb refine hold <RUN-ID> --reason 短句 (--question 问题)... [--background 背景]
+                                               worker 声明分析挂起（待人工确认分析；队列随声明暂停）
   atb list [--type req|bug] [--status <状态>]  列出条目（--json 输出 JSON）
   atb show <ID>                                查看条目详情（--json 输出 JSON）
   atb move <BUG-ID> [--req <REQ-ID>|--standalone]
@@ -374,6 +379,11 @@ async function main() {
 
   if (cmd === 'hold') {
     await holdCmd(rest);
+    return;
+  }
+
+  if (cmd === 'confirm') {
+    await confirmCmd(rest);
     return;
   }
 
@@ -830,6 +840,8 @@ const REFINE_USAGE = `用法：
   atb refine next [--batch ID] [--by 会话]      子 Agent 领取一项（refine 互斥；实时吸收新接受的单）
   atb refine done <RUN-ID> --summary <要点>     完成回执（须真实改过条目文档）
   atb refine fail <RUN-ID> --reason <短句>      失败回执
+  atb refine hold <RUN-ID> --reason <短句> (--question <问题>)... [--background <背景>]
+                                               声明分析挂起（REQ-20260914-001：待人工确认分析，队列暂停）
   atb refine release <RUN-ID> [--reason 短句]   释放未回执的预留
   atb refine check [--batch ID]                 主调度最小核对（≤2KiB）
   atb refine summary [--batch ID]               批次摘要
@@ -947,6 +959,25 @@ async function refineCmd(rest) {
       }
     }
     console.log(JSON.stringify(receipt));
+    return;
+  }
+
+  if (sub === 'hold') {
+    // REQ-20260914-001 分析挂起：worker 遇到必须人工确认的问题时声明（非人工专属）
+    const { pos, opts } = parseOpts(subRest, new Set(['reason', 'background', 'by']));
+    if (!pos[0] || !opts.reason) die('用法：atb refine hold <RUN-ID> --reason "<短句>" (--question "<问题一>")... [--background "<背景>"] [--by 会话]');
+    const questions = collectRepeated(subRest, 'question', []).map((text) => ({ text }));
+    if (!questions.length) die('声明必须携带至少一个问题（--question，可重复传入）');
+    const r = refine.declareRefineHold(dataDir, pos[0], {
+      reason: opts.reason,
+      background: opts.background || '',
+      questions,
+      by: opts.by || undefined,
+    });
+    if (jsonOut) { console.log(JSON.stringify(r)); return; }
+    console.log(`✓ 已声明 ${r.itemId} 待人工确认分析（第 ${r.round} 轮，${r.total} 项问题），完善队列已暂停`);
+    console.log('  人工确认视图：Status Board 任务页「待人工确认」· atb confirm list · 条目目录 confirmations.md');
+    console.log('  下一步：结束本轮子代理（不写 done）；人工作答确认后，答案会随续跑领取回传当前条目');
     return;
   }
 
@@ -1210,6 +1241,82 @@ async function holdCmd(rest) {
   }
 
   die(`未知子命令：hold ${sub}\n\n${HOLD_USAGE}`);
+}
+
+// ---------- REQ-20260914-001 挂起确认（自动提交不完整 / AI 分析问题）：confirm 子命令 ----------
+// 只读呈现入口（list / show）：人工操作（重新核验 / 保持挂起 / 作答 / 确认并继续）为 Status Board
+// 任务页专属，不经 CLI 提供（与 hold 决策作答同口径：人工专属入口集中、Agent 不可代操作）。
+
+const CONFIRM_USAGE = `用法：
+  atb confirm list [--all]        挂起确认清单（缺省仅活动项：待确认/已确认续跑）
+  atb confirm show <ID>           单条详情（文件与差异入口 / 问题与作答 / 核验结果）`;
+
+async function confirmCmd(rest) {
+  const [sub, ...subRest] = rest;
+  const dataDir = core.requireDataDir(cwd);
+  if (!sub || sub === 'help' || sub === '--help') {
+    console.log(CONFIRM_USAGE);
+    return;
+  }
+  const projectRoot = path.resolve(dataDir, '..', '..');
+
+  if (sub === 'list') {
+    const { opts } = parseOpts(subRest, new Set(['all']));
+    const r = confirmStore.listConfirms(dataDir, { all: opts.all === true, projectRoot });
+    const legacy = opts.all ? [] : confirmStore.legacyConfirmViews(dataDir, projectRoot);
+    if (jsonOut) {
+      console.log(JSON.stringify({ count: r.count + legacy.length, items: [...r.items, ...legacy] }));
+      return;
+    }
+    if (!r.items.length && !legacy.length) {
+      console.log(opts.all ? '（无挂起确认记录）' : '（当前没有待人工确认的挂起条目）');
+      return;
+    }
+    console.log(`待人工确认（活动 ${r.count}${legacy.length ? ` · 历史恢复 ${legacy.length}` : ''}）：`);
+    for (const it of [...r.items, ...legacy]) {
+      console.log(`  ⚠ ${it.itemId}  ${truncate(it.title, 28)}  [${it.kindLabel} · ${it.blockTypeLabel} · ${it.stateLabel}]  已等待 ${confirmStore.waitingText(it.declaredAt)}${it.legacy ? '  (历史账本恢复)' : ''}`);
+      if (it.kind === 'develop') {
+        console.log(`    已提交 ${it.committedCount} 组 · 待人工 ${it.pendingCount} 路径${it.reason ? ` · ${truncate(it.reason, 44)}` : ''}`);
+      } else {
+        const miss = Array.isArray(it.unansweredRequired) ? it.unansweredRequired.length : 0;
+        console.log(`    必答未答 ${miss}/${it.total}${it.reason ? ` · ${truncate(it.reason, 44)}` : ''}`);
+      }
+    }
+    return;
+  }
+
+  if (sub === 'show') {
+    const { pos } = parseOpts(subRest, new Set());
+    if (!pos[0]) die('用法：atb confirm show <ID>');
+    const d = confirmStore.confirmDetail(dataDir, pos[0], { projectRoot });
+    if (jsonOut) { console.log(JSON.stringify(d)); return; }
+    console.log(`${d.itemId} ${d.title}  [${d.kindLabel} · ${d.blockTypeLabel} · ${d.stateLabel}]（第 ${d.round} 轮，历史 ${d.archivedRounds} 轮）`);
+    console.log(`  声明：${d.declaredAt}（${d.declaredBy}）${d.runId ? ` · 运行 ${d.runId}` : ''} · 已等待 ${confirmStore.waitingText(d.declaredAt)}`);
+    if (d.reason) console.log(`  原因：${d.reason}`);
+    if (d.kind === 'develop') {
+      if (d.committedCount != null) console.log(`  已提交 ${d.committedCount} 组 · 待人工 ${d.pendingCount} 路径（补交 ${d.supplementCommits.length} 组）`);
+      for (const f of d.files || []) console.log(`    - ${f.path}  ${f.state}`);
+      if (d.verify && d.verify.lastCheckAt) {
+        console.log(`  最近核验：${d.verify.ok ? '通过' : '未通过'}`);
+        for (const rsn of d.verify.reasons || []) console.log(`    - ${rsn}`);
+      }
+    } else {
+      if (d.background) console.log(`  背景：${d.background}`);
+      console.log(`  问题（必答未答 ${Array.isArray(d.unansweredRequired) ? d.unansweredRequired.length : d.unansweredRequired}/${d.total}）：`);
+      for (const q of d.questions || []) {
+        console.log(`    ${q.answer ? '✓' : '○'} ${q.id} ${q.text}${q.required ? '' : '（选答）'}`);
+        for (const o of q.options || []) console.log(`        - ${o.label}${o.recommended ? '（推荐）' : ''}${o.impact ? `：${truncate(o.impact, 40)}` : ''}`);
+        if (q.answer) console.log(`        → ${truncate(q.answer, 60)}（${q.answeredBy || '?'}）`);
+      }
+    }
+    for (const e of (d.events || []).slice(-8)) {
+      console.log(`    · ${String(e.at).slice(0, 19).replace('T', ' ')} ${e.kind}${e.by ? `（${e.by}）` : ''}${e.note ? `：${truncate(e.note, 44)}` : ''}`);
+    }
+    console.log('  人工操作入口：Status Board 任务页「待人工确认」（重新核验 / 保持挂起 / 确认并继续）');
+    return;
+  }
+
+  die(`未知子命令：confirm ${sub}\n\n${CONFIRM_USAGE}`);
 }
 
 // ---------- 批量开发（REQ-20260906-002；REQ-20260908-010 改名）：batch / run 子命令 ----------

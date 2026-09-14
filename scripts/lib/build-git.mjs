@@ -1,8 +1,9 @@
 // REQ-20260913-001 构建模块 Git 执行层（build-git）—— server.mjs 使用，全部 spawnSync 本机 git。
 // 只提供 design.md 落定的六类操作：分支列表（只读）、分支提交记录（只读）、同步远端
-// fetch --all --prune（受限写）、推送分支 push（受限写，首推建立上游）、合并入 main
-//（受限写：临时工作树隔离执行 + 逐条目 --no-ff 合并 + 冲突即 abort，不触碰当前工作区）。
-// 除此外不提供任何 git 写操作（无 pull / rebase / 删分支 / 改历史）。
+//（受限写：BUG-20260914-011 起 = fetch --all --prune 后推送除 main 外的本地开发分支，
+// 使本地与远端记录一致；main 归发布模块，不在此推送）、推送分支 push（受限写，首推建立
+// 上游）、合并入 main（受限写：临时工作树隔离执行 + 逐条目 --no-ff 合并 + 冲突即 abort，
+// 不触碰当前工作区）。除此外不提供任何 git 写操作（无 pull / rebase / 删分支 / 改历史 / --force）。
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -50,32 +51,39 @@ export function assertRefName(branch) {
   return name;
 }
 
-// 只读：当前分支 + 本地分支 + 远端分支（origin/xxx 短名；排除 origin/HEAD 指针）。
+// 只读：当前分支 + 本地分支 + 远端分支（origin/xxx 短名；排除 origin/HEAD 指针）+ 已配置远端名。
+// BUG-20260914-006：remotes（git remote，本地配置读、非网络）供前端区分
+// 「未配置远端」/「已配置但本地无跟踪引用」/「同步成功后仍为空 = 远端仓库为空」三种空态。
 export function listBranches(root) {
-  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [] };
+  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [], remotes: [] };
   const current = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim() || null;
   const local = String(gitRaw(root, ['branch', '--format=%(refname:short)']).stdout || '')
     .split('\n').map((s) => s.trim()).filter(Boolean);
   const remote = String(gitRaw(root, ['branch', '-r', '--format=%(refname:short)']).stdout || '')
     .split('\n').map((s) => s.trim())
     .filter((s) => s && !s.endsWith('/HEAD'));
-  return { isRepo: true, current, local, remote };
+  return { isRepo: true, current, local, remote, remotes: remoteNames(root) };
 }
 
-// 只读：指定分支最近提交记录（hash / 短 hash / 说明 / 作者 / 时间）。
-export function branchLog(root, branch, limit = 50) {
+// 只读：指定分支提交记录（分页，新→旧）。BUG-20260914-009：放开原「默认 50 / 上限 200 且无翻页」
+// 截断——limit 缺省 50、归一 clamp [1,500]；offset 缺省 0、负数归 0（git log -n + --skip 偏移）；
+// 附 rev-list --count 总数 total，响应 { branch, commits, total, limit, offset }，
+// offset ≥ total 时返回空页（前端按 total 计算页码不会请求，接口层保持宽容不报错）。
+export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   const ref = assertRefName(branch);
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
-  const n = Math.max(1, Math.min(200, Number(limit) || 50));
+  const n = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
+  const skip = Math.max(0, Math.floor(Number(offset) || 0));
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
-  const out = gitOk(root, ['log', ref, `-n`, String(n), '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '读取提交记录');
+  const total = Number(gitOk(root, ['rev-list', '--count', ref], '统计提交总数').trim()) || 0;
+  const out = gitOk(root, ['log', ref, '-n', String(n), '--skip', String(skip), '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '读取提交记录');
   const commits = [];
   for (const line of out.split('\n')) {
     if (!line.trim()) continue;
     const [hash, short, author, date, ...rest] = line.split('\t');
     commits.push({ hash, short, author, date, subject: rest.join('\t') });
   }
-  return { branch: ref, commits };
+  return { branch: ref, commits, total, limit: n, offset: skip };
 }
 
 // 受限写：同步远端（fetch --all --prune；附带清理失效远端分支引用——design.md 落定口径）。
@@ -85,6 +93,32 @@ export function fetchRemote(root) {
   const output = String(r.stderr || r.stdout || '').trim();
   if (r.status !== 0) throw new AtbError(`同步远端失败：${output.split('\n').filter(Boolean).slice(0, 4).join('；')}`.slice(0, 400));
   return { ok: true, output: output.slice(0, 800) };
+}
+
+// 受限写：与远端同步（BUG-20260914-011 design.md 落定口径）——先 fetch --all --prune（失败即
+// 整体抛错，不进推送），再推送除 main 外的全部本地分支（main 归发布模块管理，不在此推送；
+// 未建上游的首推 -u 建立跟踪），使本地与远端记录一致。单分支推送失败不中断其他分支，逐条
+// 收集结果（failed 含原因）；不用 --force、不强推——远端领先（非快进被拒）时该分支计入
+// failed 并携带 git 原因，不自动改写本地历史。远端未显式指定时 origin 优先、否则取已配置
+// 远端第一个（与分支行推送确认框默认一致）。
+export function syncRemote(root, { remote } = {}) {
+  fetchRemote(root); // 前置校验（非 git 仓库）+ fetch 失败整体报错口径复用
+  const remotes = remoteNames(root);
+  if (!remotes.length) throw new AtbError('尚未配置远端（git remote add origin <url>），无法与远端同步');
+  const rm = String(remote || '').trim();
+  const target = rm && remotes.includes(rm) ? rm : (remotes.includes('origin') ? 'origin' : remotes[0]);
+  const pushed = [];
+  const failed = [];
+  const skipped = [];
+  for (const branch of listBranches(root).local) {
+    if (branch === 'main') { skipped.push(branch); continue; } // main：发布模块受控推送
+    try {
+      pushed.push({ branch, ...pushBranch(root, { remote: target, branch }) });
+    } catch (e) {
+      failed.push({ branch, error: String(e && e.message ? e.message : e).slice(0, 300) });
+    }
+  }
+  return { ok: failed.length === 0, remote: target, fetch: { ok: true }, pushed, failed, skipped };
 }
 
 function remoteNames(root) {

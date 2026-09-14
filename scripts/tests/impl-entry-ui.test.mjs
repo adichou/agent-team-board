@@ -240,6 +240,7 @@ t('E10 Esc 链（REQ-20260907-004）：任务模块为页面不被 Esc 关闭；
   h.document.querySelector('#editModalWrap').classList.add('hidden');
   // REQ-20260911-007：人工决策侧拉面板初始隐藏桩（对齐 index.html 初始态，Esc 链读取其显隐）
   h.document.querySelector('#holdPanel').classList.add('hidden');
+  h.document.querySelector('#confirmPanel').classList.add('hidden'); // REQ-20260914-001 挂起确认面板初始隐藏
   h.run('syncImpl(false)');
   h.state.impl.selected = new Set(['REQ-20990101-001']);
   await h.run("gotoRuns('develop')");

@@ -155,15 +155,18 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.equal(got.description, '首个版本');
     assert.equal(got.items[0].commit, commit1);
 
-    // S5 candidates：git 历史消息含单号 → 候选含条目与 commit；无提交条目 commits 为空
+    // S5 candidates：无提交条目 commits 为空；BUG-20260914-004：已纳入版本（S2 已把 REQ A
+    // 纳入 vid）的条目在源头收窄不出现，totalDone 反映占用过滤前 done 总数（commit 关联
+    // 展示口径由 bug-build-candidate-occupied-20260914-004.test.mjs B1 覆盖）
     r = await req(port, 'GET', `/api/build/candidates${P}`);
     assert.equal(r.status, 200);
     const cand = r.json.items;
     const cA = cand.find((x) => x.itemId === reqA.id);
     const cB = cand.find((x) => x.itemId === reqB.id);
-    assert.ok(cA && cA.commits.includes(commit1), 'candidates 应含 REQ A 与其 commit');
+    assert.ok(!cA, '已纳入版本的条目不再进入候选（BUG-20260914-004）');
     assert.ok(cB && cB.commits.length === 0, '无提交条目 commits 为空');
     assert.equal(cB.title, '演示需求二');
+    assert.equal(r.json.totalDone, 2, 'totalDone 为占用过滤前 done 总数');
 
     // S4 条目增删：移出可再加；重复添加 400
     r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'remove', itemIds: [reqA.id] });
@@ -190,6 +193,46 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=--upload-pack%3Devil`);
     assert.equal(r.status, 400, '非法 ref 拒绝');
 
+    // S8b BUG-20260914-009 分页：独立分支 long 造 62 个提交（commit-tree 不动工作区），
+    // 验证默认 50 + total、limit/offset 跨页取数、翻到分支首个提交、非法参数归一、超界空页
+    git(projA, ['branch', 'long', 'dev']);
+    {
+      let parent = git(projA, ['rev-parse', 'long']);
+      const tree = git(projA, ['rev-parse', 'long^{tree}']);
+      for (let i = 1; i <= 62; i++) {
+        parent = git(projA, ['commit-tree', tree, '-p', parent, '-m', `bulk ${i}`]);
+        git(projA, ['update-ref', 'refs/heads/long', parent]);
+      }
+    }
+    // long 总数 = dev 既有 2 个（init + feat）+ bulk 62 = 64
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.total, 64, '默认响应带 total 总数');
+    assert.equal(r.json.limit, 50, '默认 limit=50');
+    assert.equal(r.json.offset, 0, '默认 offset=0');
+    assert.equal(r.json.commits.length, 50, '缺省仍取最近 50 条（首屏兼容口径）');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=20&offset=40`);
+    assert.equal(r.json.total, 64, '分页响应 total 不变');
+    assert.equal(r.json.commits.length, 20, 'limit=20&offset=40 取 20 条');
+    assert.equal(r.json.commits[0].subject, 'bulk 22', 'offset 偏移后从第 41 新条开始（新→旧）');
+    assert.equal(r.json.commits[19].subject, 'bulk 3', '页尾为第 60 新条');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=50&offset=62`);
+    assert.equal(r.json.commits.length, 2, '末页只剩 2 条');
+    assert.equal(r.json.commits[1].subject, 'init', '可翻到分支首个提交');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=10000`);
+    assert.equal(r.json.limit, 500, '超大 limit 归一到上限 500（>200 旧顶不再截断）');
+    assert.equal(r.json.commits.length, 64, 'limit 上限内 64 条全量可达');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=-5`);
+    assert.equal(r.json.limit, 1, '负数 limit 归一为 1');
+    assert.equal(r.json.commits.length, 1, '归一后返回 1 条');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&limit=abc&offset=-3`);
+    assert.equal(r.json.limit, 50, '非数字 limit 走缺省 50');
+    assert.equal(r.json.offset, 0, '负数 offset 归一为 0');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&offset=1000`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.commits, [], 'offset 超过 total 返回空页不报错');
+    assert.equal(r.json.total, 64, '超界响应 total 仍正确');
+
     // S6 合并入 main：成功置 merged、逐条 mergedAt、main 含所选提交、切回原分支 dev
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
     assert.equal(r.status, 200, `合并应成功：${r.text}`);
@@ -204,19 +247,29 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'add', items: [{ itemId: reqB.id, commit: commit1 }] });
     assert.equal(r.status, 409, '已合并锁定增删');
 
-    // S9 push / fetch：首推建立上游 → 远端分组出现 origin/dev；fetch 幂等成功
+    // S9 push / sync：首推建立上游 → 远端分组出现 origin/dev；sync（BUG-20260914-011：
+    // fetch + push）幂等补推其余开发分支（long 未手动推送，由 sync 上传），main 不推
     r = await req(port, 'POST', `/api/build/push${P}`, { remote: 'origin', branch: 'dev' });
     assert.equal(r.status, 200, `推送应成功：${r.text}`);
     assert.equal(r.json.setUpstream, true, '首推建立上游跟踪');
     assert.match(git(projA, ['rev-parse', '--abbrev-ref', 'dev@{upstream}']), /origin\/dev/);
     r = await req(port, 'GET', `/api/build/branches${P}`);
     assert.ok(r.json.remote.includes('origin/dev'), '远端分组出现 origin/dev');
-    r = await req(port, 'POST', `/api/build/fetch${P}`, {});
-    assert.equal(r.status, 200, 'fetch 同步成功');
+    r = await req(port, 'POST', `/api/build/sync${P}`, {});
+    assert.equal(r.status, 200, `同步应成功：${r.text}`);
+    assert.equal(r.json.ok, true, `同步无失败分支：${JSON.stringify(r.json.failed)}`);
+    assert.ok(r.json.pushed.some((x) => x.branch === 'dev'), 'dev 幂等再推送（up-to-date）');
+    assert.equal(r.json.pushed.find((x) => x.branch === 'dev').setUpstream, false, '已有上游不再 -u');
+    assert.ok(r.json.pushed.some((x) => x.branch === 'long'), 'long 未手动推送，由 sync 补推');
+    assert.equal(r.json.pushed.find((x) => x.branch === 'long').setUpstream, true, 'long 首推建立跟踪');
+    assert.deepEqual(r.json.skipped, ['main'], 'main 不在同步推送范围（发布模块管理）');
+    r = await req(port, 'GET', `/api/build/branches${P}`);
+    assert.ok(r.json.remote.includes('origin/long'), 'sync 后远端分组出现 origin/long');
+    assert.ok(!r.json.remote.includes('origin/main'), 'main 未被同步推送');
 
     // S7 合并隔离：脏工作区不阻塞（合并在临时工作树执行、不触碰当前工作区），未提交改动保留；
     // release git 运行互斥 409
-    core.createItem(dataDirA, { type: 'bug', title: '演示缺陷', by: 'test' });
+    const bugC = core.createItem(dataDirA, { type: 'bug', title: '演示缺陷', by: 'test' });
     fs.writeFileSync(path.join(projA, 'f2.txt'), 'fix\n');
     git(projA, ['add', '-A']);
     git(projA, ['commit', '-m', `fix: 演示缺陷 BUG 候选`]);
@@ -253,7 +306,7 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.match(r.json.error || '', /git|仓库/);
     r = await req(port, 'POST', `/api/build/push${PB}`, { remote: 'origin', branch: 'dev' });
     assert.equal(r.status, 400);
-    r = await req(port, 'POST', `/api/build/fetch${PB}`, {});
+    r = await req(port, 'POST', `/api/build/sync${PB}`, {});
     assert.equal(r.status, 400);
     r = await req(port, 'GET', '/build.js');
     assert.equal(r.status, 200, '静态 build.js 应可获取');
@@ -261,7 +314,10 @@ t('S1~S10 /api/build* 全链路', async () => {
 
     // S11 REQ-20260913-004 版本删除：draft / merged 可删（整目录移除、state 列表移除）；
     // 不存在 400；merging 409（conflict）目录保留，恢复 failed 后可删
-    r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: reqB.id, commit: commit2 }] });
+    // BUG-20260914-004：reqB 此刻仍被 merged 的 vid2 占用（merged 也算占用），删除用版本
+    // 改用未占用的 done 条目（S7 建的 bugC 推到 done）；vid4 在 vid2 删除后创建，reqB 已释放
+    for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDirA, bugC.id, s, { by: 'test' });
+    r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: bugC.id, commit: commit2 }] });
     assert.equal(r.status, 201, `创建删除用版本应成功：${r.text}`);
     const vid3 = r.json.version.id;
     const verDir = (id) => path.join(dataDirA, 'builds', 'versions', id);

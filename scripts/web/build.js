@@ -1,14 +1,26 @@
 'use strict';
 // 构建模块前端（REQ-20260913-001，版本管理 + 分支浏览与同步）—— 由 app.js 在 view=build 时激活。
 // 界面：模块内两个子页签——版本计划（默认）：左版本列表 + 右版本详情（信息编辑 / 条目 ↔ commit 关联
-// 与增删 / 提示词与回答回填 / 合并入 main）；分支浏览：左分支列表（当前 / 本地 / 远端分组）+ 右提交记录。
+// 与增删）；版本操作（AI 完善 / 合并入 main / 删除）直接放在左侧每张版本卡片内
+//（BUG-20260913-004 参照需求列表行内操作口径；删除为 REQ-20260913-004）；分支浏览：左分支列表
+//（当前 / 本地 / 远端分组）+ 右提交记录。
 // 语义边界（与后端一致，design.md 落定口径）：
 //   - 仅已完成（done）的需求单 / Bug 单可纳入版本（BUG-20260913-001）：新建版本 / 添加条目
 //     候选只列 done 条目（后端接口已收窄，前端再过滤一次防御旧数据）；无候选时给明确空态；
+//   - 一条目至多纳入一个版本（BUG-20260914-004）：已纳入任一版本（draft/merging/merged/failed
+//     任一状态）的条目不再出现在新建 / 添加候选（后端已收窄，前端据 state.versions 再过滤一次
+//     防御旧缓存）；空态区分「无 done 条目」与「done 条目均已被版本占用」；服务端对跨版本重复
+//     纳入兜底拒绝；从 draft/failed 版本移出或删除版本后条目重新可选；
 //   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选（全选只纳入有 commit 候选的条目）；
-//   - 「提示词与回答回填」为同一弹窗两段式：上段复制提示词、下段粘贴回答解析回填，无需关闭再打开；
+//   - 「AI 完善」（原「提示词与回答回填」，BUG-20260913-004 更名）为同一弹窗两段式：上段复制提示词、
+//     下段粘贴回答解析回填，无需关闭再打开；解析成功后预览区为可编辑表单（REQ-20260913-006）——
+//     名称 / 描述预填解析值，可直接修改，「应用」保存编辑后的值（回答原文是唯一解析来源，
+//     重新解析以最新结果预填并覆盖未保存的手工修改）；
 //   - 合并入 main 前弹确认框（列 commit 清单），确认即授权；执行中禁用重复触发；
-//   - 分支浏览只读；同步仅「同步远端（fetch --prune）」与本地分支「推送」两个显式入口；
+//   - 删除版本（REQ-20260913-004）必经确认弹窗：按状态差异化提示（draft/failed 不可恢复，
+//     merged 仅移除看板记录；merging 禁删）；执行中确认键禁用防重复，成功后列表与详情同步回落；
+//   - 分支浏览只读；同步仅「和远端同步（fetch --prune）」（原「同步远端」，BUG-20260914-005 更名）
+//     与本地分支「推送」两个显式入口；
 //   - 非 git 仓库显示引导空态，不出现可点击但必然失败的入口。
 // 状态机：loading → ready | error（读取失败重试）。
 
@@ -29,20 +41,37 @@ const ATBBuild = (() => {
     query: '',
     selVerId: null,
     edit: null,          // { id, field: 'name'|'desc' } 行内编辑态
-    createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, busy, error }
-    addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, busy, error }
-    answer: null,        // { verId, text, parsed, error, busy }  提示词与回答回填弹窗
+    createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, totalDone, busy, error }
+    addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, totalDone, busy, error }
+    //（totalDone：候选接口占用过滤前的 done 条目总数，用于空态区分「无 done 条目」与
+    // 「done 条目均已被版本占用」——BUG-20260914-004）
+    // { verId, text, parsed, draft, error, busy, copied }  AI 完善弹窗（提示词与回答回填）
+    // parsed: parseAnswer 成功结果；draft: { name, description } 回填编辑表单当前值（REQ-20260913-006，
+    // 解析时以解析结果预填，编辑 / 后台重渲染前从输入框同步，应用保存该值而非解析原值）
+    answer: null,
+    // BUG-20260913-005：弹窗「去新建 XX 会话」宿主探测——状态机与 app.js state.workspaceApps
+    // 同款；模块级缓存且不随 enter(project) 重置（宿主安装是机器级事实，与项目无关）
+    workspaceApps: { zcode: undefined, codex: undefined, loaded: false, probing: false, failed: false },
     mergeConfirm: null,  // { verId }
     pushConfirm: null,   // { branch }
     mergeBusy: false,
+    deleteConfirm: null, // { verId } REQ-20260913-004 删除确认弹窗
+    deleteBusy: false,
     branches: null,      // /api/build/branches 响应
     branchesPhase: 'idle', // idle | loading | error
     branchesError: null,
     logBranch: null,
-    branchLog: null,     // { branch, commits }
+    branchLog: null,     // { branch, commits, total, limit, offset }（BUG-20260914-009：total 供分页）
     logPhase: 'idle',
+    logError: null,      // 翻页失败行内错误（保留已加载内容时展示；首次加载失败走 logPhase='error'）
+    logPage: 1,          // BUG-20260914-009：当前渲染页（1 起）
+    logPageSize: 50,     // 每页条数（20/50/100）
+    logRetryTarget: null, // 翻页失败后重试的目标页
     syncBusy: false,
     pushBusy: false,
+    // BUG-20260914-011：最近一次同步结果（{ pushed, failed, skipped, remote }）——空态细分依据；
+    // pushed/failed 逐分支收集（服务端 syncRemote），null = 本会话尚未成功同步过
+    lastSync: null,
     rendered: false,
     pendingRestore: null,
   };
@@ -51,7 +80,8 @@ const ATBBuild = (() => {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const fmtTime = (iso) => (iso ? String(iso).replace('T', ' ').slice(0, 16) : '—');
   const short = (h) => String(h || '').slice(0, 8);
-  const toast = (m) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m); } catch { /* 测试环境无 toast */ } };
+  // BUG-20260913-005：透传 isErr（错误 toast 与普通提示在任务面板口径下有样式差异）
+  const toast = (m, isErr) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m, isErr); } catch { /* 测试环境无 toast */ } };
 
   function api(path, opts = {}) {
     const sep = path.includes('?') ? '&' : '?';
@@ -76,9 +106,45 @@ const ATBBuild = (() => {
     return (items || []).filter((x) => x.status === 'done');
   }
 
+  // BUG-20260914-004 口径：一条目至多纳入一个版本——已纳入任一版本（draft/merging/merged/
+  // failed 任一状态）的条目视为占用。候选接口已在后端源头收窄，前端据 state.data.versions
+  // 再过滤一次防御旧缓存 / 混杂数据（占用状态可跨版本任一状态成立，与版本状态机无关）。
+  function occupiedItemIds(versions) {
+    const set = new Set();
+    for (const v of versions || []) {
+      for (const it of v.items || []) set.add(it.itemId);
+    }
+    return set;
+  }
+
   // 全选口径：只纳入有 commit 候选的条目（无提交条目自动跳过并提示）
   function selectableCandidates(items) {
     return (items || []).filter((x) => Array.isArray(x.commits) && x.commits.length > 0);
+  }
+
+  // BUG-20260914-009：提交记录分页条（纯函数，渲染与测试共用）——上一页 / 页码（首末 + 当前±1，
+  // 中间折叠 …）/ 下一页 + 每页条数下拉（20/50/100）+「第 x–y 条 / 共 N 条」进度。
+  function logPagerHtml(page, pages, size, total) {
+    const p = Math.max(1, Math.min(pages, page));
+    const start = (p - 1) * size;
+    const len = Math.max(0, Math.min(size, total - start));
+    const want = [];
+    for (let i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - p) <= 1) want.push(i);
+      else if (want[want.length - 1] !== '…') want.push('…');
+    }
+    const nums = want.map((w) => w === '…'
+      ? '<span class="bld-log-gap">…</span>'
+      : `<button type="button" data-pg="${w}"${w === p ? ' class="on" aria-current="page"' : ''}>${w}</button>`).join('');
+    const sizes = [20, 50, 100].map((n) => `<option value="${n}"${n === size ? ' selected' : ''}>${n} 条/页</option>`).join('');
+    return `
+      <div class="bld-log-pager" role="navigation" aria-label="提交记录分页">
+        <button type="button" data-pg="prev"${p <= 1 ? ' disabled' : ''}>上一页</button>
+        ${nums}
+        <button type="button" data-pg="next"${p >= pages ? ' disabled' : ''}>下一页</button>
+        <select id="bldLogSize" aria-label="每页条数">${sizes}</select>
+        <span class="bld-log-range">第 ${start + 1}–${start + len} 条 / 共 ${total} 条</span>
+      </div>`;
   }
 
   function buildPrompt(v) {
@@ -137,12 +203,18 @@ const ATBBuild = (() => {
         project: project ?? null, phase: 'loading', error: null, data: null, tab: 'versions',
         selVerId: null, edit: null, createPanel: null, addPanel: null, answer: null,
         mergeConfirm: null, pushConfirm: null, mergeBusy: false,
+        deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
-        logBranch: null, branchLog: null, logPhase: 'idle', syncBusy: false, pushBusy: false,
+        logBranch: null, branchLog: null, logPhase: 'idle', logError: null,
+        logPage: 1, logPageSize: 50, logRetryTarget: null, // BUG-20260914-009：分页状态随项目切换重置
+        syncBusy: false, pushBusy: false,
+        remoteSynced: false, // BUG-20260914-006：本会话是否已成功同步远端——空态区分依据
+        lastSync: null, // BUG-20260914-011：同步结果明细（pushed/failed/skipped）随项目切换重置
         rendered: false, pendingRestore: state.pendingRestore,
       });
       render(); // 拉取前先呈现加载态
     }
+    refreshWorkspaceApps(); // BUG-20260913-005：宿主探测预热（fire-and-forget，loaded 后为 no-op）
     if (!state.data || changed) {
       await refresh();
       if (state.pendingRestore && state.phase === 'ready') {
@@ -171,34 +243,79 @@ const ATBBuild = (() => {
     render();
   }
 
-  async function selectBranch(branch) {
+  // BUG-20260914-009：选中分支查看提交记录（分页）——切换分支重置回第一页（page 可省略）。
+  function selectBranch(branch, page = 1) {
     state.logBranch = branch;
+    return loadLog(page);
+  }
+
+  // 加载指定页提交记录：请求带 limit/offset；翻页失败保留已加载内容（页码回退）+
+  // 行内错误与重试入口；首次加载失败维持原口径（清空 + error 态）。
+  async function loadLog(page = 1) {
+    const branch = state.logBranch;
+    if (!branch) return;
+    const prev = { page: state.logPage, data: state.branchLog, branch: state.branchLog?.branch };
+    state.logPage = Math.max(1, Math.floor(page) || 1);
     state.logPhase = 'loading';
+    state.logError = null;
     render();
     try {
-      const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}`);
+      const size = state.logPageSize;
+      const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}&limit=${size}&offset=${(state.logPage - 1) * size}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       state.branchLog = data;
       state.logPhase = 'idle';
+      state.logRetryTarget = null;
     } catch (e) {
-      state.branchLog = null;
-      state.logPhase = 'error';
       state.logError = e.message;
+      if (prev.data && prev.branch === branch) {
+        // 翻页/换页失败：保留已加载页内容与页码，重试重发目标页
+        state.logPage = prev.page;
+        state.logPhase = 'idle';
+        state.logRetryTarget = Math.max(1, Math.floor(page) || 1);
+      } else {
+        state.branchLog = null;
+        state.logPhase = 'error';
+      }
     }
     render();
+  }
+
+  function gotoLogPage(page) {
+    if (!state.logBranch) return;
+    const total = Number(state.branchLog?.total ?? 0);
+    const pages = Math.max(1, Math.ceil(total / state.logPageSize));
+    const p = Math.max(1, Math.min(pages, Math.floor(page) || 1));
+    if (p === state.logPage && state.logPhase === 'idle' && !state.logError) return;
+    loadLog(p);
+  }
+
+  function retryLogPage() {
+    const target = state.logRetryTarget;
+    state.logRetryTarget = null;
+    loadLog(target ?? state.logPage);
+  }
+
+  function setLogPageSize(size) {
+    const n = [20, 50, 100].includes(Number(size)) ? Number(size) : 50;
+    if (n === state.logPageSize && !state.logError) return;
+    state.logPageSize = n;
+    if (state.logBranch) loadLog(1); // 换每页条数回第一页
   }
 
   /* ---------- 版本计划：创建 / 编辑 / 条目 ---------- */
 
   async function openCreatePanel() {
-    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', busy: false, error: null, loadError: null };
+    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
-      state.createPanel.candidates = doneCandidates(data.items || []); // BUG-20260913-001：仅 done 条目进候选
+      const occupied = occupiedItemIds(state.data?.versions); // BUG-20260914-004：已纳入任一版本的条目不进候选
+      state.createPanel.candidates = doneCandidates(data.items || []).filter((x) => !occupied.has(x.itemId)); // BUG-20260913-001：仅 done 条目进候选
+      state.createPanel.totalDone = Number.isInteger(data.totalDone) ? data.totalDone : null;
       for (const it of selectableCandidates(state.createPanel.candidates)) {
         state.createPanel.commits[it.itemId] = it.commits[0]; // 默认取最近一次关联提交
       }
@@ -215,7 +332,9 @@ const ATBBuild = (() => {
     render();
   }
 
-  // 全选 / 全不选：仅对「有 commit 候选」的条目生效；返回跳过的无提交条目数
+  // 全选 / 全不选：仅对「有 commit 候选」的条目生效；返回跳过的无提交条目数。
+  // BUG-20260914-002：与 pickItem 同口径在内部统一 render——点击后复选框 / 「已选 N 项」计数 /
+  // commit 下拉解禁态立即同步，避免内部 picked 集合与界面显示错位（跳过提示由调用方补充 toast）。
   function pickAll(panelKey, on) {
     const p = state[panelKey];
     if (!p || !p.candidates) return 0;
@@ -223,6 +342,7 @@ const ATBBuild = (() => {
     for (const it of selectable) {
       if (on) p.picked.add(it.itemId); else p.picked.delete(it.itemId);
     }
+    render();
     return p.candidates.length - selectable.length;
   }
 
@@ -258,8 +378,12 @@ const ATBBuild = (() => {
     }
   }
 
+  function findVersion(id) {
+    return (state.data?.versions || []).find((v) => v.id === id) || null;
+  }
+
   function selVersion() {
-    return (state.data?.versions || []).find((v) => v.id === state.selVerId) || null;
+    return findVersion(state.selVerId);
   }
 
   async function saveInfo(id, patch) {
@@ -270,7 +394,7 @@ const ATBBuild = (() => {
       await refresh();
       return true;
     } catch (e) {
-      toast(`✕ 保存失败：${e.message}`);
+      toast(`✕ 保存失败：${e.message}`, true); // ✕ 前缀为失败口径：错误样式（REQ-20260913-006 与弹窗反馈一致）
       return false;
     }
   }
@@ -291,15 +415,18 @@ const ATBBuild = (() => {
   async function openAddPanel() {
     const v = selVersion();
     if (!v) return;
-    state.addPanel = { verId: v.id, candidates: null, picked: new Set(), commits: {}, busy: false, error: null, loadError: null };
+    state.addPanel = { verId: v.id, candidates: null, picked: new Set(), commits: {}, totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       const have = new Set(v.items.map((x) => x.itemId));
-      // BUG-20260913-001：与新建版本同口径——仅 done 条目进候选，且排除已在本版本中的条目
-      state.addPanel.candidates = doneCandidates(data.items || []).filter((x) => !have.has(x.itemId));
+      const occupied = occupiedItemIds(state.data?.versions); // BUG-20260914-004：其他版本占用条目同样排除
+      // BUG-20260913-001：与新建版本同口径——仅 done 条目进候选，且排除已在本版本中的条目；
+      // BUG-20260914-004：再排除已纳入任一版本（含本版本与其他版本）的条目
+      state.addPanel.candidates = doneCandidates(data.items || []).filter((x) => !have.has(x.itemId) && !occupied.has(x.itemId));
+      state.addPanel.totalDone = Number.isInteger(data.totalDone) ? data.totalDone : null;
       for (const it of selectableCandidates(state.addPanel.candidates)) {
         state.addPanel.commits[it.itemId] = it.commits[0];
       }
@@ -334,76 +461,226 @@ const ATBBuild = (() => {
     }
   }
 
-  /* ---------- 提示词与回答回填（同一弹窗两段式） ---------- */
+  /* ---------- AI 完善（提示词与回答回填，同一弹窗两段式） ---------- */
 
-  function openAnswerModal() {
-    const v = selVersion();
+  // BUG-20260913-004：入口迁入版本卡片后按 verId 打开（对按钮所在卡片生效）；
+  // 不带参时回落当前选中版本（向后兼容），带参但版本已不存在时不弹窗。
+  function openAnswerModal(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
-    state.answer = { verId: v.id, text: '', parsed: null, error: null, busy: false, copied: false };
+    state.answer = { verId: v.id, text: '', parsed: null, draft: null, error: null, busy: false, copied: false };
     render();
+    refreshWorkspaceApps(); // BUG-20260913-005：入口探测（fire-and-forget；loaded / 进行中 / 已失败不重探）
+  }
+
+  // BUG-20260913-005：剪贴板写入，返回布尔（与任务面板 copyDispatchText 同口径）；
+  // 失败 toast 由调用方给完整补救指引，不在此处重复提示
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch { /* 剪贴板不可用：走失败分支 */ }
+    return false;
   }
 
   async function copyPrompt() {
     const a = state.answer;
     if (!a) return;
-    const v = selVersion();
+    const v = findVersion(a.verId);
     if (!v) return;
-    const text = buildPrompt(v);
+    const copied = await copyText(buildPrompt(v));
+    a.copied = copied;
+    if (copied) toast('✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方');
+    else toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制');
+    render();
+  }
+
+  // BUG-20260913-005：弹窗内「去新建 XX 会话」点击——与任务面板 copyPromptAndOpenSession 同构
+  // （BUG-20260910-005 / REQ-20260911-008 口径）：先复制本弹窗当前版本提示词（buildPrompt(v)），
+  // 复制动作完成后才触发深链跳转（zcode 只打开工作区、codex 落在新会话输入框，均不传 prompt、
+  // 不自动发送）；失败不静默且深链打开不依赖复制成败；busy 防重复点击（在途点击直接忽略）。
+  // 版本提示词为前端本地生成，无「提示词获取失败」分支；版本缺失（弹窗已关）仅作防御路径。
+  let bldSessionBusy = false;
+  async function copyPromptAndOpenSession(agent, url) {
+    if (bldSessionBusy) return;
+    bldSessionBusy = true;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        a.copied = true;
-        toast('✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方');
-        render();
+      const label = agent === 'codex' ? 'Codex 新会话' : 'Zcode 工作区';
+      const v = state.answer ? findVersion(state.answer.verId) : null;
+      const prompt = v ? buildPrompt(v) : '';
+      if (!prompt) {
+        location.href = url;
+        toast(`当前弹窗暂无版本提示词；已请求打开 ${label}（${state.project}）`);
         return;
       }
-    } catch { /* 剪贴板不可用：降级为手动全选复制 */ }
-    a.copied = false;
-    toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制');
-    render();
+      const copied = await copyText(prompt); // 失败时由下方 toast 给手动复制补救指引
+      location.href = url;
+      if (copied) {
+        toast(`✓ 已复制提示词并请求打开 ${label}（${state.project}）：请在新建会话中粘贴发送；回答仍粘贴回本弹窗`);
+      } else {
+        toast(`复制失败：已请求打开 ${label}（${state.project}），请点弹窗内「复制提示词」手动复制后再粘贴；回答仍粘贴回本弹窗`, true);
+      }
+    } finally {
+      bldSessionBusy = false;
+    }
+  }
+
+  // BUG-20260913-005：弹窗「去新建 XX 会话」宿主探测——状态机与任务面板（app.js
+  // refreshWorkspaceApps）同款：probing 标记进行中；成功置 loaded（zcode/codex 为明确 boolean）；
+  // 失败置 failed 且不置 loaded（保持未知，不当作未安装），重试走 force（「重新检测」）。
+  // 探测异步 fire-and-forget，结束仅在弹窗打开时重渲染刷出最终态，不阻断复制与回填。
+  async function refreshWorkspaceApps(force = false) {
+    const w = state.workspaceApps;
+    if (w.loaded || w.probing || (w.failed && !force)) return;
+    w.probing = true;
+    w.failed = false;
+    try {
+      const r = await fetch('/api/workspace/apps'); // 全局只读接口（不挂 /api/build 前缀）
+      if (!r.ok) throw new Error(`探测失败（${r.status}）`);
+      const d = await r.json();
+      w.zcode = !!d.zcode;
+      w.codex = !!d.codex;
+      w.loaded = true;
+    } catch {
+      w.failed = true; // 保持未知：不置 loaded、不当作未安装；手动「重新检测」恢复
+    } finally {
+      w.probing = false;
+      // 入口只在回填弹窗内：仅在弹窗打开时刷最终态；刷前先保留未解析草稿防丢输入
+      if (state.answer) { syncAnswerDraft(); render(); }
+    }
+  }
+
+  // 探测结束重渲染前，把回答框当前值同步回 state.answer.text，避免丢用户已粘贴未解析的草稿；
+  // REQ-20260913-006：解析成功后同时同步回填编辑表单（名称 / 描述）当前值到 a.draft，
+  // 使任何后台重渲染（宿主探测刷新、复制提示词、应用失败重试等）都不冲掉未保存的编辑
+  function syncAnswerDraft() {
+    const a = state.answer;
+    if (!a) return;
+    const view = $('#buildView');
+    if (!view) return;
+    const input = $('.bld-answer-input', view);
+    if (input) a.text = input.value ?? a.text;
+    if (!a.parsed) return;
+    const nameEl = $('.bld-name-edit', view);
+    const descEl = $('.bld-desc-edit', view);
+    if (nameEl || descEl) {
+      a.draft = {
+        name: nameEl ? nameEl.value : (a.draft?.name ?? ''),
+        description: descEl ? descEl.value : (a.draft?.description ?? ''),
+      };
+    }
+  }
+
+  // REQ-20260913-006：回填编辑输入即时校验——名称空即刻显错并禁用「应用」（title 说明），
+  // 只改错误提示显隐与按钮态、不整页重渲染（保输入焦点）；数据层 saveInfo 校验兜底双保险
+  function onAnswerEditInput() {
+    const a = state.answer;
+    if (!a?.parsed) return;
+    syncAnswerDraft();
+    const nameEmpty = !String(a.draft?.name ?? '').trim();
+    const view = $('#buildView');
+    if (!view) return;
+    $('.bld-name-err', view)?.classList.toggle('hidden', !nameEmpty);
+    const applyBtn = $('#bldApplyBtn', view);
+    if (applyBtn) {
+      applyBtn.disabled = !!(a.busy || nameEmpty);
+      applyBtn.title = nameEmpty ? '版本名称不能为空' : '';
+    }
+  }
+
+  // BUG-20260913-005：弹窗上段「去新建 XX 会话」入口（参照任务面板 newSessionLinksHtml 口径，
+  // BUG-20260910-005 / REQ-20260911-008）。取材与 title 均为本弹窗版本提示词（非主调度提示词）；
+  // 状态机同款：检测中显示检测态（不把未知当未检测到）；失败给说明 +「重新检测」+ 手动打开指引
+  // （不砍入口区）；未检测到宿主该端禁用 +（未检测到）；未选项目两端禁用 + title 说明。
+  function answerSessionLinksHtml() {
+    const w = state.workspaceApps;
+    if (w.failed && !w.loaded) {
+      return '<span class="muted small">客户端检测失败：无法确认本机 Zcode / Codex 是否可用</span>'
+        + '<a class="ws-entry-link" href="#" data-bld-ws-retry title="重新检测本机 Zcode / Codex 客户端（只读存在性检查）">重新检测</a>'
+        + '<span class="muted small">或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词</span>';
+    }
+    if (w.probing || !w.loaded) {
+      return '<span class="muted small">正在检测本机 Agent 客户端…</span>';
+    }
+    const noProject = !state.project;
+    const cfg = [
+      { agent: 'zcode', label: '去新建 Zcode 会话',
+        okTitle: `自动复制本弹窗版本提示词后打开 Zcode（${state.project}）：深链只打开工作区，会话需手动新建并粘贴提示词`,
+        missingTitle: '未检测到 ZCode.app（zcode:// 深链宿主）：可能未安装或装在非默认路径；可直接打开 Zcode 手动新建会话并粘贴提示词' },
+      { agent: 'codex', label: '去新建 Codex 会话',
+        okTitle: `自动复制本弹窗版本提示词后打开 Codex 新会话（${state.project}）：深链不传提示词，不会自动发送，请粘贴发送`,
+        missingTitle: '未检测到 ChatGPT.app（codex:// 深链宿主）：可能未安装或装在非默认路径；可直接打开 ChatGPT 手动新建会话并粘贴提示词' },
+    ];
+    return cfg.map((c) => {
+      if (w[c.agent] === false) {
+        return `<a class="ws-entry-link is-off" aria-disabled="true" data-bld-new-session="${c.agent}" title="${esc(c.missingTitle)}">${c.label}<span class="ws-entry-note">（未检测到）</span></a>`;
+      }
+      if (noProject) {
+        return `<a class="ws-entry-link is-off" aria-disabled="true" data-bld-new-session="${c.agent}" title="未选择项目：请先在顶栏选择项目后再新建会话">${c.label}</a>`;
+      }
+      const url = c.agent === 'codex'
+        ? `codex://threads/new?path=${encodeURIComponent(state.project)}`
+        : `zcode://workspace/open?path=${encodeURIComponent(state.project)}`;
+      return `<a class="ws-entry-link" href="${url}" data-bld-new-session="${c.agent}" title="${esc(c.okTitle)}">${c.label}</a>`;
+    }).join('');
   }
 
   function parseAnswerPreview() {
     const a = state.answer;
-    if (!a) return;
+    if (!a || a.busy) return;
     a.text = ($('.bld-answer-input', $('#buildView'))?.value) ?? a.text;
     const r = parseAnswer(a.text);
     if (!r.ok) {
       a.parsed = null;
+      a.draft = null;
       a.error = r.error; // 原文保留在输入框，可在弹窗内修改重试
     } else {
       a.parsed = r;
+      // REQ-20260913-006：以最新解析结果预填编辑表单，覆盖未保存的手工修改——
+      // 回答原文是唯一解析来源，避免两处编辑互相覆盖产生歧义
+      a.draft = { name: r.name, description: r.description };
       a.error = null;
     }
-    render();
+    // 解析结果即最新事实：跳过草稿回同步，防止旧 DOM 输入值覆盖刚解析的预填值
+    render(false);
   }
 
+  // REQ-20260913-006：「应用」保存编辑后的名称与描述（未修改时即解析原值）；名称空由前端
+  // 即时校验拦截不发请求，数据层 saveInfo「版本名称不能为空」校验兜底双保险
   async function applyParsed() {
     const a = state.answer;
-    if (!a?.parsed) return;
+    if (!a?.parsed || a.busy) return;
+    syncAnswerDraft(); // 以编辑框当前值为准（含测试直调等未触发 input 事件的路径）
+    const name = String(a.draft?.name ?? '');
+    if (!name.trim()) {
+      render(); // 显即时错误并禁用应用，不发保存请求
+      return;
+    }
     a.busy = true;
     render();
-    const ok = await saveInfo(a.verId, { name: a.parsed.name, description: a.parsed.description });
+    const ok = await saveInfo(a.verId, { name, description: String(a.draft?.description ?? '') });
     if (ok) {
       state.answer = null;
       toast('✓ 已应用回填：版本名称与描述已更新');
     } else {
-      a.busy = false;
+      a.busy = false; // 失败：弹窗与编辑内容保留，可修改后重试
     }
     render();
   }
 
   /* ---------- 合并入 main ---------- */
 
-  function openMergeConfirm() {
-    const v = selVersion();
+  function openMergeConfirm(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
     if (!v || state.mergeBusy) return;
     state.mergeConfirm = { verId: v.id };
     render();
   }
 
   async function doMerge() {
-    const v = selVersion();
+    const v = findVersion(state.mergeConfirm?.verId);
     if (!v || state.mergeBusy) return;
     state.mergeConfirm = null;
     state.mergeBusy = true;
@@ -423,17 +700,64 @@ const ATBBuild = (() => {
     }
   }
 
+  /* ---------- 删除版本（REQ-20260913-004） ---------- */
+
+  // 打开删除确认弹窗：按所在卡片版本定位（无参回落当前选中，向后兼容）；
+  // 已有删除弹窗 / 删除执行中 / 合并执行中不再开新弹窗（弹窗打开期间列表不可再触发其他删除）。
+  function openDeleteConfirm(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
+    if (!v || state.deleteConfirm || state.deleteBusy || state.mergeBusy) return;
+    state.deleteConfirm = { verId: v.id };
+    render();
+  }
+
+  // 确认删除：执行期间弹窗保持展示、确认键禁用防重复触发；成功关闭弹窗、刷新列表
+  // （选中失效回落既有规则：取列表最新，空则显示空态）；失败关闭弹窗、toast 错误、
+  // 数据保持原状（版本仍留在列表，可重新打开弹窗重试）。
+  async function doDelete() {
+    const v = findVersion(state.deleteConfirm?.verId);
+    if (!v || state.deleteBusy) return;
+    state.deleteBusy = true;
+    render();
+    try {
+      const r = await post('/version/delete', { id: v.id });
+      if (!r.ok) throw new Error(await errOf(r, '删除失败'));
+      state.deleteConfirm = null;
+      toast(`✓ 已删除版本（${v.id}）`);
+      await refresh();
+    } catch (e) {
+      state.deleteConfirm = null;
+      toast(`✕ 删除失败：${e.message}`, true);
+    } finally {
+      state.deleteBusy = false;
+      render();
+    }
+  }
+
   /* ---------- 分支浏览与同步 ---------- */
 
-  async function doFetch() {
+  // BUG-20260914-011：与远端同步 = 先 fetch 再推送除 main 外的本地分支（服务端 syncRemote
+  // 逐分支收集结果）。fetch 失败整体报错（口径不变）；推送结果不静默：部分失败时错误 toast
+  // 列明失败分支与首个原因（可重试），成功 toast 汇总两步；lastSync 供远端空态细分。
+  async function doSync() {
     if (state.syncBusy) return;
     state.syncBusy = true;
     render();
     try {
-      const r = await post('/fetch', {});
+      const r = await post('/sync', {});
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `同步失败（${r.status}）`);
-      toast('✓ 已同步远端（fetch --prune）');
+      const pushed = data.pushed || [];
+      const failed = data.failed || [];
+      state.remoteSynced = true; // fetch 成功（BUG-20260914-006：空态区分依据；细分见 lastSync）
+      state.lastSync = { pushed, failed, skipped: data.skipped || [], remote: data.remote || 'origin' };
+      if (failed.length) {
+        toast(`✕ 同步完成但部分推送失败：${failed.map((f) => f.branch).join('、')}（${failed[0].error || '未知原因'}）`, true);
+      } else if (pushed.length) {
+        toast(`✓ 已同步远端：fetch 完成，已推送 ${pushed.map((p) => p.branch).join('、')} → ${state.lastSync.remote}`);
+      } else {
+        toast('✓ 已同步远端：fetch 完成，无可推送的开发分支（main 由发布模块推送）');
+      }
       await loadBranches();
       if (state.logBranch) await selectBranch(state.logBranch);
     } catch (e) {
@@ -531,11 +855,23 @@ const ATBBuild = (() => {
         ? '<div class="rel-empty-mini muted">没有匹配的版本（按名称 / 单号过滤）</div>'
         : '<div class="rel-empty-mini muted">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
     }
-    return versions.map((v) => `
+    // BUG-20260913-004：版本操作直接放在每张卡片内（参照需求列表 row-acts 口径），
+    // 状态禁用/文案规则逐卡继承原详情底部逻辑；mergeBusy 为全局口径（执行中禁所有卡片的合并键）。
+    return versions.map((v) => {
+      const mergeLabel = v.status === 'failed' ? '重试合并入 main' : '合并入 main';
+      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${v.status === 'merging' ? ` disabled title="合并中，请稍候……"` : ''} aria-label="AI 完善 ${esc(v.id)}"${v.status === 'merging' ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
+      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? ` disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
+      // REQ-20260913-004 删除键：排在两键之后、quiet 危险弱化样式（不抢主操作）；
+      // merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（与合并键一并禁用）。
+      const delDisabled = v.status === 'merging' || state.mergeBusy;
+      const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
+      return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><strong>${esc(v.name || v.id)}</strong> ${statusChip(v.status)}</div>
         <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
-      </div>`).join('');
+        <div class="card-acts">${answerBtn}${mergeBtn}${delBtn}</div>
+      </div>`;
+    }).join('');
   }
 
   function renderCandidateRows(p, panelKey, disabledIds) {
@@ -566,7 +902,10 @@ const ATBBuild = (() => {
         <div class="rel-panel-body">
           ${p.loadError ? `<p class="rel-form-err" role="alert">${esc(p.loadError)} <button type="button" class="btn small" id="bldPanelRetry">重试</button></p>` : ''}
           ${!p.candidates ? '<p class="muted">正在读取条目…</p>'
-            : p.candidates.length === 0 ? '<p class="muted bld-cand-empty">暂无可纳入版本的条目：仅已完成（done）的需求单 / Bug 单会出现在候选中</p>'
+            : p.candidates.length === 0 ? `<p class="muted bld-cand-empty">${p.totalDone
+              ? '已完成的条目均已纳入版本计划：可从「计划中 / 失败」版本移出条目，或删除版本后重新纳入' // BUG-20260914-004：区分「均已被占用」空态
+              // BUG-20260914-008：口径已在头部副标题（side-panel-scope），空态正文精简不再复述，避免同面板口径出现两次
+              : '暂无可纳入版本的条目'}</p>`
             : `
           <div class="bld-pick-bar">
             <button type="button" class="btn small" id="bldPickAll">全选</button>
@@ -625,42 +964,47 @@ const ATBBuild = (() => {
           ${itemRows || '<p class="muted small">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}
         </div>
         ${mergeState}
-        <footer class="rel-acts">
-          <button type="button" class="btn" id="bldAnswerBtn" ${v.status === 'merging' ? 'disabled' : ''} title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析">提示词与回答回填</button>
-          <button type="button" class="btn primary" id="bldMergeBtn" ${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? `disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
-        </footer>
-      </div>`;
+      </div>`; // BUG-20260913-004：原 footer.rel-acts（AI 完善 / 合并入 main）已迁入左侧版本卡片，详情不再重复渲染
   }
 
   function renderAnswerModal() {
     const a = state.answer;
     if (!a) return '';
     const v = (state.data?.versions || []).find((x) => x.id === a.verId);
+    // REQ-20260913-006：解析成功后预览区为可编辑表单（名称单行 / 描述多行，预填解析值），
+    // label 内以 muted「当前：<旧值>」保留对照语境；名称空即时显错并禁用「应用」
+    const nameEmpty = !!a.parsed && !String(a.draft?.name ?? '').trim();
+    const applyDisabled = a.busy || !a.parsed || nameEmpty;
     return `
-      <div class="rel-modal-wrap" id="bldAnswerWrap" role="dialog" aria-label="提示词与回答回填">
+      <div class="rel-modal-wrap" id="bldAnswerWrap" role="dialog" aria-label="AI 完善">
         <div class="rel-modal">
-          <h3>提示词与回答回填（${esc(v?.id || '')}）</h3>
+          <h3>AI 完善（${esc(v?.id || '')}）</h3>
           <div class="rel-modal-body">
             <p class="muted small">上段：复制提示词交给 Agent；下段：把回答粘贴回来，解析预览后应用——全程无需关闭本弹窗。</p>
             <div class="bld-prompt-box">
               <textarea class="bld-prompt-text" rows="7" readonly>${esc(v ? buildPrompt(v) : '')}</textarea>
               <button type="button" class="btn small primary" id="bldCopyPrompt">复制提示词</button>
               ${a.copied ? '<span class="muted small">已复制 ✓</span>' : ''}
+              <div class="bld-session-entry">${answerSessionLinksHtml()}</div>
             </div>
             <div class="bld-answer-box">
               <label class="field">Agent 回答（粘贴后点「解析并预览」）
                 <textarea class="bld-answer-input" rows="5" placeholder="版本名称：…&#10;版本描述：…">${esc(a.text)}</textarea></label>
               ${a.error ? `<p class="rel-form-err" role="alert">${esc(a.error)}</p>` : ''}
-              ${a.parsed ? `<div class="bld-preview">
-                <div><span class="muted small">名称</span>：${esc(v?.name || '（空）')} → <strong>${esc(a.parsed.name)}</strong></div>
-                <div><span class="muted small">描述</span>：${esc(v?.description || '（空）')} → <strong>${esc(a.parsed.description || '（空）')}</strong></div>
+              ${a.parsed ? `<div class="bld-preview bld-edit-form">
+                <p class="muted small">解析结果可直接修改，点「应用」保存修改后的值</p>
+                <label class="field">版本名称（当前：${esc(v?.name || '（空）')}）
+                  <input class="bld-name-edit" type="text" value="${esc(a.draft?.name ?? '')}"></label>
+                <p class="rel-form-err bld-name-err${nameEmpty ? '' : ' hidden'}" role="alert">版本名称不能为空</p>
+                <label class="field">版本描述（当前：${esc(v?.description || '（空）')}）
+                  <textarea class="bld-desc-edit" rows="4">${esc(a.draft?.description ?? '')}</textarea></label>
               </div>` : ''}
             </div>
           </div>
           <footer class="modal-foot">
             <button type="button" class="btn" id="bldAnswerClose">关闭</button>
             <button type="button" class="btn" id="bldParseBtn" ${a.busy ? 'disabled' : ''}>解析并预览</button>
-            <button type="button" class="btn primary" id="bldApplyBtn" ${a.busy || !a.parsed ? 'disabled' : ''}>应用</button>
+            <button type="button" class="btn primary" id="bldApplyBtn"${applyDisabled ? ' disabled' : ''}${nameEmpty && !a.busy ? ' title="版本名称不能为空"' : ''}>${a.busy ? '应用中…' : '应用'}</button>
           </footer>
         </div>
       </div>`;
@@ -713,6 +1057,51 @@ const ATBBuild = (() => {
       </div>`;
   }
 
+  // REQ-20260913-004 删除确认弹窗（沿用 rel-modal 居中口径）：正文列名称 / 状态 / 关联单数，
+  // 按状态给差异化不可恢复提示；确认键危险主样式，执行期间（deleteBusy）双键禁用防重复触发。
+  function renderDeleteConfirm() {
+    const m = state.deleteConfirm;
+    if (!m) return '';
+    const v = (state.data?.versions || []).find((x) => x.id === m.verId);
+    if (!v) { state.deleteConfirm = null; return ''; }
+    const statusHint = v.status === 'merged'
+      ? '仅删除看板版本记录，不影响已合并入 main 的提交与代码。'
+      : '删除后不可恢复，关联条目与 commit 关联一并移除；条目本身可重新纳入其他版本。';
+    return `
+      <div class="rel-modal-wrap" id="bldDeleteWrap" role="dialog" aria-label="删除版本确认">
+        <div class="rel-modal">
+          <h3>删除版本（${esc(v.id)}）</h3>
+          <div class="rel-modal-body">
+            <p>版本「<strong>${esc(v.name || v.id)}</strong>」当前状态：${statusChip(v.status)}，共 ${v.items.length} 个关联单。</p>
+            <p class="muted small">${statusHint}</p>
+            <p class="muted small">此操作不可撤销，请确认后再继续。</p>
+          </div>
+          <footer class="modal-foot">
+            <button type="button" class="btn" id="bldDeleteCancel"${state.deleteBusy ? ' disabled' : ''}>取消</button>
+            <button type="button" id="bldDeleteGo"${state.deleteBusy ? ' disabled' : ''} class="btn danger">${state.deleteBusy ? '删除中…' : '确认删除'}</button>
+          </footer>
+        </div>
+      </div>`;
+  }
+
+  // BUG-20260914-011：同步（fetch + push）成功后远端列表仍为空的确定性解释——按推送结果细分：
+  // 有失败分支 → 解释推送失败并引导重试（fetch 拉到的新分支已在列表，推送可重试）；
+  // 一支未推 → 本地无开发分支可推（main 由发布模块管理，不在此推送）；
+  // 推送成功却仍空 → 正常不可达（推送成功远端必非空），保留 BUG-20260914-006 断言兜底时序窗口。
+  function remoteSyncedEmptyHint() {
+    const ls = state.lastSync || { pushed: [], failed: [] };
+    if ((ls.failed || []).length) {
+      return `<div class="bld-remote-hint" role="note"><strong>同步拉取已完成，但推送失败。</strong>
+        <span class="small">本次推送未能完成：失败分支与原因见上方提示。可在上方「本地」分组对分支点「推送」重试，或再次点击「⟳ 和远端同步」。</span></div>`;
+    }
+    if (!(ls.pushed || []).length) {
+      return `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
+        <span class="small">本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。</span></div>`;
+    }
+    return `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
+      <span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>`;
+  }
+
   function renderBranchesPane() {
     if (!state.data?.isRepo) {
       return `<div class="rel-empty"><h3>当前项目不是 git 仓库</h3>
@@ -725,29 +1114,63 @@ const ATBBuild = (() => {
     } else if (state.branchesPhase === 'error') {
       list = `<p class="rel-form-err" role="alert">分支读取失败：${esc(state.branchesError || '')} <button type="button" class="btn small" id="bldBranchRetry">重试</button></p>`;
     } else {
+      const remotes = b.remotes || [];
+      // BUG-20260914-006：同步成功后仍为空 ⇒ 远端仓库确实为空——本地分支「推送」高亮为出路。
+      const pushAttn = remotes.length > 0 && state.remoteSynced && (b.remote || []).length === 0;
       const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span></div>` : '';
+      // BUG-20260914-012：main 推远端归发布模块受控动作（REQ-20260913-001 语义边界；「和远端同步」
+      // 的服务端推送亦排除 main，见 build-git.syncRemotes），分支浏览不为 main 渲染「推送」入口；
+      // main 行本身保留（点击查看提交记录的只读浏览语义不变），其余分支按钮与 attn 高亮不变。
       const local = (b.local || []).filter((x) => x !== b.current).map((x) => `
-        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>
-          <button type="button" class="btn small quiet bld-push" data-push="${esc(x)}" title="推送到远端">推送</button></div>`).join('');
+        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>${x === 'main' ? '' : `
+          <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button>`}</div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
+      // BUG-20260914-006：远端空态三分支——未配置远端保持既有文案（范围外）；
+      // 已配置远端未同步 → 解释成因并引导同步；本会话同步成功后仍为空 → 按 BUG-20260914-011
+      // 的推送结果细分（同步含推送后「推送成功 ⇒ 远端必非空」，见 remoteSyncedEmptyHint）。
+      const remoteEmpty = !remotes.length
+        ? '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>'
+        : state.remoteSynced
+          ? remoteSyncedEmptyHint()
+          : '<p class="muted small">本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。</p>';
+      // BUG-20260914-003：本地有分支但缺 main 时给出可解释提示（与「合并入 main」
+      // precheckMerge「main 分支不存在」报错口径一致），引导经设置页 Git 工作流幂等补建。
+      // 空仓库（无任何本地分支 = 尚无提交、无补建基点）不出提示。
+      const locals = b.local || [];
+      const mainMissing = locals.length > 0 && !locals.includes('main');
+      const mainHint = mainMissing
+        ? `<p class="bld-main-hint" role="note">⚠ 本地缺少 main 分支：版本计划「合并入 main」将报「main 分支不存在」。可到「设置 → Git 工作流」执行初始化（幂等，将在首个提交上补建 main，不推送远端）。</p>`
+        : '';
       list = `
-        <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local || '<p class="muted small">（无其他本地分支）</p>'}</div>
-        <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || '<p class="muted small">（无远端分支：先「同步远端」或推送本地分支）</p>'}</div>`;
+        <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local || '<p class="muted small">（无其他本地分支）</p>'}${mainHint}</div>
+        <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || remoteEmpty}</div>`;
     }
     const log = state.logBranch ? (() => {
       if (state.logPhase === 'loading') return '<p class="muted">加载提交记录中…</p>';
       if (state.logPhase === 'error') return `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError || '')}</p>`;
       const commits = state.branchLog?.commits || [];
       if (!commits.length) return '<p class="muted small">该分支暂无提交</p>';
-      return `<ul class="bld-log">${commits.map((c) => `<li>
+      // BUG-20260914-009：分页展示全部提交（替代 50 条静默截断）——翻页失败保留旧内容时
+      // 在列表上方显示行内错误 + 重试（重发失败时的目标页）
+      const errBar = state.logError ? `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError)} <button type="button" class="btn small" id="bldLogRetry">重试</button></p>` : '';
+      const listHtml = `<ul class="bld-log">${commits.map((c) => `<li>
         <code>${esc(c.short || c.hash.slice(0, 8))}</code> <span>${esc(c.subject)}</span>
         <span class="muted small">${esc(c.author)} · ${esc(fmtTime(c.date))}</span></li>`).join('')}</ul>`;
+      const total = Number(state.branchLog?.total ?? commits.length);
+      const size = state.logPageSize;
+      const pages = Math.max(1, Math.ceil(total / size));
+      const page = Math.min(Math.max(1, state.logPage), pages);
+      const start = (page - 1) * size;
+      const eof = page === pages
+        ? `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条提交（可翻至分支首个提交）</div>`
+        : '';
+      return errBar + listHtml + eof + logPagerHtml(page, pages, size, total);
     })() : '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
     return `
       <div class="rel-split bld-branch-split">
         <div class="rel-list" aria-label="分支列表">
           <div class="bld-branch-tools">
-            <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune：拉取远端最新并清理失效引用">${state.syncBusy ? '同步中…' : '⟳ 同步远端'}</button>
+            <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致">${state.syncBusy ? '同步中…' : '⟳ 和远端同步'}</button>
             <button type="button" class="btn small quiet" id="bldBranchRefresh">刷新</button>
           </div>
           ${list}
@@ -760,9 +1183,13 @@ const ATBBuild = (() => {
       </div>`;
   }
 
-  function render() {
+  // syncModalDrafts=false 供 parseAnswerPreview 跳过草稿回同步（解析结果刚写入 state，
+  // 旧 DOM 输入值不应覆盖预填值）；其余调用方默认 true——重渲染前把弹窗内未保存的
+  // 回答草稿与回填编辑值写回 state，防止后台刷新冲掉用户输入（REQ-20260913-006）
+  function render(syncModalDrafts = true) {
     const view = $('#buildView');
     if (!view) return;
+    if (syncModalDrafts && state.rendered && state.answer) syncAnswerDraft();
     if (state.phase === 'loading') {
       view.innerHTML = '<div class="rel-loading muted">加载构建模块…</div>';
       state.rendered = true;
@@ -797,11 +1224,12 @@ const ATBBuild = (() => {
     view.innerHTML = `
       <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}</nav>
       ${body}
-      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
-      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）的需求单 / Bug 单可加入本版本（已在本版本中的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
+      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
+      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已纳入版本的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
       ${renderAnswerModal()}
       ${renderMergeConfirm()}
-      ${renderPushConfirm()}`;
+      ${renderPushConfirm()}
+      ${renderDeleteConfirm()}`;
     bindCommon(view);
     state.rendered = true;
   }
@@ -840,14 +1268,62 @@ const ATBBuild = (() => {
     for (const el of view.querySelectorAll('[data-commit-item]')) {
       el.addEventListener('change', () => itemAction('commit', { itemId: el.dataset.commitItem, commit: el.value }));
     }
-    // 操作区
-    q('#bldAnswerBtn')?.addEventListener('click', openAnswerModal);
-    q('#bldMergeBtn')?.addEventListener('click', openMergeConfirm);
-    // 回填弹窗（同一弹窗内完成复制 → 粘贴 → 解析 → 应用）
+    // 卡片行内操作（BUG-20260913-004：按钮迁入版本卡片，按所在卡片版本绑定；
+    // .rel-list 点击处理已忽略 button 点击，点按钮不会改变选中态）
+    for (const el of view.querySelectorAll('[data-ver-answer]')) {
+      el.addEventListener('click', () => openAnswerModal(el.dataset.verAnswer));
+    }
+    for (const el of view.querySelectorAll('[data-ver-merge]')) {
+      el.addEventListener('click', () => openMergeConfirm(el.dataset.verMerge));
+    }
+    // REQ-20260913-004 删除确认（按所在卡片版本打开；遮罩点击关闭，执行中不关防误触）
+    for (const el of view.querySelectorAll('[data-ver-delete]')) {
+      el.addEventListener('click', () => openDeleteConfirm(el.dataset.verDelete));
+    }
+    q('#bldDeleteCancel')?.addEventListener('click', () => {
+      if (state.deleteBusy) return;
+      state.deleteConfirm = null;
+      render();
+    });
+    q('#bldDeleteGo')?.addEventListener('click', doDelete);
+    q('#bldDeleteWrap')?.addEventListener('click', (e) => {
+      if (state.deleteBusy || e.target !== e.currentTarget) return;
+      state.deleteConfirm = null;
+      render();
+    });
+    // 回填弹窗（同一弹窗内完成复制 → 粘贴 → 解析 → 编辑 → 应用）
     q('#bldCopyPrompt')?.addEventListener('click', copyPrompt);
     q('#bldParseBtn')?.addEventListener('click', parseAnswerPreview);
     q('#bldApplyBtn')?.addEventListener('click', applyParsed);
+    // REQ-20260913-006：回填编辑表单输入即时校验（名称空显错禁用应用；描述无即时校验）
+    q('.bld-name-edit')?.addEventListener('input', onAnswerEditInput);
+    q('.bld-desc-edit')?.addEventListener('input', onAnswerEditInput);
     q('#bldAnswerClose')?.addEventListener('click', () => { state.answer = null; render(); });
+    // BUG-20260913-005：弹窗内「去新建 XX 会话」——守卫与点击口径同任务面板
+    // （未选项目 / 未检测到 → 仅 toast 说明，不复制不导航；守卫通过后先复制本弹窗提示词后跳深链）。
+    // 单一触发路径（preventDefault 后统一按最新 state.project 构造深链），键盘 Enter 同路径。
+    for (const el of view.querySelectorAll('[data-bld-new-session]')) {
+      el.addEventListener('click', (ev) => {
+        ev?.preventDefault?.();
+        const agent = el.dataset.bldNewSession;
+        if (!state.project) {
+          toast('未选择项目：请先在顶栏选择项目后再新建会话', true);
+          return;
+        }
+        if (state.workspaceApps[agent] === false) {
+          toast(agent === 'codex'
+            ? '未检测到 ChatGPT.app：可能未安装或装在非默认路径，可直接打开 ChatGPT 手动新建会话并粘贴提示词'
+            : '未检测到 ZCode.app：可能未安装或装在非默认路径，可直接打开 Zcode 手动新建会话并粘贴提示词', true);
+          return;
+        }
+        const url = agent === 'codex'
+          ? `codex://threads/new?path=${encodeURIComponent(state.project)}`
+          : `zcode://workspace/open?path=${encodeURIComponent(state.project)}`;
+        copyPromptAndOpenSession(agent, url); // fire-and-forget：先复制后跳转（含失败/空态 toast）
+      });
+    }
+    // 探测失败后的「重新检测」（force 绕过 failed 防重，探测结束自动刷出结果）
+    q('[data-bld-ws-retry]')?.addEventListener('click', (ev) => { ev?.preventDefault?.(); refreshWorkspaceApps(true); });
     // 合并确认
     q('#bldMergeCancel')?.addEventListener('click', () => { state.mergeConfirm = null; render(); });
     q('#bldMergeGo')?.addEventListener('click', doMerge);
@@ -857,11 +1333,12 @@ const ATBBuild = (() => {
     q('#bldPanelRetry')?.addEventListener('click', () => { if (state.createPanel) openCreatePanel(); else openAddPanel(); });
     q('#bldCreateBtn')?.addEventListener('click', submitCreate);
     q('#bldAddSubmit')?.addEventListener('click', submitAdd);
+    // BUG-20260914-002：pickAll 内部统一 render——「全选」的跳过提示与界面更新同时生效
+    //（提示不替代渲染）；「全不选」同样即时清空界面，两个面板共用该路径。
     q('#bldPickAll')?.addEventListener('click', () => {
       const key = state.createPanel ? 'createPanel' : 'addPanel';
       const skipped = pickAll(key, true);
       if (skipped) toast(`已全选有 commit 候选的条目；${skipped} 个条目暂无关联提交已跳过`);
-      else render();
     });
     q('#bldPickNone')?.addEventListener('click', () => {
       const key = state.createPanel ? 'createPanel' : 'addPanel';
@@ -876,10 +1353,21 @@ const ATBBuild = (() => {
     const nameInput = q('#bldNewName');
     nameInput?.addEventListener('input', () => { if (state.createPanel) state.createPanel.name = nameInput.value; });
     // 分支浏览
-    q('#bldFetchBtn')?.addEventListener('click', doFetch);
+    q('#bldFetchBtn')?.addEventListener('click', doSync);
     q('#bldBranchRefresh')?.addEventListener('click', loadBranches);
     q('#bldBranchRetry')?.addEventListener('click', loadBranches);
-    q('#bldLogRefresh')?.addEventListener('click', () => state.logBranch && selectBranch(state.logBranch));
+    // BUG-20260914-009：刷新=重新加载当前页；翻页失败重试重发目标页
+    q('#bldLogRefresh')?.addEventListener('click', () => state.logBranch && loadLog(state.logPage));
+    q('#bldLogRetry')?.addEventListener('click', retryLogPage);
+    q('#bldLogSize')?.addEventListener('change', (e) => setLogPageSize(Number(e.target?.value)));
+    for (const el of view.querySelectorAll('[data-pg]')) {
+      el.addEventListener('click', () => {
+        const v = el.dataset.pg;
+        if (v === 'prev') gotoLogPage(state.logPage - 1);
+        else if (v === 'next') gotoLogPage(state.logPage + 1);
+        else gotoLogPage(Number(v));
+      });
+    }
     for (const el of view.querySelectorAll('[data-branch]')) {
       el.addEventListener('click', (e) => {
         if (e.target?.closest?.('button')) return;
@@ -896,6 +1384,7 @@ const ATBBuild = (() => {
   document.addEventListener?.('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (state.pushConfirm) { state.pushConfirm = null; render(); return; }
+    if (state.deleteConfirm) { if (!state.deleteBusy) { state.deleteConfirm = null; render(); } return; }
     if (state.mergeConfirm) { state.mergeConfirm = null; render(); return; }
     if (state.answer) { state.answer = null; render(); return; }
     if (state.createPanel || state.addPanel) { state.createPanel = null; state.addPanel = null; render(); }
@@ -906,8 +1395,13 @@ const ATBBuild = (() => {
   return {
     enter, refresh, setTab, setQuery, snapshot, restoreView, notifyState: notify,
     openCreatePanel, openAddPanel, selectBranch,
+    // BUG-20260914-009：提交记录分页行为接缝（测试与翻页交互）
+    gotoLogPage, setLogPageSize, retryLogPage,
     // 纯函数接缝（测试与面板复用）
-    doneCandidates, selectableCandidates, parseAnswer, buildPrompt,
+    doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
+    // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
+    // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
+    openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };

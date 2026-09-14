@@ -2,11 +2,11 @@
   "id": "REQ-20260913-004",
   "type": "requirement",
   "title": "支持版本删除",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-2",
   "createdAt": "2026-09-13T15:28:41.855Z",
-  "updatedAt": "2026-09-14T00:42:47.336Z",
+  "updatedAt": "2026-09-14T02:44:21.797Z",
   "agentCompletedAt": "2026-09-14T00:42:47.336Z",
   "lastReport": {
     "at": "2026-09-14T00:42:47.336Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-2",
       "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:21.798Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

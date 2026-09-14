@@ -140,6 +140,7 @@ t('R12-8（BUG-20260908-014）终止收尾后面板显示「启动新任务」�
       esc: String, fmtTime: String, shortOwner: String, batchStatusLabel: String,
       taskStatsLine: () => '', fmtElapsed: () => '00:00',
       pendingQueueHtml: () => '', runAttemptsHtml: () => '',
+      confirmQueueBannerHtml: () => '', // REQ-20260914-001 挂起确认横幅桩
       // REQ-20260909-008：运行面板改由共用 taskPaneShell 组织二级页签（此处桩为拼合四分区内容）
       taskPaneShell: (scope, store, panes) => Object.values(panes).join(''),
       // REQ-20260910-002：提示词分区工作区工具行改由共用 workspaceOpenRowHtml 渲染（此处桩掉）
@@ -185,6 +186,7 @@ t('R12-9（BUG-20260908-015）终态批次不再提供「暂停后续」入口�
       esc: String, fmtTime: String, shortOwner: String, batchStatusLabel: String,
       taskStatsLine: () => '', fmtElapsed: () => '00:00',
       pendingQueueHtml: () => '', runAttemptsHtml: () => '',
+      confirmQueueBannerHtml: () => '', // REQ-20260914-001 挂起确认横幅桩
       // REQ-20260909-008：运行面板改由共用 taskPaneShell 组织二级页签（此处桩为拼合四分区内容）
       taskPaneShell: (scope, store, panes) => Object.values(panes).join(''),
       // REQ-20260910-002：提示词分区工作区工具行改由共用 workspaceOpenRowHtml 渲染（此处桩掉）
@@ -228,6 +230,7 @@ t('R12-10（REQ-20260909-011）收尾「启动新任务」与创建面板去 Age
       esc: String, fmtTime: String, shortOwner: String, batchStatusLabel: String,
       refineReasonsHtml: () => '', taskStatsLine: () => '', fmtElapsed: () => '00:00',
       pendingQueueHtml: () => '', runAttemptsHtml: () => '',
+      confirmQueueBannerHtml: () => '', // REQ-20260914-001 挂起确认横幅桩
       // REQ-20260909-008：运行面板改由共用 taskPaneShell 组织二级页签（此处桩为拼合四分区内容）
       taskPaneShell: (scope, store, panes) => Object.values(panes).join(''),
       // REQ-20260910-002：提示词分区工作区工具行改由共用 workspaceOpenRowHtml 渲染（此处桩掉）

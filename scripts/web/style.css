@@ -3039,6 +3039,11 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
    样式与状态说明口径，弹窗内独立一行 flex-wrap，窄屏自动换行；深浅色沿用现有变量 */
 .bld-session-entry { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
 .bld-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+/* REQ-20260913-006：AI 完善弹窗回填编辑表单——原只读预览区改可编辑（名称单行 / 描述多行），
+   控件复用 .field 既有输入样式，仅收紧表单内边距；窄屏随弹窗自然纵向堆叠 */
+.bld-edit-form { gap: 6px; }
+.bld-edit-form .field { margin: 4px 0; }
+.bld-edit-form textarea { resize: vertical; }
 /* 分支浏览 */
 .bld-branch-split { grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); }
 .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -3051,13 +3056,43 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-branch:hover { background: var(--bg); }
 .bld-branch.bld-cur { background: var(--bg); }
 .bld-branch .bld-push { margin-left: auto; }
+/* BUG-20260914-003：本地缺 main 的可解释提示（弱警示，不抢空态文案） */
+.bld-main-hint {
+  margin: 4px 0 0; padding: 6px 10px; font-size: 12.5px; line-height: 1.5;
+  border-left: 3px solid var(--warn); background: var(--bg);
+  border-radius: 0 8px 8px 0;
+}
+/* BUG-20260914-006：远端分组空态解释块——同步成功后仍为空 ⇒ 断言「远端仓库尚无任何分支（从未推送）」 */
+.bld-remote-hint {
+  margin: 4px 0 0; padding: 8px 12px; line-height: 1.55;
+  border-left: 3px solid var(--info-text); background: var(--info-bg);
+  border-radius: 0 8px 8px 0; display: grid; gap: 2px;
+}
+.bld-remote-hint strong { color: var(--info-text); font-size: 13px; }
+/* 同上：该状态下本地分支「推送」按钮高亮为出路（呼吸描边，无布局位移） */
+.bld-push.attn { outline: 2px solid var(--primary); outline-offset: 1px; animation: nudge 1.2s ease-in-out infinite; }
+@keyframes nudge { 50% { outline-color: transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  .bld-push.attn { animation: none; }
+}
 .bld-log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .bld-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .bld-log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
 .bld-log code { font-size: 12px; color: var(--info-text); }
 .bld-log li .muted { margin-left: auto; }
+/* BUG-20260914-009 提交记录分页条 + 末页反馈（跟随系统深浅色变量） */
+.bld-log-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.bld-log-pager button { min-width: 30px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+.bld-log-pager button:hover:not(:disabled):not(.on) { background: var(--info-bg); }
+.bld-log-pager button.on { background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; }
+.bld-log-pager button:disabled { opacity: 0.45; cursor: default; }
+.bld-log-gap { color: var(--muted); }
+.bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+.bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }
+.bld-log-eof { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; }
 @media (max-width: 960px) {
   .bld-branch-split { grid-template-columns: minmax(0, 1fr); }
+  .bld-log-range { margin-left: 0; width: 100%; }
 }
 
 /* ---------- REQ-20260911-007 待人工确认持久聚合区（需求列表下方，空态整体隐藏） ---------- */
@@ -3153,3 +3188,55 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .hold-q textarea:focus,
 .hold-q input[type='text']:focus { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
 #holdFormMeta { margin: 0 0 10px; }
+
+/* ---------- REQ-20260914-001 挂起确认区（任务页置顶卡片 + 统一侧拉面板） ---------- */
+.confirm-area { margin: 0 0 10px; display: grid; gap: 6px; }
+.confirm-area[hidden] { display: none; }
+.confirm-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+  display: grid;
+  gap: 4px;
+}
+.confirm-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.confirm-card-head > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.confirm-kind, .confirm-type { font-size: 11px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--border); }
+.confirm-kind.k-develop { border-color: var(--primary); color: var(--primary); }
+.confirm-kind.k-analyze { border-color: var(--accent, #2f9e44); color: var(--accent, #2f9e44); }
+.confirm-type.t-commit { background: var(--warn); border-color: var(--warn); color: #fff; }
+.confirm-type.t-analysis { background: var(--primary); border-color: var(--primary); color: #fff; }
+.confirm-title { font-weight: 600; }
+.confirm-reason { margin: 0; color: var(--text); }
+.confirm-counts { margin: 0; color: var(--muted); font-size: 12px; }
+.confirm-verify { margin: 0; font-size: 12px; }
+.confirm-verify.ok { color: var(--accent, #2f9e44); }
+.confirm-verify.bad { color: var(--warn); }
+.confirm-verify-reason { margin: 2px 0 0 14px; font-size: 12px; color: var(--warn); }
+.confirm-keep-note { margin: 0; }
+.confirm-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.confirm-queue-banner { margin-bottom: 6px; }
+.flag.confirm-flag {
+  background: var(--warn);
+  color: #fff;
+}
+.confirm-files { width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0; }
+.confirm-files th, .confirm-files td { border: 1px solid var(--border); padding: 3px 6px; text-align: left; word-break: break-all; }
+.confirm-diff-box { display: grid; gap: 4px; }
+.confirm-diff pre, .confirm-test-tail pre {
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg-inset, rgba(127, 127, 127, 0.12));
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.confirm-background { margin: 0 0 6px; }
+.confirm-option { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; }
+.confirm-option small { flex: 1; }
+.confirm-rec { font-style: normal; color: var(--primary); margin-left: 4px; font-size: 11px; }
+.confirm-q { margin-bottom: 8px; }

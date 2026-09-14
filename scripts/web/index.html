@@ -419,6 +419,30 @@
     </div>
   </div>
 
+  <!-- REQ-20260914-001 挂起确认侧拉面板（统一入口）：自动提交不完整（待人工确认提交：文件/差异/核验/
+       保持挂起/确认并继续）与 AI 分析问题（待人工确认分析：问题/选项/作答/草稿/确认并继续）按阻塞
+       类型分形态；确认绑定内容指纹/问题版本，失败保留现场可重试。操作仅人工（Agent 调用被钩子拦截） -->
+  <div id="confirmPanel" class="side-panel hidden" role="dialog" aria-label="挂起确认">
+    <header class="side-panel-head">
+      <div class="side-panel-title">
+        <h3 id="confirmPanelTitle">挂起确认</h3>
+        <p class="side-panel-scope" id="confirmPanelScope">核对后确认：核验通过才恢复队列</p>
+      </div>
+      <button type="button" class="icon-btn" id="confirmPanelClose" aria-label="关闭挂起确认面板" title="关闭（Esc）">✕</button>
+    </header>
+    <div class="side-panel-body">
+      <p id="confirmPanelLoading" class="muted edit-loading">正在读取挂起详情…</p>
+      <div id="confirmPanelError" class="edit-error hidden" role="alert">
+        <p id="confirmPanelErrorText" class="edit-error-text"></p>
+        <div class="modal-foot">
+          <button type="button" class="btn" id="confirmPanelErrorClose">关闭</button>
+          <button type="button" class="btn primary" id="confirmPanelErrorRetry">重试</button>
+        </div>
+      </div>
+      <div id="confirmForm" class="hidden"></div>
+    </div>
+  </div>
+
   <!-- REQ-20260910-007 快捷键帮助面板：居中模态，列出「操作 / 按键 / 生效条件」；
        窄屏整体可滚动且头部 sticky（关闭按钮始终可达），开启期间 Tab/Shift+Tab 焦点圈定在面板内 -->
   <div id="shortcutHelpWrap" class="modal-wrap hidden">

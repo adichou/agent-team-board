@@ -35,6 +35,7 @@ function renderPanel(data) {
     esc: String, fmtTime: String, shortOwner: String, batchStatusLabel: String,
     taskStatsLine: () => '', fmtElapsed: () => '00:00',
     pendingQueueHtml: () => '', runAttemptsHtml: () => '',
+    confirmQueueBannerHtml: () => '', // REQ-20260914-001 挂起确认横幅桩
     taskPaneShell: (scope, store, panes) => Object.values(panes).join(''),
     workspaceOpenRowHtml: () => '',
     localStorage: { getItem: () => '' },

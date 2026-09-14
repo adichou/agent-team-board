@@ -250,17 +250,18 @@ t('P5 全部非看板改动均待人工且无 doc 可提交：状态如实 skipp
   assert.ok(!commitStore.committedItemIndex(dataDir).get(item.id), '徽标账本不得点亮');
 });
 
-t('P6 幂等：待人工回执重复收尾幂等返回；atb run autocommit 重试因历史已含单号跳过，不产生新提交', () => {
+t('P6 幂等：待人工回执重复收尾幂等返回；挂起后 autocommit 重试指向人工确认闭环，不产生新提交', () => {
   const root = mkProject();
   const { dataDir, item, runId } = runPreDirtyFlow(root);
   assert.equal(logSubjectsOf(root, item.id).length, 1);
   const r2 = batch.finishRun(dataDir, runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.equal(r2.idempotent, true, '重复回执应幂等返回');
+  // REQ-20260914-001：存在待人工路径的收尾已挂起（待人工确认提交）——重试入口不越过人工确认
   const again = atb(['run', 'autocommit', runId, '--json'], root);
   assert.equal(again.code, 0, `重试入口应成功（${again.err}）`);
   const ac = jsonOf(again).autoCommit;
   assert.equal(ac.status, 'skipped');
-  assert.match(ac.reason, /幂等|已含/, '应按幂等口径跳过');
+  assert.match(ac.reason, /待人工确认/, '应指向人工确认闭环');
   assert.equal(logSubjectsOf(root, item.id).length, 1, '不得产生重复提交');
 });
 

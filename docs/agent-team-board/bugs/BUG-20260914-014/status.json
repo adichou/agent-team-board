@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-014",
+  "type": "bug",
+  "title": "回退 BUG-20260914-010",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-18",
+  "createdAt": "2026-09-14T07:19:58.354Z",
+  "updatedAt": "2026-09-14T07:58:18.380Z",
+  "agentCompletedAt": "2026-09-14T07:58:18.380Z",
+  "lastReport": {
+    "at": "2026-09-14T07:58:18.380Z",
+    "coverage": 100,
+    "framework": "node:test-style custom scripts/tests/run-all.mjs (229 files)",
+    "summary": "回退 BUG-20260914-010 全部 7 处改动（提示词指令/checkBatch 暂扣 notice/pendingManualRuns/API pendingCommits/看板待人工提交分组/i18n 词条/style 选择器/010 测试删除），残留 grep 清零、行为回归 010 前；新增 bug-revert-held-notice-20260914-014.test.mjs 7 用例 TDD（5 红→全绿）；全量 229 文件 0 失败；他人单改动与 010 历史文档账本完好；归因 BUG-20260914-010（atb list 核验）。回退撤除随人工授权补交批入库，014 测试由收尾自动提交归因",
+    "runId": "run-20260914-236"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T07:19:58.354Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T07:19:58.354Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T07:29:14.350Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-152108-87a9）"
+    },
+    {
+      "at": "2026-09-14T07:36:32.412Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-18",
+      "note": "认领（zcode-batch-048-18）"
+    },
+    {
+      "at": "2026-09-14T07:58:18.380Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-18",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

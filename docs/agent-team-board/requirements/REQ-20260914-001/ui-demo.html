@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260914-001 界面演示 · 挂起条目并暂停队列，人工确认后恢复</title>
+<style>
+  /* 配色取自 scripts/web/style.css（--bg/--panel/--text/--muted/--border/--primary/--warn 等），
+     深浅色按 data-theme 切换（默认跟随系统），与看板一致。 */
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --primary: #2563eb; --primary-soft: rgba(37,99,235,.12);
+    --warn: #dc2626; --warn-soft: rgba(220,38,38,.1);
+    --inprogress: #d97706; --ok: #16a34a; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --warn-bg: #fef2f2; --warn-text: #b91c1c;
+    --chip-mute: #64748b; --mask: rgba(20,30,50,.45);
+    --code-bg: #f1f5f9; --diff-add: #dcfce7; --diff-add-text: #166534; --diff-del: #fee2e2; --diff-del-text: #991b1b;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    --primary: #60a5fa; --primary-soft: rgba(96,165,250,.15);
+    --warn: #f87171; --warn-soft: rgba(248,113,113,.12);
+    --inprogress: #fbbf24; --ok: #4ade80; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+    --info-bg: #0b1d3a; --info-text: #93c5fd; --warn-bg: #3b1214; --warn-text: #fca5a5;
+    --chip-mute: #94a3b8; --mask: rgba(4,8,14,.6);
+    --code-bg: #0b111a; --diff-add: #0c2e1f; --diff-add-text: #86efac; --diff-del: #3b1416; --diff-del-text: #fca5a5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; color: inherit; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .btn { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .btn.ghost-warn { border-color: var(--warn); color: var(--warn); }
+  .btn.small { padding: 4px 10px; font-size: 12.5px; border-radius: 7px; }
+  .chip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .chip.mute { color: var(--chip-mute); border-color: var(--chip-mute); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+  .chip.ok { color: var(--ok); border-color: var(--ok); }
+  .chip.info { color: var(--primary); border-color: var(--primary); }
+  .chip.amber { color: var(--inprogress); border-color: var(--inprogress); }
+
+  /* ---------- 演示控制台（真实界面没有，仅为驱动本演示） ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 50; }
+  .demo-top h1 { font-size: 14px; margin: 0 8px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; padding: 5px 12px; cursor: pointer; color: var(--muted); }
+  .seg button.on { background: var(--primary); color: #fff; font-weight: 600; }
+  .state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 8px 16px; border-bottom: 1px dashed var(--border); background: var(--bg); }
+  .state-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .state-bar label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; }
+  .state-bar .right { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- 任务页（还原 tasks 视图顶部：队列横幅 + 待人工确认区 + 队列） ---------- */
+  .board { max-width: 980px; margin: 0 auto; padding: 14px 18px 40px; }
+  .queue-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; box-shadow: var(--shadow); }
+  .queue-bar.paused { border-color: var(--warn); }
+  .queue-bar strong { font-size: 14.5px; }
+  .restore-note { margin: 8px 2px 0; font-size: 12.5px; color: var(--muted); }
+
+  .hold-area { margin-top: 14px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+  .hold-area-head { padding: 9px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .hold-area-head h2 { font-size: 13.5px; margin: 0; }
+  .hold-empty { padding: 18px 16px; color: var(--muted); }
+  .hold-card { padding: 12px 14px; }
+  .hold-card + .hold-card { border-top: 1px dashed var(--border); }
+  .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card-title { font-size: 13.5px; font-weight: 600; margin: 4px 0 2px; overflow-wrap: anywhere; }
+  .card-meta { margin: 2px 0; }
+  .card-meta b.warn-text { color: var(--warn); }
+  .counts { display: flex; gap: 14px; flex-wrap: wrap; margin: 6px 0 2px; font-size: 13px; }
+  .counts .n-wait { color: var(--warn); font-weight: 600; }
+  .hold-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+  .file-table { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: auto; }
+  .file-table table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .file-table th, .file-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .file-table th { color: var(--muted); font-weight: 600; background: var(--bg); white-space: nowrap; }
+  .file-table tr:last-child td { border-bottom: 0; }
+  .file-table td.path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .owner-unknown { color: var(--warn); font-weight: 600; }
+
+  .note-row { margin-top: 10px; }
+  .note-row textarea { width: 100%; min-height: 52px; resize: vertical; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); padding: 7px 10px; font: inherit; }
+  .note-row textarea:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+
+  .status-block { margin-top: 10px; border-radius: 10px; padding: 9px 12px; font-size: 13px; }
+  .status-block.loading { background: var(--info-bg); color: var(--info-text); display: flex; gap: 9px; align-items: center; }
+  .status-block.fail { background: var(--warn-bg); color: var(--warn-text); }
+  .status-block.ok-block { background: var(--ok-bg); color: var(--ok-text); }
+  .status-block.info { background: var(--info-bg); color: var(--info-text); }
+  .status-block ul { margin: 6px 0 2px; padding-left: 18px; }
+  .status-block .btn { margin-top: 8px; }
+  .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor;
+    border-top-color: transparent; animation: spin .8s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .queue-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .q-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; }
+  .q-row.blocked { border-color: var(--warn); }
+  .q-row.dim { opacity: .62; }
+  .q-row .q-title { flex: 1 1 260px; min-width: 200px; overflow-wrap: anywhere; }
+  .legend { margin-top: 18px; padding: 10px 14px; border: 1px dashed var(--border); border-radius: 10px;
+    color: var(--muted); font-size: 12.5px; }
+
+  /* ---------- 分析确认侧拉面板（复用统一人工确认入口） ---------- */
+  .side-mask { position: fixed; inset: 0; background: var(--mask); display: none; z-index: 90; }
+  .side-mask.show { display: block; }
+  .side-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 94vw);
+    background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow);
+    z-index: 100; display: none; flex-direction: column; }
+  .side-panel.show { display: flex; }
+  .sp-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .sp-head h3 { font-size: 14px; margin: 0; flex: 1; }
+  .sp-body { flex: 1; overflow: auto; padding: 4px 16px 16px; }
+  .sp-foot { border-top: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sp-foot .hint { color: var(--muted); font-size: 12.5px; }
+  .bg-block { background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+  .q-block { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+  .q-block .q-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .q-block .q-title { font-weight: 600; font-size: 13.5px; }
+  .opt { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--border);
+    border-radius: 9px; margin: 7px 0; cursor: pointer; }
+  .opt:hover { border-color: var(--primary); }
+  .opt.sel { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+  .opt input { margin-top: 4px; }
+  .opt .o-body { flex: 1; }
+  .opt .o-impact { color: var(--muted); font-size: 12.5px; }
+  .q-input { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+    color: var(--text); padding: 7px 10px; font: inherit; margin-top: 7px; }
+  .q-input:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+  .field-err { color: var(--warn); font-size: 12.5px; margin-top: 5px; display: none; }
+  .field-err.show { display: block; }
+
+  /* ---------- 差异 / 文档弹窗 ---------- */
+  .modal-mask { position: fixed; inset: 0; background: var(--mask); display: none;
+    align-items: center; justify-content: center; z-index: 110; padding: 18px; }
+  .modal-mask.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: min(760px, 100%); max-height: 84vh; display: flex; flex-direction: column; }
+  .modal-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--border); }
+  .modal-head h3 { font-size: 13.5px; margin: 0; flex: 1; overflow-wrap: anywhere; }
+  .modal-body { overflow: auto; padding: 12px 16px; }
+  .diff { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+    border-radius: 8px; overflow: auto; background: var(--code-bg); }
+  .diff .ln { display: block; padding: 1px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .diff .add { background: var(--diff-add); color: var(--diff-add-text); }
+  .diff .del { background: var(--diff-del); color: var(--diff-del-text); }
+  .diff .ctx { color: var(--muted); }
+  .doc-snippet h4 { margin: 10px 0 4px; font-size: 13.5px; }
+  .doc-snippet p { margin: 6px 0; font-size: 13px; }
+  .doc-snippet ul { padding-left: 20px; font-size: 13px; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(16px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-left: 3px solid var(--primary); border-radius: 10px; box-shadow: var(--shadow);
+    padding: 9px 16px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 120;
+    max-width: min(560px, 90vw); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- 演示控制台（真实界面没有这一条） -->
+<div class="demo-top">
+  <h1>REQ-20260914-001 演示 · 挂起并暂停队列，人工确认后恢复</h1>
+  <div class="seg" id="segScene" role="group" aria-label="场景选择">
+    <button type="button" data-scene="dev">AI 开发 · 确认提交</button>
+    <button type="button" data-scene="ana">AI 分析 · 确认分析</button>
+    <button type="button" data-scene="empty">空态（无待确认）</button>
+  </div>
+  <div class="seg" id="segTheme" role="group" aria-label="外观">
+    <button type="button" data-theme-opt="auto">跟随系统</button>
+    <button type="button" data-theme-opt="light">浅色</button>
+    <button type="button" data-theme-opt="dark">深色</button>
+  </div>
+  <span class="muted small">单文件演示 · 无外网依赖 · 数据为演示数据</span>
+</div>
+
+<div class="state-bar" id="stateBar">
+  <!-- 场景相关模拟开关由 JS 注入 -->
+  <div class="right">
+    <button type="button" class="btn small" id="btnReload">模拟页面刷新（真实 reload）</button>
+    <button type="button" class="btn small" id="btnReset">重置演示</button>
+  </div>
+</div>
+
+<!-- 任务页顶部：队列横幅 + 待人工确认区 + 队列（还原 tasks 视图） -->
+<main class="board">
+  <div class="queue-bar" id="queueBar"></div>
+  <p class="restore-note" id="restoreNote" hidden></p>
+  <section class="hold-area" role="region" aria-label="待人工确认">
+    <div class="hold-area-head">
+      <h2>待人工确认</h2>
+      <span class="muted small">置顶聚合区 · 不随批次结束消失</span>
+    </div>
+    <div id="holdBody"></div>
+  </section>
+  <div class="queue-list" id="queueList"></div>
+  <p class="legend">
+    演示说明：本页为 REQ-20260914-001 的静态单文件演示。阻塞卡片、队列暂停、确认面板均为交互模拟；
+    状态用浏览器 localStorage 持久化（真实系统持久化于服务端，刷新 / 重启 / 新会话不可绕过）。
+    单号与标题取自看板既有条目，文件路径、commit、问题与差异内容均为演示数据。
+  </p>
+</main>
+
+<!-- 分析确认侧拉面板 -->
+<div class="side-mask" id="sideMask"></div>
+<aside class="side-panel" id="sidePanel" role="dialog" aria-modal="true" aria-label="人工确认面板"></aside>
+
+<!-- 差异 / 文档弹窗 -->
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <div class="modal-head"><h3 id="modalTitle"></h3>
+      <button type="button" class="btn small" id="modalClose">关闭</button></div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ============================ 演示数据（均为演示数据，单号/标题取自看板既有条目） ============================ */
+const DEV_BLOCKED = { id: 'BUG-20260914-008', title: '新建版本是关联条目重复提示。导入条目到已有版本一样重复提示，请修复' };
+const DEV_WAITING = [
+  { id: 'BUG-20260914-013', title: '集成测试泄漏 server/stub 进程：随机端口被残留监听者占用致跨轮次偶发失败' },
+  { id: 'BUG-20260914-010', title: '批量开发暂扣待人工提交的改动缺少人工提醒通道' },
+];
+const DEV_FILES = [
+  { path: 'docs/agent-team-board/bugs/BUG-20260914-008/README.md', owner: '本单', commit: '3fa21c0e', test: '—', kind: 'doc' },
+  { path: 'electron/version-panel.mjs（演示路径）', owner: '归属不明', commit: '', test: '待测试', kind: 'impl', unknown: true },
+  { path: 'scripts/tests/version-panel.test.mjs（演示路径）', owner: '本单（待确认）', commit: '', test: '未运行', kind: 'test' },
+];
+const ANA_BLOCKED = { id: 'REQ-20260914-002', title: '分支浏览中支持在当前分支中搜索提交记录' };
+const ANA_WAITING = [{ id: 'REQ-20260913-006', title: '（演示排队条目，标题从略）' }];
+const QUESTIONS = {
+  q1: {
+    label: '1. 搜索范围如何确定？（必答 · 单选）',
+    options: [
+      { key: 'A', text: '仅当前本地分支', impact: '影响：结果聚焦、实现简单；无法发现仅存在于远端的提交', rec: true },
+      { key: 'B', text: '当前分支 + 远端同名分支', impact: '影响：覆盖更全；需要处理远端未拉取时的加载与失败提示' },
+    ],
+    notePlaceholder: '补充意见（选填）：如对默认行为、边界情况的说明',
+  },
+  q2: { label: '2. 请补充必要信息：默认搜索的时间范围 / 条数上限（必答 · 填写）', placeholder: '例如：默认最近 30 天，上限 200 条，超出时提示缩小范围…' },
+};
+const DIFFS = {
+  doc: ['@@ README.md @@', '- 版本计划面板的候选口径文案说明（重复第一处）', '+ 版本计划面板的候选口径文案说明（修订后，仅保留一处）', '  - 其余文档内容未改动'],
+  impl: ['@@ electron/version-panel.mjs @@', '  function openCandidatePanel(kind) {', '-   showHint(PANEL_HINT_TEXT);', '+   showHintOnce(PANEL_HINT_TEXT); // 任务开始前已存在的修改，归属待确认', '  }'],
+  test: [
+    '@@ scripts/tests/version-panel.test.mjs @@',
+    "+ test('版本面板口径提示只出现一次', async () => {",
+    "+   await openPanel('create');",
+    '+   expect(hintCount()).toBe(1);',
+    '+ });',
+  ],
+};
+
+/* ============================ 状态 ============================ */
+const LS_KEY = 'atb-req-20260914-001-demo';
+const freshState = () => ({
+  scene: 'dev',                 // dev | ana | empty
+  themeOpt: 'auto',             // auto | light | dark
+  dev: { phase: 'held', expanded: false, note: '', keptNote: '', manualPatched: false, verifySim: 'pass', fpStale: false,
+         lastVerify: null, allCommitted: false, successHash: '' },
+  ana: { phase: 'held', panelOpen: false, busy: false, staleSim: false, draftAt: null, anaDone: false,
+         answers: { q1: '', q1Note: '', q2: '' }, triedConfirm: false },
+  queueRunning: false, resumedNext: '',
+});
+let S = freshState();
+let memoryStore = null; // localStorage 不可用时的兜底
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let timer = null;
+
+function save() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+  catch { memoryStore = JSON.stringify(S); }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return { ok: true, data: JSON.parse(raw) };
+    if (memoryStore) return { ok: true, data: JSON.parse(memoryStore) };
+  } catch { /* ignore */ }
+  return { ok: false };
+}
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ============================ 外观 ============================ */
+function applyTheme() {
+  const resolved = S.themeOpt === 'auto'
+    ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : S.themeOpt;
+  document.documentElement.dataset.theme = resolved;
+  $$('#segTheme button').forEach((b) => b.classList.toggle('on', b.dataset.themeOpt === S.themeOpt));
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (S.themeOpt === 'auto') applyTheme(); });
+
+/* ============================ 渲染：控制条 ============================ */
+function renderStateBar() {
+  let html = '';
+  if (S.scene === 'dev') {
+    html += `<span class="lbl">模拟核验结果：</span>
+      <div class="seg" id="segVerify">
+        <button type="button" data-v="pass" class="${S.dev.verifySim === 'pass' ? 'on' : ''}">核验通过</button>
+        <button type="button" data-v="fail" class="${S.dev.verifySim === 'fail' ? 'on' : ''}">核验失败</button>
+      </div>
+      <label><input type="checkbox" id="simPatch" ${S.dev.manualPatched ? 'checked' : ''}> 人工已在终端补交实现与测试</label>
+      <label><input type="checkbox" id="simStale" ${S.dev.fpStale ? 'checked' : ''}> 确认时差异指纹已变化（过期）</label>`;
+  } else if (S.scene === 'ana') {
+    html += `<label><input type="checkbox" id="simQStale" ${S.ana.staleSim ? 'checked' : ''}> 确认时问题清单已更新（确认将过期）</label>`;
+  } else {
+    html += `<span class="lbl">空态：当前没有任何待人工确认的条目，队列正常执行。</span>`;
+  }
+  const right = $('#stateBar .right');
+  $('#stateBar').innerHTML = html + right.outerHTML;
+  $$('#segVerify button').forEach((b) => b.addEventListener('click', () => {
+    S.dev.verifySim = b.dataset.v; save(); renderStateBar();
+  }));
+  $('#simPatch')?.addEventListener('change', (e) => { S.dev.manualPatched = e.target.checked; save(); });
+  $('#simStale')?.addEventListener('change', (e) => { S.dev.fpStale = e.target.checked; save(); });
+  $('#simQStale')?.addEventListener('change', (e) => { S.ana.staleSim = e.target.checked; save(); });
+}
+
+/* ============================ 渲染：队列横幅 / 队列 ============================ */
+function queueMeta() {
+  if (S.scene === 'dev') {
+    return {
+      kind: 'AI 开发队列', blocked: DEV_BLOCKED, waiting: DEV_WAITING,
+      holdType: '待人工确认提交', runningLabel: `AI 开发队列：运行中 · 当前 ${DEV_WAITING[0].id}`,
+    };
+  }
+  if (S.scene === 'ana') {
+    return {
+      kind: 'AI 分析队列', blocked: ANA_BLOCKED, waiting: ANA_WAITING,
+      holdType: '待人工确认分析', runningLabel: 'AI 分析队列：运行中',
+    };
+  }
+  return null;
+}
+
+function renderQueue() {
+  const m = queueMeta();
+  const bar = $('#queueBar'); const list = $('#queueList');
+  if (!m) {
+    bar.classList.remove('paused');
+    bar.innerHTML = `<strong>AI 开发队列：运行中</strong> <span class="chip ok">运行中</span>
+      <span class="muted small">当前 ${esc(DEV_WAITING[0].id)} · 无阻塞</span>`;
+    list.innerHTML = [
+      `<div class="q-row"><span class="chip amber">执行中</span><span class="q-title"><b>${esc(DEV_WAITING[0].id)}</b> ${esc(DEV_WAITING[0].title)}</span><span class="chip mute">开发中</span></div>`,
+      `<div class="q-row dim"><span class="chip mute">排队</span><span class="q-title"><b>${esc(DEV_WAITING[1].id)}</b> ${esc(DEV_WAITING[1].title)}</span><span class="chip mute">已预留 · 未开始</span></div>`,
+    ].join('');
+    return;
+  }
+  const resumed = S.queueRunning;
+  if (resumed) {
+    bar.classList.remove('paused');
+    bar.innerHTML = `<strong>${esc(m.kind)}：已恢复运行</strong> <span class="chip ok">运行中</span>
+      <span class="muted small">下一条 ${esc(S.resumedNext || m.waiting[0].id)} 已可领取</span>`;
+  } else {
+    bar.classList.add('paused');
+    bar.innerHTML = `<strong>${esc(m.kind)}：已暂停</strong> <span class="chip warn">已暂停</span>
+      <span>阻塞于 <b>${esc(m.blocked.id)}</b> · 后续 ${m.waiting.length} 单等待</span>
+      <span class="muted small">领取 / 认领 / 派发入口均受守卫</span>`;
+  }
+  const chipBlocked = `<span class="chip warn">已挂起 · ${S.scene === 'dev' ? '待人工确认提交' : '待人工确认分析'}</span>`;
+  const rows = [];
+  const blockedDone = (S.scene === 'dev' && S.dev.phase === 'success') || (S.scene === 'ana' && S.ana.anaDone);
+  rows.push(`<div class="q-row${blockedDone ? '' : ' blocked'}">
+      <span class="q-title"><b>${esc(m.blocked.id)}</b> ${esc(m.blocked.title)}</span>
+      ${blockedDone ? '<span class="chip ok">核验通过 · 已收尾</span>' : chipBlocked}</div>`);
+  m.waiting.forEach((w, i) => {
+    const active = resumed || blockedDone;
+    rows.push(`<div class="q-row${active ? '' : ' dim'}">
+      <span class="q-title"><b>${esc(w.id)}</b> ${esc(w.title)}</span>
+      ${active
+        ? (i === 0 ? '<span class="chip amber">可领取</span>' : '<span class="chip mute">排队</span>')
+        : '<span class="chip mute">已暂停 · 不可领取</span>'}</div>`);
+  });
+  list.innerHTML = rows.join('');
+}
+
+/* ============================ 渲染：待人工确认区 ============================ */
+function renderHold() {
+  const box = $('#holdBody');
+  if (S.scene === 'empty') {
+    box.innerHTML = `<div class="hold-empty">当前没有待人工确认的条目 —— 队列正常执行，无需人工介入。</div>`;
+    return;
+  }
+  box.innerHTML = S.scene === 'dev' ? devCardHtml() : anaCardHtml();
+  if (S.scene === 'dev') bindDevCard(); else bindAnaCard();
+}
+
+/* ---------- AI 开发 · 待人工确认提交 ---------- */
+function devCounts() {
+  return S.dev.allCommitted
+    ? `<span>已提交：文档 1 · 实现 1 · 测试 1（共 3）</span><span class="n-wait">待提交：0</span>`
+    : `<span>已提交：文档 1 组</span><span class="n-wait">待提交：实现 1 / 测试 1</span>`;
+}
+function devCardHtml() {
+  const d = S.dev;
+  const busy = d.phase === 'verifying';
+  const done = d.phase === 'success';
+  const files = d.expanded ? `
+    <div class="file-table"><table>
+      <thead><tr><th>文件</th><th>归属</th><th>已有 commit</th><th>测试结果</th><th></th></tr></thead>
+      <tbody>${DEV_FILES.map((f) => `
+        <tr><td class="path">${esc(f.path)}</td>
+          <td>${f.unknown ? `<span class="owner-unknown">归属不明</span>` : esc(f.owner)}${f.unknown ? '<br><span class="muted small">含任务开始前的修改</span>' : ''}</td>
+          <td>${f.commit || (d.allCommitted ? '<span style="color:var(--ok)">7c2d9e1（终端补交）</span>' : '<span class="muted">无</span>')}</td>
+          <td>${d.allCommitted && f.kind !== 'doc' ? '<span style="color:var(--ok)">通过</span>' : esc(f.test)}</td>
+          <td><button type="button" class="btn small" data-diff="${f.kind}">差异</button></td></tr>`).join('')}
+      </tbody></table></div>
+    <p class="muted small" style="margin:6px 0 0">文件路径、commit 与测试结果均为演示数据；差异入口打开演示 diff。</p>` : '';
+  let status = '';
+  if (busy) {
+    status = `<div class="status-block loading"><span class="spinner" aria-hidden="true"></span>正在核验提交与测试…（按钮已禁用，防重复操作）</div>`;
+  } else if (d.phase === 'fail') {
+    status = `<div class="status-block fail"><b>核验未通过，保持挂起：</b>
+      <ul>${d.failReasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>
+      <button type="button" class="btn small" id="btnRetry">重试核验</button></div>`;
+  } else if (done) {
+    status = `<div class="status-block ok-block"><b>✓ 核验通过 · 队列已恢复</b>
+      <ul><li>补交 commit：<code>${esc(d.successHash)}</code>（演示 hash），必要实现 / 测试 / 文档完整入库</li>
+        <li>测试已在提交后的完整内容上重新验证：通过</li>
+        <li>队列解除暂停，下一条 ${esc(S.resumedNext || DEV_WAITING[0].id)} 已可领取；重复确认幂等，不再重复提交</li>
+        <li class="muted-small" style="opacity:.85">人工确认提交 ≠ 人工验收 done：条目最终验收仍由「确认完成」流程处理</li></ul></div>`;
+  } else if (d.lastVerify) {
+    status = d.lastVerify.ok
+      ? `<div class="status-block ok-block">最近核验：${esc(d.lastVerify.msg)}</div>`
+      : `<div class="status-block fail">最近核验（仍不完整，保持挂起）：<ul>${d.lastVerify.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>`;
+  }
+  const kept = d.keptNote ? `<p class="muted small" style="margin:8px 0 0">处理说明已记录：${esc(d.keptNote)}</p>` : '';
+  return `<article class="hold-card">
+    <div class="card-top"><span class="chip warn">${esc(DEV_BLOCKED.id)}</span>
+      <span class="chip mute">AI 开发</span><span class="chip warn">⚠ 等人工决策</span>
+      <span class="chip warn">部分提交，开发未完成</span></div>
+    <div class="card-title">${esc(DEV_BLOCKED.title)}</div>
+    <p class="card-meta">原因：工作区文件含任务开始前的修改，归属待确认（演示：仅文档组已提交）</p>
+    <div class="counts">${devCounts()}</div>
+    ${files}${status}${kept}
+    ${done ? '' : `
+    <div class="note-row">
+      <label class="muted small" for="holdNote">处理说明（选填：归属仍不清晰时填写并保持挂起）</label>
+      <textarea id="holdNote" placeholder="例如：xxx.mjs 的改动属于另一任务，按其单号单独提交…">${esc(d.note)}</textarea>
+    </div>
+    <div class="hold-acts">
+      <button type="button" class="btn small" id="btnExpand">${d.expanded ? '收起文件与差异' : '查看文件与差异'}</button>
+      <button type="button" class="btn small" id="btnRecheck" ${busy ? 'disabled' : ''}>重新核验</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn small ghost-warn" id="btnKeep" ${busy ? 'disabled' : ''}>保持挂起</button>
+      <button type="button" class="btn small primary" id="btnConfirm" ${busy ? 'disabled' : ''}>确认并继续</button>
+    </div>`}
+  </article>`;
+}
+function bindDevCard() {
+  $('#btnExpand')?.addEventListener('click', () => { S.dev.expanded = !S.dev.expanded; save(); renderHold(); });
+  $$('#holdBody [data-diff]').forEach((b) => b.addEventListener('click', () => openDiff(b.dataset.diff)));
+  $('#btnKeep')?.addEventListener('click', () => {
+    S.dev.note = $('#holdNote').value.trim();
+    S.dev.keptNote = S.dev.note || '（未填写，仅保持挂起）';
+    save(); renderHold();
+    toast('已保持挂起：现场与队列暂停均已保留，后续条目继续等待');
+  });
+  $('#btnRecheck')?.addEventListener('click', () => runVerify('recheck'));
+  $('#btnRetry')?.addEventListener('click', () => runVerify('recheck'));
+  $('#btnConfirm')?.addEventListener('click', () => runVerify('confirm'));
+  $('#holdNote')?.addEventListener('input', (e) => { S.dev.note = e.target.value; save(); });
+}
+
+/* ---------- AI 分析 · 待人工确认分析 ---------- */
+function anaCardHtml() {
+  const a = S.ana;
+  const done = a.phase === 'success' && a.anaDone;
+  const confirming = a.phase === 'success' && !a.anaDone;
+  const draftBadge = a.draftAt ? `<span class="chip info">草稿已保存 ${esc(a.draftAt)}</span>` : '';
+  if (done) {
+    return `<article class="hold-card">
+      <div class="card-top"><span class="chip ok">${esc(ANA_BLOCKED.id)}</span><span class="chip mute">AI 分析</span>
+        <span class="chip ok">✓ 已确认并完成分析</span></div>
+      <div class="card-title">${esc(ANA_BLOCKED.title)}</div>
+      <div class="status-block ok-block" style="margin-top:8px">人工答案已交回当前分析任务并完成收尾；队列恢复，下一条 ${esc(S.resumedNext || ANA_WAITING[0].id)} 已可处理。
+        <span class="muted small" style="display:block;margin-top:4px">分析确认只解除分析阻塞：不自动接受需求、不启动开发、不标记验收完成。</span></div>
+    </article>`;
+  }
+  return `<article class="hold-card">
+    <div class="card-top"><span class="chip warn">${esc(ANA_BLOCKED.id)}</span><span class="chip mute">AI 分析</span>
+      <span class="chip warn">⚠ 等人工决策</span><span class="chip warn">待确认问题 2 项（必答 2）</span>${draftBadge}</div>
+    <div class="card-title">${esc(ANA_BLOCKED.title)}</div>
+    <p class="card-meta">原因：方案选择与必要信息缺失，AI 不得自行代替人工确认（演示问题）</p>
+    <p class="card-meta muted small">后续等待 ${ANA_WAITING.length} 单 · 分析队列已暂停，领取 / 派发入口均受守卫</p>
+    ${confirming ? `<div class="status-block info">已确认，正在继续当前条目分析 —— 待当前条目分析完整完成后，才恢复下一条。</div>` : ''}
+    <div class="hold-acts">
+      <button type="button" class="btn small primary" id="btnOpenPanel">查看并确认</button>
+    </div>
+  </article>`;
+}
+function bindAnaCard() {
+  $('#btnOpenPanel')?.addEventListener('click', () => { S.ana.panelOpen = true; save(); renderPanel(); });
+}
+
+/* ============================ 核验流程（AI 开发） ============================ */
+function runVerify(kind) {
+  const d = S.dev;
+  d.phase = 'verifying';
+  d.note = $('#holdNote') ? $('#holdNote').value.trim() : d.note;
+  save(); renderHold(); renderQueue();
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    if (kind === 'recheck') {
+      if (d.manualPatched) {
+        d.allCommitted = true;
+        d.lastVerify = { ok: true, msg: '已识别终端补交 commit 7c2d9e1：实现与测试均已入库，测试在完整内容上验证通过。可「确认并继续」收尾并恢复队列。' };
+        d.phase = 'held';
+        toast('重新核验：识别到人工已补交，提交完整');
+      } else {
+        d.lastVerify = { ok: false, reasons: [
+          '2 个文件未提交：electron/version-panel.mjs、scripts/tests/version-panel.test.mjs（演示路径）',
+          '测试未在提交后的完整内容上验证',
+        ] };
+        d.phase = 'held';
+        toast('重新核验：提交仍不完整，保持挂起');
+      }
+    } else { // confirm：服务端按确认携带的差异指纹重新核验
+      if (d.allCommitted) {
+        d.phase = 'success'; d.successHash = '7c2d9e1（终端补交）';
+        S.queueRunning = true; S.resumedNext = DEV_WAITING[0].id;
+        toast('核验通过：队列已恢复');
+      } else if (d.fpStale) {
+        d.phase = 'fail';
+        d.failReasons = [
+          '确认携带的差异指纹已过期：确认期间工作区文件再次变化（v3 → v5，演示）',
+          '请核对最新差异后重新确认；本次确认不生效',
+        ];
+        toast('确认已过期：文件在确认后被改动，保持挂起');
+      } else if (d.verifySim === 'fail') {
+        d.phase = 'fail';
+        d.failReasons = [
+          '必需文件未提交：实现 1、测试 1（演示路径）',
+          '测试失败：version-panel.test.mjs 1 条用例未通过（演示）',
+          '服务端重新核验未通过，保持挂起；可重试核验',
+        ];
+        toast('核验未通过：保持挂起并已列出原因');
+      } else {
+        d.phase = 'success'; d.allCommitted = true; d.successHash = '9a8b7c6d（授权恢复流程补交）';
+        S.queueRunning = true; S.resumedNext = DEV_WAITING[0].id;
+        toast('核验通过：已补交并恢复队列');
+      }
+    }
+    save(); renderHold(); renderQueue();
+  }, 1100);
+}
+
+/* ============================ 分析确认侧拉面板 ============================ */
+function canConfirm() {
+  const a = S.ana.answers;
+  return !!a.q1 && a.q2.trim().length > 0;
+}
+function renderPanel() {
+  const panel = $('#sidePanel'); const mask = $('#sideMask');
+  if (!S.ana.panelOpen || S.scene !== 'ana') {
+    panel.classList.remove('show'); mask.classList.remove('show');
+    return;
+  }
+  panel.classList.add('show'); mask.classList.add('show');
+  const a = S.ana;
+  if (a.phase === 'success') {
+    panel.innerHTML = `
+      <div class="sp-head"><h3>待人工确认分析 · ${esc(ANA_BLOCKED.id)}</h3><span class="chip ok">已确认</span></div>
+      <div class="sp-body">
+        <div class="status-block ok-block" style="margin-top:12px"><b>✓ 已确认，正在继续当前条目分析</b>
+          <ul><li>人工答案（含确认时间）已交回当前分析任务，继续未完成步骤</li>
+            <li>当前条目分析完整完成后才恢复下一条；若再次发现待确认问题将重新挂起</li>
+            <li class="muted small">分析确认不等于接受需求、批准开发或验收完成</li></ul></div>
+        <p class="muted small">点击下方按钮模拟「当前条目分析完成」观察队列恢复。</p>
+      </div>
+      <div class="sp-foot"><button type="button" class="btn primary" id="btnAnaDone">模拟：当前条目分析完成 → 恢复队列</button>
+        <button type="button" class="btn" id="btnPanelClose2">关闭面板</button></div>`;
+    $('#btnAnaDone').addEventListener('click', () => {
+      a.anaDone = true; a.panelOpen = false;
+      S.queueRunning = true; S.resumedNext = ANA_WAITING[0].id;
+      save(); renderPanel(); renderHold(); renderQueue();
+      toast('当前条目分析完成：队列恢复，下一条已可处理');
+    });
+    $('#btnPanelClose2').addEventListener('click', () => { a.panelOpen = false; save(); renderPanel(); });
+    return;
+  }
+  if (a.phase === 'stale') {
+    panel.innerHTML = `
+      <div class="sp-head"><h3>待人工确认分析 · ${esc(ANA_BLOCKED.id)}</h3><span class="chip warn">确认已过期</span></div>
+      <div class="sp-body">
+        <div class="status-block fail" style="margin-top:12px"><b>⚠ 问题清单已更新（v2 → v3，演示），本次确认已过期</b>
+          <ul><li>已填答案保留，不必重新输入；请重新核对最新问题后再确认</li>
+            <li>保存草稿不解除阻塞；确认绑定当前问题与文档版本</li></ul></div>
+      </div>
+      <div class="sp-foot"><button type="button" class="btn primary" id="btnRelook">重新核对</button>
+        <button type="button" class="btn" id="btnPanelClose3">保持挂起并关闭</button></div>`;
+    $('#btnRelook').addEventListener('click', () => { a.phase = 'held'; a.staleSim = false; save(); renderStateBar(); renderPanel(); });
+    $('#btnPanelClose3').addEventListener('click', () => { a.phase = 'held'; a.panelOpen = false; save(); renderPanel(); });
+    return;
+  }
+  const busy = a.busy;
+  const a2 = a.answers;
+  const opts = QUESTIONS.q1.options.map((o) => `
+    <label class="opt${a2.q1 === o.key ? ' sel' : ''}">
+      <input type="radio" name="q1" value="${o.key}" ${a2.q1 === o.key ? 'checked' : ''} ${busy ? 'disabled' : ''}>
+      <span class="o-body"><b>${o.key}. ${esc(o.text)}</b>${o.rec ? ' <span class="chip info">推荐</span>' : ''}
+        <span class="chip mute" style="margin-left:4px">推荐不自动视为人工答案</span>
+        <div class="o-impact">${esc(o.impact)}</div></span></label>`).join('');
+  const q1Err = a.triedConfirm && !a2.q1 ? 'show' : '';
+  const q2Err = a.triedConfirm && !a2.q2.trim() ? 'show' : '';
+  const ok = canConfirm();
+  panel.innerHTML = `
+    <div class="sp-head"><h3>待人工确认分析 · ${esc(ANA_BLOCKED.id)}</h3>
+      <span class="chip mute">AI 分析</span><span class="chip warn">必答 2 项</span>
+      <button type="button" class="btn small" id="btnPanelX" ${busy ? 'disabled' : ''}>✕</button></div>
+    <div class="sp-body">
+      <div class="bg-block"><b>当前分析背景：</b>分支浏览搜索功能的交互行为有待人工确定（演示背景）。
+        <button type="button" class="btn small" id="btnDoc" style="margin-left:6px">查看文档</button>
+        <div class="muted small" style="margin-top:4px">本面板与提交确认复用统一入口，但不展示 Git 文件或测试核验字段。</div></div>
+      <div class="q-block">
+        <div class="q-head"><span class="q-title">${esc(QUESTIONS.q1.label)}</span></div>
+        ${opts}
+        <input class="q-input" id="q1Note" placeholder="${esc(QUESTIONS.q1.notePlaceholder)}" value="${esc(a2.q1Note)}" ${busy ? 'disabled' : ''}>
+        <div class="field-err ${q1Err}">必答项未完成：请选择一个方案</div>
+      </div>
+      <div class="q-block">
+        <div class="q-head"><span class="q-title">${esc(QUESTIONS.q2.label)}</span></div>
+        <textarea class="q-input" id="q2" rows="3" placeholder="${esc(QUESTIONS.q2.placeholder)}" ${busy ? 'disabled' : ''}>${esc(a2.q2)}</textarea>
+        <div class="field-err ${q2Err}">必答项未完成：请补充必要信息</div>
+      </div>
+      ${busy ? '<div class="status-block loading"><span class="spinner" aria-hidden="true"></span>正在提交人工确认…（期间不可重复操作）</div>' : ''}
+    </div>
+    <div class="sp-foot">
+      <button type="button" class="btn small" id="btnDraft" ${busy ? 'disabled' : ''}>保存草稿</button>
+      <button type="button" class="btn small ghost-warn" id="btnHold" ${busy ? 'disabled' : ''}>保持挂起</button>
+      <button type="button" class="btn primary" id="btnConfirmAna" ${busy || !ok ? 'disabled' : ''} title="${ok ? '' : '必答项未完成时禁止确认并继续'}">确认并继续</button>
+      <span class="hint">${ok ? '' : '必答项未完成，禁止「确认并继续」'}</span>
+    </div>`;
+  const read = () => {
+    a.answers.q1 = $('input[name="q1"]:checked', panel)?.value || '';
+    a.answers.q1Note = $('#q1Note').value;
+    a.answers.q2 = $('#q2').value;
+  };
+  $$('input[name="q1"]', panel).forEach((r) => r.addEventListener('change', () => {
+    read(); a.triedConfirm = false; save(); renderPanel();
+  }));
+  $('#q1Note').addEventListener('input', (e) => { a.answers.q1Note = e.target.value; save(); });
+  $('#q2').addEventListener('input', (e) => { a.answers.q2 = e.target.value; save(); renderFootState(); });
+  function renderFootState() {
+    const okNow = canConfirm();
+    const btn = $('#btnConfirmAna');
+    btn.disabled = busy || !okNow;
+    btn.title = okNow ? '' : '必答项未完成时禁止确认并继续';
+    panel.querySelector('.sp-foot .hint').textContent = okNow ? '' : '必答项未完成，禁止「确认并继续」';
+  }
+  $('#btnDoc').addEventListener('click', openDoc);
+  $('#btnPanelX').addEventListener('click', () => { a.panelOpen = false; save(); renderPanel(); });
+  $('#btnDraft').addEventListener('click', () => {
+    read();
+    a.draftAt = new Date().toTimeString().slice(0, 5);
+    save(); renderHold(); renderPanel();
+    toast('草稿已保存（保持挂起）：刷新 / 重启后可恢复答案草稿');
+  });
+  $('#btnHold').addEventListener('click', () => {
+    read(); a.panelOpen = false; save(); renderPanel(); renderHold();
+    toast('已保持挂起：问题与答案草稿保留，分析队列继续暂停');
+  });
+  $('#btnConfirmAna').addEventListener('click', () => {
+    read();
+    if (!canConfirm()) { a.triedConfirm = true; save(); renderPanel(); return; }
+    a.busy = true; save(); renderPanel();
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      a.busy = false;
+      if (a.staleSim) { a.phase = 'stale'; toast('确认过期：问题已变化，需重新核对'); }
+      else { a.phase = 'success'; toast('已确认：人工答案交回当前分析任务'); }
+      save(); renderPanel(); renderHold();
+    }, 1000);
+  });
+}
+$('#sideMask').addEventListener('click', () => { if (!S.ana.busy) { S.ana.panelOpen = false; save(); renderPanel(); } });
+
+/* ============================ 弹窗：差异 / 文档 ============================ */
+function openModal(title, bodyHtml) {
+  $('#modalTitle').textContent = title;
+  $('#modalBody').innerHTML = bodyHtml;
+  $('#modalMask').classList.add('show');
+}
+function openDiff(kind) {
+  const f = DEV_FILES.find((x) => x.kind === kind);
+  const lines = DIFFS[kind].map((l) => {
+    const cls = l.startsWith('+') ? 'add' : l.startsWith('-') ? 'del' : 'ctx';
+    return `<span class="ln ${cls}">${esc(l)}</span>`;
+  }).join('');
+  openModal(`差异 · ${f.path}`,
+    `<div class="diff">${lines}</div>
+     <p class="muted small" style="margin-top:8px">演示差异：确认「确认并继续」时携带当前差异版本 / 指纹；确认期间文件再变化将判定确认过期并保持挂起。</p>`);
+}
+function openDoc() {
+  openModal(`分析文档摘录 · ${ANA_BLOCKED.id}（演示内容）`, `
+    <div class="doc-snippet">
+      <h4>背景</h4>
+      <p>分支浏览页需要支持在当前分支中搜索提交记录。分析过程中发现交互行为存在两种可行方案，且缺少默认范围约定，属必须由人工确认的事项，条目进入「挂起：待人工确认分析」。</p>
+      <h4>待确认事项</h4>
+      <ul><li>搜索范围：仅当前本地分支，还是包含远端同名分支（影响见面板选项）</li>
+        <li>默认搜索的时间范围与条数上限</li></ul>
+      <p class="muted small">以上为演示文档内容；真实内容以条目 README / 分析记录为准。</p>
+    </div>`);
+}
+$('#modalClose').addEventListener('click', () => $('#modalMask').classList.remove('show'));
+$('#modalMask').addEventListener('click', (e) => { if (e.target === e.currentTarget) $('#modalMask').classList.remove('show'); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { $('#modalMask').classList.remove('show'); if (!S.ana.busy) { S.ana.panelOpen = false; save(); renderPanel(); } }
+});
+
+/* ============================ 控制台 ============================ */
+$$('#segScene button').forEach((b) => b.addEventListener('click', () => {
+  S.scene = b.dataset.scene; save();
+  renderStateBar(); renderQueue(); renderHold(); renderPanel();
+}));
+$$('#segTheme button').forEach((b) => b.addEventListener('click', () => { S.themeOpt = b.dataset.themeOpt; save(); applyTheme(); }));
+$('#stateBar').addEventListener('click', (e) => {
+  if (e.target.id === 'btnReload') { save(); location.reload(); }
+  if (e.target.id === 'btnReset') {
+    try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+    memoryStore = null; S = freshState(); save();
+    renderStateBar(); renderQueue(); renderHold(); renderPanel();
+    toast('演示已重置');
+  }
+});
+
+/* ============================ 启动：恢复持久化状态 ============================ */
+(function init() {
+  const r = load();
+  let restored = false;
+  if (r.ok && r.data && typeof r.data === 'object' && r.data.dev) {
+    S = Object.assign(freshState(), r.data, {
+      dev: Object.assign(freshState().dev, r.data.dev),
+      ana: Object.assign(freshState().ana, r.data.ana, { busy: false, panelOpen: false }),
+    });
+    restored = true;
+  }
+  applyTheme(); renderStateBar(); renderQueue(); renderHold(); renderPanel();
+  if (restored) {
+    $('#restoreNote').hidden = false;
+    $('#restoreNote').textContent = '页面刷新 / 服务重启后：已从持久化记录恢复同一阻塞卡片、答案草稿与队列暂停状态（演示用 localStorage，真实系统为服务端持久化，新会话不可绕过）。';
+    toast('已从持久化记录恢复挂起与队列暂停状态');
+  }
+})();
+</script>
+</body>
+</html>

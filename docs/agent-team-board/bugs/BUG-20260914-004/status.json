@@ -2,11 +2,11 @@
   "id": "BUG-20260914-004",
   "type": "bug",
   "title": "已经纳入版本的条目不应该再出现在其他版本的关联列表或新建版本的关联列表中",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-9",
   "createdAt": "2026-09-14T03:32:24.805Z",
-  "updatedAt": "2026-09-14T03:55:40.721Z",
+  "updatedAt": "2026-09-14T04:37:20.812Z",
   "agentCompletedAt": "2026-09-14T03:55:40.721Z",
   "lastReport": {
     "at": "2026-09-14T03:55:40.721Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-9",
       "note": "上报测试报告（覆盖率 11%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T04:37:20.813Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

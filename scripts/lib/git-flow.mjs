@@ -1,8 +1,9 @@
 // REQ-20260911-009 dev 分支开发 + 到待测试自动 commit —— Git 工作流数据层。
 // 三个职责：
 //   1. 初始化：ensureDevWorkflow —— 按需 `git init`（-b main）、按需创建 dev 分支并把
-//      工作区切到 dev（幂等；空仓库走「未出生分支改名」等价路径）。只做本地分支操作，
-//      不 push、不配置远端、不执行丢弃/还原/暂存无关改动。
+//      工作区切到 dev（幂等；空仓库走「未出生分支改名」等价路径），并幂等补建本地 main
+//      （BUG-20260914-003：该路径下 main 从未出生，详见 ensureMainBranch）。只做本地分支
+//      操作，不 push、不配置远端、不执行丢弃/还原/暂存无关改动。
 //   2. 自动提交：autoCommitForRun —— 批量开发回执核验通过（reported）后，以
 //      「领取时工作区快照 → 收尾时差集」做确定性归因，把本单改动按 doc / test /
 //      业务三组提交（git add -A 指定路径 + git commit --only，只 commit 不 push）。
@@ -70,6 +71,8 @@ export function gitBranchState(root) {
 // 幂等初始化：非 git 项目 → git init -b main；随后按需创建 dev 并切换工作区。
 // 空仓库（尚无任何提交）：HEAD 未出生，`git switch -c dev` 等价于把未出生分支改名，
 // 首个提交自然落在 dev（README「待确认」的等价方案结论）。
+// BUG-20260914-003：该路径使 `refs/heads/main` 从未出生（构建模块「合并入 main」与
+// 分支浏览均以本地 main 存在为前提）——收尾调用 ensureMainBranch 幂等补建。
 export function ensureDevWorkflow(root) {
   if (!isGitRepo(root)) {
     gitOk(root, ['init', '-q', '-b', MAIN_BRANCH], 'git init');
@@ -90,7 +93,26 @@ export function ensureDevWorkflow(root) {
   if (after.branch !== DEV_BRANCH) {
     throw new AtbError(`初始化后当前分支应为 ${DEV_BRANCH}（实际 ${after.branch || '未知'}）`);
   }
-  return { isRepo: true, gitInited: !before.isRepo, devCreated, switched, before, after };
+  const mainCreated = ensureMainBranch(root);
+  return { isRepo: true, gitInited: !before.isRepo, devCreated, switched, mainCreated, before, after };
+}
+
+// BUG-20260914-003 main 出生保障（幂等补建，ensureDevWorkflow 收尾调用）：
+// 仓库已有提交且 `refs/heads/main` 缺失时，在当前分支历史的根提交
+// （`git rev-list --max-parents=0 HEAD` 首行；多根历史取首行，罕见场景）上
+// `git branch main <root>` 补建本地 main——只创建分支，不切换、不推送、不触碰工作区。
+// 空仓库（HEAD 未出生，尚无基点）跳过不报错；main 已存在不动。补建后本地 main 作为
+// 版本合并目标累积合并提交，口径与 build-git precheckMerge「main 分支不存在」一致。
+export function ensureMainBranch(root) {
+  if (gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${MAIN_BRANCH}`]).status === 0) {
+    return false; // main 已存在：幂等不动
+  }
+  const roots = gitRaw(root, ['rev-list', '--max-parents=0', 'HEAD']);
+  if (roots.status !== 0) return false; // HEAD 未出生（尚无提交）：无补建基点
+  const first = String(roots.stdout || '').trim().split('\n').map((s) => s.trim()).filter(Boolean)[0];
+  if (!first) return false;
+  gitOk(root, ['branch', MAIN_BRANCH, first], '补建 main 分支');
+  return true;
 }
 
 // ---------- 2. 工作区快照与归因 ----------
@@ -220,11 +242,20 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
       return { status: 'skipped', commits: [], reason: '项目不是 git 仓库，无法自动提交' };
     }
     // 幂等：git 历史已含单号 → 整单跳过（重复上报/回执重放不产生新提交）。
-    // 例外：上次尝试 failed（可能已有部分组提交落历史）时按差集续传，已提交路径已
-    // 退出脏集合天然去重，不做整单跳过——否则部分失败的单永远补不齐剩余分组。
+    // REQ-20260914-001：仅当本单无未入库的可归因改动时才可信——历史含单号但预留快照以来
+    // 仍有本单改动（如早前轮次只提交了文档）时不得凭任意带单号 commit 判完整，继续按差集
+    // 归因（已提交路径已退出脏集合，天然去重不重复提交）。
+    // 例外：上次尝试 failed（可能已有部分组提交落历史）时按差集续传，不做整单跳过——
+    // 否则部分失败的单永远补不齐剩余分组。
     const prevFailed = run.autoCommit && run.autoCommit.status === 'failed';
     if (!prevFailed && itemCommittedInGit(projectRoot, itemId)) {
-      return { status: 'skipped', commits: [], reason: 'git 历史已含该单号提交（幂等跳过）' };
+      const diffNow = run.treeSnapshot && run.treeSnapshot.entries
+        ? diffWorkingTree(projectRoot, run.treeSnapshot)
+        : null;
+      const hasWork = diffNow && (diffNow.changed.length || diffNow.dirtyTouched.length);
+      if (!hasWork) {
+        return { status: 'skipped', commits: [], reason: 'git 历史已含该单号提交且本单无可归因改动（幂等跳过）' };
+      }
     }
     if (!run.treeSnapshot || !run.treeSnapshot.entries) {
       return { status: 'skipped', commits: [], reason: '缺少预留时工作区快照（旧版本预留），不做猜测归因；可人工核对后经批量 commit 提交' };
@@ -310,11 +341,24 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     }
 
     const commits = [];
-    for (const [kind, paths, subject] of plan) {
-      const c = commitPaths(projectRoot, paths, subject);
-      const err = validateCommitSubject(c.subject, itemId);
-      if (err) throw new AtbError(`${kind} 组提交消息不合规：${err}`);
-      commits.push(c);
+    try {
+      for (const [kind, paths, subject] of plan) {
+        const c = commitPaths(projectRoot, paths, subject);
+        const err = validateCommitSubject(c.subject, itemId);
+        if (err) throw new AtbError(`${kind} 组提交消息不合规：${err}`);
+        commits.push(c);
+      }
+    } catch (e) {
+      // REQ-20260914-001 C02：分组提交失败时保留已成功提交的 hash（不丢账）——失败结果
+      // 携带 partial commits，人工确认补交时据此不重复提交（已提交路径已退出脏集合）。
+      if (commits.length) {
+        writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual: [], heldGroups: null });
+      }
+      return {
+        status: 'failed',
+        commits,
+        reason: `${String(e && e.message ? e.message : e).slice(0, 160)}（已成功提交 ${commits.length} 组，hash 已保留，不重复提交）`,
+      };
     }
 
     // 账本登记（与人工批量 commit 的 committedItemIndex 同源 → 看板「已提交」徽标点亮）
@@ -354,7 +398,7 @@ function manualPendingReason(pendingManual, heldGroups) {
 // committedItemIndex 收录；完整明细另落 dispatch 运行目录 auto-commit.json。
 // BUG-20260913-006：仅有待人工路径、无实际提交时不写 commits/runs（徽标不误点亮），
 // 但明细仍落盘如实记录 pendingManual（路径 + 建议）与 heldGroups。
-function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups }) {
+function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups, summaryNote = null }) {
   const d = new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const rand = crypto.randomBytes(2).toString('hex');
@@ -371,9 +415,9 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
     createdAt: nowIso(),
     finishedAt: nowIso(),
     reason: null,
-    summary: pending.length
+    summary: summaryNote || (pending.length
       ? `到待测试自动提交（部分提交 ${commits.length} 组，${pending.length} 个路径待人工处理）`
-      : '到待测试自动提交（AI 开发回执核验通过）',
+      : '到待测试自动提交（AI 开发回执核验通过）'),
     commits,
     autoForRun: run.runId,
   };
@@ -398,7 +442,121 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
   return record;
 }
 
-// ---------- 4. 条目 ↔ commit 双向索引 ----------
+// ---------- 3b. REQ-20260914-001 人工确认补交与差异呈现 ----------
+
+// 指定路径的当前工作区状态：porcelain 在列即脏（带内容 sha1），不在列即 clean。
+// 人工确认的指纹比对口径：脏→clean = 人工已在终端补交（允许方向）；脏→脏但内容变 = 内容已变（过期确认）。
+export function pathStates(root, paths) {
+  const out = {};
+  const want = new Set((paths || []).filter(Boolean));
+  if (!want.size || !isGitRepo(root)) {
+    for (const p of want) out[p] = 'clean';
+    return out;
+  }
+  const snap = workingTreeSnapshot(root);
+  for (const p of want) {
+    const code = snap.entries ? snap.entries[p] : undefined;
+    if (code == null) { out[p] = 'clean'; continue; }
+    if (code === '??') out[p] = snap.untracked[p] || 'dirty';
+    else out[p] = (snap.trackedHashes && snap.trackedHashes[p]) || 'dirty';
+  }
+  return out;
+}
+
+// 单文件差异文本（UI「查看差异」用）：已跟踪走 git diff HEAD -- path；
+// 未跟踪与新增文件给出全文（标记为新文件）。只读操作。
+export function fileDiffText(root, p) {
+  if (!isGitRepo(root)) return null;
+  const rel = String(p || '').replace(/^\/+/, '');
+  const tracked = gitRaw(root, ['ls-files', '--', rel]).status === 0
+    && String(gitRaw(root, ['ls-files', '--', rel]).stdout || '').trim() !== '';
+  if (tracked) {
+    const r = gitRaw(root, ['diff', 'HEAD', '--', rel]);
+    if (r.status === 0 && String(r.stdout || '').trim()) return String(r.stdout);
+    // 已跟踪但工作区与 HEAD 一致（如已补交）：给 staged/工作区均无差异的空结果
+    return r.status === 0 ? '' : null;
+  }
+  let content = null;
+  try { content = fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+  return `（新文件，未纳入版本控制）\n${'='.repeat(60)}\n${content}`;
+}
+
+// 归因扫描（只读，REQ-20260914-001 核验与补交共用）：以「预留快照 → 现在」差集盘点本单
+// 仍留在工作区、可归因本条目的路径。doc 组 = 条目目录与看板共享文件；fix 组 = 其余全部
+// 变化路径（含预留前已脏混合路径——是否整文件提交由调用方决定：核验只报告，补交在人工
+// 确认授权后整文件提交）。其他条目目录一律排除（不越权收纳他人单据）。
+// 返回 null 表示无法归因（非 git / 无快照 / 状态不可读）。
+export function attributablePathsForRun({ dataDir, projectRoot, run }) {
+  if (!isGitRepo(projectRoot)) return null;
+  if (!run.treeSnapshot || !run.treeSnapshot.entries) return null;
+  const nowSnap = workingTreeSnapshot(projectRoot);
+  if (!nowSnap) return null;
+  const diff = diffWorkingTree(projectRoot, run.treeSnapshot);
+  const changed = diff ? diff.changed : [];
+  const dirtyTouched = diff ? diff.dirtyTouched : [];
+  const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
+  const itemDir = resolveItemDir(dataDir, run.itemId).dir;
+  const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
+  const itemRel = path.relative(repoTop, itemDir);
+  const boardRel = path.relative(repoTop, dataDir);
+  const boardPref = boardRel + '/';
+  const groups = { doc: [], fix: [] };
+  const excluded = [];
+  for (const p of allDirty) {
+    const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
+    if (p.startsWith(boardPref) || inItem) {
+      const owner = owningItemIdOf(boardRel, p);
+      if (owner && owner !== run.itemId && !inItem) { excluded.push(p); continue; }
+      groups.doc.push(p);
+      continue;
+    }
+    if (!changed.includes(p) && !dirtyTouched.includes(p)) continue;
+    groups.fix.push(p);
+  }
+  groups.doc.sort(); groups.fix.sort(); excluded.sort();
+  return { groups, excluded };
+}
+
+// 人工确认后的授权补交（REQ-20260914-001 C05/C08）：人工已核对差异并确认归属，
+// 把本单仍留在工作区的全部可归因改动整文件提交——预留前已脏混合路径（pendingManual）
+// 与暂扣 test/业务组一并收纳；不做 hunk 拆分。doc 组照常 doc 前缀，其余统一 fix 前缀
+// 「fix: 人工确认补交 <单号>」。幂等：无可归因脏路径时不产生提交。
+export function supplementCommitForRun({ dataDir, projectRoot, run }) {
+  const itemId = run.itemId;
+  try {
+    const scan = attributablePathsForRun({ dataDir, projectRoot, run });
+    if (scan == null) {
+      return { status: 'skipped', commits: [], reason: '无法归因补交（非 git 仓库 / 缺少预留快照 / 状态不可读）；请人工在终端提交' };
+    }
+    ensureLedgerIgnore(dataDir);
+    const itemDir = resolveItemDir(dataDir, itemId).dir;
+    const title = readStatus(itemDir).title || itemId;
+    const desc = [...String(title)].slice(0, DESC_MAX_CHARS).join('');
+    let plan = [
+      ['doc', scan.groups.doc, commitSubjectOf('doc', desc, itemId)],
+      ['fix', scan.groups.fix, commitSubjectOf('fix', '人工确认补交', itemId)],
+    ].filter(([, paths]) => paths.length);
+    if (!plan.length) {
+      return { status: 'skipped', commits: [], excluded: scan.excluded, reason: '无可归因待补交路径（可能已全部入库）' };
+    }
+    const commits = [];
+    for (const [kind, paths, subject] of plan) {
+      const err0 = validateCommitSubject(subject, itemId);
+      if (err0) throw new AtbError(`${kind} 组补交消息不合规：${err0}`);
+      const c = commitPaths(projectRoot, paths, subject);
+      commits.push(c);
+    }
+    writeAutoCommitLedger(dataDir, {
+      run, itemId, title, commits, excluded: scan.excluded, pendingManual: [], heldGroups: null,
+      summaryNote: '人工确认补交（REQ-20260914-001：确认归属后授权整文件提交）',
+    });
+    return { status: 'committed', commits, excluded: scan.excluded, reason: null };
+  } catch (e) {
+    return { status: 'failed', commits: [], reason: String(e && e.message ? e.message : e).slice(0, 200) };
+  }
+}
+
+
 
 // 正向：条目 → 全部提交。账本（经核验）与 git 历史（消息含单号）合并去重，按时间升序。
 export function itemCommitLog(dataDir, projectRoot, itemId) {

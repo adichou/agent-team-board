@@ -13,6 +13,9 @@ import { ensureDevWorkflow } from './git-flow.mjs';
 import {
   activeHoldOf, unansweredCount, saveHoldRecord, renderDecisionsDoc, HOLD_STATE_LABEL,
 } from './hold-states.mjs';
+// REQ-20260914-001 挂起确认账本（执行层索引，不写 status.json）——claim 项目级挂起防呆钩子。
+// confirm-states 自包含（不 import core），此处引用无循环依赖。
+import { waitingDevelopConfirm } from './confirm-states.mjs';
 
 export const DATA_REL_DIR = path.join('docs', 'agent-team-board');
 // pending-alignment 仅为存量兼容保留（历史条目仍可人工放行）；主流程不再进入。
@@ -224,7 +227,16 @@ export function readImplLockIfExists(dataDir) {
 // 失败待核对占用（BUG-20260906-003）：failed 且 safeToContinue=false 的回执不释放项目实施占用，
 // 而是把锁标记为 attention（项目暂停）。所有实施入口（含原锁属主）都不得再开工，
 // 直到人工在批次上恢复（暂停→恢复）后由批次层解除。
+// REQ-20260914-001：attentionKind='confirm' 为自动提交不完整挂起（待人工确认提交），
+// 恢复入口是任务页「待人工确认」的确认并继续（核验+补交通过后自动恢复）。
 function implAttentionError(impl) {
+  if (impl.attentionKind === 'confirm') {
+    return new AtbError(
+      `项目已挂起：${impl.itemId || '条目'} 自动提交不完整` +
+      `${impl.attentionReason ? `（${impl.attentionReason}）` : ''}，待人工确认提交；` +
+      '请到 Status Board 任务页「待人工确认」核对差异并确认后继续，队列与认领在确认通过后恢复'
+    );
+  }
   return new AtbError(
     `项目已暂停：批次 ${impl.batchId || '未知'} 的 ${impl.itemId || '条目'} 实施失败` +
     `${impl.attentionReason ? `（${impl.attentionReason}）` : ''}，无法确认工作区可继续；` +
@@ -878,6 +890,16 @@ export function claim(dataDir, id, owner) {
     throw new AtbError(
       `${id} 待人工决策（${n} 项未答，${hold.declaredBy || 'worker'} 于 ${String(hold.declaredAt || '').slice(0, 10)} 声明${hold.reason ? `：${hold.reason}` : ''}）：` +
       '请在 Status Board「待人工确认」（或 atb hold list）补齐决策并复工后再实施'
+    );
+  }
+  // REQ-20260914-001 项目级挂起防呆：存在「待人工确认提交」的挂起条目时整个开发队列暂停，
+  // 任何条目的认领（含 /dev loop、手工、其他条目）一律拒绝——不得绕过人工确认放大混合修改；
+  // 确认并继续（核验+补交+测试通过）后自动恢复。
+  const confirmWaiting = waitingDevelopConfirm(dataDir);
+  if (confirmWaiting) {
+    throw new AtbError(
+      `项目挂起：${confirmWaiting.itemId} 自动提交不完整（${confirmWaiting.reason || '待人工确认提交'}），` +
+      `暂停期间不得认领 ${id}；请到 Status Board 任务页「待人工确认」完成确认后继续`
     );
   }
   // 条目级冲突先行：异 owner 续认同一条目 → 提示指向条目本身

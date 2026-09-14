@@ -23,6 +23,8 @@ import {
 } from './core.mjs';
 import { FOLLOW_SESSION_PROMPT_LINE } from './task-settings.mjs';
 import * as gitFlow from './git-flow.mjs';
+import * as confirmStore from './confirm-store.mjs';
+import { waitingDevelopConfirm } from './confirm-states.mjs';
 
 // REQ-20260908-019：批次上限设置已移除（BATCH_LIMIT_* 常量随之删除）——
 // 上限原本只截断创建时点的初始快照，REQ-20260908-010 实时队列后已无实际约束意义。
@@ -600,6 +602,20 @@ function holdImplAttention(dataDir, run, reason) {
   }
 }
 
+// REQ-20260914-001 提交不完整挂起占用：与失败待核对同锁同语义（项目暂停、所有实施入口被拒），
+// 但恢复入口是「待人工确认提交」的确认并继续（核验+补交通过后 resumeAfterConfirm 解除），
+// 不依赖暂停→恢复按钮；attentionKind='confirm' 供提示文案区分指引。
+function holdConfirmAttention(dataDir, run, reason) {
+  const lock = readImplLockIfExists(dataDir);
+  if (lock && (lock.runId === run.runId || lock.owner === run.owner)) {
+    try {
+      fs.writeFileSync(implLockPath(dataDir), JSON.stringify({
+        ...lock, attention: true, attentionKind: 'confirm', attentionReason: reason, attentionAt: nowIso(),
+      }));
+    } catch {}
+  }
+}
+
 function releaseImplLockIf(dataDir, pred) {
   const lock = readImplLockIfExists(dataDir);
   if (lock && pred(lock)) {
@@ -647,6 +663,17 @@ export function nextItem(dataDir, batchId, { owner = null } = {}) {
       `当前执行未收尾：${r.runId}（${r.itemId}，owner ${r.owner}，${r.phase}）。` +
       '先核对旧子 Agent 是否结束，不得创建第二个实施任务'
     );
+  }
+  // REQ-20260914-001：存在活动的「待人工确认提交」挂起时不得派发后续项（人工恢复领取也不放行，
+  // 只有确认并继续闭环后才恢复）——notice 指明阻塞条目与原因，不派空 worker。先于 pauseRequested
+  // 判定：挂起暂停是最具体的原因，提示须直达确认入口。只看 waiting（resolved 已闭环不阻塞）。
+  const waitingConfirm = waitingDevelopConfirm(dataDir);
+  if (waitingConfirm) {
+    return {
+      stop: 'paused',
+      counts: state0.counts,
+      notice: `队列挂起：${waitingConfirm.itemId} 待人工确认提交（${waitingConfirm.reason || '自动提交不完整'}）；请到 Status Board 任务页「待人工确认」完成确认并继续`,
+    };
   }
   if (batch.pauseRequested) {
     return { stop: 'paused', counts: state0.counts, notice: '已暂停后续领取（在途执行不受影响）' };
@@ -869,6 +896,7 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
   // 视同人工授权；由 atb 进程内部执行 git，不经 Agent Bash 工具，不受 state-guard 拦截。
   // 自动提交失败不阻断回执：改动保留在工作区，可 atb run autocommit <RUN-ID> 重试。
   let autoCommit = null;
+  let suspendReason = null; // REQ-20260914-001：提交不完整 → 挂起当前条目并暂停队列
   if (result === 'reported') {
     const flowBatch = getBatch(dataDir, run.batchId);
     autoCommit = gitFlow.autoCommitForRun({ dataDir, projectRoot: flowBatch.projectRoot, run });
@@ -881,6 +909,13 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
         : {}),
       ...(autoCommit.reason ? { reason: autoCommit.reason } : {}),
     };
+    // REQ-20260914-001：提交完整性是收尾与后续派发的前置——归属不明 / 暂扣 / 失败 /
+    // 无法确认完整时挂起当前条目（待人工确认提交）并持久化暂停队列，文档或部分文件
+    // 提交成功不得视为开发完成，后续项不得继续执行。
+    suspendReason = confirmStore.commitIncompleteReason(autoCommit);
+    if (suspendReason) {
+      receipt.suspended = { itemId: run.itemId, blockType: 'commit', reason: suspendReason.slice(0, 120) };
+    }
   }
 
   const bytes = Buffer.byteLength(JSON.stringify(receipt), 'utf8');
@@ -901,7 +936,24 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
   const batch = getBatch(dataDir, run.batchId);
   if (batch.currentRunId === runId) batch.currentRunId = null;
   const state = batchState(dataDir, batch);
-  if (result === 'reported' || safe) {
+  if (suspendReason) {
+    // REQ-20260914-001 提交不完整挂起：持久化暂停队列（pauseRequested）+ 声明待人工确认
+    // 提交记录 + 项目实施占用转 attentionKind='confirm'（不释放为可被后续任务占用的
+    // 执行权；当前条目的核验/补交/恢复入口不经实施锁，不发生死锁）。确认并继续闭环
+    // （核验+补交+测试全过）后由服务端 resumeAfterConfirm 解除。
+    try {
+      confirmStore.declareCommitConfirm(dataDir, {
+        run, batch, autoCommit, projectRoot: batch.projectRoot,
+      });
+    } catch (e) {
+      // 声明失败（如已有活动记录）不阻断回执落账，如实带入 notice 供人工核对
+      suspendReason = `${suspendReason.slice(0, 80)}；挂起登记失败：${String(e.message || e).slice(0, 60)}`;
+    }
+    batch.pauseRequested = true;
+    batch.status = 'paused';
+    saveBatch(dataDir, batch);
+    holdConfirmAttention(dataDir, run, suspendReason);
+  } else if (result === 'reported' || safe) {
     batch.status = batch.pauseRequested ? 'paused' : (state.counts.remaining > 0 ? 'running' : 'finished');
     saveBatch(dataDir, batch);
     releaseImplLockIf(dataDir, (l) => l.runId === runId || l.owner === run.owner);
@@ -917,12 +969,24 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
 
 // REQ-20260911-009 自动提交重试入口：自动提交失败的已上报运行，人工/流程可重试
 // （幂等：git 历史已含单号或工作区无归属改动时按 skipped 返回，不产生重复提交）。
+// REQ-20260914-001：该条目已声明「待人工确认提交」挂起时，补交走确认闭环
+// （重新核验 / 确认并继续的授权补交），重试入口不越过人工确认直接提交。
 export function retryAutoCommit(dataDir, runId) {
   const run = getRun(dataDir, runId);
   if (run.phase !== 'reported') {
     throw new AtbError(`运行 ${runId} 当前为 ${run.phase}：只有回执核验通过（reported）的运行才能重试自动提交`);
   }
   const flowBatch = getBatch(dataDir, run.batchId);
+  const waiting = waitingDevelopConfirm(dataDir);
+  if (waiting && waiting.itemId === run.itemId) {
+    return {
+      ok: true, runId, itemId: run.itemId,
+      autoCommit: {
+        status: 'skipped', commits: [],
+        reason: `${run.itemId} 已挂起待人工确认提交：请到 Status Board 任务页「待人工确认」重新核验并确认后继续（授权补交在确认闭环内执行）`,
+      },
+    };
+  }
   const autoCommit = gitFlow.autoCommitForRun({ dataDir, projectRoot: flowBatch.projectRoot, run });
   run.autoCommit = autoCommit;
   saveRun(dataDir, run);
@@ -953,7 +1017,11 @@ export function checkBatch(dataDir, batchId) {
     notice = '任务已人工终止：不再派发后续项；在途子代理请在对应子代理会话人工停止';
   } else if (batch.pauseRequested) {
     nextAction = 'stop';
-    notice = '已暂停后续领取（在途执行不受影响；立即停止请到 Zcode 原生任务界面操作）';
+    // REQ-20260914-001：挂起待人工确认提交时给出阻塞条目与入口（队列暂停的持久化原因）
+    const waitingConfirm = waitingDevelopConfirm(dataDir);
+    notice = waitingConfirm
+      ? `队列已暂停：${waitingConfirm.itemId} 待人工确认提交（${waitingConfirm.reason || '自动提交不完整'}）；请到 Status Board 任务页「待人工确认」核对差异并确认后继续`
+      : '已暂停后续领取（在途执行不受影响；立即停止请到 Zcode 原生任务界面操作）';
   } else if (state.counts.remaining === 0) {
     nextAction = 'stop';
     notice = '本轮队列已处理完毕：实时队列已取空，可启动新一轮';
@@ -1025,6 +1093,27 @@ export function pauseBatch(dataDir, batchId, paused) {
   // 人工恢复领取 = 已核对失败遗留改动：解除该批次留下的项目暂停占用（BUG-20260906-003）
   if (!paused) releaseImplLockIf(dataDir, (l) => l.attention && l.batchId === batchId);
   return batch;
+}
+
+// REQ-20260914-001 确认并继续（提交核验通过后恢复队列）：由服务端在 confirmCommitContinue
+// 成功后调用。语义 = 解除该批次的挂起暂停 + 释放 attentionKind='confirm' 的项目实施占用；
+// 与人工「恢复后续领取」按钮共用通路（幂等），队列从下一条继续（当前条目已收尾 reported）。
+export function resumeAfterConfirm(dataDir, batchId) {
+  const batch = getBatch(dataDir, batchId);
+  const term = batchTerminalReason(batch);
+  if (term) {
+    // 已终止/已结束的批次无需恢复：占用已在终止时全量释放，如实返回
+    return { ok: true, batchId, alreadyTerminal: true, notice: term };
+  }
+  const before = readImplLockIfExists(dataDir);
+  pauseBatch(dataDir, batchId, false);
+  const after = readImplLockIfExists(dataDir);
+  return {
+    ok: true,
+    batchId,
+    released: Boolean(before && (before.attention || before.attentionKind)) && (!after || !after.attention),
+    status: getBatch(dataDir, batchId).status,
+  };
 }
 
 // REQ-20260908-020 终止出局账（不占 currentRun；直接写终态 run 供记录展示）

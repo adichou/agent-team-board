@@ -31,6 +31,7 @@ import * as refine from './lib/refine-store.mjs';
 import * as refineStates from './lib/refine-states.mjs';
 import * as holdStates from './lib/hold-states.mjs';
 import * as holdStore from './lib/hold-store.mjs';
+import * as confirmStore from './lib/confirm-store.mjs';
 import * as taskSettings from './lib/task-settings.mjs';
 import * as dispatch from './lib/dispatch.mjs';
 import { createScheduler, createHub, detectCli, probeCliVersion, resolveModelForItem } from './lib/scheduler.mjs';
@@ -2012,17 +2013,23 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
 //   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
 //   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
-//                                    BUG-20260913-001：仅已完成 done 条目进入候选）
+//                                    BUG-20260913-001：仅已完成 done 条目进入候选；
+//                                    BUG-20260914-004：已纳入任一版本的条目一并收窄，
+//                                    totalDone=占用过滤前 done 总数供前端区分空态）
 //   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
-//   GET  /api/build/branch-log        指定分支最近提交（≤50 条：hash/short/subject/author/date）
+//   GET  /api/build/branch-log        指定分支提交记录（BUG-20260914-009 分页：?limit= 默认 50 上限 500、
+//                                    ?offset= 偏移默认 0；返回 hash/short/subject/author/date + total 总数）
 //   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
-//                                    BUG-20260913-001：非 done 条目拒绝纳入）
+//                                    BUG-20260913-001：非 done 条目拒绝纳入；
+//                                    BUG-20260914-004：已纳入任一版本的条目拒绝纳入，数据层兜底）
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
-//   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删）
+//   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删；
+//                                    add 同受 BUG-20260913-001 / BUG-20260914-004 口径约束）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
 //   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
 //                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
-//   POST /api/build/fetch             同步远端（fetch --all --prune）
+//   POST /api/build/sync             与远端同步（BUG-20260914-011：fetch --all --prune 后推送
+//                                    除 main 外的本地分支，main 归发布模块不在此推送）
 //   POST /api/build/push              推送本地分支（未建立上游时首推 -u 建立跟踪）
 async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   const notFound = () => sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
@@ -2058,10 +2065,14 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/candidates') {
     const board = requireBoard();
     const idx = gitFlow.itemCommitStatusIndex(board, root);
-    // BUG-20260913-001：仅已完成（done）条目可纳入版本——候选在数据源头收窄，
-    // 「新建版本」与「添加条目」两面板共用本接口，口径保持一致。
-    const items = core.listItems(board)
-      .filter((it) => it.status === 'done')
+    // BUG-20260913-001：仅已完成（done）条目可纳入版本；BUG-20260914-004：已纳入任一版本
+    // （draft/merging/merged/failed 任一状态）的条目一并收窄，不再进入候选——「新建版本」与
+    // 「添加条目」两面板共用本接口，口径保持一致。totalDone 为占用过滤前的 done 条目总数，
+    // 供前端区分「无 done 条目」与「done 条目均已被版本占用」两种空态。
+    const occupied = buildStore.occupiedItemMap(board);
+    const doneItems = core.listItems(board).filter((it) => it.status === 'done');
+    const items = doneItems
+      .filter((it) => !occupied.has(it.id))
       .map((it) => {
         const rec = idx.get(it.id);
         return {
@@ -2073,14 +2084,18 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
           lastCommittedAt: rec ? rec.lastCommittedAt : null,
         };
       });
-    return sendJson(res, 200, { items });
+    return sendJson(res, 200, { items, totalDone: doneItems.length });
   }
   if (req.method === 'GET' && pathname === '/api/build/branches') {
     return sendJson(res, 200, buildGit.listBranches(root));
   }
   if (req.method === 'GET' && pathname === '/api/build/branch-log') {
     const branch = u.searchParams.get('branch') || '';
-    return sendJson(res, 200, buildGit.branchLog(root, branch));
+    // BUG-20260914-009：limit/offset 分页参数（缺省/非法由数据层归一：默认 50/0，负数 clamp）
+    return sendJson(res, 200, buildGit.branchLog(root, branch, {
+      limit: u.searchParams.get('limit'),
+      offset: u.searchParams.get('offset'),
+    }));
   }
   if (req.method === 'POST' && pathname === '/api/build/version') {
     return runPost(async (body) => {
@@ -2180,8 +2195,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       return sendJson(res, 200, buildStore.deleteVersion(board, String(body.id || '')));
     });
   }
-  if (req.method === 'POST' && pathname === '/api/build/fetch') {
-    return runPost(() => sendJson(res, 200, buildGit.fetchRemote(root)));
+  // BUG-20260914-011：同步 = 先 fetch 再 push（旧 /api/build/fetch 仅拉取、语义名不副实，随本单移除）
+  if (req.method === 'POST' && pathname === '/api/build/sync') {
+    return runPost(() => sendJson(res, 200, buildGit.syncRemote(root)));
   }
   if (req.method === 'POST' && pathname === '/api/build/push') {
     return runPost((body) => sendJson(res, 200, buildGit.pushBranch(root, { remote: body.remote, branch: body.branch })));
@@ -2736,6 +2752,18 @@ async function handleApi(req, res, u, pathname) {
             runId: holdRec.runId || null,
           };
         }
+        // REQ-20260914-001：挂起确认徽标（待人工确认提交 / 待人工确认分析）随看板呈现
+        const confirmRec = confirmStore.confirmOf(dataDir, it.id);
+        if (confirmRec && (confirmRec.state === 'waiting' || confirmRec.state === 'confirmed')) {
+          it.confirm = {
+            state: confirmRec.state,
+            kind: confirmRec.kind,
+            blockType: confirmRec.blockType,
+            reason: confirmRec.reason || null,
+            declaredAt: confirmRec.declaredAt,
+            runId: confirmRec.runId || null,
+          };
+        }
       }
     }
     return sendJson(res, 200, data);
@@ -2773,6 +2801,98 @@ async function handleApi(req, res, u, pathname) {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
     const id = decodeURIComponent(holdMatch[1]);
     return sendJson(res, 200, holdStore.holdDetail(dataDir, id));
+  }
+
+  // ---------- REQ-20260914-001 挂起确认（自动提交不完整 / AI 分析问题）----------
+  // 只读：清单（含历史账本恢复视图）/ 详情 / 单文件差异；写操作（answer|verify|keep|continue）
+  // 为人工专属：Agent 的 curl 调用会被 state-guard 拦截（与 /api/hold 同口径）。
+  if (req.method === 'GET' && pathname === '/api/confirms') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const all = u.searchParams.get('all') === '1';
+    const r = confirmStore.listConfirms(dataDir, { all, projectRoot: root });
+    const legacy = all ? [] : confirmStore.legacyConfirmViews(dataDir, root);
+    return sendJson(res, 200, { count: r.count + legacy.length, items: [...r.items, ...legacy] });
+  }
+
+  const confirmActMatch = pathname.match(/^\/api\/confirms\/([^/]+)\/(answer|verify|keep|continue)$/);
+  if (confirmActMatch && req.method === 'POST') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmActMatch[1]);
+    const act = confirmActMatch[2];
+    const body = JSON.parse((await readBody(req)) || '{}');
+    let r;
+    if (act === 'answer') {
+      r = confirmStore.answerAnalysisConfirm(dataDir, id, {
+        answers: Array.isArray(body.answers) ? body.answers : [],
+        by: 'board',
+      });
+    } else if (act === 'verify') {
+      r = confirmStore.verifyCommitConfirm(dataDir, id, {
+        projectRoot: root, runTests: body.runTests !== false, by: 'board',
+      });
+    } else if (act === 'keep') {
+      r = confirmStore.keepConfirm(dataDir, id, { note: body.note || '', by: 'board' });
+    } else if (confirmStore.confirmOf(dataDir, id) && confirmStore.confirmOf(dataDir, id).kind === 'analyze') {
+      // 分析确认：必答齐备 + 版本未过期 → confirmed，答案回传当前条目续跑（队首重排）
+      r = confirmStore.confirmAnalysisContinue(dataDir, id, {
+        version: body.version || '', by: 'board',
+      });
+      if (r.ok && r.runId) {
+        try {
+          refine.resumeAfterAnalysisConfirm(dataDir, r.runId);
+        } catch (e) {
+          r = { ok: false, itemId: id, reasons: [`续跑排队失败（答案已保留可重试）：${String(e.message || e).slice(0, 120)}`] };
+        }
+      }
+    } else {
+      // 提交确认：指纹核验 → 授权补交 → 完整性与测试复验 → 恢复队列
+      let rec = confirmStore.confirmOf(dataDir, id);
+      if (!rec && body.legacy) {
+        // 历史账本恢复视图的人工操作：先物化为本轮确认记录再走同一闭环
+        const runDir = path.join(dataDir, 'dispatch', 'runs', String(body.runId || ''));
+        let run = null;
+        let ac = null;
+        try {
+          run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
+          ac = JSON.parse(fs.readFileSync(path.join(runDir, 'auto-commit.json'), 'utf8'));
+        } catch { /* runId 无效时由下方确认入口报错 */ }
+        if (run && ac) {
+          rec = confirmStore.declareCommitConfirm(dataDir, {
+            run, batch: null, autoCommit: ac, projectRoot: root, legacy: true, by: 'board',
+          });
+        }
+      }
+      void rec;
+      r = confirmStore.confirmCommitContinue(dataDir, id, {
+        projectRoot: root,
+        fingerprint: body.fingerprint && typeof body.fingerprint === 'object' ? body.fingerprint : null,
+        note: body.note || '',
+        by: 'board',
+      });
+      if (r.ok && r.batchId) {
+        try {
+          batch.resumeAfterConfirm(dataDir, r.batchId);
+        } catch { /* 批次已删除/终止：占用已在终止时释放，队列无需恢复 */ }
+      }
+    }
+    return sendJson(res, 200, r);
+  }
+
+  const confirmDiffMatch = pathname.match(/^\/api\/confirms\/([^/]+)\/diff$/);
+  if (confirmDiffMatch && req.method === 'GET') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmDiffMatch[1]);
+    const p = String(u.searchParams.get('path') || '');
+    if (!p) return sendJson(res, 400, { error: '缺少 path 查询参数' });
+    const diff = gitFlow.fileDiffText(root, p);
+    return sendJson(res, 200, { itemId: id, path: p, diff: diff == null ? '' : diff });
+  }
+
+  const confirmMatch = pathname.match(/^\/api\/confirms\/([^/]+)$/);
+  if (confirmMatch && req.method === 'GET') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmMatch[1]);
+    return sendJson(res, 200, confirmStore.confirmDetail(dataDir, id, { projectRoot: root }));
   }
 
   // REQ-20260909-003 需求文档引用讨论（独立 DISC 序列）：提示词/引用/归档/应用

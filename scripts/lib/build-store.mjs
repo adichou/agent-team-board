@@ -5,6 +5,9 @@
 //   - 合并入 main 由 build-git 在服务端同步执行；本层只存事实与逐条目结果，不伪造成功；
 //   - merging/merged 锁条目增删；merging 锁名称与描述编辑；merged/failed 允许编辑信息；
 //   - 服务重启后 merging 标记 failed（recoverMerging，不自动重跑）。
+//   - 一条目至多纳入一个版本（BUG-20260914-004）：已纳入任一版本（draft/merging/merged/failed
+//     任一状态）的条目视为占用，跨版本重复纳入在本层拒绝（含占用版本编号）；从 draft/failed
+//     版本移出或删除版本后占用释放，条目可重新纳入。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -117,8 +120,33 @@ export function readVersion(dataDir, id) {
   return v;
 }
 
+// BUG-20260914-004：跨版本占用索引——itemId → 所在版本 id（任一状态：draft/merging/merged/failed
+// 均视为占用）。excludeVersionId 用于「添加条目」路径排除目标版本自身（条目已在本版本中的
+// 重复添加由 normalizeItems 既有口径报「已在本版本中」）。
+export function occupiedItemMap(dataDir, { excludeVersionId = null } = {}) {
+  const map = new Map();
+  for (const v of listVersions(dataDir)) {
+    if (excludeVersionId && v.id === excludeVersionId) continue;
+    for (const it of v.items || []) {
+      if (!map.has(it.itemId)) map.set(it.itemId, v.id);
+    }
+  }
+  return map;
+}
+
+// 跨版本重复纳入兜底：任一条目已被其他版本占用 → AtbError（HTTP 400），报错含占用版本编号。
+function assertNotOccupied(dataDir, itemIds, excludeVersionId = null) {
+  const map = occupiedItemMap(dataDir, { excludeVersionId });
+  for (const id of itemIds) {
+    if (map.has(id)) throw new AtbError(`条目 ${id} 已纳入版本 ${map.get(id)}，不可重复纳入`);
+  }
+}
+
 export function createVersion(dataDir, { name, items, by = 'board' } = {}) {
   const info = validateInfo({ name: name ?? '', description: '' });
+  const normalized = normalizeItems(items);
+  // BUG-20260914-004：先校验占用再分配编号，被拒绝的创建不占当日序列
+  assertNotOccupied(dataDir, normalized.map((x) => x.itemId));
   const v = {
     schema: 1,
     id: nextVersionId(dataDir),
@@ -126,7 +154,7 @@ export function createVersion(dataDir, { name, items, by = 'board' } = {}) {
     description: '',
     status: 'draft',
     targetBranch: TARGET_BRANCH,
-    items: normalizeItems(items),
+    items: normalized,
     createdAt: nowIso(),
     updatedAt: nowIso(),
     merge: { startedAt: null, finishedAt: null, error: null, baseBranch: null },
@@ -163,6 +191,8 @@ export function addItems(dataDir, id, items, { by = 'board' } = {}) {
   assertItemsEditable(v);
   const have = new Set(v.items.map((x) => x.itemId));
   const add = normalizeItems(items, have);
+  // BUG-20260914-004：跨版本重复纳入兜底（排除本版本自身，本版本内重复由 normalizeItems 报既有口径）
+  assertNotOccupied(dataDir, add.map((x) => x.itemId), id);
   v.items.push(...add);
   v.by = by;
   return writeVersion(dataDir, v);

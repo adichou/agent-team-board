@@ -2,11 +2,11 @@
   "id": "REQ-20260913-006",
   "type": "requirement",
   "title": "版本计划 AI 完善界面支持针对 AI 完善的标题和文本进行修改后再保存",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-5",
   "createdAt": "2026-09-13T15:58:09.610Z",
-  "updatedAt": "2026-09-14T01:48:25.608Z",
+  "updatedAt": "2026-09-14T02:44:18.631Z",
   "agentCompletedAt": "2026-09-14T01:48:25.608Z",
   "lastReport": {
     "at": "2026-09-14T01:48:25.608Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-5",
       "note": "上报测试报告（覆盖率 7%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:18.632Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
