@@ -174,6 +174,7 @@ const ATBBuild = (() => {
         deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
         logBranch: null, branchLog: null, logPhase: 'idle', syncBusy: false, pushBusy: false,
+        remoteSynced: false, // BUG-20260914-006：本会话是否已成功同步远端——空态区分依据
         rendered: false, pendingRestore: state.pendingRestore,
       });
       render(); // 拉取前先呈现加载态
@@ -665,6 +666,7 @@ const ATBBuild = (() => {
       const r = await post('/fetch', {});
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `同步失败（${r.status}）`);
+      state.remoteSynced = true; // BUG-20260914-006：记录同步成功，供远端空态解释使用
       toast('✓ 已同步远端（fetch --prune）');
       await loadBranches();
       if (state.logBranch) await selectBranch(state.logBranch);
@@ -1003,11 +1005,20 @@ const ATBBuild = (() => {
     } else if (state.branchesPhase === 'error') {
       list = `<p class="rel-form-err" role="alert">分支读取失败：${esc(state.branchesError || '')} <button type="button" class="btn small" id="bldBranchRetry">重试</button></p>`;
     } else {
+      const remotes = b.remotes || [];
+      // BUG-20260914-006：同步成功后仍为空 ⇒ 远端仓库确实为空——本地分支「推送」高亮为出路。
+      const pushAttn = remotes.length > 0 && state.remoteSynced && (b.remote || []).length === 0;
       const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span></div>` : '';
       const local = (b.local || []).filter((x) => x !== b.current).map((x) => `
         <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>
-          <button type="button" class="btn small quiet bld-push" data-push="${esc(x)}" title="推送到远端">推送</button></div>`).join('');
+          <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button></div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
+      // BUG-20260914-006：区分尚未同步与同步后远端仍为空。
+      const remoteEmpty = !remotes.length
+        ? '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>'
+        : state.remoteSynced
+          ? '<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong><span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>'
+          : '<p class="muted small">本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取；若同步后仍为空，说明远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。</p>';
       // BUG-20260914-003：本地有分支但缺 main 时给出可解释提示（与「合并入 main」
       // precheckMerge「main 分支不存在」报错口径一致），引导经设置页 Git 工作流幂等补建。
       // 空仓库（无任何本地分支 = 尚无提交、无补建基点）不出提示。
@@ -1018,7 +1029,7 @@ const ATBBuild = (() => {
         : '';
       list = `
         <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local || '<p class="muted small">（无其他本地分支）</p>'}${mainHint}</div>
-        <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>'}</div>`;
+        <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || remoteEmpty}</div>`;
     }
     const log = state.logBranch ? (() => {
       if (state.logPhase === 'loading') return '<p class="muted">加载提交记录中…</p>';

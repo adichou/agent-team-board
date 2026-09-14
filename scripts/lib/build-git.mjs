@@ -50,16 +50,18 @@ export function assertRefName(branch) {
   return name;
 }
 
-// 只读：当前分支 + 本地分支 + 远端分支（origin/xxx 短名；排除 origin/HEAD 指针）。
+// 只读：当前分支 + 本地分支 + 远端分支（origin/xxx 短名；排除 origin/HEAD 指针）+ 已配置远端名。
+// BUG-20260914-006：remotes（git remote，本地配置读、非网络）供前端区分
+// 「未配置远端」/「已配置但本地无跟踪引用」/「同步成功后仍为空 = 远端仓库为空」三种空态。
 export function listBranches(root) {
-  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [] };
+  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [], remotes: [] };
   const current = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim() || null;
   const local = String(gitRaw(root, ['branch', '--format=%(refname:short)']).stdout || '')
     .split('\n').map((s) => s.trim()).filter(Boolean);
   const remote = String(gitRaw(root, ['branch', '-r', '--format=%(refname:short)']).stdout || '')
     .split('\n').map((s) => s.trim())
     .filter((s) => s && !s.endsWith('/HEAD'));
-  return { isRepo: true, current, local, remote };
+  return { isRepo: true, current, local, remote, remotes: remoteNames(root) };
 }
 
 // 只读：指定分支最近提交记录（hash / 短 hash / 说明 / 作者 / 时间）。
