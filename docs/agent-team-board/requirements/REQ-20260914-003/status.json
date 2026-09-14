@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260914-003",
+  "type": "requirement",
+  "title": "优化讨论生成的提示词",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-21",
+  "createdAt": "2026-09-14T08:28:26.282Z",
+  "updatedAt": "2026-09-14T11:08:41.834Z",
+  "agentCompletedAt": "2026-09-14T11:08:41.834Z",
+  "lastReport": {
+    "at": "2026-09-14T11:08:41.834Z",
+    "coverage": 8,
+    "framework": "node:test(assert)+自研脚本",
+    "summary": "启动/继续提示词追加「按需更新与自动提交」段：按需更新文件后自动 git 提交（只 commit 不 push）、commit 消息含讨论单号+摘要（沿用 类型: 摘要 单号）、回答展示 commit 消息、无更新明示不空提交；既有章节零删改，整理/收尾提示词不变；新增 8 用例+R7 按新口径更新，全量 235 文件 0 失败；5 个待确认项按保守默认收敛记入 design.md",
+    "runId": "run-20260914-241"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T08:28:26.282Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T08:28:26.283Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T08:45:38.297Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-164131-a32c）"
+    },
+    {
+      "at": "2026-09-14T10:58:56.201Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-21",
+      "note": "认领（zcode-batch-048-21）"
+    },
+    {
+      "at": "2026-09-14T11:08:41.835Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-21",
+      "note": "上报测试报告（覆盖率 8%），待人工确认完成"
+    }
+  ]
+}

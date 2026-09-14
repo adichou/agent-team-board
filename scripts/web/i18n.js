@@ -116,6 +116,11 @@ const EN = {
   '↩ 驳回接受': '↩ Reject acceptance',
   '▶ 开始 AI 分析': '▶ Start AI analysis',
   '▶ 开始 AI 开发': '▶ Start AI development',
+  // BUG-20260914-015：任务执行中快捷入口按钮态（禁用文案 + title 说明）
+  'AI 分析中': 'AI analysis in progress',
+  'AI 开发中': 'AI development in progress',
+  'AI 分析任务执行中：子代理正在批量补全文档，收尾后自动恢复入口': 'AI analysis in progress: subagents are completing documents in bulk; the entry restores automatically when the run finishes',
+  'AI 开发任务执行中：子代理正在按已计划队列实施，收尾后自动恢复入口': 'AI development in progress: subagents are implementing the planned queue; the entry restores automatically when the run finishes',
   '⚠ 文件视图组件（banner.js / highlight.js）未加载': '⚠ File view components (banner.js / highlight.js) not loaded',
   '✎ 修改': '✎ Edit',
   '✓ 接受': '✓ Accept',

@@ -2500,6 +2500,22 @@ async function handleApi(req, res, u, pathname) {
     return sendJson(res, 200, { ok: true, settings });
   }
 
+  // BUG-20260914-015：当前项目两类批量任务运行态（看板列表头快捷入口按钮数据源；只读轻量聚合，
+  // 不触发核对/结算/锁）。复用全局任务看板的「在工作」口径（unfinished 且未终止）；同类多行
+  // （存量排队账本）按活跃度取一行：running > needs_attention > paused > prepared；
+  // 未初始化项目不抛错，按「无任务」返回两个 null（projectTaskRows 同口径）。
+  if (req.method === 'GET' && pathname === '/api/tasks/state') {
+    const rows = projectTaskRows(root);
+    const RANK = { running: 3, needs_attention: 2, paused: 1, prepared: 0 };
+    const pick = (kind) => {
+      const statuses = rows.filter((x) => x.kind === kind).map((x) => x.status);
+      if (!statuses.length) return null;
+      statuses.sort((a, b) => (RANK[b] ?? -1) - (RANK[a] ?? -1));
+      return statuses[0];
+    };
+    return sendJson(res, 200, { ok: true, refine: pick('refine'), develop: pick('develop') });
+  }
+
   if (req.method === 'GET' && pathname === '/api/batch/prompt') {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
     // 缺省解析队首（存量排队账本兼容）：全部结束回退最新（「已结束面板 / 启动新一轮」语义）

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260914-003 讨论 prompt 展示与复制 — 可交互演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dde3; --text: #1f2430; --muted: #6b7280;
+    --accent: #2563eb; --accent-soft: #dbeafe; --ok: #16a34a; --ok-soft: #dcfce7;
+    --warn: #b45309; --warn-soft: #fef3c7; --err: #dc2626; --err-soft: #fee2e2;
+    --new: #7c3aed; --new-soft: #ede9fe; --chip: #eef1f5; --code: #f3f4f6;
+  }
+  html[data-theme="dark"] {
+    --bg: #111418; --panel: #1a1f26; --border: #333b45; --text: #e5e7eb; --muted: #9ca3af;
+    --accent: #60a5fa; --accent-soft: #1e3a5f; --ok: #4ade80; --ok-soft: #14351f;
+    --warn: #fbbf24; --warn-soft: #3a2c0a; --err: #f87171; --err-soft: #3b1414;
+    --new: #c4b5fd; --new-soft: #2a2140; --chip: #242a33; --code: #21262e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .legend { color: var(--muted); font-size: 12px; }
+  .legend .n { color: var(--new); font-weight: 600; }
+  main { display: grid; grid-template-columns: 280px 1fr; gap: 12px; padding: 12px 16px; max-width: 1100px; margin: 0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .col-title { font-size: 12px; color: var(--muted); margin: 2px 0 6px; letter-spacing: .05em; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .card .id { font-weight: 600; font-size: 13px; }
+  .card .tt { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 8px; background: var(--chip); color: var(--muted); margin-left: 6px; vertical-align: 1px; }
+  .badge.discussing { background: var(--ok-soft); color: var(--ok); }
+  .drawer { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .drawer-head { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .drawer-head .id { font-weight: 700; }
+  .drawer-head .meta { color: var(--muted); font-size: 12px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .fold { border-top: 1px dashed var(--border); }
+  .fold > .fold-head { width: 100%; text-align: left; border: 0; background: transparent; color: var(--accent); padding: 10px 14px; cursor: pointer; font-size: 13px; }
+  .fold-body { display: none; padding: 0 14px 12px; }
+  .fold.open .fold-body { display: block; }
+  pre.prompt { white-space: pre-wrap; word-break: break-word; background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; margin: 0; max-height: 340px; overflow: auto; }
+  pre.prompt .new-sec { display: block; background: var(--new-soft); outline: 1px dashed var(--new); border-radius: 6px; padding: 6px 8px; margin: 4px -8px; }
+  pre.prompt .tag { color: var(--new); font-weight: 700; }
+  pre.prompt .old-line { color: var(--err); text-decoration: line-through; }
+  .section { padding: 12px 14px; border-top: 1px solid var(--border); }
+  .section h3 { margin: 0 0 8px; font-size: 13px; }
+  .round { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .round .who { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .commit-chip { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--ok-soft); color: var(--ok); border-radius: 6px; padding: 2px 8px; margin-top: 4px; }
+  .commit-chip.none { background: var(--chip); color: var(--muted); }
+  .empty-state, .load-state, .err-state { text-align: center; color: var(--muted); padding: 48px 16px; }
+  .spin { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: r .8s linear infinite; vertical-align: -4px; margin-right: 8px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .err-box { background: var(--err-soft); color: var(--err); border-radius: 8px; padding: 12px 16px; }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: .25s; pointer-events: none; max-width: 90vw; font-size: 13px; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { background: var(--err); color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>REQ-20260914-003 · 讨论 prompt 展示与复制（可交互演示）</h1>
+  <div class="seg" id="stateSeg">
+    <button data-st="normal" class="on">正常</button>
+    <button data-st="empty">空</button>
+    <button data-st="loading">加载</button>
+    <button data-st="fail">失败</button>
+  </div>
+  <div class="seg" id="verSeg">
+    <button data-v="new" class="on">新版提示词</button>
+    <button data-v="old">旧版提示词</button>
+  </div>
+  <button class="btn" id="themeBtn">深浅色</button>
+  <span class="legend">紫色 <span class="n">【新增】</span> 段落为本需求追加；旧版含被取消的禁止行（红色删除线）</span>
+</header>
+
+<main>
+  <section>
+    <div class="col-title">讨论列表</div>
+    <div id="list"></div>
+  </section>
+  <section>
+    <div class="col-title">讨论详情（抽屉内容）</div>
+    <div id="detail"></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+'use strict';
+// 全部数据为演示示例，非真实看板数据。
+const DEMO_DISC = {
+  id: 'ASK-20260914-001', title: '优化导出流程的交互与文档', status: 'discussing',
+  rounds: 2, minutesV: 3,
+  conv: [
+    { user: '确认：导出按钮移到工具栏右侧，说明文档第 3 节同步更新。',
+      agent: '已按共识更新 docs/export-guide.md 第 3 节（按钮位置与操作步骤），其余章节未动。以下为本次自动提交的 commit 消息：',
+      commit: 'ASK-20260914-001: 更新导出按钮位置说明文档（a1b2c3d）' },
+    { user: '第二轮补充：导出失败时的提示文案也定稿了，但文档先不改。',
+      agent: '已记录为「已确认共识」。本轮不需要更新文件，未执行 git 提交（不产生空提交）。',
+      commit: null },
+  ],
+};
+
+const PROMPT_NEW = [
+'你是本项目的开放式讨论参与者。请与我围绕主题自由讨论，讨论编号 ASK-20260914-001（优化导出流程的交互与文档）。',
+'项目根：/Users/adichou/Documents/src/agent-team-board',
+'',
+'讨论背景：',
+'（未填写背景）',
+'',
+'开始前（上下文读取）：',
+'- 先校验项目与讨论归属并恢复上下文：node …/atb.mjs disc show ASK-20260914-001 --dir …',
+'- 已有纪要或轮次时先读纪要与近期轮次，按需再追溯更早原文；新会话不要仅凭聊天记忆接续。',
+'',
+'讨论约定：',
+'- 讨论不强制绑定需求或说明文档，可读项目代码与文档辅助判断；',
+'- 区分「已确认共识」「模型建议与取舍」「未决问题」，不要把未确认的建议写成共识。',
+'',
+'@@按需更新与自动提交（每轮回答后检查）：',
+'- 本轮结论需要更新相应文件时按需更新，更新完成后自动 git 提交（只 commit，不 push）；',
+'- commit 消息必须体现讨论单号，并对本次修改做简单摘要，便于按单号追溯，',
+'  如 "ASK-20260914-001: 更新导出按钮位置说明文档"；',
+'- 回答内容中要显示本次 commit 消息（单号 + 摘要，建议含提交号）；',
+'- 本轮无文件更新时明示无修改，不产生空提交。@@',
+'',
+'逐轮保存约定（每轮必须执行，无需等待任何收尾指令）：',
+'- 一轮 = 一次用户输入 + 你的完整回复；每轮回复完成后立即保存：',
+'  把 {"user":…,"summary":…,"session":…,"key":…} 写入临时 JSON，执行 node …/atb.mjs disc round ASK-20260914-001 --file <该文件> --dir …',
+'',
+'纪要维护（每轮检查，按需更新）：',
+'- 当前纪要与版本：minutes.md；需要更新时经 node …/atb.mjs disc minutes … --base-version <当前版本> 提交。',
+].join('\n');
+
+const PROMPT_OLD = [
+'你是本项目的开放式讨论参与者。请与我围绕主题自由讨论，讨论编号 ASK-20260914-001（优化导出流程的交互与文档）。',
+'项目根：/Users/adichou/Documents/src/agent-team-board',
+'',
+'开始前（上下文读取）：',
+'- 先校验项目与讨论归属并恢复上下文：node …/atb.mjs disc show ASK-20260914-001 --dir …',
+'',
+'讨论约定：',
+'- 讨论不强制绑定需求或说明文档，可读项目代码与文档辅助判断；',
+'-- 讨论期间不修改代码、不执行 git commit、不创建或修改需求/Bug 条目、不改变看板状态；',
+'- 区分「已确认共识」「模型建议与取舍」「未决问题」，不要把未确认的建议写成共识。',
+'',
+'逐轮保存约定 / 纪要维护：（同新版，此处略）',
+].join('\n');
+
+const state = { view: 'normal', ver: 'new', foldOpen: false };
+const $ = (s) => document.querySelector(s);
+
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function renderPrompt() {
+  const ver = state.ver;
+  const text = ver === 'new' ? PROMPT_NEW : PROMPT_OLD;
+  let html = '';
+  for (const line of text.split('\n')) {
+    if (ver === 'new' && line.startsWith('@@')) {
+      html += line.replace(/^@@|@@$/g, '').replace('按需更新与自动提交（每轮回答后检查）：', (m) => `<span class="tag">【新增】</span>${m}`).trimStart();
+      html += '\n';
+    } else if (ver === 'old' && line.startsWith('-- ')) {
+      html += `<span class="old-line">${line.slice(1)}</span>\n`;
+    } else {
+      html += line + '\n';
+    }
+  }
+  // 上面按行拼接后统一包一层高亮：将【新增】起止区间标出
+  const body = html.replace(/<span class="tag">[\s\S]*$/,
+    (m) => m + '');
+  return html;
+}
+
+function renderList() {
+  const el = $('#list');
+  if (state.view === 'empty') {
+    el.innerHTML = '<div class="card"><div class="tt">（暂无讨论 · 用 atb oncall new 创建）</div></div>';
+    return;
+  }
+  const dim = state.view === 'loading' ? 'opacity:.45;' : '';
+  el.innerHTML = `
+    <div class="card sel" style="${dim}">
+      <div class="id">${DEMO_DISC.id}<span class="badge discussing">讨论中</span></div>
+      <div class="tt">${DEMO_DISC.title} · 已保存 ${DEMO_DISC.rounds} 轮 · 纪要 v${DEMO_DISC.minutesV}</div>
+    </div>
+    <div class="card" style="${dim}">
+      <div class="id">ASK-20260913-006<span class="badge">已归档</span></div>
+      <div class="tt">发布流程改版讨论 · 已保存 5 轮</div>
+    </div>`;
+}
+
+function renderDetail() {
+  const el = $('#detail');
+  if (state.view === 'loading') {
+    el.innerHTML = `<div class="drawer"><div class="load-state"><span class="spin"></span>正在读取讨论（disc show）…按钮已禁用防重复</div></div>`;
+    return;
+  }
+  if (state.view === 'fail') {
+    el.innerHTML = `<div class="drawer"><div class="err-state">
+      <div class="err-box">读取讨论失败：演示模拟的读取错误（轮次目录暂不可读；已保存轮次不受影响）</div>
+      <p></p><button class="btn primary" id="retryBtn">重试</button></div></div>`;
+    $('#retryBtn').onclick = () => { setView('loading'); setTimeout(() => setView('normal'), 700); };
+    return;
+  }
+  if (state.view === 'empty') {
+    el.innerHTML = `<div class="drawer"><div class="empty-state">暂无讨论<br>新建后此处展示启动提示词、逐轮记录与纪要</div></div>`;
+    return;
+  }
+  const d = DEMO_DISC;
+  const disabled = '';
+  el.innerHTML = `
+  <div class="drawer">
+    <div class="drawer-head">
+      <span class="id">${d.id}</span>
+      <span class="badge discussing">讨论中</span>
+      <span class="meta">${d.title} · 已保存 ${d.rounds} 轮 · 纪要版本 v${d.minutesV}</span>
+    </div>
+    <div class="actions">
+      <button class="btn" id="foldBtn">${state.foldOpen ? '收起启动提示词' : '启动提示词'}</button>
+      <button class="btn" id="copyBtn">复制继续讨论提示词</button>
+      <button class="btn" id="orgBtn">整理结论</button>
+      <button class="btn primary" id="arcBtn">归档讨论</button>
+    </div>
+    <div class="fold ${state.foldOpen ? 'open' : ''}" id="fold">
+      <button class="fold-head" id="foldHead">▸ 启动提示词（${state.ver === 'new' ? '新版·含按需更新与自动提交' : '旧版·禁止修改与提交'}，点击展开/收起）</button>
+      <div class="fold-body"><pre class="prompt" id="promptPre"></pre></div>
+    </div>
+    <div class="section">
+      <h3>Agent 回答回显（模拟会话：commit 消息在回答内容中显示）</h3>
+      <div id="conv"></div>
+    </div>
+  </div>`;
+  $('#promptPre').innerHTML = renderPrompt();
+  $('#foldBtn').onclick = $('#foldHead').onclick = () => { state.foldOpen = !state.foldOpen; renderDetail(); };
+  $('#copyBtn').onclick = async () => {
+    const text = '继续讨论 ' + d.id + '（含按需更新与自动提交约定）…（演示文本）';
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        toast('✓ 继续讨论提示词已复制：粘贴到任意能访问本项目文档的 Agent 会话即可接续同一讨论');
+        return;
+      }
+      throw new Error('clipboard unavailable');
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast(ok ? '✓ 已复制（回退方式）' : '剪贴板不可用：请点「启动提示词」展开后手动选择复制', !ok);
+    }
+  };
+  $('#orgBtn').onclick = () => toast('整理结论：重整纪要（演示，不终止讨论）');
+  $('#arcBtn').onclick = () => toast('归档讨论：需确认（演示）');
+  $('#conv').innerHTML = d.conv.map((r, i) => `
+    <div class="round">
+      <div class="who">第 ${i + 1} 轮 · 用户</div><div>${r.user}</div>
+      <div class="who" style="margin-top:6px">Agent 回答</div><div>${r.agent}</div>
+      ${r.commit
+        ? `<span class="commit-chip">本次提交：${r.commit}</span>`
+        : `<span class="commit-chip none">本轮无文件更新 · 未提交</span>`}
+    </div>`).join('');
+}
+
+function render() { renderList(); renderDetail(); }
+
+function setView(v) {
+  state.view = v; state.foldOpen = false;
+  document.querySelectorAll('#stateSeg button').forEach((b) => b.classList.toggle('on', b.dataset.st === v));
+  render();
+}
+
+document.querySelectorAll('#stateSeg button').forEach((b) => { b.onclick = () => {
+  if (b.dataset.st === 'loading') { setView('loading'); setTimeout(() => setView('normal'), 800); return; }
+  setView(b.dataset.st);
+}; });
+document.querySelectorAll('#verSeg button').forEach((b) => { b.onclick = () => {
+  state.ver = b.dataset.v;
+  document.querySelectorAll('#verSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  renderDetail();
+}; });
+$('#themeBtn').onclick = () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+};
+render();
+</script>
+</body>
+</html>
