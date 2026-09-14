@@ -2012,13 +2012,17 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
 //   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
 //   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
-//                                    BUG-20260913-001：仅已完成 done 条目进入候选）
+//                                    BUG-20260913-001：仅已完成 done 条目进入候选；
+//                                    BUG-20260914-004：已纳入任一版本的条目一并收窄，
+//                                    totalDone=占用过滤前 done 总数供前端区分空态）
 //   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
 //   GET  /api/build/branch-log        指定分支最近提交（≤50 条：hash/short/subject/author/date）
 //   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
-//                                    BUG-20260913-001：非 done 条目拒绝纳入）
+//                                    BUG-20260913-001：非 done 条目拒绝纳入；
+//                                    BUG-20260914-004：已纳入任一版本的条目拒绝纳入，数据层兜底）
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
-//   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删）
+//   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删；
+//                                    add 同受 BUG-20260913-001 / BUG-20260914-004 口径约束）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
 //   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
 //                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
@@ -2058,10 +2062,14 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/candidates') {
     const board = requireBoard();
     const idx = gitFlow.itemCommitStatusIndex(board, root);
-    // BUG-20260913-001：仅已完成（done）条目可纳入版本——候选在数据源头收窄，
-    // 「新建版本」与「添加条目」两面板共用本接口，口径保持一致。
-    const items = core.listItems(board)
-      .filter((it) => it.status === 'done')
+    // BUG-20260913-001：仅已完成（done）条目可纳入版本；BUG-20260914-004：已纳入任一版本
+    // （draft/merging/merged/failed 任一状态）的条目一并收窄，不再进入候选——「新建版本」与
+    // 「添加条目」两面板共用本接口，口径保持一致。totalDone 为占用过滤前的 done 条目总数，
+    // 供前端区分「无 done 条目」与「done 条目均已被版本占用」两种空态。
+    const occupied = buildStore.occupiedItemMap(board);
+    const doneItems = core.listItems(board).filter((it) => it.status === 'done');
+    const items = doneItems
+      .filter((it) => !occupied.has(it.id))
       .map((it) => {
         const rec = idx.get(it.id);
         return {
@@ -2073,7 +2081,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
           lastCommittedAt: rec ? rec.lastCommittedAt : null,
         };
       });
-    return sendJson(res, 200, { items });
+    return sendJson(res, 200, { items, totalDone: doneItems.length });
   }
   if (req.method === 'GET' && pathname === '/api/build/branches') {
     return sendJson(res, 200, buildGit.listBranches(root));

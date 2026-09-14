@@ -110,11 +110,15 @@ function statePayload(over = {}) {
 
 function candidatesPayload() {
   return {
+    totalDone: 3,
     items: [
       { itemId: 'REQ-20260913-001', title: '演示需求', status: 'done', commits: [H1] },
       { itemId: 'REQ-20260913-002', title: '无提交需求', status: 'done', commits: [] },
       // BUG-20260913-001：后端已收窄为仅 done；保留非 done 条目验证前端防御过滤
       { itemId: 'REQ-20260913-003', title: '开发中需求', status: 'in-progress', commits: [H2] },
+      // BUG-20260914-004：后端已收窄为未占用；保留已占用条目（state 中 BLD-20260913-001
+      // 已纳入 REQ-20260913-001）验证前端防御过滤
+      { itemId: 'REQ-20260913-004', title: '未占用有提交需求', status: 'done', commits: [H2] },
     ],
   };
 }
@@ -169,17 +173,19 @@ t('N7a build.js 挂载与 state 渲染：版本列表 + 状态 chip + 空态 + �
   assert.doesNotMatch(inner3, /id="bldNewBtn"/, '非 git 不出现创建入口');
 });
 
-t('N7b 创建面板：候选仅 done 条目（BUG-20260913-001）；全选只纳入有 commit 候选的条目；无 commit 条目标注且不可选', async () => {
+t('N7b 创建面板：候选仅 done 且未占用条目（BUG-20260913-001 / BUG-20260914-004）；全选只纳入有 commit 候选的条目；无 commit 条目标注且不可选', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
   const inner = h.run(`document.querySelector('#buildView').innerHTML`);
-  assert.match(inner, /新建版本/, '新建版本面板渲染');
-  assert.match(inner, /无提交需求/, '无 commit 条目仍列出');
-  assert.match(inner, /暂无关联提交/, '无 commit 明确提示');
-  assert.doesNotMatch(inner, /开发中需求/, '非 done 条目不渲染（前端防御过滤）');
+  const panel = inner.match(/<aside class="rel-panel"[^>]*aria-label="新建版本">[\s\S]*?<\/aside>/);
+  assert.ok(panel, '新建版本面板应渲染');
+  assert.match(panel[0], /无提交需求/, '无 commit 条目仍列出');
+  assert.match(panel[0], /暂无关联提交/, '无 commit 明确提示');
+  assert.doesNotMatch(panel[0], /开发中需求/, '非 done 条目不渲染（前端防御过滤）');
+  assert.doesNotMatch(panel[0], /REQ-20260913-001/, '已纳入版本的条目不渲染（前端防御过滤，BUG-20260914-004）');
   const selectable = h.run(`window.ATBBuild.selectableCandidates(window.ATBBuild.getCandidates())`);
-  assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-001'], '全选口径=仅纳入有 commit 候选的条目');
+  assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-004'], '全选口径=未占用 done 且有 commit 候选的条目');
 });
 
 t('N7c 回填解析：标准回答解析出名称与描述；缺名称报错保留原文', () => {

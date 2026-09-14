@@ -7,6 +7,10 @@
 // 语义边界（与后端一致，design.md 落定口径）：
 //   - 仅已完成（done）的需求单 / Bug 单可纳入版本（BUG-20260913-001）：新建版本 / 添加条目
 //     候选只列 done 条目（后端接口已收窄，前端再过滤一次防御旧数据）；无候选时给明确空态；
+//   - 一条目至多纳入一个版本（BUG-20260914-004）：已纳入任一版本（draft/merging/merged/failed
+//     任一状态）的条目不再出现在新建 / 添加候选（后端已收窄，前端据 state.versions 再过滤一次
+//     防御旧缓存）；空态区分「无 done 条目」与「done 条目均已被版本占用」；服务端对跨版本重复
+//     纳入兜底拒绝；从 draft/failed 版本移出或删除版本后条目重新可选；
 //   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选（全选只纳入有 commit 候选的条目）；
 //   - 「AI 完善」（原「提示词与回答回填」，BUG-20260913-004 更名）为同一弹窗两段式：上段复制提示词、
 //     下段粘贴回答解析回填，无需关闭再打开；解析成功后预览区为可编辑表单（REQ-20260913-006）——
@@ -36,8 +40,10 @@ const ATBBuild = (() => {
     query: '',
     selVerId: null,
     edit: null,          // { id, field: 'name'|'desc' } 行内编辑态
-    createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, busy, error }
-    addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, busy, error }
+    createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, totalDone, busy, error }
+    addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, totalDone, busy, error }
+    //（totalDone：候选接口占用过滤前的 done 条目总数，用于空态区分「无 done 条目」与
+    // 「done 条目均已被版本占用」——BUG-20260914-004）
     // { verId, text, parsed, draft, error, busy, copied }  AI 完善弹窗（提示词与回答回填）
     // parsed: parseAnswer 成功结果；draft: { name, description } 回填编辑表单当前值（REQ-20260913-006，
     // 解析时以解析结果预填，编辑 / 后台重渲染前从输入框同步，应用保存该值而非解析原值）
@@ -90,6 +96,17 @@ const ATBBuild = (() => {
   // 前端再过滤一次防御旧缓存 / 混杂数据，保证界面与数据口径一致。
   function doneCandidates(items) {
     return (items || []).filter((x) => x.status === 'done');
+  }
+
+  // BUG-20260914-004 口径：一条目至多纳入一个版本——已纳入任一版本（draft/merging/merged/
+  // failed 任一状态）的条目视为占用。候选接口已在后端源头收窄，前端据 state.data.versions
+  // 再过滤一次防御旧缓存 / 混杂数据（占用状态可跨版本任一状态成立，与版本状态机无关）。
+  function occupiedItemIds(versions) {
+    const set = new Set();
+    for (const v of versions || []) {
+      for (const it of v.items || []) set.add(it.itemId);
+    }
+    return set;
   }
 
   // 全选口径：只纳入有 commit 候选的条目（无提交条目自动跳过并提示）
@@ -210,13 +227,15 @@ const ATBBuild = (() => {
   /* ---------- 版本计划：创建 / 编辑 / 条目 ---------- */
 
   async function openCreatePanel() {
-    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', busy: false, error: null, loadError: null };
+    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
-      state.createPanel.candidates = doneCandidates(data.items || []); // BUG-20260913-001：仅 done 条目进候选
+      const occupied = occupiedItemIds(state.data?.versions); // BUG-20260914-004：已纳入任一版本的条目不进候选
+      state.createPanel.candidates = doneCandidates(data.items || []).filter((x) => !occupied.has(x.itemId)); // BUG-20260913-001：仅 done 条目进候选
+      state.createPanel.totalDone = Number.isInteger(data.totalDone) ? data.totalDone : null;
       for (const it of selectableCandidates(state.createPanel.candidates)) {
         state.createPanel.commits[it.itemId] = it.commits[0]; // 默认取最近一次关联提交
       }
@@ -316,15 +335,18 @@ const ATBBuild = (() => {
   async function openAddPanel() {
     const v = selVersion();
     if (!v) return;
-    state.addPanel = { verId: v.id, candidates: null, picked: new Set(), commits: {}, busy: false, error: null, loadError: null };
+    state.addPanel = { verId: v.id, candidates: null, picked: new Set(), commits: {}, totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       const have = new Set(v.items.map((x) => x.itemId));
-      // BUG-20260913-001：与新建版本同口径——仅 done 条目进候选，且排除已在本版本中的条目
-      state.addPanel.candidates = doneCandidates(data.items || []).filter((x) => !have.has(x.itemId));
+      const occupied = occupiedItemIds(state.data?.versions); // BUG-20260914-004：其他版本占用条目同样排除
+      // BUG-20260913-001：与新建版本同口径——仅 done 条目进候选，且排除已在本版本中的条目；
+      // BUG-20260914-004：再排除已纳入任一版本（含本版本与其他版本）的条目
+      state.addPanel.candidates = doneCandidates(data.items || []).filter((x) => !have.has(x.itemId) && !occupied.has(x.itemId));
+      state.addPanel.totalDone = Number.isInteger(data.totalDone) ? data.totalDone : null;
       for (const it of selectableCandidates(state.addPanel.candidates)) {
         state.addPanel.commits[it.itemId] = it.commits[0];
       }
@@ -787,7 +809,9 @@ const ATBBuild = (() => {
         <div class="rel-panel-body">
           ${p.loadError ? `<p class="rel-form-err" role="alert">${esc(p.loadError)} <button type="button" class="btn small" id="bldPanelRetry">重试</button></p>` : ''}
           ${!p.candidates ? '<p class="muted">正在读取条目…</p>'
-            : p.candidates.length === 0 ? '<p class="muted bld-cand-empty">暂无可纳入版本的条目：仅已完成（done）的需求单 / Bug 单会出现在候选中</p>'
+            : p.candidates.length === 0 ? `<p class="muted bld-cand-empty">${p.totalDone
+              ? '已完成的条目均已纳入版本计划：可从「计划中 / 失败」版本移出条目，或删除版本后重新纳入' // BUG-20260914-004：区分「均已被占用」空态
+              : '暂无可纳入版本的条目：仅已完成（done）且未纳入其他版本的需求单 / Bug 单会出现在候选中'}</p>`
             : `
           <div class="bld-pick-bar">
             <button type="button" class="btn small" id="bldPickAll">全选</button>
@@ -1062,8 +1086,8 @@ const ATBBuild = (() => {
     view.innerHTML = `
       <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}</nav>
       ${body}
-      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
-      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）的需求单 / Bug 单可加入本版本（已在本版本中的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
+      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
+      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已纳入版本的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
       ${renderAnswerModal()}
       ${renderMergeConfirm()}
       ${renderPushConfirm()}
@@ -1223,7 +1247,7 @@ const ATBBuild = (() => {
     enter, refresh, setTab, setQuery, snapshot, restoreView, notifyState: notify,
     openCreatePanel, openAddPanel, selectBranch,
     // 纯函数接缝（测试与面板复用）
-    doneCandidates, selectableCandidates, parseAnswer, buildPrompt,
+    doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt,
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
     // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
     openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,

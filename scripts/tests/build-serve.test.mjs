@@ -155,15 +155,18 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.equal(got.description, '首个版本');
     assert.equal(got.items[0].commit, commit1);
 
-    // S5 candidates：git 历史消息含单号 → 候选含条目与 commit；无提交条目 commits 为空
+    // S5 candidates：无提交条目 commits 为空；BUG-20260914-004：已纳入版本（S2 已把 REQ A
+    // 纳入 vid）的条目在源头收窄不出现，totalDone 反映占用过滤前 done 总数（commit 关联
+    // 展示口径由 bug-build-candidate-occupied-20260914-004.test.mjs B1 覆盖）
     r = await req(port, 'GET', `/api/build/candidates${P}`);
     assert.equal(r.status, 200);
     const cand = r.json.items;
     const cA = cand.find((x) => x.itemId === reqA.id);
     const cB = cand.find((x) => x.itemId === reqB.id);
-    assert.ok(cA && cA.commits.includes(commit1), 'candidates 应含 REQ A 与其 commit');
+    assert.ok(!cA, '已纳入版本的条目不再进入候选（BUG-20260914-004）');
     assert.ok(cB && cB.commits.length === 0, '无提交条目 commits 为空');
     assert.equal(cB.title, '演示需求二');
+    assert.equal(r.json.totalDone, 2, 'totalDone 为占用过滤前 done 总数');
 
     // S4 条目增删：移出可再加；重复添加 400
     r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'remove', itemIds: [reqA.id] });
@@ -216,7 +219,7 @@ t('S1~S10 /api/build* 全链路', async () => {
 
     // S7 合并隔离：脏工作区不阻塞（合并在临时工作树执行、不触碰当前工作区），未提交改动保留；
     // release git 运行互斥 409
-    core.createItem(dataDirA, { type: 'bug', title: '演示缺陷', by: 'test' });
+    const bugC = core.createItem(dataDirA, { type: 'bug', title: '演示缺陷', by: 'test' });
     fs.writeFileSync(path.join(projA, 'f2.txt'), 'fix\n');
     git(projA, ['add', '-A']);
     git(projA, ['commit', '-m', `fix: 演示缺陷 BUG 候选`]);
@@ -261,7 +264,10 @@ t('S1~S10 /api/build* 全链路', async () => {
 
     // S11 REQ-20260913-004 版本删除：draft / merged 可删（整目录移除、state 列表移除）；
     // 不存在 400；merging 409（conflict）目录保留，恢复 failed 后可删
-    r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: reqB.id, commit: commit2 }] });
+    // BUG-20260914-004：reqB 此刻仍被 merged 的 vid2 占用（merged 也算占用），删除用版本
+    // 改用未占用的 done 条目（S7 建的 bugC 推到 done）；vid4 在 vid2 删除后创建，reqB 已释放
+    for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDirA, bugC.id, s, { by: 'test' });
+    r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: bugC.id, commit: commit2 }] });
     assert.equal(r.status, 201, `创建删除用版本应成功：${r.text}`);
     const vid3 = r.json.version.id;
     const verDir = (id) => path.join(dataDirA, 'builds', 'versions', id);
