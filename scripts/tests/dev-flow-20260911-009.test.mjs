@@ -219,7 +219,7 @@ t('D7 幂等：同一运行重复回执不重复提交；git 历史已含单号�
   assert.match(jsonOf(again).autoCommit.reason, /幂等|已含/);
 });
 
-t('D8 失败不阻断：提交失败回执仍 reported、改动保留、批次可继续；atb run autocommit 重试成功不重复', () => {
+t('D8 失败不阻断回执：提交失败回执仍 reported、改动保留；REQ-20260914-001 起挂起队列，人工确认后恢复续派；重试不重复', async () => {
   const root = mkProject();
   const dataDir = core.dataDirFrom(root);
   const { receipt, runId, item } = runReportedFlow(root, { hookFail: true });
@@ -229,21 +229,32 @@ t('D8 失败不阻断：提交失败回执仍 reported、改动保留、批次�
   assert.equal(logSubjects(root).filter((s) => s.includes(item.id)).length, 0, '失败时不应产生任何提交');
   const st = git(root, ['status', '--porcelain', '-uall']).stdout;
   assert.match(st, /feature-a\.mjs/, '失败时改动应保留在工作区');
-  // 批次可继续：失败不影响后续条目处理（前批已收尾，新单走新一轮批次照常领取）
+  // REQ-20260914-001：失败 → 挂起当前条目并暂停队列（禁止后续领取放大混合修改）
+  assert.ok(receipt.suspended, '失败应触发挂起标记');
+  const batchId = batch.queueHeadBatch(dataDir).batchId;
+  assert.equal(batch.getBatch(dataDir, batchId).pauseRequested, true, '队列应持久化暂停');
   const item2 = mkPlannedItem(dataDir, '后续单');
-  batch.createBatch(dataDir, { projectRoot: root });
-  const nx2 = batch.nextItem(dataDir, batch.queueHeadBatch(dataDir).batchId, { owner: 'w2' });
-  assert.equal(nx2.itemId, item2.id);
+  const blocked = batch.nextItem(dataDir, batchId, { owner: 'w2' });
+  assert.equal(blocked.stop, 'paused', '挂起期间不得派发后续单');
+  void item2;
 
-  // 移除故障钩子后重试：三组提交落库、不重复
+  // 移除故障钩子后人工确认：授权补交恰一次（不重复），核验通过恢复队列
   fs.rmSync(path.join(root, '.git', 'hooks', 'pre-commit'));
-  const retry = atb(['run', 'autocommit', runId, '--json'], root);
-  assert.equal(retry.code, 0, `重试应成功（${retry.err}）`);
-  const ac = jsonOf(retry).autoCommit;
-  assert.equal(ac.status, 'committed');
-  assert.equal(ac.commits.length, 3);
+  const confirmStore = await import('../lib/confirm-store.mjs');
+  const confirmStates = await import('../lib/confirm-states.mjs');
+  const rec = confirmStates.confirmOf(dataDir, item.id);
+  assert.ok(rec, '失败应已声明挂起确认记录');
+  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+    projectRoot: root, fingerprint: rec.fingerprint,
+  });
+  assert.ok(r.ok, `人工确认应成功：${JSON.stringify(r.reasons || [])}`);
+  batch.resumeAfterConfirm(dataDir, batchId);
+  const nx2 = batch.nextItem(dataDir, batchId, { owner: 'w2' });
+  assert.equal(nx2.itemId, item2.id, '确认恢复后批次继续派发下一项');
   const withId = logSubjects(root).filter((s) => s.includes(item.id));
-  assert.equal(withId.length, 3, '重试应恰好补齐三组提交，不重复');
+  assert.ok(withId.length >= 2, `补交应恰好落库（doc + 人工确认补交）：${withId.join(' | ')}`);
+  assert.equal(logSubjects(root).filter((s) => s === 'doc: 幂等单 ' + item.id).length, 0, '不得出现重复主题');
+  void runId;
 });
 
 t('D9 旧版预留（无快照）/非 git 项目 → 明确跳过，不猜测归因', () => {

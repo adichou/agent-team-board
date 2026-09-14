@@ -170,13 +170,16 @@ t('C1 行为回归：reported 且带暂扣账本时 notice 无暂扣统计行；
   const dataDir = core.dataDirFrom(root);
   seedPreDirtySource(root);
   const held = mkPlannedItem(dataDir, '回退后暂扣单');
-  const standby = mkPlannedItem(dataDir, '剩余可实施单'); // 保持 remaining>0 → continue
+  const standby = mkPlannedItem(dataDir, '剩余可实施单'); // 保持 remaining>0
   const batchId = batch.createBatch(dataDir, { projectRoot: root }).batch.batchId;
   const runId = runOneHeldItem(root, dataDir, held, 'C1');
   void standby;
 
+  // REQ-20260914-001 起：自动提交不完整（暂扣/待人工）挂起当前条目并暂停队列——
+  // nextAction 不再 continue（不放大混合修改），notice 指向挂起条目而非暂扣统计行。
   const chk = batch.checkBatch(dataDir, batchId);
-  assert.equal(chk.nextAction, 'continue', '剩余可实施单存在时应为 continue');
+  assert.equal(chk.nextAction, 'stop', '挂起暂停后应为 stop');
+  assert.ok(String(chk.notice || '').includes('待人工确认提交'), `notice 应指向挂起确认入口：${chk.notice}`);
   assert.ok(!String(chk.notice || '').includes(NOTICE_HELD), `notice 不应再含暂扣统计行：${chk.notice}`);
   assert.ok(!String(chk.notice || '').includes('dispatch/runs/*/auto-commit.json'), `notice 不应再给暂扣明细入口：${chk.notice}`);
 

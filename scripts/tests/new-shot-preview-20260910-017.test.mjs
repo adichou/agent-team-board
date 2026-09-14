@@ -55,6 +55,7 @@ function setup() {
   document.querySelector('#shortcutHelpWrap').classList.add('hidden'); // 初始常驻隐藏态
   document.querySelector('#editModalWrap').classList.add('hidden'); // REQ-20260911-001 编辑面板初始隐藏态（Esc 链会检查）
 document.querySelector('#holdPanel').classList.add('hidden'); // REQ-20260911-007 决策面板初始隐藏态（Esc 链会检查）
+document.querySelector('#confirmPanel').classList.add('hidden'); // REQ-20260914-001 挂起确认面板初始隐藏态（Esc 链会检查）
   const requests = [], notices = [];
   const sandbox = {
     document, URLSearchParams, console, setTimeout: () => 0, clearTimeout() {}, Date,
