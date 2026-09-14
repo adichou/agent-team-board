@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260912-001",
+  "type": "requirement",
+  "title": "设置中的 git 工作流的描述需要更详细",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-041-1",
+  "createdAt": "2026-09-11T17:10:01.910Z",
+  "updatedAt": "2026-09-11T18:33:12.468Z",
+  "agentCompletedAt": "2026-09-11T18:33:12.468Z",
+  "lastReport": {
+    "at": "2026-09-11T18:33:12.468Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + run-all.mjs（npm test）",
+    "summary": "设置页 Git 工作流分区就绪态改为详细描述：dev+main 双分支协作总述、分支职责（dev 承载需求设计/开发/测试，main 承载版本构建与发布构建物）、每单开发完自动提交到本地（仅本地不 push）；非 git 指引保留；i18n 词典 +3/-1；新增 6 用例先红后绿，全量 204 测试文件 0 失败",
+    "runId": "run-20260912-206"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T17:10:01.910Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T17:10:01.911Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T18:13:52.194Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-11T18:26:12.426Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-041-1",
+      "note": "认领（zcode-batch-041-1）"
+    },
+    {
+      "at": "2026-09-11T18:33:12.469Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-041-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
