@@ -47,7 +47,7 @@ function statePayload(over = {}) {
 }
 
 // fetchResult：同步接口的可控应答工厂（U3/U4 驱动 busy 态与 toast；
-// BUG-20260914-011 起同步走 /api/build/fetch，成功应答含逐分支推送结果）
+// BUG-20260914-011 起同步走 /api/build/sync，成功应答含逐分支推送结果）
 function setup({ branches, state = statePayload(), fetchResult } = {}) {
   const document = element();
   document.createElement = element;
@@ -67,7 +67,7 @@ function setup({ branches, state = statePayload(), fetchResult } = {}) {
       if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(state)) };
       if (up.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
       if (up.pathname === '/api/build/branches') return { ok: true, json: async () => JSON.parse(JSON.stringify(branches)) };
-      if (up.pathname === '/api/build/fetch') return fetchResult ? fetchResult() : { ok: true, json: async () => ({}) };
+      if (up.pathname === '/api/build/sync') return fetchResult ? fetchResult() : { ok: true, json: async () => ({}) };
       return { ok: true, json: async () => ({}) };
     },
   };
@@ -103,7 +103,7 @@ t('U1 默认态按钮显示「⟳ 和远端同步」，悬停提示为 fetch+pus
   const inner = view.innerHTML;
   assert.match(inner, /⟳ 和远端同步/, '按钮默认态应为「⟳ 和远端同步」');
   assert.doesNotMatch(inner, /⟳ 同步远端/, '旧按钮文案「⟳ 同步远端」不得残留');
-  assert.match(fetchBtnHtml(inner), /title="fetch --all --prune：拉取远端最新并清理失效引用"/, '悬停提示为双动作口径（BUG-20260914-011）');
+  assert.match(fetchBtnHtml(inner), /title="fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致"/, '悬停提示为双动作口径（BUG-20260914-011）');
   assert.ok(!/disabled/.test(fetchBtnHtml(inner)), '默认态不禁用');
 });
 
@@ -131,8 +131,8 @@ t('U3 点击同步：执行中禁用并显示「同步中…」，成功 toast �
   resolveFetch({ ok: true, json: async () => ({ ok: true, remote: 'origin', pushed: [{ branch: 'dev', remoteBranch: 'origin/dev', setUpstream: true }], failed: [], skipped: [] }) });
   await sleep(30);
   assert.deepEqual(
-    h.toasts.filter(([m]) => m === '✓ 已同步远端（fetch --prune）'),
-    [['✓ 已同步远端（fetch --prune）', undefined]],
+    h.toasts.filter(([m]) => m === '✓ 已同步远端：fetch 完成，已推送 dev → origin'),
+    [['✓ 已同步远端：fetch 完成，已推送 dev → origin', undefined]],
     '成功 toast 汇总两步结果',
   );
   assert.match(view.innerHTML, /⟳ 和远端同步/, '完成后按钮恢复新文案');
@@ -177,7 +177,7 @@ t('S1 build.js 源码：旧按钮文案「⟳ 同步远端」无残留，现状�
   assert.ok(buildJs.includes('⟳ 和远端同步'), '源码应包含新按钮文案');
   assert.ok(buildJs.includes('先「和远端同步」或推送本地分支'), '空态指称应更新');
   assert.ok(buildJs.includes('同步中…'), '执行中文案维持现状');
-  assert.ok(buildJs.includes('✓ 已同步远端（fetch --prune）'), '成功 toast 为两步汇总口径（BUG-20260914-011）');
+  assert.ok(buildJs.includes('✓ 已同步远端：fetch 完成，已推送 '), '成功 toast 为两步汇总口径（BUG-20260914-011）');
   assert.ok(buildJs.includes('✕ 同步远端失败：'), '失败 toast 维持现状');
 });
 

@@ -108,7 +108,7 @@ function setup({ branches, state = statePayload(), fetchResult } = {}) {
       if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(state)) };
       if (up.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
       if (up.pathname === '/api/build/branches') return { ok: true, json: async () => JSON.parse(JSON.stringify(branches)) };
-      if (up.pathname === '/api/build/fetch') return fetchResult ? fetchResult() : { ok: true, json: async () => ({}) };
+      if (up.pathname === '/api/build/sync') return fetchResult ? fetchResult() : { ok: true, json: async () => ({}) };
       return { ok: true, json: async () => ({}) };
     },
   };
@@ -154,7 +154,7 @@ t('U2 已配置远端 + 同步成功后仍为空：解释块断言「远端仓�
   await sleep(30);
   const inner = view.innerHTML;
   assert.match(inner, /远端仓库尚无任何分支（从未推送）。/, '同步成功后仍为空应断言远端仓库为空');
-  assert.match(inner, /刚才的同步已成功/, '应说明未推送成因（main 口径）');
+  assert.match(inner, /本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）/, '应说明未推送成因（main 口径）');
   assert.match(inner, /bld-remote-hint/, '解释块应有稳定样式钩子');
   assert.match(inner, /role="note"/, '解释块 role=note');
   assert.match(inner, /bld-push attn/, '本地分支「推送」按钮应高亮为出路');
@@ -188,7 +188,7 @@ t('U5 同步成功后远端出现分支（本地未同步场景）：空态解�
   h.sandbox.fetch = async (url) => {
     const up = new URL(String(url), 'http://local');
     if (up.pathname === '/api/build/branches') return { ok: true, json: async () => JSON.parse(JSON.stringify(branches)) };
-    if (up.pathname === '/api/build/fetch') return { ok: true, json: async () => ({ ok: true, remote: 'origin', pushed: [{ branch: 'dev', remoteBranch: 'origin/dev', setUpstream: true }], failed: [], skipped: ['main'] }) };
+    if (up.pathname === '/api/build/sync') return { ok: true, json: async () => ({ ok: true, remote: 'origin', pushed: [{ branch: 'dev', remoteBranch: 'origin/dev', setUpstream: true }], failed: [], skipped: ['main'] }) };
     if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(statePayload())) };
     if (up.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
     return { ok: true, json: async () => ({}) };
@@ -210,8 +210,8 @@ t('W1 词典收录新空态文案（文本节点全文为键），中英往返�
   const I = globalThis.ATBI18N;
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN } = I._dict;
-  assert.equal(EN['本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取；若同步后仍为空，说明远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。'],
-    'No remote-tracking branches yet: the list is not synced with the remote — click "⟳ Sync with remote" above to fetch; if it is still empty after syncing, the remote repository has no branches (never pushed), and you can push branches in the "Local" group above.',
+  assert.equal(EN['本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。'],
+    'No remote-tracking branches yet: the list is not synced with the remote — click "⟳ Sync with remote" above to fetch and push; if it is still empty after syncing, the push did not succeed or the remote repository has no branches (never pushed), and you can push branches in the "Local" group above.',
     '初始空态整句应有词条（BUG-20260914-011 后含推送口径）');
   assert.equal(EN['远端仓库尚无任何分支（从未推送）。'], 'The remote repository has no branches yet (never pushed).', '解释块标题应有词条');
   assert.equal(EN['刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。'],

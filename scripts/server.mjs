@@ -2027,7 +2027,8 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
 //   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
 //                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
-//   POST /api/build/fetch             同步远端（fetch --all --prune）
+//   POST /api/build/sync             与远端同步（BUG-20260914-011：fetch --all --prune 后推送
+//                                    除 main 外的本地分支，main 归发布模块不在此推送）
 //   POST /api/build/push              推送本地分支（未建立上游时首推 -u 建立跟踪）
 async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   const notFound = () => sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
@@ -2193,8 +2194,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       return sendJson(res, 200, buildStore.deleteVersion(board, String(body.id || '')));
     });
   }
-  if (req.method === 'POST' && pathname === '/api/build/fetch') {
-    return runPost(() => sendJson(res, 200, buildGit.fetchRemote(root)));
+  // BUG-20260914-011：同步 = 先 fetch 再 push（旧 /api/build/fetch 仅拉取、语义名不副实，随本单移除）
+  if (req.method === 'POST' && pathname === '/api/build/sync') {
+    return runPost(() => sendJson(res, 200, buildGit.syncRemote(root)));
   }
   if (req.method === 'POST' && pathname === '/api/build/push') {
     return runPost((body) => sendJson(res, 200, buildGit.pushBranch(root, { remote: body.remote, branch: body.branch })));

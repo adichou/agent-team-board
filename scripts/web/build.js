@@ -69,6 +69,9 @@ const ATBBuild = (() => {
     logRetryTarget: null, // 翻页失败后重试的目标页
     syncBusy: false,
     pushBusy: false,
+    // BUG-20260914-011：最近一次同步结果（{ pushed, failed, skipped, remote }）——空态细分依据；
+    // pushed/failed 逐分支收集（服务端 syncRemote），null = 本会话尚未成功同步过
+    lastSync: null,
     rendered: false,
     pendingRestore: null,
   };
@@ -206,6 +209,7 @@ const ATBBuild = (() => {
         logPage: 1, logPageSize: 50, logRetryTarget: null, // BUG-20260914-009：分页状态随项目切换重置
         syncBusy: false, pushBusy: false,
         remoteSynced: false, // BUG-20260914-006：本会话是否已成功同步远端——空态区分依据
+        lastSync: null, // BUG-20260914-011：同步结果明细（pushed/failed/skipped）随项目切换重置
         rendered: false, pendingRestore: state.pendingRestore,
       });
       render(); // 拉取前先呈现加载态
@@ -732,16 +736,28 @@ const ATBBuild = (() => {
 
   /* ---------- 分支浏览与同步 ---------- */
 
-  async function doFetch() {
+  // BUG-20260914-011：与远端同步 = 先 fetch 再推送除 main 外的本地分支（服务端 syncRemote
+  // 逐分支收集结果）。fetch 失败整体报错（口径不变）；推送结果不静默：部分失败时错误 toast
+  // 列明失败分支与首个原因（可重试），成功 toast 汇总两步；lastSync 供远端空态细分。
+  async function doSync() {
     if (state.syncBusy) return;
     state.syncBusy = true;
     render();
     try {
-      const r = await post('/fetch', {});
+      const r = await post('/sync', {});
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `同步失败（${r.status}）`);
-      state.remoteSynced = true; // BUG-20260914-006：记录同步成功，供远端空态解释使用
-      toast('✓ 已同步远端（fetch --prune）');
+      const pushed = data.pushed || [];
+      const failed = data.failed || [];
+      state.remoteSynced = true; // fetch 成功（BUG-20260914-006：空态区分依据；细分见 lastSync）
+      state.lastSync = { pushed, failed, skipped: data.skipped || [], remote: data.remote || 'origin' };
+      if (failed.length) {
+        toast(`✕ 同步完成但部分推送失败：${failed.map((f) => f.branch).join('、')}（${failed[0].error || '未知原因'}）`, true);
+      } else if (pushed.length) {
+        toast(`✓ 已同步远端：fetch 完成，已推送 ${pushed.map((p) => p.branch).join('、')} → ${state.lastSync.remote}`);
+      } else {
+        toast('✓ 已同步远端：fetch 完成，无可推送的开发分支（main 由发布模块推送）');
+      }
       await loadBranches();
       if (state.logBranch) await selectBranch(state.logBranch);
     } catch (e) {
@@ -1068,6 +1084,24 @@ const ATBBuild = (() => {
       </div>`;
   }
 
+  // BUG-20260914-011：同步（fetch + push）成功后远端列表仍为空的确定性解释——按推送结果细分：
+  // 有失败分支 → 解释推送失败并引导重试（fetch 拉到的新分支已在列表，推送可重试）；
+  // 一支未推 → 本地无开发分支可推（main 由发布模块管理，不在此推送）；
+  // 推送成功却仍空 → 正常不可达（推送成功远端必非空），保留 BUG-20260914-006 断言兜底时序窗口。
+  function remoteSyncedEmptyHint() {
+    const ls = state.lastSync || { pushed: [], failed: [] };
+    if ((ls.failed || []).length) {
+      return `<div class="bld-remote-hint" role="note"><strong>同步拉取已完成，但推送失败。</strong>
+        <span class="small">本次推送未能完成：失败分支与原因见上方提示。可在上方「本地」分组对分支点「推送」重试，或再次点击「⟳ 和远端同步」。</span></div>`;
+    }
+    if (!(ls.pushed || []).length) {
+      return `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
+        <span class="small">本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。</span></div>`;
+    }
+    return `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
+      <span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>`;
+  }
+
   function renderBranchesPane() {
     if (!state.data?.isRepo) {
       return `<div class="rel-empty"><h3>当前项目不是 git 仓库</h3>
@@ -1088,12 +1122,14 @@ const ATBBuild = (() => {
         <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>
           <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button></div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
-      // BUG-20260914-006：区分尚未同步与同步后远端仍为空。
+      // BUG-20260914-006：远端空态三分支——未配置远端保持既有文案（范围外）；
+      // 已配置远端未同步 → 解释成因并引导同步；本会话同步成功后仍为空 → 按 BUG-20260914-011
+      // 的推送结果细分（同步含推送后「推送成功 ⇒ 远端必非空」，见 remoteSyncedEmptyHint）。
       const remoteEmpty = !remotes.length
         ? '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>'
         : state.remoteSynced
-          ? '<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong><span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>'
-          : '<p class="muted small">本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取；若同步后仍为空，说明远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。</p>';
+          ? remoteSyncedEmptyHint()
+          : '<p class="muted small">本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。</p>';
       // BUG-20260914-003：本地有分支但缺 main 时给出可解释提示（与「合并入 main」
       // precheckMerge「main 分支不存在」报错口径一致），引导经设置页 Git 工作流幂等补建。
       // 空仓库（无任何本地分支 = 尚无提交、无补建基点）不出提示。
@@ -1131,7 +1167,7 @@ const ATBBuild = (() => {
       <div class="rel-split bld-branch-split">
         <div class="rel-list" aria-label="分支列表">
           <div class="bld-branch-tools">
-            <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune：拉取远端最新并清理失效引用">${state.syncBusy ? '同步中…' : '⟳ 和远端同步'}</button>
+            <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致">${state.syncBusy ? '同步中…' : '⟳ 和远端同步'}</button>
             <button type="button" class="btn small quiet" id="bldBranchRefresh">刷新</button>
           </div>
           ${list}
@@ -1314,7 +1350,7 @@ const ATBBuild = (() => {
     const nameInput = q('#bldNewName');
     nameInput?.addEventListener('input', () => { if (state.createPanel) state.createPanel.name = nameInput.value; });
     // 分支浏览
-    q('#bldFetchBtn')?.addEventListener('click', doFetch);
+    q('#bldFetchBtn')?.addEventListener('click', doSync);
     q('#bldBranchRefresh')?.addEventListener('click', loadBranches);
     q('#bldBranchRetry')?.addEventListener('click', loadBranches);
     // BUG-20260914-009：刷新=重新加载当前页；翻页失败重试重发目标页

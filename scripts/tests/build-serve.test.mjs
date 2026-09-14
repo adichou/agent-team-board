@@ -247,15 +247,25 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'add', items: [{ itemId: reqB.id, commit: commit1 }] });
     assert.equal(r.status, 409, '已合并锁定增删');
 
-    // S9 push / fetch：首推建立上游 → 远端分组出现 origin/dev；fetch 幂等成功
+    // S9 push / sync：首推建立上游 → 远端分组出现 origin/dev；sync（BUG-20260914-011：
+    // fetch + push）幂等补推其余开发分支（long 未手动推送，由 sync 上传），main 不推
     r = await req(port, 'POST', `/api/build/push${P}`, { remote: 'origin', branch: 'dev' });
     assert.equal(r.status, 200, `推送应成功：${r.text}`);
     assert.equal(r.json.setUpstream, true, '首推建立上游跟踪');
     assert.match(git(projA, ['rev-parse', '--abbrev-ref', 'dev@{upstream}']), /origin\/dev/);
     r = await req(port, 'GET', `/api/build/branches${P}`);
     assert.ok(r.json.remote.includes('origin/dev'), '远端分组出现 origin/dev');
-    r = await req(port, 'POST', `/api/build/fetch${P}`, {});
-    assert.equal(r.status, 200, 'fetch 同步成功');
+    r = await req(port, 'POST', `/api/build/sync${P}`, {});
+    assert.equal(r.status, 200, `同步应成功：${r.text}`);
+    assert.equal(r.json.ok, true, `同步无失败分支：${JSON.stringify(r.json.failed)}`);
+    assert.ok(r.json.pushed.some((x) => x.branch === 'dev'), 'dev 幂等再推送（up-to-date）');
+    assert.equal(r.json.pushed.find((x) => x.branch === 'dev').setUpstream, false, '已有上游不再 -u');
+    assert.ok(r.json.pushed.some((x) => x.branch === 'long'), 'long 未手动推送，由 sync 补推');
+    assert.equal(r.json.pushed.find((x) => x.branch === 'long').setUpstream, true, 'long 首推建立跟踪');
+    assert.deepEqual(r.json.skipped, ['main'], 'main 不在同步推送范围（发布模块管理）');
+    r = await req(port, 'GET', `/api/build/branches${P}`);
+    assert.ok(r.json.remote.includes('origin/long'), 'sync 后远端分组出现 origin/long');
+    assert.ok(!r.json.remote.includes('origin/main'), 'main 未被同步推送');
 
     // S7 合并隔离：脏工作区不阻塞（合并在临时工作树执行、不触碰当前工作区），未提交改动保留；
     // release git 运行互斥 409
@@ -296,7 +306,7 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.match(r.json.error || '', /git|仓库/);
     r = await req(port, 'POST', `/api/build/push${PB}`, { remote: 'origin', branch: 'dev' });
     assert.equal(r.status, 400);
-    r = await req(port, 'POST', `/api/build/fetch${PB}`, {});
+    r = await req(port, 'POST', `/api/build/sync${PB}`, {});
     assert.equal(r.status, 400);
     r = await req(port, 'GET', '/build.js');
     assert.equal(r.status, 200, '静态 build.js 应可获取');

@@ -41,10 +41,15 @@ const EN = {
   // 全文命中需键含前缀；旧键「同步远端」（原值 Sync remote）随更名清理。
   '⟳ 和远端同步': '⟳ Sync with remote',
   '推送': 'Push',
-  // BUG-20260914-006：远端分组空态解释。
-  '本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取；若同步后仍为空，说明远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。': 'No remote-tracking branches yet: the list is not synced with the remote — click "⟳ Sync with remote" above to fetch; if it is still empty after syncing, the remote repository has no branches (never pushed), and you can push branches in the "Local" group above.',
+  // BUG-20260914-006：分支浏览远端空态区分；BUG-20260914-011 同步改 fetch+push 后，
+  // 未同步空态说明随之更新（同步后仍空 = 推送未成功或远端为空），并新增按推送结果细分的
+  // 两条空态解释（推送失败 / 无可推分支——main 由发布模块管理不在此推送）。
+  '本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。': 'No remote-tracking branches yet: the list is not synced with the remote — click "⟳ Sync with remote" above to fetch and push; if it is still empty after syncing, the push did not succeed or the remote repository has no branches (never pushed), and you can push branches in the "Local" group above.',
   '远端仓库尚无任何分支（从未推送）。': 'The remote repository has no branches yet (never pushed).',
   '刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。': 'The sync just succeeded — an empty list means the remote repository itself is empty. Click "Push" on a branch in the "Local" group above; the first push will set up upstream tracking.',
+  '同步拉取已完成，但推送失败。': 'Fetch completed, but the push failed.',
+  '本次推送未能完成：失败分支与原因见上方提示。可在上方「本地」分组对分支点「推送」重试，或再次点击「⟳ 和远端同步」。': 'The push did not complete: see the toast above for the failed branches and reasons. Click "Push" on a branch in the "Local" group above to retry, or click "⟳ Sync with remote" again.',
+  '本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。': 'No branch was pushed in this sync: there is no local development branch to push automatically (main is managed by the release module, not pushed here).',
   '计划中': 'Planning',
   '合并中': 'Merging',
   '已合并': 'Merged',
