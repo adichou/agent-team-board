@@ -301,6 +301,13 @@ const state = {
     expanded: new Set(), // 卡片「查看进展记录」展开集合（跨轮询保持）
     events: new Map(),   // itemId → 事件时间线缓存（展开时拉取）
   },
+  confirms: {     // REQ-20260914-001 任务页「待人工确认」挂起确认区：/api/confirms 快照
+    data: null,   // { count, items: [...] }（含历史账本恢复视图）；null = 尚未加载
+    sig: '',      // 渲染签名（轮询剪枝）
+    error: null,  // 加载失败原因（错误条 + 重试）
+    busyId: null, // 操作中的条目（按钮禁用防重复：核验中/确认中）
+    detail: new Map(), // itemId → 详情缓存（卡片展开文件表 / 面板打开时刷新）
+  },
   global: {       // REQ-20260910-003 全局任务总览（跨项目只读聚合，不随项目切换重置）；
     //          BUG-20260910-004 起为顶栏入口 + 右侧面板呈现（不再是主视图）
     open: false,           // 面板开合（打开才随轮询拉取；重复打开幂等）
@@ -1914,6 +1921,7 @@ function reqRowEl(it) {
       ${refineBadgeHtml(it)}
       ${commitBadgeHtml(it, { inline: true })} <!-- BUG-20260912-003：完成条目提交状态原位直显短提交号（无「已提交」徽标与折叠层） -->
       ${it.hold ? `<span class="flag hold-flag" title="待人工决策：${it.hold.unanswered} 项未答；到列表下方「待人工确认」区补决策并复工">⚠ 等人工决策</span>` : ''}
+      ${it.confirm && it.confirm.state === 'waiting' ? `<span class="flag confirm-flag" title="${it.confirm.kind === 'develop' ? '自动提交不完整，队列已挂起' : '分析问题待人工确认，队列已挂起'}：${it.confirm.reason || ''}；到任务页「待人工确认」完成确认">⚠ ${it.confirm.kind === 'develop' ? '待确认提交' : '待确认分析'}</span>` : ''}
       ${state.codexPending.byItem.has(it.id) ? '<span class="flag warn" title="模型配置待处理：点击行查看，或到设置模块的「模型与推理强度」处理">模型配置待处理</span>' : ''}
       <!-- BUG-20260910-007：四操作仅图标（⧉/✓/✎/🗑），动作与单号由 aria-label/title 提示，顺序与显隐规则不变 -->
       <span class="row-acts">
@@ -2199,6 +2207,7 @@ function isEditableTarget(t) {
     if (!$('#projModalWrap').classList.contains('hidden')) return true;
     if (!$('#editModalWrap').classList.contains('hidden')) return true; // REQ-20260911-001 编辑侧拉面板
     if (!$('#holdPanel').classList.contains('hidden')) return true; // REQ-20260911-007 人工决策侧拉面板
+    if (!$('#confirmPanel').classList.contains('hidden')) return true; // REQ-20260914-001 挂起确认侧拉面板
     return !!document.querySelector('.confirm-wrap'); // uiConfirm 动态弹层
   }
 
@@ -2305,6 +2314,10 @@ function onGlobalKeydown(e) {
     }
     if (holdPanelOpen()) { // REQ-20260911-007：人工决策面板层（保存中暂不可关闭）
       if (!holdSide.busy) closeHoldPanel();
+      return;
+    }
+    if (confirmPanelOpen()) { // REQ-20260914-001：挂起确认面板层（确认中暂不可关闭）
+      if (!confirmSide.busy) closeConfirmPanel();
       return;
     }
     if (!$('#projModalWrap').classList.contains('hidden')) {
@@ -3104,6 +3117,425 @@ async function resumeHoldItem(id, btn) {
     toast(`复工失败：${e.message}`, true);
     if (btn) { btn.disabled = false; btn.textContent = prev || '复工'; }
     await refreshHolds();
+  }
+}
+
+/* ---------- REQ-20260914-001 挂起确认区（任务页置顶卡片 + 统一侧拉确认面板） ---------- */
+
+// 拉取挂起确认清单（失败保留上次数据并记录错误，下轮 / 重试自动恢复）
+async function refreshConfirms(force = false) {
+  if (!state.batch.open) return;
+  if (!force && state.confirms.busyId) return; // 操作进行中不刷新（防打断表单）
+  try {
+    const r = await api('/api/confirms');
+    state.confirms.data = r;
+    state.confirms.error = null;
+  } catch (e) {
+    state.confirms.error = String(e.message || e);
+  }
+  renderConfirmArea();
+}
+
+function confirmKindChip(c) {
+  return `<span class="chip confirm-kind k-${esc(c.kind)}" title="${esc(c.kindLabel)}阻塞">${esc(c.kindLabel)}</span>`;
+}
+
+function confirmCardHtml(c) {
+  const busy = state.confirms.busyId === c.itemId;
+  const isDev = c.kind === 'develop';
+  const badge = c.partialBadge && isDev
+    ? '<span class="flag confirm-flag" title="部分提交，开发未完成——文档或部分文件提交不构成完成">部分提交，开发未完成</span>'
+    : '';
+  let bodyLine = '';
+  if (isDev) {
+    bodyLine = `已提交：${c.committedCount} 组 · 待人工：${c.pendingCount} 路径${c.legacy ? ' · 历史账本恢复' : ''}`;
+  } else {
+    const miss = Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0;
+    bodyLine = `${c.total} 项问题（必答未答 ${miss}）${c.state === 'confirmed' ? ' · 已确认，续跑中' : ''}`;
+  }
+  const verifyLine = isDev && c.verify && c.verify.lastCheckAt
+    ? `<p class="confirm-verify ${c.verify.ok ? 'ok' : 'bad'}">最近核验（${fmtTime(c.verify.lastCheckAt)}）：${c.verify.ok ? '通过' : `未通过——${(c.verify.reasons || [])[0] || '见面板明细'}`}</p>`
+    : '';
+  return `<article class="confirm-card" data-confirm-card="${esc(c.itemId)}">
+    <header class="confirm-card-head">
+      <div>
+        ${confirmKindChip(c)}
+        <span class="chip confirm-type t-${esc(c.blockType)}">${esc(c.blockTypeLabel)}</span>
+        <span class="cid link" data-goto-item="${esc(c.itemId)}" role="button">${esc(c.itemId)}</span>
+        <span class="confirm-title">${esc(shortOwner(c.title))}</span>
+        ${badge}
+      </div>
+      <span class="muted small">已等待 ${fmtElapsed(c.declaredAt)}</span>
+    </header>
+    <p class="confirm-reason">${esc(c.reason || '')}</p>
+    <p class="confirm-counts">${esc(bodyLine)}</p>
+    ${verifyLine}
+    ${c.keepNote ? `<p class="confirm-keep-note muted small">保持挂起说明：${esc(c.keepNote)}</p>` : ''}
+    <div class="confirm-acts">
+      <button type="button" class="btn small" data-confirm-panel="${esc(c.itemId)}">查看并确认</button>
+      ${isDev ? `<button type="button" class="btn small" data-confirm-verify="${esc(c.itemId)}"${busy ? ' disabled' : ''}>${busy ? '正在核验提交与测试…' : '重新核验'}</button>` : ''}
+    </div>
+  </article>`;
+}
+
+// 任务页置顶渲染（renderBatchDrawer 调用；无活动挂起时隐藏，不影响既有面板）
+function renderConfirmArea() {
+  const area = $('#confirmArea');
+  if (!area) return;
+  const items = (state.confirms.data?.items || []).filter((c) => c.state === 'waiting' || c.state === 'confirmed');
+  if (state.confirms.error && !state.confirms.data) {
+    area.classList.remove('hidden');
+    area.innerHTML = `<div class="hold-error" role="alert">
+      <span>挂起确认清单加载失败：${esc(state.confirms.error)}</span>
+      <button type="button" class="btn small" data-confirm-retry>重试</button>
+    </div>`;
+    area.querySelector('[data-confirm-retry]')?.addEventListener('click', () => refreshConfirms(true));
+    return;
+  }
+  if (!items.length) {
+    area.classList.add('hidden');
+    area.replaceChildren();
+    return;
+  }
+  const sig = JSON.stringify([items.map((c) => [c.itemId, c.state, c.reason, c.verify?.lastCheckAt || '', c.keepNote || '', c.committedCount ?? c.answered ?? 0, c.pendingCount ?? (Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0)]), state.confirms.busyId]);
+  if (sig === state.confirms.sig && area.dataset.rendered === '1') return;
+  state.confirms.sig = sig;
+  area.dataset.rendered = '1';
+  area.classList.remove('hidden');
+  area.innerHTML = `<header class="hold-area-head">⚠ 待人工确认（${items.length}）——阻塞队列，确认后才继续</header>
+    ${items.map((c) => confirmCardHtml(c)).join('')}`;
+  for (const btn of area.querySelectorAll('[data-confirm-panel]')) {
+    btn.addEventListener('click', () => openConfirmPanel(btn.dataset.confirmPanel, btn));
+  }
+  for (const btn of area.querySelectorAll('[data-confirm-verify]')) {
+    btn.addEventListener('click', () => verifyConfirmItem(btn.dataset.confirmVerify, btn));
+  }
+}
+
+// 队列区暂停横幅（develop / refine 面板 overview 共用）
+function confirmQueueBannerHtml(kind) {
+  const items = (state.confirms.data?.items || []).filter((c) => c.kind === kind && c.state === 'waiting');
+  if (!items.length) return '';
+  const c = items[0];
+  return `<div class="notice warn confirm-queue-banner">${esc(c.kindLabel)}队列：已暂停 · 阻塞于 <span class="cid" data-goto-item="${esc(c.itemId)}" role="button">${esc(c.itemId)}</span> · ${esc(c.blockTypeLabel)}（${esc(c.reason || '')}）</div>`;
+}
+
+// 卡片「重新核验」：服务端重算剩余路径 + 跑测试；期间按钮禁用防重复
+async function verifyConfirmItem(id, btn) {
+  if (btn?.disabled || state.confirms.busyId) return;
+  state.confirms.busyId = id;
+  renderConfirmArea();
+  try {
+    const r = await api(`/api/confirms/${encodeURIComponent(id)}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (r.ok) toast(`✓ ${id} 核验通过：提交完整${r.test && !r.test.skipped ? '，测试通过' : ''}`);
+    else toast(`核验未通过：${(r.reasons || [])[0] || '见卡片与面板明细'}`, true);
+    await refreshConfirms(true);
+    if (confirmSide.open && confirmSide.id === id) await loadConfirmDetail(true);
+  } catch (e) {
+    toast(`核验失败：${e.message}`, true);
+  } finally {
+    state.confirms.busyId = null;
+    renderConfirmArea();
+  }
+}
+
+/* ---------- 挂起确认侧拉面板（统一入口：提交核验 / 分析表单按阻塞类型分形态） ---------- */
+
+const confirmSide = { open: false, busy: false, id: null, seq: 0, detail: null };
+
+function confirmPanelOpen() {
+  const p = $('#confirmPanel');
+  return !!p && !p.classList.contains('hidden');
+}
+
+function setConfirmPanelView(mode) {
+  $('#confirmPanelLoading').classList.toggle('hidden', mode !== 'loading');
+  $('#confirmPanelError').classList.toggle('hidden', mode !== 'error');
+  $('#confirmForm').classList.toggle('hidden', mode !== 'form');
+}
+
+function confirmPanelMsg(text, isErr = false) {
+  const el = $('#confirmPanelMsg');
+  el.textContent = text;
+  el.classList.toggle('err', isErr);
+}
+
+async function openConfirmPanel(id, opener) {
+  confirmSide.open = true;
+  confirmSide.id = id;
+  confirmSide.seq += 1;
+  confirmSide.opener = opener || document.activeElement || null;
+  $('#confirmPanel').classList.remove('hidden');
+  confirmPanelMsg('');
+  return loadConfirmDetail();
+}
+
+function closeConfirmPanel() {
+  confirmSide.open = false;
+  confirmSide.seq += 1; // 迟到响应丢弃
+  $('#confirmPanel').classList.add('hidden');
+  const opener = confirmSide.opener;
+  if (opener && opener.isConnected) opener.focus?.();
+}
+
+async function loadConfirmDetail(silent = false) {
+  const token = confirmSide.seq;
+  const { id } = confirmSide;
+  if (!silent) setConfirmPanelView('loading');
+  try {
+    const d = await api(`/api/confirms/${encodeURIComponent(id)}`);
+    if (!confirmSide.open || token !== confirmSide.seq) return;
+    confirmSide.detail = d;
+    state.confirms.detail.set(id, d);
+    renderConfirmForm(d);
+    setConfirmPanelView('form');
+  } catch (e) {
+    if (!confirmSide.open || token !== confirmSide.seq) return;
+    $('#confirmPanelErrorText').textContent = `挂起详情读取失败：${e.message}`;
+    setConfirmPanelView('error');
+  }
+}
+
+function renderConfirmForm(d) {
+  $('#confirmPanelTitle').textContent = `${d.blockTypeLabel} · ${d.itemId}`;
+  $('#confirmPanelScope').textContent = d.kind === 'develop'
+    ? '核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列'
+    : '逐项作答后确认：答案回传当前条目继续分析，未决问题清零才处理下一条';
+  const form = $('#confirmForm');
+  const busy = confirmSide.busy || state.confirms.busyId === d.itemId;
+  const resolved = d.state !== 'waiting';
+  if (d.kind === 'develop') {
+    const files = (d.files || []).map((f) => `
+      <tr>
+        <td title="${esc(f.path)}">${esc(f.path)}</td>
+        <td>${f.state === '已入库' ? '已入库' : '未提交'}</td>
+        <td><button type="button" class="btn small" data-confirm-diff="${esc(f.path)}">查看差异</button></td>
+      </tr>`).join('');
+    const heldCount = d.pendingCount || 0;
+    const verifyRows = d.verify && d.verify.lastCheckAt
+      ? `<p class="confirm-verify ${d.verify.ok ? 'ok' : 'bad'}">最近核验（${fmtTime(d.verify.lastCheckAt)}）：${d.verify.ok ? '通过' : '未通过'}</p>
+        ${(d.verify.reasons || []).map((r) => `<p class="confirm-verify-reason">· ${esc(r)}</p>`).join('')}
+        ${d.verify.test && d.verify.test.tail ? `<details class="confirm-test-tail"><summary>测试输出（${esc(d.verify.test.cmd || 'npm test')} 退出码 ${d.verify.test.exitCode ?? '—'}）</summary><pre>${esc(d.verify.test.tail)}</pre></details>` : ''}`
+      : '<p class="muted small">尚未核验：确认时将自动重新核验并运行测试</p>';
+    form.innerHTML = `
+      <p class="confirm-reason">${esc(d.reason || '')}${d.legacy ? '（历史账本恢复）' : ''}</p>
+      <p class="confirm-counts">已提交：${d.committedCount} 组（补交 ${(d.supplementCommits || []).length} 组）· 待人工：${heldCount} 路径</p>
+      ${files ? `<table class="confirm-files"><thead><tr><th>文件</th><th>状态</th><th>差异</th></tr></thead><tbody>${files}</tbody></table>` : ''}
+      <div id="confirmDiffBox" class="confirm-diff-box"></div>
+      ${verifyRows}
+      <label class="field">处理说明（保持挂起时记录；确认时可留空）
+        <textarea id="confirmNote" rows="2" placeholder="如：已核对归属，整文件归本单">${esc(d.keepNote || '')}</textarea>
+      </label>
+      <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+      <footer class="modal-foot">
+        <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
+        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''}>保持挂起</button>
+        <button type="button" class="btn" id="confirmVerifyBtn"${busy || resolved ? ' disabled' : ''}>${busy ? '正在核验提交与测试…' : '重新核验'}</button>
+        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved ? ' disabled' : ''}>${resolved ? '已确认恢复' : '确认并继续'}</button>
+      </footer>`;
+    bindConfirmFormActions(d);
+  } else {
+    const qs = (d.questions || []).map((q) => {
+      const opts = (q.options || []).map((o, i) => `
+        <label class="confirm-option">
+          <input type="radio" name="cq-${esc(q.id)}" value="${esc(o.label)}"${(q.answer || '') === o.label ? ' checked' : ''}>
+          <span>${esc(o.label)}${o.recommended ? '<em class="confirm-rec">（推荐）</em>' : ''}${o.impact ? `<small class="muted">——${esc(o.impact)}</small>` : ''}</small></span>
+        </label>`).join('');
+      return `
+      <fieldset class="hold-q confirm-q">
+        <legend class="${q.answer ? 'answered' : 'open'}">${q.answer ? '✓' : '○'} ${esc(q.id)} · ${esc(q.text)}${q.required ? '' : '（选答）'}</legend>
+        ${opts || ''}
+        <textarea rows="2" data-cq="${esc(q.id)}" placeholder="${(q.options || []).length ? '选择方案，可在此补充意见' : '人工答复（必答）'}">${esc(q.answer || '')}</textarea>
+      </fieldset>`;
+    }).join('');
+    const miss = Array.isArray(d.unansweredRequired) ? d.unansweredRequired.length : 0;
+    form.innerHTML = `
+      ${d.background ? `<p class="confirm-background">背景：${esc(d.background)}</p>` : ''}
+      <p class="confirm-counts">问题 ${d.total} 项 · 已答 ${d.answered} · 必答未答 ${miss}${d.state === 'confirmed' ? ' · 已确认，答案续跑中' : ''}</p>
+      ${qs}
+      <label class="field">处理说明（保持挂起时记录）
+        <textarea id="confirmNote" rows="2" placeholder="可留空">${esc(d.keepNote || '')}</textarea>
+      </label>
+      <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+      <footer class="modal-foot">
+        <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
+        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''}>保持挂起</button>
+        <button type="button" class="btn" id="confirmDraftBtn"${busy || resolved ? ' disabled' : ''}>保存草稿</button>
+        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved ? ' disabled' : ''}>${resolved ? '已确认续跑' : '确认并继续'}</button>
+      </footer>`;
+    bindConfirmFormActions(d);
+  }
+}
+
+// 面板动作绑定（差异查看 / 保持挂起 / 重新核验 / 保存草稿 / 确认并继续）
+function bindConfirmFormActions(d) {
+  const form = $('#confirmForm');
+  form.querySelector('#confirmPanelCancel')?.addEventListener('click', () => { if (!confirmSide.busy) closeConfirmPanel(); });
+  form.querySelector('#confirmKeepBtn')?.addEventListener('click', () => confirmKeepAction(d));
+  form.querySelector('#confirmVerifyBtn')?.addEventListener('click', () => verifyConfirmItem(d.itemId, null).then(() => {}));
+  form.querySelector('#confirmDraftBtn')?.addEventListener('click', () => confirmDraftAction(d));
+  form.querySelector('#confirmContinueBtn')?.addEventListener('click', () => confirmContinueAction(d));
+  for (const btn of form.querySelectorAll('[data-confirm-diff]')) {
+    btn.addEventListener('click', async () => {
+      const p = btn.dataset.confirmDiff;
+      const box = form.querySelector('#confirmDiffBox');
+      if (!box) return;
+      box.innerHTML = '<p class="muted small">正在读取差异…</p>';
+      try {
+        const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/diff?path=${encodeURIComponent(p)}`);
+        box.innerHTML = `<details open class="confirm-diff"><summary>${esc(p)}</summary><pre>${esc(r.diff || '（与 HEAD 一致：无差异——可能已补交入库）')}</pre></details>`;
+      } catch (e) {
+        box.innerHTML = `<p class="edit-error-text">差异读取失败：${esc(e.message)}</p>`;
+      }
+    });
+  }
+}
+
+async function confirmKeepAction(d) {
+  if (confirmSide.busy) return;
+  const note = $('#confirmForm #confirmNote')?.value?.trim() || '';
+  confirmSide.busy = true;
+  setConfirmButtonsDisabled(true);
+  try {
+    await api(`/api/confirms/${encodeURIComponent(d.itemId)}/keep`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    });
+    confirmPanelMsg('已保持挂起：现场与队列暂停保留（取消队列须显式终止任务或恢复领取）');
+    toast(`已保持挂起 ${d.itemId}`);
+    await refreshConfirms(true);
+    await loadConfirmDetail(true);
+  } catch (e) {
+    confirmPanelMsg(`保持挂起失败：${e.message}`, true);
+  } finally {
+    confirmSide.busy = false;
+    setConfirmButtonsDisabled(false);
+  }
+}
+
+// 分析草稿：收集选项 + 文本（文本优先；选了方案又有补充意见时合并），保存不解除阻塞
+function collectAnalysisAnswers() {
+  const answers = [];
+  for (const ta of $('#confirmForm').querySelectorAll('textarea[data-cq]')) {
+    const qid = ta.dataset.cq;
+    const picked = $('#confirmForm').querySelector(`input[name="cq-${CSS.escape(qid)}"]:checked`)?.value || '';
+    const text = ta.value.trim();
+    const merged = picked && text && text !== picked ? `${picked}（补充：${text}）` : (text || picked);
+    if (!merged) continue;
+    answers.push({ q: qid, text: merged });
+  }
+  return answers;
+}
+
+async function confirmDraftAction(d) {
+  if (confirmSide.busy) return;
+  const answers = collectAnalysisAnswers();
+  if (!answers.length) {
+    confirmPanelMsg('请至少填写或选择一项再保存草稿', true);
+    return;
+  }
+  confirmSide.busy = true;
+  setConfirmButtonsDisabled(true);
+  try {
+    const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    });
+    if (r.ready) confirmPanelMsg('草稿已保存：必答已齐，可「确认并继续」');
+    else confirmPanelMsg(`草稿已保存（缺 ${(r.missing || []).join('、')}）：保存草稿不解除阻塞`);
+    await refreshConfirms(true);
+    await loadConfirmDetail(true);
+  } catch (e) {
+    confirmPanelMsg(`草稿保存失败：${e.message}（输入已保留，可重试）`, true);
+  } finally {
+    confirmSide.busy = false;
+    setConfirmButtonsDisabled(false);
+  }
+}
+
+async function confirmContinueAction(d) {
+  if (confirmSide.busy) return;
+  const isDev = d.kind === 'develop';
+  // 必答校验（就地提示，禁用继续）：推荐选项不自动视为已答
+  if (!isDev) {
+    const answers = collectAnalysisAnswers();
+    const answeredIds = new Set(answers.map((a) => a.q));
+    const missing = (d.questions || []).filter((q) => q.required && !answeredIds.has(q.id)).map((q) => q.id);
+    if (missing.length) {
+      confirmPanelMsg(`必答项未完成（缺 ${missing.join('、')}）：完成作答后才能确认并继续`, true);
+      return;
+    }
+    if (!answers.length) {
+      confirmPanelMsg('请完成作答后再确认', true);
+      return;
+    }
+    // 先保存答案再确认（确认绑定当前作答）
+    confirmSide.busy = true;
+    setConfirmButtonsDisabled(true);
+    try {
+      await api(`/api/confirms/${encodeURIComponent(d.itemId)}/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers }),
+      });
+    } catch (e) {
+      confirmPanelMsg(`作答保存失败：${e.message}`, true);
+      confirmSide.busy = false;
+      setConfirmButtonsDisabled(false);
+      return;
+    }
+  } else {
+    confirmSide.busy = true;
+    setConfirmButtonsDisabled(true);
+  }
+  const btn = $('#confirmContinueBtn');
+  const prev = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = isDev ? '正在核验提交与测试…' : '确认中…'; }
+  try {
+    const body = isDev
+      ? { fingerprint: d.fingerprint, note: $('#confirmForm #confirmNote')?.value?.trim() || '' }
+      : { version: d.questionsVersion };
+    const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/continue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      if (isDev) {
+        const n = (r.supplementCommits || []).length;
+        confirmPanelMsg(`已确认恢复：${n ? `补交 ${n} 组提交` : '无需补交（已完整入库）'}，核验通过，队列已恢复；条目验收仍走「确认完成」`);
+        toast(`✓ ${d.itemId} 已确认恢复：队列继续`);
+      } else {
+        confirmPanelMsg('已确认，正在继续当前条目分析（完成后才处理下一条）');
+        toast(`✓ ${d.itemId} 已确认：答案回传续跑`);
+      }
+      await refreshConfirms(true);
+      await loadConfirmDetail(true);
+      await poll();
+    } else {
+      confirmPanelMsg(`确认未通过，保持挂起：\n· ${(r.reasons || ['未知原因']).join('\n· ')}`, true);
+      await refreshConfirms(true);
+      await loadConfirmDetail(true);
+    }
+  } catch (e) {
+    confirmPanelMsg(`确认失败：${e.message}（可重试）`, true);
+  } finally {
+    confirmSide.busy = false;
+    setConfirmButtonsDisabled(false);
+    if (btn) { btn.disabled = false; btn.textContent = prev || '确认并继续'; }
+  }
+}
+
+function setConfirmButtonsDisabled(disabled) {
+  for (const sel of ['#confirmKeepBtn', '#confirmVerifyBtn', '#confirmDraftBtn', '#confirmContinueBtn']) {
+    const el = $(sel);
+    if (el) el.disabled = disabled;
   }
 }
 
@@ -5120,6 +5552,7 @@ async function refreshBatch() {
     state.batch.mode = 'develop';
     // BUG-20260909-006：不再按勾选集合过滤统计（?ids= 随范围链路移除），口径恒为已计划队列全量
     const data = await api('/api/batch/current');
+    await refreshConfirms(); // REQ-20260914-001：挂起确认区随轮询刷新（独立于批次签名）
     // stats（创建面板候选/受阻数）变化须计入签名，否则候选变化不重渲染；
     // REQ-20260913-003：批次排队列表（queue）已移除，不再计入签名；
     // pending/recordsTotal/attempt（REQ-20260908-026）：队列与最近记录变化触发重渲染
@@ -5180,7 +5613,11 @@ function renderBatchDrawer() {
       </nav>
       <div class="ws-entry">${newSessionLinksHtml()}</div>
     </header>
-      <div class="drawer-body">${mode === 'refine' ? renderRefinePanel() : `${!state.batchData?.batch ? renderDevStartBar() : ''}${mode === 'codex' ? renderCodexPanel(q) : renderZcodeBatchPanel()}`}</div>`;
+      <div class="drawer-body">
+        <div id="confirmArea" class="confirm-area hidden" role="region" aria-label="待人工确认" aria-live="polite"></div>
+        ${mode === 'refine' ? renderRefinePanel() : `${!state.batchData?.batch ? renderDevStartBar() : ''}${mode === 'codex' ? renderCodexPanel(q) : renderZcodeBatchPanel()}`}
+      </div>`;
+  renderConfirmArea(); // REQ-20260914-001：任务页置顶「待人工确认」挂起卡片
   bindBatchDrawer();
   bindDevStart(drawer); // REQ-20260908-010：统一开发启动入口（执行 Agent zcode / codex，仅子代理模式）
   if (mode === 'codex') bindCodexPanel(drawer);
@@ -6051,6 +6488,7 @@ function renderZcodeBatchPanel() {
         <span class="muted small">${taskAgentModeText(b)} · 创建 ${fmtTime(b.createdAt)}</span>
       </div>
       ${data.nextAction === 'needs_attention' ? `<div class="notice warn">${esc(data.notice || '执行状态待核对')}</div>` : ''}
+      ${confirmQueueBannerHtml('develop')}
       ${b.aborted ? '<div class="notice warn">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止。</div>' : ''}
       ${b.pauseRequested ? '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>' : ''}
       ${batchDone && !b.aborted ? `<div class="notice ok">${esc(data.notice || '本轮已处理完毕')}</div>` : ''}
@@ -6106,6 +6544,7 @@ async function refreshRefine() {
     ]);
     const data = { ...cur, candidates: cands.candidates || [] };
     state.refine.data = data;
+    await refreshConfirms(); // REQ-20260914-001：挂起确认区随轮询刷新（独立签名）
     const sig = JSON.stringify({
       b: data.batch, c: data.counts, n: data.nextAction, t: data.stats, rt: data.recordsTotal,
       d: data.candidates.map((x) => x.id + x.reasons.join()),
@@ -6178,6 +6617,7 @@ function renderRefinePanel() {
         <span class="muted small">${taskAgentModeText(b)} · 创建 ${fmtTime(b.createdAt)}</span>
       </div>
       ${data.notice && !doneNoticeOnly ? `<div class="notice">${esc(data.notice)}</div>` : ''}
+      ${confirmQueueBannerHtml('analyze')}
       ${b.aborted ? '<div class="notice warn">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止；终止后可立即「启动新一轮」。</div>' : ''}
       ${b.pauseRequested ? '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>' : ''}
       ${batchDone && !b.aborted ? `<div class="notice ok">${esc(data.notice || '本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）')}</div>` : ''}
@@ -6876,6 +7316,10 @@ $('#selectNone').addEventListener('click', deselectOperable); // REQ-20260908-02
 // 点击不创建任务、不弹确认（创建仍由面板内「启动」承接）
 $('#laneQuickEntry')?.addEventListener('click', () => gotoRuns(state.reqFilter === 'accepted' ? 'refine' : 'develop'));
 $('#mask').addEventListener('click', closeDrawer);
+// REQ-20260914-001：挂起确认面板头部关闭 / 错误重试（表单内按钮随渲染动态绑定）
+$('#confirmPanelClose')?.addEventListener('click', () => { if (!confirmSide.busy) closeConfirmPanel(); });
+$('#confirmPanelErrorClose')?.addEventListener('click', () => closeConfirmPanel());
+$('#confirmPanelErrorRetry')?.addEventListener('click', () => loadConfirmDetail());
 // REQ-20260909-014 / BUG-20260913-003：需求与 Bug 抽屉文档页签右键「讨论」菜单（document 级委托绑定一次，#docView 随抽屉重建不重绑）
 document.addEventListener('contextmenu', onDocCtxMenu);
 document.addEventListener('keydown', onGlobalKeydown); // REQ-20260910-007：全局单键快捷键唯一注册点（具名处理器定义于绑定区之前）

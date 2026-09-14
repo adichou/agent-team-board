@@ -622,6 +622,19 @@ if (mode === 'bash') {
           );
         }
       }
+      // (2d) REQ-20260914-001：挂起确认的人工闭环操作（核验/保持挂起/作答/确认并继续）为人工专属
+      //      ——Agent 不代人工确认提交归属、不代答分析问题、不代恢复队列；
+      //      atb confirm list|show 只读呈现与 atb refine hold worker 声明放行（不经此分支）。
+      const confirmIdx = tokens.findIndex((t, i) => t === 'confirm' && tokens[i - 1] !== 'refine');
+      if (confirmIdx !== -1) {
+        const act = tokens[confirmIdx + 1];
+        if (act === 'verify' || act === 'keep' || act === 'answer' || act === 'continue' || act === 'cancel') {
+          deny(
+            `Agent 不能代人工完成挂起确认（命令片段：${seg.trim()}）。` +
+            '重新核验 / 保持挂起 / 作答 / 确认并继续仅限人工：请在 Status Board 任务页「待人工确认」操作。'
+          );
+        }
+      }
     }
 
     // (3) curl 等直接调 Status Board 的人工 API
@@ -647,6 +660,15 @@ if (mode === 'bash') {
       deny(
         `Agent 不能通过 HTTP 代人工作出决策或复工（命令片段：${seg.trim()}）。` +
         '作答 / 复工 / 作废仅限人工：请在 Status Board「待人工确认」操作。'
+      );
+    }
+
+    // (3c) REQ-20260914-001：挂起确认写接口（/api/confirms/<id>/(answer|verify|keep|continue)）人工专属；
+    //      GET /api/confirms 清单 / 详情 / diff 为只读呈现，不在此列。
+    if (/(7736|8888)|agent-team-board.*\/api\//i.test(norm) && /\/api\/confirms\/[^/\s"']*\/(answer|verify|keep|continue)\b/i.test(norm)) {
+      deny(
+        `Agent 不能通过 HTTP 代人工完成挂起确认（命令片段：${seg.trim()}）。` +
+        '重新核验 / 保持挂起 / 作答 / 确认并继续仅限人工：请在 Status Board 任务页「待人工确认」操作。'
       );
     }
 

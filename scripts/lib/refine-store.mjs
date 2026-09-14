@@ -41,6 +41,8 @@ import {
   normalizePromptForDisplay,
 } from './task-settings.mjs';
 import { readRefineStates, setRefineItemState } from './refine-states.mjs';
+import * as confirmStore from './confirm-store.mjs';
+import { waitingAnalyzeConfirm, confirmOf as confirmRecordOf } from './confirm-states.mjs';
 
 export const REASON_MAX_CHARS = 200;   // fail reason / done summary 上限（与批次回执口径一致）
 export const RECEIPT_MAX_BYTES = 2048; // 回执/check 协议载荷上限
@@ -443,6 +445,8 @@ export function buildRefinePrompt({ projectRoot, batchId = null, developer = nul
     '   项目里查不到的事实一律写「待确认」，不要编造。',
     '3. 回执：atb refine done <RUN-ID> --summary "<补全要点>"（须真实改过文档）；',
     '   无法完善用 atb refine fail <RUN-ID> --reason "<短句>"；认领冲突用 atb refine release。',
+    '   遇到必须人工确认的问题用 atb refine hold <RUN-ID> --reason "<短句>" --question "<问题>"：',
+    '   声明后队列暂停、人工看板作答确认后答案随续跑回传（REQ-20260914-001）。',
     '',
     ...constraintLines,
     REFINE_DEMO_PERMIT_LINE,
@@ -472,6 +476,9 @@ export function buildRefineWorkerPrompt({ item, projectRoot, atbPath = ATB_PATH,
     ...REFINE_BUG_DOC_LINES.slice(0, 3),
     '   演示建议对照展示缺陷现象与期望修复后状态（如通过状态切换/开关对比）。',
     '2. 项目里查不到的事实一律写「待确认」，不要编造。',
+    '   遇到必须由人工确认的问题（需求歧义、方案选择、信息缺失）：',
+    `   atb refine hold ${'<RUN-ID>'} --reason "<短句>" --question "<问题一>" [--question "<问题二>"] [--background "<背景>"]`,
+    '   声明后结束本轮（不写 done）：当前条目挂起、完善队列暂停，人工在看板作答确认后答案会随续跑回传。',
     ...constraintLines,
     `   不要写 test-report.md、不要 git commit；只编辑条目目录下的 markdown（涉及 UI 的需求或 Bug 可另建约定的 ${UI_DEMO_FILE}）。`,
     `4. 完成后把补全要点（一两句话）作为最终回复直接输出（服务会核验文档确有变更后记账）。`,
@@ -808,15 +815,27 @@ export function nextRefineItem(dataDir, batchId, { owner = null } = {}) {
   absorbNewRefineCandidates(dataDir, batch); // 实时队列：先吸收新接受的未完善条目再盘点
   requeueReacceptedRefineItems(dataDir, batch); // BUG-20260908-010：终态后重新接受的条目重排队尾并重冻结基线
   const state0 = refineBatchState(dataDir, batch);
+  // REQ-20260914-001：存在「待人工确认分析」挂起时后续分析条目不得领取/派发（人工恢复领取
+  // 也不放行，只有当前条目答案确认并续跑收尾后才继续）——不派空 worker。先于 currentRun 判定：
+  // 声明挂起的运行保持 reserved 是预期形态（等待人工确认后 interrupted 续跑），提示须直达确认
+  // 入口而非误导「核对旧子代理」。只看 waiting（confirmed 已回传续跑，队列须能派发该条目）。
+  const waitingAnalyze = waitingAnalyzeConfirm(dataDir);
+  if (waitingAnalyze) {
+    return {
+      stop: 'paused',
+      counts: state0.counts,
+      notice: `分析队列挂起：${waitingAnalyze.itemId} 待人工确认分析（${waitingAnalyze.reason || '存在必答问题'}）；请到 Status Board 任务页「待人工确认」作答并确认后继续`,
+    };
+  }
+  if (batch.pauseRequested) {
+    return { stop: 'paused', counts: state0.counts, notice: '已暂停后续领取' };
+  }
   if (state0.currentRun && !FINAL_REFINE_PHASES.has(state0.currentRun.phase)) {
     const r = state0.currentRun;
     throw new AtbError(
       `当前执行未收尾：${r.runId}（${r.itemId}，owner ${r.owner}，${r.phase}）。` +
       '先核对旧子 Agent 是否结束，不得创建第二个完善执行'
     );
-  }
-  if (batch.pauseRequested) {
-    return { stop: 'paused', counts: state0.counts, notice: '已暂停后续领取' };
   }
   acquireRefineLock(dataDir, { kind: 'zcode', batchId, owner, at: nowIso() });
   for (const cand of batch.candidates) {
@@ -860,6 +879,19 @@ export function nextRefineItem(dataDir, batchId, { owner = null } = {}) {
     saveRefineBatch(dataDir, batch);
     // REQ-20260908-020：领取成功置「完善中」（执行账本索引，徽标随轮询可见）
     setRefineItemState(dataDir, cand.id, 'refining', { runId: run.runId });
+    // REQ-20260914-001：上一轮「待人工确认分析」已确认续跑的条目，把人工答案随领取回传
+    // 当前分析任务继续未完成步骤（confirmed 记录保留，done 收尾时闭环）。
+    const priorConfirm = confirmRecordOf(dataDir, cand.id);
+    const continuation = priorConfirm && priorConfirm.kind === 'analyze' && priorConfirm.state === 'confirmed'
+      ? {
+        round: priorConfirm.round || 1,
+        background: priorConfirm.background || null,
+        reason: priorConfirm.reason || null,
+        questions: (priorConfirm.questions || []).map((q) => ({
+          id: q.id, text: q.text, answer: q.answer || null, note: q.note || null,
+        })),
+      }
+      : null;
     return {
       runId: run.runId,
       batchId: batch.batchId,
@@ -870,6 +902,7 @@ export function nextRefineItem(dataDir, batchId, { owner = null } = {}) {
       itemDir: dir,
       docs: orderedDocs(dir),
       owner,
+      ...(continuation ? { continuation } : {}),
     };
   }
   // 无可领取：收尾批次并释放互斥
@@ -884,9 +917,94 @@ export function nextRefineItem(dataDir, batchId, { owner = null } = {}) {
   };
 }
 
+// ---------- REQ-20260914-001 分析挂起：声明（worker）/ 确认续跑（人工后回传） ----------
+
+// worker 声明分析挂起（atb refine hold <RUN-ID>）：当前运行遇到必须人工确认的问题
+// （需求歧义/方案选择/信息缺失）时调用——记录问题、背景、备选方案及影响，进入
+// 「挂起：待人工确认分析」，持久化暂停本完善队列（pauseRequested，后续领取/派发均被拒）。
+// 不得用文档已生成/部分分析完成代替人工确认：done 回执在有活动挂起时被拒（见 finishRefineRun）。
+export function declareRefineHold(dataDir, runId, { reason = '', background = '', questions = [], by = null } = {}) {
+  const run = getRefineRun(dataDir, runId);
+  if (FINAL_REFINE_PHASES.has(run.phase)) {
+    throw new AtbError(`运行 ${runId} 已收尾（${run.phase}）：不能声明挂起，请核对后换单或重建任务`);
+  }
+  const batch = getRefineBatch(dataDir, run.batchId);
+  if (batch.currentRunId !== runId) {
+    throw new AtbError(`运行 ${runId} 不是当前执行（currentRun ${batch.currentRunId || '无'}）：不得声明挂起`);
+  }
+  const { dir } = resolveItemDir(dataDir, run.itemId);
+  const st = readStatus(dir);
+  if (st.status !== 'accepted' && st.status !== 'planned') {
+    throw new AtbError(`${run.itemId} 当前状态 ${st.status}，不属于分析阶段（accepted），不能声明分析挂起`);
+  }
+  const rec = confirmStore.declareAnalysisConfirm(dataDir, {
+    itemId: run.itemId,
+    runId,
+    batchId: batch.batchId,
+    reason,
+    background,
+    questions,
+    by: by || run.owner,
+  });
+  // 持久化暂停本完善队列（在途声明运行不受影响；后续 next 一律 stop=paused）
+  batch.pauseRequested = true;
+  if (batch.status === 'prepared' || batch.status === 'running') batch.status = 'paused';
+  saveRefineBatch(dataDir, batch);
+  return {
+    ok: true,
+    runId,
+    itemId: run.itemId,
+    round: rec.round,
+    total: rec.questions.length,
+    unansweredRequired: rec.questions.filter((q) => q.required !== false && !(q.answer || '').trim()).length,
+    notice: '已声明待人工确认分析并暂停完善队列：worker 结束本轮即可（不写 done）；人工在看板作答并确认后答案将随续跑回传',
+  };
+}
+
+// 人工确认后的续跑（confirmAnalysisContinue 成功后由服务端调用）：当前运行落 interrupted
+// （注明人工已确认），条目重排队首并标记 retryItems，按当前文档重冻结基线，解除队列暂停
+// ——下一次 refine next 优先领取该条目并携带人工答案（continuation）继续未完成步骤。
+// 幂等：重复调用不产生重复启动（run 已 interrupted 直接返回）。
+export function resumeAfterAnalysisConfirm(dataDir, runId) {
+  const run = getRefineRun(dataDir, runId);
+  const batch = getRefineBatch(dataDir, run.batchId);
+  if (run.phase === 'interrupted' && batch.retryItems && batch.retryItems[run.itemId] === runId) {
+    return { ok: true, idempotent: true, runId, itemId: run.itemId, batchId: batch.batchId };
+  }
+  if (FINAL_REFINE_PHASES.has(run.phase)) {
+    throw new AtbError(`运行 ${runId} 已收尾（${run.phase}）：不能按确认续跑，请核对当前执行`);
+  }
+  if (batch.currentRunId !== runId) {
+    throw new AtbError(`运行 ${runId} 不是当前执行（currentRun ${batch.currentRunId || '无'}）：不能续跑`);
+  }
+  run.phase = 'interrupted';
+  run.reason = '人工确认分析：答案已回传，重排队首续跑';
+  run.finishedAt = nowIso();
+  saveRefineRun(dataDir, run);
+  setRefineItemState(dataDir, run.itemId, 'unrefined', { runId });
+  const cand = batch.candidates.find((c) => c.id === run.itemId);
+  const { dir } = resolveItemDir(dataDir, run.itemId);
+  if (cand) {
+    batch.candidates = [cand, ...batch.candidates.filter((c) => c.id !== run.itemId)];
+    cand.baseline = docsFingerprint(dir); // 按当前文档重冻结（声明后未再编辑才走到这里）
+    const fresh = refineCandidates(dataDir).find((x) => x.id === run.itemId);
+    if (fresh) {
+      cand.reasons = [...fresh.reasons];
+      cand.title = fresh.title;
+    }
+  }
+  batch.retryItems = { ...(batch.retryItems || {}), [run.itemId]: runId };
+  batch.currentRunId = null;
+  batch.pauseRequested = false; // 确认闭环：解除队列暂停（当前条目队首续跑，完成后才到下一条）
+  const counts = refineBatchState(dataDir, batch).counts;
+  batch.status = counts.remaining > 0 ? 'running' : 'finished';
+  saveRefineBatch(dataDir, batch);
+  releaseRefineLockIf(dataDir, (l) => l.runId === runId || l.owner === run.owner);
+  return { ok: true, runId, itemId: run.itemId, batchId: batch.batchId };
+}
+
 // 出局落账（不占 currentRun；直接写终态 run 供记录展示）
-function skipRun(dataDir, batch, cand, reason) {
-  const run = newRefineRun(dataDir, {
+function skipRun(dataDir, batch, cand, reason) {  const run = newRefineRun(dataDir, {
     batchId: batch.batchId,
     item: { id: cand.id, title: cand.title },
     owner: 'refine',
@@ -981,6 +1099,18 @@ export function finishRefineRun(dataDir, runId, { result, summary = '', reason =
     }
     const { dir, type: itemType } = resolveItemDir(dataDir, run.itemId);
     const st = readStatus(dir);
+    // REQ-20260914-001 C15：有待人工确认的分析问题时不得记完成——文档已生成/部分分析
+    // 完成不构成完成依据，必须先由人工作答确认（confirmed）后方可 done。
+    const waitingConfirm = confirmRecordOf(dataDir, run.itemId);
+    if (waitingConfirm && waitingConfirm.kind === 'analyze' && waitingConfirm.state === 'waiting') {
+      const missing = (waitingConfirm.questions || [])
+        .filter((q) => q.required !== false && !(q.answer || '').trim()).length;
+      throw new AtbError(
+        `${run.itemId} 待人工确认分析（第 ${waitingConfirm.round} 轮，${missing} 项必答未答）：` +
+        '不得以文档生成或部分分析完成代替人工确认；请人工在看板作答并「确认并继续」后续跑，'
+        + '或改用 refine fail 登记原因'
+      );
+    }
     // REQ-20260909-010：done 核验允许 accepted | planned——人工提前移入计划（planned）时完善结果
     // 仍有效：done 成功记账、跳过自动流转（回执说明原因）；其余状态维持拒绝（人工核对，改用 refine fail）。
     if (st.status !== 'accepted' && st.status !== 'planned') {
@@ -1022,6 +1152,12 @@ export function finishRefineRun(dataDir, runId, { result, summary = '', reason =
 
   // REQ-20260908-020：done 核验通过置「已完善」；fail 回置「未完善」（可被下一轮重新领取）
   setRefineItemState(dataDir, run.itemId, result === 'done' ? 'refined' : 'unrefined', { runId });
+
+  // REQ-20260914-001：分析确认续跑后完成收尾——confirmed 记录随完成闭环（closed-done），
+  // 队列此后才继续下一条（收尾本身不解除其他挂起）。
+  if (result === 'done') {
+    confirmStore.closeAnalysisConfirm(dataDir, run.itemId, { by: 'system' });
+  }
 
   // REQ-20260909-010：完善完成后自动转入计划（默认关闭）。done 终态与完善账本先落（完成事实不丢），
   // 流转由回执处理内部系统执行（非 Agent 命令，Agent 纪律与 state-guard 拦截不变）；任何异常都不
@@ -1173,7 +1309,11 @@ export function checkRefineBatch(dataDir, batchId) {
     notice = '任务已人工终止：不再派发后续项；在途子代理请在对应子代理会话人工停止';
   } else if (batch.pauseRequested) {
     nextAction = 'stop';
-    notice = '已暂停后续领取（在途执行不受影响）';
+    // REQ-20260914-001：挂起待人工确认分析时给出阻塞条目与入口
+    const waitingAnalyze = waitingAnalyzeConfirm(dataDir);
+    notice = waitingAnalyze
+      ? `分析队列已暂停：${waitingAnalyze.itemId} 待人工确认分析（${waitingAnalyze.reason || '存在必答问题'}）；请到 Status Board 任务页「待人工确认」作答并确认后继续`
+      : '已暂停后续领取（在途执行不受影响）';
   } else if (state.counts.remaining === 0) {
     nextAction = 'stop';
     notice = '本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）';

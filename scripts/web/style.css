@@ -3188,3 +3188,55 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .hold-q textarea:focus,
 .hold-q input[type='text']:focus { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
 #holdFormMeta { margin: 0 0 10px; }
+
+/* ---------- REQ-20260914-001 挂起确认区（任务页置顶卡片 + 统一侧拉面板） ---------- */
+.confirm-area { margin: 0 0 10px; display: grid; gap: 6px; }
+.confirm-area[hidden] { display: none; }
+.confirm-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+  display: grid;
+  gap: 4px;
+}
+.confirm-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.confirm-card-head > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.confirm-kind, .confirm-type { font-size: 11px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--border); }
+.confirm-kind.k-develop { border-color: var(--primary); color: var(--primary); }
+.confirm-kind.k-analyze { border-color: var(--accent, #2f9e44); color: var(--accent, #2f9e44); }
+.confirm-type.t-commit { background: var(--warn); border-color: var(--warn); color: #fff; }
+.confirm-type.t-analysis { background: var(--primary); border-color: var(--primary); color: #fff; }
+.confirm-title { font-weight: 600; }
+.confirm-reason { margin: 0; color: var(--text); }
+.confirm-counts { margin: 0; color: var(--muted); font-size: 12px; }
+.confirm-verify { margin: 0; font-size: 12px; }
+.confirm-verify.ok { color: var(--accent, #2f9e44); }
+.confirm-verify.bad { color: var(--warn); }
+.confirm-verify-reason { margin: 2px 0 0 14px; font-size: 12px; color: var(--warn); }
+.confirm-keep-note { margin: 0; }
+.confirm-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.confirm-queue-banner { margin-bottom: 6px; }
+.flag.confirm-flag {
+  background: var(--warn);
+  color: #fff;
+}
+.confirm-files { width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0; }
+.confirm-files th, .confirm-files td { border: 1px solid var(--border); padding: 3px 6px; text-align: left; word-break: break-all; }
+.confirm-diff-box { display: grid; gap: 4px; }
+.confirm-diff pre, .confirm-test-tail pre {
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg-inset, rgba(127, 127, 127, 0.12));
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.confirm-background { margin: 0 0 6px; }
+.confirm-option { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; }
+.confirm-option small { flex: 1; }
+.confirm-rec { font-style: normal; color: var(--primary); margin-left: 4px; font-size: 11px; }
+.confirm-q { margin-bottom: 8px; }

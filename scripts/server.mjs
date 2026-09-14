@@ -31,6 +31,7 @@ import * as refine from './lib/refine-store.mjs';
 import * as refineStates from './lib/refine-states.mjs';
 import * as holdStates from './lib/hold-states.mjs';
 import * as holdStore from './lib/hold-store.mjs';
+import * as confirmStore from './lib/confirm-store.mjs';
 import * as taskSettings from './lib/task-settings.mjs';
 import * as dispatch from './lib/dispatch.mjs';
 import { createScheduler, createHub, detectCli, probeCliVersion, resolveModelForItem } from './lib/scheduler.mjs';
@@ -2751,6 +2752,18 @@ async function handleApi(req, res, u, pathname) {
             runId: holdRec.runId || null,
           };
         }
+        // REQ-20260914-001：挂起确认徽标（待人工确认提交 / 待人工确认分析）随看板呈现
+        const confirmRec = confirmStore.confirmOf(dataDir, it.id);
+        if (confirmRec && (confirmRec.state === 'waiting' || confirmRec.state === 'confirmed')) {
+          it.confirm = {
+            state: confirmRec.state,
+            kind: confirmRec.kind,
+            blockType: confirmRec.blockType,
+            reason: confirmRec.reason || null,
+            declaredAt: confirmRec.declaredAt,
+            runId: confirmRec.runId || null,
+          };
+        }
       }
     }
     return sendJson(res, 200, data);
@@ -2788,6 +2801,98 @@ async function handleApi(req, res, u, pathname) {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
     const id = decodeURIComponent(holdMatch[1]);
     return sendJson(res, 200, holdStore.holdDetail(dataDir, id));
+  }
+
+  // ---------- REQ-20260914-001 挂起确认（自动提交不完整 / AI 分析问题）----------
+  // 只读：清单（含历史账本恢复视图）/ 详情 / 单文件差异；写操作（answer|verify|keep|continue）
+  // 为人工专属：Agent 的 curl 调用会被 state-guard 拦截（与 /api/hold 同口径）。
+  if (req.method === 'GET' && pathname === '/api/confirms') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const all = u.searchParams.get('all') === '1';
+    const r = confirmStore.listConfirms(dataDir, { all, projectRoot: root });
+    const legacy = all ? [] : confirmStore.legacyConfirmViews(dataDir, root);
+    return sendJson(res, 200, { count: r.count + legacy.length, items: [...r.items, ...legacy] });
+  }
+
+  const confirmActMatch = pathname.match(/^\/api\/confirms\/([^/]+)\/(answer|verify|keep|continue)$/);
+  if (confirmActMatch && req.method === 'POST') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmActMatch[1]);
+    const act = confirmActMatch[2];
+    const body = JSON.parse((await readBody(req)) || '{}');
+    let r;
+    if (act === 'answer') {
+      r = confirmStore.answerAnalysisConfirm(dataDir, id, {
+        answers: Array.isArray(body.answers) ? body.answers : [],
+        by: 'board',
+      });
+    } else if (act === 'verify') {
+      r = confirmStore.verifyCommitConfirm(dataDir, id, {
+        projectRoot: root, runTests: body.runTests !== false, by: 'board',
+      });
+    } else if (act === 'keep') {
+      r = confirmStore.keepConfirm(dataDir, id, { note: body.note || '', by: 'board' });
+    } else if (confirmStore.confirmOf(dataDir, id) && confirmStore.confirmOf(dataDir, id).kind === 'analyze') {
+      // 分析确认：必答齐备 + 版本未过期 → confirmed，答案回传当前条目续跑（队首重排）
+      r = confirmStore.confirmAnalysisContinue(dataDir, id, {
+        version: body.version || '', by: 'board',
+      });
+      if (r.ok && r.runId) {
+        try {
+          refine.resumeAfterAnalysisConfirm(dataDir, r.runId);
+        } catch (e) {
+          r = { ok: false, itemId: id, reasons: [`续跑排队失败（答案已保留可重试）：${String(e.message || e).slice(0, 120)}`] };
+        }
+      }
+    } else {
+      // 提交确认：指纹核验 → 授权补交 → 完整性与测试复验 → 恢复队列
+      let rec = confirmStore.confirmOf(dataDir, id);
+      if (!rec && body.legacy) {
+        // 历史账本恢复视图的人工操作：先物化为本轮确认记录再走同一闭环
+        const runDir = path.join(dataDir, 'dispatch', 'runs', String(body.runId || ''));
+        let run = null;
+        let ac = null;
+        try {
+          run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
+          ac = JSON.parse(fs.readFileSync(path.join(runDir, 'auto-commit.json'), 'utf8'));
+        } catch { /* runId 无效时由下方确认入口报错 */ }
+        if (run && ac) {
+          rec = confirmStore.declareCommitConfirm(dataDir, {
+            run, batch: null, autoCommit: ac, projectRoot: root, legacy: true, by: 'board',
+          });
+        }
+      }
+      void rec;
+      r = confirmStore.confirmCommitContinue(dataDir, id, {
+        projectRoot: root,
+        fingerprint: body.fingerprint && typeof body.fingerprint === 'object' ? body.fingerprint : null,
+        note: body.note || '',
+        by: 'board',
+      });
+      if (r.ok && r.batchId) {
+        try {
+          batch.resumeAfterConfirm(dataDir, r.batchId);
+        } catch { /* 批次已删除/终止：占用已在终止时释放，队列无需恢复 */ }
+      }
+    }
+    return sendJson(res, 200, r);
+  }
+
+  const confirmDiffMatch = pathname.match(/^\/api\/confirms\/([^/]+)\/diff$/);
+  if (confirmDiffMatch && req.method === 'GET') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmDiffMatch[1]);
+    const p = String(u.searchParams.get('path') || '');
+    if (!p) return sendJson(res, 400, { error: '缺少 path 查询参数' });
+    const diff = gitFlow.fileDiffText(root, p);
+    return sendJson(res, 200, { itemId: id, path: p, diff: diff == null ? '' : diff });
+  }
+
+  const confirmMatch = pathname.match(/^\/api\/confirms\/([^/]+)$/);
+  if (confirmMatch && req.method === 'GET') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmMatch[1]);
+    return sendJson(res, 200, confirmStore.confirmDetail(dataDir, id, { projectRoot: root }));
   }
 
   // REQ-20260909-003 需求文档引用讨论（独立 DISC 序列）：提示词/引用/归档/应用
