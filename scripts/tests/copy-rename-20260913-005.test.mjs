@@ -42,8 +42,8 @@ function stripHtmlComments(src) {
 // ---------- W1 / W2 Web 前端 ----------
 
 t('W1a index.html：档位快捷入口 aria-label / title / 可见文案、驳回按钮 title 换新词', () => {
-  assert.ok(html.includes('aria-label="开始 AI 分析"'), '快捷入口 aria-label 应为新词（与可见文字同源）');
-  assert.ok(html.includes('▶ 开始 AI 分析</button>'), '快捷入口可见文案应为「▶ 开始 AI 分析」');
+  assert.ok(html.includes('aria-label="AI 分析"'), '快捷入口 aria-label 应为新词（与可见文字同源；REQ-20260914-005 去「开始」）');
+  assert.ok(html.includes('▶ AI 分析</button>'), '快捷入口可见文案应为「▶ AI 分析」');
   assert.ok(html.includes('进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）'), '快捷入口 title 应指向 AI 分析面板');
   assert.ok(html.includes('完善中的单待本轮 AI 分析结束后再驳回'), '驳回待接受按钮 title 应为新词');
   for (const w of OLD_WORDS) assert.ok(!stripHtmlComments(html).includes(w), `index.html 可见文案不应再出现「${w}」`);
@@ -51,8 +51,8 @@ t('W1a index.html：档位快捷入口 aria-label / title / 可见文案、驳�
 
 t('W1b app.js 用户可见文案：页签/筛选档/徽标/弹窗/toast/空态/快捷入口全部换新词', () => {
   const pairs = [
-    ['▶ 开始完善', '▶ 开始 AI 分析'],
-    ['▶ 开始开发', '▶ 开始 AI 开发'],
+    ['▶ 开始完善', '▶ AI 分析'],
+    ['▶ 开始开发', '▶ AI 开发'],
     ['进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）', '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）'],
     ['进入任务模块批量开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务', '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务'],
     ['已接受未完善：可由批量完善任务补全文档；点击查看批量完善面板', '已接受未完善：可由 AI 分析任务补全文档；点击查看 AI 分析面板'],
@@ -100,9 +100,8 @@ t('W3 i18n 中英成对更新：19 个新键存在且值非空；中英两侧均
     assert.ok(!i18n.includes(en), `i18n.js 不应残留旧英文：${en}`);
   }
   const pairs = [
-    "'▶ 开始 AI 分析': '▶ Start AI analysis'",
-    "'▶ 开始 AI 开发': '▶ Start AI development'",
-    "'开始 AI 分析': 'Start AI analysis'",
+    "'▶ AI 分析': '▶ AI analysis'",
+    "'▶ AI 开发': '▶ AI development'",
     "'AI 分析': 'AI analysis'",
     "'AI 开发': 'AI development'",
     "'终止 AI 分析任务？': 'Abort AI analysis task?'",

@@ -195,7 +195,7 @@ t('T4 行为零变化：三选择档两图标按钮可见、非选择档隐藏�
   assert.equal(h.document.querySelector('#selectNone').disabled, true, '批量进行中禁用全不选');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '已接受档快捷入口仍可见');
   assert.equal(h.document.querySelector('#laneQuickEntry').disabled, false, '快捷入口仅导航，批量进行中不禁用');
-  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ 开始 AI 分析', '已接受档快捷入口文案（REQ-20260913-005 改名）');
+  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ AI 分析', '已接受档快捷入口文案（REQ-20260914-005 去「开始」）');
   h.state.plan.pending = false;
   // 非选择档：两图标按钮与批量动作组整体隐藏（无空占位）；快捷入口仅已接受 / 已计划 / 已完成可见
   for (const lane of ['developing', 'confirming']) {
@@ -218,7 +218,7 @@ t('T4 行为零变化：三选择档两图标按钮可见、非选择档隐藏�
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#selectOperable'), false, '已计划档全选图标可见');
   assert.equal(hidden(h, '#selectNone'), false, '已计划档全不选图标可见');
-  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ 开始 AI 开发', '已计划档快捷入口文案（镜像入口同口径，REQ-20260913-005 改名）');
+  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ AI 开发', '已计划档快捷入口文案（镜像入口同口径，REQ-20260914-005 去「开始」）');
 });
 
 // T5 ui-demo.html：离线自包含（无外链脚本 / 样式 / 资源），承载调整前 / 调整后对照与图标 + 同行演示
