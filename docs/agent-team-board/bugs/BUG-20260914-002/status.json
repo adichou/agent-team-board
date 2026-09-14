@@ -2,11 +2,11 @@
   "id": "BUG-20260914-002",
   "type": "bug",
   "title": "版本计划中关联条目与 commit 无法全选，新建版本计划中也无法全选",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-7",
   "createdAt": "2026-09-14T02:46:30.466Z",
-  "updatedAt": "2026-09-14T03:25:29.821Z",
+  "updatedAt": "2026-09-14T03:42:53.302Z",
   "agentCompletedAt": "2026-09-14T03:25:29.821Z",
   "lastReport": {
     "at": "2026-09-14T03:25:29.821Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-7",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T03:42:53.303Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

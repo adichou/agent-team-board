@@ -233,7 +233,9 @@ const ATBBuild = (() => {
     render();
   }
 
-  // 全选 / 全不选：仅对「有 commit 候选」的条目生效；返回跳过的无提交条目数
+  // 全选 / 全不选：仅对「有 commit 候选」的条目生效；返回跳过的无提交条目数。
+  // BUG-20260914-002：与 pickItem 同口径在内部统一 render——点击后复选框 / 「已选 N 项」计数 /
+  // commit 下拉解禁态立即同步，避免内部 picked 集合与界面显示错位（跳过提示由调用方补充 toast）。
   function pickAll(panelKey, on) {
     const p = state[panelKey];
     if (!p || !p.candidates) return 0;
@@ -241,6 +243,7 @@ const ATBBuild = (() => {
     for (const it of selectable) {
       if (on) p.picked.add(it.itemId); else p.picked.delete(it.itemId);
     }
+    render();
     return p.candidates.length - selectable.length;
   }
 
@@ -1160,11 +1163,12 @@ const ATBBuild = (() => {
     q('#bldPanelRetry')?.addEventListener('click', () => { if (state.createPanel) openCreatePanel(); else openAddPanel(); });
     q('#bldCreateBtn')?.addEventListener('click', submitCreate);
     q('#bldAddSubmit')?.addEventListener('click', submitAdd);
+    // BUG-20260914-002：pickAll 内部统一 render——「全选」的跳过提示与界面更新同时生效
+    //（提示不替代渲染）；「全不选」同样即时清空界面，两个面板共用该路径。
     q('#bldPickAll')?.addEventListener('click', () => {
       const key = state.createPanel ? 'createPanel' : 'addPanel';
       const skipped = pickAll(key, true);
       if (skipped) toast(`已全选有 commit 候选的条目；${skipped} 个条目暂无关联提交已跳过`);
-      else render();
     });
     q('#bldPickNone')?.addEventListener('click', () => {
       const key = state.createPanel ? 'createPanel' : 'addPanel';
