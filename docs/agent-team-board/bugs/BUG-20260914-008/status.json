@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-008",
+  "type": "bug",
+  "title": "新建版本是关联条目重复提示。导入条目到已有版本一样重复提示，请修复",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-2",
+  "createdAt": "2026-09-14T04:38:44.074Z",
+  "updatedAt": "2026-09-14T05:44:19.554Z",
+  "agentCompletedAt": "2026-09-14T05:44:19.554Z",
+  "lastReport": {
+    "at": "2026-09-14T05:44:19.554Z",
+    "coverage": 4,
+    "framework": "node:test（自定义 vm 断言脚手架）",
+    "summary": "口径单点化：renderPanel 无done空态正文精简为「暂无可纳入版本的条目」，不再复述头部副标题口径；新建/添加两面板口径各只出现一次；保留 BUG-20260914-004 totalDone 两分支空态与正常态/加载/失败行为。新增 4 用例测试（先红后绿），既有 done-only/occupied 两套断言无需改动仍通过；全量 226 个测试文件 0 失败。引入来源归因 BUG-20260913-001（提交 87a2fca），详见 design.md。",
+    "runId": "run-20260914-229"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T04:38:44.074Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T04:38:44.075Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T04:51:53.393Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-124740-d308）"
+    },
+    {
+      "at": "2026-09-14T05:37:16.397Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-2",
+      "note": "认领（zcode-batch-048-2）"
+    },
+    {
+      "at": "2026-09-14T05:44:19.554Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-2",
+      "note": "上报测试报告（覆盖率 4%），待人工确认完成"
+    }
+  ]
+}
