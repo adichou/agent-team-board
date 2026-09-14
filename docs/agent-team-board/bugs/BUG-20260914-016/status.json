@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-016",
+  "type": "bug",
+  "title": "分支浏览的搜索框要往上移到和分支名在同一行",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-049-1",
+  "createdAt": "2026-09-14T12:00:37.615Z",
+  "updatedAt": "2026-09-14T12:22:14.344Z",
+  "agentCompletedAt": "2026-09-14T12:22:14.344Z",
+  "lastReport": {
+    "at": "2026-09-14T12:22:14.344Z",
+    "coverage": null,
+    "framework": "node:assert/strict + vm 桩 DOM（项目自研测试口径）",
+    "summary": "分支浏览提交记录面板搜索控件上移与分支名同一头部行：build.js searchRow 注入 bld-log-head（分支名→搜索→刷新同行、未选分支无搜索控件口径不变）；style.css 头部行去 space-between 加 flex-wrap、搜索容器改 flex:1 1 160px 吃剩余宽度（窄屏放不下先收缩再折行不溢出）；搜索/分页/禁用/草稿回写行为零回归。build-ui N7g 增同行断言、N7i 增静态契约，先红(2败)后绿(17/17)，全量 235 文件 0 失败。归因 REQ-20260914-002。",
+    "runId": "run-20260914-242"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T12:00:37.615Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T12:00:37.616Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T12:08:09.262Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-200156-ced8）"
+    },
+    {
+      "at": "2026-09-14T12:11:08.389Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-049-1",
+      "note": "认领（zcode-batch-049-1）"
+    },
+    {
+      "at": "2026-09-14T12:22:14.344Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-049-1",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}
