@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-010 界面演示 · 批量开发暂扣待人工提交缺少人工提醒通道</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --line:#e2e5ea; --ink:#1f2430; --muted:#6b7280;
+    --brand:#3b82f6; --warn:#d97706; --warn-bg:#fff7e6; --ok:#16a34a; --err:#dc2626;
+    --err-bg:#fef2f2; --chip:#eef1f6; --code:#f6f8fa; --code-ink:#24292f;
+    --shadow:0 1px 3px rgba(16,24,40,.08);
+  }
+  body.dark{
+    --bg:#0f1117; --panel:#171a21; --line:#2a2f3a; --ink:#e6e8ee; --muted:#9aa1ad;
+    --brand:#60a5fa; --warn:#f59e0b; --warn-bg:#2a2113; --ok:#4ade80; --err:#f87171;
+    --err-bg:#2a1517; --chip:#232833; --code:#1b1e26; --code-ink:#d6dae2;
+    --shadow:0 1px 3px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:14px;line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:16px 20px 60px}
+
+  /* ===== 演示工具栏 ===== */
+  .demo-bar{position:sticky;top:0;z-index:20;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--shadow);padding:10px 14px;margin-bottom:14px}
+  .demo-bar h1{font-size:15px;margin:0 0 8px;font-weight:600}
+  .demo-bar h1 .id{color:var(--brand);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .ctrl-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:var(--muted);padding:5px 12px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--brand);color:#fff}
+  .lbl{font-size:12px;color:var(--muted)}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;
+    padding:5px 12px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--brand);color:var(--brand)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.accent{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .poll{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .poll .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);
+    margin-right:4px;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .hint-bar{margin-top:8px;font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:6px}
+
+  /* ===== 看板骨架 ===== */
+  .board{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+  .topbar{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .logo{display:flex;align-items:center;gap:8px;font-weight:600}
+  .logo .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--brand),#8b5cf6);
+    display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:12px}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .tabs span{padding:4px 12px;border-radius:6px;color:var(--muted);font-size:13px;cursor:default}
+  .tabs span.active{background:var(--chip);color:var(--ink);font-weight:600}
+  .proj{margin-left:auto;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:3px 10px}
+  .subrow{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line)}
+  .subrow b{font-size:14px}
+  .subrow .cnt{color:var(--muted);font-size:12px}
+  .subrow .search{margin-left:auto;border:1px solid var(--line);border-radius:6px;padding:4px 10px;
+    font-size:12px;color:var(--muted);background:var(--bg)}
+  .list{padding:12px 16px;display:grid;gap:10px}
+  .card{border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel)}
+  .card .row1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .card .id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:var(--brand)}
+  .flag{font-size:11.5px;border-radius:5px;padding:1px 7px}
+  .flag.hold{background:var(--warn-bg);color:var(--warn)}
+  .flag.pm{background:var(--err-bg);color:var(--err)}
+  .card .t{color:var(--muted);font-size:12px;margin:2px 0 0}
+  .demo-note{font-size:11px;color:var(--muted)}
+
+  /* ===== 聚合区 ===== */
+  .hold-area{margin:4px 16px 16px;border:1px solid var(--warn);border-radius:9px;background:var(--warn-bg)}
+  .hold-area.head-only{border-style:dashed;background:transparent}
+  .hold-area-head{padding:8px 12px;font-weight:600;color:var(--warn);border-bottom:1px dashed var(--warn);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .hold-area-sub{margin:0;padding:6px 12px 2px;color:var(--muted);font-size:12px}
+  .group{padding:6px 12px 10px}
+  .group+.group{border-top:1px dashed var(--line)}
+  .group-head{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;margin-bottom:6px}
+  .group-head .n{color:var(--muted);font-weight:400;font-size:12px}
+  .pm-item{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 10px;margin-bottom:8px}
+  .pm-item.committing{opacity:.55}
+  .pm-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pm-row .id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:var(--brand)}
+  .pm-row .paths{color:var(--err);font-size:12px}
+  .pm-row .acts{margin-left:auto;display:flex;gap:6px}
+  .pm-detail{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;font-size:12px}
+  .pm-detail h5{margin:0 0 4px;font-size:12px;color:var(--muted)}
+  .pm-detail ul{margin:0 0 6px;padding-left:18px}
+  .pm-detail li{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+  .pm-detail .advice{color:var(--muted);background:var(--code);border-radius:6px;padding:6px 8px}
+  .ghost{margin:4px 16px 16px;border:1px dashed var(--line);border-radius:9px;padding:14px;
+    color:var(--muted);font-size:12px;text-align:center}
+  .skel{padding:16px 12px;color:var(--muted);font-size:13px}
+  .skel .bar{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--chip),var(--line),var(--chip));
+    background-size:200% 100%;animation:shine 1.2s infinite;margin:10px 0}
+  @keyframes shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .hold-error{margin:4px 16px 16px;display:flex;align-items:center;gap:10px;background:var(--err-bg);
+    color:var(--err);border:1px solid var(--err);border-radius:8px;padding:10px 12px;font-size:13px}
+  .hold-error .btn{margin-left:auto}
+
+  /* ===== 旁证通道 ===== */
+  .channels{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  @media (max-width:860px){.channels{grid-template-columns:1fr}}
+  .term{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden}
+  .term header{padding:8px 12px;font-weight:600;border-bottom:1px solid var(--line);font-size:13px;display:flex;gap:8px;align-items:center}
+  .term pre{margin:0;padding:12px;background:var(--code);color:var(--code-ink);overflow:auto;font-size:12px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;max-height:340px}
+  .term .cmd{color:var(--ok)}
+  .term .mut{color:var(--muted)}
+  .term .hl{background:rgba(250,204,21,.25);border-radius:3px;padding:0 2px}
+  .term .bad{color:var(--err)}
+  .foot{margin-top:14px;color:var(--muted);font-size:12px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+    border-radius:8px;padding:8px 16px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="demo-bar">
+    <h1><span class="id">BUG-20260914-010</span> 批量开发暂扣待人工提交的改动缺少人工提醒通道 — 界面演示</h1>
+    <div class="ctrl-row">
+      <span class="lbl">场景</span>
+      <div class="seg" id="segMode">
+        <button data-mode="defect" class="on">缺陷形态（现状）</button>
+        <button data-mode="fixed">修复后（期望）</button>
+      </div>
+      <span class="lbl">数据状态</span>
+      <div class="seg" id="segState">
+        <button data-state="normal" class="on">正常</button>
+        <button data-state="loading">加载</button>
+        <button data-state="error">失败</button>
+        <button data-state="empty">空</button>
+      </div>
+      <button class="btn" id="btnInject">模拟新一轮产生暂扣</button>
+      <button class="btn" id="btnReset">重置演示</button>
+      <button class="btn" id="btnTheme">深浅色</button>
+      <span class="poll"><span class="dot"></span>自动轮询 2s · 下一次 <span id="cd">2.0</span>s</span>
+    </div>
+    <div class="hint-bar" id="modeHint"></div>
+  </div>
+
+  <div class="board">
+    <div class="topbar">
+      <span class="logo"><span class="mark">AT</span>智能体团队看板</span>
+      <nav class="tabs">
+        <span>讨论</span><span class="active">需求</span><span>任务</span><span>文件</span><span>营销</span><span>设置</span>
+      </nav>
+      <span class="proj">项目：agent-team-board ▾</span>
+    </div>
+    <div class="subrow">
+      <b>需求</b><span class="cnt">实时队列 · 最旧优先</span>
+      <span class="search">🔍 搜索条目…</span>
+    </div>
+    <div class="list" id="reqList"></div>
+    <div id="holdSlot"></div>
+  </div>
+
+  <div class="channels">
+    <div class="term">
+      <header>🖥 旁证通道一 · <span style="font-family:ui-monospace,monospace">atb batch check</span> 收尾 notice</header>
+      <pre id="checkOut"></pre>
+    </div>
+    <div class="term">
+      <header>📝 旁证通道三 · 主调度提示词（<span style="font-family:ui-monospace,monospace">atb batch create</span> 生成）节选</header>
+      <pre id="promptOut"></pre>
+    </div>
+  </div>
+
+  <p class="foot">
+    数据口径：REQ-20260913-006 的暂扣路径取自真实账本 <span style="font-family:ui-monospace,monospace">docs/agent-team-board/dispatch/runs/run-20260914-221/auto-commit.json</span>；
+    「待人工决策」卡与 BUG-20260914-002~005 的路径为示意（以各单 auto-commit.json 为准）。
+    本页为单文件静态演示，仅模拟看板轮询节奏，不访问任何接口。
+  </p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ---------- 演示数据 ---------- */
+// 待人工决策（hold declare 既有功能，示意）
+const DECISION_ITEM = {
+  id:'BUG-20260914-0xx', title:'（示意）worker 声明受阻待人工决策的单据',
+  unanswered:1, total:2, wait:'42 分钟'
+};
+// 待人工提交（本 Bug 的主角）：pendingManual = 无法归因路径；heldGroups = 一并暂扣的 test/biz
+const PENDING = [
+  { id:'REQ-20260913-006', runId:'run-20260914-221', real:true,
+    pendingManual:['scripts/web/build.js'],
+    test:['scripts/tests/build-answer-edit-20260913-006.test.mjs'],
+    biz:['scripts/web/style.css'] },
+  { id:'BUG-20260914-002', runId:'run-20260914-223', real:false,
+    pendingManual:['scripts/web/build.js','scripts/lib/server-api.mjs'],
+    test:['scripts/tests/xxx-20260914-002.test.mjs'], biz:[] },
+  { id:'BUG-20260914-003', runId:'run-20260914-224', real:false,
+    pendingManual:['scripts/web/build.js','scripts/lib/batch.mjs','scripts/web/app.js'],
+    test:['scripts/tests/xxx-20260914-003.test.mjs'], biz:['scripts/web/style.css'] },
+  { id:'BUG-20260914-004', runId:'run-20260914-225', real:false,
+    pendingManual:['scripts/web/build.js','scripts/server.mjs','scripts/web/i18n.js'],
+    test:['scripts/tests/xxx-20260914-004.test.mjs'], biz:[] },
+  { id:'BUG-20260914-005', runId:'run-20260914-226', real:false,
+    pendingManual:['scripts/web/build.js','scripts/web/style.css'],
+    test:['scripts/tests/xxx-20260914-005.test.mjs'], biz:[] }
+];
+const ADVICE = '人工核对该路径中「预留前改动 / 本单改动」的归属后整文件提交（提交消息带单号），再补提交暂扣的 test/业务路径；自动提交不做猜测归属，也不会拆分 hunk。';
+const NEW_ITEM = { id:'REQ-20260913-007', runId:'run-20260914-227', real:false, fresh:true,
+  pendingManual:['scripts/web/build.js'], test:['scripts/tests/xxx-20260914-007.test.mjs'], biz:[] };
+
+/* ---------- 状态 ---------- */
+const S = {
+  mode:'defect',          // defect | fixed
+  data:'normal',          // normal | loading | error | empty
+  items:PENDING.map(x=>({...x, committing:false, expanded:false})),
+  injected:false,         // 已注入新一轮暂扣
+  retryTick:0
+};
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mono = p=>`<span style="font-family:ui-monospace,Menlo,Consolas,monospace">${esc(p)}</span>`;
+
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------- 需求列表（骨架示意） ---------- */
+function renderList(){
+  $('#reqList').innerHTML = `
+    <div class="card"><div class="row1"><span class="id">REQ-20260913-008</span>
+      <span class="flag" style="background:var(--chip);color:var(--muted)">developing</span></div>
+      <p class="t">（示意卡片）批量开发队列中的其他单据，与本 Bug 无关</p></div>
+    <div class="card"><div class="row1"><span class="id">${esc(DECISION_ITEM.id)}</span>
+      <span class="flag hold">⚠ 等人工决策</span>
+      <span class="demo-note">未答 ${DECISION_ITEM.unanswered}/${DECISION_ITEM.total} · 已等待 ${esc(DECISION_ITEM.wait)}</span></div>
+      <p class="t">${esc(DECISION_ITEM.title)} —— 列表下方「待人工确认」区补决策并复工</p></div>`;
+}
+
+/* ---------- 聚合区 ---------- */
+function pendingCount(){ return S.items.filter(i=>!i.committing).length; }
+
+function pmCard(it){
+  const n = it.pendingManual.length + it.test.length + it.biz.length;
+  return `<div class="pm-item${it.committing?' committing':''}">
+    <div class="pm-row">
+      <span class="id">${esc(it.id)}</span>
+      <span class="paths">暂扣 ${n} 路径</span>
+      ${it.committing?'<span class="demo-note">已人工提交 · 等待下轮轮询刷新…</span>':''}
+      <span class="acts">
+        <button class="btn" data-exp="${esc(it.id)}">${it.expanded?'收起明细':'明细'}</button>
+        <button class="btn primary" data-commit="${esc(it.id)}" ${it.committing?'disabled':''}>模拟人工提交</button>
+      </span>
+    </div>
+    ${it.expanded?`<div class="pm-detail">
+      <h5>dispatch/runs/${esc(it.runId)}/auto-commit.json${it.real?'':'（路径示意）'}</h5>
+      <h5>pendingManual（预留前已脏且本单动过，无法安全归因）</h5>
+      <ul>${it.pendingManual.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>
+      ${it.test.length?`<h5>heldGroups.test（一并暂扣待补提交）</h5><ul>${it.test.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>`:''}
+      ${it.biz.length?`<h5>heldGroups.biz（一并暂扣待补提交）</h5><ul>${it.biz.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>`:''}
+      <p class="advice">建议：${esc(ADVICE)}</p>
+    </div>`:''}
+  </div>`;
+}
+
+function renderHoldArea(){
+  const slot = $('#holdSlot');
+  if(S.data==='loading'){
+    slot.innerHTML = `<div class="hold-area head-only">
+      <div class="hold-area-head">⚠ 待人工确认</div>
+      <div class="skel">正在加载待确认清单…<div class="bar"></div><div class="bar" style="width:70%"></div><div class="bar" style="width:45%"></div></div>
+    </div>`; return;
+  }
+  if(S.data==='error'){
+    slot.innerHTML = `<div class="hold-error" role="alert">
+      <span>待确认清单加载失败：fetch /api/holds → /api/pending-manual 网络错误（演示模拟）——保留上次数据，下轮自动恢复</span>
+      <button class="btn" id="btnRetry">重试</button></div>`;
+    $('#btnRetry').addEventListener('click',()=>{ toast('重试中…'); setData('loading');
+      setTimeout(()=>setData('normal'),900); });
+    return;
+  }
+  if(S.data==='empty'){
+    slot.innerHTML = `<div class="ghost">（空态：既无待人工决策、也无暂扣时，「⚠ 待人工确认」聚合区整体隐藏，不占版面——真实看板直接不渲染该节点）</div>`;
+    return;
+  }
+  if(S.mode==='defect'){
+    // 缺陷形态：只有既有的「待人工决策」组；账本里 5+ 单暂扣，界面零展示
+    slot.innerHTML = `<div class="hold-area">
+      <div class="hold-area-head">⚠ 待人工确认（1）</div>
+      <p class="hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失</p>
+      <div class="group"><div class="group-head">◇ 待人工决策（1）</div>
+        <div class="pm-item"><div class="pm-row"><span class="id">${esc(DECISION_ITEM.id)}</span>
+          <span class="flag hold">⚠ 等人工决策</span>
+          <span class="demo-note">未答 ${DECISION_ITEM.unanswered}/${DECISION_ITEM.total}</span>
+          <span class="acts"><button class="btn">补决策</button><button class="btn accent">复工</button></span></div></div>
+      </div>
+      <div class="group"><div class="group-head" style="color:var(--muted)">◇ 待人工提交（0）</div>
+        <p class="demo-note" style="margin:0 0 4px">现状：该分组不存在——${S.items.length} 单改动被暂扣在 dispatch/runs/*/auto-commit.json，看板无任何出口</p>
+      </div>
+    </div>`; return;
+  }
+  // 修复后：正常数据 + 待人工提交分组
+  const n = pendingCount();
+  slot.innerHTML = `<div class="hold-area">
+    <div class="hold-area-head">⚠ 待人工确认（待决策 1 + 待提交 ${n}）</div>
+    <p class="hold-area-sub">暂扣单提醒：人工核对后整文件提交（提交消息带单号）即自动消失；以账本路径当前是否仍脏为口径，无需新增「忽略」动作</p>
+    <div class="group"><div class="group-head">◇ 待人工决策（1）</div>
+      <div class="pm-item"><div class="pm-row"><span class="id">${esc(DECISION_ITEM.id)}</span>
+        <span class="flag hold">⚠ 等人工决策</span>
+        <span class="demo-note">未答 ${DECISION_ITEM.unanswered}/${DECISION_ITEM.total}</span>
+        <span class="acts"><button class="btn">补决策</button><button class="btn accent">复工</button></span></div></div>
+    </div>
+    <div class="group"><div class="group-head">◇ 待人工提交（${n}）<span class="n">明细见 dispatch/runs/&lt;runId&gt;/auto-commit.json</span></div>
+      ${n? S.items.map(pmCard).join('')
+        : '<p class="demo-note" style="margin:0">（无暂扣：分组不渲染，聚合区只保留待人工决策）</p>'}
+    </div>
+  </div>`;
+  for(const b of slot.querySelectorAll('[data-exp]'))
+    b.addEventListener('click',()=>{ const it=S.items.find(x=>x.id===b.dataset.exp); it.expanded=!it.expanded; renderHoldArea(); });
+  for(const b of slot.querySelectorAll('[data-commit]'))
+    b.addEventListener('click',()=>{
+      const it=S.items.find(x=>x.id===b.dataset.commit); it.committing=true; it.expanded=false;
+      toast(`已模拟人工提交（消息带单号 ${it.id}）：下一轮 2s 轮询后从分组消失`);
+      renderHoldArea(); renderChannels();
+    });
+}
+
+/* ---------- 旁证通道 ---------- */
+function renderChannels(){
+  const n = pendingCount();
+  const commitN = S.items.filter(i=>i.committing||i.gone).length;
+  const checkFix = S.mode==='fixed';
+  const notice = checkFix
+    ? (n? `本轮队列已处理完毕：实时队列已取空，可启动新一轮；<span class="hl">${n} 单有暂扣待人工提交</span>（明细见 dispatch/runs/*/auto-commit.json）`
+        : `本轮队列已处理完毕：实时队列已取空，可启动新一轮${commitN?`；本轮暂扣已全部人工提交（${commitN} 单）`:''}`)
+    : `本轮队列已处理完毕：实时队列已取空，可启动新一轮`;
+  const bytes = 180 + (checkFix&&n? n*9:0);
+  $('#checkOut').innerHTML =
+`<span class="cmd">$ node scripts/atb.mjs batch check --dir "&lt;root&gt;"</span>
+
+{
+  "ok": true,
+  "nextAction": "stop",
+  "notice": "${notice}",
+  "counts": { "reported": 7, "failed": 0, "remaining": 0 }
+}
+
+<span class="mut">// 响应 ${bytes} 字节 ≤ CHECK_MAX_BYTES(2048)：暂扣单过多时 notice 降级为
+// 计数 + 入口，不逐单列路径，不得超限报错。
+// 现状（缺陷形态）：reported 且带暂扣的运行算成功终态，notice 只报队列取空，
+// ${S.items.length} 单 pendingManual 被当成功吞掉。</span>`;
+
+  const pmLine = '<span class="hl">回执 JSON 含 autoCommit.pendingManual 时，立即向用户报告单号与暂扣路径数，不得当作普通成功回执。</span>';
+  $('#promptOut').innerHTML =
+`<span class="cmd">$ node scripts/atb.mjs batch create</span>
+
+<span class="mut">……（生成主调度提示词，节选）……</span>
+
+每轮新启动一个子代理，按执行规范领取当前队列中最早的一个可实施条目。
+主会话只接收规定的短回执，并调用最小核对入口。
+nextAction=continue 时启动下一个新子代理；stop 时结束；
+needs_attention 时说明简短原因和记录入口，等待人工处理。
+不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。
+收尾只给本轮计数和异常入口。不得代替人工接受需求或确认完成。
+${checkFix? pmLine : '<span class="bad">（现状：无任何 pendingManual 相关指令 —— 回执字段被当普通成功）</span>'}`;
+}
+
+/* ---------- 轮询模拟 ---------- */
+let countdown = 2.0;
+setInterval(()=>{
+  countdown -= 0.1;
+  if(countdown<=0){
+    countdown = 2.0;
+    tick();
+  }
+  $('#cd').textContent = countdown.toFixed(1);
+},100);
+
+function tick(){
+  // 模拟 2s 主轮询：吸收新暂扣、移除已人工提交的单（仅修复后可见；缺陷形态数据在但界面无出口）
+  if(S.injected && !S.items.some(i=>i.id===NEW_ITEM.id)){
+    S.items.push({...NEW_ITEM, committing:false, expanded:false});
+    if(S.mode==='fixed'){ toast(`轮询刷新：发现新暂扣单 ${NEW_ITEM.id}`); renderChannels(); }
+  }
+  const before = S.items.length;
+  S.items = S.items.filter(i=>!(i.committing));
+  if(S.mode==='fixed' && S.items.length!==before) toast('轮询刷新：已人工提交的暂扣单从分组消失');
+  renderHoldArea(); renderChannels();
+}
+
+/* ---------- 控件 ---------- */
+function setMode(m){
+  S.mode=m;
+  for(const b of $('#segMode').children) b.classList.toggle('on',b.dataset.mode===m);
+  $('#modeHint').textContent = m==='defect'
+    ? '缺陷形态：5 单 fix/test 改动被 auto-commit 暂扣（账本与回执 JSON 均有记录），但 batch check notice、看板、调度提示词三处通道均零提示——人工只能翻 dispatch/runs/<runId>/auto-commit.json 才能发现。'
+    : '修复后：三通道齐备——聚合区新增「待人工提交」分组（明细=auto-commit.json）、batch check 收尾 notice 计数、调度提示词强制上报指令；可点「模拟人工提交」验证处理后消失。';
+  renderHoldArea(); renderChannels();
+}
+function setData(d){ S.data=d;
+  for(const b of $('#segState').children) b.classList.toggle('on',b.dataset.state===d);
+  renderHoldArea();
+}
+$('#segMode').addEventListener('click',e=>{ if(e.target.dataset.mode) setMode(e.target.dataset.mode); });
+$('#segState').addEventListener('click',e=>{ if(e.target.dataset.state) setData(e.target.dataset.state); });
+$('#btnInject').addEventListener('click',()=>{ S.injected=true;
+  toast(S.mode==='fixed'?'新一轮产生暂扣：等待下一轮 2s 轮询自动出现':'新一轮产生暂扣：缺陷形态下界面仍不会有任何展示'); });
+$('#btnReset').addEventListener('click',()=>{ S.items=PENDING.map(x=>({...x,committing:false,expanded:false}));
+  S.injected=false; setMode(S.mode); setData('normal'); toast('演示已重置'); });
+$('#btnTheme').addEventListener('click',()=>document.body.classList.toggle('dark'));
+
+/* ---------- 启动 ---------- */
+renderList(); setMode('defect'); renderChannels();
+</script>
+</body>
+</html>
