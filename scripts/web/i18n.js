@@ -49,7 +49,15 @@ const EN = {
   '刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。': 'The sync just succeeded — an empty list means the remote repository itself is empty. Click "Push" on a branch in the "Local" group above; the first push will set up upstream tracking.',
   '同步拉取已完成，但推送失败。': 'Fetch completed, but the push failed.',
   '本次推送未能完成：失败分支与原因见上方提示。可在上方「本地」分组对分支点「推送」重试，或再次点击「⟳ 和远端同步」。': 'The push did not complete: see the toast above for the failed branches and reasons. Click "Push" on a branch in the "Local" group above to retry, or click "⟳ Sync with remote" again.',
-  '本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。': 'No branch was pushed in this sync: there is no local development branch to push automatically (main is managed by the release module, not pushed here).',
+  '本次同步未推送任何分支：没有可推送的开发分支；main 必须通过发布流程推送。': 'No branch was pushed in this sync: there is no development branch to push; main must be pushed through the release process.',
+  // BUG-20260914-017：同步范围（排除 main）常驻说明 + main 行标识 + 悬停提示补译（title 原为
+  // 词典缺口，英文界面悬停仍为中文）；toast 拼接句见 EN_DYNAMIC。
+  '同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。': 'Sync pushes local branches other than main only; main must be pushed through the release process.',
+  '通过发布流程推送': 'Pushed via release process',
+  'main 由发布流程推送：不随「和远端同步」推送，也无单独推送按钮': 'main is pushed via the release process: it is not pushed by "⟳ Sync with remote" and has no standalone push button',
+  'fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致': 'fetch --all --prune to pull from the remote, then push local development branches (main excluded): keep local and remote consistent',
+  '✓ 已同步远端：fetch 完成，没有可推送的开发分支；main 必须通过发布流程推送': '✓ Remote synced: fetch done; no development branch to push; main must be pushed through the release process',
+  '✓ 已同步远端：fetch 完成，无可推送的开发分支': '✓ Remote synced: fetch done; no branch to push',
   '计划中': 'Planning',
   '合并中': 'Merging',
   '已合并': 'Merged',
@@ -835,6 +843,12 @@ const EN_DYNAMIC = {
   '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
   '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',
   '已到末尾 · 共 ◇ 条匹配': 'End of results · $1 matches in total',
+  // BUG-20260914-017：分支同步 toast 拼接句（成功 / 部分失败 × 有无 main 跳过注记四种形态；
+  // main 注记按服务端 skipped 数据拼接，本地无 main 时不带注记维持原口径）
+  '✓ 已同步远端：fetch 完成，已推送 ◇ → ◇；main 已跳过，请通过发布流程推送': '✓ Remote synced: fetch done, pushed $1 → $2; main skipped — push it through the release process',
+  '✓ 已同步远端：fetch 完成，已推送 ◇ → ◇': '✓ Remote synced: fetch done, pushed $1 → $2',
+  '✕ 同步完成但部分推送失败：◇（◇）；main 已跳过，请通过发布流程推送': '✕ Sync finished with push failures: $1 ($2); main skipped — push it through the release process',
+  '✕ 同步完成但部分推送失败：◇（◇）': '✕ Sync finished with push failures: $1 ($2)',
   // REQ-20260911-009 Git 工作流：状态/失败就近反馈（动态拼接）
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
   '失败：◇（可重试；已存在的分支不会重复创建）': 'Failed: $1 (retryable; an existing branch is never re-created)',

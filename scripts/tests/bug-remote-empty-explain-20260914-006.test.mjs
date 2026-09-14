@@ -154,7 +154,7 @@ t('U2 已配置远端 + 同步成功后仍为空：解释块断言「远端仓�
   await sleep(30);
   const inner = view.innerHTML;
   assert.match(inner, /远端仓库尚无任何分支（从未推送）。/, '同步成功后仍为空应断言远端仓库为空');
-  assert.match(inner, /本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）/, '应说明未推送成因（main 口径）');
+  assert.match(inner, /本次同步未推送任何分支：没有可推送的开发分支；main 必须通过发布流程推送/, '应说明未推送成因（main 发布口径，BUG-20260914-017 更新）');
   assert.match(inner, /bld-remote-hint/, '解释块应有稳定样式钩子');
   assert.match(inner, /role="note"/, '解释块 role=note');
   assert.match(inner, /bld-push attn/, '本地分支「推送」按钮应高亮为出路');

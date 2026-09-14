@@ -3047,6 +3047,8 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 /* 分支浏览 */
 .bld-branch-split { grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); }
 .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 8px; }
+/* BUG-20260914-017：工具栏下常驻同步范围说明（不悬停可见；深浅色沿用 muted 变量） */
+.bld-sync-note { margin: -2px 0 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .bld-branch-group { margin-bottom: 10px; }
 .bld-group-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .bld-branch {
@@ -3056,6 +3058,12 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-branch:hover { background: var(--bg); }
 .bld-branch.bld-cur { background: var(--bg); }
 .bld-branch .bld-push { margin-left: auto; }
+/* BUG-20260914-017：main 行「通过发布流程推送」说明标识——右对齐（与推送按钮同位），
+   虚线描边弱化样式（说明徽标而非操作按钮），深浅色沿用现有变量 */
+.bld-branch .bld-main-flag {
+  margin-left: auto; font-size: 11.5px; line-height: 1.4; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+}
 /* BUG-20260914-003：本地缺 main 的可解释提示（弱警示，不抢空态文案） */
 .bld-main-hint {
   margin: 4px 0 0; padding: 6px 10px; font-size: 12.5px; line-height: 1.5;

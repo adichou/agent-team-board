@@ -249,8 +249,8 @@ t('U1 点击同步：请求走 /api/build/sync（不再调 /api/build/fetch）�
   assert.equal(h.calls.filter((x) => x === '/api/build/sync').length, 1, '同步请求走新接口 /api/build/sync（仅一次）');
   assert.ok(!h.calls.includes('/api/build/fetch'), '全程不得调用旧接口 /api/build/fetch');
   assert.ok(
-    h.toasts.some(([m]) => m === '✓ 已同步远端：fetch 完成，已推送 dev → origin'),
-    `成功 toast 应汇总两步：${JSON.stringify(h.toasts)}`,
+    h.toasts.some(([m]) => m === '✓ 已同步远端：fetch 完成，已推送 dev → origin；main 已跳过，请通过发布流程推送'),
+    `成功 toast 应汇总两步（BUG-20260914-017 起携带 main 跳过注记）：${JSON.stringify(h.toasts)}`,
   );
   assert.match(view.innerHTML, /⟳ 和远端同步/, '完成后按钮恢复');
   assert.ok(!/disabled/.test(fetchBtnHtml(view.innerHTML)), '完成后按钮恢复可点');
@@ -304,8 +304,8 @@ t('U3 本地仅 main（无可推送开发分支）：成功 toast 明确说明�
   view.nodes.get('#bldFetchBtn').listeners.click();
   await sleep(30);
   assert.ok(
-    h.toasts.some(([m]) => m === '✓ 已同步远端：fetch 完成，无可推送的开发分支（main 由发布模块推送）'),
-    `无可推分支 toast 应说明：${JSON.stringify(h.toasts)}`,
+    h.toasts.some(([m]) => m === '✓ 已同步远端：fetch 完成，没有可推送的开发分支；main 必须通过发布流程推送'),
+    `无可推分支 toast 应说明（BUG-20260914-017 口径）：${JSON.stringify(h.toasts)}`,
   );
 });
 
@@ -333,7 +333,7 @@ t('U4 空态细分（同步成功后远端仍为空）：推送失败 → 解释
   await sleep(30);
   inner = view.innerHTML;
   assert.match(inner, /远端仓库尚无任何分支（从未推送）。/, '远端为空事实仍应说明');
-  assert.match(inner, /本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）/, '应说明未推送原因是 main 口径');
+  assert.match(inner, /本次同步未推送任何分支：没有可推送的开发分支；main 必须通过发布流程推送/, '应说明未推送原因是 main 发布口径（BUG-20260914-017）');
   assert.doesNotMatch(inner, /同步拉取已完成，但推送失败/, '无失败时不得出现失败解释');
 });
 
@@ -372,9 +372,9 @@ t('W1 词典收录新空态解释（静态整句），中英往返；未同步�
   assert.equal(EN['本次推送未能完成：失败分支与原因见上方提示。可在上方「本地」分组对分支点「推送」重试，或再次点击「⟳ 和远端同步」。'],
     'The push did not complete: see the toast above for the failed branches and reasons. Click "Push" on a branch in the "Local" group above to retry, or click "⟳ Sync with remote" again.',
     '推送失败空态说明应有词条');
-  assert.equal(EN['本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。'],
-    'No branch was pushed in this sync: there is no local development branch to push automatically (main is managed by the release module, not pushed here).',
-    '无可推分支空态说明应有词条');
+  assert.equal(EN['本次同步未推送任何分支：没有可推送的开发分支；main 必须通过发布流程推送。'],
+    'No branch was pushed in this sync: there is no development branch to push; main must be pushed through the release process.',
+    '无可推分支空态说明应有词条（BUG-20260914-017 更新口径）');
   assert.match(EN['本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。'] || '',
     /never pushed/, '未同步空态词条已按新语义更新（仍说明远端为空成因）');
   I.setLang('en');
