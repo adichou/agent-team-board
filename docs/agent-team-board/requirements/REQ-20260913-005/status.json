@@ -1,0 +1,75 @@
+{
+  "id": "REQ-20260913-005",
+  "type": "requirement",
+  "title": "批量完善和批量开发的文案改为 AI 分析和 AI 开发，要全面排查整改",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-3",
+  "createdAt": "2026-09-13T15:30:47.183Z",
+  "updatedAt": "2026-09-14T01:00:58.920Z",
+  "agentCompletedAt": "2026-09-14T01:00:58.920Z",
+  "lastReport": {
+    "at": "2026-09-14T01:00:58.920Z",
+    "coverage": null,
+    "framework": "Node.js（scripts/tests/run-all.mjs 聚合）",
+    "summary": "「批量完善→AI 分析」「批量开发→AI 开发」全面文案整改：web（index.html/app.js/i18n.js 中英 19 键）、CLI/服务端（atb/core/batch/refine-store/git-flow/state-guard/task-settings）与展示层归一链；标识符与 API 不动；新增契约测试 7 用例，全量 217 文件 0 失败",
+    "runId": "run-20260914-219"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T15:30:47.183Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-13T15:30:47.190Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-13T15:31:00.245Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-13T15:31:40.114Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "描述修改（README「## 描述」节整体替换）"
+    },
+    {
+      "at": "2026-09-13T15:31:42.577Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-13T15:48:30.053Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-234030-eb3e）"
+    },
+    {
+      "at": "2026-09-14T00:43:29.439Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-3",
+      "note": "认领（zcode-batch-048-3）"
+    },
+    {
+      "at": "2026-09-14T01:00:58.921Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-3",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}
