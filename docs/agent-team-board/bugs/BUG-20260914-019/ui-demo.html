@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-019 演示 — 提示词末尾追加一个换行符</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --panel-2:#fafafa; --border:#dcdfe3; --border-2:#c8ccd2;
+    --text:#24292f; --muted:#6a737d; --accent:#1f6feb; --accent-weak:#ddf1ff;
+    --sel:#fff3c2; --ok:#1a7f37; --ok-bg:#dafbe1; --err:#cf222e; --err-bg:#ffebe9;
+    --shadow:0 8px 28px rgba(20,30,45,.18);
+  }
+  html[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2129; --border:#30363d; --border-2:#444c56;
+    --text:#e6edf3; --muted:#8b949e; --accent:#4493f8; --accent-weak:#12283f;
+    --sel:#4b3f10; --ok:#3fb950; --ok-bg:#0f2c1c; --err:#f85149; --err-bg:#3a1418;
+    --shadow:0 8px 28px rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+  header.page{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:40}
+  header.page h1{font-size:15px;margin:0;margin-right:auto}
+  header.page h1 small{color:var(--muted);font-weight:400}
+  .ctl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+  select,button,textarea{font:inherit;color:var(--text)}
+  select,.btn{background:var(--panel);border:1px solid var(--border-2);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .btn:hover,select:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.small{padding:2px 8px;font-size:12px}
+  label.chk{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);cursor:pointer}
+  main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:16px 18px;max-width:1240px;margin:0 auto}
+  @media (max-width:960px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+  .card>h2{font-size:13px;margin:0;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .card>h2 .grow{flex:1}
+  .card .body{padding:12px 14px;display:flex;flex-direction:column;gap:10px;flex:1}
+
+  /* ---- 抽屉模拟 ---- */
+  .drawer{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .drawer-head{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border)}
+  .drawer-head .id{font-weight:600}
+  .drawer-head .x{margin-left:auto;color:var(--muted);cursor:pointer;border:none;background:none;font-size:15px}
+  .tabs{display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap}
+  .tab{border:none;background:none;padding:7px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-size:13px}
+  .tab.active{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+  .selinfo{font-size:12px;color:var(--muted);padding:6px 12px 0}
+  .docview{padding:6px 0 10px;min-height:230px}
+  .blk{position:relative;padding:4px 14px;cursor:default}
+  .blk.hoverable:hover{background:var(--accent-weak)}
+  .blk .ln{position:absolute;left:2px;top:4px;font-size:10px;color:var(--muted);opacity:0;font-variant-numeric:tabular-nums}
+  .blk.hoverable:hover .ln{opacity:.9}
+  .blk.sel{background:var(--sel);outline:1px solid var(--border-2)}
+  .docview h3{margin:8px 0 4px;font-size:15px}
+  .docview p{margin:4px 0}
+  .docview ul{margin:4px 0;padding-left:26px}
+  .docview pre{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto;margin:6px 0}
+  .placeholder{padding:56px 0;text-align:center;color:var(--muted)}
+
+  /* ---- 右键菜单 ---- */
+  .ctxmenu{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--border-2);border-radius:8px;box-shadow:var(--shadow);padding:4px;min-width:150px}
+  .ctxmenu button{display:block;width:100%;border:none;background:none;text-align:left;padding:7px 12px;border-radius:6px;cursor:pointer;color:var(--text);font:inherit;font-size:13px}
+  .ctxmenu button:hover{background:var(--accent-weak)}
+
+  /* ---- 会话输入框 ---- */
+  #chat{width:100%;min-height:190px;resize:vertical;border:1px solid var(--border-2);border-radius:8px;background:var(--panel-2);padding:10px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
+  #chat:focus{outline:2px solid var(--accent-weak);border-color:var(--accent)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .verdict{border-radius:8px;padding:8px 12px;font-size:13px;border:1px solid var(--border)}
+  .verdict.ok{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+  .verdict.err{background:var(--err-bg);border-color:var(--err);color:var(--err)}
+  .verdict.none{color:var(--muted);background:var(--panel-2)}
+
+  /* ---- 预览 ---- */
+  #preview{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font:12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;min-height:80px}
+  #preview .cur{display:inline-block;width:0;border-left:2px solid var(--err);animation:blink 1s step-end infinite;margin:0 1px 0 -1px}
+  @keyframes blink{50%{opacity:0}}
+  #preview .nlmk{color:var(--accent);background:var(--accent-weak);border-radius:3px;padding:0 2px;font-size:11px;margin-left:2px}
+  #preview .q{background:var(--sel);border-radius:3px;padding:1px 0}
+  #preview .badd{background:var(--err-bg);outline:1px dashed var(--err);border-radius:3px}
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:700px){.cmp{grid-template-columns:1fr}}
+  .cmp>div{border:1px dashed var(--border-2);border-radius:8px;padding:8px 10px;font:12px/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+  .cmp .t{font:600 12px/1.6 inherit;border:none;padding:0 0 4px;white-space:normal}
+  .cmp .bad .t{color:var(--err)} .cmp .good .t{color:var(--ok)}
+  .cmp .hl-bad{background:var(--err-bg);border-radius:3px}
+  .cmp .hl-good{background:var(--ok-bg);border-radius:3px}
+
+  /* ---- toast / 弹窗 ---- */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,16px);background:var(--panel);border:1px solid var(--border-2);border-radius:8px;box-shadow:var(--shadow);padding:8px 16px;font-size:13px;opacity:0;pointer-events:none;transition:all .18s;z-index:90;max-width:min(92vw,560px)}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #toast.err{border-color:var(--err);color:var(--err)}
+  .modal-wrap{position:fixed;inset:0;background:rgba(10,15,25,.45);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
+  .modal{background:var(--panel);border:1px solid var(--border-2);border-radius:10px;box-shadow:var(--shadow);width:min(600px,94vw);padding:14px}
+  .modal h3{margin:0 0 10px;font-size:14px}
+  .modal textarea{width:100%;box-sizing:border-box;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px}
+  .modal .cap{font-size:12px;color:var(--muted);margin-top:6px}
+  .modal .cap.ok{color:var(--ok)} .modal .cap.err{color:var(--err)}
+  .modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;align-items:center}
+  .modal .foot .muted{margin-right:auto;font-size:12px;color:var(--muted)}
+  footer.note{max-width:1240px;margin:0 auto;padding:0 18px 24px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>BUG-20260914-019 <small>右键「讨论」提示词末尾追加一个换行符 — 交互演示</small></h1>
+  <div class="ctl">模式：
+    <select id="modeSel">
+      <option value="bug">当前（缺陷：末尾无换行）</option>
+      <option value="fixed">修复后（末尾 1 个换行 ⏎）</option>
+    </select>
+  </div>
+  <label class="chk"><input type="checkbox" id="copyFailChk">模拟自动复制失败</label>
+  <label class="chk"><input type="checkbox" id="invisChk" checked>显示不可见字符（⏎）</label>
+  <button class="btn small" id="themeBtn">切换深浅色</button>
+</header>
+
+<main>
+  <!-- ① 抽屉 · 文档页签 -->
+  <section class="card">
+    <h2>① 需求详情抽屉 · 文档页签（右键「💬 讨论」复制）
+      <span class="grow"></span>
+      <span class="ctl">文档状态
+        <select id="docStateSel">
+          <option value="ready">已就绪</option>
+          <option value="loading">加载中</option>
+          <option value="missing">未创建</option>
+          <option value="error">加载失败</option>
+        </select>
+      </span>
+    </h2>
+    <div class="body">
+      <div class="drawer">
+        <div class="drawer-head"><span class="id">REQ-20260914-004</span><span style="color:var(--muted);font-size:12px">优化需求说明、设计文档中右键讨论菜单生成的提示词</span><span class="x">✕</span></div>
+        <div class="tabs" id="tabs"></div>
+        <div class="selinfo" id="selInfo">未选中：右键将按落点块的行范围引用；点文档块可模拟「选中文字」。</div>
+        <div class="docview" id="docView"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">口径同现状：文档未创建 / 加载中 / 加载失败时右键<b>不弹</b>讨论菜单（放行浏览器原生菜单）；复制成功 toast 为「已复制 引用：&lt;文档名&gt; 第 x–y 行」，本单不改。</div>
+    </div>
+  </section>
+
+  <!-- ② Agent 会话输入框 -->
+  <section class="card">
+    <h2>② Agent 会话输入框（粘贴提示词 → 直接输入问题）</h2>
+    <div class="body">
+      <textarea id="chat" placeholder="模拟 Agent 会话输入框：先「粘贴提示词」，再「模拟输入问题」（不按回车，模拟用户直接打字）…" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="btn primary" id="pasteBtn">⌘V 粘贴提示词</button>
+        <button class="btn" id="typeBtn">模拟输入问题</button>
+        <button class="btn small" id="clearBtn">清空</button>
+        <span style="font-size:12px;color:var(--muted)">也可在输入框内自由编辑 / 移动光标</span>
+      </div>
+      <div class="verdict none" id="verdict">（尚未粘贴提示词）</div>
+      <div style="font-size:12px;color:var(--muted)">缺陷：粘贴后光标停在末行「…（短哈希即可）。」行尾，问题连在同一行；修复后：末尾 1 个换行符使光标已在新行，问题自动另起一行。</div>
+    </div>
+  </section>
+
+  <!-- ③ 预览 -->
+  <section class="card" style="grid-column:1/-1">
+    <h2>③ 最终消息预览（⏎ = 换行符，▏ = 光标；问题文字高亮，接缝处红 / 绿标界）</h2>
+    <div class="body">
+      <div id="preview"></div>
+      <div class="cmp">
+        <div class="bad">
+          <div class="t">当前（缺陷）— 问题与提示词同一行 ✗</div>
+          <div id="cmpBad"></div>
+        </div>
+        <div class="good">
+          <div class="t">修复后 — 末尾 1 个 ⏎，问题另起一行 ✓</div>
+          <div id="cmpGood"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="note">
+  演示为页面内存模拟：按 <code>scripts/web/app.js</code> 的 <code>buildDocRef</code>（约 4390–4406 行，REQ-20260914-004 commit 8196d60 落地格式）逐字复刻提示词，仅末尾换行随模式切换；不连接真实看板、不写剪贴板以外的任何数据、不执行 git 操作。
+</footer>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var state = {
+    mode: 'bug',
+    docState: 'ready',
+    doc: 'design.md',
+    selected: null,          // 被选中块 { start, end, text }
+    lastRef: null,           // 最近一次「讨论」生成的提示词
+  };
+  var TAIL = '4. 每轮回答回显本轮 commit log 与 commit 号（短哈希即可）。';
+  var QUESTION = '我想先只讨论这一段、暂不改文件，第 3 条要求可以跳过吗？';
+
+  /* ---------- 主题 ---------- */
+  function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); }
+  applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  $('#themeBtn').addEventListener('click', function () {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ---------- toast ---------- */
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var el = $('#toast');
+    el.textContent = msg;
+    el.className = 'show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.className = ''; }, 2200);
+  }
+
+  /* ---------- 文档页签内容（模拟 design.md 源行） ---------- */
+  var DOCS = {
+    'README.md': [
+      { tag: 'h3', start: 98, end: 98, text: '验收标准' },
+      { tag: 'p', start: 100, end: 106, text: '右键「讨论」复制到剪贴板的提示词，在保留现有自包含引用的基础上追加「讨论要求」，完整覆盖三条 commit 指令。' },
+      { tag: 'p', start: 108, end: 113, text: '交互零回退：菜单唤起 / 收起、copyPlain 双回退、toast 摘要口径均与现状一致。' },
+    ],
+    'design.md': [
+      { tag: 'h3', start: 25, end: 25, text: '改动方案' },
+      { tag: 'p', start: 26, end: 26, text: '改动集中在 scripts/web/app.js 的 buildDocRef（约 4388 行）一处：' },
+      { tag: 'li', start: 33, end: 34, text: 'commit message 须包含：条目单号、本轮用户问题摘要、本轮回答（改动）摘要；' },
+      { tag: 'li', start: 35, end: 35, text: '每轮回答回显本轮 commit log 与 commit 号（短哈希即可）。' },
+      { tag: 'pre', start: 45, end: 56, text: '【文档讨论引用】\nREQ-20260914-004 / design.md 第 3–4 行\n文档：<项目根>/docs/.../design.md\n原文：\n（所选文字）\n\n【讨论要求】请在本轮及后续讨论中遵守：\n1. … 2. … 3. … 4. …' },
+    ],
+    'test-cases.md': [
+      { tag: 'h3', start: 8, end: 8, text: '用例' },
+      { tag: 'p', start: 10, end: 12, text: 'T1 复制提示词含【文档讨论引用】与【讨论要求】四条指令。' },
+      { tag: 'p', start: 14, end: 16, text: 'T2 有选中 / 无选中两场景断言引用要素完整。' },
+    ],
+  };
+  var TAB_LABEL = { 'README.md': '说明', 'design.md': '设计', 'test-cases.md': '测试用例' };
+
+  function renderTabs() {
+    var tabs = $('#tabs');
+    tabs.innerHTML = '';
+    Object.keys(DOCS).forEach(function (name) {
+      var b = document.createElement('button');
+      b.className = 'tab' + (state.doc === name ? ' active' : '');
+      b.textContent = TAB_LABEL[name] + ' · ' + name;
+      b.addEventListener('click', function () {
+        state.doc = name;
+        state.selected = null;
+        renderTabs(); renderDoc(); renderSelInfo();
+      });
+      tabs.appendChild(b);
+    });
+  }
+
+  function renderDoc() {
+    var view = $('#docView');
+    view.innerHTML = '';
+    if (state.docState !== 'ready') {
+      var ph = { loading: '加载中…', missing: '尚未创建，开发阶段补充。', error: '文档加载失败' }[state.docState];
+      var d = document.createElement('div');
+      d.className = 'placeholder';
+      d.textContent = ph;
+      view.appendChild(d);
+      return;
+    }
+    var list = DOCS[state.doc];
+    var ul = null;
+    list.forEach(function (blk) {
+      if (blk.tag === 'li' && !ul) { ul = document.createElement('ul'); view.appendChild(ul); }
+      if (blk.tag !== 'li' && ul) ul = null;
+      var el = document.createElement(blk.tag === 'li' ? 'li' : (blk.tag === 'pre' ? 'pre' : (blk.tag === 'h3' ? 'h3' : 'p')));
+      el.className = 'blk hoverable' + (state.selected && state.selected.start === blk.start ? ' sel' : '');
+      el.dataset.start = blk.start; el.dataset.end = blk.end;
+      el.dataset.text = blk.text;
+      var ln = document.createElement('span');
+      ln.className = 'ln';
+      ln.textContent = blk.start === blk.end ? 'L' + blk.start : 'L' + blk.start + '–' + blk.end;
+      el.appendChild(ln);
+      el.appendChild(document.createTextNode(blk.text));
+      el.addEventListener('click', function () {
+        if (state.selected && state.selected.start === blk.start) state.selected = null;
+        else state.selected = { start: blk.start, end: blk.end, text: blk.text, name: state.doc };
+        renderDoc(); renderSelInfo();
+      });
+      (ul || view).appendChild(el);
+    });
+  }
+
+  function renderSelInfo() {
+    var el = $('#selInfo');
+    if (state.docState !== 'ready') { el.textContent = '文档状态：' + state.docState + '（右键不弹讨论菜单，放行浏览器原生菜单）'; return; }
+    el.textContent = state.selected
+      ? '已选中：' + state.selected.name + ' 第 ' + state.selected.start + (state.selected.start === state.selected.end ? '' : '–' + state.selected.end) + ' 行（再点一次取消选中）'
+      : '未选中：右键将按落点块的行范围引用；点文档块可模拟「选中文字」。';
+  }
+
+  $('#docStateSel').addEventListener('change', function (e) {
+    state.docState = e.target.value;
+    state.selected = null;
+    renderDoc(); renderSelInfo();
+  });
+
+  /* ---------- buildDocRef 复刻（仅末尾换行随模式） ---------- */
+  function docRefPath(name) {
+    return '/Users/demo/proj/docs/agent-team-board/requirements/REQ-20260914-004/' + name;
+  }
+  function buildDocRef(name, start, end, text) {
+    var lines = [
+      '【文档讨论引用】',
+      'REQ-20260914-004 / ' + name + ' 第 ' + start + (start === end ? ' 行' : '–' + end + ' 行'),
+      '文档：' + docRefPath(name),
+    ];
+    if (text != null && text !== '') lines.push('原文：', text);
+    lines.push('', '【讨论要求】请在本轮及后续讨论中遵守：',
+      '1. 围绕上方引用（文档路径 + 源码行范围）展开讨论与修改。',
+      '2. 每轮回答中如需修改相关文件：修改完成后同轮同步执行 git commit，不留未提交改动。',
+      '3. commit message 须包含：条目单号（如 REQ-20260914-004）、本轮用户问题摘要、本轮回答（改动）摘要。',
+      TAIL);
+    var s = lines.join('\n');
+    if (state.mode === 'fixed') s += '\n';   // ← 本 Bug：仅这一行的差异
+    return s;
+  }
+
+  /* ---------- 右键菜单 ---------- */
+  var menuEl = null, menuCleanup = null;
+  function closeMenu() {
+    if (menuCleanup) { menuCleanup(); menuCleanup = null; }
+    if (menuEl) { menuEl.remove(); menuEl = null; }
+  }
+  function openMenu(x, y, info) {
+    closeMenu();
+    var m = document.createElement('div');
+    m.className = 'ctxmenu';
+    var b = document.createElement('button');
+    b.textContent = '💬 讨论';
+    b.addEventListener('click', onDiscuss);
+    m.appendChild(b);
+    document.body.appendChild(m);
+    var r = m.getBoundingClientRect();
+    m.style.left = Math.min(x, window.innerWidth - r.width - 8) + 'px';
+    m.style.top = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+    m._info = info;
+    menuEl = m;
+    var onDown = function (e) { if (!menuEl.contains(e.target)) closeMenu(); };
+    var onKey = function (e) { if (e.key === 'Escape') { e.preventDefault(); closeMenu(); } };
+    var onScroll = function () { closeMenu(); };
+    document.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('scroll', onScroll, true);
+    menuCleanup = function () {
+      document.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }
+
+  document.addEventListener('contextmenu', function (e) {
+    var view = $('#docView');
+    if (!view.contains(e.target)) return;
+    if (state.docState !== 'ready') {
+      toast('「' + state.docState + '」状态右键不弹讨论菜单（放行浏览器原生菜单）— 口径同现状');
+      return; // 不 preventDefault：原生菜单放行
+    }
+    var blkEl = e.target.closest('.blk');
+    if (!blkEl) return;
+    e.preventDefault();
+    var sel = state.selected;
+    var start, end, text;
+    if (sel && sel.name === state.doc) { start = sel.start; end = sel.end; text = sel.text; }
+    else { start = Number(blkEl.dataset.start); end = Number(blkEl.dataset.end); text = blkEl.dataset.text; }
+    openMenu(e.clientX, e.clientY, { name: state.doc, start: start, end: end, text: text });
+  });
+
+  function onDiscuss() {
+    var info = menuEl && menuEl._info;
+    closeMenu();
+    if (!info) return;
+    var rangeLabel = '第 ' + info.start + (info.start === info.end ? ' 行' : '–' + info.end + ' 行');
+    var text = buildDocRef(info.name, info.start, info.end, info.text);
+    state.lastRef = text;
+    if ($('#copyFailChk').checked) {
+      toast('自动复制失败，请在弹出的文本框中手动复制', true);
+      uiCopyBox(text);
+    } else {
+      toast('已复制 引用：' + info.name + ' ' + rangeLabel + '（演示：模拟写入剪贴板）');
+    }
+  }
+
+  /* ---------- uiCopyBox 复刻 ---------- */
+  function uiCopyBox(text) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-wrap';
+    var box = document.createElement('div');
+    box.className = 'modal';
+    var h = document.createElement('h3');
+    h.textContent = '手动复制讨论引用';
+    box.appendChild(h);
+    var area = document.createElement('textarea');
+    area.rows = 10; area.readOnly = true; area.value = text;
+    box.appendChild(area);
+    var cap = document.createElement('div');
+    var fixed = state.mode === 'fixed';
+    cap.className = 'cap ' + (fixed ? 'ok' : 'err');
+    cap.textContent = fixed
+      ? '✓ 修复后：文本末尾含 1 个换行符 ⏎（textarea 中不可见，但已全选包含它）——粘贴后光标即在新行'
+      : '✗ 当前缺陷：文本末尾无换行符——全选复制后粘贴，输入的问题将连在末行「…（短哈希即可）。」之后';
+    box.appendChild(cap);
+    var foot = document.createElement('div');
+    foot.className = 'foot';
+    var muted = document.createElement('span');
+    muted.className = 'muted';
+    muted.textContent = '只读、已全选，可直接 ⌘C / Ctrl+C';
+    var btn = document.createElement('button');
+    btn.className = 'btn primary';
+    btn.textContent = '关闭';
+    foot.appendChild(muted); foot.appendChild(btn);
+    box.appendChild(foot);
+    overlay.appendChild(box);
+    var onKey = function (e) { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    function close() {
+      window.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+    }
+    btn.addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    document.body.appendChild(overlay);
+    window.addEventListener('keydown', onKey, true);
+    area.focus();
+    area.select();
+  }
+
+  /* ---------- 会话输入框 ---------- */
+  var chat = $('#chat');
+  function insertAtCursor(str) {
+    var s = chat.selectionStart == null ? chat.value.length : chat.selectionStart;
+    var e = chat.selectionEnd == null ? s : chat.selectionEnd;
+    chat.value = chat.value.slice(0, s) + str + chat.value.slice(e);
+    var pos = s + str.length;
+    chat.focus();
+    chat.setSelectionRange(pos, pos);
+    renderPreview();
+  }
+  $('#pasteBtn').addEventListener('click', function () {
+    if (!state.lastRef) { toast('请先在左侧文档区右键「💬 讨论」生成提示词', true); return; }
+    insertAtCursor(state.lastRef);
+  });
+  $('#typeBtn').addEventListener('click', function () { insertAtCursor(QUESTION); });
+  $('#clearBtn').addEventListener('click', function () { chat.value = ''; renderPreview(); });
+  ['input', 'click', 'keyup'].forEach(function (ev) { chat.addEventListener(ev, renderPreview); });
+
+  /* ---------- 预览与判定 ---------- */
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function renderPreview() {
+    var v = chat.value;
+    var cur = chat.selectionStart == null ? v.length : chat.selectionStart;
+    var invis = $('#invisChk').checked;
+    var out = '';
+    var i = 0;
+    var tailIdx = v.indexOf(TAIL);
+    var tailEnd = tailIdx >= 0 ? tailIdx + TAIL.length : -1;
+    var questionStart = -1, separated = false;
+    if (tailEnd >= 0) {
+      var j = tailEnd;
+      while (j < v.length && (v[j] === ' ' || v[j] === '\t')) j++;                  // 略过末行行尾空格 / 制表
+      separated = j < v.length && v[j] === '\n'; // 末行之后确实存在换行符才算分隔（无后续内容不算）
+      var k = tailEnd;
+      while (k < v.length && /\s/.test(v[k])) k++;                  // 第一个非空白字符＝问题起点
+      if (k < v.length) questionStart = k;
+    }
+    while (i < v.length) {
+      if (i === cur) out += '<span class="cur"></span>';
+      var ch = v[i];
+      if (ch === '\n') {
+        out += invis ? '<span class="nlmk">⏎</span><br>' : '<br>';
+        i++;
+        continue;
+      }
+      var cls = [];
+      if (i === questionStart && !separated) cls.push('badd');                        // 问题首字符紧贴提示词末行（缺陷）
+      if (i >= questionStart && questionStart >= 0) cls.push('q');                   // 问题文字高亮
+      out += cls.length ? '<span class="' + cls.join(' ') + '">' + esc(ch) + '</span>' : esc(ch);
+      i++;
+    }
+    if (cur >= v.length) out += '<span class="cur"></span>';
+    $('#preview').innerHTML = out || '<span style="color:var(--muted)">（空）</span>';
+    renderVerdict(tailEnd, questionStart, separated);
+  }
+
+  function renderVerdict(tailEnd, questionStart, separated) {
+    var el = $('#verdict');
+    if (tailEnd < 0) {
+      el.className = 'verdict none';
+      el.textContent = '（尚未粘贴提示词——先在左侧右键「💬 讨论」，再点「⌘V 粘贴提示词」）';
+      return;
+    }
+    if (questionStart < 0) {
+      // 已粘贴、未输入问题：看光标落点
+      el.className = 'verdict ' + (separated ? 'ok' : 'err');
+      el.textContent = separated
+        ? '✓ 修复后：提示词末尾含 1 个换行符 ⏎，光标已在新行——直接输入的问题将自动另起一行'
+        : '✗ 当前缺陷：提示词末尾无换行符，光标停在末行行尾——直接输入的问题将连在同一行（点「模拟输入问题」试试）';
+      return;
+    }
+    el.className = 'verdict ' + (separated ? 'ok' : 'err');
+    el.textContent = separated
+      ? '✓ 修复后：用户问题与提示词有明确的换行分隔（末行 ⏎ 之后另起一行）'
+      : '✗ 当前缺陷：用户问题「' + QUESTION.slice(0, 12) + '…」与「…（短哈希即可）。」连在同一行，无换行分隔';
+  }
+
+  function renderCmp() {
+    var q = QUESTION;
+    var bad = esc(TAIL) + '<span class="hl-bad">' + esc(q) + '</span>';
+    var good = esc(TAIL) + '<span class="nlmk">⏎</span><br>' + '<span class="hl-good">' + esc(q) + '</span>';
+    $('#cmpBad').innerHTML = bad;
+    $('#cmpGood').innerHTML = good;
+  }
+
+  $('#modeSel').addEventListener('change', function (e) {
+    state.mode = e.target.value;
+    toast(state.mode === 'fixed'
+      ? '已切到「修复后」：此后右键「讨论」生成的提示词末尾带 1 个换行符（重新粘贴体验差异）'
+      : '已切到「当前（缺陷）」：提示词末尾无换行符');
+    renderPreview();
+  });
+  $('#invisChk').addEventListener('change', renderPreview);
+
+  renderTabs(); renderDoc(); renderSelInfo(); renderPreview(); renderCmp();
+})();
+</script>
+</body>
+</html>

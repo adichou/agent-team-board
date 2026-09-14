@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-019",
+  "type": "bug",
+  "title": "REQ-20260914-004 这个需求对生成的提示词追加一个换行符，用户的问题和提示词可以有明确的换行分隔",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-019",
+  "createdAt": "2026-09-14T14:23:46.030Z",
+  "updatedAt": "2026-09-14T14:50:02.857Z",
+  "agentCompletedAt": "2026-09-14T14:50:02.857Z",
+  "lastReport": {
+    "at": "2026-09-14T14:50:02.857Z",
+    "coverage": 1,
+    "framework": "node:assert/strict + vm 纯函数注入（项目自研用例 runner）",
+    "summary": "buildDocRef 末尾恰追加一个换行符（join('\\n')+'\\n'），粘贴后用户问题与提示词明确分行；T9 先红后绿，copyPlain/uiCopyBox 同文本自动生效；全量 237 测试文件失败 0；归因 REQ-20260914-004（已核验）",
+    "runId": "run-20260914-248"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T14:23:46.030Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T14:23:46.030Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T14:37:40.627Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-222507-ca27）"
+    },
+    {
+      "at": "2026-09-14T14:40:28.101Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-019",
+      "note": "认领（zcode-batch-048-BUG-20260914-019）"
+    },
+    {
+      "at": "2026-09-14T14:50:02.858Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-019",
+      "note": "上报测试报告（覆盖率 1%），待人工确认完成"
+    }
+  ]
+}
