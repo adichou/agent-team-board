@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-013",
+  "type": "bug",
+  "title": "集成测试泄漏 server/stub 进程：随机端口被残留监听者占用致跨轮次偶发失败（serve-stale T1 实证）",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048",
+  "createdAt": "2026-09-14T05:31:26.846Z",
+  "updatedAt": "2026-09-14T10:14:36.126Z",
+  "agentCompletedAt": "2026-09-14T10:14:36.126Z",
+  "lastReport": {
+    "at": "2026-09-14T10:14:36.126Z",
+    "coverage": 85,
+    "framework": "node:assert/strict + 真实进程/端口端到端 + lsof/ps 快照",
+    "summary": "测试进程泄漏修复：新增 scripts/tests/lib/test-process.mjs（pickFreePort 端口占用预检、stopChild/stopPid 确定性收尾 SIGTERM→有界等待→SIGKILL、waitHealth 可校验 pid 命中冒牌 health 报端口被占、listTestResidue/sweepTestResidue 残留扫描清理）；serve-stale T1-T5 全量 try/finally + 端口预检 + expectPid；dispatch-api stop() 消除 5s/20s 失配静默泄漏窗口；run-all 每文件后 sweep 兜底。11 用例先红后绿；serve-stale×5、run-all×3 全绿零失败；本机 2026-09-08 起 7 个泄漏进程全部检出回收，前后快照零残留。归因 BUG-20260907-017（辅 REQ-20260906-003/BUG-20260908-003）",
+    "runId": "run-20260914-238"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T05:31:26.846Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0914-29be"
+    },
+    {
+      "at": "2026-09-14T08:20:46.033Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T08:35:56.132Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-163308-3eba）"
+    },
+    {
+      "at": "2026-09-14T09:51:55.326Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048",
+      "note": "认领（zcode-batch-048）"
+    },
+    {
+      "at": "2026-09-14T10:14:36.126Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    }
+  ]
+}
