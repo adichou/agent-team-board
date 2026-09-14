@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-007",
+  "type": "bug",
+  "title": "body-limit.test.mjs 在 run-all 全量跑下偶发失败（单独运行通过）",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-12",
+  "createdAt": "2026-09-14T04:10:37.580Z",
+  "updatedAt": "2026-09-14T05:35:13.014Z",
+  "agentCompletedAt": "2026-09-14T05:35:13.014Z",
+  "lastReport": {
+    "at": "2026-09-14T05:35:13.014Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + 真实 server.mjs 集成 + 环境注入自检",
+    "summary": "body-limit 全量偶发失败修复（仅测试层）：启动就绪预算 6s→45s 且要求 health 200、server 退出快速失败并附 stderr 尾部诊断；请求带环节标签（健康检查/T1/T2/T3/超限后恢复），超时/连接错误可区分环节；传输类抖动默认重试 1 次且每次留痕，功能性失败不重试；注入旋钮 3 个（STARTUP_BUDGET_MS/REQ_TIMEOUT_MS/TRANSPORT_RETRIES）；新增 3 个确定性自检用例先红后绿，原 4 项功能断言语义不变；单独 3 连跑 + 全量 4 轮（含 1 轮 6 进程 CPU 压测）body-limit 全过、清理进程泄漏后全量 0 失败退出 0；第 3 轮 serve-stale T1 失败为预存进程泄漏所致，已登记 BUG-20260914-013；引入来源归因 BUG-20260907-004（design.md）",
+    "runId": "run-20260914-228"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T04:10:37.580Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0914-7edc"
+    },
+    {
+      "at": "2026-09-14T04:38:49.297Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T04:47:09.829Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-124450-e05e）"
+    },
+    {
+      "at": "2026-09-14T05:10:25.481Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-12",
+      "note": "认领（zcode-batch-048-12）"
+    },
+    {
+      "at": "2026-09-14T05:35:13.015Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-12",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
