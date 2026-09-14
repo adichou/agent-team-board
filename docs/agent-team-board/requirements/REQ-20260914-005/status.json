@@ -1,0 +1,89 @@
+{
+  "id": "REQ-20260914-005",
+  "type": "requirement",
+  "title": "回退 BUG-20260914-015，并把 开始 AI 开发和开始 AI 分析两个按钮改成 AI 开发和 AI 分析就行",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-22",
+  "createdAt": "2026-09-14T13:51:05.168Z",
+  "updatedAt": "2026-09-14T15:07:29.220Z",
+  "agentCompletedAt": "2026-09-14T15:07:29.220Z",
+  "lastReport": {
+    "at": "2026-09-14T15:07:29.220Z",
+    "coverage": null,
+    "framework": "node:assert/strict + 真 server fixture + vm 模拟 DOM + 源码静态契约（项目既有自研用例 runner 模式）",
+    "summary": "回退 BUG-20260914-015 全部代码（server /api/tasks/state 路由、app.js taskRun/refreshTaskRunState/执行中禁用分支、4 条 i18n 词条、专属测试文件）并恢复快捷入口「仅导航恒不禁用」口径；两按钮去「开始」改「▶ AI 分析 / ▶ AI 开发」（index.html/app.js/i18n.js 含 aria-label，▶ 前缀保留）；新增 quick-entry-revert-20260914-005.test.mjs（R1-R5 先红后绿），5 个既有测试断言同步改词；全量 237 个测试文件失败 0；git diff 037b806^ 核对除改名行外与基线零差异",
+    "runId": "run-20260914-249"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T13:51:05.168Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T13:51:05.169Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T13:57:56.973Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-215230-5bdb）"
+    },
+    {
+      "at": "2026-09-14T14:17:52.780Z",
+      "from": "planned",
+      "to": "accepted",
+      "by": "board",
+      "note": "人工移出计划，退回已接受"
+    },
+    {
+      "at": "2026-09-14T14:17:57.329Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-14T14:28:25.720Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "标题 + 描述修改：「回退 BUG-20260914-015」→「回退 BUG-20260914-015，并把 开始 AI 开发和开始 AI 分析两个按钮改成 AI 开发和 AI 分析就行」（README「## 描述」节整体替换）"
+    },
+    {
+      "at": "2026-09-14T14:28:27.131Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T14:42:32.418Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-223841-a891）"
+    },
+    {
+      "at": "2026-09-14T14:52:18.502Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-22",
+      "note": "认领（zcode-batch-048-22）"
+    },
+    {
+      "at": "2026-09-14T15:07:29.220Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-22",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}
