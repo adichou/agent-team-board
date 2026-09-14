@@ -797,12 +797,17 @@ const ATBBuild = (() => {
       const failed = data.failed || [];
       state.remoteSynced = true; // fetch 成功（BUG-20260914-006：空态区分依据；细分见 lastSync）
       state.lastSync = { pushed, failed, skipped: data.skipped || [], remote: data.remote || 'origin' };
+      // BUG-20260914-017：main 被跳过必须在结果反馈中明示（不静默）——直接用服务端 skipped
+      // 数据判断，本地无 main（skipped 不含 main）时不误报。
+      const mainNote = state.lastSync.skipped.includes('main') ? '；main 已跳过，请通过发布流程推送' : '';
       if (failed.length) {
-        toast(`✕ 同步完成但部分推送失败：${failed.map((f) => f.branch).join('、')}（${failed[0].error || '未知原因'}）`, true);
+        toast(`✕ 同步完成但部分推送失败：${failed.map((f) => f.branch).join('、')}（${failed[0].error || '未知原因'}）${mainNote}`, true);
       } else if (pushed.length) {
-        toast(`✓ 已同步远端：fetch 完成，已推送 ${pushed.map((p) => p.branch).join('、')} → ${state.lastSync.remote}`);
+        toast(`✓ 已同步远端：fetch 完成，已推送 ${pushed.map((p) => p.branch).join('、')} → ${state.lastSync.remote}${mainNote}`);
+      } else if (mainNote) {
+        toast('✓ 已同步远端：fetch 完成，没有可推送的开发分支；main 必须通过发布流程推送');
       } else {
-        toast('✓ 已同步远端：fetch 完成，无可推送的开发分支（main 由发布模块推送）');
+        toast('✓ 已同步远端：fetch 完成，无可推送的开发分支');
       }
       await loadBranches();
       if (state.logBranch) await selectBranch(state.logBranch);
@@ -1142,10 +1147,16 @@ const ATBBuild = (() => {
     }
     if (!(ls.pushed || []).length) {
       return `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
-        <span class="small">本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。</span></div>`;
+        <span class="small">本次同步未推送任何分支：没有可推送的开发分支；main 必须通过发布流程推送。</span></div>`;
     }
     return `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
       <span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>`;
+  }
+
+  // BUG-20260914-017：main 行「通过发布流程推送」标识（纯说明徽标，title 详释规则；
+  // 当前行 / 非当前行共用；不引入任何直接推送入口，行点击查看提交记录语义不变）。
+  function mainFlagHtml() {
+    return ` <span class="bld-main-flag" title="main 由发布流程推送：不随「和远端同步」推送，也无单独推送按钮">通过发布流程推送</span>`;
   }
 
   function renderBranchesPane() {
@@ -1163,12 +1174,12 @@ const ATBBuild = (() => {
       const remotes = b.remotes || [];
       // BUG-20260914-006：同步成功后仍为空 ⇒ 远端仓库确实为空——本地分支「推送」高亮为出路。
       const pushAttn = remotes.length > 0 && state.remoteSynced && (b.remote || []).length === 0;
-      const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span></div>` : '';
-      // BUG-20260914-012：main 推远端归发布模块受控动作（REQ-20260913-001 语义边界；「和远端同步」
-      // 的服务端推送亦排除 main，见 build-git.syncRemotes），分支浏览不为 main 渲染「推送」入口；
-      // main 行本身保留（点击查看提交记录的只读浏览语义不变），其余分支按钮与 attn 高亮不变。
+      const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span>${b.current === 'main' ? mainFlagHtml() : ''}</div>` : '';
+      // BUG-20260914-017：本地 main 行显示「通过发布流程推送」说明标识——main 既不随「和远端同步」
+      // 推送（BUG-20260914-011），推送按钮也已按 BUG-20260914-012 去除，行上说明替代原因缺失；
+      // 标识仅为说明（title 详释），不引入任何直接推送入口，行点击查看提交记录语义不变。
       const local = (b.local || []).filter((x) => x !== b.current).map((x) => `
-        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>${x === 'main' ? '' : `
+        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>${x === 'main' ? mainFlagHtml() : `
           <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button>`}</div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
       // BUG-20260914-006：远端空态三分支——未配置远端保持既有文案（范围外）；
@@ -1244,6 +1255,7 @@ const ATBBuild = (() => {
             <button type="button" class="btn small" id="bldFetchBtn" ${state.syncBusy ? 'disabled' : ''} title="fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致">${state.syncBusy ? '同步中…' : '⟳ 和远端同步'}</button>
             <button type="button" class="btn small quiet" id="bldBranchRefresh">刷新</button>
           </div>
+          <p class="bld-sync-note" role="note">同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。</p>
           ${list}
         </div>
         <div class="rel-detail" aria-label="提交记录">
