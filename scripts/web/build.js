@@ -1118,9 +1118,12 @@ const ATBBuild = (() => {
       // BUG-20260914-006：同步成功后仍为空 ⇒ 远端仓库确实为空——本地分支「推送」高亮为出路。
       const pushAttn = remotes.length > 0 && state.remoteSynced && (b.remote || []).length === 0;
       const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span></div>` : '';
+      // BUG-20260914-012：main 推远端归发布模块受控动作（REQ-20260913-001 语义边界；「和远端同步」
+      // 的服务端推送亦排除 main，见 build-git.syncRemotes），分支浏览不为 main 渲染「推送」入口；
+      // main 行本身保留（点击查看提交记录的只读浏览语义不变），其余分支按钮与 attn 高亮不变。
       const local = (b.local || []).filter((x) => x !== b.current).map((x) => `
-        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>
-          <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button></div>`).join('');
+        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>${x === 'main' ? '' : `
+          <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button>`}</div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
       // BUG-20260914-006：远端空态三分支——未配置远端保持既有文案（范围外）；
       // 已配置远端未同步 → 解释成因并引导同步；本会话同步成功后仍为空 → 按 BUG-20260914-011
