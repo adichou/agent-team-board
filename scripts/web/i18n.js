@@ -244,6 +244,13 @@ const EN = {
   '历史记录未记录': 'Not recorded in history',
   '历史记录未记录（创建于模型配置记录之前）': 'Not recorded in history (created before model-config logging)',
   '原文：': 'Source: ',
+  // REQ-20260914-004：右键「讨论」复制提示词追加「讨论要求」（分区标记 + 讨论/commit 指令静态行；
+  // 含条目单号插值的第 3 条与既有「已复制 引用：◇ ◇」toast 见 EN_DYNAMIC）
+  '【文档讨论引用】': '[Document discussion reference]',
+  '【讨论要求】请在本轮及后续讨论中遵守：': '[Discussion rules] Follow these in this and all subsequent turns:',
+  '1. 围绕上方引用（文档路径 + 源码行范围）展开讨论与修改。': '1. Discuss and edit around the reference above (document path + source line range).',
+  '2. 每轮回答中如需修改相关文件：修改完成后同轮同步执行 git commit，不留未提交改动。': '2. When a turn requires editing related files, run git commit in the same turn once the edits are done, leaving no uncommitted changes.',
+  '4. 每轮回答回显本轮 commit log 与 commit 号（短哈希即可）。': '4. In every answer, echo the commit log and commit hash of this turn (short hash is fine).',
   '去新建 Codex 会话': 'New Codex session',
   '去新建 Zcode 会话': 'New Zcode session',
   'Zcode 工作区': 'the Zcode workspace',
@@ -1014,6 +1021,8 @@ const EN_DYNAMIC = {
   '已在列表中，已切换到 ◇': 'Already in the list; switched to $1',
   '已复制 ◇': 'Copied $1',
   '已复制 引用：◇ ◇': 'Copied reference: $1 $2',
+  // REQ-20260914-004：讨论要求第 3 条（条目单号动态插值，与右键「讨论」toast 同源）
+  '3. commit message 须包含：条目单号（如 ◇）、本轮用户问题摘要、本轮回答（改动）摘要。': '3. The commit message must include the item ID (e.g. $1), a summary of the user question in this turn, and a summary of the answer (changes) in this turn.',
   '✓ 已复制提示词并请求打开 ◇（◇）：请在新建会话中粘贴发送': '✓ Prompt copied and requested opening $1 ($2): paste and send it in the new session',
   '复制失败：已请求打开 ◇（◇），请回任务面板点「重新复制」后再粘贴': 'Copy failed: requested opening $1 ($2); use "Recopy" in the task panel, then paste',
   '提示词获取失败（◇）：已请求打开 ◇，请回任务面板点「重新复制」后再粘贴': 'Failed to fetch the prompt ($1): requested opening $2; use "Recopy" in the task panel, then paste',

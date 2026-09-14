@@ -4384,13 +4384,24 @@ function docRefPath(projectRoot, itemId, name, parent = null) {
   return projectRoot ? `${projectRoot}/${rel}` : rel;
 }
 
-// 组装剪贴板文本：自包含（单号+文档名+行范围+路径[+原文]），Agent 不打开看板也能定位
+// 组装剪贴板文本：自包含（分区标记+单号+文档名+行范围+路径[+原文]），Agent 不打开看板也能定位；
+// REQ-20260914-004 追加「讨论要求」：改文件同轮同步 commit、message 含单号+问题摘要+回答摘要、
+// 回显本轮 commit log 与 commit 号（约定层面，看板不校验执行结果）
 function buildDocRef({ id, name, path, start, end, text }) {
   const lines = [
+    '【文档讨论引用】',
     `${id} / ${name} ${start === end ? `第 ${start} 行` : `第 ${start}–${end} 行`}`,
     `文档：${path}`,
   ];
   if (text != null && text !== '') lines.push('原文：', text);
+  lines.push(
+    '',
+    '【讨论要求】请在本轮及后续讨论中遵守：',
+    '1. 围绕上方引用（文档路径 + 源码行范围）展开讨论与修改。',
+    '2. 每轮回答中如需修改相关文件：修改完成后同轮同步执行 git commit，不留未提交改动。',
+    `3. commit message 须包含：条目单号（如 ${id}）、本轮用户问题摘要、本轮回答（改动）摘要。`,
+    '4. 每轮回答回显本轮 commit log 与 commit 号（短哈希即可）。',
+  );
   return lines.join('\n');
 }
 
