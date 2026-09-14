@@ -44,7 +44,7 @@ submitted ──人工──▶ accepted ──人工──▶ planned ──Age
 
 1. **绝不**用 Write/Edit 直接写任何 `docs/agent-team-board/**/status.json`——会被拦截。状态只能通过 `$ATB` 子命令变更。
 2. **绝不**把条目置为 `accepted`、`planned` 或 `done`（包括 `$ATB status <ID> …`、curl 调 Status Board 的 `/api/item/*/status`）。这三个状态**仅限人工**（planned = 已计划排期，REQ-20260908-010）。
-3. Agent 允许的状态操作只有两个：
+3. 常规开发的状态操作为 claim/report；用户明确授权单项例外开发时，另见 [收尾规则](dev-closeout.md) 的状态收尾边界：
    - `$ATB claim <ID>`——认领（accepted/planned → in-progress，O_EXCL 原子锁防并行冲突），认领即实施；
    - `$ATB report <ID> --coverage N --summary "…"`——写 test-report.md 并标记「待人工确认完成」。
 4. 开发过程中可以并且应该**直接编辑条目下的 markdown**（README/design/test-cases），这是人的阅读界面，不经过状态机。实施要点写入 design.md 作为实施记录。
@@ -115,7 +115,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 2. **读文档**：条目 `README.md`、`design.md`、`test-cases.md`（Bug 读 README 与 design 的引入来源节）。信息不足先澄清或补文档（直接编辑 markdown，允许）；实施要点写入 design.md 作为实施记录。
 3. `$ATB claim <ID> --by <会话名>`（accepted/planned → in-progress）。失败说明被其他会话认领或状态不对，如实转告用户。
 4. **TDD**：test-cases.md 补用例并**写测试跑红** → 实现代码**跑绿** → 重构。新问题按 `/bug` 登记（登记时不填引入来源）。**修复 Bug 必须归因**：根因分析与 test-report 写明引入来源（design.md「引入来源（源单）」节已有则引用，缺失则排查补充并写入，三选一 REQ-/BUG-（`atb list` 核验存在）/未定位（附排查过程），禁止编造），并在 Bug README 开头头部补写 `- 引入来源：…` 行（第一屏可见，样式见 BUG-20260907-017）。**开源选型（REQ-20260909-015）**：方案优先复用成熟开源库，以依赖方式引入（npm / SPM / CocoaPods），禁止复制开源库源码进项目仓库（仅 vendor 例外且须标注复制范围与原因）；仅用开源友好许可（MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / ISC / 0BSD / Unlicense），GPL / LGPL / AGPL / SSPL 及 License 不明禁止引入；引入开源库须在条目目录维护 `licenses.md`（库名 / 版本 / 引入方式 / License / 仓库地址），未使用不创建；自研须写三选一理由（引用了哪些库 / 无合适库的原因 / 引入成本高于自研的原因）。
-5. `$ATB report <ID> --coverage <N> --framework <框架> --summary "<实现要点>"`，汇报报告要点，**请用户到 Status Board 点「确认完成」**。状态保持 in-progress，等人工确认。
+5. **提交与待测试**：必须读取并执行 [dev 收尾规则](dev-closeout.md)：真实测试通过 → report → 仅提交本单代码/测试/文档及报告状态 → 核验提交 hash 和本轮待测试状态。用户明确授权例外开发也须按该规则收尾；提交/上报失败时明确报告未完成项，不宣称完整交付。不自动 push，不代替人工验收。
 6. **实施中需人工决策**（范围/口径确认、方案取舍、账号或真机操作、排除项批准等，REQ-20260911-007）：
    `$ATB hold declare <ID> (--question "决策问题")… [--reason "…"] --by <会话名>` 声明后告知用户到
    Status Board「待人工确认」区作答并复工；不得代替人工作答或复工（`hold answer/resume` 为人工专属）。
@@ -124,7 +124,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 
 - **会话名约定（REQ-20260901-005）**：认领者显示会话名，格式 `<工具/语义名>` 全小写连字符（如 `zcode-login-view`、`codex-dev-loop`）。Agent 在 claim 时**应**主动起语义名：`$ATB claim <ID> --by zcode-<本次任务关键词>`，多会话并行便于看板区分；未传 --by 时工具生成可读缺省名（`前缀-MMDD-4位随机`，前缀可由环境变量 `ATB_AGENT_NAME` 注入，如 zcode/codex），不再出现裸 terminal。
 - 一次会话同一时刻只认领一个条目；阶段一完成（停在待对齐）或实施完成（report 后）再取下一个。
-- `/dev loop` 逐条处理：认领 → TDD 实施 → report → 取下一个 planned（已计划），直到没有已计划条目。**失败不中断**：认领冲突、开发错误等 → 如实说明后跳过继续，条目保持 in-progress 交人工处置；结束时输出完成/跳过清单与剩余状态分布。
+- `/dev loop` 逐条处理：认领 → TDD 实施 → report → 本单 Git 提交与待测试核验 → 取下一个 planned（已计划），直到没有已计划条目。**失败处理**：认领冲突、开发错误等记录后跳过；提交/上报失败或归属不明改动遗留时按收尾规则停止取单；结束时输出完成/跳过清单与剩余状态分布。
 - claim 冲突（已被他人认领）不是错误：`$ATB list` 换一个。
 - 用户在聊天里描述的新需求/新缺陷：分别走 `/req`、`/bug` 创建，不要自行 accept。
 - 看到条目是 submitted：提醒用户去 Status Board 接受；看到「待对齐」：提醒用户查阅 design.md 并对齐。
