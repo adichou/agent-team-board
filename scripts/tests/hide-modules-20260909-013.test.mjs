@@ -34,7 +34,7 @@ t('H1 顶栏模块导航收敛：仅 需求/任务/设置，无「讨论」「�
   // REQ-20260909-013：暂态隐藏 oncall/files；
   // REQ-20260911-002：营销 / 发布入口同口径暂态隐藏（口径锁定见 hide-marketing-release-20260911-002.test.mjs）；
   // 恢复时按各条目 design.md「恢复步骤」加回 <button data-view>
-  assert.deepEqual(order, ['status', 'runs', 'settings'],
+  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], // REQ-20260913-001 新增构建
     '导航顺序应为 需求/任务 + 末位设置（讨论 / 文件 / 营销 / 发布已暂隐藏）');
   assert.match(nav[0], /data-view="status"[^>]*>需求</, '需求入口保留');
   assert.doesNotMatch(nav[0], /data-view="oncall"/, '导航不得残留「讨论」入口');

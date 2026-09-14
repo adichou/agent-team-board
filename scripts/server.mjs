@@ -18,6 +18,8 @@ import * as dispatchStore from './lib/dispatch-store.mjs';
 import * as oncall from './lib/oncall-store.mjs';
 import * as marketing from './lib/marketing-store.mjs';
 import * as releaseStore from './lib/release-store.mjs';
+import * as buildStore from './lib/build-store.mjs';
+import * as buildGit from './lib/build-git.mjs';
 import { runGitPipeline, realExec as realGitExec } from './lib/release-git.mjs';
 import { runApplePipeline, createRealAdapter as createRealAppleAdapter } from './lib/release-apple.mjs';
 import { runElectronPipeline, readElectronProject } from './lib/release-electron.mjs';
@@ -2014,6 +2016,155 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 }
 
 
+// REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
+//   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
+//   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex）
+//   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
+//   GET  /api/build/branch-log        指定分支最近提交（≤50 条：hash/short/subject/author/date）
+//   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit）
+//   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
+//   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删）
+//   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
+//   POST /api/build/fetch             同步远端（fetch --all --prune）
+//   POST /api/build/push              推送本地分支（未建立上游时首推 -u 建立跟踪）
+async function handleBuildApi(req, res, u, pathname, root, dataDir) {
+  const notFound = () => sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
+  // 冲突类（409）：合并重入 / 锁定态操作 / release git 运行互斥
+  const runPost = async (fn) => {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    try {
+      return await fn(body);
+    } catch (e) {
+      if (e instanceof buildStore.BuildConflictError || e instanceof releaseStore.ReleaseConflictError) {
+        return sendJson(res, 409, { error: e.message, conflict: true });
+      }
+      throw e; // AtbError → 外层统一 400；其余 → 500
+    }
+  };
+  const requireBoard = () => {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    return dataDir;
+  };
+
+  if (req.method === 'GET' && pathname === '/api/build/state') {
+    if (!dataDir) return sendJson(res, 200, { initialized: false });
+    try { buildStore.recoverMerging(dataDir); } catch { /* 数据目录异常不阻塞读取 */ }
+    const branches = buildGit.listBranches(root);
+    return sendJson(res, 200, {
+      initialized: true,
+      isRepo: branches.isRepo,
+      currentBranch: branches.current,
+      versions: buildStore.listVersions(dataDir),
+      statusLabels: buildStore.VERSION_STATUS_LABEL,
+    });
+  }
+  if (req.method === 'GET' && pathname === '/api/build/candidates') {
+    const board = requireBoard();
+    const idx = gitFlow.itemCommitStatusIndex(board, root);
+    const items = core.listItems(board).map((it) => {
+      const rec = idx.get(it.id);
+      return {
+        itemId: it.id,
+        title: it.title || '',
+        status: it.status,
+        type: it.type,
+        commits: rec ? [...rec.commits] : [],
+        lastCommittedAt: rec ? rec.lastCommittedAt : null,
+      };
+    });
+    return sendJson(res, 200, { items });
+  }
+  if (req.method === 'GET' && pathname === '/api/build/branches') {
+    return sendJson(res, 200, buildGit.listBranches(root));
+  }
+  if (req.method === 'GET' && pathname === '/api/build/branch-log') {
+    const branch = u.searchParams.get('branch') || '';
+    return sendJson(res, 200, buildGit.branchLog(root, branch));
+  }
+  if (req.method === 'POST' && pathname === '/api/build/version') {
+    return runPost(async (body) => {
+      const board = requireBoard();
+      if (!buildGit.isGitRepo(root)) throw new core.AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再创建版本计划');
+      const known = new Set(core.listItems(board).map((it) => it.id));
+      const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
+      const items = Array.isArray(body.items) ? body.items : [];
+      for (const it of items) {
+        if (!known.has(String(it?.itemId || ''))) {
+          throw new core.AtbError(`条目 ${it?.itemId || '（空）'} 不在本看板中，无法纳入版本`);
+        }
+      }
+      const version = buildStore.createVersion(board, {
+        name: body.name,
+        items: items.map((it) => ({ ...it, title: titles.get(String(it?.itemId || '')) || '' })),
+        by: 'board',
+      });
+      return sendJson(res, 201, { version });
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/build/version/save') {
+    return runPost((body) => {
+      const board = requireBoard();
+      return sendJson(res, 200, { version: buildStore.saveInfo(board, body.id, { name: body.name, description: body.description }) });
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/build/version/items') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (body.action === 'add') {
+        const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
+        const items = (Array.isArray(body.items) ? body.items : []).map((it) => ({ ...it, title: titles.get(String(it?.itemId || '')) || v.items.find((x) => x.itemId === it?.itemId)?.title || '' }));
+        return sendJson(res, 200, { version: buildStore.addItems(board, body.id, items) });
+      }
+      if (body.action === 'remove') {
+        return sendJson(res, 200, { version: buildStore.removeItems(board, body.id, body.itemIds) });
+      }
+      if (body.action === 'commit') {
+        return sendJson(res, 200, { version: buildStore.setItemCommit(board, body.id, body.itemId, body.commit) });
+      }
+      throw new core.AtbError('action 必须是 add / remove / commit');
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/build/version/merge') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') {
+        throw new buildStore.BuildConflictError('版本正在合并中，请勿重复触发');
+      }
+      if (v.status === 'merged') {
+        throw new buildStore.BuildConflictError('版本已合并入 main，无需重复合并');
+      }
+      // 与发布模块互斥（design.md 落定）：release 有活动 git 目标运行时拒绝合并（读侧校验，不改发布状态）
+      releaseStore.assertTargetFree(board, 'git', {});
+      // 前置校验（只读，不改版本状态：工作区脏 / main 缺失 / 提交缺失在此明确报 400）
+      buildGit.precheckMerge(root, v.items);
+      buildStore.beginMerge(board, v.id, { baseBranch: buildGit.listBranches(root).current });
+      let version;
+      try {
+        const r = buildGit.mergeCommitsIntoMain(root, { versionId: v.id, versionName: v.name, items: v.items });
+        version = buildStore.finishMerge(board, v.id, { results: r.results });
+        version.mergeWarnings = r.warnings || [];
+      } catch (e) {
+        // 合并执行中异常（如切分支失败）：未覆盖的条目按失败落盘，版本置 failed 可重试
+        const done = new Set(v.items.filter((x) => x.mergedAt).map((x) => x.itemId));
+        version = buildStore.finishMerge(board, v.id, {
+          results: v.items.filter((x) => !done.has(x.itemId)).map((x) => ({ itemId: x.itemId, ok: false, error: String(e.message || e).slice(0, 300) })),
+        });
+        version.mergeWarnings = [String(e.message || e).slice(0, 300)];
+      }
+      return sendJson(res, 200, { version });
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/build/fetch') {
+    return runPost(() => sendJson(res, 200, buildGit.fetchRemote(root)));
+  }
+  if (req.method === 'POST' && pathname === '/api/build/push') {
+    return runPost((body) => sendJson(res, 200, buildGit.pushBranch(root, { remote: body.remote, branch: body.branch })));
+  }
+  return notFound();
+}
+
 async function handleApi(req, res, u, pathname) {
   // ---- 与项目无关 ----
   if (req.method === 'GET' && pathname === '/api/health') {
@@ -2644,6 +2795,13 @@ async function handleApi(req, res, u, pathname) {
   // REQ-20260910-029 发布模块：Git 远端 / Apple App Store 发布流水线（不进 REQ/BUG 状态机）
   if (pathname.startsWith('/api/release')) {
     const r = await handleReleaseApi(req, res, u, pathname, root, dataDir);
+    if (r !== null) return r;
+    return sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
+  }
+
+  // REQ-20260913-001 构建模块：版本计划（合并入 main）与分支浏览同步（不进 REQ/BUG 状态机）
+  if (pathname.startsWith('/api/build')) {
+    const r = await handleBuildApi(req, res, u, pathname, root, dataDir);
     if (r !== null) return r;
     return sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
   }

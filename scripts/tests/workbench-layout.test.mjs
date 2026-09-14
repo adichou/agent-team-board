@@ -79,7 +79,7 @@ t('W2 模块导航（REQ-20260911-002 口径）：需求 → 任务，末位「�
   // REQ-20260909-013：讨论（oncall）/ 文件（files）入口暂态隐藏（恢复步骤见条目 design.md）；
   // REQ-20260911-002：营销 / 发布入口同口径暂态隐藏，导航收敛为 需求/任务 + 末位设置；
   // BUG-20260910-004 全局移至顶栏「管理项目」右侧（跨项目总览不属于单一项目模块）
-  assert.deepEqual(order, ['status', 'runs', 'settings'], '导航顺序应为 需求/任务 + 末位设置（营销与发布已暂隐藏）');
+  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], '导航顺序应为 需求/构建/任务 + 末位设置（REQ-20260913-001 新增构建）');
   assert.match(nav[0], /data-view="status"[^>]*>需求</, '需求栏目名称');
   assert.match(nav[0], /data-view="runs"[^>]*>任务</, '执行中心应更名为「任务」');
   assert.doesNotMatch(nav[0], /data-view="global"/, '模块导航不再含全局入口（BUG-20260910-004，移至顶栏）');

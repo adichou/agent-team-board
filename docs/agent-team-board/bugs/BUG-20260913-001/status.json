@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260913-001",
+  "type": "bug",
+  "title": "版本创建时应该允许关联的需求范围是已完成的需求或 bug，其他都不应该出现在这个范围内。",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-044-01",
+  "createdAt": "2026-09-13T08:31:05.933Z",
+  "updatedAt": "2026-09-13T09:10:23.551Z",
+  "agentCompletedAt": "2026-09-13T09:10:23.551Z",
+  "lastReport": {
+    "at": "2026-09-13T09:10:23.551Z",
+    "coverage": 90,
+    "framework": "node:assert/strict + 子进程 HTTP 集成 + 前端 vm 行为测试（scripts/tests/run-all.mjs 聚合）",
+    "summary": "候选范围收窄为仅 done 条目：/api/build/candidates 后端过滤，创建/添加条目接口对非 done 拒绝（400 带原因）；前端 doneCandidates 双重过滤 + 无候选空态提示，两面板口径一致；全选仅纳入有 commit 的 done 条目。新增 8 用例 TDD 红→绿，全量 211 测试文件失败 0。",
+    "runId": "run-20260913-213"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T08:31:05.933Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-13T08:31:05.934Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-13T08:42:26.727Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-163452-82a9）"
+    },
+    {
+      "at": "2026-09-13T08:56:52.998Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-044-01",
+      "note": "认领（zcode-batch-044-01）"
+    },
+    {
+      "at": "2026-09-13T09:10:23.552Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-044-01",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    }
+  ]
+}

@@ -28,8 +28,8 @@ t('M1 顶栏模块导航收敛：仅 需求/任务/设置；HIDDEN_VIEWS 单一�
   const order = [...nav[0].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
   // REQ-20260911-002：营销 / 发布入口暂态隐藏（恢复步骤见条目 design.md）；
   // 导航收敛为 需求/任务 + 末位设置（讨论 / 文件自 REQ-20260909-013 起已暂隐藏）
-  assert.deepEqual(order, ['status', 'runs', 'settings'],
-    '导航顺序应为 需求/任务 + 末位设置（营销与发布已暂隐藏）');
+  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'],
+    '导航顺序应为 需求/构建/任务 + 末位设置（营销与发布已暂隐藏；REQ-20260913-001 新增构建）');
   assert.match(nav[0], /data-view="status"[^>]*>需求</, '需求入口保留');
   assert.match(nav[0], /data-view="runs"[^>]*>任务</, '任务入口保留');
   assert.match(nav[0], /<button[^>]*class="view-tab nav-extra"[^>]*data-view="settings"/, '设置保持行末辅助入口');
