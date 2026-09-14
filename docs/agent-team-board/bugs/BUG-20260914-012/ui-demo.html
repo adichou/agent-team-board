@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-012 演示 · main 分支的推送按钮不需要，请去掉</title>
+<style>
+  /* 配色沿用 scripts/web/style.css 的明暗两套变量（prefers-color-scheme 自动适配） */
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --text: #1b2434;
+    --muted: #66748c;
+    --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20, 30, 50, 0.08), 0 4px 14px rgba(20, 30, 50, 0.06);
+    --primary: #2563eb;
+    --warn: #dc2626;
+    --ok-bg: #ecfdf5;
+    --ok-text: #047857;
+    --info-bg: #eff6ff;
+    --info-text: #1d4ed8;
+    --warn-bg: #fef2f2;
+    --warn-text: #b91c1c;
+    --chip-run-bg: #eff6ff;
+    --chip-run-text: #1d4ed8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b;
+      --panel: #161d29;
+      --text: #e5eaf3;
+      --muted: #8b98ad;
+      --border: #263041;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+      --primary: #3b82f6;
+      --warn: #f87171;
+      --ok-bg: #052e1c;
+      --ok-text: #6ee7b7;
+      --info-bg: #0b1d3a;
+      --info-text: #93c5fd;
+      --warn-bg: #3a1116;
+      --warn-text: #fca5a5;
+      --chip-run-bg: #0b1d3a;
+      --chip-run-text: #93c5fd;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 20px 16px 80px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示页框架 ---------- */
+  .demo-head { max-width: 980px; margin: 0 auto 14px; }
+  .demo-head h1 { font-size: 17px; margin: 0 0 4px; }
+  .demo-head .meta { font-size: 12.5px; }
+
+  .demo-controls {
+    max-width: 980px; margin: 0 auto 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 12px 14px;
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  }
+  .demo-controls label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  select {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+    background: var(--panel); color: var(--muted); border: none;
+  }
+  .seg button.on-defect { background: var(--warn); color: #fff; }
+  .seg button.on-fixed { background: var(--primary); color: #fff; }
+  .btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn.small { font-size: 12.5px; padding: 3px 10px; }
+  .btn.quiet { background: transparent; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+
+  .observe {
+    max-width: 980px; margin: 0 auto 14px; padding: 10px 14px;
+    background: var(--info-bg); color: var(--info-text);
+    border-radius: 10px; font-size: 13px;
+  }
+  .observe strong { display: block; margin-bottom: 2px; }
+
+  /* ---------- 模拟看板：构建模块 ---------- */
+  .board {
+    max-width: 980px; margin: 0 auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .board-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600;
+  }
+  .board-head .chip { font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 9px; background: var(--warn); color: #fff; }
+  .rel-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); }
+  .rel-tab {
+    font: inherit; font-size: 13.5px; padding: 7px 14px; cursor: pointer;
+    background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  }
+  .rel-tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+
+  .rel-split { display: flex; min-height: 400px; }
+  .rel-list { width: 46%; border-right: 1px solid var(--border); padding: 12px 14px; overflow-y: auto; }
+  .rel-detail { flex: 1; padding: 12px 16px; overflow-y: auto; }
+  @media (max-width: 700px) { .rel-split { flex-direction: column; } .rel-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border); } }
+
+  .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 12px; }
+  .bld-branch-group { margin-bottom: 14px; }
+  .bld-group-head { font-size: 12px; color: var(--muted); letter-spacing: 0.4px; margin-bottom: 6px; }
+  .bld-branch {
+    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .bld-branch:hover { border-color: var(--border); background: var(--bg); }
+  .bld-branch.sel { border-color: var(--primary); background: var(--info-bg); }
+  .bld-branch > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bld-branch .st {
+    font-size: 11.5px; border-radius: 99px; padding: 1px 9px; white-space: nowrap;
+    background: var(--chip-run-bg); color: var(--chip-run-text); font-weight: 600;
+  }
+  .bld-remote { color: var(--muted); }
+  /* BUG-20260914-006 口径：远端为空（已同步）时推送按钮高亮为出路 */
+  .bld-push.attn { border-color: var(--primary); color: var(--primary); font-weight: 600; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
+
+  .bld-remote-hint, .bld-main-hint, .rel-form-err {
+    border-radius: 8px; padding: 8px 11px; margin: 6px 0; font-size: 12.5px;
+  }
+  .bld-remote-hint { background: var(--warn-bg); color: var(--warn-text); }
+  .bld-main-hint { background: var(--warn-bg); color: var(--warn-text); }
+  .rel-form-err { background: var(--warn-bg); color: var(--warn-text); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .bld-log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .bld-log { list-style: none; margin: 0; padding: 0; }
+  .bld-log li { padding: 7px 4px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .bld-log li span:last-child { margin-left: auto; }
+
+  /* ---------- 推送确认弹窗（对齐 build.js renderPushConfirm 口径） ---------- */
+  .rel-modal-wrap {
+    position: fixed; inset: 0; background: rgba(10, 16, 28, 0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 40; padding: 16px;
+  }
+  .rel-modal {
+    width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .rel-modal h3 { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 15px; }
+  .rel-modal-body { padding: 14px 16px; }
+  .rel-modal-body .field { display: block; font-size: 13px; margin-bottom: 10px; }
+  .rel-modal-body select { margin-top: 4px; display: block; min-width: 180px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+  /* ---------- toast（对齐看板 toast 范式） ---------- */
+  .toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--ok-text);
+    color: var(--text); border-radius: 8px; box-shadow: var(--shadow);
+    padding: 9px 14px; font-size: 13px; max-width: 380px; animation: slidein 0.18s ease-out;
+  }
+  .toast.err { border-left-color: var(--warn); }
+  @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="demo-head">
+  <h1>BUG-20260914-012 · main 分支的推送按钮不需要，请去掉</h1>
+  <div class="meta muted">还原「构建 → 分支浏览」左侧「本地」分组：<b>缺陷态</b> main 行渲染了「推送」按钮（可走完整推送流程推 main 到远端）；<b>修复后</b> main 行无该按钮，其余分支推送能力不变。所有数据为演示模拟，不执行真实 git 操作。</div>
+</div>
+
+<div class="demo-controls">
+  <label>模式
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on-defect">当前（缺陷）</button>
+      <button type="button" data-mode="fixed">修复后</button>
+    </span>
+  </label>
+  <label>当前分支
+    <select id="currentBranch">
+      <option value="dev">dev（典型：开发在 dev）</option>
+      <option value="main">main（当前即 main，本就无按钮）</option>
+    </select>
+  </label>
+  <label>远端
+    <select id="remoteState">
+      <option value="normal">正常（origin/dev 等）</option>
+      <option value="empty">空（从未推送，BUG-20260914-006 场景）</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="failPush"> 模拟推送失败</label>
+  <label><input type="checkbox" id="failSync"> 模拟同步失败</label>
+  <label><input type="checkbox" id="failLoad"> 模拟分支读取失败</label>
+  <button type="button" class="btn small" id="reloadBtn">重新加载分支列表</button>
+</div>
+
+<div class="observe" id="observeBox"></div>
+
+<div class="board">
+  <div class="board-head">agent-team-board <span class="chip" id="modeChip">缺陷</span><span class="muted small">构建模块（演示）</span></div>
+  <div class="rel-tabs">
+    <button type="button" class="rel-tab">版本计划</button>
+    <button type="button" class="rel-tab active">分支浏览</button>
+  </div>
+  <div class="rel-split">
+    <div class="rel-list" aria-label="分支列表">
+      <div class="bld-branch-tools">
+        <button type="button" class="btn small" id="fetchBtn" title="fetch --all --prune：拉取远端最新并清理失效引用">⟳ 和远端同步</button>
+        <button type="button" class="btn small quiet" id="refreshBtn">刷新</button>
+      </div>
+      <div id="branchList"></div>
+    </div>
+    <div class="rel-detail" aria-label="提交记录">
+      <div class="bld-log-head"><strong id="logTitle">提交记录</strong><button type="button" class="btn small quiet" id="logRefresh" style="display:none">刷新</button></div>
+      <div id="logPane"><div class="muted">点击左侧分支查看提交记录</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="modalHost"></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+/* ---------- 演示状态 ---------- */
+const state = {
+  mode: 'defect',            // defect：main 行有推送按钮（缺陷）；fixed：无（修复后）
+  current: 'dev',
+  remoteState: 'normal',     // normal | empty
+  branchesPhase: 'loading',  // loading | error | ready（模拟 GET /api/build/branches）
+  remotes: [],               // 远端分支（origin/xxx）
+  syncedEmpty: false,        // 同步成功后仍为空 → BUG-20260914-006 解释块 + 推送按钮高亮
+  selBranch: null,
+  logPhase: 'idle',          // idle | loading | ready | error
+  syncBusy: false,
+  pushBusy: false,
+  pushConfirm: null,         // { branch }
+};
+
+const ALL_LOCAL = ['dev', 'main', 'feature/build-module', 'docs/notes'];
+const COMMITS = {
+  dev: [
+    { h: '9f31c0aa', s: 'feat(build): 版本计划条目换选 commit 支持', a: 'atb-agent', d: '2026-09-14 11:02' },
+    { h: '4b7e19d2', s: 'fix(build): 空远端解释块口径对齐 BUG-20260914-006', a: 'atb-agent', d: '2026-09-14 09:47' },
+    { h: 'c2a90f31', s: 'chore: 同步远端按钮文案统一为「和远端同步」', a: 'atb-agent', d: '2026-09-13 18:20' },
+  ],
+  main: [
+    { h: '7d55ab10', s: 'build: v0.3.1 合并 REQ-20260913-001（构建模块）', a: 'atb-agent', d: '2026-09-13 16:05' },
+    { h: 'e08cc4f7', s: 'build: v0.3.0 合并 REQ-20260911-009（dev 工作流）', a: 'atb-agent', d: '2026-09-11 21:33' },
+  ],
+  'feature/build-module': [
+    { h: '1c6f77b3', s: 'feat(build): 分支浏览左右分栏与懒加载提交记录', a: 'atb-agent', d: '2026-09-12 22:11' },
+    { h: 'a95de402', s: 'feat(build): 本地分支推送确认弹窗（首推 -u）', a: 'atb-agent', d: '2026-09-12 20:48' },
+  ],
+  'docs/notes': [],          // 空提交记录状态
+};
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3400);
+}
+
+function resetRemote() {
+  state.remotes = state.remoteState === 'empty' ? [] : ['origin/dev', 'origin/feature/build-module'];
+  state.syncedEmpty = false;
+}
+
+/* ---------- 分支列表渲染（对齐 build.js renderBranchesPane 口径） ---------- */
+function hasPushButton(branch) {
+  // 当前分支按「当前」行渲染，本就无按钮；main 是否渲染推送按钮由模式开关决定（本 Bug 修复点）
+  if (branch === state.current) return false;
+  if (branch === 'main') return state.mode === 'defect';
+  return true;
+}
+
+function renderBranches() {
+  const host = $('#branchList');
+  if (state.branchesPhase === 'loading') {
+    host.innerHTML = '<p class="muted">加载分支中…</p>';
+    return;
+  }
+  if (state.branchesPhase === 'error') {
+    host.innerHTML = '<p class="rel-form-err" role="alert">分支读取失败：演示模拟的读取错误（' +
+      '<button type="button" class="btn small" id="retryBtn">重试</button>）</p>';
+    $('#retryBtn').addEventListener('click', loadBranches);
+    return;
+  }
+
+  // BUG-20260914-006 口径：已配置远端 + 本会话同步成功后仍为空 ⇒ 远端仓库确实为空 → 推送按钮高亮
+  const pushAttn = state.remotes.length === 0 && state.syncedEmpty;
+  const cur = state.current
+    ? `<div class="bld-branch bld-cur" data-branch="${esc(state.current)}"><span><strong>${esc(state.current)}</strong></span><span class="st">当前</span></div>`
+    : '';
+  const local = ALL_LOCAL.filter((x) => x !== state.current).map((x) => {
+    const btn = hasPushButton(x)
+      ? `<button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button>`
+      : '';
+    return `<div class="bld-branch${state.selBranch === x ? ' sel' : ''}" data-branch="${esc(x)}"><span>${esc(x)}</span>${btn}</div>`;
+  }).join('');
+  const remote = state.remotes.map((x) =>
+    `<div class="bld-branch bld-remote" data-branch="${esc(x)}"><span>${esc(x)}</span></div>`).join('');
+  const remoteEmpty = !remote
+    ? (state.syncedEmpty
+        ? `<div class="bld-remote-hint" role="note"><strong>远端仓库尚无任何分支（从未推送）。</strong>
+           <span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>`
+        : '<p class="muted small">（无远端分支：先「和远端同步」或推送本地分支）</p>')
+    : '';
+  host.innerHTML = `
+    <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local}</div>
+    <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || remoteEmpty}</div>`;
+
+  $$('#branchList .bld-branch[data-branch]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-push]')) return;
+      selectBranch(el.dataset.branch);
+    });
+  });
+  $$('#branchList [data-push]').forEach((el) => {
+    el.addEventListener('click', () => openPushConfirm(el.dataset.push));
+  });
+}
+
+/* ---------- 提交记录（对齐 branchLog 懒加载口径） ---------- */
+function renderLog() {
+  const pane = $('#logPane');
+  const title = $('#logTitle');
+  const refresh = $('#logRefresh');
+  title.textContent = state.selBranch || '提交记录';
+  refresh.style.display = state.selBranch ? '' : 'none';
+  if (!state.selBranch) { pane.innerHTML = '<div class="muted">点击左侧分支查看提交记录</div>'; return; }
+  if (state.logPhase === 'loading') { pane.innerHTML = '<p class="muted">加载提交记录中…</p>'; return; }
+  if (state.logPhase === 'error') {
+    pane.innerHTML = '<p class="rel-form-err" role="alert">提交记录读取失败：演示模拟的读取错误</p>';
+    return;
+  }
+  const commits = COMMITS[state.selBranch.replace(/^origin\//, '')] || [];
+  if (!commits.length) { pane.innerHTML = '<p class="muted small">该分支暂无提交</p>'; return; }
+  pane.innerHTML = `<ul class="bld-log">${commits.map((c) => `<li>
+    <code>${esc(c.h)}</code> <span>${esc(c.s)}</span>
+    <span class="muted small">${esc(c.a)} · ${esc(c.d)}</span></li>`).join('')}</ul>`;
+}
+
+function selectBranch(branch) {
+  state.selBranch = branch;
+  state.logPhase = 'loading';
+  renderBranches();
+  renderLog();
+  setTimeout(() => {
+    state.logPhase = $('#failLoad').checked ? 'error' : 'ready';
+    renderLog();
+  }, 420);
+}
+
+function loadBranches() {
+  state.branchesPhase = 'loading';
+  state.selBranch = null;
+  renderBranches();
+  renderLog();
+  setTimeout(() => {
+    state.branchesPhase = $('#failLoad').checked ? 'error' : 'ready';
+    renderBranches();
+  }, 520);
+}
+
+/* ---------- 同步 / 推送（对齐 doFetch / doPush 口径） ---------- */
+async function doFetch() {
+  if (state.syncBusy) return;
+  state.syncBusy = true;
+  renderTools();
+  await new Promise((r) => setTimeout(r, 700));
+  state.syncBusy = false;
+  renderTools();
+  if ($('#failSync').checked) {
+    toast('✕ 同步远端失败：演示模拟（远端不可达）', true);
+    return;
+  }
+  state.remoteState = state.remotes.length ? 'normal' : 'empty';
+  state.syncedEmpty = state.remotes.length === 0; // 同步成功后仍为空 ⇒ 远端确实为空
+  toast('✓ 已同步远端（fetch --prune）');
+  renderBranches();
+}
+
+function openPushConfirm(branch) {
+  if (state.pushBusy) return;
+  state.pushConfirm = { branch };
+  renderModal();
+}
+
+function renderModal() {
+  const host = $('#modalHost');
+  const p = state.pushConfirm;
+  if (!p) { host.innerHTML = ''; return; }
+  const hasUp = state.remotes.some((r) => r.endsWith('/' + p.branch));
+  host.innerHTML = `
+    <div class="rel-modal-wrap" role="dialog" aria-label="推送分支确认">
+      <div class="rel-modal">
+        <h3>推送分支 ${esc(p.branch)}</h3>
+        <div class="rel-modal-body">
+          <label class="field">目标远端
+            <select class="bld-push-remote"><option>origin</option></select></label>
+          <p class="muted small">${hasUp
+            ? `该分支已有远端分支：本次推送将更新 origin/${esc(p.branch)}。`
+            : '该分支尚未建立上游跟踪：首推将加 -u 建立跟踪。'}</p>
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="pushCancel">取消</button>
+          <button type="button" class="btn primary" id="pushGo" ${state.pushBusy ? 'disabled' : ''}>${state.pushBusy ? '推送中…' : '确认推送'}</button>
+        </footer>
+      </div>
+    </div>`;
+  $('#pushCancel').addEventListener('click', () => { state.pushConfirm = null; renderModal(); });
+  $('#pushGo').addEventListener('click', doPush);
+}
+
+async function doPush() {
+  const p = state.pushConfirm;
+  if (!p || state.pushBusy) return;
+  state.pushConfirm = null;
+  state.pushBusy = true;
+  renderModal();
+  renderBranches();
+  await new Promise((r) => setTimeout(r, 760));
+  state.pushBusy = false;
+  const remote = 'origin/' + p.branch;
+  if ($('#failPush').checked) {
+    toast(`✕ 推送失败：演示模拟（推送 ${p.branch} 被远端拒绝）`, true);
+  } else {
+    const first = !state.remotes.includes(remote);
+    if (!state.remotes.includes(remote)) state.remotes.push(remote);
+    state.syncedEmpty = false;
+    toast(`✓ 已推送 ${p.branch} → ${remote}${first ? '（已建立上游跟踪）' : ''}`);
+  }
+  renderBranches();
+}
+
+/* ---------- 工具栏 / 观察框 / 控件 ---------- */
+function renderTools() {
+  $('#fetchBtn').disabled = state.syncBusy;
+  $('#fetchBtn').textContent = state.syncBusy ? '同步中…' : '⟳ 和远端同步';
+}
+
+function renderObserve() {
+  const box = $('#observeBox');
+  const modeTxt = state.mode === 'defect'
+    ? '当前为<b>缺陷态</b>：非当前分支的 main 行带有「推送」按钮，点击可推 main 到远端（绕开发布模块「预检 → 计划确认 → 仅快进推送」的受控口径）。'
+    : '当前为<b>修复后</b>：main 行不再渲染「推送」按钮（行本身保留、仍可点击查看提交记录）；dev / 功能分支的推送能力不变。';
+  const curTxt = state.current === 'main'
+    ? ' 当前分支为 main：main 以「当前」行渲染，两种模式下均无按钮（与现状一致）。'
+    : '';
+  box.innerHTML = `<strong>对比要点</strong>${modeTxt}${curTxt} 远端为空时可观察 BUG-20260914-006 的解释块与剩余推送按钮的 attn 高亮。`;
+}
+
+function renderAll() {
+  $('#modeChip').textContent = state.mode === 'defect' ? '缺陷' : '修复后';
+  renderObserve();
+  renderTools();
+  renderBranches();
+  renderLog();
+}
+
+$('#modeSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  state.mode = btn.dataset.mode;
+  $$('#modeSeg button').forEach((b) => {
+    b.className = b === btn ? (state.mode === 'defect' ? 'on-defect' : 'on-fixed') : '';
+  });
+  renderAll();
+});
+$('#currentBranch').addEventListener('change', (e) => {
+  state.current = e.target.value;
+  renderAll();
+});
+$('#remoteState').addEventListener('change', (e) => {
+  state.remoteState = e.target.value;
+  resetRemote();
+  loadBranches();
+});
+$('#failLoad').addEventListener('change', () => loadBranches());
+$('#reloadBtn').addEventListener('click', loadBranches);
+$('#refreshBtn').addEventListener('click', loadBranches);
+$('#fetchBtn').addEventListener('click', doFetch);
+$('#logRefresh').addEventListener('click', () => state.selBranch && selectBranch(state.selBranch));
+
+/* 初始化 */
+resetRemote();
+loadBranches();
+</script>
+</body>
+</html>
