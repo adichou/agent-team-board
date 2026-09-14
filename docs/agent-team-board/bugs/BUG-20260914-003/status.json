@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-003",
+  "type": "bug",
+  "title": "为什么会显示无其他本地分支的？main 分支应该是要显示的",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-8",
+  "createdAt": "2026-09-14T02:47:19.499Z",
+  "updatedAt": "2026-09-14T03:40:40.029Z",
+  "agentCompletedAt": "2026-09-14T03:40:40.029Z",
+  "lastReport": {
+    "at": "2026-09-14T03:40:40.029Z",
+    "coverage": 100,
+    "framework": "node:assert + 真实临时 git 仓库集成 + 前端 vm 行为测试",
+    "summary": "根因修复+可解释性：ensureDevWorkflow 收尾新增 ensureMainBranch 幂等补建本地 main（有提交且缺失时在根提交 git branch main，不切分支不推送不动 HEAD）；分支浏览本地分组缺 main 时渲染明确提示（与合并校验「main 分支不存在」口径一致，引导设置页 Git 工作流初始化）。新增 6 例先红后绿，run-all 222 文件 0 失败；归因 REQ-20260911-009。本仓库已经产品路径补建 main（基点=根提交 b7225d0，未推送），分支浏览可见 main、合并前置校验通过",
+    "runId": "run-20260914-224"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T02:47:19.499Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T02:47:19.501Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T03:10:36.887Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-110059-ed1a）"
+    },
+    {
+      "at": "2026-09-14T03:32:53.381Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-8",
+      "note": "认领（zcode-batch-048-8）"
+    },
+    {
+      "at": "2026-09-14T03:40:40.030Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-8",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
