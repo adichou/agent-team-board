@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-011",
+  "type": "bug",
+  "title": "和远端同步是指先 fetch，然后 push，确保本地和远端的记录一模一样",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-011",
+  "createdAt": "2026-09-14T05:23:27.070Z",
+  "updatedAt": "2026-09-14T06:44:25.141Z",
+  "agentCompletedAt": "2026-09-14T06:44:25.141Z",
+  "lastReport": {
+    "at": "2026-09-14T06:44:25.141Z",
+    "coverage": 13,
+    "framework": "node:assert/strict + vm（项目既有自研用例 runner）",
+    "summary": "和远端同步改为 fetch --all --prune 后推送除 main 外全部本地分支（main 归发布模块，与 012 口径一致）：build-git 新增 syncRemote 逐分支收集结果不强推；/api/build/fetch 换 /api/build/sync；前端两步汇总 toast + 空态按推送结果细分；i18n 新增 3 词条；新增 13 用例，005/006/build-serve 断言随语义更新，run-all 228 文件全过",
+    "runId": "run-20260914-234"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T05:23:27.070Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T05:23:27.071Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T05:31:15.285Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-132502-0587）"
+    },
+    {
+      "at": "2026-09-14T06:23:47.820Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-011",
+      "note": "认领（zcode-batch-048-BUG-20260914-011）"
+    },
+    {
+      "at": "2026-09-14T06:44:25.141Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-011",
+      "note": "上报测试报告（覆盖率 13%），待人工确认完成"
+    }
+  ]
+}
