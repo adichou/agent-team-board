@@ -1153,12 +1153,6 @@ const ATBBuild = (() => {
       <span class="small">刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>`;
   }
 
-  // BUG-20260914-017：main 行「通过发布流程推送」标识（纯说明徽标，title 详释规则；
-  // 当前行 / 非当前行共用；不引入任何直接推送入口，行点击查看提交记录语义不变）。
-  function mainFlagHtml() {
-    return ` <span class="bld-main-flag" title="main 由发布流程推送：不随「和远端同步」推送，也无单独推送按钮">通过发布流程推送</span>`;
-  }
-
   function renderBranchesPane() {
     if (!state.data?.isRepo) {
       return `<div class="rel-empty"><h3>当前项目不是 git 仓库</h3>
@@ -1174,12 +1168,12 @@ const ATBBuild = (() => {
       const remotes = b.remotes || [];
       // BUG-20260914-006：同步成功后仍为空 ⇒ 远端仓库确实为空——本地分支「推送」高亮为出路。
       const pushAttn = remotes.length > 0 && state.remoteSynced && (b.remote || []).length === 0;
-      const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span>${b.current === 'main' ? mainFlagHtml() : ''}</div>` : '';
-      // BUG-20260914-017：本地 main 行显示「通过发布流程推送」说明标识——main 既不随「和远端同步」
-      // 推送（BUG-20260914-011），推送按钮也已按 BUG-20260914-012 去除，行上说明替代原因缺失；
-      // 标识仅为说明（title 详释），不引入任何直接推送入口，行点击查看提交记录语义不变。
+      const cur = b.current ? `<div class="bld-branch bld-cur" data-branch="${esc(b.current)}" role="button" tabindex="0"><strong>${esc(b.current)}</strong> <span class="st st-run">当前</span></div>` : '';
+      // BUG-20260914-018：main 行不再渲染「通过发布流程推送」说明徽标（用户要求删掉该文字，
+      // 亦不新增任何替代说明）；main 既不随「和远端同步」推送（BUG-20260914-011），推送按钮也已按
+      // BUG-20260914-012 去除，行上仅保留分支名，行点击查看提交记录语义不变。
       const local = (b.local || []).filter((x) => x !== b.current).map((x) => `
-        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>${x === 'main' ? mainFlagHtml() : `
+        <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>${x === 'main' ? '' : `
           <button type="button" class="btn small quiet bld-push${pushAttn ? ' attn' : ''}" data-push="${esc(x)}" title="推送到远端">推送</button>`}</div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
       // BUG-20260914-006：远端空态三分支——未配置远端保持既有文案（范围外）；
