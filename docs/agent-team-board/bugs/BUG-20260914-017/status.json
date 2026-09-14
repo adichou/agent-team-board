@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-017",
+  "type": "bug",
+  "title": "分支同步界面缺少 main 必须经过发布流程推送的规则说明",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-017",
+  "createdAt": "2026-09-14T12:10:13.166Z",
+  "updatedAt": "2026-09-14T14:01:19.964Z",
+  "agentCompletedAt": "2026-09-14T14:01:19.964Z",
+  "lastReport": {
+    "at": "2026-09-14T14:01:19.964Z",
+    "coverage": 11,
+    "framework": "node:test(自研断言脚本)",
+    "summary": "展示层补齐 main 发布流程规则说明：分支浏览工具栏下常驻同步范围说明；本地 main 行（当前/非当前）「通过发布流程推送」标识（无推送入口）；doSync 成功/部分失败 toast 按服务端 skipped 数据附「main 已跳过，请通过发布流程推送」，仅 main 场景 toast 与远端空态改为「没有可推送的开发分支；main 必须通过发布流程推送」；i18n 补静态（含按钮 title 英文缺口）与动态词条并清理旧键；syncRemote 排除 main 行为未动；新增测试 11 例跑红转绿，受影响既有断言（011/006）同步更新，run-all 236 文件全过；引入来源归因 BUG-20260914-011（design.md）",
+    "runId": "run-20260914-244"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T12:10:13.166Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0914-00ca"
+    },
+    {
+      "at": "2026-09-14T12:25:47.973Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T12:37:21.885Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-203025-17f3）"
+    },
+    {
+      "at": "2026-09-14T13:21:09.790Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-017",
+      "note": "认领（zcode-batch-048-BUG-20260914-017）"
+    },
+    {
+      "at": "2026-09-14T14:01:19.964Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-017",
+      "note": "上报测试报告（覆盖率 11%），待人工确认完成"
+    }
+  ]
+}
