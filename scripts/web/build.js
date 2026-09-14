@@ -814,7 +814,8 @@ const ATBBuild = (() => {
           ${!p.candidates ? '<p class="muted">正在读取条目…</p>'
             : p.candidates.length === 0 ? `<p class="muted bld-cand-empty">${p.totalDone
               ? '已完成的条目均已纳入版本计划：可从「计划中 / 失败」版本移出条目，或删除版本后重新纳入' // BUG-20260914-004：区分「均已被占用」空态
-              : '暂无可纳入版本的条目：仅已完成（done）且未纳入其他版本的需求单 / Bug 单会出现在候选中'}</p>`
+              // BUG-20260914-008：口径已在头部副标题（side-panel-scope），空态正文精简不再复述，避免同面板口径出现两次
+              : '暂无可纳入版本的条目'}</p>`
             : `
           <div class="bld-pick-bar">
             <button type="button" class="btn small" id="bldPickAll">全选</button>
