@@ -56,7 +56,7 @@ t('D1 retryRun：failed 记录重排队——原记录保留、计数改记待�
   const a = mkDevItem(p, '失败后重试', { backMs: 2000 });
   const b0 = mkDevItem(p, '另一项');
   const { batch: b } = batch.createBatch(p.dataDir, { projectRoot: p.root });
-  assert.deepEqual(b.candidates, [a, b0]);
+  assert.deepEqual(b.candidates, [], '建轮不冻结候选快照（REQ-20260913-003）');
   const r1 = batch.nextItem(p.dataDir, b.batchId, { owner: W1 });
   assert.equal(r1.itemId, a);
   batch.finishRun(p.dataDir, r1.runId, { result: 'failed', reason: '子代理执行超时', safeToContinue: true });
@@ -158,7 +158,7 @@ t('D4 retryRefineRun：failed 记录重排队尾——原记录保留、计数�
   const a = mkRefineItem(p, '完善失败重试');
   const b0 = mkRefineItem(p, '后一项');
   const { batch: b } = refine.createRefineBatch(p.dataDir, { mode: 'zcode', projectRoot: p.root });
-  assert.deepEqual(b.candidates.map((c) => c.id), [a, b0]);
+  assert.deepEqual(b.candidates, [], '建轮不冻结候选快照（REQ-20260913-003）');
   const r1 = refine.nextRefineItem(p.dataDir, b.batchId, { owner: W1 });
   assert.equal(r1.itemId, a);
   refine.finishRefineRun(p.dataDir, r1.runId, { result: 'failed', reason: '子代理超时' });

@@ -155,7 +155,7 @@ t('C2 批量开发聚合不回归：develop 批次照常聚合；无任务项目
   assert.equal(dev.status, 'ok');
   assert.equal(dev.tasks.length, 1, '批量开发批次应聚合为一行');
   assert.equal(dev.tasks[0].kind, 'develop', '批次类型为 develop');
-  assert.match(dev.tasks[0].batchId, /^batch-/, '开发批次号前缀');
+  assert.equal('batchId' in dev.tasks[0], false, 'REQ-20260913-003：简报不再透出批次号');
   const clean = projRow(projClean);
   assert.deepEqual(clean.tasks, [], '无任务项目行为空');
 });

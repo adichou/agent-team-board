@@ -286,13 +286,16 @@ t('N7 内容归组（批量开发）：概况/队列/提示词/记录各自归�
   h.state.batchData = devRunData();
   const html = h.run('renderZcodeBatchPanel()');
   const overview = paneSlice(html, 'overview');
-  for (const word of ['batch-status-line', 'meta-grid', 'task-stats', 'id="batchPause"', 'id="batchAbort"', 'id="queueNewBatch"', '暂停后续领取', 'Zcode 原生任务']) {
+  for (const word of ['batch-status-line', 'meta-grid', 'task-stats', 'id="batchPause"', 'id="batchAbort"', '暂停后续领取', 'Zcode 原生任务']) {
     assert.ok(overview.includes(word), `概况分区应包含 ${word}`);
   }
   const queue = paneSlice(html, 'queue');
-  for (const word of ['task-queue', 'batch-queue', 'data-del-batch', '待开发']) {
+  // REQ-20260913-003：排队批次节与删除入口随批次排队概念移除——队列分区仅实时待处理队列
+  for (const word of ['task-queue', '待开发']) {
     assert.ok(queue.includes(word), `队列分区应包含 ${word}`);
   }
+  assert.ok(!queue.includes('batch-queue'), '队列分区不得再含排队批次节');
+  assert.ok(!queue.includes('data-del-batch'), '队列分区不得再含排队批次删除入口');
   const prompt = paneSlice(html, 'prompt');
   // BUG-20260910-005：会话入口（原 batchOpenZcode 底部按钮）迁至头部一级页签旁，提示词分区不再承载
   for (const word of ['id="batchPrompt"', 'id="batchRecopy"', 'id="batchResumeCopy"']) {
@@ -303,7 +306,7 @@ t('N7 内容归组（批量开发）：概况/队列/提示词/记录各自归�
     assert.ok(records.includes(word), `记录分区应包含 ${word}`);
   }
   // 关键操作入口归组唯一（不得跨分区重复出现）
-  for (const id of ['id="batchPause"', 'id="batchAbort"', 'id="queueNewBatch"', 'id="batchRecopy"', 'id="batchPrompt"', 'data-retry-run']) {
+  for (const id of ['id="batchPause"', 'id="batchAbort"', 'id="batchRecopy"', 'id="batchPrompt"', 'data-retry-run']) {
     assert.equal((html.match(new RegExp(id.replace(/[-"]/g, '\\$&'), 'g')) || []).length, 1, `${id} 应只出现一次`);
   }
   // 终态：概况提供「启动新一轮」，且不显示暂停/终止
@@ -421,12 +424,12 @@ t('N13 操作控件零回退：启动/终态/运行/提示词/记录/跳转入�
   h.state.batchData = devRunData();
   const dev = h.run('renderZcodeBatchPanel()');
   // BUG-20260910-005：工作区入口迁至头部（batchOpenZcode 不在面板内），此处不再断言
-  for (const id of ['id="batchPause"', 'id="batchAbort"', 'id="queueNewBatch"', 'id="batchRecopy"', 'id="batchResumeCopy"', 'data-retry-run', 'data-goto-item', 'data-del-batch']) {
+  for (const id of ['id="batchPause"', 'id="batchAbort"', 'id="batchRecopy"', 'id="batchResumeCopy"', 'data-retry-run', 'data-goto-item']) {
     assert.match(dev, new RegExp(id.replace(/[-]/g, '\\$&')), `开发运行态应含 ${id}`);
   }
-  // 删除本批次：仅在无在途执行时出现（现状口径）
+  // REQ-20260913-003：删除入口随批次排队概念移除——无在途执行时也不再出现
   h.state.batchData = devRunData({ current: null });
-  assert.match(h.run('renderZcodeBatchPanel()'), /id="batchDelete"/, '无在途执行时保留「删除本批次」');
+  assert.ok(!h.run('renderZcodeBatchPanel()').includes('id="batchDelete"'), '不再提供「删除本批次」入口');
   // 完善运行态
   h.state.refine.data = refineRunData();
   const rf = h.run('renderRefinePanel()');

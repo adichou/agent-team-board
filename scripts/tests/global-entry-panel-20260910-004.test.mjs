@@ -81,7 +81,7 @@ t('B3 面板结构：右侧面板常驻节点 = 标题 + 跨项目说明 + 关�
   assert.match(p, /id="globalPanelClose"[^>]*aria-label="关闭全局任务面板"/, '应有常驻关闭按钮（可访问名称）');
   assert.match(p, /id="globalSearchInput"/, '面板应有独立搜索输入（不复用第三行 #searchInput）');
   assert.doesNotMatch(p, /id="searchInput"/, '面板内不得复用模块搜索输入框');
-  assert.match(p, /placeholder="搜项目 \/ 批次号 \/ 条目编号…"/, '面板搜索占位符沿用全局口径');
+  assert.match(p, /placeholder="搜项目 \/ 条目编号…"/, '面板搜索占位符沿用全局口径');
   assert.match(p, /id="globalPanelBody"/, '应有 #globalPanelBody 内容容器');
   // 关闭按钮位于静态头部（不随内容重渲染）：加载 / 失败状态不阻塞关闭
   const iClose = p.indexOf('id="globalPanelClose"');

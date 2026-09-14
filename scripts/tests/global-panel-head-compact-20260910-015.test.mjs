@@ -82,7 +82,7 @@ t('U5 搜索输入契约不变：type / placeholder / aria-label / enterkeyhint 
   const input = panel[0].match(/<input id="globalSearchInput"[^>]*>/);
   assert.ok(input, '应有 #globalSearchInput');
   assert.match(input[0], /type="search"/, 'type=search');
-  assert.match(input[0], /placeholder="搜项目 \/ 批次号 \/ 条目编号…"/, '占位符沿用全局口径');
+  assert.match(input[0], /placeholder="搜项目 \/ 条目编号…"/, '占位符沿用全局口径');
   assert.match(input[0], /aria-label="搜索全局任务（跨项目）"/, '可访问名称标注跨项目语义');
   assert.match(input[0], /enterkeyhint="search"/, 'enterkeyhint=search 保留');
   assert.match(input[0], /autocomplete="off"/, 'autocomplete=off 保留');

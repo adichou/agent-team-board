@@ -112,36 +112,35 @@ t('R11 服务接口：候选（已接受未完善）/ 子代理模式创建 / �
     const subItem = r.json.items.find((x) => x.title === '待接受不进');
     assert.ok(subItem && subItem.refineState === undefined, '待接受单不带完善状态字段');
 
-    // 子代理模式创建（zcode）：返回主调度提示词；幂等
+    // 子代理模式创建（zcode）：返回主调度提示词；重复创建被拒（REQ-20260913-003）
     r = await req(port, 'POST', `/api/refine/create?${P}`, { mode: 'zcode', developer: '张三' });
     assert.equal(r.status, 200, `zcode create 应成功（${JSON.stringify(r.json)}）`);
-    const zcodeBatchId = r.json.batchId;
-    assert.match(zcodeBatchId, /^RFB-/);
+    assert.equal('batchId' in r.json, false, '创建响应不再透出批次号（REQ-20260913-003）');
     assert.ok(r.json.prompt.includes('atb refine next'), 'zcode create 返回主调度提示词');
     assert.equal(r.json.counts.candidates, 3);
     r = await req(port, 'POST', `/api/refine/create?${P}`, { mode: 'zcode', developer: '张三' });
-    assert.equal(r.json.created, false, '重复创建幂等返回');
+    assert.equal(r.status, 400, '重复创建应被拒（不幂等返回）');
+    assert.match(String(r.json && r.json.error || ''), /已有进行中的完善任务/);
 
-    // current：缺省队首批次 + 计数 + 记录
+    // current：缺省队首批次 + 计数 + 记录（公开视图不再透出批次号）
     r = await req(port, 'GET', `/api/refine/current?${P}`);
     assert.equal(r.status, 200);
-    assert.equal(r.json.batch.batchId, zcodeBatchId);
-    assert.equal(r.json.batch.candidates.length, 3, '公开视图含冻结候选（含缺失原因，供面板展示）');
+    assert.equal('batchId' in r.json.batch, false, '公开视图不再透出批次号（REQ-20260913-003）');
     assert.equal(r.json.counts.remaining, 3);
 
-    // pause / 恢复
-    r = await req(port, 'POST', `/api/refine/pause?${P}`, { batchId: zcodeBatchId, paused: true });
+    // pause / 恢复（缺省解析队首，不再传批次号——REQ-20260913-003 前端口径）
+    r = await req(port, 'POST', `/api/refine/pause?${P}`, { paused: true });
     assert.equal(r.status, 200);
     assert.equal(r.json.pauseRequested, true);
-    r = await req(port, 'POST', `/api/refine/pause?${P}`, { batchId: zcodeBatchId, paused: false });
+    r = await req(port, 'POST', `/api/refine/pause?${P}`, { paused: false });
     assert.equal(r.json.pauseRequested, false);
 
     // codex 子代理模式：无需本机 codex CLI，返回差异化的主调度提示词，不再逐项入队后台执行
     const freshRoot2 = await atbNewAccepted(root, 'req', 'codex 子代理待完善');
     assert.ok(freshRoot2);
-    await req(port, 'POST', `/api/refine/pause?${P}`, { batchId: zcodeBatchId, paused: false });
+    await req(port, 'POST', `/api/refine/pause?${P}`, { paused: false });
     // 先终止当前未开始的完善任务（REQ-20260908-020 终止链路）
-    r = await req(port, 'POST', `/api/refine/abort?${P}`, { batchId: zcodeBatchId });
+    r = await req(port, 'POST', `/api/refine/abort?${P}`, {});
     assert.equal(r.status, 200, `abort 应成功（${JSON.stringify(r.json)}）`);
     assert.equal(r.json.aborted, true);
     assert.match(r.json.notice, /人工停止/, '终止提示含在途子代理人工停止指引');
@@ -152,7 +151,7 @@ t('R11 服务接口：候选（已接受未完善）/ 子代理模式创建 / �
     // 通用子代理模式创建（REQ-20260909-011：mode 入参忽略，提示词单一通用版）：返回 prompt，无 runs
     r = await req(port, 'POST', `/api/refine/create?${P}`, { mode: 'codex' });
     assert.equal(r.status, 200, `通用子代理 create 应成功（${JSON.stringify(r.json)}）`);
-    assert.match(r.json.batchId, /^RFB-/);
+    assert.equal('batchId' in r.json, false, '创建响应不再透出批次号（REQ-20260913-003）');
     assert.equal(r.json.agent, 'subagent', '返回通用子代理模式标识（mode 入参被忽略）');
     assert.ok(r.json.prompt && !/zcode|Zcode|codex|Codex|general-purpose/.test(r.json.prompt), '返回单一通用主调度提示词（无执行端字样）');
     assert.equal(r.json.runs, undefined, '不再入队后台执行');

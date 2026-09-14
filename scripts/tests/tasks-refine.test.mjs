@@ -55,7 +55,8 @@ t('T2 实时读取：创建任务后新接受的单在下一轮领取时被吸�
   const a = core.createItem(dataDir, { type: 'requirement', title: '先接受' });
   accept(dataDir, a.id);
   const { batch: b } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
-  assert.deepEqual(b.candidates.map((c) => c.id), [a.id]);
+  assert.deepEqual(b.candidates, [], '建轮不冻结候选快照（REQ-20260913-003）');
+  assert.deepEqual(refine.effectiveRefineCandidates(dataDir, b).map((c) => c.id), [a.id]);
 
   // 创建后新接受的单 → 下一轮 next 实时吸收
   const late = core.createItem(dataDir, { type: 'requirement', title: '后接受' });
@@ -277,10 +278,10 @@ t('T11 BUG-20260908-013：领取落账继承批次执行 Agent（codex 批次 ru
 
 t('T12 领取前缀通用化（REQ-20260909-011）：单一 refine- 前缀，不再 zcode-refine / codex-refine 二选一', () => {
   const p = refine.buildRefinePrompt({ projectRoot: '/tmp/p', batchId: 'RFB-20260908-009' });
-  assert.ok(p.includes('refine-<批次尾号>-<序号>'), '领取命令使用单一通用前缀');
+  assert.ok(p.includes('refine-<序号>'), '领取命令使用单一通用前缀（去批次尾号，REQ-20260913-003）');
   assert.ok(!p.includes('zcode-refine') && !p.includes('codex-refine'), '不再出现按 Agent 差异化的领取前缀');
   const c = refine.buildRefinePrompt({ projectRoot: '/tmp/p', batchId: 'RFB-20260908-009', agent: 'codex' });
-  assert.ok(c.includes('refine-<批次尾号>-<序号>'), '显式 codex 参数亦输出通用前缀');
+  assert.ok(c.includes('refine-<序号>'), '显式 codex 参数亦输出通用前缀（去批次尾号）');
 });
 
 let failed = 0;

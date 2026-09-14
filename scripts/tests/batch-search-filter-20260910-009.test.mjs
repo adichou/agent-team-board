@@ -244,7 +244,7 @@ t('L2 runAttemptsHtml 按 runId/itemId/title/owner 过滤：账面「共 N 条�
   assert.match(empty, /暂无执行记录/, '全量即空仍显示「暂无执行记录」');
 });
 
-t('L3 排队批次按批次号过滤：收窄、标注、无匹配空态；无排队批次整节不显示（REQ-20260910-027 起不再按开发人员匹配）', () => {
+t('L3 排队批次节已移除（REQ-20260913-003）：队列分区仅实时待处理队列，无排队渲染与过滤', () => {
   const h = setupUI();
   const mkData = (queue) => ({
     batch: devBatch(),
@@ -253,46 +253,30 @@ t('L3 排队批次按批次号过滤：收窄、标注、无匹配空态；无�
     queue,
     stats: { candidates: 0, blocked: 0 },
   });
+  // 旧服务残留 queue 字段时前端也不渲染排队概念
   const queue = [
-    { batchId: 'batch-20990101-002', status: 'prepared', queuePosition: 2, total: 3, createdAt: '2026-01-01T00:00:00.000Z', developer: '张三' },
-    { batchId: 'batch-20990101-003', status: 'prepared', queuePosition: 3, total: 2, createdAt: '2026-01-01T00:01:00.000Z', developer: '李四' },
+    { batchId: 'batch-20990101-002', status: 'prepared', queuePosition: 2, total: 3, createdAt: '2026-01-01T00:00:00.000Z' },
+    { batchId: 'batch-20990101-003', status: 'prepared', queuePosition: 3, total: 2, createdAt: '2026-01-01T00:01:00.000Z' },
   ];
   h.state.batchData = mkData(queue);
   h.state.search.q = '';
   const full = h.run('renderZcodeBatchPanel()');
-  assert.match(full, /batch-20990101-002/, '全量含排队批次 2');
-  assert.match(full, /batch-20990101-003/, '全量含排队批次 3');
-  assert.ok(!full.includes('开发人员'), '排队批次行不再展示开发人员');
-  // 按批次号过滤
-  h.state.search.q = 'batch-20990101-003';
-  const byId = h.run('renderZcodeBatchPanel()');
-  assert.match(byId, /batch-20990101-003/, '命中批次号的排队批次保留');
-  assert.ok(!byId.includes('batch-20990101-002</span>'), '未命中排队批次被过滤');
-  assert.match(byId, /（1 条被搜索过滤）/, '标注被过滤的排队批次数');
-  // REQ-20260910-027：开发人员不再是匹配字段——按开发人员姓名搜索不命中排队批次
-  h.state.search.q = '李四';
-  const byDev = h.run('renderZcodeBatchPanel()');
-  assert.match(byDev, /没有匹配的排队批次，清空搜索恢复。/, '按开发人员搜索应无命中（字段已移除）');
-  // 无匹配空态；清空恢复
-  h.state.search.q = 'zzz-不存在';
-  const miss = h.run('renderZcodeBatchPanel()');
-  assert.match(miss, /没有匹配的排队批次，清空搜索恢复。/, '无匹配排队批次空态');
-  h.state.search.q = '';
-  const restored = h.run('renderZcodeBatchPanel()');
-  assert.match(restored, /batch-20990101-002/, '清空后恢复全量排队批次');
-  // 无排队批次：整节不显示（现状保留）
+  assert.ok(!full.includes('batch-20990101-002'), '不得渲染排队批次号');
+  assert.ok(!full.includes('batch-20990101-003'), '不得渲染排队批次号');
+  assert.ok(!full.includes('排队批次'), '不得出现排队批次节文案');
+  assert.ok(!full.includes('开发人员'), '不展示开发人员');
   h.state.batchData = mkData([]);
   const none = h.run('renderZcodeBatchPanel()');
-  assert.ok(!none.includes('排队批次'), '无排队批次时整节不显示');
+  assert.ok(!none.includes('排队批次'), '无排队数据同样不显示');
 });
 
 // ---------- C 一致性与不回退 ----------
 
-t('C1 反馈条 runs 分支文案与真实过滤口径一致（含执行器与批次号说明，仍声明不发请求）', () => {
+t('C1 反馈条 runs 分支文案与真实过滤口径一致（编号 / 标题 / 执行器，仍声明不发请求）', () => {
   const feed = fnBody(js, 'renderSearchFeedback');
   assert.ok(
-    js.includes('关键词在下方面板内前端过滤（编号 / 标题 / 执行器；排队批次含批次号），不发请求'),
-    'runs 分支文案需与实际过滤字段一致',
+    js.includes('关键词在下方面板内前端过滤（编号 / 标题 / 执行器），不发请求'),
+    'runs 分支文案需与实际过滤字段一致（REQ-20260913-003 去排队批次口径）',
   );
   assert.match(feed, /前端过滤/, '反馈条保留前端过滤口径说明');
 });

@@ -69,7 +69,8 @@ t('B3 领取时重冻结基线并持久化：账本 baseline=领取时点指纹�
   const { root, dataDir } = mkProject();
   const a = core.createItem(dataDir, { type: 'requirement', title: 'r1' });
   accept(dataDir, a.id);
-  const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
+  // ids 显式种子落账（带创建时基线）——缺省建轮不冻结候选（REQ-20260913-003），无创建时基线可比对
+  const { batch } = refine.createRefineBatch(dataDir, { ids: [a.id], mode: 'zcode', projectRoot: root });
   const frozenAtCreate = batch.candidates[0].baseline;
   const dir = core.resolveItemDir(dataDir, a.id).dir;
   fs.appendFileSync(path.join(dir, 'README.md'), '\n人工追加背景\n');
@@ -122,7 +123,9 @@ t('B6 出局条件回归：目录损坏与离开 accepted 仍 skipped 出局，�
     return x;
   });
   const [a, b, c] = items;
-  const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
+  // ids 种子落账：目录损坏项须在账本候选中才会走「目录损坏出局」记账
+  //（REQ-20260913-003 起实时候选盘点直接跳过目录损坏项，不经出局记账）
+  const { batch } = refine.createRefineBatch(dataDir, { ids: [a.id, b.id, c.id], mode: 'zcode', projectRoot: root });
   fs.rmSync(core.resolveItemDir(dataDir, a.id).dir, { recursive: true, force: true }); // 目录损坏
   core.setStatus(dataDir, b.id, 'planned', { by: 'human' }); // 离开 accepted
   fs.appendFileSync(path.join(core.resolveItemDir(dataDir, c.id).dir, 'README.md'), '\n人工追加\n'); // 人工编辑：不出局

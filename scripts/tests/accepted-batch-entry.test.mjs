@@ -163,7 +163,7 @@ t('L6 前端不再依赖 batchEntry 渲染已接受条目（源码级断言）',
 });
 
 // ============================================================
-// 第二部分：数据层 S1（batch.batchEntryIndex 单测）
+// 第二部分：数据层（batchEntryIndex 已随 REQ-20260913-003 下线）
 // ============================================================
 
 function tempData() {
@@ -179,40 +179,11 @@ const mkPlanned = (dataDir, title) => {
   return st.id;
 };
 
-t('S1 batchEntryIndex：入未结束批次→{batchId,status}；未入批→无；finished→剔除；多批次取最早', () => {
-  const { root, dataDir } = tempData();
-  const a = mkPlanned(dataDir, 'A');
-  const b = mkPlanned(dataDir, 'B');
-  const { batch: b1 } = batch.createBatch(dataDir, { ids: [a], projectRoot: root, mode: 'zcode' });
-  let idx = batch.batchEntryIndex(dataDir);
-  assert.deepEqual(idx.get(a), { batchId: b1.batchId, status: 'prepared' }, '入批条目应映射到批次与状态');
-  assert.equal(idx.get(b), undefined, '未入批条目不应出现在索引');
-
-  // 手工构造更晚创建、同样包含 a 的第二批次（createBatch 会冻结前序候选，这里直接落盘账本）
-  const dir1 = path.join(dataDir, 'dispatch', 'batches', b1.batchId);
-  const raw = JSON.parse(fs.readFileSync(path.join(dir1, 'batch.json'), 'utf8'));
-  const b2Id = 'batch-20990909-999';
-  const dir2 = path.join(dataDir, 'dispatch', 'batches', b2Id);
-  fs.mkdirSync(dir2, { recursive: true });
-  fs.writeFileSync(path.join(dir2, 'batch.json'), JSON.stringify({
-    ...raw, batchId: b2Id, createdAt: '2099-01-02T00:00:00.000Z', status: 'running', candidates: [a],
-  }));
-  idx = batch.batchEntryIndex(dataDir);
-  assert.equal(idx.get(a).batchId, b1.batchId, '多批次含同一条目时应取最早创建的批次');
-
-  // 最早批次结束后退到次早批次；两个都结束则剔除
-  raw.status = 'finished';
-  fs.writeFileSync(path.join(dir1, 'batch.json'), JSON.stringify(raw));
-  idx = batch.batchEntryIndex(dataDir);
-  assert.equal(idx.get(a).batchId, b2Id, '最早批次 finished 后应退到仍在队列中的批次');
-  fs.writeFileSync(path.join(dir2, 'batch.json'), JSON.stringify({ ...raw, batchId: b2Id, status: 'finished' }));
-  idx = batch.batchEntryIndex(dataDir);
-  assert.equal(idx.get(a), undefined, '全部批次结束后条目不再算已入批次');
-  fs.rmSync(root, { recursive: true, force: true });
-});
+// REQ-20260913-003：S1 batchEntryIndex 单测随「已入批次」数据源下线移除（/api/board 与
+// /api/item/:id 不再附加 batchEntry，见 S2 新断言）。
 
 // ============================================================
-// 第三部分：服务端 S2（batchEntry 仅对 planned 附加，accepted 不再下发）
+// 第三部分：服务端 S2（REQ-20260913-003：batchEntry 字段全量下线，任何条目均不下发）
 // ============================================================
 
 async function serverPart() {
@@ -261,8 +232,8 @@ async function serverPart() {
     const ib = board.json.items.find((x) => x.id === b);
     const ic = board.json.items.find((x) => x.id === c);
     const id = board.json.items.find((x) => x.id === d);
-    assert.deepEqual(ia.batchEntry, { batchId: b1.batchId, status: 'prepared' }, '入批 planned 条目应附 batchEntry（详情 notice 仍消费）');
-    assert.equal(ib.batchEntry, null, '未入批 planned 条目 batchEntry 应为 null');
+    assert.equal('batchEntry' in ia, false, 'REQ-20260913-003：入轮 planned 条目不再附加 batchEntry');
+    assert.equal('batchEntry' in ib, false, '未入轮 planned 条目同样不下发该字段');
     assert.equal('batchEntry' in ic, false, '非 planned 条目不应附加 batchEntry');
     assert.equal('batchEntry' in id, false, 'BUG-20260908-020：accepted 条目不再下发 batchEntry');
 
@@ -271,8 +242,8 @@ async function serverPart() {
     const db = await request(`/api/item/${encodeURIComponent(b)}`);
     const dc = await request(`/api/item/${encodeURIComponent(c)}`);
     const dd = await request(`/api/item/${encodeURIComponent(d)}`);
-    assert.equal(da.json.batchEntry.batchId, b1.batchId, '入批条目详情应附 batchEntry');
-    assert.equal(db.json.batchEntry, null, '未入批条目详情 batchEntry 应为 null');
+    assert.equal('batchEntry' in da.json, false, 'REQ-20260913-003：条目详情不再下发 batchEntry');
+    assert.equal('batchEntry' in db.json, false, '未入轮条目详情同样不下发该字段');
     assert.equal('batchEntry' in dc.json, false, '非 planned 条目详情不附加 batchEntry');
     assert.equal('batchEntry' in dd.json, false, 'BUG-20260908-020：accepted 条目详情不再下发 batchEntry');
 
@@ -283,8 +254,8 @@ async function serverPart() {
     fs.writeFileSync(bfile, JSON.stringify(raw));
     const board2 = await request('/api/board');
     const ia2 = board2.json.items.find((x) => x.id === a);
-    assert.equal(ia2.batchEntry, null, '批次结束后 planned 条目 batchEntry 应回到 null');
-    console.log('✓ S2 /api/board 与 /api/item/:id：batchEntry 仅 planned 附加（accepted 不再下发；finished 剔除）');
+    assert.equal('batchEntry' in ia2, false, '轮次结束后同样不下发该字段');
+    console.log('✓ S2 /api/board 与 /api/item/:id：batchEntry 全量不下发（REQ-20260913-003 数据源下线）');
   } finally {
     proc.kill();
     fs.rmSync(root, { recursive: true, force: true });

@@ -65,55 +65,53 @@ const batchDirOf = (p, batchId) => path.join(p.dataDir, 'dispatch', 'batches', b
 
 // ---------- C1 执行中创建（回归） ----------
 
-t('C1 core：批次有在途运行时 createBatch 成功，新批排队尾（执行中创建回归）', () => {
+t('C1 core：批次有在途运行时重复启动被拒（REQ-20260913-003 不排队）', () => {
   const p = mkProject();
   try {
     const a1 = mkItem(p, 'A1', { backMs: 2000 });
-    const rA = batch.createBatch(p.dataDir, { projectRoot: p.root }); // A 冻结 {A1}
+    const rA = batch.createBatch(p.dataDir, { projectRoot: p.root });
     const run = batch.nextItem(p.dataDir, rA.batch.batchId, { owner: W1 }); // A 在途（预留未收尾）
     assert.equal(run.itemId, a1);
 
-    const b1 = mkItem(p, 'B1', { backMs: 1000 }); // A 冻结后新接受
-    const rB = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.equal(rB.created, true, '在途运行中创建新批应成功');
-    assert.equal(rB.queued, true);
-    assert.equal(rB.queuePosition, 2);
-    assert.deepEqual(rB.batch.candidates, [b1]);
+    mkItem(p, 'B1', { backMs: 1000 }); // 运行中新接受（实时队列归本轮，不再另建）
+    const before = batch.listBatches(p.dataDir).length;
+    assert.throws(() => batch.createBatch(p.dataDir, { projectRoot: p.root }), /已有进行中的任务/, '在途运行中不得再启动');
+    assert.equal(batch.listBatches(p.dataDir).length, before, '拒绝路径不产生新账本对象');
 
-    // 收尾 A：check 应提示自动接续 B
     core.claim(p.dataDir, a1, W1);
     core.report(p.dataDir, a1, { summary: 'ok', by: W1, run: { runId: run.runId } });
     batch.finishRun(p.dataDir, run.runId, { result: 'reported', reportRef: 'test-report.md' });
     const ck = batch.checkBatch(p.dataDir, rA.batch.batchId);
-    assert.equal(ck.nextBatch && ck.nextBatch.batchId, rB.batch.batchId, 'A 收尾应接续 B');
+    assert.equal('nextBatch' in ck, false, '收尾不再携带排队接续');
   } finally { cleanup(p); }
 });
 
 // ---------- D1 删除排队批次 ----------
 
-t('D1 core：删除排队中（未执行）批次——目录移除、队列缩短、后续位次前移', () => {
+t('D1 core：删除排队中（未执行）的存量账本——目录移除、未结束队列缩短', () => {
   const p = mkProject();
   try {
     mkItem(p, 'A1', { backMs: 3000 });
     const rA = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    mkItem(p, 'B1', { backMs: 1000 });
-    const rB = batch.createBatch(p.dataDir, { projectRoot: p.root }); // B 排队
-    assert.equal(rB.queued, true);
+    // REQ-20260913-003：不再排队——手工构造升级前的后位排队账本（CLI 处理存量数据的路径）
+    const rB = { batchId: 'batch-20990101-099' };
+    const raw = batch.getBatch(p.dataDir, rA.batch.batchId);
+    const dirB = path.join(p.dataDir, 'dispatch', 'batches', rB.batchId);
+    fs.mkdirSync(dirB, { recursive: true });
+    fs.writeFileSync(path.join(dirB, 'batch.json'), JSON.stringify({
+      ...raw, batchId: rB.batchId, createdAt: '2099-01-02T00:00:00.000Z', status: 'prepared', currentRunId: null,
+    }));
 
-    const r = batch.deleteBatch(p.dataDir, rB.batch.batchId);
+    const r = batch.deleteBatch(p.dataDir, rB.batchId);
     assert.equal(r.ok, true);
-    assert.equal(r.batchId, rB.batch.batchId);
-    assert.equal(fs.existsSync(batchDirOf(p, rB.batch.batchId)), false, '批次账本目录应移除');
+    assert.equal(r.batchId, rB.batchId);
+    assert.equal(fs.existsSync(batchDirOf(p, rB.batchId)), false, '批次账本目录应移除');
     assert.equal(fs.existsSync(batchDirOf(p, rA.batch.batchId)), true, '其余批次目录不受影响');
     assert.deepEqual(
       batch.unfinishedBatches(p.dataDir).map((b) => b.batchId),
       [rA.batch.batchId],
-      '删除后队列只剩 A',
+      '删除后未结束队列只剩 A',
     );
-
-    mkItem(p, 'C1');
-    const rC = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.equal(rC.queuePosition, 2, '删除 B 后新排队批次位次前移为 2');
   } finally { cleanup(p); }
 });
 
@@ -187,21 +185,28 @@ t('D4 core：删除已结束（finished）批次成功；删除不存在批次�
 
 // ---------- D5 删队首：防抢解除 ----------
 
-t('D5 core：删除队首未执行批次后，下一批次成为队首且 nextItem 可直接领取', () => {
+t('D5 core：删除队首未执行账本后，存量后位账本成为队首且 nextItem 可直接领取', () => {
   const p = mkProject();
   try {
     const a1 = mkItem(p, 'A1', { backMs: 3000 });
     const rA = batch.createBatch(p.dataDir, { projectRoot: p.root }); // A 队首
     const b1 = mkItem(p, 'B1', { backMs: 1000 });
-    const rB = batch.createBatch(p.dataDir, { projectRoot: p.root }); // B 排队
-    // B 被队首 A 防抢阻塞
-    assert.throws(() => batch.nextItem(p.dataDir, rB.batch.batchId, { owner: W1 }), /排队中/);
+    // 手工构造升级前的后位排队账本（candidates 冻结 B1 的存量形态）
+    const rB = { batchId: 'batch-20990101-098' };
+    const raw = batch.getBatch(p.dataDir, rA.batch.batchId);
+    const dirB = path.join(p.dataDir, 'dispatch', 'batches', rB.batchId);
+    fs.mkdirSync(dirB, { recursive: true });
+    fs.writeFileSync(path.join(dirB, 'batch.json'), JSON.stringify({
+      ...raw, batchId: rB.batchId, createdAt: '2099-01-02T00:00:00.000Z', status: 'prepared', currentRunId: null, candidates: [b1],
+    }));
+    // 后位账本被队首 A 防抢阻塞
+    assert.throws(() => batch.nextItem(p.dataDir, rB.batchId, { owner: W1 }), /排队中/);
 
     const r = batch.deleteBatch(p.dataDir, rA.batch.batchId);
     assert.equal(r.ok, true);
-    assert.equal(batch.queueHeadBatch(p.dataDir).batchId, rB.batch.batchId, 'B 应成为队首');
-    const run = batch.nextItem(p.dataDir, rB.batch.batchId, { owner: W1 });
-    assert.equal(run.itemId, b1, '删除队首后 B 可直接领取');
+    assert.equal(batch.queueHeadBatch(p.dataDir).batchId, rB.batchId, '后位账本应成为队首');
+    const run = batch.nextItem(p.dataDir, rB.batchId, { owner: W1 });
+    assert.equal(run.itemId, b1, '删除队首后可直接领取');
     core.claim(p.dataDir, b1, W1);
     core.report(p.dataDir, b1, { summary: 'ok', by: W1, run: { runId: run.runId } });
     batch.finishRun(p.dataDir, run.runId, { result: 'reported', reportRef: 'test-report.md' });
@@ -275,9 +280,23 @@ async function acceptNew(root, title) {
   return m[1];
 }
 
+
+// 读取项目当前队首账本号（创建响应不再透出批次号后的测试辅助）
+function batchHeadOf(p) {
+  const dir = path.join(p.root, 'docs', 'agent-team-board', 'dispatch', 'batches');
+  const ids = fs.readdirSync(dir).sort();
+  for (const id of ids) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(dir, id, 'batch.json'), 'utf8'));
+      if (j.status !== 'finished') return id;
+    } catch {}
+  }
+  return ids[ids.length - 1];
+}
+
 // ---------- D6 serve：删除接口 ----------
 
-t('D6 serve：/api/batch/delete 删除排队批次成功；在途/不存在批次返回 400', async () => {
+t('D6 serve：/api/batch/delete 删除未执行账本成功；重复启动 400；在途/不存在 400', async () => {
   const p = await mkCliProject(2);
   const port = 30000 + Math.floor(Math.random() * 20000);
   const server = spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'server.mjs')], {
@@ -296,24 +315,32 @@ t('D6 serve：/api/batch/delete 删除排队批次成功；在途/不存在批�
 
     const cA = await httpReq(port, 'POST', `/api/batch/create?${P}`, {});
     assert.equal(cA.status, 200);
-    await acceptNew(p.root, '删除排队追加条目');
-    const cB = await httpReq(port, 'POST', `/api/batch/create?${P}`, {});
-    assert.equal(cB.status, 200);
-    assert.equal(cB.json.queued, true, 'B 应排队');
+    assert.equal('batchId' in cA.json, false, '创建响应不再透出批次号（REQ-20260913-003）');
+    const headA = batchHeadOf(p);
 
-    const del = await httpReq(port, 'POST', `/api/batch/delete?${P}`, { batchId: cB.json.batchId });
+    // REQ-20260913-003：未结束轮内重复启动 400（不排队）
+    await acceptNew(p.root, '重复启动追加条目');
+    const cB = await httpReq(port, 'POST', `/api/batch/create?${P}`, {});
+    assert.equal(cB.status, 400, '重复启动应被拒');
+    assert.match(String(cB.json && cB.json.error || ''), /已有进行中的任务/);
+
+    const del = await httpReq(port, 'POST', `/api/batch/delete?${P}`, { batchId: headA });
     assert.equal(del.status, 200);
     assert.equal(del.json.ok, true);
-    assert.equal(del.json.batchId, cB.json.batchId);
+    assert.equal(del.json.batchId, headA);
 
     const cur = await httpReq(port, 'GET', `/api/batch/current?${P}`);
     assert.equal(cur.status, 200);
-    assert.deepEqual((cur.json.queue || []).map((q) => q.batchId), [cA.json.batchId], '删除后队列只剩 A');
+    assert.equal('queue' in cur.json, false, 'current 不再携带排队列表');
+    assert.equal(cur.json.batch, null, '删除后无未结束轮（回到启动区）');
 
-    // A 预留在途运行后删除应 400
-    const next = await runAtbJson(['batch', 'next', '--batch', cA.json.batchId, '--by', 'zcode-del-cli-w1'], p.root);
+    // 新一轮预留在途运行后删除应 400
+    const cC = await httpReq(port, 'POST', `/api/batch/create?${P}`, {});
+    assert.equal(cC.status, 200, '删除后可再启动');
+    const headC = batchHeadOf(p);
+    const next = await runAtbJson(['batch', 'next', '--batch', headC, '--by', 'zcode-del-cli-w1'], p.root);
     assert.ok(next.runId, '应预留成功');
-    const delA = await httpReq(port, 'POST', `/api/batch/delete?${P}`, { batchId: cA.json.batchId });
+    const delA = await httpReq(port, 'POST', `/api/batch/delete?${P}`, { batchId: headC });
     assert.equal(delA.status, 400, '在途批次删除应 400');
     assert.match(delA.json.error, /正在执行|在途/, '错误应说明在途执行');
 
@@ -328,39 +355,37 @@ t('D6 serve：/api/batch/delete 删除排队批次成功；在途/不存在批�
 
 // ---------- D7 CLI：batch delete ----------
 
-t('D7 cli：batch delete 删除排队批次成功；在途批次与缺参报错；needs_attention 拒绝', async () => {
+t('D7 cli：batch delete 删除未执行账本成功；在途批次与缺参报错；needs_attention 拒绝', async () => {
   const p = await mkCliProject(1);
   try {
     const cA = await runAtbJson(['batch', 'create'], p.root);
-    await acceptNew(p.root, '删除-C1');
+    const aId = cA.batchId;
+
+    // 位置参数删除：成功且提示（未执行账本可删）
+    const delA0 = await runAtb(['batch', 'delete', aId], p.root);
+    assert.equal(delA0.code, 0);
+    assert.match(delA0.out, new RegExp(`已删除批次 ${aId}`));
+
+    // 重新启动一轮（删除后候选仍在）
     const cB = await runAtbJson(['batch', 'create'], p.root);
-    assert.equal(cB.queued, true);
-    await acceptNew(p.root, '删除-C2');
-    const cC = await runAtbJson(['batch', 'create'], p.root);
-    assert.equal(cC.queued, true);
-
-    // 位置参数删除 B：成功且提示
-    const delB = await runAtb(['batch', 'delete', cB.batchId], p.root);
-    assert.equal(delB.code, 0);
-    assert.match(delB.out, new RegExp(`已删除批次 ${cB.batchId}`));
-
-    // --json 删除 C：结构化输出
-    const delC = await runAtbJson(['batch', 'delete', '--batch', cC.batchId], p.root);
+    const bId = cB.batchId;
+    // --json 删除：结构化输出
+    const delC = await runAtbJson(['batch', 'delete', '--batch', bId], p.root);
     assert.equal(delC.ok, true);
 
-    // 队首回到 A：summary 缺省解析 A
-    const s = await runAtbJson(['batch', 'summary'], p.root);
-    assert.equal(s.batch.batchId, cA.batchId);
+    // 再启动一轮供后续断言
+    const cD = await runAtbJson(['batch', 'create'], p.root);
+    const dId = cD.batchId;
 
     // 缺批次号：用法报错
     const noArg = await runAtb(['batch', 'delete'], p.root);
     assert.notEqual(noArg.code, 0);
     assert.match(noArg.out + noArg.err, /批次号|用法/);
 
-    // A 预留在途运行：删除被拒
-    const next = await runAtbJson(['batch', 'next', '--batch', cA.batchId, '--by', 'zcode-del-cli-w2'], p.root);
+    // 预留在途运行：删除被拒
+    const next = await runAtbJson(['batch', 'next', '--batch', dId, '--by', 'zcode-del-cli-w2'], p.root);
     assert.ok(next.runId);
-    const delA = await runAtb(['batch', 'delete', cA.batchId], p.root);
+    const delA = await runAtb(['batch', 'delete', dId], p.root);
     assert.notEqual(delA.code, 0, '在途批次删除应失败');
     assert.match(delA.out + delA.err, /正在执行|在途/);
 
@@ -368,7 +393,7 @@ t('D7 cli：batch delete 删除排队批次成功；在途批次与缺参报错�
     assert.equal((await runAtb(['claim', next.itemId, '--by', 'zcode-del-cli-w2'], p.root)).code, 0);
     assert.equal((await runAtb(['report', next.itemId, '--summary', 'ok', '--by', 'zcode-del-cli-w2', '--run', next.runId], p.root)).code, 0);
     await runAtbJson(['run', 'receipt', next.runId, '--result', 'failed', '--reason', '环境错误', '--no-safe-to-continue'], p.root);
-    const delNa = await runAtb(['batch', 'delete', cA.batchId], p.root);
+    const delNa = await runAtb(['batch', 'delete', dId], p.root);
     assert.notEqual(delNa.code, 0, 'needs_attention 批次删除应失败');
     assert.match(delNa.out + delNa.err, /人工核对|needs_attention/);
   } finally {
@@ -378,19 +403,13 @@ t('D7 cli：batch delete 删除排队批次成功；在途批次与缺参报错�
 
 // ---------- D8 UI 静态契约 ----------
 
-t('D8 ui：执行中面板「排队新批次」入口 + 排队/当前批次删除入口与确认流', () => {
+t('D8 ui：排队/删除入口已随批次排队概念移除（REQ-20260913-003）', () => {
   const js = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'app.js'), 'utf8');
-  // 执行中创建入口：按钮 id + 复用创建流程
-  assert.match(js, /id="queueNewBatch"/, '应有「排队新批次」按钮');
-  assert.match(js, /#queueNewBatch'[\s\S]{0,220}?createBatchAndCopy/, '排队新批次应复用 createBatchAndCopy 创建流程');
-  // 删除入口：排队列表项 + 当前批次（无在途）
-  assert.match(js, /data-del-batch/, '排队列表项应有删除按钮');
-  assert.match(js, /id="batchDelete"/, '当前批次应有「删除本批次」按钮');
-  // 确认与调用
-  assert.match(js, /\/api\/batch\/delete/, '应调用删除接口');
-  const delFn = js.match(/async function deleteBatchById[\s\S]{0,900}/);
-  assert.ok(delFn, '应有 deleteBatchById 删除流程函数');
-  assert.match(delFn[0], /uiConfirm/, '删除前应有页面内确认框');
+  for (const w of ['queueNewBatch', 'data-del-batch', 'deleteBatchById', '排队新批次', '删除本批次']) {
+    assert.ok(!js.includes(w), `app.js 不得残留「${w}」入口`);
+  }
+  // 服务端删除路由保留（CLI 处理存量账本），但前端不再调用
+  assert.ok(!js.includes('/api/batch/delete'), '前端不再调用删除接口');
 });
 
 // ---------- 运行 ----------

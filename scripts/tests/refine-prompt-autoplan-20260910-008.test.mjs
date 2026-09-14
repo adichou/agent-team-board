@@ -224,7 +224,9 @@ t('D1 CLI refine create 分态回显：默认关闭与现状一致；开启后 p
     assert.equal(textOff.code, 0, '关闭路径 create 应成功');
     assert.match(textOff.out, /条目保持 accepted（已接受），不占实施互斥/, '关闭：输出行与现状一致');
     assert.ok(!textOff.out.includes('自动转入计划'), '关闭：全文无自动转入计划说明');
-    assert.ok(!atbJson(['refine', 'create'], off.root).prompt.includes('自动转入计划'), '关闭：JSON prompt 无说明');
+    // REQ-20260913-003：重复创建被拒——JSON 口径改读账本落盘提示词
+    const offLedger = refine.queueHeadRefineBatch(off.dataDir);
+    assert.ok(!offLedger.prompt.includes('自动转入计划'), '关闭：账本 prompt 无说明');
 
     mkAccepted(on.dataDir, 'CLI 开启');
     taskSettings.saveTaskSettings(on.dataDir, { refine: { autoPlanAfterDone: true } });
@@ -232,16 +234,16 @@ t('D1 CLI refine create 分态回显：默认关闭与现状一致；开启后 p
     assert.equal(textOn.code, 0, '开启路径 create 应成功');
     assert.match(textOn.out, /完善后自动转入计划已开启/, '开启：输出行标注已开启');
     assert.match(textOn.out, /属预期系统行为/, '开启：输出行说明属预期系统行为');
-    const jsonOn = atbJson(['refine', 'create'], on.root);
-    assert.ok(jsonOn.prompt.includes('完善完成后自动转入计划'), '开启：JSON prompt 含开关说明');
-    assert.ok(jsonOn.prompt.includes('不要据此暂停、中止或等待人工确认'), '开启：JSON prompt 含不得暂停指令');
+    const onLedger = refine.queueHeadRefineBatch(on.dataDir);
+    assert.ok(onLedger.prompt.includes('完善完成后自动转入计划'), '开启：账本 prompt 含开关说明');
+    assert.ok(onLedger.prompt.includes('不要据此暂停、中止或等待人工确认'), '开启：账本 prompt 含不得暂停指令');
   } finally {
     fs.rmSync(off.root, { recursive: true, force: true });
     fs.rmSync(on.root, { recursive: true, force: true });
   }
 });
 
-t('D2 存量未结束批次：冻结 OFF 提示词 → 打开开关 → 幂等回显归一为 ON；账本冻结原文不被改写', () => {
+t('D2 存量未结束批次：冻结 OFF 提示词 → 打开开关 → 公开视图归一为 ON；账本冻结原文不被改写', () => {
   const p = mkProject('atb-b31-d2-');
   try {
     mkAccepted(p.dataDir, '存量批次');
@@ -249,10 +251,10 @@ t('D2 存量未结束批次：冻结 OFF 提示词 → 打开开关 → 幂等�
     const rawBefore = ledgerOf(p.dataDir, first.batchId).prompt;
     assert.ok(rawBefore.includes(OFF_SCHED), '创建时（关闭）冻结 OFF 原文');
     taskSettings.saveTaskSettings(p.dataDir, { refine: { autoPlanAfterDone: true } });
-    const again = atbJson(['refine', 'create'], p.root);
-    assert.equal(again.created, false, '在途批次幂等返回');
-    assert.ok(again.prompt.includes(ON_SCHED.join('\n')), '幂等回显按当前开关归一为 ON 文案');
-    assert.ok(!again.prompt.includes(OFF_SCHED), '回显不再含 OFF 约束行');
+    // REQ-20260913-003：重复创建被拒——公开视图（summary/publicView 数据源）按当前开关归一
+    const view = refine.refineBatchPublicView(refine.getRefineBatch(p.dataDir, first.batchId), { autoPlan: true });
+    assert.ok(view.prompt.includes(ON_SCHED.join('\n')), '公开视图按当前开关归一为 ON 文案');
+    assert.ok(!view.prompt.includes(OFF_SCHED), '视图不再含 OFF 约束行');
     assert.equal(ledgerOf(p.dataDir, first.batchId).prompt, rawBefore, '账本冻结原文不回写');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });

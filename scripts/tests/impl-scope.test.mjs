@@ -153,7 +153,7 @@ async function waitReported(s, d, runId) {
 
 // ---------- S1/S2：createBatch 指定集合（REQ-20260908-026 单条目重试依赖的显式范围） ----------
 
-t('S1 createBatch({ids})：候选=指定集合且保持规范排序，未指定条目不入批', () => {
+t('S1 createBatch({ids})：指定集合作队首种子（规范序），实时队列并入其余已计划条目', () => {
   const p = mkProject();
   try {
     const reqOld = mkItem(p, 'requirement', '较早需求', { backMs: 3000 });
@@ -164,13 +164,15 @@ t('S1 createBatch({ids})：候选=指定集合且保持规范排序，未指定�
     mkItem(p, 'requirement', '未接受', { accept: false });
 
     const { batch: b } = batch.createBatch(p.dataDir, { ids: [bug, reqNew], projectRoot: p.root });
-    assert.deepEqual(b.candidates, [reqNew, bug], '候选应为指定集合，按 需求→bug 规范序');
-    const { batch: full } = batch.createBatch(p.dataDir, { projectRoot: p.root, mode: 'codex' });
-    assert.equal(full.candidates.length, 3, '未指定 ids 时仍为全部候选（默认范围）');
+    assert.deepEqual(b.candidates, [reqNew, bug], '队首种子应为指定集合，按 需求→bug 规范序');
+    // REQ-20260913-003：实时队列——其余已计划条目（reqOld）并入本轮生效候选（种子在前）
+    assert.deepEqual(batch.effectiveCandidates(p.dataDir, b), [reqNew, bug, reqOld], '生效候选=种子∪实时候选');
+    // 未结束轮内不得再启动（不再排队/幂等）
+    assert.throws(() => batch.createBatch(p.dataDir, { projectRoot: p.root, mode: 'codex' }), /已有进行中的任务/);
   } finally { cleanup(p); }
 });
 
-t('S2 createBatch({ids})：认领剔除、空集报错、指定集合全量入批（REQ-20260908-019 起无上限截断）', () => {
+t('S2 createBatch({ids})：认领剔除、空集报错、未结束轮内重复启动先于范围校验拒绝', () => {
   const p = mkProject();
   try {
     const reqOld = mkItem(p, 'requirement', '较早需求', { backMs: 3000 });
@@ -178,11 +180,11 @@ t('S2 createBatch({ids})：认领剔除、空集报错、指定集合全量入�
     const bug = mkItem(p, 'bug', 'Bug');
 
     forceClaim(p, reqNew, 'zcode-other');
-    // 空集/非法入参报错须在任何批次创建之前验证：未结束批次的幂等返回会短路后续校验
+    // 空集/非法入参报错须在任何批次创建之前验证：重复启动拒绝会短路后续校验（REQ-20260913-003）
     assert.throws(
       () => batch.createBatch(p.dataDir, { ids: [reqNew], projectRoot: p.root }),
-      /均不可入批/,
-      '勾选集合过滤后为空应给明确错误',
+      /均不可入队/,
+      '勾选集合过滤后为空应给明确错误（去批次措辞，REQ-20260913-003）',
     );
     assert.throws(
       () => batch.createBatch(p.dataDir, { ids: 'REQ-x', projectRoot: p.root }),
@@ -191,12 +193,15 @@ t('S2 createBatch({ids})：认领剔除、空集报错、指定集合全量入�
     );
 
     const { batch: b1 } = batch.createBatch(p.dataDir, { ids: [reqNew, bug], projectRoot: p.root });
-    assert.deepEqual(b1.candidates, [bug], '已被认领的指定项应剔除');
+    assert.deepEqual(b1.candidates, [bug], '已被认领的指定项应从种子剔除');
     assert.equal('limit' in b1, false, '批次记录不再写 limit 字段');
 
-    const { batch: b2 } = batch.createBatch(p.dataDir, { ids: [reqOld, reqNew, bug], projectRoot: p.root, mode: 'codex' });
-    assert.equal(b2.mode, 'codex');
-    assert.deepEqual(b2.candidates, [reqOld, bug], '指定集合全量入批（无截断），未指定条目不入批');
+    // 未结束轮内再次 create（含显式 ids）一律按重复启动拒绝——先于范围校验
+    assert.throws(
+      () => batch.createBatch(p.dataDir, { ids: [reqOld, reqNew, bug], projectRoot: p.root, mode: 'codex' }),
+      /已有进行中的任务/,
+      '未结束轮内不得再建（终态单条目重建路径要求轮次已收尾）',
+    );
   } finally { cleanup(p); }
 });
 
@@ -222,12 +227,14 @@ t('S3 /api/batch/current：不再按 ?ids= 过滤统计（BUG-20260909-006）；
     assert.equal(r.status, 200);
     assert.deepEqual(r.json.stats, { candidates: 3, blocked: 1 }, 'ids 参数不再过滤统计（口径唯一化为已计划队列）');
 
-    // 创建接口的显式 ids（REQ-20260908-026 单条目重试路径）保持可用
+    // 创建接口的显式 ids（REQ-20260908-026 单条目重试路径）保持可用：指定集合为队首种子，
+    // 实时候选计数按「种子 ∪ 当前已计划队列」口径（REQ-20260913-003 建轮不冻结）
     r = await req(srv.port, 'POST', `/api/batch/create${P}`, { ids: [C, A] });
     assert.equal(r.status, 200);
-    assert.equal(r.json.counts.candidates, 2, '显式 ids 创建批次候选应为指定集合');
-    const b = batch.getBatch(p.dataDir, r.json.batchId);
-    assert.deepEqual(b.candidates, [A, C], '冻结清单=指定集合（规范序）');
+    assert.equal('batchId' in r.json, false, '创建响应不再透出批次号（REQ-20260913-003）');
+    assert.equal(r.json.counts.candidates, 3, '实时候选计数=种子∪已计划队列（B 一并入列）');
+    const b = batch.queueHeadBatch(p.dataDir);
+    assert.deepEqual(b.candidates, [A, C], '队首种子=指定集合（规范序）');
   } finally {
     srv.child.kill('SIGTERM');
     cleanup(p);

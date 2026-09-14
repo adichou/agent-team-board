@@ -118,11 +118,15 @@ t('D2 遗留兼容：三个 create 传 developer 不报错（忽略）；prompt 
     const plain = batch.generatePrompt({ projectRoot: p.root, batchId: withDev.batch.batchId, workerSpecPath: '/s.md' });
     const legacy = batch.generatePrompt({ projectRoot: p.root, batchId: withDev.batch.batchId, workerSpecPath: '/s.md', developer: '张三' });
     assert.equal(legacy, plain, 'generatePrompt 传 developer 应与不传逐字一致（参数保留但忽略）');
-    // 非法值也不再校验报错（校验随功能移除，遗留入参一律忽略）
+    // 非法值也不再校验报错（校验随功能移除，遗留入参一律忽略）；
+    // REQ-20260913-003：未结束轮内再建（含显式 ids）被拒——developer 忽略语义经生成函数断言覆盖
     const second = mkPlanned(p, 'A2');
-    const bad = batch.createBatch(p.dataDir, { projectRoot: p.root, ids: [second], developer: 'x'.repeat(31) });
-    assert.ok(bad.batch.batchId, '超长 developer 应被忽略而不是拒绝');
-    assert.equal(batch.listBatches(p.dataDir).length, 2, '两次创建均应成功');
+    assert.throws(
+      () => batch.createBatch(p.dataDir, { projectRoot: p.root, ids: [second], developer: 'x'.repeat(31) }),
+      /已有进行中的任务/,
+      '未结束轮内不得再建（重复启动先于参数忽略）',
+    );
+    assert.equal(batch.listBatches(p.dataDir).length, 1, '不得产生第二个账本对象');
   } finally { cleanup(p); }
 });
 
@@ -147,7 +151,8 @@ t('D3 存量兼容：账本手工含 developer 的批次 summary/publicView/brie
     rsaved.developer = '存量开发';
     fs.writeFileSync(rfile, JSON.stringify(rsaved, null, 2) + '\n');
     const rview = refine.refineBatchPublicView(refine.getRefineBatch(p.dataDir, rb.batch.batchId));
-    assert.equal(rview.batchId, rb.batch.batchId, 'refine 公开视图应正常返回');
+    assert.equal(rview.mode, rb.batch.mode, 'refine 公开视图应正常返回');
+    assert.equal('batchId' in rview, false, 'REQ-20260913-003：refine 公开视图不再透出批次号');
     assert.equal('developer' in rview, false, 'refine 公开视图不应透出 developer');
     assert.equal('developer' in refine.refineBatchBrief(p.dataDir, rb.batch.batchId), false, 'refineBatchBrief 不应透出 developer');
   } finally { cleanup(p); }
@@ -177,9 +182,8 @@ t('D5 前端展示/搜索：无「开发人员」片段；globalTaskMatches 与�
   const m = source.app.match(/function globalTaskMatches\(task, projRow, q\)[\s\S]*?\n\}/);
   assert.ok(m, '应存在 globalTaskMatches');
   assert.doesNotMatch(m[0], /developer/, '全局搜索过滤字段不应含 developer');
-  const q = source.app.match(/allQueued\.filter\(\(x\) =>[\s\S]*?\)\)/);
-  assert.ok(q, '应存在排队批次过滤');
-  assert.doesNotMatch(q[0], /developer/, '排队批次过滤字段不应含 developer');
+  // REQ-20260913-003：排队批次过滤已随批次排队概念移除（不得残留，也不含 developer）
+  assert.ok(!source.app.includes('allQueued'), '排队批次过滤应已移除');
 });
 
 // ---------- D6/D7 server 与 CLI 静态契约 ----------
@@ -234,9 +238,9 @@ t('D8 保留项：启动按钮与无候选禁用 title、启动新一轮、排�
   assert.match(source.app, /id="refineCreate"/, '完善启动按钮保留');
   assert.match(source.app, /id="batchNext"/, '终态「启动新一轮」保留');
   assert.match(source.app, /id="refineNext"/, '完善「启动新一轮」保留');
-  const q = source.app.match(/allQueued\.filter\(\(x\) =>[\s\S]*?\)\)/);
-  assert.ok(q && /x\.batchId/.test(q[0]), '排队批次仍按批次号过滤');
-  assert.match(source.app.match(/function globalTaskMatches\(task, projRow, q\)[\s\S]*?\n\}/)[0], /task\.batchId/, '全局搜索仍按批次号过滤');
+  // REQ-20260913-003：排队批次过滤与批次号搜索字段已移除；队列/记录搜索其余字段保持
+  assert.ok(!source.app.includes('allQueued'), '排队批次过滤应已移除');
+  assert.doesNotMatch(source.app.match(/function globalTaskMatches\(task, projRow, q\)[\s\S]*?\n\}/)[0], /batchId/, '全局搜索不再按批次号过滤');
 });
 
 let failed = 0;
