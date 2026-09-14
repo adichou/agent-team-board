@@ -548,7 +548,7 @@ const ATBBuild = (() => {
         : '<span class="muted small">暂无关联提交（先完成开发提交）</span>';
       return `<label class="check bld-cand${disabledIds?.has(it.itemId) ? ' off' : ''}">
         <input type="checkbox" data-pick="${panelKey}" data-item="${esc(it.itemId)}"${checked}${dis}>
-        <span class="bld-cand-title">${esc(it.itemId)} ${esc(it.title || '')}</span>${commits}
+        <span class="bld-cand-title" title="${esc(it.title || '')}">${esc(it.itemId)} ${esc(it.title || '')}</span>${commits}
       </label>`;
     }).join('');
   }
