@@ -858,6 +858,20 @@ export function listDiscussions(dataDir, { status = null } = {}) {
 
 // ---------- 提示词（服务端拼装；复制只代表已生成，不代表 Agent 已连接） ----------
 
+// REQ-20260914-003：讨论 Agent「按需更新文件并自动提交」追加约定（启动/继续提示词共用）。
+// 只追加不改既有章节；「不修改代码」口径收敛为业务代码仍不改，仅放开讨论明确支撑的文档/配置类文件。
+function fileUpdateCommitLines(id, extra = []) {
+  return [
+    '按需更新与自动提交（每轮回答后检查）：',
+    '- 本轮结论需要更新相应文件（如讨论中约定的文档、配置等）时，按需更新文件，更新完成后自动执行 git 提交（只 commit，不 push）；',
+    `- commit 消息必须体现讨论单号 ${id}，并对本次修改做简单摘要，便于按单号追溯；格式沿用项目自动提交口径「类型: 摘要 单号」（如 "doc: 更新导出说明 ${id}"）；`,
+    '- 回答内容中要显示本次 commit 消息（单号 + 修改摘要，建议含提交号），用户无需另查 git log 即可知道本轮落了什么提交；',
+    '- 本轮无文件更新时在回答中明示无修改，不产生空提交；',
+    '- 仅放开讨论明确支撑的文档、配置类文件（上文「不修改代码」指业务代码，仍不改）；不改变看板状态、不创建或修改需求/Bug 条目，轮次与纪要仍经 atb disc round / atb disc minutes 统一入口。',
+    ...extra,
+  ];
+}
+
 export function buildStartPrompt(dataDir, id) {
   const meta = readTicketMeta(dataDir, id);
   const dir = ticketDir(dataDir, id);
@@ -883,6 +897,8 @@ export function buildStartPrompt(dataDir, id) {
     '- 讨论不强制绑定需求或说明文档，可读项目代码与文档辅助判断；',
     '- 讨论期间不修改代码、不创建或修改需求/Bug 条目、不改变看板状态；',
     '- 区分「已确认共识」「模型建议与取舍」「未决问题」，不要把未确认的建议写成共识。',
+    '',
+    ...fileUpdateCommitLines(meta.id),
     '',
     '逐轮保存约定（每轮必须执行，无需等待任何收尾指令）：',
     '- 一轮 = 一次用户输入（问题/补充/纠正/确认均算一轮）+ 你的完整回复；工具调用与进度播报不单独计轮；',
@@ -956,6 +972,10 @@ export function buildContinuePrompt(dataDir, id) {
     `- 纪要：${path.join(dir, DISC_MINUTES_FILE)}`,
     '',
     '约束：只写入本讨论目录，不串其他项目或讨论；不修改代码、不创建或修改需求/Bug 条目、不改变看板状态。',
+    '',
+    ...fileUpdateCommitLines(meta.id, [
+      '- 「只写入本讨论目录」约束的是轮次与纪要；按需文件更新可写讨论明确支撑的本项目内文件，仍不串其他项目或讨论。',
+    ]),
   ].join('\n');
 }
 
