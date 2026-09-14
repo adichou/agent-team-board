@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-018",
+  "type": "bug",
+  "title": "分支浏览页面中的 main 分支通过发布流程推送的文字删掉",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-018",
+  "createdAt": "2026-09-14T14:18:52.684Z",
+  "updatedAt": "2026-09-14T14:38:31.523Z",
+  "agentCompletedAt": "2026-09-14T14:38:31.523Z",
+  "lastReport": {
+    "at": "2026-09-14T14:38:31.523Z",
+    "coverage": 11,
+    "framework": "node:test(自研断言脚本)",
+    "summary": "按用户反馈删除分支浏览 main 行「通过发布流程推送」徽标：build.js 删 mainFlagHtml() 及当前/非当前两处拼接（不加替代，行点击与无推送入口语义不变）；style.css 删 .bld-main-flag；i18n 清理两条徽标词条防死词条；017 测试 U2/U2b 反向断言+W1 死词条断言+S1 无残留断言，先跑红（4 例）后跑绿（11/11），run-all 237 文件全过；引入来源归因 BUG-20260914-017（design.md）",
+    "runId": "run-20260914-247"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T14:18:52.684Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T14:18:52.685Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T14:24:37.088Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-222026-abb3）"
+    },
+    {
+      "at": "2026-09-14T14:30:25.139Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-018",
+      "note": "认领（zcode-batch-048-BUG-20260914-018）"
+    },
+    {
+      "at": "2026-09-14T14:38:31.523Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-018",
+      "note": "上报测试报告（覆盖率 11%），待人工确认完成"
+    }
+  ]
+}
