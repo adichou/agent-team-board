@@ -2020,6 +2020,8 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
 //   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
+//   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
+//                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
 //   POST /api/build/fetch             同步远端（fetch --all --prune）
 //   POST /api/build/push              推送本地分支（未建立上游时首推 -u 建立跟踪）
 async function handleBuildApi(req, res, u, pathname, root, dataDir) {
@@ -2168,6 +2170,14 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         version.mergeWarnings = [String(e.message || e).slice(0, 300)];
       }
       return sendJson(res, 200, { version });
+    });
+  }
+  // REQ-20260913-004 删除版本：POST + JSON 范式（对齐 /api/batch/delete）。透传数据层结果与
+  // 错误（BuildConflictError → 409，经 runPost）；删除后的最新版本状态由前端统一刷新 /state。
+  if (req.method === 'POST' && pathname === '/api/build/version/delete') {
+    return runPost((body) => {
+      const board = requireBoard();
+      return sendJson(res, 200, buildStore.deleteVersion(board, String(body.id || '')));
     });
   }
   if (req.method === 'POST' && pathname === '/api/build/fetch') {

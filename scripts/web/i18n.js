@@ -25,6 +25,14 @@ const EN = {
   // BUG-20260913-004：「提示词与回答回填」更名「AI 完善」（按钮迁入版本卡片，弹窗标题同步）
   'AI 完善': 'AI refine',
   '复制提示词': 'Copy prompt',
+  // REQ-20260913-004 支持版本删除（卡片删除键 + 确认弹窗 + 反馈）
+  '确认删除': 'Confirm delete',
+  '合并中，不可删除': 'Merging in progress — deletion disabled',
+  '删除中…': 'Deleting…',
+  '删除该版本计划（需确认，删除后不可恢复）': 'Delete this version plan (confirmation required; cannot be undone)',
+  '删除后不可恢复，关联条目与 commit 关联一并移除；条目本身可重新纳入其他版本。': 'This cannot be undone: linked items and their commit associations are removed; the items themselves can be added to another version later.',
+  '仅删除看板版本记录，不影响已合并入 main 的提交与代码。': 'Only the board record is removed; commits and code already merged into main are untouched.',
+  '此操作不可撤销，请确认后再继续。': 'This action is irreversible — please confirm to continue.',
   // BUG-20260913-005：版本回填弹窗「去新建 XX 会话」入口——既有复制 toast 一并补齐词条
   '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方': '✓ Prompt copied — paste it into the Agent, run it, then paste the answer back below',
   '剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制': 'Clipboard unavailable: select all (⌘A) in the prompt box and copy manually',
@@ -738,6 +746,10 @@ const EN = {
 const EN_DYNAMIC = {
   // REQ-20260913-001 构建模块搜索反馈（命中数动态拼接）
   '命中 ◇ / 共 ◇ 个版本（按版本名 / 单号）': '$1 of $2 versions matched (by name / item id)',
+  // REQ-20260913-004 支持版本删除：弹窗标题 / 成功失败反馈（动态拼接）
+  '删除版本（◇）': 'Delete version ($1)',
+  '✓ 已删除版本（◇）': '✓ Version deleted ($1)',
+  '✕ 删除失败：◇': '✕ Delete failed: $1',
   // REQ-20260911-009 Git 工作流：状态/失败就近反馈（动态拼接）
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
   '失败：◇（可重试；已存在的分支不会重复创建）': 'Failed: $1 (retryable; an existing branch is never re-created)',

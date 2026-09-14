@@ -247,3 +247,17 @@ export function recoverMerging(dataDir) {
   }
   return n;
 }
+
+// REQ-20260913-004 删除版本：按编号读取后整目录移除 builds/versions/<id>/（看板数据层面清理，
+// 不可恢复）。语义按状态区分：draft/failed = 放弃该版本计划（关联条目与 commit 关联一并移除，
+// 条目本身与提交不受影响，可重新纳入其他版本）；merged = 仅移除看板版本记录（提交已实际合并入
+// main，代码与 git 历史不动）；merging 禁删（合并执行中删除会破坏状态机，等合并结束再删）。
+// 对齐批次删除（deleteBatch）的整目录 fs.rmSync 口径。
+export function deleteVersion(dataDir, id) {
+  const v = readVersion(dataDir, id); // 不存在 → AtbError「找不到版本计划：<id>」
+  if (v.status === 'merging') {
+    throw new BuildConflictError('版本合并中，不可删除，请等合并结束后再删');
+  }
+  fs.rmSync(path.join(versionsRoot(dataDir), v.id), { recursive: true, force: true });
+  return { ok: true, id: v.id };
+}
