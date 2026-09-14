@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-004",
+  "type": "bug",
+  "title": "已经纳入版本的条目不应该再出现在其他版本的关联列表或新建版本的关联列表中",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-9",
+  "createdAt": "2026-09-14T03:32:24.805Z",
+  "updatedAt": "2026-09-14T03:55:40.721Z",
+  "agentCompletedAt": "2026-09-14T03:55:40.721Z",
+  "lastReport": {
+    "at": "2026-09-14T03:55:40.721Z",
+    "coverage": 11,
+    "framework": "node 自建 runner（scripts/tests/*.test.mjs）",
+    "summary": "三层修复：数据层 occupiedItemMap+assertNotOccupied 兜底拒绝跨版本重复纳入（含占用版本编号）；候选接口源头排除已占用条目并返回 totalDone；前端两面板防御过滤+空态区分两种文案。新增 11 用例全绿，全量 223 文件 0 失败；归因 REQ-20260913-001。",
+    "runId": "run-20260914-225"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T03:32:24.805Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T03:32:24.806Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T03:40:23.603Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-113431-cb8c）"
+    },
+    {
+      "at": "2026-09-14T03:41:29.903Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-9",
+      "note": "认领（zcode-batch-048-9）"
+    },
+    {
+      "at": "2026-09-14T03:55:40.721Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-9",
+      "note": "上报测试报告（覆盖率 11%），待人工确认完成"
+    }
+  ]
+}
