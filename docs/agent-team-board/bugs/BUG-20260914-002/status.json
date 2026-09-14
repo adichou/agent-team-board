@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-002",
+  "type": "bug",
+  "title": "版本计划中关联条目与 commit 无法全选，新建版本计划中也无法全选",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-7",
+  "createdAt": "2026-09-14T02:46:30.466Z",
+  "updatedAt": "2026-09-14T03:25:29.821Z",
+  "agentCompletedAt": "2026-09-14T03:25:29.821Z",
+  "lastReport": {
+    "at": "2026-09-14T03:25:29.821Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + 前端 vm 行为测试（点击按钮监听器断言 DOM 同步，scripts/tests/run-all.mjs 聚合）",
+    "summary": "pickAll 内统一 render：全选/全不选点击后复选框、「已选 N 项」计数、commit 下拉即时同步，跳过 toast 与渲染同时生效；两面板共用路径一并修复，界面与提交内容不再错位。新增 5 例（先红后绿），run-all 221 文件 0 失败；归因 REQ-20260913-001（已核验）",
+    "runId": "run-20260914-223"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T02:46:30.466Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T02:46:30.467Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T03:00:08.365Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-105013-f6e6）"
+    },
+    {
+      "at": "2026-09-14T03:05:38.057Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-7",
+      "note": "认领（zcode-batch-048-7）"
+    },
+    {
+      "at": "2026-09-14T03:25:29.821Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-7",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
