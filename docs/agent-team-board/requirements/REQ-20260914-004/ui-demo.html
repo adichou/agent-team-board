@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260914-004 演示 — 右键「讨论」提示词优化</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --panel-2:#fafafa; --border:#dcdfe3; --border-2:#c8ccd2;
+    --text:#24292f; --muted:#6a737d; --accent:#1f6feb; --accent-weak:#ddf1ff;
+    --sel:#fff3c2; --ok:#1a7f37; --err:#cf222e; --mark:#fff3c2; --mark-tex:#6b4d00;
+    --shadow:0 8px 28px rgba(20,30,45,.18);
+  }
+  html[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2129; --border:#30363d; --border-2:#444c56;
+    --text:#e6edf3; --muted:#8b949e; --accent:#4493f8; --accent-weak:#12283f;
+    --sel:#4b3f10; --ok:#3fb950; --err:#f85149; --mark:#3c2f0a; --mark-tex:#e3b341;
+    --shadow:0 8px 28px rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+  header.page{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header.page h1{font-size:16px;margin:0;margin-right:auto}
+  header.page h1 small{color:var(--muted);font-weight:400}
+  .ctl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+  select,button{font:inherit;color:var(--text)}
+  select,.btn{background:var(--panel);border:1px solid var(--border-2);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .btn:hover,select:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.small{padding:2px 8px;font-size:12px}
+  label.chk{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);cursor:pointer}
+  main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:16px 18px;max-width:1240px;margin:0 auto}
+  @media (max-width:960px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .card>h2{font-size:13px;margin:0;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-weight:600}
+  .card .body{padding:12px 14px}
+
+  /* ---- 抽屉模拟 ---- */
+  .drawer-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}
+  .drawer-head .id{font-weight:600}
+  .drawer-head .x{margin-left:auto;color:var(--muted);cursor:pointer;border:none;background:none;font-size:15px}
+  .tabs{display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--border);background:var(--panel-2);flex-wrap:wrap}
+  .tab{border:none;background:none;padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-size:13px}
+  .tab.active{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+  .tab .tag{font-size:10px;border:1px solid var(--border-2);border-radius:4px;padding:0 4px;color:var(--muted);margin-left:4px;vertical-align:1px}
+  .pane{min-height:280px}
+  .hintbar{padding:6px 14px;font-size:12px;color:var(--muted);border-bottom:1px dashed var(--border);background:var(--panel-2);min-height:28px}
+  .docview{padding:6px 0}
+  .blk{position:relative;padding:4px 16px;cursor:default}
+  .blk.hoverable:hover{background:var(--accent-weak)}
+  .blk .ln{position:absolute;left:2px;top:4px;font-size:10px;color:var(--muted);opacity:0;transition:opacity .12s;font-variant-numeric:tabular-nums}
+  .blk.hoverable:hover .ln{opacity:.9}
+  .blk.sel{background:var(--sel);outline:1px solid var(--border-2)}
+  .docview h3{margin:8px 0 4px;font-size:15px}
+  .docview p{margin:4px 0}
+  .docview ul{margin:4px 0;padding-left:26px}
+  .docview pre{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto;margin:6px 0}
+  .docview table{border-collapse:collapse;margin:6px 0;font-size:13px}
+  .docview th,.docview td{border:1px solid var(--border);padding:4px 10px}
+  .placeholder{padding:48px 0;text-align:center;color:var(--muted)}
+  .selinfo{font-size:12px;color:var(--muted);padding:0 14px 8px}
+
+  /* ---- 右键菜单 ---- */
+  .ctxmenu{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--border-2);border-radius:8px;box-shadow:var(--shadow);padding:4px;min-width:150px}
+  .ctxmenu button{display:block;width:100%;border:none;background:none;text-align:left;padding:7px 12px;border-radius:6px;cursor:pointer;color:var(--text);font:inherit;font-size:13px}
+  .ctxmenu button:hover{background:var(--accent-weak)}
+
+  /* ---- toast ---- */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,16px);background:var(--panel);border:1px solid var(--border-2);border-radius:8px;box-shadow:var(--shadow);padding:8px 16px;font-size:13px;opacity:0;pointer-events:none;transition:all .18s;z-index:70;max-width:min(92vw,560px)}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #toast.err{border-color:var(--err);color:var(--err)}
+
+  /* ---- 手动复制弹窗 ---- */
+  .modal-wrap{position:fixed;inset:0;background:rgba(10,15,25,.45);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
+  .modal{background:var(--panel);border:1px solid var(--border-2);border-radius:10px;box-shadow:var(--shadow);width:min(560px,94vw);padding:14px}
+  .modal h3{margin:0 0 10px;font-size:14px}
+  .modal textarea{width:100%;box-sizing:border-box;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px}
+  .modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;align-items:center}
+  .modal .foot .muted{margin-right:auto;font-size:12px;color:var(--muted)}
+
+  /* ---- 剪贴板预览 ---- */
+  .pv-tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  .pv-box{border:1px solid var(--border);border-radius:8px;background:var(--panel-2);padding:0;max-height:380px;overflow:auto}
+  .pv-cols{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  @media (max-width:680px){.pv-cols{grid-template-columns:1fr}}
+  .pv-cols .pv-col{min-width:0;padding:0;border-left:1px solid var(--border)}
+  .pv-cols .pv-col:first-child{border-left:none}
+  .pv-col h4{margin:0;padding:7px 10px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel-2)}
+  pre.pv{margin:0;padding:10px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+  .pv-empty{padding:40px 12px;text-align:center;color:var(--muted);font-size:13px}
+  .hl{background:var(--mark);color:var(--mark-tex);border-radius:3px;padding:0 2px}
+  footer.note{padding:6px 18px 24px;color:var(--muted);font-size:12px;max-width:1240px;margin:0 auto}
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>REQ-20260914-004 <small>右键「讨论」提示词优化 — 可交互演示（仅页面内存模拟）</small></h1>
+  <div class="ctl">文档状态
+    <select id="docState">
+      <option value="loaded">正常（已加载）</option>
+      <option value="loading">加载中</option>
+      <option value="failed">加载失败</option>
+      <option value="empty">未创建（空）</option>
+    </select>
+  </div>
+  <label class="chk"><input type="checkbox" id="failSim">模拟自动复制失败</label>
+  <button class="btn small" id="themeBtn" type="button">切换深浅色</button>
+</header>
+
+<main>
+  <!-- 左：需求详情抽屉模拟 -->
+  <section class="card">
+    <h2>需求详情抽屉（文档页签右键「讨论」）</h2>
+    <div class="drawer-head"><span class="id">REQ-20260914-004</span><span style="color:var(--muted);font-size:12px">需求</span><button class="x" type="button" title="关闭抽屉">✕</button></div>
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="info" type="button">基本信息</button>
+      <button class="tab active" data-tab="README.md" type="button">说明</button>
+      <button class="tab" data-tab="design.md" type="button">设计</button>
+      <button class="tab" data-tab="test-cases.md" type="button">测试用例<span class="tag">范围待确认</span></button>
+      <button class="tab" data-tab="disc" type="button">讨论纪要</button>
+    </nav>
+    <div class="hintbar" id="hintbar">提示：在文档内容区（说明 / 设计 / 测试用例页签）右键弹出「讨论」菜单；点击段落 / 列表 / 代码块可选中，再右键即带「原文」。</div>
+    <div class="pane" id="pane"></div>
+    <div class="selinfo" id="selinfo">当前无选中：右键将复制落点块的路径 + 行范围（无「原文」节）。</div>
+  </section>
+
+  <!-- 右：剪贴板预览 -->
+  <section class="card">
+    <h2>剪贴板提示词预览（点「讨论」后生成）</h2>
+    <div class="body">
+      <div class="pv-tabs">
+        <button class="btn small primary" data-pv="new" type="button">新格式（本需求）</button>
+        <button class="btn small" data-pv="old" type="button">旧格式（现状）</button>
+        <button class="btn small" data-pv="cmp" type="button">对比</button>
+      </div>
+      <div class="pv-box" id="pvBox"><div class="pv-empty">尚未复制：右键文档内容 → 点「💬 讨论」后，这里展示复制到剪贴板的提示词。</div></div>
+    </div>
+  </section>
+</main>
+
+<footer class="note">仅页面内存模拟：不连接 Agent、不执行真实 git 操作、不写看板数据。「讨论要求」措辞为演示参考，最终以条目 design.md 定稿为准。</footer>
+
+<div id="toast" role="status"></div>
+
+<script>
+/* ================= 基础工具 ================= */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let toastTimer = null;
+function toast(msg, isErr=false){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+/* 深浅色：默认跟随系统，可手动切换 */
+const themeBtn = $('#themeBtn');
+function applyTheme(dark){ document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }
+if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) applyTheme(true);
+themeBtn.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme !== 'dark'));
+
+/* ================= 演示数据（模拟源码行标注） ================= */
+const ITEM = { id: 'REQ-20260914-004' };
+const ROOT = '/Users/demo/project';
+const docPath = (name) => `${ROOT}/docs/agent-team-board/requirements/${ITEM.id}/${name}`;
+
+const DOCS = {
+  'README.md': [
+    { kind:'heading', start:3, end:3, html:'<h3>## 描述</h3>' },
+    { kind:'para', start:4, end:6, html:'<p>在文档页签右键「讨论」，可把所选文字（或落点块）的路径与源码行范围复制到剪贴板，粘贴到 Agent 会话即可讨论。第一行……第二行……第三行……</p>' },
+    { kind:'heading', start:8, end:8, html:'<h3>## 验收标准</h3>' },
+    { kind:'list', start:9, end:11, html:'<ul><li>- [ ] 提示词包含同轮同步 commit 要求</li><li>- [ ] commit message 带单号、问题摘要、回答摘要</li><li>- [ ] 回答回显 commit log 与 commit 号</li></ul>' },
+    { kind:'fence', start:13, end:17, html:'<pre>git log --oneline -1\n# 期望 AI 每轮改动后同步提交，回显如：\n# a1b2c3d (REQ-20260914-004) 问题摘要：回答摘要</pre>' },
+  ],
+  'design.md': [
+    { kind:'heading', start:3, end:3, html:'<h3>## 方案</h3>' },
+    { kind:'para', start:4, end:5, html:'<p>在 buildDocRef 组装的引用文本之后追加「讨论要求」部分，三条指令覆盖：同轮 commit、commit message 规范、回显 commit log 与号。</p>' },
+    { kind:'para', start:7, end:8, html:'<p>纯前端改动：不改菜单交互与收起通道，不动后端 API，不改状态机。</p>' },
+    { kind:'fence', start:10, end:13, html:'<pre>// 参考结构\n引用头（单号 / 文档名 / 行范围）\n文档：路径 + 可选原文\n【讨论要求】……</pre>' },
+  ],
+  'test-cases.md': [
+    { kind:'heading', start:3, end:3, html:'<h3>## 测试用例</h3>' },
+    { kind:'table', start:4, end:7, html:'<table><tr><th>#</th><th>用例</th><th>结果</th></tr><tr><td>1</td><td>新提示词含三条指令</td><td>-</td></tr><tr><td>2</td><td>无选中场景无原文节</td><td>-</td></tr></table>' },
+  ],
+};
+const DOC_TABS = ['README.md','design.md','test-cases.md'];
+
+const state = { tab:'README.md', docState:'loaded', sel:null, lastRef:null, pvMode:'new', menu:null };
+
+/* ================= 抽屉渲染 ================= */
+function lineLabel(b){ return b.start === b.end ? `第 ${b.start} 行` : `第 ${b.start}–${b.end} 行`; }
+
+function renderPane(){
+  const pane = $('#pane');
+  if (state.tab === 'info'){
+    pane.innerHTML = '<div class="placeholder">基本信息页签（非文档页签）：右键放行浏览器原生菜单。</div>';
+    return;
+  }
+  if (state.tab === 'disc'){
+    pane.innerHTML = '<div class="placeholder">讨论纪要页签（非文档页签）：右键放行浏览器原生菜单。</div>';
+    return;
+  }
+  if (state.docState === 'loading'){ pane.innerHTML = '<div class="placeholder">加载中…</div>'; return; }
+  if (state.docState === 'failed'){ pane.innerHTML = '<div class="placeholder">文档加载失败：GET /api/item/' + ITEM.id + '/doc/' + state.tab + ' 500</div>'; return; }
+  if (state.docState === 'empty'){ pane.innerHTML = '<div class="placeholder">尚未创建，开发阶段补充。</div>'; return; }
+  const view = document.createElement('div');
+  view.className = 'docview';
+  view.id = 'docView';
+  for (const b of DOCS[state.tab]){
+    const el = document.createElement('div');
+    el.className = 'blk hoverable';
+    el.dataset.start = b.start; el.dataset.end = b.end; el.dataset.kind = b.kind;
+    el.innerHTML = `<span class="ln">${b.start === b.end ? b.start : b.start + '–' + b.end}</span>` + b.html;
+    el.addEventListener('click', () => {
+      if (state.sel && state.sel.el === el){ el.classList.remove('sel'); state.sel = null; }
+      else { state.sel?.el.classList.remove('sel'); el.classList.add('sel'); state.sel = { el, block:b }; }
+      renderSelInfo();
+    });
+    view.appendChild(el);
+  }
+  pane.innerHTML = '';
+  pane.appendChild(view);
+}
+
+function blockText(b, name){
+  // 演示用原文：取块内纯文本（真实实现取 window 选区文字 / 源文本文本）
+  if (b.kind === 'heading') return null;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = b.html.replace(/<pre[\s\S]*?<\/pre>/, m => m); // keep
+  const t = tmp.textContent.trim();
+  return t ? `（${name} 第 ${b.start}${b.start===b.end?'':'–'+b.end} 行所选原文示例）` : null;
+}
+
+function renderSelInfo(){
+  const si = $('#selinfo');
+  si.textContent = state.sel
+    ? `已选中：${state.tab} ${lineLabel(state.sel.block)}（点「讨论」将携带「原文」节）。再次点击可取消选中。`
+    : '当前无选中：右键将复制落点块的路径 + 行范围（无「原文」节）。';
+}
+
+$('#tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab'); if (!btn) return;
+  state.tab = btn.dataset.tab;
+  state.sel = null; closeMenu();
+  $$('#tabs .tab').forEach(t => t.classList.toggle('active', t === btn));
+  renderPane(); renderSelInfo();
+  setHint('已切换页签（菜单若打开会关闭）。');
+});
+$('#docState').addEventListener('change', (e) => {
+  state.docState = e.target.value; state.sel = null; closeMenu();
+  renderPane(); renderSelInfo();
+  setHint(state.docState === 'loaded' ? '文档已就绪：内容区右键弹出「讨论」菜单。' : '文档未就绪（' + e.target.selectedOptions[0].textContent + '）：右键不弹自定义菜单，放行原生。');
+});
+function setHint(msg){ $('#hintbar').textContent = msg; }
+
+/* ================= 提示词组装（新旧对照） ================= */
+function refOf(block){
+  const text = state.sel && state.sel.block === block ? blockText(block, state.tab) : null;
+  return { id: ITEM.id, name: state.tab, path: docPath(state.tab), start: block.start, end: block.end, text };
+}
+function baseRef(r){
+  const lines = [
+    `${r.id} / ${r.name} ${r.start === r.end ? `第 ${r.start} 行` : `第 ${r.start}–${r.end} 行`}`,
+    `文档：${r.path}`,
+  ];
+  if (r.text != null && r.text !== '') lines.push('原文：', r.text);
+  return lines.join('\n');
+}
+const REQ_LINES = [
+  '【讨论要求】请在本轮及后续讨论中遵守：',
+  '1. 围绕上方引用（文档路径 + 源码行范围）展开讨论与修改。',
+  '2. 每轮回答中如需修改相关文件：修改完成后同轮同步执行 git commit，不留未提交改动。',
+  '3. commit message 须包含：条目单号（如 ' + ITEM.id + '）、本轮用户问题摘要、本轮回答（改动）摘要。',
+  '4. 每轮回答回显本轮 commit log 与 commit 号。',
+];
+function newRef(r){ return `【文档讨论引用】\n${baseRef(r)}\n\n${REQ_LINES.join('\n')}`; }
+
+/* ================= 剪贴板预览 ================= */
+$$('.pv-tabs .btn').forEach(b => b.addEventListener('click', () => {
+  state.pvMode = b.dataset.pv;
+  $$('.pv-tabs .btn').forEach(x => x.classList.toggle('primary', x === b));
+  renderPreview();
+}));
+function renderPreview(){
+  const box = $('#pvBox');
+  if (!state.lastRef){ box.innerHTML = '<div class="pv-empty">尚未复制：右键文档内容 → 点「💬 讨论」后，这里展示复制到剪贴板的提示词。</div>'; return; }
+  const r = state.lastRef;
+  const oldTxt = esc(baseRef(r));
+  const base = esc(`【文档讨论引用】\n${baseRef(r)}`);
+  const extra = '\n\n' + esc(REQ_LINES.join('\n'));
+  if (state.pvMode === 'old'){
+    box.innerHTML = `<pre class="pv">${oldTxt}</pre>`;
+  } else if (state.pvMode === 'new'){
+    box.innerHTML = `<pre class="pv">${base}<span class="hl">${extra}</span></pre>`;
+  } else {
+    box.innerHTML = `<div class="pv-cols">
+      <div class="pv-col"><h4>旧格式（现状）— 仅定位引用</h4><pre class="pv">${oldTxt}</pre></div>
+      <div class="pv-col"><h4>新格式（本需求）— 追加「讨论要求」（高亮）</h4><pre class="pv">${base}<span class="hl">${extra}</span></pre></div>
+    </div>`;
+  }
+}
+
+/* ================= 右键菜单 ================= */
+function closeMenu(){
+  if (state.menu){ state.menu.el.remove(); state.menu = null; }
+}
+function openMenu(x, y, ref){
+  closeMenu();
+  const m = document.createElement('div');
+  m.className = 'ctxmenu';
+  m.setAttribute('role', 'menu');
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.textContent = '💬 讨论';
+  btn.addEventListener('click', onDiscuss);
+  m.appendChild(btn);
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, window.innerWidth - r.width - 8) + 'px';
+  m.style.top = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+  state.menu = { el:m, ref };
+}
+function onDiscuss(){
+  const { ref } = state.menu || {};
+  closeMenu();
+  if (!ref) return;
+  state.lastRef = ref;
+  renderPreview();
+  if ($('#failSim').checked){
+    toast('自动复制失败，请在弹出的文本框中手动复制', true);
+    openCopyBox(ref);
+  } else {
+    toast(`已复制 引用：${ref.name} ${ref.start === ref.end ? `第 ${ref.start} 行` : `第 ${ref.start}–${ref.end} 行`}`);
+  }
+}
+
+/* 文档级 contextmenu 委托（同真实实现：仅文档页签内容区且文档就绪才拦截） */
+document.addEventListener('contextmenu', (e) => {
+  const view = $('#docView');
+  if (!view || !e.target.closest || !view.contains(e.target)){
+    setHint('右键落点在文档内容区外（页签行 / 头部 / 预览卡…）：放行浏览器原生菜单。');
+    return;
+  }
+  if (state.docState !== 'loaded'){ setHint('文档未就绪：不弹自定义菜单，放行原生。'); return; }
+  if (e.target.closest('a, img')){ setHint('链接 / 图片上：放行原生菜单。'); return; }
+  const blkEl = e.target.closest('.blk');
+  if (!blkEl){ setHint('落点未标注（占位 / 配对失准区）：放行原生菜单。'); return; }
+  e.preventDefault();
+  const block = DOCS[state.tab].find(b => b.start === +blkEl.dataset.start && b.end === +blkEl.dataset.end);
+  const useSel = state.sel && state.sel.block === block;
+  openMenu(e.clientX, e.clientY, refOf(useSel ? state.sel.block : block));
+  setHint('菜单已弹出：点外部 / Esc / 滚动 / 切页签可关闭且不执行。');
+});
+
+/* 收起通道：点外部 / Esc / 滚动 / 视口变化 */
+document.addEventListener('pointerdown', (e) => { if (state.menu && !state.menu.el.contains(e.target)) closeMenu(); }, true);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape'){ e.preventDefault(); closeMenu(); closeCopyBox(); } }, true);
+window.addEventListener('scroll', () => closeMenu(), true);
+window.addEventListener('resize', () => closeMenu());
+
+/* ================= 手动复制弹窗（自动复制失败回退） ================= */
+let copyBoxEl = null;
+function closeCopyBox(){ copyBoxEl?.remove(); copyBoxEl = null; }
+function openCopyBox(ref){
+  closeCopyBox();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-wrap';
+  const box = document.createElement('div');
+  box.className = 'modal';
+  box.innerHTML = `<h3>手动复制讨论引用</h3>`;
+  const ta = document.createElement('textarea');
+  ta.rows = 12; ta.readOnly = true; ta.value = newRef(ref);
+  box.appendChild(ta);
+  const foot = document.createElement('div');
+  foot.className = 'foot';
+  const hint = document.createElement('span');
+  hint.className = 'muted'; hint.textContent = '自动复制失败：文本已全选，按 ⌘C / Ctrl+C 手动复制。';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn primary'; btn.textContent = '关闭';
+  btn.addEventListener('click', closeCopyBox);
+  foot.appendChild(hint); foot.appendChild(btn);
+  box.appendChild(foot);
+  overlay.appendChild(box);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeCopyBox(); });
+  document.body.appendChild(overlay);
+  copyBoxEl = overlay;
+  ta.focus(); ta.select();
+}
+
+/* ================= 初始化 ================= */
+renderPane();
+renderSelInfo();
+</script>
+</body>
+</html>
