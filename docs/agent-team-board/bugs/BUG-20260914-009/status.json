@@ -2,11 +2,11 @@
   "id": "BUG-20260914-009",
   "type": "bug",
   "title": "dev 界面只加载最近 50 条，需要修复成显示所有，并支持分页展示",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-BUG-20260914-009",
   "createdAt": "2026-09-14T04:51:58.340Z",
-  "updatedAt": "2026-09-14T06:01:25.435Z",
+  "updatedAt": "2026-09-14T08:34:15.847Z",
   "agentCompletedAt": "2026-09-14T06:01:25.435Z",
   "lastReport": {
     "at": "2026-09-14T06:01:25.435Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-BUG-20260914-009",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T08:34:15.848Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

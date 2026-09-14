@@ -2,11 +2,11 @@
   "id": "BUG-20260914-014",
   "type": "bug",
   "title": "回退 BUG-20260914-010",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-18",
   "createdAt": "2026-09-14T07:19:58.354Z",
-  "updatedAt": "2026-09-14T07:58:18.380Z",
+  "updatedAt": "2026-09-14T13:18:08.024Z",
   "agentCompletedAt": "2026-09-14T07:58:18.380Z",
   "lastReport": {
     "at": "2026-09-14T07:58:18.380Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-18",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:18:08.024Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

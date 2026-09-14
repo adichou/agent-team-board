@@ -2,11 +2,11 @@
   "id": "BUG-20260913-006",
   "type": "bug",
   "title": "批量实施 auto-commit 漏提交业务源码：预留时已脏的 build.js 永远不入任何单的提交，HEAD 上已提交的 test/biz 组合自相矛盾 zcode-batch-047-1",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-4",
   "createdAt": "2026-09-13T13:33:02.947Z",
-  "updatedAt": "2026-09-14T01:23:03.290Z",
+  "updatedAt": "2026-09-14T02:44:26.132Z",
   "agentCompletedAt": "2026-09-14T01:23:03.290Z",
   "lastReport": {
     "at": "2026-09-14T01:23:03.290Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-4",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:26.132Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

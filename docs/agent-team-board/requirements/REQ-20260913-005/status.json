@@ -2,11 +2,11 @@
   "id": "REQ-20260913-005",
   "type": "requirement",
   "title": "批量完善和批量开发的文案改为 AI 分析和 AI 开发，要全面排查整改",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-3",
   "createdAt": "2026-09-13T15:30:47.183Z",
-  "updatedAt": "2026-09-14T01:00:58.920Z",
+  "updatedAt": "2026-09-14T02:44:20.064Z",
   "agentCompletedAt": "2026-09-14T01:00:58.920Z",
   "lastReport": {
     "at": "2026-09-14T01:00:58.920Z",
@@ -70,6 +70,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-3",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:20.065Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

@@ -2,11 +2,11 @@
   "id": "REQ-20260914-001",
   "type": "requirement",
   "title": "自动提交不完整时挂起条目并暂停队列，人工确认后恢复开发",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-19",
   "createdAt": "2026-09-14T07:40:13.313Z",
-  "updatedAt": "2026-09-14T09:43:11.683Z",
+  "updatedAt": "2026-09-14T13:18:14.208Z",
   "agentCompletedAt": "2026-09-14T09:43:11.683Z",
   "lastReport": {
     "at": "2026-09-14T09:43:11.683Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-19",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:18:14.208Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

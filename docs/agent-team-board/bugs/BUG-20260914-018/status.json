@@ -2,11 +2,11 @@
   "id": "BUG-20260914-018",
   "type": "bug",
   "title": "分支浏览页面中的 main 分支通过发布流程推送的文字删掉",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-BUG-20260914-018",
   "createdAt": "2026-09-14T14:18:52.684Z",
-  "updatedAt": "2026-09-14T14:38:31.523Z",
+  "updatedAt": "2026-09-14T14:45:03.190Z",
   "agentCompletedAt": "2026-09-14T14:38:31.523Z",
   "lastReport": {
     "at": "2026-09-14T14:38:31.523Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-BUG-20260914-018",
       "note": "上报测试报告（覆盖率 11%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T14:45:03.190Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

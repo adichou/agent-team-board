@@ -2,11 +2,11 @@
   "id": "BUG-20260914-016",
   "type": "bug",
   "title": "分支浏览的搜索框要往上移到和分支名在同一行",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-049-1",
   "createdAt": "2026-09-14T12:00:37.615Z",
-  "updatedAt": "2026-09-14T12:22:14.344Z",
+  "updatedAt": "2026-09-14T13:17:46.594Z",
   "agentCompletedAt": "2026-09-14T12:22:14.344Z",
   "lastReport": {
     "at": "2026-09-14T12:22:14.344Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-049-1",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:17:46.595Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

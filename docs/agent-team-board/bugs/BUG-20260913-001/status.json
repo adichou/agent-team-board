@@ -2,11 +2,11 @@
   "id": "BUG-20260913-001",
   "type": "bug",
   "title": "版本创建时应该允许关联的需求范围是已完成的需求或 bug，其他都不应该出现在这个范围内。",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-044-01",
   "createdAt": "2026-09-13T08:31:05.933Z",
-  "updatedAt": "2026-09-13T09:10:23.551Z",
+  "updatedAt": "2026-09-14T02:44:37.115Z",
   "agentCompletedAt": "2026-09-13T09:10:23.551Z",
   "lastReport": {
     "at": "2026-09-13T09:10:23.551Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-044-01",
       "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:37.116Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

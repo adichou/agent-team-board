@@ -2,11 +2,11 @@
   "id": "REQ-20260913-003",
   "type": "requirement",
   "title": "批量任务去掉批次概念，每次启动到结束就实时执行当前的任务",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-1",
   "createdAt": "2026-09-13T13:06:33.959Z",
-  "updatedAt": "2026-09-14T00:27:38.602Z",
+  "updatedAt": "2026-09-14T02:44:27.763Z",
   "agentCompletedAt": "2026-09-14T00:27:38.602Z",
   "lastReport": {
     "at": "2026-09-14T00:27:38.602Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-1",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:27.764Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

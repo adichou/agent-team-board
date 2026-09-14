@@ -2,11 +2,11 @@
   "id": "REQ-20260914-004",
   "type": "requirement",
   "title": "优化需求说明、设计文档中右键讨论菜单生成的提示词",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-REQ-20260914-004",
   "createdAt": "2026-09-14T12:19:34.659Z",
-  "updatedAt": "2026-09-14T14:19:28.846Z",
+  "updatedAt": "2026-09-14T14:21:54.897Z",
   "agentCompletedAt": "2026-09-14T14:19:28.846Z",
   "lastReport": {
     "at": "2026-09-14T14:19:28.846Z",
@@ -63,6 +63,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-REQ-20260914-004",
       "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T14:21:54.897Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

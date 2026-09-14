@@ -2,11 +2,11 @@
   "id": "BUG-20260914-007",
   "type": "bug",
   "title": "body-limit.test.mjs 在 run-all 全量跑下偶发失败（单独运行通过）",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-12",
   "createdAt": "2026-09-14T04:10:37.580Z",
-  "updatedAt": "2026-09-14T05:35:13.014Z",
+  "updatedAt": "2026-09-14T08:33:45.130Z",
   "agentCompletedAt": "2026-09-14T05:35:13.014Z",
   "lastReport": {
     "at": "2026-09-14T05:35:13.014Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-12",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T08:33:45.132Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

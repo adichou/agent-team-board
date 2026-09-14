@@ -2,11 +2,11 @@
   "id": "BUG-20260914-008",
   "type": "bug",
   "title": "新建版本是关联条目重复提示。导入条目到已有版本一样重复提示，请修复",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-2",
   "createdAt": "2026-09-14T04:38:44.074Z",
-  "updatedAt": "2026-09-14T05:44:19.554Z",
+  "updatedAt": "2026-09-14T08:34:12.679Z",
   "agentCompletedAt": "2026-09-14T05:44:19.554Z",
   "lastReport": {
     "at": "2026-09-14T05:44:19.554Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-2",
       "note": "上报测试报告（覆盖率 4%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T08:34:12.679Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

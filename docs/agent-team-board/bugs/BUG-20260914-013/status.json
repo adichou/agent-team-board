@@ -2,11 +2,11 @@
   "id": "BUG-20260914-013",
   "type": "bug",
   "title": "集成测试泄漏 server/stub 进程：随机端口被残留监听者占用致跨轮次偶发失败（serve-stale T1 实证）",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048",
   "createdAt": "2026-09-14T05:31:26.846Z",
-  "updatedAt": "2026-09-14T10:14:36.126Z",
+  "updatedAt": "2026-09-14T13:18:03.675Z",
   "agentCompletedAt": "2026-09-14T10:14:36.126Z",
   "lastReport": {
     "at": "2026-09-14T10:14:36.126Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048",
       "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:18:03.676Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
