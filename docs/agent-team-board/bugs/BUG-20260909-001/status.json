@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-001",
+  "type": "bug",
+  "title": "开发任务终止后看板不显示「已终止」口径：/api/batch/current 未透出 aborted 字段",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-1",
+  "createdAt": "2026-09-08T18:00:21.911Z",
+  "updatedAt": "2026-09-11T05:52:19.932Z",
+  "agentCompletedAt": "2026-09-09T00:17:30.417Z",
+  "lastReport": {
+    "at": "2026-09-09T00:17:30.417Z",
+    "coverage": 90,
+    "framework": "node:assert（scripts/tests/run-all.mjs 聚合）",
+    "summary": "atb.mjs batchPublicView 与 server.mjs /api/batch/current 的 batch 视图按 Boolean() 归一化补公开 abortRequested/aborted：终止批次 true、存量缺字段/运行中/暂停/自然结束 false 不误判；queue 维持原口径（abortBatch 原子落 finished，终止批次恒不入队，理由见 design.md）；前端零改动（renderZcodeBatchPanel 已依赖 b.aborted）。新增 tests/batch-abort-view.test.mjs（真实 HTTP 服务 + CLI 子进程双路径）先跑红后跑绿，batch-cli Z14b 过时注释修正并加强为字段透出断言；全量 101 个测试文件 0 失败。引入来源归因 REQ-20260908-020（atb list 核验存在）。",
+    "runId": "run-20260909-107"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T18:00:21.911Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0909-26d1"
+    },
+    {
+      "at": "2026-09-08T23:05:36.442Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:08:14.164Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T00:09:49.335Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "认领（zcode-batch-019-1）"
+    },
+    {
+      "at": "2026-09-09T00:17:30.417Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.932Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-21ed",
+      "note": "人工确认完成"
+    }
+  ]
+}

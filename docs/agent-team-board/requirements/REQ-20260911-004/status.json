@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260911-004",
+  "type": "requirement",
+  "title": "在设置中支持对 commit 到 git 的目录进行设置，默认只 commit 源代码相关目录",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-038-1",
+  "createdAt": "2026-09-11T07:52:14.007Z",
+  "updatedAt": "2026-09-11T14:22:10.209Z",
+  "agentCompletedAt": "2026-09-11T08:47:28.123Z",
+  "lastReport": {
+    "at": "2026-09-11T08:47:28.123Z",
+    "coverage": 82,
+    "framework": "node:assert + npm test (run-all.mjs)",
+    "summary": "设置新增批量Commit提交目录范围白名单:tasks/settings.json commit分区(宽松读/严格存,默认=源代码目录+docs/+根级文件);批次创建冻结scope并注入提示词,next摘要同源,done核验严格拒绝范围外文件;服务端透传;设置页批量Commit分区(两组复选框+恢复默认+空态警示+三态保存);新增10用例先红后绿,npm test 194文件零回归,详见test-report.md",
+    "runId": "run-20260911-199"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T07:52:14.007Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T07:52:14.007Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T08:02:06.283Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-155333-7954）"
+    },
+    {
+      "at": "2026-09-11T08:24:15.298Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-038-1",
+      "note": "认领（zcode-batch-038-1）"
+    },
+    {
+      "at": "2026-09-11T08:47:28.123Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-038-1",
+      "note": "上报测试报告（覆盖率 82%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T14:22:10.209Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

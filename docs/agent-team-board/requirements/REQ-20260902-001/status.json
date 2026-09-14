@@ -1,0 +1,60 @@
+{
+  "id": "REQ-20260902-001",
+  "type": "requirement",
+  "title": "收窄 agent-team-board SKILL.md 触发描述，仅保留强信号避免误触发",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-skill-desc",
+  "createdAt": "2026-09-02T09:50:12.118Z",
+  "updatedAt": "2026-09-11T05:52:13.517Z",
+  "agentCompletedAt": "2026-09-02T10:08:23.000Z",
+  "lastReport": {
+    "at": "2026-09-02T10:08:23.000Z",
+    "coverage": null,
+    "framework": "node:assert 静态契约（skill-desc.test.mjs S1–S4）",
+    "summary": "SKILL 触发描述收窄完成（按对齐方案）：frontmatter description 从 331 字符的泛化词长文改为 109 字符强信号版——仅 /req /bug /dev /board 命令、atb、agent-team-board、Status Board、REQ-/BUG-YYYYMMDD-NNN 编号触发，并保留一句话用途定位；移除全部泛化词（需求/提需求/Bug 泛指/缺陷/看板泛指/认领任务/状态流转/submitted 等状态名/test-report），避免日常开发会话误触发灌入 10KB 正文并逐轮重发的 token 放大。正文（数据规范/铁律/CLI/流程）与命令入口零改动。TDD：新增 skill-desc.test.mjs S1–S4 先红后绿全过；11 套测试回归全绿。副作用（README 已声明）：弱提及（如「帮我记个 bug」）不再自动挂载，需显式 /bug 或提及 atb/编号；Codex 端 remove+add 重装验证由用户操作。版本 0.3.9→0.3.10。"
+  },
+  "history": [
+    {
+      "at": "2026-09-02T09:50:12.118Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0902-6313"
+    },
+    {
+      "at": "2026-09-02T09:51:01.187Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-02T09:52:55.538Z",
+      "from": "accepted",
+      "to": "pending-alignment",
+      "by": "zcode-skill-desc",
+      "note": "认领（出方案阶段，zcode-skill-desc）"
+    },
+    {
+      "at": "2026-09-02T10:06:02.441Z",
+      "from": "pending-alignment",
+      "to": "in-progress",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-02T10:08:23.000Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0902-4838",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.518Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-4079",
+      "note": "人工确认完成"
+    }
+  ]
+}

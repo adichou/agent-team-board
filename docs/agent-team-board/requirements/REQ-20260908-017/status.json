@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-017",
+  "type": "requirement",
+  "title": "创建完单后直接返回列表即可",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-5",
+  "createdAt": "2026-09-08T05:05:02.011Z",
+  "updatedAt": "2026-09-11T05:52:18.614Z",
+  "agentCompletedAt": "2026-09-08T13:57:53.121Z",
+  "lastReport": {
+    "at": "2026-09-08T13:57:53.121Z",
+    "coverage": 24,
+    "framework": "node:assert/strict + vm 沙箱行为测试（scripts/tests/run-all.mjs）",
+    "summary": "创建完单后只关弹窗/进模块/刷列表/toast，不再自动导航：submitNew 删 openDrawer(st.id) 与 reveal(t.id)；poll 删「已定位新建条目」toast+跳转，detectNewItem 收敛为纯基线登记（README 要求保留）；oncall.js 删无调用方的 reveal；同步改写 new-item-nav/oncall-question-optional/workbench-layout 契约（旧静态切片标记已失效改函数体提取）。全量 90 测试文件 0 失败；M1/M2 宽窄屏人工验收留待确认。",
+    "runId": "run-20260908-083"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T05:05:02.011Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T05:06:23.780Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.320Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T13:50:31.742Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-5",
+      "note": "认领（zcode-batch-018-5）"
+    },
+    {
+      "at": "2026-09-08T13:57:53.121Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-5",
+      "note": "上报测试报告（覆盖率 24%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.614Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6273",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-009",
+  "type": "bug",
+  "title": "任务界面去掉任务这个标题",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T11:45:51.469Z",
+  "updatedAt": "2026-09-11T05:52:19.032Z",
+  "agentCompletedAt": "2026-09-08T14:37:47.132Z",
+  "lastReport": {
+    "at": "2026-09-08T14:37:47.132Z",
+    "coverage": 4,
+    "framework": "node:assert/strict + vm 契约测试",
+    "summary": "移除 renderBatchDrawer 头部 <h2>任务</h2>，项目标识/关闭按钮/子面板 Tab 保留；新增 batch-title-removed.test.mjs 4 用例跑红转绿；同步更新 BUG-008 边界断言；run-all 93 文件全绿；归因 REQ-20260907-004",
+    "runId": "run-20260908-087"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T11:45:51.469Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T12:02:05.250Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.321Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T14:34:02.971Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T14:37:47.132Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 4%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.032Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6447",
+      "note": "人工确认完成"
+    }
+  ]
+}

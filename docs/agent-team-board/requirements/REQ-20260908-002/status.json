@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260908-002",
+  "type": "requirement",
+  "title": "所有列表提供排序功能。已完成的需求或 bug 默认只显示最新的 100 项，其他的需要通过搜索获取",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-011-01",
+  "createdAt": "2026-09-08T00:37:55.498Z",
+  "updatedAt": "2026-09-11T05:52:17.802Z",
+  "agentCompletedAt": "2026-09-08T01:29:23.139Z",
+  "lastReport": {
+    "at": "2026-09-08T01:29:23.139Z",
+    "coverage": 6,
+    "framework": "node:assert 单测 + vm 沙箱 + 静态契约（list-sort 新增；run-all.mjs 全量 77 文件回归）",
+    "summary": "需求视图五档列表新增排序下拉（最新更新默认/最早更新/最新创建/最早创建/单号，localStorage 记忆）；已完成档默认仅显示最新 100 项（计数 100/N 提示用搜索获取，搜索期间不截断）；讨论视图列表同款排序（四时间键）；TDD 8 用例先红后绿，全量 77 测试文件通过",
+    "runId": "run-20260908-063"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T00:37:55.498Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T00:45:15.531Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T01:18:09.303Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-011-01",
+      "note": "认领（zcode-batch-011-01）"
+    },
+    {
+      "at": "2026-09-08T01:29:23.140Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-011-01",
+      "note": "上报测试报告（覆盖率 6%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.802Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-d869",
+      "note": "人工确认完成"
+    }
+  ]
+}

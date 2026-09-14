@@ -1,0 +1,43 @@
+{
+  "name": "agent-team-board",
+  "productName": "Agent Team Board",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent Team Board —— 智能体团队看板（含 Electron 桌面壳）",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "app": "electron .",
+    "dist": "electron-builder",
+    "test": "node scripts/tests/run-all.mjs"
+  },
+  "build": {
+    "appId": "com.adichou.agent-team-board",
+    "productName": "Agent Team Board",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "scripts/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "scripts/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}

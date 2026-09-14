@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-002",
+  "type": "requirement",
+  "title": "列表头与批量操作条合并为单行：去清空选择、文案精简",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-01",
+  "createdAt": "2026-09-08T23:04:40.243Z",
+  "updatedAt": "2026-09-11T05:52:20.071Z",
+  "agentCompletedAt": "2026-09-09T00:54:48.601Z",
+  "lastReport": {
+    "at": "2026-09-09T00:54:48.601Z",
+    "coverage": 9,
+    "framework": "node:test(vm 模拟 DOM + 静态契约)",
+    "summary": "列表头与批量操作条合并为单行：index.html 删除独立 #selectionBar 与清空选择按钮，#reqCaption 合并行分左组（计数/排序/全选/全不选）与右组 #selGroup（role=group，含分隔线+已选计数+当前档动作，零选择整体隐藏）；app.js syncAcceptance 改用 #selGroup，计数统一「已选 M 项」、按钮去数量后缀，删除 clearSelections 及绑定；style.css 删 .selection-bar 规则，.req-caption/.sel-group flex-wrap 窄屏换行。新增 selection-bar-merge.test.mjs M1-M9（TDD 先红后绿），同步更新 selection-lane-scope/accept-ui/impl-entry-ui/plan-batch-move/batch-ui/refine-ui 旧契约断言；npm test 全量 104 文件失败 0",
+    "runId": "run-20260909-110"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T23:04:40.243Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0909-2f0d"
+    },
+    {
+      "at": "2026-09-08T23:05:36.431Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:08:14.175Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T00:45:53.043Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-01",
+      "note": "认领（zcode-batch-019-01）"
+    },
+    {
+      "at": "2026-09-09T00:54:48.601Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-01",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.072Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-8187",
+      "note": "人工确认完成"
+    }
+  ]
+}

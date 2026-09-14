@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-010",
+  "type": "bug",
+  "title": "已上报条目卡片显示两个「待确认」标记；已完成条目仍残留「待确认」chip 与「请人工确认」横幅",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-01",
+  "createdAt": "2026-09-07T09:00:50.880Z",
+  "updatedAt": "2026-09-11T05:52:16.994Z",
+  "agentCompletedAt": "2026-09-07T16:38:53.556Z",
+  "lastReport": {
+    "at": "2026-09-07T16:38:53.556Z",
+    "coverage": 100,
+    "framework": "node:assert + npm test（run-all 聚合）",
+    "summary": "卡片去重：reqRowEl 移除 testFlagHtml 角标（lane 状态 chip 已显示待测试，叠加即重复）；角标保留于详情抽屉头部与下属 Bug 列表；done 残留（现象2）已由 REQ-20260907-005 先行收敛，本次以 T3/T4 回归锁定；同步调整 confirm-lane.test.mjs T8 断言；新增 card-flag-dedup.test.mjs（T1 先红后绿）；全套 69 个测试文件通过；引入来源 REQ-20260906-013（已 atb list 核验）",
+    "runId": "run-20260908-048"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.880Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-4cbb"
+    },
+    {
+      "at": "2026-09-07T15:09:45.049Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T16:33:44.334Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-01",
+      "note": "认领（zcode-batch-009-01）"
+    },
+    {
+      "at": "2026-09-07T16:38:53.556Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.995Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-dc77",
+      "note": "人工确认完成"
+    }
+  ]
+}

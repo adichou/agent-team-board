@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-017",
+  "type": "requirement",
+  "title": "支持对需求或 bug 单批量接受",
+  "status": "done",
+  "parent": null,
+  "owner": "codex-batch-accept",
+  "createdAt": "2026-09-06T07:45:02.499Z",
+  "updatedAt": "2026-09-11T05:52:15.521Z",
+  "agentCompletedAt": "2026-09-06T08:23:16.006Z",
+  "lastReport": {
+    "at": "2026-09-06T08:23:16.006Z",
+    "coverage": 99.76,
+    "framework": "node:assert + node:vm / V8 源码范围覆盖",
+    "summary": "已实现需求和 Bug 卡片单条接受、待接受列全选/多选与批量接受、进度和逐项失败反馈、防重复提交及项目切换隔离。TDD 红阶段 10 组失败，最终新增行为测试 11 组全通过。新增三个接受函数 V8 源码范围覆盖率 99.76%，不是全库行覆盖率。完整回归 34 个文件中 33 通过，唯一存量失败为 BUG-20260906-011。浏览器已核对控件显示；点击自动化未获授权，窄屏/主题及真实操作待人工验收。会话改名因宿主应用禁止自动化访问未完成。详见设计、测试用例及 evidence。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T07:45:02.499Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T07:45:22.330Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T07:49:11.500Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "codex-batch-accept",
+      "note": "认领（codex-batch-accept）"
+    },
+    {
+      "at": "2026-09-06T08:23:16.006Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "codex-batch-accept",
+      "note": "上报测试报告（覆盖率 99.76%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.521Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6469",
+      "note": "人工确认完成"
+    }
+  ]
+}

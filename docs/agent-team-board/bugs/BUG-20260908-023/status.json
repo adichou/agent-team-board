@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-023",
+  "type": "bug",
+  "title": "已终止/已结束的开发批次可被暂停操作复活为未结束状态",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T15:49:23.312Z",
+  "updatedAt": "2026-09-11T05:52:19.837Z",
+  "agentCompletedAt": "2026-09-08T18:01:28.064Z",
+  "lastReport": {
+    "at": "2026-09-08T18:01:28.064Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + HTTP 集成 + CLI 端到端 + vm 沙箱",
+    "summary": "对齐 BUG-20260908-015 方案：batch.mjs 新增 batchTerminalReason 终态判定 + pauseBatch 幂等拒绝（不写 pauseRequested/不改 status，两方向一致）；CLI batch pause 与 HTTP /api/batch/pause 透传明确错误（die / 400 AtbError）；UI terminal 隐藏口径以 U16 vm 渲染测试锁定。新增 4 用例先红后绿；全套件 99 文件 0 失败。归因 REQ-20260906-002（暴露交互 REQ-20260908-020）。新发现 /api/batch/current 未透出 aborted 已登记 BUG-20260909-001",
+    "runId": "run-20260909-105"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T15:49:23.312Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-56a5"
+    },
+    {
+      "at": "2026-09-08T16:17:15.319Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T16:32:49.641Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T17:48:08.268Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T18:01:28.065Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.837Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a85f",
+      "note": "人工确认完成"
+    }
+  ]
+}

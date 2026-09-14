@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260908-003",
+  "type": "bug",
+  "title": "Status Board 收到 SIGTERM 后可能滞留不退，端口被占导致后续实例无法启动",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-013-1",
+  "createdAt": "2026-09-08T01:04:21.062Z",
+  "updatedAt": "2026-09-11T05:52:17.900Z",
+  "agentCompletedAt": "2026-09-08T03:44:25.367Z",
+  "lastReport": {
+    "at": "2026-09-08T03:44:25.367Z",
+    "coverage": 90,
+    "framework": "node:assert 进程级+源码契约测试",
+    "summary": "shutdownServer 兜底强退 setTimeout 提前到任何 await 之前注册（缺省 20s 不变，ATB_SHUTDOWN_FORCE_MS 可收紧）；scheduler 收尾 Promise.race 有界（强退时限−2s 余量）；server.close 后 closeIdleConnections 防滞留 keep-alive 连接拖住回调。新增 shutdown-forced-exit.test.mjs 三用例（源码顺序契约/正常 SIGTERM 退出且端口释放/挂起连接下按时限强退），先红后绿；全量回归 83 文件 0 失败。引入来源：REQ-20260906-003（atb list 核验）。",
+    "runId": "run-20260908-070"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T01:04:21.062Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-c599"
+    },
+    {
+      "at": "2026-09-08T01:56:23.341Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T03:37:25.044Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-013-1",
+      "note": "认领（zcode-batch-013-1）"
+    },
+    {
+      "at": "2026-09-08T03:44:25.367Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-013-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.900Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0007",
+      "note": "人工确认完成"
+    }
+  ]
+}

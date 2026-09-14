@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-015",
+  "type": "bug",
+  "title": "全局任务中的副标题精简，同时将搜索框和副标题放在同一行",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-24",
+  "createdAt": "2026-09-10T07:28:04.896Z",
+  "updatedAt": "2026-09-11T05:52:22.854Z",
+  "agentCompletedAt": "2026-09-10T09:47:02.418Z",
+  "lastReport": {
+    "at": "2026-09-10T09:47:02.418Z",
+    "coverage": 9,
+    "framework": "node:assert 零依赖静态契约测试",
+    "summary": "副标题精简为「跨项目批量任务」（原语义经 title 保留）并移入 .global-panel-tools 与搜索同排；首行只剩标题+关闭；head 去 border-bottom、tools 单条分隔，消重复留白；搜索输入改 flex 伸缩+min-width，窄屏行内自然折行；app.js 零改动，行为不回归。新增测试 9 用例跑红后全绿，全量 157 测试文件 0 失败。引入来源归因 BUG-20260910-004。",
+    "runId": "run-20260910-170"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T07:28:04.896Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T07:28:07.392Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T07:48:17.513Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-154527-4ec4）"
+    },
+    {
+      "at": "2026-09-10T09:39:50.725Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-24",
+      "note": "认领（zcode-batch-031-24）"
+    },
+    {
+      "at": "2026-09-10T09:47:02.418Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-24",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.854Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f203",
+      "note": "人工确认完成"
+    }
+  ]
+}

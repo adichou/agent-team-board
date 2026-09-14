@@ -1,0 +1,75 @@
+{
+  "id": "BUG-20260908-021",
+  "type": "bug",
+  "title": "需求详情中的交互 Demo 相对链接打开后返回 404",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T15:18:54.537Z",
+  "updatedAt": "2026-09-11T05:52:19.696Z",
+  "agentCompletedAt": "2026-09-08T17:24:44.769Z",
+  "lastReport": {
+    "at": "2026-09-08T17:24:44.769Z",
+    "coverage": 91,
+    "framework": "node:assert/strict + 真实 HTTP 集成 + vm 沙箱（scripts/tests/item-demo-link.test.mjs）",
+    "summary": "看板侧修复：新增只读端点 GET /api/item/:id/demo/:name（?project= 绑定多项目；名称白名单+realpath 防穿越+2MB 上限；nosniff+CSP default-src none 仅放行内联脚本/样式与 data: 资源，fetch/XHR 禁→演示页无法触达管理 API），前端 loadDoc 后经 linkupDocDemo 把条目文档内单文件名 .html/.htm 相对链接改写至该端点并 noopener 新标签打开；条目/文件缺失 404、非法路径 400 均返回人读 HTML 提示页；README 源 ./ui-demo.html 写法不变，REQ-20260907-004 同形态链接自动覆盖。引入来源归因 REQ-20260908-021（已核验）。新增测试 11 用例全绿；全套件 99 文件 915 用例 0 失败。注意：运行中的看板服务需 atb serve 重启后新端点生效",
+    "runId": "run-20260909-102"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T15:18:54.537Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-1163"
+    },
+    {
+      "at": "2026-09-08T15:19:49.027Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T15:20:54.993Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-08T15:34:18.546Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T16:08:29.136Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T17:12:20.495Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T17:24:44.770Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 91%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.696Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-ed6e",
+      "note": "人工确认完成"
+    }
+  ]
+}

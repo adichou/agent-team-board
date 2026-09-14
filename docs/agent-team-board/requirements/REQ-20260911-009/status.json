@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260911-009",
+  "type": "requirement",
+  "title": "需求模块使用 dev 分支进行开发，每条需求或 bug 开发完到待测试状态都自动 commit",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-040-3",
+  "createdAt": "2026-09-11T15:27:27.517Z",
+  "updatedAt": "2026-09-11T17:48:52.469Z",
+  "agentCompletedAt": "2026-09-11T16:51:47.458Z",
+  "lastReport": {
+    "at": "2026-09-11T16:51:47.458Z",
+    "coverage": 88,
+    "framework": "node:assert/strict + 真实 git 临时仓库子进程集成（scripts/tests/run-all.mjs 聚合）",
+    "summary": "新增 lib/git-flow.mjs：initData 自动 git init+切 dev（空仓库走未出生分支改名）；设置页 Git 工作流分区（branch-state/init-dev 接口）；批量回执核验通过后按预留快照差集归因自动提交（doc/test/业务分组、commit --only 隔离预暂存、幂等/失败可 atb run autocommit 重试、账本与已提交徽标同源）；state-guard 新增流程外 git commit 拦截（CMT 在途豁免）；commit log/which 双向索引。新增 dev-flow-20260911-009 测试 12 例，全量 203 文件通过。",
+    "runId": "run-20260912-204"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T15:27:27.517Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T15:27:27.518Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T15:36:00.923Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-232944-b30d）"
+    },
+    {
+      "at": "2026-09-11T16:06:52.258Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-040-3",
+      "note": "认领（zcode-batch-040-3）"
+    },
+    {
+      "at": "2026-09-11T16:51:47.459Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-040-3",
+      "note": "上报测试报告（覆盖率 88%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T17:48:52.470Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-027",
+  "type": "requirement",
+  "title": "删除所有任务中对开发人员的设置功能",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260910-032-03",
+  "createdAt": "2026-09-10T13:05:52.941Z",
+  "updatedAt": "2026-09-11T05:52:23.400Z",
+  "agentCompletedAt": "2026-09-10T15:57:36.107Z",
+  "lastReport": {
+    "at": "2026-09-10T15:57:36.107Z",
+    "coverage": 100,
+    "framework": "node:test 风格契约测试（vm 沙箱 + 静态源码契约 + CLI/lib 端到端，npm test 全量）",
+    "summary": "三类批量任务开发人员设置整体移除：lib 三 store 删 normalizeDeveloper/账本字段/prompt 命名行（developer 入参保留但忽略，兼容旧调用）；server 删 gitUser 预填与全部 developer 透出（遗留入参忽略）；前端删三启动区输入框、localStorage atb.batch.dev、状态行/排队行/全局行展示与搜索字段；CLI 去 --dev（显式传参 die 提示）与全部输出；SKILL.md/batch-execution.md 同步；新契约测试 dev-setting-removed-20260910-027（D1-D8）先红后绿，13 个既有测试按新口径更新；附带修复 app.js 概况模板一处既有反引号损坏（非本单引入）；175 个测试文件全量通过",
+    "runId": "run-20260910-181"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T13:05:52.941Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T13:05:52.942Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-10T13:27:49.115Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-211935-e244）"
+    },
+    {
+      "at": "2026-09-10T15:18:01.724Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-03",
+      "note": "认领（zcode-batch-20260910-032-03）"
+    },
+    {
+      "at": "2026-09-10T15:57:36.107Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260910-032-03",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.400Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-9aad",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-002 演示 · 列表和详情页面占比应为 1:2</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --chip-bug: #e11d48; --chip-req: #4f46e5;
+    --submitted: #64748b; --accepted: #2563eb; --inprogress: #d97706;
+    --ok-bg: #ecfdf5; --ok-text: #047857; --info-bg: #eff6ff; --info-text: #1d4ed8;
+    --warn-bg: #fffbeb; --warn-text: #b45309;
+    --demo-bar: #101827; --demo-bar-text: #dbe4f3;
+    --scrim: rgba(10, 16, 26, 0.35);
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+  }
+  html[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+    --border: #263041; --primary: #3b82f6; --chip-bug: #fb7185; --chip-req: #818cf8;
+    --submitted: #94a3b8; --accepted: #60a5fa; --inprogress: #fbbf24;
+    --ok-bg: #052e1c; --ok-text: #6ee7b7; --info-bg: #0b1d3a; --info-text: #93c5fd;
+    --warn-bg: #36260a; --warn-text: #fcd34d;
+    --demo-bar: #0a0f17; --demo-bar-text: #c8d3e6;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  code { background: rgba(127,140,170,.15); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+
+  /* ================= 演示控制条（非看板本体） ================= */
+  .demo-bar {
+    flex: none; background: var(--demo-bar); color: var(--demo-bar-text);
+    padding: 8px 14px 6px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,.12); z-index: 50;
+  }
+  .demo-bar .demo-title { font-weight: 650; font-size: 13px; }
+  .demo-bar .demo-title span { font-weight: 400; opacity: .75; }
+  .seg { display: inline-flex; border: 1px solid rgba(255,255,255,.25); border-radius: 99px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: none; background: transparent; color: inherit;
+    padding: 3px 12px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .demo-bar select {
+    height: 26px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25);
+    background: transparent; color: inherit; font-size: 12px; padding: 0 4px; cursor: pointer;
+  }
+  .demo-bar select option { color: #1b2434; }
+  .demo-bar label { font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .demo-bar input[type="range"] { width: 150px; accent-color: var(--primary); }
+  .demo-note { font-size: 11px; opacity: .7; }
+  .log-toggle { margin-left: auto; }
+
+  /* 实时比例读数条 */
+  .ratio-bar {
+    flex: none; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+    padding: 5px 14px; font-size: 12px; color: var(--muted);
+    background: var(--panel); border-bottom: 1px solid var(--border); z-index: 40;
+  }
+  .ratio-bar b { color: var(--text); font-weight: 600; }
+  .ratio-bar .tag { border-radius: 99px; padding: 1px 10px; font-size: 11.5px; }
+  .ratio-bar .tag.now { background: var(--warn-bg); color: var(--warn-text); }
+  .ratio-bar .tag.expect { background: var(--ok-bg); color: var(--ok-text); }
+
+  /* ================= 舞台：模拟可变视口 ================= */
+  .stage-wrap { flex: 1; min-height: 0; overflow: auto; display: grid; justify-items: center; padding: 10px 10px 14px; }
+  .stage { width: 1306px; max-width: 100%; height: 100%; min-height: 420px; display: flex; flex-direction: column;
+    background: var(--bg); border: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 12px; overflow: hidden; }
+  .stage-label { flex: none; text-align: center; font-size: 11px; color: var(--muted); padding: 3px 0 0; user-select: none; }
+
+  /* ================= 看板模拟（复刻 scripts/web 口径） ================= */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 8px 18px; background: var(--panel); border-bottom: 1px solid var(--border); flex: none;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .logo {
+    width: 30px; height: 30px; display: grid; place-items: center; font-size: 15px; color: #fff;
+    background: linear-gradient(135deg, #4f46e5, #0ea5e9); border-radius: 8px; position: relative;
+  }
+  .logo i { position: absolute; top: -4px; right: -5px; font-size: 10px; font-style: normal; color: #16a34a; background: var(--panel); border-radius: 50%; padding: 1px; line-height: 1; }
+  .brand h1 { margin: 0; font-size: 14px; font-weight: 650; }
+  .brand .path { display: block; color: var(--muted); font-size: 10.5px; font-family: ui-monospace, Menlo, monospace; }
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 9px; padding: 4px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 2px 10px; font-size: 12px; }
+  .module-nav { display: flex; gap: 6px; padding: 8px 18px 0; flex: none; }
+  .view-tab {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    border-radius: 99px; padding: 4px 14px; font-size: 13px; cursor: pointer;
+  }
+  .view-tab.active { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); font-weight: 600; }
+  .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 18px 10px; flex: none; }
+  .module-sub { margin: 0; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .search {
+    display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--panel);
+    border-radius: 99px; padding: 0 10px; height: 28px; min-width: 150px; flex: 0 1 220px;
+  }
+  .search input { border: none; outline: none; background: transparent; color: var(--text); font-size: 12.5px; width: 100%; }
+  .filter-bar { display: flex; gap: 6px; padding: 0 18px 10px; flex: none; flex-wrap: wrap; }
+  .chip {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+    border-radius: 99px; padding: 3px 12px; font-size: 12px; cursor: pointer;
+  }
+  .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  .req-view { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  /* ★ 核心：.req-split 两栏口径——现状（缺陷）vs 期望（1:2） */
+  .req-split {
+    flex: 1; min-height: 0; display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 460px);   /* 现状：scripts/web/style.css 第 251 行 */
+    gap: 14px; padding: 14px 18px 24px; align-items: stretch;
+  }
+  body.expect .req-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);     /* 期望示意：列表:详情 = 1:2；列表保底宽属 design.md 裁定 */
+  }
+  .req-list-wrap {
+    position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+    background: rgba(127,140,170,.05); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px 12px;
+  }
+  .req-caption { display: flex; flex-direction: column; gap: 6px; padding: 2px 4px 8px; border-bottom: 1px solid var(--border); flex: none; }
+  .caption-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .sort-select { height: 24px; padding: 0 4px; font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+  .req-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+  .req-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--panel); cursor: pointer; font-size: 12.5px;
+  }
+  .req-row:hover { border-color: var(--primary); }
+  .req-row.picked { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .req-row .kind { font-weight: 650; font-size: 11px; border-radius: 6px; padding: 1px 6px; color: #fff; flex: none; }
+  .req-row .kind.bug { background: var(--chip-bug); }
+  .req-row .kind.req { background: var(--chip-req); }
+  .req-row .rid { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--muted); flex: none; }
+  .req-row .ttl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .req-row .cb { flex: none; }
+  .state-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .state-dot.s-accepted { background: var(--accepted); }
+  .state-dot.s-in-progress { background: var(--inprogress); }
+  .list-empty { flex: 1; display: grid; place-items: center; color: var(--muted); font-size: 12.5px; padding: 18px; text-align: center; }
+
+  /* 抽屉（宽屏静态右栏；口径同 .req-split > .drawer） */
+  .drawer {
+    position: static; width: auto; box-shadow: none; z-index: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .drawer-head { padding: 14px 18px 10px; border-bottom: 1px solid var(--border); flex: none; }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .card-top .kind { font-weight: 650; font-size: 11px; border-radius: 6px; padding: 1px 6px; color: #fff; background: var(--chip-bug); flex: none; }
+  .card-top .rid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .icon-btn {
+    appearance: none; border: none; background: transparent; color: var(--muted); cursor: pointer;
+    border-radius: 6px; padding: 2px 6px; font-size: 14px; line-height: 1;
+  }
+  .icon-btn:hover { background: rgba(127,140,170,.15); color: var(--text); }
+  .drawer-head h2 { margin: 6px 0 0; font-size: 15.5px; word-break: break-word; }
+  .drawer-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--border); flex: none; }
+  .tab {
+    appearance: none; border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 99px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+  }
+  .tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .drawer-body { padding: 14px 18px 26px; overflow-y: auto; flex: 1; min-height: 0; }
+  .drawer-empty { flex: 1; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px;
+    background: rgba(127,140,170,.07); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; margin-bottom: 12px;
+  }
+  .meta-grid label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+  .meta-grid span { font-size: 12.5px; word-break: break-all; }
+  .notice { border-radius: 9px; padding: 9px 12px; font-size: 12.5px; margin: 10px 0; }
+  .notice.info { background: var(--info-bg); color: var(--info-text); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .drawer-actions { display: flex; gap: 10px; margin: 4px 0 14px; align-items: center; }
+  .drawer-actions .pos { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .md { border: 1px solid var(--border); border-radius: 10px; padding: 4px 18px; font-size: 13.5px; overflow-wrap: break-word; }
+  .md h1 { font-size: 17px; margin: 16px 0 8px; }
+  .md h2 { font-size: 15px; margin: 16px 0 6px; }
+  .md ul, .md ol { padding-left: 20px; margin: 6px 0; }
+  .md p { margin: 8px 0; }
+
+  /* 栏宽标注徽章（演示用，浮于两栏右上角） */
+  .pane-badge {
+    position: absolute; top: 8px; right: 8px; z-index: 5; max-width: calc(100% - 16px);
+    border-radius: 8px; padding: 4px 9px; font-size: 11px; line-height: 1.45;
+    background: var(--warn-bg); color: var(--warn-text); border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent);
+    pointer-events: none; text-align: right;
+  }
+  .pane-badge b { font-weight: 650; }
+  body.expect .pane-badge { background: var(--ok-bg); color: var(--ok-text); border-color: color-mix(in srgb, var(--ok-text) 35%, transparent); }
+  body.narrow .pane-badge { display: none; }
+  .drawer .pane-badge { top: 6px; }
+  .drawer.has-item .pane-badge { display: block; }
+  .drawer:not(.has-item) .pane-badge { display: none; }
+
+  /* 遮罩 */
+  .mask { position: absolute; inset: 0; background: var(--scrim); z-index: 19; }
+  .hidden { display: none !important; }
+
+  /* 窄屏模拟（复刻 @media (max-width:1020px)：单列 + 覆盖式抽屉） */
+  body.narrow .req-split { grid-template-columns: minmax(0, 1fr); padding: 10px 12px 20px; }
+  body.expect.narrow .req-split { grid-template-columns: minmax(0, 1fr); }
+  body.narrow .drawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 92%); z-index: 20;
+    border-radius: 12px 0 0 12px; border-right: none;
+    box-shadow: -8px 0 30px rgba(10,16,26,.25);
+    transform: translateX(100%); transition: transform .18s ease;
+  }
+  body.narrow .drawer.has-item { transform: none; }
+
+  /* 操作日志 */
+  .log-panel {
+    position: fixed; right: 12px; bottom: 12px; z-index: 70; width: 330px; max-width: calc(100vw - 24px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); font-size: 12px;
+  }
+  .log-panel header { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  .log-panel ol { margin: 0; padding: 8px 12px 10px 30px; max-height: 150px; overflow-y: auto; color: var(--muted); }
+  .log-panel li { margin: 2px 0; }
+  .log-panel li b { color: var(--text); font-weight: 500; }
+  .log-panel.collapsed ol { display: none; }
+</style>
+</head>
+<body class="now">
+
+  <!-- 演示控制条（仅演示用，非看板本体） -->
+  <div class="demo-bar">
+    <span class="demo-title">BUG-20260910-002 演示 <span>· 列表和详情页面占比应为 1:2</span></span>
+    <span class="seg" role="group" aria-label="模式">
+      <button type="button" id="modeNow" class="on">现状（缺陷）</button>
+      <button type="button" id="modeExpect">期望（1:2）</button>
+    </span>
+    <span class="seg" role="group" aria-label="形态">
+      <button type="button" id="formWide" class="on">宽屏分栏</button>
+      <button type="button" id="formNarrow">窄屏覆盖</button>
+    </span>
+    <label>视口宽度 <input type="range" id="vw" min="900" max="2200" step="2" value="1306"> <b id="vwVal" style="font-weight:600;min-width:46px;">1306px</b></label>
+    <label>状态
+      <select id="uiState">
+        <option value="normal">正常（详情已渲染）</option>
+        <option value="loading">加载中</option>
+        <option value="fail">详情加载失败</option>
+        <option value="unselected">未选择（空态）</option>
+        <option value="emptylist">列表为空</option>
+      </select>
+    </label>
+    <span class="seg" role="group" aria-label="主题">
+      <button type="button" id="themeDark" class="on">深色</button>
+      <button type="button" id="themeLight">浅色</button>
+    </span>
+    <button type="button" class="btn log-toggle" id="logToggle" style="background:transparent;color:inherit;border-color:rgba(255,255,255,.25);">隐藏日志</button>
+    <span class="demo-note">拖动视口宽度滑杆看比例变化；点列表行开详情（✕ / Esc 关闭）</span>
+  </div>
+
+  <!-- 实时比例读数（演示用） -->
+  <div class="ratio-bar" id="ratioBar">
+    <span>舞台宽 <b id="rStage">–</b></span>
+    <span>列表栏 <b id="rList">–</b></span>
+    <span>详情栏 <b id="rDetail">–</b></span>
+    <span>列表 : 详情 ≈ <b id="rRatio">–</b></span>
+    <span class="tag now" id="rTag">现状：详情被 460px 上限锁死，视口越宽列表占比越高</span>
+  </div>
+
+  <!-- 可变视口舞台 + 看板模拟本体 -->
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <header class="topbar">
+        <div class="brand">
+          <span class="logo">▦<i>●</i></span>
+          <div>
+            <h1>智能体团队看板</h1>
+            <span class="path">/Users/adichou/Documents/src/agent-team-board</span>
+          </div>
+        </div>
+        <button type="button" class="btn primary">＋ 新建</button>
+      </header>
+
+      <nav class="module-nav" aria-label="模块导航">
+        <button type="button" class="view-tab">讨论</button>
+        <button type="button" class="view-tab active">需求</button>
+        <button type="button" class="view-tab">任务</button>
+        <button type="button" class="view-tab">文件</button>
+        <button type="button" class="view-tab">设置</button>
+      </nav>
+
+      <section class="page-head">
+        <p class="module-sub">从想法到验收，跟进每一项工作</p>
+        <div class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="搜需求 / Bug / 文档…" aria-label="搜索"></div>
+      </section>
+
+      <nav class="filter-bar" aria-label="按状态筛选">
+        <button type="button" class="chip">待接受 0</button>
+        <button type="button" class="chip active">已接受 1</button>
+        <button type="button" class="chip">已计划 0</button>
+        <button type="button" class="chip">开发中 2</button>
+        <button type="button" class="chip">已完成 0</button>
+      </nav>
+
+      <main class="req-view">
+        <div class="req-split">
+          <section class="req-list-wrap" id="listPane" aria-label="需求列表">
+            <div class="pane-badge" id="listBadge"></div>
+            <div class="req-caption">
+              <div class="caption-row">
+                <span class="muted small" style="font-weight:600;" id="reqCount">3 个条目</span>
+                <select class="sort-select" aria-label="列表排序"><option>最新更新</option></select>
+              </div>
+              <div class="caption-row">
+                <button type="button" class="btn small">☑ 全选</button>
+                <button type="button" class="btn small" disabled>☐ 全不选</button>
+              </div>
+            </div>
+            <div class="req-list" id="list">
+              <div class="req-row picked" data-id="BUG-20260910-002">
+                <input type="checkbox" class="cb" checked><span class="state-dot s-accepted"></span><span class="kind bug">BUG</span>
+                <span class="rid">BUG-20260910-002</span>
+                <span class="ttl">列表占太多空间，应该调整下，列表和详情页面占比应为 1:2</span>
+              </div>
+              <div class="req-row" data-id="REQ-20260907-004">
+                <input type="checkbox" class="cb"><span class="state-dot s-in-progress"></span><span class="kind req">REQ</span>
+                <span class="rid">REQ-20260907-004</span>
+                <span class="ttl">看板整体布局优化：统一导航、三类新建入口与列表工作区</span>
+              </div>
+              <div class="req-row" data-id="REQ-20260908-005">
+                <input type="checkbox" class="cb"><span class="state-dot s-in-progress"></span><span class="kind req">REQ</span>
+                <span class="rid">REQ-20260908-005</span>
+                <span class="ttl">详情页面高度不要超过列表，要低于状态筛选行</span>
+              </div>
+            </div>
+          </section>
+
+          <aside class="drawer has-item" id="drawer" aria-label="条目详情">
+            <div class="pane-badge" id="detailBadge"></div>
+          </aside>
+        </div>
+        <div class="mask hidden" id="mask"></div>
+      </main>
+      <div class="stage-label" id="stageLabel">模拟视口 1306px（实际看板 ≤1020px 自动切窄屏覆盖形态）</div>
+    </div>
+  </div>
+
+  <div class="log-panel" id="logPanel">
+    <header>操作日志 <button type="button" class="icon-btn" id="logClose" title="折叠">▁</button></header>
+    <ol id="log"></ol>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var state = {
+    mode: 'now',            // now | expect
+    form: 'wide',           // wide | narrow
+    theme: 'dark',          // dark | light
+    uiState: 'normal',      // normal | loading | fail | unselected | emptylist
+    tab: 'info',            // info | doc | design | cases | disc
+    open: true,
+    pickId: 'BUG-20260910-002'
+  };
+  var ITEMS = {
+    'BUG-20260910-002': { kind: 'BUG', kcls: 'bug', title: '列表占太多空间，应该调整下，列表和详情页面占比应为 1:2', st: '已接受', cr: '2026-09-09' },
+    'REQ-20260907-004': { kind: 'REQ', kcls: 'req', title: '看板整体布局优化：统一导航、三类新建入口与列表工作区', st: '开发中', cr: '2026-09-07' },
+    'REQ-20260908-005': { kind: 'REQ', kcls: 'req', title: '详情页面高度不要超过列表，要低于状态筛选行', st: '开发中', cr: '2026-09-08' }
+  };
+  var logEl = $('#log');
+  var loadTimer = null;
+
+  function log(msg) {
+    var t = new Date();
+    var ts = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
+    var li = document.createElement('li');
+    li.innerHTML = '<b>' + ts + '</b> ' + msg;
+    logEl.prepend(li);
+    while (logEl.children.length > 40) logEl.removeChild(logEl.lastChild);
+  }
+
+  /* ---------- 详情渲染 ---------- */
+  function mdDocHtml(id) {
+    return '<h1>' + id + ' ' + ITEMS[id].title + '</h1>' +
+      '<h2>现象</h2><p>宽屏工作区两栏比例失衡：列表栏远宽于详情栏，窗口越宽越严重（详见 README）。</p>' +
+      '<h2>复现步骤</h2><ol><li>宽屏打开「需求」模块并选中条目；</li><li>观察列表 / 详情两栏宽度比；</li><li>拖宽窗口重复观察。</li></ol>' +
+      '<h2>期望行为</h2><p>列表 : 详情 ≈ 1 : 2，随视口同步伸缩；窄屏覆盖形态不变。</p>';
+  }
+
+  function renderDrawer() {
+    var d = $('#drawer');
+    var emptyList = state.uiState === 'emptylist';
+    if (!state.open || state.uiState === 'unselected') {
+      d.classList.remove('has-item');
+      d.innerHTML = '<div class="pane-badge" id="detailBadge"></div><div class="drawer-empty">选择左侧列表中的条目查看详情</div>';
+      $('#mask').classList.add('hidden');
+      updateRatio();
+      return;
+    }
+    d.classList.add('has-item');
+    $('#mask').classList.toggle('hidden', state.form !== 'narrow');
+    var it = ITEMS[state.pickId];
+    var bodyHtml = '';
+    if (state.uiState === 'loading') {
+      bodyHtml = '<div class="drawer-empty">加载中…</div>';
+    } else if (state.uiState === 'fail') {
+      bodyHtml = '<div class="drawer-body"><div class="notice warn">详情加载失败：请稍后重试（演示占位文案）。</div>' +
+        '<div class="drawer-actions"><button type="button" class="btn" id="dRetry">重试</button></div></div>';
+    } else if (state.tab === 'info') {
+      bodyHtml = '<div class="drawer-body">' +
+        '<section class="meta-grid">' +
+          '<div><label>状态</label><span>' + it.st + '</span></div><div><label>类型</label><span>' + (it.kind === 'BUG' ? 'Bug' : '需求') + '</span></div><div><label>归属</label><span>独立</span></div>' +
+          '<div><label>认领者</label><span>—</span></div><div><label>创建</label><span>' + it.cr + '</span></div><div><label>更新</label><span>' + it.cr + '</span></div>' +
+        '</section>' +
+        '<div class="notice info">未入计划。可点「移入计划」排入开发计划。</div>' +
+        '<div class="drawer-actions"><button type="button" class="btn primary">✓ 接受</button><button type="button" class="btn">✎ 修改</button><span class="pos">1 / 3</span></div>' +
+      '</div>';
+    } else if (state.tab === 'doc') {
+      bodyHtml = '<div class="drawer-body"><article class="md">' + mdDocHtml(state.pickId) + '</article></div>';
+    } else if (state.tab === 'design' || state.tab === 'cases') {
+      bodyHtml = '<div class="drawer-body"><article class="md"><p class="muted">尚未创建，开发阶段补充。</p></article></div>';
+    } else {
+      bodyHtml = '<div class="drawer-body"><p class="muted small">（演示聚焦两栏比例，讨论纪要仅占位）</p></div>';
+    }
+    var tabs = [['info', '基本信息'], ['doc', '说明'], ['design', '设计'], ['cases', '测试用例'], ['disc', '讨论纪要']];
+    var tabsDisabled = state.uiState === 'loading' || state.uiState === 'fail';
+    d.innerHTML = '<div class="pane-badge" id="detailBadge"></div>' +
+      '<header class="drawer-head">' +
+        '<div class="card-top"><span class="kind">' + it.kind + '</span><span class="rid">' + state.pickId + '</span>' +
+        '<button type="button" class="icon-btn" id="dClose" title="关闭" aria-label="关闭">✕</button></div>' +
+        '<h2>' + it.title + '</h2>' +
+      '</header>' +
+      (tabsDisabled ? '' :
+      '<nav class="drawer-tabs" role="tablist" aria-label="详情分页">' +
+        tabs.map(function (t) {
+          return '<button type="button" class="tab' + (state.tab === t[0] ? ' active' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
+        }).join('') +
+      '</nav>') +
+      bodyHtml;
+
+    $('#dClose').addEventListener('click', function () { closeDrawer('✕'); });
+    var retry = $('#dRetry');
+    if (retry) retry.addEventListener('click', function () {
+      log('点「重试」→ 重新进入「加载中…」');
+      state.uiState = 'loading';
+      $('#uiState').value = 'loading';
+      renderDrawer();
+      clearTimeout(loadTimer);
+      loadTimer = setTimeout(function () {
+        state.uiState = 'normal'; $('#uiState').value = 'normal';
+        log('重试成功 → 详情恢复渲染（正常态）');
+        renderDrawer();
+      }, 600);
+    });
+    Array.prototype.forEach.call(d.querySelectorAll('.tab'), function (b) {
+      b.addEventListener('click', function () {
+        state.tab = b.dataset.tab;
+        log('切换页签 →「' + b.textContent + '」' + (b.dataset.tab === 'design' || b.dataset.tab === 'cases' ? '（文档未创建空态）' : ''));
+        renderDrawer();
+      });
+    });
+    updateRatio();
+  }
+
+  function openDrawer(id) {
+    state.open = true;
+    state.pickId = id;
+    state.tab = 'doc';
+    Array.prototype.forEach.call(document.querySelectorAll('.req-row'), function (r) {
+      r.classList.toggle('picked', r.dataset.id === id);
+      var cb = r.querySelector('.cb');
+      if (cb) cb.checked = r.dataset.id === id;
+    });
+    log('打开详情：<b>' + id + '</b>（经「加载中…」过渡）');
+    if (state.uiState === 'unselected') { state.uiState = 'normal'; $('#uiState').value = 'normal'; }
+    if (state.uiState === 'emptylist') { state.uiState = 'normal'; $('#uiState').value = 'normal'; }
+    if (state.uiState === 'normal') {
+      state.uiState = 'loading';
+      renderDrawer();
+      clearTimeout(loadTimer);
+      loadTimer = setTimeout(function () {
+        state.uiState = 'normal';
+        log('详情渲染完成 → 正常态');
+        renderDrawer();
+      }, 450);
+      $('#uiState').value = 'normal';
+    } else {
+      renderDrawer();
+    }
+  }
+  function closeDrawer(via) {
+    state.open = false;
+    log('关闭详情（' + via + '）→ 未选择空态');
+    renderDrawer();
+  }
+
+  /* ---------- 列表渲染（空态 / 正常） ---------- */
+  function renderList() {
+    var empty = state.uiState === 'emptylist';
+    $('#reqCount').textContent = empty ? '0 个条目' : '3 个条目';
+    Array.prototype.forEach.call(document.querySelectorAll('.req-row'), function (r) {
+      r.style.display = empty ? 'none' : '';
+    });
+    var holder = $('#listEmpty');
+    if (empty && !holder) {
+      var div = document.createElement('div');
+      div.className = 'list-empty';
+      div.id = 'listEmpty';
+      div.textContent = '当前筛选档没有条目（演示空态）';
+      $('#list').appendChild(div);
+    } else if (!empty && holder) {
+      holder.remove();
+    }
+  }
+
+  /* ---------- 实时比例读数 ---------- */
+  function fmtRatio(a, b) {
+    if (!(a > 0) || !(b > 0)) return '–';
+    var r = a / b;
+    return (Math.round(r * 100) / 100) + ' : 1';
+  }
+  function updateRatio() {
+    var stage = $('#stage');
+    var lw = $('#listPane').getBoundingClientRect().width;
+    var dw = $('#drawer').getBoundingClientRect().width;
+    var sw = stage.getBoundingClientRect().width;
+    var total = lw + dw;
+    var lp = total > 0 ? Math.round(lw / total * 100) : 0;
+    var dp = total > 0 ? Math.round(dw / total * 100) : 0;
+    $('#rStage').textContent = Math.round(sw) + 'px';
+    if (state.form === 'narrow') {
+      $('#rList').textContent = Math.round(lw) + 'px';
+      $('#rDetail').textContent = Math.round(dw) + 'px（覆盖层）';
+      $('#rRatio').textContent = '单列';
+      $('#rTag').textContent = '窄屏（≤1020px）：单列 + 覆盖式抽屉，无左右比例问题（不在本单范围）';
+      $('#rTag').className = 'tag now';
+    } else {
+      $('#rList').textContent = Math.round(lw) + 'px（' + lp + '%）';
+      $('#rDetail').textContent = Math.round(dw) + 'px（' + dp + '%）';
+      $('#rRatio').textContent = fmtRatio(lw, dw);
+      if (state.mode === 'now') {
+        $('#rTag').textContent = '现状：详情被 460px 上限锁死，视口越宽列表占比越高';
+        $('#rTag').className = 'tag now';
+      } else {
+        $('#rTag').textContent = '期望：列表 : 详情 ≈ 1 : 2，随视口同步伸缩（保底宽待 design.md）';
+        $('#rTag').className = 'tag expect';
+      }
+    }
+    var lb = $('#listBadge'), db = $('#detailBadge');
+    if (lb) {
+      lb.innerHTML = state.mode === 'now'
+        ? '<b>列表栏 ' + Math.round(lw) + 'px（' + lp + '%）</b><br>现状：独占全部剩余宽度'
+        : '<b>列表栏 ' + Math.round(lw) + 'px（' + lp + '%）</b><br>期望：≈ 1/3，保底可读';
+    }
+    if (db) {
+      db.innerHTML = state.mode === 'now'
+        ? '<b>详情栏 ' + Math.round(dw) + 'px（' + dp + '%）</b><br>现状：460px 上限锁死'
+        : '<b>详情栏 ' + Math.round(dw) + 'px（' + dp + '%）</b><br>期望：≈ 2/3 主阅读区';
+    }
+  }
+
+  /* ---------- 控制条 ---------- */
+  function setSeg(onId, offId, fn) {
+    $(onId).classList.add('on'); $(offId).classList.remove('on'); fn();
+  }
+  $('#modeNow').addEventListener('click', function () { setSeg('#modeNow', '#modeExpect', function () {
+    state.mode = 'now'; document.body.classList.remove('expect');
+    log('模式 → 现状（缺陷）：<code>minmax(0,1fr) minmax(0,460px)</code>，列表独占剩余宽度');
+    updateRatio();
+  }); });
+  $('#modeExpect').addEventListener('click', function () { setSeg('#modeExpect', '#modeNow', function () {
+    state.mode = 'expect'; document.body.classList.add('expect');
+    log('模式 → 期望（1:2）：<code>minmax(0,1fr) minmax(0,2fr)</code>（示意口径，最终以 design.md 为准）');
+    updateRatio();
+  }); });
+  $('#formWide').addEventListener('click', function () { setSeg('#formWide', '#formNarrow', function () {
+    state.form = 'wide'; document.body.classList.remove('narrow');
+    log('形态 → 宽屏分栏（>1020px，抽屉为常驻右栏）');
+    renderDrawer();
+  }); });
+  $('#formNarrow').addEventListener('click', function () { setSeg('#formNarrow', '#formWide', function () {
+    state.form = 'narrow'; document.body.classList.add('narrow');
+    log('形态 → 窄屏覆盖（≤1020px，单列 + 抽屉滑入 + 遮罩）');
+    renderDrawer();
+  }); });
+  $('#themeDark').addEventListener('click', function () { setSeg('#themeDark', '#themeLight', function () {
+    state.theme = 'dark'; document.documentElement.dataset.theme = 'dark'; log('主题 → 深色'); updateRatio();
+  }); });
+  $('#themeLight').addEventListener('click', function () { setSeg('#themeLight', '#themeDark', function () {
+    state.theme = 'light'; document.documentElement.dataset.theme = 'light'; log('主题 → 浅色'); updateRatio();
+  }); });
+
+  $('#vw').addEventListener('input', function (e) {
+    var v = Number(e.target.value);
+    $('#stage').style.width = v + 'px';
+    $('#vwVal').textContent = v + 'px';
+    $('#stageLabel').textContent = '模拟视口 ' + v + 'px' + (v <= 1020 ? '（≤1020px：实际看板会自动切窄屏覆盖形态，本演示以形态开关为准）' : '（实际看板 ≤1020px 自动切窄屏覆盖形态）');
+    updateRatio();
+  });
+
+  $('#uiState').addEventListener('change', function (e) {
+    state.uiState = e.target.value;
+    var label = {
+      normal: '正常（详情已渲染）',
+      loading: '加载中（「加载中…」空态占位，停留供观察）',
+      fail: '详情加载失败（占位提示 + 重试）',
+      unselected: '未选择（抽屉空态：选择左侧列表中的条目查看详情）',
+      emptylist: '列表为空（0 个条目空提示，详情随之关闭）'
+    }[state.uiState];
+    log('状态 → ' + label);
+    if (state.uiState === 'unselected' || state.uiState === 'emptylist') state.open = false;
+    if (state.uiState === 'normal') state.open = true;
+    renderList();
+    renderDrawer();
+  });
+
+  $('#logToggle').addEventListener('click', function () {
+    var p = $('#logPanel');
+    p.classList.toggle('collapsed');
+    this.textContent = p.classList.contains('collapsed') ? '显示日志' : '隐藏日志';
+  });
+
+  /* ---------- 列表交互 + 搜索 ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll('.req-row'), function (r) {
+    r.addEventListener('click', function (e) {
+      if (e.target.classList.contains('cb')) { log('勾选条目 ' + r.dataset.id + '（列表栏收紧后勾选须仍可用）'); return; }
+      openDrawer(r.dataset.id);
+    });
+  });
+  $('#q').addEventListener('input', function (e) {
+    var q = e.target.value.trim();
+    Array.prototype.forEach.call(document.querySelectorAll('.req-row'), function (r) {
+      r.style.display = (!q || r.textContent.indexOf(q) >= 0) && state.uiState !== 'emptylist' ? '' : 'none';
+    });
+    log(q ? '搜索“' + q + '”过滤列表' : '清除搜索');
+  });
+
+  $('#mask').addEventListener('click', function () { closeDrawer('遮罩'); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (state.open) closeDrawer('Escape');
+  });
+  window.addEventListener('resize', updateRatio);
+
+  /* ---------- 初始 ---------- */
+  document.documentElement.dataset.theme = 'dark';
+  renderList();
+  renderDrawer();
+  log('演示就绪：默认「现状 + 宽屏 + 深色 + 正常态」，舞台 1306px');
+  updateRatio();
+  /* 等字体 / 布局稳定后再校一次读数 */
+  setTimeout(updateRatio, 60);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Edit$|^Write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/scripts/state-guard.mjs\" file",
+            "timeout": 10,
+            "statusMessage": "看板状态守卫：检查 status.json 直写"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/scripts/state-guard.mjs\" bash",
+            "timeout": 10,
+            "statusMessage": "看板状态守卫：人工专属状态命令与流程外提交"
+          }
+        ]
+      }
+    ]
+  }
+}

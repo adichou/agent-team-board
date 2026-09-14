@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-015",
+  "type": "bug",
+  "title": "state-guard PLUGIN_ROOT 多解析一层：docs 豁免永不生效，无锁时条目 markdown 误被拦截",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-002-01",
+  "createdAt": "2026-09-06T14:29:13.424Z",
+  "updatedAt": "2026-09-11T05:52:15.984Z",
+  "agentCompletedAt": "2026-09-06T16:25:39.751Z",
+  "lastReport": {
+    "at": "2026-09-06T16:25:39.751Z",
+    "coverage": 95,
+    "framework": "Node 原生 assert + 子进程实测（scripts/tests/run-all.mjs）",
+    "summary": "修复 state-guard.mjs PLUGIN_ROOT 多上跳一层：改为从 scripts/ 仅上跳一层，docs/ 豁免恢复生效且保护范围收敛回插件根；code-guard.test.mjs 新增 P1-P4 回归（豁免放行/同级不误拦/仍拦源码/真实软链形态），全套 43 个测试文件 0 失败",
+    "runId": "run-20260907-016"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T14:29:13.424Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-8dd0"
+    },
+    {
+      "at": "2026-09-06T14:30:29.315Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T16:21:53.040Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-002-01",
+      "note": "认领（zcode-batch-002-01）"
+    },
+    {
+      "at": "2026-09-06T16:25:39.751Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-002-01",
+      "note": "上报测试报告（覆盖率 95%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.984Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-198c",
+      "note": "人工确认完成"
+    }
+  ]
+}

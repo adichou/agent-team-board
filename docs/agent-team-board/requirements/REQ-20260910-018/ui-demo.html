@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260910-018 演示 — 讨论逐轮持久化、文档资产展示与跨会话续聊</title>
+<style>
+  /* ---------- 主题变量：默认跟随系统，可手动切换（对齐看板 prefers-color-scheme 双主题） ---------- */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea; --text: #1f2329; --muted: #8a919c;
+    --primary: #2563eb; --primary-text: #ffffff; --ok: #16a34a; --ok-bg: #e8f7ee;
+    --warn: #b45309; --warn-bg: #fdf1df; --danger: #dc2626; --danger-bg: #fdecec;
+    --chip: #eef1f5; --chip-text: #4b5563; --shadow: 0 8px 28px rgba(15, 23, 42, .14);
+    --focus: rgba(37, 99, 235, .28); --quote: #f7f8fa;
+  }
+  html[data-theme="dark"] {
+    --bg: #10141b; --panel: #1a2029; --line: #2b333f; --text: #e6e9ee; --muted: #8b94a1;
+    --primary: #3b82f6; --primary-text: #ffffff; --ok: #34d399; --ok-bg: #10331f;
+    --warn: #f0b355; --warn-bg: #3a2c10; --danger: #f87171; --danger-bg: #3d1717;
+    --chip: #232b36; --chip-text: #b3bcc9; --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+    --focus: rgba(59, 130, 246, .35); --quote: #20262f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    transition: background .2s, color .2s;
+  }
+  button { font: inherit; cursor: pointer; }
+  input, textarea, select { font: inherit; color: var(--text); }
+  .hidden { display: none !important; }
+
+  /* ---------- 顶部说明条 ---------- */
+  .demo-bar {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .demo-bar .t { font-weight: 600; }
+  .demo-bar .d { color: var(--muted); font-size: 12.5px; }
+  .demo-bar .spacer { flex: 1; }
+  .demo-note { font-size: 12.5px; color: var(--muted); padding: 8px 16px; border-bottom: 1px dashed var(--line); }
+  .demo-note b { color: var(--text); }
+
+  /* ---------- 通用控件 ---------- */
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 5px 12px;
+  }
+  .btn:hover { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  .btn.accent { background: var(--panel); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .btn.small { padding: 2px 9px; font-size: 12.5px; border-radius: 6px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); }
+  .chip { border-radius: 999px; padding: 1px 9px; font-size: 11.5px; background: var(--chip); color: var(--chip-text); white-space: nowrap; }
+  .chip.disc { background: var(--ok-bg); color: var(--ok); }
+  .chip.arch { background: var(--chip); color: var(--chip-text); }
+  .chip.roundref { cursor: pointer; border: 1px dashed var(--line); background: var(--panel); color: var(--primary); }
+  .chip.roundref:hover { border-color: var(--primary); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 顶栏（简化看板骨架） ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .topbar .logo { font-weight: 700; letter-spacing: .5px; }
+  .nav { display: flex; gap: 4px; color: var(--muted); font-size: 13px; }
+  .nav span { padding: 3px 8px; border-radius: 6px; }
+  .nav span.on { color: var(--text); background: var(--chip); }
+  .topbar .spacer { flex: 1; }
+
+  /* ---------- 讨论模块：筛选 + 左列表右详情 ---------- */
+  .disc-wrap { max-width: 1180px; margin: 0 auto; padding: 12px 16px 4px; }
+  .filters { display: flex; gap: 8px; margin-bottom: 10px; }
+  .filter-chip {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 999px; padding: 4px 14px; font-size: 13px;
+  }
+  .filter-chip .cnt { color: var(--muted); font-size: 12px; }
+  .filter-chip.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .split { display: grid; grid-template-columns: minmax(300px, 7fr) minmax(0, 11fr); gap: 12px; align-items: start; }
+  .list-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .list-cap { padding: 2px 4px 8px; }
+  .disc-card {
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px;
+    background: var(--bg); cursor: pointer; transition: border-color .12s;
+  }
+  .disc-card:hover { border-color: var(--primary); }
+  .disc-card.selected { border-color: var(--primary); box-shadow: 0 0 0 2px var(--focus); }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .card-top .chip { margin-left: auto; }
+  .card-title { font-weight: 600; margin: 3px 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-rounds { color: var(--chip-text); background: var(--chip); border-radius: 999px; padding: 0 8px; font-size: 11.5px; }
+  .card-sum { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-meta { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .card-meta .m-time { margin-left: auto; }
+  .list-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 26px 8px; border: 1px dashed var(--line); border-radius: 10px; }
+
+  /* ---------- 详情 ---------- */
+  .detail { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .detail-empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+  .detail-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); }
+  .detail-head h2 { margin: 6px 0 8px; font-size: 16.5px; }
+  .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .detail-actions .grow { flex: 1; }
+  .back-btn { display: none; }
+  .tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tab {
+    border: none; background: none; color: var(--muted); padding: 8px 12px;
+    border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+  .detail-body { padding: 12px 14px 16px; min-height: 300px; }
+  .notice { border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; border: 1px solid var(--line); background: var(--quote); }
+  .notice.loading { color: var(--muted); }
+  .notice.ok { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+  .notice.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+  .notice.err { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+  .pane h4 { margin: 14px 0 6px; font-size: 13.5px; }
+  .pane h4:first-child { margin-top: 0; }
+  .min-item { border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px; padding: 7px 10px; margin-bottom: 7px; background: var(--quote); }
+  .min-item.consensus { border-left-color: var(--ok); }
+  .min-item.advice { border-left-color: var(--primary); }
+  .min-item.open { border-left-color: var(--warn); }
+  .min-item.action { border-left-color: var(--chip-text); }
+  .min-item .refs { margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .min-stale { color: var(--warn); font-size: 12.5px; }
+
+  /* 交流记录：轮次卡 */
+  .round-toggle { width: 100%; text-align: center; }
+  .round {
+    border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: var(--bg);
+    transition: box-shadow .3s;
+  }
+  .round.flash { box-shadow: 0 0 0 3px var(--focus); }
+  .round-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px dashed var(--line); }
+  .round-q { padding: 8px 10px 2px; white-space: pre-wrap; }
+  .round-q .who { color: var(--primary); font-size: 12px; font-weight: 600; margin-right: 6px; }
+  .round-a { margin: 6px 10px 10px; border-left: 3px solid var(--primary); background: var(--quote); border-radius: 0 8px 8px 0; padding: 7px 10px; }
+  .round-a .who { color: var(--muted); font-size: 12px; font-weight: 600; margin-right: 6px; }
+  .round-a .sum-row { margin: 2px 0; font-size: 13px; }
+  .round-a .sum-k { display: inline-block; min-width: 66px; color: var(--muted); font-size: 12px; }
+  .clampable { position: relative; }
+  .clampable.clamped .clamp-body { max-height: 96px; overflow: hidden; }
+  .clampable .clamp-more { margin-top: 4px; }
+  .rounds-empty { color: var(--muted); text-align: center; padding: 30px 8px; border: 1px dashed var(--line); border-radius: 10px; }
+
+  /* 后续行动 */
+  .created-box { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; background: var(--ok-bg); }
+  .created-box h4 { color: var(--ok); margin: 0 0 6px; font-size: 13px; }
+  .created-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 5px; }
+  .draft-box { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 9px; background: var(--bg); }
+  .draft-check { display: flex; gap: 7px; align-items: center; font-weight: 600; }
+  .field { display: block; margin: 7px 0 0; font-size: 13px; }
+  .field > span { display: block; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    padding: 6px 9px;
+  }
+  .field textarea { resize: vertical; }
+  .actions-empty { color: var(--muted); text-align: center; padding: 26px 8px; border: 1px dashed var(--line); border-radius: 10px; }
+
+  /* ---------- 提示词 / 整理浮层 ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 20, .45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal { width: 620px; max-width: 100%; max-height: 90vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .modal-head h3 { margin: 0; font-size: 15px; }
+  .icon-btn { border: none; background: none; color: var(--muted); font-size: 15px; border-radius: 6px; padding: 2px 7px; }
+  .icon-btn:hover { background: var(--chip); color: var(--text); }
+  .modal-body { padding: 12px 16px 16px; }
+  .modal-body textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 9px 11px; min-height: 220px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.55; }
+  .modal-foot { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+
+  /* ---------- toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-left: 4px solid var(--ok); border-radius: 10px; padding: 9px 16px;
+    box-shadow: var(--shadow); z-index: 90; max-width: min(92vw, 620px); font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  .toast.err { border-left-color: var(--danger); }
+
+  /* ---------- 演示控制台 ---------- */
+  .demo-controls {
+    max-width: 1180px; margin: 12px auto 0; padding: 10px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 12.5px; color: var(--muted);
+  }
+  .demo-controls .cap { font-weight: 600; color: var(--text); }
+  .demo-controls label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; user-select: none; }
+  .legend { font-size: 12.5px; color: var(--muted); max-width: 1180px; margin: 10px auto 26px; padding: 0 16px; }
+  .legend code { background: var(--chip); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+
+  /* ---------- 窄屏：先列表，点选进入详情覆盖层 ---------- */
+  .disc-mask { display: none; }
+  @media (max-width: 880px) {
+    .split { display: block; }
+    .detail { display: none; }
+    .detail.has-item { display: block; position: fixed; inset: 0; z-index: 40; border-radius: 0; border: none; overflow-y: auto; }
+    .disc-mask.on { display: block; position: fixed; inset: 0; background: rgba(10, 14, 20, .35); z-index: 30; }
+    .back-btn { display: inline-block; }
+    .detail-body { min-height: auto; padding-bottom: 40px; }
+  }
+</style>
+</head>
+<body>
+  <div class="demo-bar">
+    <span class="t">REQ-20260910-018 · 讨论逐轮持久化、文档资产展示与跨会话续聊</span>
+    <span class="d">可交互演示（简化看板讨论模块，仅示意本需求改动面）</span>
+    <span class="spacer"></span>
+    <button class="btn small" id="themeBtn" type="button">深浅色切换</button>
+  </div>
+  <div class="demo-note">
+    对照现状：<b>现状</b>（<code>scripts/web/oncall.js</code>）讨论只在收尾时一次性落盘——「讨论完毕」生成收尾提示词，Agent 成套写纪要 + 候选草稿 + 发布标记后看板才展示；
+    <b>本需求</b>每轮实时保存用户原文与回复总结，列表 / 详情自动刷新（无需收尾提示词），详情按「讨论纪要 / 交流记录 / 后续行动」三标签展示，并支持跨会话续聊。演示数据为虚构占位。
+  </div>
+
+  <!-- 简化看板顶栏 -->
+  <div class="topbar">
+    <span class="logo">Status Board</span>
+    <div class="nav"><span class="on">讨论</span><span>需求</span><span>任务</span><span>文件</span><span>设置</span></div>
+    <span class="spacer"></span>
+    <button class="btn" id="newBtn" type="button">＋ 新建</button>
+  </div>
+
+  <!-- 讨论模块 -->
+  <div class="disc-wrap">
+    <nav class="filters" id="filters" aria-label="按状态筛选"></nav>
+    <div class="split">
+      <section class="list-wrap" aria-label="讨论记录">
+        <div class="list-cap muted small" id="listCap"></div>
+        <div id="discList"></div>
+      </section>
+      <aside class="detail" id="detail" aria-label="讨论详情"></aside>
+    </div>
+  </div>
+  <div class="disc-mask" id="discMask"></div>
+
+  <!-- 演示控制台：模拟 Agent 侧逐轮保存 / 跨会话续聊 / 失败注入 -->
+  <div class="demo-controls">
+    <span class="cap">演示控制台</span>
+    <button class="btn small" id="simRound" type="button">模拟一轮讨论（Agent 逐轮保存）</button>
+    <button class="btn small" id="simResume" type="button">模拟新会话续聊（会话 B 追加一轮）</button>
+    <label><input type="checkbox" id="failWrite"> 模拟写入失败（下一轮保存失败，演示失败反馈与重试不重复）</label>
+    <label><input type="checkbox" id="failRead"> 模拟读取失败（重新打开详情时报错）</label>
+  </div>
+  <p class="legend">
+    说明：实际多轮对话发生在 Agent 会话内（看板不增加聊天输入框）；控制台按钮代表「Agent 已通过统一入口保存一轮」的效果落位。
+    「整理结论」替代原「讨论完毕」：随时可整理、不终止讨论、也不是交流保存的前提。提示词复制只代表已复制，不代表 Agent 已连接。
+  </p>
+
+  <!-- 启动提示词 / 整理提示词浮层 -->
+  <div class="modal-wrap hidden" id="modalWrap">
+    <div class="modal" role="dialog" aria-modal="true">
+      <header class="modal-head">
+        <h3 id="modalTitle">提示词</h3>
+        <button class="icon-btn" id="modalClose" type="button" aria-label="关闭">✕</button>
+      </header>
+      <div class="modal-body">
+        <label class="muted small" for="modalText" id="modalLabel">提示词内容</label>
+        <textarea id="modalText" readonly></textarea>
+        <div class="modal-foot">
+          <button class="btn primary" id="modalCopy" type="button">复制提示词</button>
+          <button class="btn" id="modalClose2" type="button">收起</button>
+          <button class="btn accent hidden" id="modalApply" type="button">模拟 Agent 已执行整理</button>
+          <span class="muted small">复制只代表提示词已复制，不代表 Agent 已连接</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (sel) { return document.querySelector(sel); };
+
+  /* ================= 深浅色：默认跟随系统，按钮手动覆盖 ================= */
+  var themeBtn = $('#themeBtn');
+  function applyTheme(pref) {
+    var dark = pref === 'dark' || (!pref && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    themeBtn.textContent = dark ? '切换浅色' : '切换深色';
+  }
+  applyTheme();
+  themeBtn.addEventListener('click', function () {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ================= toast ================= */
+  var toastEl = $('#toast'), toastTimer = null;
+  function toast(msg, isErr) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 4200);
+  }
+
+  /* ================= 演示数据（虚构占位；结构口径对应 README「文档与记录规则」） =================
+     rounds[]：每轮 = 用户原文 q + 回复总结 sum（观点/取舍/未决）+ 时间 at + 轮次 no + 来源会话 session
+     minutesUpTo：纪要已整理到的轮次（落后于轮数即「纪要待更新」）
+     candidates[]：候选草稿（人工勾选创建）；created[]：已创建成果（关联条目，不可重复创建） */
+  var now = function (minAgo) {
+    var d = new Date(Date.now() - (minAgo || 0) * 60000);
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  };
+
+  var discussions = [
+    {
+      id: 'ASK-20260910-005', title: '看板搜索统一化方案讨论', status: 'discussing',
+      createdAt: now(320), updatedAt: now(26),
+      background: '各模块搜索行为不一致：需求 / 文件走服务端 /api/search，讨论 / 任务走前端过滤。希望统一搜索口径并讨论演进方向，不限定结论。',
+      rounds: [
+        {
+          no: 1, at: now(180), session: '会话 A（原会话）',
+          q: '现在各模块搜索行为不一致：需求和文件走服务端 /api/search，讨论和任务走前端过滤。想统一成一套，怎么看？',
+          sum: {
+            points: '两套实现各有依据：服务端搜索适合数据量大、可分页与高亮的场景；前端过滤适合小数据集即时反馈。统一应统一「入口与交互口径」，而非强制统一实现方式。',
+            tradeoff: '全量迁服务端会增加请求量与延迟；全量前端过滤在需求模块大数据集下不可行。建议按数据规模分档。',
+            open: '各模块数据规模与延迟预算未核实，需要先测量再定档。'
+          }
+        },
+        {
+          no: 2, at: now(26), session: '会话 A（原会话）',
+          q: '补充：讨论和任务用前端过滤是刻意的——数据集小，避免小数据也发请求。另外搜索词切换模块时的结果保留逻辑也想一并理清。',
+          sum: {
+            points: '确认前端过滤是设计而非遗留；「按数据规模分档」与该设计一致。跨模块搜索词结果保留建议沿用现有 resQ 一致性检查思路，切模块不重发也不停留旧结果。',
+            tradeoff: '分档策略需要一处可配置的判定（模块 × 数据量阈值），集中配置比散落判断更可维护，但引入一处新配置面。',
+            open: '阈值定多少、配置放全局还是模块级，未定。'
+          },
+          long: true
+        }
+      ],
+      minutesUpTo: 2,
+      minutes: {
+        consensus: [
+          { text: '统一「搜索入口与交互口径」，不强制统一实现方式；按数据规模分档：小数据集前端过滤（保留现状），大数据集走服务端搜索。', refs: [1, 2] },
+          { text: '跨模块切换时搜索结果按查询一致性处理：不重发、不停留旧模块结果。', refs: [2] }
+        ],
+        advice: [
+          { text: '（模型建议）分档阈值集中为一处可配置判定，避免各模块散落判断；引入新配置面是取舍。', refs: [2] }
+        ],
+        open: [
+          { text: '各模块数据规模与延迟预算未测量，分档阈值（全局 / 模块级）未定。', refs: [2] }
+        ],
+        actions: [
+          { text: '先测量各模块典型数据量与搜索延迟，再定分档阈值。', refs: [2] }
+        ]
+      },
+      candidates: [
+        { id: 'c1', type: 'requirement', selected: true, title: '看板搜索口径统一：按数据规模分档策略', description: '统一各模块搜索入口与交互口径；小数据集保留前端过滤，大数据集走服务端搜索，分档阈值集中配置。' }
+      ],
+      created: [
+        { itemId: 'REQ-20260910-016', title: '搜索统计只读口径（命中 N / 共 T）', status: '已接受' }
+      ]
+    },
+    {
+      id: 'ASK-20260910-007', title: '（新）登录态同步方案', status: 'discussing',
+      createdAt: now(9), updatedAt: now(9),
+      background: '多端同时打开看板时登录态如何同步、过期如何提示，先开放式讨论方案空间。',
+      rounds: [], minutesUpTo: 0, minutes: null,
+      candidates: [], created: []
+    },
+    {
+      id: 'ASK-20260910-003', title: '发布节奏与分支策略', status: 'archived',
+      createdAt: now(2600), updatedAt: now(1500),
+      background: '讨论个人项目的发布节奏：主干直推还是短分支 + 快速合并。',
+      rounds: [
+        { no: 1, at: now(2560), session: '会话 A（原会话）', q: '个人项目要不要坚持分支流程，还是主干直推？', sum: { points: '单人项目分支流程收益主要在回滚与实验隔离，成本在上下文切换。', tradeoff: '主干直推最快但实验性改动会阻塞主线。', open: '无——倾向短分支 + 当日合并。' } },
+        { no: 2, at: now(2480), session: '会话 A（原会话）', q: '那实验性改动怎么隔离？', sum: { points: '实验性改动单独开短分支，超过一天未合并就在分支上写明进度再决定保留或丢弃。', tradeoff: '无', open: '无' } },
+        { no: 3, at: now(1500), session: '会话 A（原会话）', q: '确认：就按短分支 + 当日合并执行。', sum: { points: '已确认为共识：短分支 + 当日合并；实验分支超过一天写明进度。', tradeoff: '无', open: '无' } }
+      ],
+      minutesUpTo: 3,
+      minutes: {
+        consensus: [{ text: '发布节奏采用短分支 + 当日合并；实验分支超过一天写明进度再决定去留。', refs: [1, 2, 3] }],
+        advice: [], open: [], actions: []
+      },
+      candidates: [],
+      created: [
+        { itemId: 'REQ-20260909-011', title: '分支策略约定写入项目 README', status: '已完成' }
+      ]
+    }
+  ];
+
+  /* 模拟后续轮次的问答脚本（第 3 轮起；超过脚本后循环通用补充轮） */
+  var simScript = [
+    {
+      q: '那就先按「入口统一、实现分档」推进。阈值我先拍个初值：条目数 ≤ 500 用前端过滤，超过走服务端，行不行？',
+      sum: {
+        points: '初值 500 条可行，作为默认档位写入集中配置；后续按实测延迟再调。',
+        tradeoff: '阈值过细会增加配置维护成本，先只留一个全局默认值、不做模块级覆盖，等出现真实差异化需求再加。',
+        open: '配置项命名与存放位置（全局设置还是搜索模块内部）未定。'
+      }
+    },
+    {
+      q: '纠正一下：刚才说的 500 改成 300，我这边列表通常三四百条就开始卡了。',
+      sum: {
+        points: '已按纠正更新：默认阈值取 300 条。该纠正作为同讨论内的新一轮保存，不覆盖第 3 轮原文——旧轮次保留，纪要引用最新结论。',
+        tradeoff: '无',
+        open: '配置项命名与存放位置仍未定。'
+      }
+    },
+    {
+      q: '搜索词跨模块保留这块，直接按现有 resQ 一致性检查的思路落，不用再讨论了吧？',
+      sum: {
+        points: '可以按现有思路落：切模块不重发、不停留旧结果。该点从「未决」移入「已确认共识」。',
+        tradeoff: '无',
+        open: '无'
+      }
+    }
+  ];
+
+  /* ================= 模块状态 ================= */
+  var state = {
+    filter: 'discussing',
+    selectedId: null,
+    tab: 'minutes',           // minutes | rounds | actions（三标签，默认「讨论纪要」）
+    reading: false,
+    roundsCollapsed: true,    // 交流记录：默认折叠历史、定位最新轮
+    lastSave: null,           // { ok, no, at, msg } 最近一轮保存反馈（通知条）
+    saveFail: null,           // { q, sum, session } 待重试内容（失败保留）
+    currentSession: '会话 A（原会话）',
+    creating: false,
+    listScrollTop: 0
+  };
+  var nextSeq = 17; // 演示新建条目编号（虚构占位）
+
+  function discOf(id) { return discussions.find(function (d) { return d.id === id; }) || null; }
+  function selected() { return state.selectedId ? discOf(state.selectedId) : null; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ================= 列表 ================= */
+  var FILTERS = [['discussing', '讨论中'], ['archived', '已归档']];
+
+  function renderFilters() {
+    $('#filters').innerHTML = FILTERS.map(function (f) {
+      var n = discussions.filter(function (d) { return d.status === f[0]; }).length;
+      return '<button type="button" class="filter-chip' + (state.filter === f[0] ? ' active' : '') + '" data-filter="' + f[0] + '">'
+        + f[1] + ' <span class="cnt">' + n + '</span></button>';
+    }).join('');
+    Array.prototype.forEach.call($('#filters').querySelectorAll('.filter-chip'), function (chip) {
+      chip.addEventListener('click', function () {
+        state.filter = chip.dataset.filter;
+        renderFilters(); renderList();
+      });
+    });
+  }
+
+  function renderList() {
+    var shown = discussions.filter(function (d) { return d.status === state.filter; })
+      .sort(function (a, b) { return String(b.updatedAt).localeCompare(String(a.updatedAt)) || String(b.id).localeCompare(String(a.id)); });
+    $('#listCap').textContent = shown.length + ' 条记录 · 按最近更新';
+    var list = $('#discList');
+    if (!shown.length) {
+      list.innerHTML = '<div class="list-empty">当前筛选下没有讨论记录。</div>';
+      return;
+    }
+    list.innerHTML = shown.map(function (d) {
+      var rounds = d.rounds.length;
+      var sum = rounds ? d.rounds[rounds - 1].sum.points : '尚无已保存交流——复制启动提示词到 Agent 会话开始讨论';
+      return '<article class="disc-card' + (state.selectedId === d.id ? ' selected' : '') + '" data-id="' + esc(d.id) + '">'
+        + '<div class="card-top"><span class="cid">' + esc(d.id) + '</span>'
+        + '<span class="card-rounds" title="已保存轮数">' + rounds + ' 轮</span>'
+        + '<span class="chip ' + (d.status === 'archived' ? 'arch' : 'disc') + '">' + (d.status === 'archived' ? '已归档' : '讨论中') + '</span></div>'
+        + '<div class="card-title">' + esc(d.title) + '</div>'
+        + '<div class="card-sum" title="最新回复摘要">最新：' + esc(sum) + '</div>'
+        + '<div class="card-meta"><span>' + (d.status === 'archived' ? '成果已保留' : '逐轮保存中') + '</span><span class="m-time">' + esc(d.updatedAt) + '</span></div>'
+        + '</article>';
+    }).join('');
+    Array.prototype.forEach.call(list.querySelectorAll('.disc-card'), function (card) {
+      card.addEventListener('click', function () { openItem(card.dataset.id); });
+    });
+    list.scrollTop = state.listScrollTop;
+  }
+
+  /* ================= 详情 ================= */
+  function openItem(id) {
+    var list = $('#discList');
+    if (list) state.listScrollTop = list.scrollTop;
+    state.selectedId = id;
+    state.tab = 'minutes';
+    state.roundsCollapsed = true;
+    state.lastSave = null;
+    state.saveFail = null;
+    $('#detail').classList.add('has-item');
+    $('#discMask').classList.add('on');
+    renderList();
+    if ($('#failRead').checked) {
+      renderDetailReadError();
+    } else {
+      state.reading = true;
+      renderDetailLoading();
+      setTimeout(function () { state.reading = false; renderDetail(); }, 420);
+    }
+  }
+  function closeDetail() {
+    state.selectedId = null;
+    $('#detail').classList.remove('has-item');
+    $('#discMask').classList.remove('on');
+    renderList(); renderDetail();
+  }
+  $('#discMask').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('#modalWrap').classList.contains('hidden') && state.selectedId) closeDetail();
+  });
+
+  function noticeHtml(d) {
+    if (state.reading) return '<div class="notice loading" role="status">正在读取讨论记录……（仅读取完整保存的轮次）</div>';
+    if (state.saveFail) {
+      return '<div class="notice err" role="alert">本轮未保存：写入 docs/agent-team-board/discussions/' + esc(d.id) + '/ 失败（路径不可访问或写入被拒，演示模拟）——回复内容已保留，可重试；重试成功不会产生重复轮次。'
+        + ' <button type="button" class="btn small" id="retrySave">重试本轮保存</button></div>';
+    }
+    if (state.lastSave && state.lastSave.ok) {
+      var staleAfterSave = d.minutesUpTo < d.rounds.length;
+      return '<div class="notice ok" role="status">第 ' + state.lastSave.no + ' 轮已保存（' + esc(state.lastSave.at) + '）· 共 ' + d.rounds.length + ' 轮——列表轮数 / 时间 / 摘要已自动更新，无需收尾提示词。'
+        + (staleAfterSave ? ' 纪要待更新（整理至第 ' + d.minutesUpTo + ' 轮），可点「整理结论」重新汇总。' : '') + '</div>';
+    }
+    if (!d.rounds.length) {
+      return '<div class="notice" role="status">新讨论：尚无已保存交流。复制「启动提示词」到 Agent 会话开始讨论，每轮交流会自动保存；也可以先只保存背景。</div>';
+    }
+    if (d.minutesUpTo < d.rounds.length) {
+      return '<div class="notice warn" role="status">纪要待更新：已保存 ' + d.rounds.length + ' 轮，纪要整理至第 ' + d.minutesUpTo + ' 轮——可点「整理结论」重新汇总（整理不终止讨论，也不是交流保存的前提）。已保存轮次不受影响。</div>';
+    }
+    return '<div class="notice ok" role="status">纪要已同步至最新轮次（第 ' + d.minutesUpTo + ' 轮）· 共 ' + d.rounds.length + ' 轮。</div>';
+  }
+
+  function renderDetailEmpty() {
+    $('#detail').innerHTML = '<div class="detail-empty"><p>从左侧选择一条讨论记录，查看纪要、交流记录与后续行动。<br><span class="small">每轮自动保存，无需收尾发布。</span></p></div>';
+  }
+  function renderDetailLoading() {
+    var d = selected();
+    $('#detail').innerHTML = '<div class="detail-head"><div class="card-top"><span class="cid">' + esc(d.id) + '</span></div><h2>' + esc(d.title) + '</h2></div>'
+      + '<div class="detail-body"><div class="notice loading" role="status">正在读取讨论记录……</div></div>';
+  }
+  function renderDetailReadError() {
+    var d = selected();
+    $('#detail').innerHTML = '<div class="detail-head"><div class="card-top"><span class="cid">' + esc(d.id) + '</span></div><h2>' + esc(d.title) + '</h2></div>'
+      + '<div class="detail-body"><div class="notice err" role="alert">讨论记录读取失败：路径不可访问或格式错误（演示模拟）——此前已保存内容不受影响，仅本次读取失败。'
+      + ' <button type="button" class="btn small" id="retryRead">重试读取</button></div></div>';
+    $('#retryRead').addEventListener('click', function () {
+      $('#failRead').checked = false;
+      state.reading = true; renderDetailLoading();
+      setTimeout(function () { state.reading = false; renderDetail(); }, 420);
+    });
+  }
+
+  function minutesPaneHtml(d) {
+    if (!d.minutes) {
+      return '<p class="muted">尚无纪要：有轮次但暂未整理时可点顶部「整理结论」重新汇总；整理不是交流保存的前提。</p>';
+    }
+    var m = d.minutes;
+    var stale = d.minutesUpTo < d.rounds.length;
+    var refChips = function (refs) {
+      return (refs || []).map(function (no) {
+        return '<span class="chip roundref" data-goto-round="' + no + '" role="button" title="定位到交流记录第 ' + no + ' 轮">↗ 第 ' + no + ' 轮</span>';
+      }).join('');
+    };
+    var block = function (cls, head, items) {
+      if (!items || !items.length) return '';
+      return '<h4>' + head + '</h4>' + items.map(function (it) {
+        return '<div class="min-item ' + cls + '"><div>' + esc(it.text) + '</div><div class="refs">' + refChips(it.refs) + '</div></div>';
+      }).join('');
+    };
+    return '<h4>讨论背景</h4><div>' + esc(d.background || '（未填写背景）') + '</div>'
+      + block('consensus', '已确认共识（用户确认过）', m.consensus)
+      + block('advice', '模型建议与取舍（未经确认不写入共识）', m.advice)
+      + block('open', '待讨论问题', m.open)
+      + block('action', '后续行动', m.actions)
+      + (stale ? '<p class="min-stale">⚠ 纪要整理至第 ' + d.minutesUpTo + ' 轮，最新已保存到第 ' + d.rounds.length + ' 轮——待整理。纪要可从逐轮记录重新整理，旧轮次不会被覆盖。</p>' : '');
+  }
+
+  function roundHtml(r, d) {
+    var sumRows = [
+      ['关键观点', r.sum.points],
+      ['理由与取舍', r.sum.tradeoff],
+      ['未决问题', r.sum.open]
+    ].map(function (row) {
+      return '<div class="sum-row"><span class="sum-k">' + row[0] + '</span><span>' + esc(row[1]) + '</span></div>';
+    }).join('');
+    var body = '<div class="round-q"><span class="who">用户原文</span>' + esc(r.q) + '</div>'
+      + '<div class="round-a"><span class="who">回复总结</span>' + sumRows + '</div>';
+    if (r.long) {
+      body = '<div class="round-q clampable clamped"><span class="who">用户原文</span><span class="clamp-body" style="display:block">' + esc(r.q) + '</span>'
+        + '<button type="button" class="btn small clamp-more" data-clamp>展开全文</button></div>'
+        + '<div class="round-a clampable clamped"><span class="who">回复总结</span><span class="clamp-body" style="display:block">' + sumRows + '</span>'
+        + '<button type="button" class="btn small clamp-more" data-clamp>展开全文</button></div>';
+    }
+    return '<section class="round" data-round="' + r.no + '" id="round-' + r.no + '">'
+      + '<header class="round-head"><span class="chip">第 ' + r.no + ' 轮</span>'
+      + '<span class="chip" title="可追溯的轮次标识">' + esc(d.id) + '-R' + String(r.no).padStart(3, '0') + '</span>'
+      + '<span class="chip" title="来源会话（不依赖会话名称判定归属）">' + esc(r.session) + '</span>'
+      + '<span class="muted small" style="margin-left:auto">' + esc(r.at) + '</span></header>'
+      + body + '</section>';
+  }
+
+  function roundsPaneHtml(d) {
+    if (!d.rounds.length) {
+      return '<div class="rounds-empty">尚无已保存交流：复制「启动提示词」到 Agent 会话开始讨论。<br><span class="small">补充、纠正也会保存为新一轮；工具调用与进度播报不单独计轮。</span></div>';
+    }
+    var sorted = d.rounds.slice().sort(function (a, b) { return a.no - b.no; }); // 从早到晚
+    var latest = sorted[sorted.length - 1].no;
+    var head = '';
+    if (state.roundsCollapsed && sorted.length > 1) {
+      head = '<button type="button" class="btn round-toggle" data-toggle-rounds>展开 ' + (sorted.length - 1) + ' 轮历史（当前折叠，已定位最新轮）</button>'
+        + '<p class="muted small" style="text-align:center;margin:6px 0 10px">⋯ 历史已折叠 ⋯</p>';
+      sorted = [sorted[sorted.length - 1]];
+    } else if (sorted.length > 1) {
+      head = '<button type="button" class="btn round-toggle" data-toggle-rounds>折叠历史，只看最新轮</button>';
+    }
+    return head + sorted.map(function (r) { return roundHtml(r, d); }).join('')
+      + '<p class="muted small">记录只追加不覆盖：结论变化通过新轮次体现，可追溯到对应轮次标识。</p>';
+  }
+
+  function actionsPaneHtml(d) {
+    var created = (d.created || []).map(function (c) {
+      return '<div class="created-row"><span class="cid">' + esc(c.itemId) + '</span><strong>' + esc(c.title) + '</strong>'
+        + '<span class="chip">' + esc(c.status) + '</span>'
+        + '<span class="muted small">来源 ' + esc(d.id) + '</span>'
+        + '<button type="button" class="btn small" data-jump="' + esc(c.itemId) + '">跳转条目详情</button></div>';
+    }).join('');
+    var createdBox = created
+      ? '<div class="created-box"><h4>已创建成果（不可重复创建）</h4>' + created + '</div>'
+      : '';
+    var drafts = (d.candidates || []).filter(function (c) {
+      return !(d.created || []).some(function (x) { return x.draftId === c.id; });
+    });
+    if (!drafts.length) {
+      return createdBox + '<div class="actions-empty">当前没有候选条目。纪要可以只有结论，不必生成需求或 Bug。<br><span class="small">（零候选为正常空态；保存、查看与归档不依赖候选行动）</span></div>';
+    }
+    return createdBox + drafts.map(function (c) {
+      return '<div class="draft-box" data-draft="' + esc(c.id) + '">'
+        + '<label class="draft-check"><input type="checkbox" data-field="selected"' + (c.selected ? ' checked' : '') + '>'
+        + '<span>创建' + (c.type === 'bug' ? 'Bug' : '需求') + '</span></label>'
+        + '<p class="muted small">类型：' + (c.type === 'bug' ? 'Bug' : '需求') + ' · 由纪要草稿生成，未经确认不会自动创建</p>'
+        + '<label class="field"><span>标题</span><input type="text" data-field="title" value="' + esc(c.title) + '" maxlength="120"></label>'
+        + '<label class="field"><span>描述 / 现象</span><textarea rows="3" data-field="description">' + esc(c.description) + '</textarea></label>'
+        + '</div>';
+    }).join('')
+      + '<button type="button" class="btn primary" id="ocCreate">' + (state.creating ? '创建中……' : '创建勾选的条目') + '</button>';
+  }
+
+  function renderDetail() {
+    var wrap = $('#detail');
+    var d = selected();
+    if (!d) { wrap.classList.remove('has-item'); renderDetailEmpty(); return; }
+    var tab = state.tab;
+    var pendingActions = (d.candidates || []).filter(function (c) {
+      return !(d.created || []).some(function (x) { return x.draftId === c.id; });
+    }).length;
+    var actionsCount = pendingActions + (d.created || []).length;
+    wrap.innerHTML =
+      '<header class="detail-head">'
+      + '<div class="card-top"><button type="button" class="btn small back-btn" id="ocBack">← 返回列表</button>'
+      + '<span class="cid">' + esc(d.id) + '</span>'
+      + '<span class="chip ' + (d.status === 'archived' ? 'arch' : 'disc') + '">' + (d.status === 'archived' ? '已归档' : '讨论中') + '</span>'
+      + '<span class="muted small" style="margin-left:auto">最近保存 ' + esc(d.updatedAt) + ' · ' + d.rounds.length + ' 轮</span></div>'
+      + '<h2>' + esc(d.title) + '</h2>'
+      + '<div class="detail-actions">'
+      + '<button type="button" class="btn" id="ocStart">启动提示词</button>'
+      + '<button type="button" class="btn" id="ocResume">复制继续讨论提示词</button>'
+      + '<button type="button" class="btn" id="ocFinish" title="替代原「讨论完毕」：重新汇总已有轮次与可选候选行动，不终止讨论">整理结论</button>'
+      + '<span class="grow"></span>'
+      + '<button type="button" class="btn' + (d.status === 'archived' ? ' primary' : '') + '" id="ocArchive">' + (d.status === 'archived' ? '继续讨论' : '归档讨论') + '</button>'
+      + '</div></header>'
+      + '<nav class="tabs" role="tablist" aria-label="讨论详情分区">'
+      + '<button type="button" class="tab' + (tab === 'minutes' ? ' active' : '') + '" data-tab="minutes">讨论纪要</button>'
+      + '<button type="button" class="tab' + (tab === 'rounds' ? ' active' : '') + '" data-tab="rounds">交流记录 (' + d.rounds.length + ')</button>'
+      + '<button type="button" class="tab' + (tab === 'actions' ? ' active' : '') + '" data-tab="actions">后续行动' + (actionsCount ? ' (' + actionsCount + ')' : '') + '</button>'
+      + '</nav>'
+      + '<div class="detail-body">' + noticeHtml(d)
+      + '<section class="pane' + (tab === 'minutes' ? '' : ' hidden') + '">'
+      + (tab === 'minutes' ? minutesPaneHtml(d) : '') + '</section>'
+      + '<section class="pane' + (tab === 'rounds' ? '' : ' hidden') + '">'
+      + (tab === 'rounds' ? roundsPaneHtml(d) : '') + '</section>'
+      + '<section class="pane' + (tab === 'actions' ? '' : ' hidden') + '">'
+      + (tab === 'actions' ? actionsPaneHtml(d) : '') + '</section>'
+      + '</div>';
+
+    $('#ocBack')?.addEventListener('click', closeDetail);
+    $('#ocStart')?.addEventListener('click', function () { showPromptModal('start', d); });
+    $('#ocResume')?.addEventListener('click', function () {
+      copyText(buildResumePrompt(d));
+      toast('✓ 继续讨论提示词已复制——粘贴到任意可访问本项目文档的 Agent 会话即可接续（复制只代表提示词已复制，不代表 Agent 已连接）');
+    });
+    $('#ocFinish')?.addEventListener('click', function () { showPromptModal('organize', d); });
+    $('#ocArchive')?.addEventListener('click', function () { doArchiveToggle(d); });
+    $('#retrySave')?.addEventListener('click', function () { doSaveRound(true); });
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-tab]'), function (b) {
+      b.addEventListener('click', function () { state.tab = b.dataset.tab; renderDetail(); });
+    });
+    wrap.querySelector('[data-toggle-rounds]')?.addEventListener('click', function () {
+      state.roundsCollapsed = !state.roundsCollapsed;
+      renderDetail();
+      if (!state.roundsCollapsed) scrollToRound(null);
+    });
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-clamp]'), function (b) {
+      b.addEventListener('click', function () {
+        var box = b.closest('.clampable');
+        box.classList.toggle('clamped');
+        b.textContent = box.classList.contains('clamped') ? '展开全文' : '收起';
+      });
+    });
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-goto-round]'), function (chip) {
+      chip.addEventListener('click', function () {
+        state.tab = 'rounds';
+        state.roundsCollapsed = false; // 引用定位需展开历史
+        renderDetail();
+        scrollToRound(Number(chip.dataset.gotoRound));
+      });
+    });
+    bindActionsPane(d);
+  }
+
+  function scrollToRound(no) {
+    var el = no ? $('#round-' + no) : ($('#detail .round:last-of-type'));
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('flash');
+    setTimeout(function () { el.classList.remove('flash'); }, 1400);
+  }
+
+  /* ================= 后续行动：勾选 / 编辑 / 人工创建 ================= */
+  function bindActionsPane(d) {
+    Array.prototype.forEach.call($('#detail').querySelectorAll('[data-draft]'), function (box) {
+      var c = d.candidates.find(function (x) { return x.id === box.dataset.draft; });
+      if (!c) return;
+      Array.prototype.forEach.call(box.querySelectorAll('[data-field]'), function (el) {
+        el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', function () {
+          c[el.dataset.field] = el.type === 'checkbox' ? el.checked : el.value;
+        });
+      });
+    });
+    $('#ocCreate')?.addEventListener('click', function () { doCreate(d); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-jump]'), function (b) {
+      b.addEventListener('click', function () {
+        toast('演示：跳转条目详情 ' + b.dataset.jump + '（真实看板打开需求模块条目抽屉，双向关联）');
+      });
+    });
+  }
+
+  function doCreate(d) {
+    if (state.creating) return;
+    var picks = (d.candidates || []).filter(function (c) {
+      return c.selected && !(d.created || []).some(function (x) { return x.draftId === c.id; });
+    });
+    if (!picks.length) { toast('请先勾选候选条目。', true); return; }
+    for (var i = 0; i < picks.length; i++) {
+      if (!picks[i].title.trim() || !picks[i].description.trim()) {
+        toast('请先补全勾选条目的必填字段：「' + (picks[i].title || picks[i].id) + '」的标题与描述为必填', true);
+        return;
+      }
+    }
+    state.creating = true;
+    renderDetail();
+    setTimeout(function () {
+      state.creating = false;
+      picks.forEach(function (c) {
+        var id = 'REQ-20260910-' + String(nextSeq++).padStart(3, '0');
+        d.created.push({ draftId: c.id, itemId: id, title: c.title, status: '待接受' });
+      });
+      state.tab = 'actions';
+      renderDetail(); renderList();
+      toast('创建完成：成功 ' + picks.length + ' 条，均为待接受；候选需求 / Bug 仍由用户操作才创建，刷新或重试不会重复创建。');
+    }, 600);
+  }
+
+  /* ================= 归档 / 继续讨论 ================= */
+  function doArchiveToggle(d) {
+    d.status = d.status === 'archived' ? 'discussing' : 'archived';
+    state.filter = d.status; // 归档 / 恢复后筛选跟随
+    d.updatedAt = now();
+    renderFilters(); renderList(); renderDetail();
+    toast(d.status === 'archived'
+      ? '讨论已归档——全部逐轮记录、纪要与已创建成果保留展示；通过「继续讨论」可恢复。'
+      : '讨论已恢复「讨论中」——此前逐轮记录与纪要不丢失，可继续追加轮次。');
+  }
+
+  /* ================= 提示词（新口径：含项目位置 / 讨论编号 / 文档位置 / 上下文读取 / 逐轮保存规则） ================= */
+  function buildStartPrompt(d) {
+    return [
+      '你是本项目的开放式讨论参与者。请与我围绕主题自由讨论，讨论编号 ' + d.id + '（' + d.title + '）。',
+      '项目根：/Users/adichou/Documents/src/agent-team-board（演示占位路径）',
+      '',
+      '讨论背景：',
+      d.background || '（未填写背景）',
+      '',
+      '讨论与记录约定（本需求新口径——逐轮保存，不再依赖收尾提示词）：',
+      '- 开始前先校验目标项目与讨论编号，读取已有纪要与必要历史轮次，再开始交流；',
+      '- 每轮 = 一次用户输入（问题 / 补充 / 纠正 / 确认）及你的完整回复；工具调用与进度播报不单独计轮；',
+      '- 每轮生成回复后，立即通过统一入口保存：用户原文（原样）+ 你的回复总结（关键观点、理由、取舍、未决问题）+ 时间 + 稳定轮次标识；',
+      '- 保存走统一追加入口：校验项目与讨论归属、幂等防重、并发不覆盖；写入失败要明确告知未保存及原因，不得宣称已保存；',
+      '- 记录只追加不覆盖；每轮检查纪要是否需要更新（区分已确认共识 / 模型建议 / 待讨论问题，不把未确认建议写成共识）；',
+      '- 讨论期间不修改代码、不创建或修改需求 / Bug 条目、不改变看板状态；',
+      '- 轮次记录与纪要位于 docs/agent-team-board/discussions/（具体结构以 design.md 定稿为准——待确认）。',
+      '',
+      '完整写入并确认成功后，再向我反馈保存结果；看板会自动读取已完整保存的轮次，无需收尾发布。'
+    ].join('\n');
+  }
+  function buildResumePrompt(d) {
+    return [
+      '请继续讨论 ' + d.id + '（' + d.title + '）：',
+      '项目根：/Users/adichou/Documents/src/agent-team-board（演示占位路径）',
+      '文档位置：docs/agent-team-board/discussions/（轮次记录与纪要；具体结构以 design.md 定稿为准——待确认）',
+      '',
+      '续聊约定：',
+      '- 先读取已有纪要与必要历史轮次再开始，不依赖聊天记忆，也不仅凭会话名称判定归属；',
+      '- 从下一轮编号继续追加到同一讨论，写入格式与逐轮保存规则同启动提示词；',
+      '- 内容过长时先读纪要与近期轮次，按需追溯原文；',
+      '- 讨论已归档时先恢复「讨论中」（看板操作），再追加轮次。'
+    ].join('\n');
+  }
+  function buildOrganizePrompt(d) {
+    return [
+      '请整理讨论结论 ' + d.id + '（' + d.title + '）——重新汇总已保存的 ' + d.rounds.length + ' 轮记录（整理不终止讨论，也不作为交流保存的前提）：',
+      '1. 从逐轮记录重新整理纪要：背景 / 已确认共识 / 模型建议与取舍 / 未决问题 / 后续行动，逐条注明支撑轮次；',
+      '2. 如有明确支撑的候选需求 / Bug，整理为候选草稿（仅草稿，不自动创建、不自动接受；由用户在看板操作）；',
+      '3. 纪要更新走版本校验：并发冲突时先重新读取再整理，不静默覆盖他人更新；',
+      '4. 整理完成后看板展示最新纪要；全部历史轮次与既有成果保留。'
+    ].join('\n');
+  }
+
+  /* ================= 提示词浮层 ================= */
+  var modalWrap = $('#modalWrap');
+  function showPromptModal(kind, d) {
+    $('#modalTitle').textContent = kind === 'start' ? '启动提示词（复制到 Agent 新会话）' : '整理提示词（复制到当前 Agent 会话）';
+    $('#modalLabel').textContent = kind === 'start'
+      ? '启动提示词（复制到 Agent 新会话；含项目位置、讨论编号、文档位置、上下文读取与逐轮保存规则）'
+      : '整理提示词（重新汇总已有轮次与可选候选行动；整理不终止讨论）';
+    $('#modalText').value = kind === 'start' ? buildStartPrompt(d) : buildOrganizePrompt(d);
+    $('#modalApply').classList.toggle('hidden', kind !== 'organize');
+    modalWrap.dataset.kind = kind;
+    modalWrap.classList.remove('hidden');
+  }
+  function closeModal() { modalWrap.classList.add('hidden'); }
+  $('#modalClose').addEventListener('click', closeModal);
+  $('#modalClose2').addEventListener('click', closeModal);
+  modalWrap.addEventListener('click', function (e) { if (e.target === modalWrap) closeModal(); });
+  $('#modalCopy').addEventListener('click', function () {
+    copyText($('#modalText').value);
+    toast(modalWrap.dataset.kind === 'start'
+      ? '✓ 启动提示词已复制，请粘贴到 Agent 新会话（复制只代表提示词已复制，不代表 Agent 已连接）'
+      : '✓ 整理提示词已复制，请粘贴回当前 Agent 会话');
+  });
+  $('#modalApply').addEventListener('click', function () {
+    closeModal();
+    var d = selected();
+    if (!d) return;
+    // 模拟 Agent 按整理提示词完成纪要更新：纪要同步至最新轮，并按最新轮落一条共识 / 移除已决未决项
+    d.minutesUpTo = d.rounds.length;
+    if (!d.minutes) {
+      d.minutes = { consensus: [], advice: [], open: [], actions: [] };
+    }
+    var last = d.rounds[d.rounds.length - 1];
+    if (last) {
+      d.minutes.consensus.push({ text: '（整理自第 ' + last.no + ' 轮）' + last.sum.points, refs: [last.no] });
+      if (last.sum.open && last.sum.open !== '无') {
+        d.minutes.open.push({ text: '（整理自第 ' + last.no + ' 轮）' + last.sum.open, refs: [last.no] });
+      }
+    }
+    state.lastSave = null;
+    state.tab = 'minutes';
+    renderDetail();
+    toast('整理结论完成：纪要已更新至第 ' + d.minutesUpTo + ' 轮（整理不终止讨论；讨论保持「讨论中」，可继续追加轮次）。');
+  });
+
+  function copyText(text) {
+    // 演示环境优先剪贴板；不可用时全选提示手动复制（对齐看板双回退口径）
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () { manualCopy(); });
+    } else { manualCopy(); }
+  }
+  function manualCopy() {
+    $('#modalText').focus(); $('#modalText').select();
+    toast('剪贴板不可用：已全选提示词，请按 ⌘C / Ctrl+C 手动复制', true);
+  }
+
+  /* ================= 模拟逐轮保存（控制台驱动，代表 Agent 侧统一入口写入） ================= */
+  function nextSimScript(d) {
+    // 预置轮数之后按脚本顺序取，超出后循环
+    var idx = Math.max(0, d.rounds.length - 2);
+    return simScript[idx % simScript.length];
+  }
+
+  function doSaveRound(isRetry) {
+    var d = selected();
+    if (!d) { toast('请先从列表选择一条讨论（演示控制台作用于当前详情）。', true); return; }
+    if (!isRetry && d.status === 'archived') {
+      toast('已归档讨论不直接追加轮次：请先点「继续讨论」恢复讨论中，再通过续聊提示词接续（归档期间全部记录与成果保留）。', true);
+      return;
+    }
+    var script;
+    if (isRetry && state.saveFail) {
+      script = state.saveFail;
+    } else {
+      var s = nextSimScript(d);
+      script = { q: s.q, sum: s.sum, session: state.currentSession };
+    }
+    if ($('#failWrite').checked && !isRetry) {
+      // 写入失败：明确「未保存」、保留可重试内容、不产生半成品轮次（列表与交流记录不变）
+      state.saveFail = script;
+      state.lastSave = null;
+      renderDetail();
+      toast('本轮未保存：写入失败（演示模拟）——内容已保留，可点通知条「重试本轮保存」；重试成功不会产生重复轮次', true);
+      return;
+    }
+    if ($('#failWrite').checked && isRetry) {
+      toast('重试仍失败：写入失败（演示模拟）——内容继续保留，可再次重试', true);
+      return;
+    }
+    var no = d.rounds.length + 1;
+    d.rounds.push({ no: no, at: now(), session: script.session, q: script.q, sum: script.sum });
+    d.updatedAt = now();
+    state.saveFail = null;
+    state.lastSave = { ok: true, no: no, at: d.updatedAt };
+    state.roundsCollapsed = true; // 保持折叠并定位最新轮
+    renderList();
+    renderDetail();
+    if (state.tab === 'rounds') setTimeout(function () { scrollToRound(no); }, 30);
+    toast('✓ 第 ' + no + ' 轮已保存（用户原文 + 回复总结，' + script.session + '）——列表轮数 / 时间 / 摘要已自动更新；纪要待整理（不阻塞保存）');
+  }
+
+  $('#simRound').addEventListener('click', function () {
+    state.currentSession = '会话 A（原会话）';
+    doSaveRound(false);
+  });
+  $('#simResume').addEventListener('click', function () {
+    var d = selected();
+    if (!d) { toast('请先从列表选择一条讨论（演示控制台作用于当前详情）。', true); return; }
+    if ($('#failWrite').checked) { toast('请先关闭「模拟写入失败」再演示续聊。', true); return; }
+    // 模拟：复制继续讨论提示词 → 会话 B 读取上下文 → 追加到同一讨论（轮次接续、不串讨论）
+    state.currentSession = '会话 B（新会话 · 续聊）';
+    var pre = d.rounds.length;
+    doSaveRound(false);
+    toast('✓ 会话 B 已通过「继续讨论提示词」读取上下文（' + pre + ' 轮 + 纪要），追加第 ' + (pre + 1) + ' 轮到同一讨论 ' + d.id + '——不依赖原聊天窗口，不串项目 / 不串讨论');
+  });
+
+  /* ================= 顶栏新建（占位，不在本需求范围） ================= */
+  $('#newBtn').addEventListener('click', function () {
+    toast('演示：新建讨论流程沿用现状（标题 + 背景 → 获得携带逐轮保存规则的启动提示词），不在本演示展开。');
+  });
+
+  /* ================= 初始渲染 ================= */
+  renderFilters();
+  renderList();
+  renderDetail();
+})();
+</script>
+</body>
+</html>

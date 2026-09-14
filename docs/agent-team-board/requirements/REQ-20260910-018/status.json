@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-018",
+  "type": "requirement",
+  "title": "讨论逐轮持久化、文档资产展示与跨会话续聊",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-25",
+  "createdAt": "2026-09-10T08:15:08.173Z",
+  "updatedAt": "2026-09-11T05:52:22.949Z",
+  "agentCompletedAt": "2026-09-10T10:14:40.704Z",
+  "lastReport": {
+    "at": "2026-09-10T10:14:40.704Z",
+    "coverage": 17,
+    "framework": "node:assert/strict（vm 静态+行为契约，仓库既有约定）",
+    "summary": "逐轮持久化落地：rounds/rNNNN.json 一轮一文件+统一入口（归属校验/linkSync 独占防并发覆盖/key 幂等重试）；纪要乐观版本 minutes.meta.json；提示词三件（启动重写为逐轮保存/新增继续讨论与整理结论，finish 兼容保留）；CLI atb disc show|round|minutes；前端三页签 讨论纪要/交流记录/后续行动+操作区四入口+列表轮数与最新摘要；新增 17 用例全绿，更新 4 个旧测试，全量 158 文件 0 失败",
+    "runId": "run-20260910-171"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T08:15:08.173Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0910-dcba"
+    },
+    {
+      "at": "2026-09-10T08:19:10.549Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T08:38:31.245Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-162105-7f49）"
+    },
+    {
+      "at": "2026-09-10T09:48:05.044Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-25",
+      "note": "认领（zcode-batch-031-25）"
+    },
+    {
+      "at": "2026-09-10T10:14:40.704Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-25",
+      "note": "上报测试报告（覆盖率 17%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.949Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f3d9",
+      "note": "人工确认完成"
+    }
+  ]
+}

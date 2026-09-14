@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-003",
+  "type": "bug",
+  "title": "改标题描述改为修改",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-1",
+  "createdAt": "2026-09-08T23:05:24.528Z",
+  "updatedAt": "2026-09-11T05:52:20.119Z",
+  "agentCompletedAt": "2026-09-09T01:01:08.861Z",
+  "lastReport": {
+    "at": "2026-09-09T01:01:08.861Z",
+    "coverage": 90,
+    "framework": "node:assert（run-all 聚合）",
+    "summary": "待接受编辑入口文案统一「✎ 修改」：app.js 卡片 reqRowEl 与抽屉 drawerActionsButtonHtml 两处由「✎ 改标题/描述」改为「✎ 修改」，位置/顺序/样式/aria-label（含编号）/title（仅待接受）/data-rename-id→editItem 链路与权限不变。TDD 先红后绿：edit-content.test.mjs U1 断言更新并新增 U6 静态契约（两处✎修改、全文件无旧文案、悬停与无障碍语义保留），21 用例全绿；全量 104 文件 0 失败。引入来源归因 REQ-20260908-011（atb list 核验，design.md 已补）。弹窗标题「编辑 <编号>」为待确认项未改。",
+    "runId": "run-20260909-111"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T23:05:24.528Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T23:05:36.435Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:08:14.177Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T00:55:53.741Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "认领（zcode-batch-019-1）"
+    },
+    {
+      "at": "2026-09-09T01:01:08.862Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.119Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-c5d5",
+      "note": "人工确认完成"
+    }
+  ]
+}

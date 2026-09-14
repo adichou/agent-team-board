@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-008",
+  "type": "bug",
+  "title": "插件源码保护可经符号链接路径绕过：守卫仅认 realpath 与 agent-team-board/<受控目录> 邻接形态",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.809Z",
+  "updatedAt": "2026-09-11T05:52:16.901Z",
+  "agentCompletedAt": "2026-09-07T16:19:49.458Z",
+  "lastReport": {
+    "at": "2026-09-07T16:19:49.458Z",
+    "coverage": 92,
+    "framework": "node:assert 子进程钩子实测（code-guard.test.mjs S1–S5）",
+    "summary": "修复软链别名绕过：hitsPluginSource 对命令文本路径 token 做符号链接归一化（~ 展开 → resolve(cwd) → realpath；目标不存在时上溯最近存在祖先），落在插件根内（docs/ 豁免）即拦截；选项/变量/URL token 跳过防误拦。新增 S1–S5 用例（别名改写/别名新建/~ 前缀/file 模式回归/误报回归），生产 cache 形态实测 exit 2，全量 67 个测试文件通过。引入来源：REQ-20260901-003。排查中另登记相邻缺口 BUG-20260908-001（file 模式不拦新建文件）。",
+    "runId": "run-20260908-046"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.809Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-8dd5"
+    },
+    {
+      "at": "2026-09-07T15:09:45.033Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T16:13:24.627Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T16:19:49.458Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.901Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-5505",
+      "note": "人工确认完成"
+    }
+  ]
+}

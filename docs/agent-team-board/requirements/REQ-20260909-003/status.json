@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-003",
+  "type": "requirement",
+  "title": "需求文档引用讨论、纪要归档与说明同步",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-019-1",
+  "createdAt": "2026-09-08T23:21:57.278Z",
+  "updatedAt": "2026-09-11T05:52:20.213Z",
+  "agentCompletedAt": "2026-09-09T01:36:57.192Z",
+  "lastReport": {
+    "at": "2026-09-09T01:36:57.192Z",
+    "coverage": 80,
+    "framework": "node:assert/strict + npm test（run-all.mjs）",
+    "summary": "新增需求文档讨论工作流（独立 DISC 序列）：store req-disc-store（创建绑定/启动收尾提示词/PUBLISH 发布协议四态读取/引用快照/独立归档/applyDraft 基线校验+旧版保留+幂等+无部分成功/继续讨论多轮）；server /api/req-disc* 六接口；前端 req-disc.js 挂载需求抽屉（操作条/提示词复制兜底/阅读模式源行映射复制引用/纪要等待·失败重试·归档·逐项应用）随主轮询自动检测发布。新增 3 个测试文件 D1-D7/S1/U1，全量 107 文件 0 失败。",
+    "runId": "run-20260909-113"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T23:21:57.278Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0909-de01"
+    },
+    {
+      "at": "2026-09-08T23:24:23.867Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:08:14.179Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T01:12:50.601Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "认领（zcode-batch-019-1）"
+    },
+    {
+      "at": "2026-09-09T01:36:57.192Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-019-1",
+      "note": "上报测试报告（覆盖率 80%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.213Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f930",
+      "note": "人工确认完成"
+    }
+  ]
+}

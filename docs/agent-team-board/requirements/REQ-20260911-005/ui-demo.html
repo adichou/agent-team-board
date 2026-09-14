@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260911-005 界面演示 · 支持英文国际化资源</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --line: #e3e6ea; --text: #1f2328;
+    --muted: #6a737d; --primary: #2f6fed; --primary-soft: #e8f0fe;
+    --accent: #5a4fd6; --accent-soft: #eceafb; --warn: #b45309; --warn-soft: #fdf1e0;
+    --ok: #1a7f37; --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --card: #1d2126; --line: #333a41; --text: #e6e8eb;
+      --muted: #9aa4ad; --primary: #6b9aff; --primary-soft: #1e2c46;
+      --accent: #9a8fff; --accent-soft: #2a2745; --warn: #e3a34c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .page { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; }
+
+  /* 模拟看板顶栏 */
+  .topbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .logo {
+    width: 22px; height: 22px; border-radius: 6px; background: var(--primary);
+    color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .tabs { display: flex; gap: 4px; margin-left: 6px; }
+  .tab {
+    border: 0; background: transparent; color: var(--muted); padding: 4px 10px;
+    border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  .tab.active { background: var(--accent-soft); color: var(--accent); }
+  .spacer { flex: 1; }
+  .btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.lang {
+    border-color: var(--primary); color: var(--primary); font-weight: 600; min-width: 40px;
+    font-variant: small-caps; letter-spacing: .5px;
+  }
+  select { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 4px 8px; font-size: 13px; }
+
+  /* 模拟状态筛选条 + 列表 */
+  .board { display: flex; gap: 14px; margin-top: 12px; }
+  .rail { display: flex; flex-direction: column; gap: 6px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--card); border-radius: var(--radius);
+    padding: 4px 10px; cursor: pointer; font-size: 13px; display: flex; gap: 6px; align-items: center;
+  }
+  .chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .chip .n { background: var(--line); border-radius: 99px; padding: 0 7px; font-size: 12px; color: var(--text); }
+  .list { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .card {
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
+    padding: 10px 12px; display: flex; align-items: center; gap: 10px;
+  }
+  .card .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); font-size: 12px; }
+  .card .title { flex: 1; }
+  .card .time { color: var(--muted); font-size: 12px; }
+  .icon-btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+  }
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+  .kbd {
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+    padding: 0 5px; font-size: 12px; font-family: ui-monospace, Menlo, monospace;
+  }
+  .search { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; }
+  .search input { border: 0; background: transparent; color: var(--text); outline: none; font-size: 13px; width: 180px; }
+
+  .toast {
+    margin-top: 12px; border-radius: var(--radius); padding: 8px 12px; font-size: 13px;
+    background: var(--card); border: 1px solid var(--line); display: inline-block;
+  }
+  .toast.ok { border-color: var(--ok); color: var(--ok); }
+
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .board { flex-direction: column; } }
+  .kv { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+  .kv:last-child { border-bottom: 0; }
+  .kv b { font-weight: 600; }
+  .hint-raw { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 data-demo="pageTitle">界面演示 · 支持英文国际化资源</h1>
+  <p class="sub" data-demo="pageSub">模拟 Status Board 文案层行为：系统语言自动切换 + 手动切换 + 动态内容 + 降级。布局为示意，非完整看板。</p>
+
+  <div class="panel">
+    <h2 data-demo="simTitle">1 · 系统语言模拟</h2>
+    <div class="toolbar" style="margin-top:0">
+      <label><span data-demo="simLabel">系统语言</span>
+        <select id="sysLang">
+          <option value="en-US">en-US（英文系统）</option>
+          <option value="zh-CN" selected>zh-CN（中文系统）</option>
+          <option value="ja-JP">ja-JP（其他语言系统）</option>
+        </select>
+      </label>
+      <button class="btn" id="btnReset" data-demo="resetBtn">清除记忆并按系统语言重新检测</button>
+      <span class="note" data-demo="simNote">演示用下拉模拟 navigator.languages；真实页面读取浏览器系统语言。</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 data-demo="boardTitle">2 · 看板文案切换</h2>
+
+    <div class="topbar">
+      <span class="brand"><span class="logo">▦</span><span data-demo="brand">智能体团队看板</span></span>
+      <div class="tabs">
+        <button class="tab active" data-demo="tabReq">需求</button>
+        <button class="tab" data-demo="tabRuns">任务</button>
+        <button class="tab" data-demo="tabSettings">设置</button>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn" data-demo="btnManage">管理项目</button>
+      <button class="btn" data-demo="btnGlobal">全局</button>
+      <button class="btn" data-demo="btnKeys">快捷键 ?</button>
+      <button class="btn lang" id="btnLang" title="">EN</button>
+      <button class="btn primary" data-demo="btnNew">＋ 新建</button>
+    </div>
+
+    <div class="toolbar">
+      <span data-demo="sortBy">列表排序</span>
+      <select id="demoSort"><option data-demo="sortUpdated">最新更新</option></select>
+      <span class="search">⌕ <span data-demo="scope">需求</span>
+        <input id="demoSearch" type="search" data-attr="placeholder" data-zh="搜需求 / Bug / 文档…" data-en="Search reqs / bugs / docs…">
+      </span>
+      <span class="kbd">/</span>
+    </div>
+
+    <div class="board">
+      <div class="rail" id="rail"></div>
+      <div class="list" id="list"></div>
+    </div>
+
+    <div class="toolbar">
+      <span data-demo="selected">已选 2 项</span>
+      <button class="btn primary" data-demo="btnAcceptSel">接受所选</button>
+      <button class="btn" data-demo="btnPlan">移入计划</button>
+      <span class="spacer"></span>
+      <span class="hint-raw" data-demo="raw">未收录文案示例（保持原文）</span>
+    </div>
+
+    <div class="toast ok" id="toast" hidden></div>
+
+    <p class="note" data-demo="boardNote">点击语言按钮即时切换（含动态计数文案）；「模拟轮询」每 3 秒增减一条待接受计数，观察刷新内容跟随当前语言。</p>
+    <div class="toolbar" style="margin-top:4px">
+      <button class="btn" id="btnPoll" data-demo="pollBtn">模拟轮询刷新</button>
+      <span class="note" data-demo="pollState">自动刷新：每 3 秒</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 data-demo="stateTitle">3 · 当前状态</h2>
+    <div class="grid">
+      <div>
+        <div class="kv"><span data-demo="kvLang">当前语言</span><b id="stLang">zh</b></div>
+        <div class="kv"><span data-demo="kvSource">语言来源</span><b id="stSource">auto（系统语言检测）</b></div>
+        <div class="kv"><span data-demo="kvHtml">html lang 属性</span><b id="stHtml">zh-CN</b></div>
+      </div>
+      <div>
+        <div class="kv"><span data-demo="kvPersist">记忆存储</span><b>localStorage · atb.lang</b></div>
+        <div class="kv"><span data-demo="kvFallback">未收录文案</span><b data-demo="kvFallbackV">优雅降级（原文显示）</b></div>
+        <div class="kv"><span data-demo="kvUserdata">用户数据</span><b data-demo="kvUserdataV">不翻译（标题/描述保持原文）</b></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  // 演示词典：真实实现为集中单文件词典 + 运行时 DOM 翻译层（i18n.js），此处内联最小子集
+  var DICT = {
+    '界面演示 · 支持英文国际化资源': 'UI Demo · English i18n Support',
+    '模拟 Status Board 文案层行为：系统语言自动切换 + 手动切换 + 动态内容 + 降级。布局为示意，非完整看板。':
+      'Simulates the Status Board copy layer: auto-detect by system language + manual toggle + dynamic content + fallback. Layout is illustrative, not the full board.',
+    '1 · 系统语言模拟': '1 · System Language Simulator',
+    '系统语言': 'System language',
+    '清除记忆并按系统语言重新检测': 'Clear preference & re-detect',
+    '演示用下拉模拟 navigator.languages；真实页面读取浏览器系统语言。':
+      'The dropdown simulates navigator.languages; the real page reads the browser system language.',
+    '2 · 看板文案切换': '2 · Board Copy Switching',
+    '智能体团队看板': 'Agent Team Board',
+    '需求': 'Requirements', '任务': 'Tasks', '设置': 'Settings',
+    '管理项目': 'Manage Projects', '全局': 'Global', '快捷键 ?': 'Shortcuts ?',
+    '＋ 新建': '+ New',
+    '列表排序': 'Sort list', '最新更新': 'Recently updated',
+    '搜需求 / Bug / 文档…': 'Search reqs / bugs / docs…',
+    '已选 2 项': '2 selected',
+    '接受所选': 'Accept selected', '移入计划': 'Add to plan',
+    '未收录文案示例（保持原文）': '未收录文案示例（保持原文）', // 故意不提供英文：演示降级
+    '点击语言按钮即时切换（含动态计数文案）；「模拟轮询」每 3 秒增减一条待接受计数，观察刷新内容跟随当前语言。':
+      'Click the language button to switch instantly (dynamic counts included); “Simulate poll” changes the pending count every 3s — refreshed content follows the current language.',
+    '模拟轮询刷新': 'Simulate poll refresh',
+    '自动刷新：每 3 秒': 'Auto refresh: every 3s',
+    '3 · 当前状态': '3 · Current State',
+    '当前语言': 'Current language', '语言来源': 'Source',
+    'html lang 属性': '<html> lang attribute',
+    '记忆存储': 'Persistence',
+    '未收录文案': 'Untranslated copy',
+    '优雅降级（原文显示）': 'Graceful fallback (source text kept)',
+    '用户数据': 'User data',
+    '不翻译（标题/描述保持原文）': 'Not translated (titles/descriptions kept)',
+    'auto（系统语言检测）': 'auto (system detection)',
+    'manual（手动选择，优先于自动检测）': 'manual (overrides auto detection)',
+    // 状态档与提示（含数字的动态文案走 pattern）
+    '待接受': 'Pending', '已接受': 'Accepted', '已计划': 'Planned',
+    '开发中': 'In progress', '待测试': 'In test', '已完成': 'Done',
+    '新条目，等待人工接受': 'New item, awaiting acceptance',
+    '已复制单号': 'ID copied',
+    '接受': 'Accept', '✎': '✎', '🗑': '🗑',
+    '接受 REQ-20260911-005': 'Accept REQ-20260911-005',
+    '复制单号': 'Copy ID',
+    '已切换到 English': 'Switched to English',
+    '已切换到中文': '已切换到中文',
+    '手动选择优先于系统语言': 'Manual choice overrides system language',
+    '已清除记忆，按系统语言重新检测': 'Preference cleared; re-detected from system language'
+  };
+  var PATTERNS = [
+    [/^待接受 (\d+)$/, 'Pending · $1'],
+    [/^已接受 (\d+)$/, 'Accepted · $1'],
+    [/^已选 (\d+) 项$/, '$1 selected'],
+    [/^共 (\d+) 个测试文件，失败 (\d+)$/, '$1 test files, $2 failed']
+  ];
+
+  var STORAGE_KEY = 'atb.demo.lang';
+  var state = { lang: 'zh', source: 'auto' };
+  var pending = 7;
+
+  function detect(sys) { return /^en(-|$)/i.test(sys) ? 'en' : 'zh'; }
+  function t(s) {
+    if (state.lang !== 'en') return s;
+    if (Object.prototype.hasOwnProperty.call(DICT, s)) return DICT[s];
+    for (var i = 0; i < PATTERNS.length; i++) {
+      if (PATTERNS[i][0].test(s)) return s.replace(PATTERNS[i][0], PATTERNS[i][1]);
+    }
+    return s; // 降级：原文
+  }
+
+  function applyStatic(root) {
+    var nodes = root.querySelectorAll('[data-demo]');
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute('data-demo'));
+    var attrs = root.querySelectorAll('[data-attr]');
+    for (var j = 0; j < attrs.length; j++) {
+      var el = attrs[j];
+      el.setAttribute(el.getAttribute('data-attr'), t(el.getAttribute('data-' + state.lang)));
+    }
+  }
+
+  var railEl = document.getElementById('rail');
+  var listEl = document.getElementById('list');
+  function chip(lane) {
+    var label = t(lane.label), n = lane.n != null ? ' ' + lane.n : '';
+    var span = document.createElement('span');
+    span.className = 'chip' + (lane.active ? ' active' : '');
+    if (lane.n != null) {
+      span.innerHTML = '<span>' + esc(label) + '</span><span class="n">' + lane.n + '</span>';
+    } else {
+      span.textContent = label;
+    }
+    return span;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  var LANES = [
+    { key: 'submitted', label: '待接受', n: 7, active: true },
+    { key: 'accepted', label: '已接受', n: 0 },
+    { key: 'planned', label: '已计划', n: 1 },
+    { key: 'developing', label: '开发中', n: 0 },
+    { key: 'confirming', label: '待测试', n: 1 },
+    { key: 'done', label: '已完成', n: 242 }
+  ];
+  var CARDS = [
+    { id: 'REQ-20260911-005', title: '支持英文国际化资源', hint: '新条目，等待人工接受', time: '09-11 15:59' },
+    { id: 'REQ-20260911-003', title: '批量 commit 功能隐藏', hint: '新条目，等待人工接受', time: '09-11 13:13' }
+  ];
+
+  function render() {
+    // 状态筛选条（带计数 = 动态文案，走 pattern）
+    railEl.innerHTML = '';
+    LANES.forEach(function (l) {
+      var el = chip({ label: l.label, n: l.key === 'submitted' ? pending : l.n, active: l.active });
+      el.title = l.key === 'submitted' ? t('新条目，等待人工接受') : '';
+      railEl.appendChild(el);
+    });
+    // 卡片：单号/时间/按钮为界面文案；标题是用户数据（不翻译）
+    listEl.innerHTML = '';
+    CARDS.forEach(function (c) {
+      var d = document.createElement('div');
+      d.className = 'card';
+      d.innerHTML =
+        '<span class="id">' + esc(c.id) + '</span>' +
+        '<span class="title">' + esc(c.title) + '</span>' +
+        '<span class="time">' + esc(t(c.hint)) + ' · ' + esc(c.time) + '</span>' +
+        '<button class="icon-btn" title="' + esc(t('接受 ' + c.id)) + '">✓</button>' +
+        '<button class="icon-btn" title="' + esc(t('复制单号')) + '">⧉</button>';
+      listEl.appendChild(d);
+    });
+    // 已选计数（动态数字 pattern）
+    document.querySelector('[data-demo="selected"]').textContent = t('已选 2 项');
+    syncState();
+  }
+
+  function syncState() {
+    var btn = document.getElementById('btnLang');
+    btn.textContent = state.lang === 'zh' ? 'EN' : '中';
+    btn.title = state.lang === 'zh'
+      ? '切换到 English（当前：中文）'
+      : 'Switch to Chinese (current: English)';
+    document.documentElement.lang = state.lang === 'en' ? 'en' : 'zh-CN';
+    document.getElementById('stLang').textContent = state.lang;
+    document.getElementById('stSource').textContent =
+      t(state.source === 'auto' ? 'auto（系统语言检测）' : 'manual（手动选择，优先于自动检测）');
+    document.getElementById('stHtml').textContent = document.documentElement.lang;
+  }
+
+  function apply(lang, source) {
+    state.lang = lang;
+    state.source = source || state.source;
+    applyStatic(document.body);
+    render();
+  }
+
+  function showToast(zh) {
+    var el = document.getElementById('toast');
+    el.textContent = t(zh);
+    el.hidden = false;
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { el.hidden = true; }, 2200);
+  }
+
+  document.getElementById('btnLang').addEventListener('click', function () {
+    var next = state.lang === 'zh' ? 'en' : 'zh';
+    try { localStorage.setItem(STORAGE_KEY, next); } catch (e) {}
+    apply(next, 'manual');
+    showToast(next === 'en' ? '已切换到 English' : '已切换到中文');
+  });
+  document.getElementById('sysLang').addEventListener('change', function () {
+    // 切换系统语言只影响自动检测：未手动选择过时立即跟随；已手动选择则保持手动选择
+    if (state.source === 'manual') { showToast('手动选择优先于系统语言'); return; }
+    apply(detect(this.value), 'auto');
+  });
+  document.getElementById('btnReset').addEventListener('click', function () {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    apply(detect(document.getElementById('sysLang').value), 'auto');
+    showToast('已清除记忆，按系统语言重新检测');
+  });
+  document.getElementById('btnPoll').addEventListener('click', function () {
+    pending = Math.max(0, pending + (Math.random() > 0.5 ? 1 : -1));
+    render();
+    showToast('待接受 ' + pending);
+  });
+
+  // 初始化：手动选择（localStorage）优先，否则按系统语言自动检测
+  var saved = null;
+  try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+  if (saved === 'en' || saved === 'zh') {
+    apply(saved, 'manual');
+  } else {
+    apply(detect(navigator.language || 'zh'), 'auto');
+  }
+
+  // 模拟轮询：每 3 秒 ±1，演示刷新内容跟随当前语言
+  setInterval(function () {
+    pending = Math.max(0, pending + (Math.random() > 0.5 ? 1 : -1));
+    render();
+  }, 3000);
+})();
+</script>
+</body>
+</html>

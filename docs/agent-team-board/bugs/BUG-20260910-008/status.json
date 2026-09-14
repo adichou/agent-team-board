@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-008",
+  "type": "bug",
+  "title": "批量完善提示词中要针对自动转入计划的配置进行处理",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-11",
+  "createdAt": "2026-09-10T03:35:05.867Z",
+  "updatedAt": "2026-09-11T05:52:22.290Z",
+  "agentCompletedAt": "2026-09-10T05:49:46.841Z",
+  "lastReport": {
+    "at": "2026-09-10T05:49:46.841Z",
+    "coverage": 100,
+    "framework": "node:assert/strict 脚本式契约测试（node scripts/tests/*.test.mjs）",
+    "summary": "完善提示词按「完善完成后自动转入计划」开关分态：buildRefinePrompt/buildRefineWorkerPrompt 新增 autoPlan 参数（缺省关闭=现状零回归），createRefineBatch/newCodexRefineRun 经 refineAutoPlanOn 实时读取开关冻结提示词；normalizePromptForDisplay 扩展 autoPlan 选项（开方向补系统流转说明/关方向剥除，幂等，账本不回写）；CLI refine create 回显与输出行、usage、server /api/refine/create、refineSummary/publicView 按实时开关分态；ON 文案明示 done 后系统自动 accepted→planned 属预期、不得据此暂停，Agent 纪律不放宽；新增 16 用例全绿，全量 144 测试文件零回归",
+    "runId": "run-20260910-157"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T03:35:05.867Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T03:35:09.683Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T04:02:09.091Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-115843-cc2a）"
+    },
+    {
+      "at": "2026-09-10T05:36:10.707Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-11",
+      "note": "认领（zcode-batch-031-11）"
+    },
+    {
+      "at": "2026-09-10T05:49:46.842Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-11",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.290Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-695b",
+      "note": "人工确认完成"
+    }
+  ]
+}

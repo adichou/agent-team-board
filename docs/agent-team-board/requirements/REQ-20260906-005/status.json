@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260906-005",
+  "type": "requirement",
+  "title": "需求单详细页面的关闭按钮要固定在单号右侧。",
+  "status": "done",
+  "parent": null,
+  "owner": "REQ-20260906-005",
+  "createdAt": "2026-09-06T02:57:35.497Z",
+  "updatedAt": "2026-09-11T05:52:14.483Z",
+  "agentCompletedAt": "2026-09-06T03:56:25.339Z",
+  "lastReport": {
+    "at": "2026-09-06T03:56:25.339Z",
+    "coverage": 100,
+    "framework": "node:test 静态契约测试（scripts/tests/detail-close-btn.test.mjs）+ 内置浏览器实测",
+    "summary": "详情抽屉头部重构：关闭按钮 ✕ 移入 .card-top 单号行内紧随单号右侧（chip→单号→✕→flag），标题独占一行；移除旧 space-between 两端布局（app.js renderDrawer 模板 + style.css .drawer-head）；新增 .card-top .icon-btn 行内样式（flex:none、尺寸适配）。TDD：新增 detail-close-btn.test.mjs T1–T4 先红后绿，run-all 全量 24 文件 0 失败；浏览器实测含待确认 flag 条目与 640px 窄窗口，点击 ✕/Escape/遮罩关闭行为保持。"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T02:57:35.497Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T03:10:47.124Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T03:51:58.279Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "REQ-20260906-005",
+      "note": "认领（REQ-20260906-005）"
+    },
+    {
+      "at": "2026-09-06T03:56:25.339Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-6a23",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.483Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e291",
+      "note": "人工确认完成"
+    }
+  ]
+}

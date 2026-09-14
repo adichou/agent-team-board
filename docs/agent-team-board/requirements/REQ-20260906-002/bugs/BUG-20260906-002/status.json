@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-002",
+  "type": "bug",
+  "title": "手工先认领时 Zcode 批次仍可认领另一项导致项目并行实施",
+  "status": "done",
+  "parent": "REQ-20260906-002",
+  "owner": "zcode-batch-002-1",
+  "createdAt": "2026-09-06T06:40:03.996Z",
+  "updatedAt": "2026-09-11T05:52:15.082Z",
+  "agentCompletedAt": "2026-09-06T15:25:22.001Z",
+  "lastReport": {
+    "at": "2026-09-06T15:25:22.001Z",
+    "coverage": null,
+    "framework": "node:assert 自定义 runner (npm test)",
+    "summary": "根因（引入源 REQ-20260906-002）：互斥机制只做了批次→手工单向检查，手工 claim 从不占用 impl.lock，批次 next 可再认领另一项致并行实施。修复：core.mjs claim 起占用 impl.lock(kind=manual,itemId)，同 owner 异条目拒绝；report/确认完成/驳回释放；批次/Codex 属主续认幂等不覆盖归属；scheduler 提示加手工认领。新增 Z-A2 回归 2 例，4 个旧测试文件补收尾；43 文件仅 detail-close-btn 既有失败(BUG-20260906-016~018,与本次无关)",
+    "runId": "run-20260906-007"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T06:40:03.996Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-157e"
+    },
+    {
+      "at": "2026-09-06T08:26:56.789Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T15:11:58.287Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "认领（zcode-batch-002-1）"
+    },
+    {
+      "at": "2026-09-06T15:25:22.002Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.082Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-cf46",
+      "note": "人工确认完成"
+    }
+  ]
+}

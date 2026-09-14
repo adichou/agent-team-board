@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-005",
+  "type": "bug",
+  "title": "看板 API 无 Origin/Host 校验：任意网页可跨站代替人工「接受」与「确认完成」（CSRF）",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.700Z",
+  "updatedAt": "2026-09-11T05:52:16.762Z",
+  "agentCompletedAt": "2026-09-07T15:47:30.604Z",
+  "lastReport": {
+    "at": "2026-09-07T15:47:30.604Z",
+    "coverage": 95,
+    "framework": "node:assert + 隔离 HTTP 服务集成测试",
+    "summary": "server.mjs /api/* 前置跨站防护：Host 回环白名单（拦 DNS rebinding）+ Origin/Referer 同源校验（拦恶意网页 text/plain 简单请求代替人工接受/确认完成），Origin:null 视为跨站；同源页面（含 localhost/[::1] 别名）与本机非浏览器客户端（curl/Electron 探活）不受影响，拒绝统一 403 JSON。新增 origin-guard.test.mjs 8 断言组，修复前主场景 200 跑红、修复后通过；全量 npm test 67 文件 0 失败。引入来源未定位（初始脚手架即无校验，非 git 仓库无历史，排查过程见 README 关联节）",
+    "runId": "run-20260907-043"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.700Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-e70c"
+    },
+    {
+      "at": "2026-09-07T15:09:45.004Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T15:37:00.608Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T15:47:30.605Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 95%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.763Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a162",
+      "note": "人工确认完成"
+    }
+  ]
+}

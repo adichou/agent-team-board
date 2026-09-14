@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-009",
+  "type": "bug",
+  "title": "内置浏览器中触发 window.confirm 的操作冻结整页：单卡「✓ 接受」/批量接受/停止执行无可见弹窗",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-01",
+  "createdAt": "2026-09-07T09:00:50.845Z",
+  "updatedAt": "2026-09-11T05:52:16.948Z",
+  "agentCompletedAt": "2026-09-07T16:32:47.103Z",
+  "lastReport": {
+    "at": "2026-09-07T16:32:47.103Z",
+    "coverage": 92,
+    "framework": "node:assert + vm 沙箱契约测试（confirm-dialog.test.mjs C1–C7）",
+    "summary": "新增页面内异步确认对话框 uiConfirm（Promise 化，复用 .modal 样式，Enter/Escape/遮罩/同屏互斥），替换三处冻结内置浏览器的同步 window.confirm（批量/单卡接受、流转按钮、停止执行）；app.js 不再有 window.confirm/alert/prompt 调用；新增 7 用例先红后绿，同步适配 accept-ui/confirm-lane/drawer-undo，npm test 68 文件全过；引入来源已归因（REQ-20260906-017/014/003）；M1 内置浏览器人工核验待确认",
+    "runId": "run-20260908-047"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.845Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-489a"
+    },
+    {
+      "at": "2026-09-07T15:09:45.045Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T16:20:45.836Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-01",
+      "note": "认领（zcode-batch-009-01）"
+    },
+    {
+      "at": "2026-09-07T16:32:47.103Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-01",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.948Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-7e54",
+      "note": "人工确认完成"
+    }
+  ]
+}

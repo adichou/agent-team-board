@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-012",
+  "type": "bug",
+  "title": "动态候选变化后重复启动完善任务不幂等",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T12:13:46.868Z",
+  "updatedAt": "2026-09-11T05:52:19.172Z",
+  "agentCompletedAt": "2026-09-08T15:21:00.782Z",
+  "lastReport": {
+    "at": "2026-09-08T15:21:00.782Z",
+    "coverage": 100,
+    "framework": "node:assert 脚本测试（run-all 全量回归 + 深测夹具）",
+    "summary": "refine createRefineBatch 同模式幂等改为按进行中任务判断：已有同模式未结束批次一律幂等返回（created:false），不再要求候选一致；新候选由原批次每轮 next 吸收。D04 转绿；R3/R4 改写+R4b 新增锁跨模式口径；--ids 路径与报错文案不变；全量 95 个测试文件 0 失败。",
+    "runId": "run-20260908-091"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T12:13:46.868Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-9687"
+    },
+    {
+      "at": "2026-09-08T12:33:46.965Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T14:08:42.372Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T15:12:43.906Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T15:21:00.783Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.173Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-35b3",
+      "note": "人工确认完成"
+    }
+  ]
+}

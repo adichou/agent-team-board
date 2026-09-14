@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260911-006",
+  "type": "requirement",
+  "title": "回退REQ-20260911-004",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-039-1",
+  "createdAt": "2026-09-11T09:07:46.296Z",
+  "updatedAt": "2026-09-11T14:59:33.617Z",
+  "agentCompletedAt": "2026-09-11T14:37:36.469Z",
+  "lastReport": {
+    "at": "2026-09-11T14:37:36.469Z",
+    "coverage": 100,
+    "framework": "node:assert + npm test (run-all.mjs)",
+    "summary": "整体撤销004提交目录范围:task-settings无commit分区(patch.commit按未知键忽略,残留读忽略保存不写回);commit-store提示词/批次/摘要/核验恢复无目录约束(batch无scope,spec静态,三参核验);server不透传body.commit;设置页恢复仅批量任务分区;删004测试文件;新增7用例先红后绿,npm test 199文件0失败",
+    "runId": "run-20260911-200"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T09:07:46.296Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T09:07:46.297Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T09:41:22.437Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-173157-ecb5）"
+    },
+    {
+      "at": "2026-09-11T14:22:36.272Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-039-1",
+      "note": "认领（zcode-batch-039-1）"
+    },
+    {
+      "at": "2026-09-11T14:37:36.469Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-039-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T14:59:33.617Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

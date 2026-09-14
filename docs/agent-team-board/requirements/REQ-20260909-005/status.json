@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-005",
+  "type": "requirement",
+  "title": "批量任务中的智能体模型和智能或推理程度要保持和主调度会话一致",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260909-019-1",
+  "createdAt": "2026-09-09T00:27:36.224Z",
+  "updatedAt": "2026-09-11T05:52:20.352Z",
+  "agentCompletedAt": "2026-09-09T02:48:12.628Z",
+  "lastReport": {
+    "at": "2026-09-09T02:48:12.628Z",
+    "coverage": 14,
+    "framework": "node:assert 自研契约",
+    "summary": "四路子代理模型默认跟随主调度会话：task-settings 增 source 字段+存量迁移(model非空/档位偏离缺省→手动且值保留,缺省形态→跟随)；batch/refine 提示词按来源注入跟随指令(follow)或沿用固定行(manual)；server 与 atb CLI 创建口径统一；设置区五列表格(模型来源/子代理模型/推理强度/是否隐藏,跟随机禁用置灰+占位)；启动区四处展示生效口径；design.md 给出 codex 可显式(--model/model_reasoning_effort)/zcode 无依据的降级口径；新增14用例契约测试并更新001/K10/R12-7被取代契约,111个测试文件全绿",
+    "runId": "run-20260909-116"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T00:27:36.224Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T00:27:41.107Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T00:43:19.938Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-09T02:23:27.240Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260909-019-1",
+      "note": "认领（zcode-batch-20260909-019-1）"
+    },
+    {
+      "at": "2026-09-09T02:48:12.628Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260909-019-1",
+      "note": "上报测试报告（覆盖率 14%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.352Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-66ec",
+      "note": "人工确认完成"
+    }
+  ]
+}

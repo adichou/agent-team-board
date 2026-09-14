@@ -1,0 +1,53 @@
+{
+  "id": "BUG-20260905-002",
+  "type": "bug",
+  "title": "default-port 测试 V7 在 8888 被占用时必失败，应像 V6 一样跳过",
+  "status": "done",
+  "parent": "REQ-20260905-003",
+  "owner": "zcode-port-v7-skip",
+  "createdAt": "2026-09-05T09:18:02.701Z",
+  "updatedAt": "2026-09-11T05:52:14.206Z",
+  "agentCompletedAt": "2026-09-05T09:55:49.788Z",
+  "lastReport": {
+    "at": "2026-09-05T09:55:49.788Z",
+    "coverage": 100,
+    "framework": "node assert 自研用例（default-port.test.mjs 8 用例，npm test 聚合）",
+    "summary": "V7 开测时先探测 8888：被外部占用则跳过「不再占 8888」断言（输出说明），空闲则保留断言；7737 探活/port=7737 断言不变，与 V6 跳过策略对齐。TDD：8888 被占环境先复现红（1/8 失败）→修复后 8/8 绿、退出码 0。根因与引入来源已写入 Bug README「关联」节：REQ-20260905-003（新增 default-port.test.mjs 时 V7 无条件断言 8888 空闲）。注意：npm test 中 portrait-board.test.mjs P6 失败为既有问题，属 REQ-20260903-002（竖屏重设计，在途）范围，与本次改动无关。"
+  },
+  "history": [
+    {
+      "at": "2026-09-05T09:18:02.701Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0905-f155"
+    },
+    {
+      "at": "2026-09-05T09:45:27.158Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-05T09:48:34.815Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-port-v7-skip",
+      "note": "认领（zcode-port-v7-skip）"
+    },
+    {
+      "at": "2026-09-05T09:55:49.788Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0905-f3a7",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.206Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-bba2",
+      "note": "人工确认完成"
+    }
+  ]
+}

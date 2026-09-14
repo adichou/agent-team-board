@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-013",
+  "type": "bug",
+  "title": "detail-close-btn T2 回归：批量实施抽屉头部重新引入 space-between 内联布局",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-002-1",
+  "createdAt": "2026-09-06T12:42:21.033Z",
+  "updatedAt": "2026-09-11T05:52:15.798Z",
+  "agentCompletedAt": "2026-09-06T16:20:59.133Z",
+  "lastReport": {
+    "at": "2026-09-06T16:20:59.133Z",
+    "coverage": 100,
+    "framework": "Node.js assert 静态契约测试（npm test / run-all.mjs）",
+    "summary": "与 BUG-20260906-011 同问题的重复登记：T2 已由 011 收窄断言到 renderDrawer 修复（生产代码零改动）。本条目验证收尾：detail-close-btn T1-T4 4/4 通过，全量 npm test 43 文件失败 0；README 补修复记录并归因引入来源 REQ-20260906-002（atb list 已核验）",
+    "runId": "run-20260907-015"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T12:42:21.033Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-65e9"
+    },
+    {
+      "at": "2026-09-06T14:05:49.032Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T16:19:41.345Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "认领（zcode-batch-002-1）"
+    },
+    {
+      "at": "2026-09-06T16:20:59.133Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.798Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a943",
+      "note": "人工确认完成"
+    }
+  ]
+}

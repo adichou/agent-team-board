@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-012",
+  "type": "requirement",
+  "title": "讨论详情也要支持多页签布局",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-024-1",
+  "createdAt": "2026-09-09T08:47:35.589Z",
+  "updatedAt": "2026-09-11T05:52:20.961Z",
+  "agentCompletedAt": "2026-09-09T09:21:10.258Z",
+  "lastReport": {
+    "at": "2026-09-09T09:21:10.258Z",
+    "coverage": 91,
+    "framework": "node:assert + vm（静态契约/行为测试，npm test 全量 121 文件通过）",
+    "summary": "讨论详情页签化：renderDetail 重构为 头部→drawer-tabs 四页签（概况/纪要/成果/提示词，补齐 role=tab/aria-selected/tabpanel）→常驻 #ocNotice + 四分区 hidden 切换；提示词由浮层迁入页签（promptHtml 空态常驻，收起=清展示回默认页签）；成果页签计数角标；openItem/closeDetail 重置默认页签 overview，detailSig 记忆不重置；doFinish/#ocStart/reveal 跳 prompt、doCreate 跳 drafts；仅改 scripts/web/oncall.js + style.css（新增 .disc-empty-prompt），#ocBack/.drawer-back 未动；新测试 T1–T10 跑红转绿，discussion-ui U5 文案断言同步更名",
+    "runId": "run-20260909-128"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T08:47:35.589Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T08:47:38.707Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T08:56:56.675Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260909-165044-d83e）"
+    },
+    {
+      "at": "2026-09-09T09:09:11.970Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-024-1",
+      "note": "认领（zcode-batch-024-1）"
+    },
+    {
+      "at": "2026-09-09T09:21:10.258Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-024-1",
+      "note": "上报测试报告（覆盖率 91%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:20.961Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-927d",
+      "note": "人工确认完成"
+    }
+  ]
+}

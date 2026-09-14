@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-007 演示 · 已接受「开始完善」/ 已计划「开始开发」快捷按钮</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #d9dee4; --text: #1f2733; --muted: #6b7684;
+    --accent: #2563eb; --accent-soft: #e8effd; --ok: #16794c; --ok-soft: #e6f4ec; --ok-bg: #e6f4ec;
+    --err: #b3261e; --err-soft: #fbeae9; --warn: #8a5a00; --warn-soft: #fdf3e0;
+    --info-bg: #eef1f5; --chip-bg: #f1f3f6;
+    --disabled-text: #9aa3ad; --shadow: 0 6px 22px rgba(0,0,0,.14);
+  }
+  html[data-theme="dark"] {
+    --bg: #14181d; --panel: #1d232b; --line: #38414c; --text: #e6e9ed; --muted: #98a2ad;
+    --accent: #6f9bff; --accent-soft: #21324f; --ok: #57c78d; --ok-soft: #1d3529; --ok-bg: #1d3529;
+    --err: #ef8a84; --err-soft: #44201e; --warn: #d9a75a; --warn-soft: #3d3115;
+    --info-bg: #232a33; --chip-bg: #232a33;
+    --disabled-text: #5d6873; --shadow: 0 6px 22px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+         font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header.demo-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  header.demo-head h1 { font-size: 16px; margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 7px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .btn.quiet { background: transparent; }
+  .btn.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  select, input[type="text"] { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+
+  /* 看板骨架：模块导航 + 筛选条 + 列表头 + 列表 / 任务面板 */
+  .board { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .module-nav { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
+  .view-tab { border: none; background: transparent; color: var(--muted); font-size: 13.5px;
+              padding: 6px 12px; cursor: pointer; border-radius: 7px 7px 0 0; }
+  .view-tab.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px 2px; }
+  .filter-chip { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+                 border-radius: 999px; padding: 3px 11px; font-size: 12.5px; cursor: pointer; }
+  .filter-chip.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .filter-count { font-size: 11.5px; opacity: .85; }
+
+  .req-caption { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+                 padding: 10px 12px 2px; }
+  .caption-left { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .caption-left .count { font-weight: 600; font-size: 13px; }
+  .caption-divider { width: 1px; align-self: stretch; background: var(--line); flex: none; }
+  .sel-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sel-group.hidden, .hidden { display: none !important; }
+
+  .req-list { display: grid; gap: 8px; padding: 10px 12px 14px; }
+  .req-row { border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; cursor: default;
+             background: var(--panel); }
+  .req-row:hover { border-color: var(--muted); }
+  .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .refine-badge { border: none; border-radius: 999px; padding: 1px 9px; font-size: 12px; cursor: pointer; }
+  .rf-unrefined { background: var(--info-bg); color: var(--muted); }
+  .rf-refining { background: var(--accent-soft); color: var(--accent); animation: pulse 1.6s infinite; }
+  .rf-refined { background: var(--ok-bg); color: var(--ok); cursor: default; }
+  @media (prefers-reduced-motion: reduce) { .rf-refining { animation: none; } }
+  @keyframes pulse { 50% { opacity: .55; } }
+  .card-title { margin: 3px 0 2px; font-weight: 600; font-size: 13.5px; }
+  .state-lane { font-size: 12px; color: var(--muted); }
+
+  /* 任务模块 */
+  .task-view { padding: 10px 14px 16px; }
+  .task-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 8px; }
+  .tab { border: none; background: transparent; color: var(--muted); padding: 5px 12px;
+         font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .task-body { padding-top: 12px; }
+  .notice { border-radius: 8px; padding: 9px 12px; margin: 8px 0; font-size: 13px;
+            background: var(--info-bg); color: var(--muted); }
+  .notice.warn { background: var(--warn-soft); color: var(--warn); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  .notice.err { background: var(--err-soft); color: var(--err); }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+                  color: var(--muted); margin: 4px 10px 4px 0; }
+  .dep-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .queue-line { margin: 8px 0 4px; }
+  .hint-note { border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--text);
+               border-radius: 0 8px 8px 0; padding: 8px 12px; margin: 10px 0; font-size: 13px; }
+
+  #toast { position: fixed; right: 18px; bottom: 18px; max-width: 440px; border-radius: 8px;
+           padding: 10px 14px; font-size: 13px; box-shadow: var(--shadow); display: none; z-index: 9; }
+  #toast.show { display: block; }
+  #toast.ok { background: var(--ok-soft); color: var(--ok); }
+  #toast.err { background: var(--err-soft); color: var(--err); }
+  footer.tip { margin-top: 12px; }
+  @media (max-width: 760px) { .req-caption { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>REQ-20260909-007 · 快捷按钮演示</h1>
+    <span class="muted small">已接受「开始完善」 / 已计划「开始开发」</span>
+    <span style="flex:1"></span>
+    <label class="chk">数据情景
+      <select id="scenarioSel">
+        <option value="normal">正常（有未完善候选）</option>
+        <option value="empty">空（已接受均已完善）</option>
+        <option value="fail">加载失败（面板拉取报错）</option>
+      </select>
+    </label>
+    <button class="btn small" id="themeBtn" type="button">外观：跟随系统</button>
+  </header>
+
+  <div class="board">
+    <nav class="module-nav" aria-label="模块导航">
+      <button class="view-tab" type="button" data-nav="oncall">讨论</button>
+      <button class="view-tab active" type="button" data-nav="status">需求</button>
+      <button class="view-tab" type="button" data-nav="runs">任务</button>
+      <button class="view-tab" type="button" data-nav="files">文件</button>
+      <button class="view-tab" type="button" data-nav="settings">设置</button>
+    </nav>
+
+    <!-- 需求模块 -->
+    <section id="reqView">
+      <nav class="filter-bar" id="filterBar" aria-label="按状态筛选需求"></nav>
+      <div class="req-caption">
+        <div class="caption-left">
+          <span class="count" id="reqCount">0 个条目</span>
+          <select id="reqSort" aria-label="列表排序">
+            <option>最新更新</option><option>最早更新</option><option>单号</option>
+          </select>
+          <button class="btn small quiet" id="selectOperable" type="button">☑ 全选</button>
+          <button class="btn small quiet" id="selectNone" type="button" disabled>☐ 全不选</button>
+          <!-- 本需求新增：档位级快捷按钮（已接受=开始完善 / 已计划=开始开发），常驻不依赖勾选 -->
+          <button class="btn small primary" id="laneShortcut" type="button"></button>
+        </div>
+        <div class="sel-group hidden" id="selGroup" role="group" aria-label="批量操作">
+          <span class="caption-divider" aria-hidden="true"></span>
+          <span class="small" id="selCount">已选 0 项</span>
+          <button class="btn small primary hidden" id="planAdd" type="button">移入计划</button>
+          <button class="btn small warn hidden" id="planReject" type="button">驳回待接受</button>
+          <button class="btn small primary hidden" id="implGo" type="button">进入批量开发</button>
+          <button class="btn small warn hidden" id="planRemove" type="button">移出计划</button>
+        </div>
+      </div>
+      <div class="req-list" id="reqList"></div>
+    </section>
+
+    <!-- 任务模块（跳转落点） -->
+    <section id="taskView" class="task-view hidden">
+      <div class="task-head">
+        <span class="muted small" id="taskScope"></span>
+        <button class="btn small" id="taskBack" type="button">✕ 返回需求模块</button>
+      </div>
+      <nav class="tabs" aria-label="任务子面板">
+        <button class="tab active" type="button" data-bmode="refine">批量完善</button>
+        <button class="tab" type="button" data-bmode="develop">批量开发</button>
+      </nav>
+      <div class="task-body" id="taskBody"></div>
+    </section>
+  </div>
+
+  <footer class="tip">
+    <p class="muted small">演示说明：切到「已接受 / 已计划」档观察列表头常驻快捷按钮；其余档不显示。点击快捷按钮跳任务模块对应子面板——「开始开发」在已计划档有勾选时沿用勾选范围、无勾选为全部已计划条目。右组批量操作条仅在勾选 &gt; 0 时出现（现状），与快捷按钮互不影响。可用右上角「数据情景」切换正常 / 空 / 加载失败状态。</p>
+  </footer>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+// 演示数据（模拟 /api/board）：状态机 submitted → accepted → planned → in-progress → done
+const LANES = ['submitted', 'accepted', 'planned', 'developing', 'confirming', 'done'];
+const LANE_LABEL = { submitted: '待接受', accepted: '已接受', planned: '已计划', developing: '开发中', confirming: '待测试', done: '已完成' };
+const REFINE_LABEL = { unrefined: '未完善', refining: '完善中', refined: '已完善' };
+let ITEMS = [
+  { id: 'REQ-20260907-001', title: '看板初始化与数据目录规范', status: 'submitted' },
+  { id: 'REQ-20260907-003', title: '批量完善已接受条目文档', status: 'accepted', refine: 'refining' },
+  { id: 'REQ-20260908-020', title: '已接受单完善三态徽标', status: 'accepted', refine: 'unrefined' },
+  { id: 'REQ-20260908-026', title: '任务面板收尾与最近记录', status: 'accepted', refine: 'unrefined' },
+  { id: 'REQ-20260908-010', title: '已计划独立档与移出计划', status: 'accepted', refine: 'refined' },
+  { id: 'REQ-20260906-018', title: '勾选范围进入批量开发', status: 'planned' },
+  { id: 'REQ-20260906-025', title: '开发队列最旧优先', status: 'planned' },
+  { id: 'REQ-20260906-007', title: '文件模块分层横幅', status: 'in-progress' },
+  { id: 'REQ-20260905-003', title: '列表排序与记忆', status: 'done' },
+];
+// 空态情景：已接受单全部置为已完善
+const EMPTY_ITEMS = () => ITEMS.map((it) => it.status === 'accepted' ? { ...it, refine: 'refined' } : it);
+
+const state = {
+  lane: 'submitted', scenario: 'normal', view: 'req',
+  taskMode: 'refine', taskScopeNote: '', taskLoading: false, taskError: '',
+  sel: { submitted: new Set(), accepted: new Set(), planned: new Set() },
+};
+const operable = (lane) => lane === 'submitted' || lane === 'accepted' || lane === 'planned';
+const itemsOf = (lane) => (state.scenario === 'empty' ? EMPTY_ITEMS() : ITEMS).filter((it) => it.status === lane);
+
+let toastTimer = null;
+function toast(msg, isErr = false) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show ' + (isErr ? 'err' : 'ok');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+/* ---------- 需求模块渲染 ---------- */
+function renderFilterBar() {
+  $('#filterBar').innerHTML = LANES.map((lane) => {
+    const count = itemsOf(lane).length;
+    return `<button type="button" class="filter-chip${state.lane === lane ? ' active' : ''}" data-lane="${lane}">${LANE_LABEL[lane]} <span class="filter-count">${count}</span></button>`;
+  }).join('');
+}
+
+function laneShortcutCfg() {
+  if (state.lane === 'accepted') return { label: '▶ 开始完善', title: '进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）', act: 'refine' };
+  if (state.lane === 'planned') return { label: '▶ 开始开发', title: '进入任务模块批量开发面板：已勾选时以勾选为范围，未勾选为全部已计划条目', act: 'develop' };
+  return null;
+}
+
+function renderCaption() {
+  const list = itemsOf(state.lane);
+  $('#reqCount').textContent = `${list.length} 个条目`;
+  // 快捷按钮：仅已接受 / 已计划档显示（本需求核心）
+  const cfg = laneShortcutCfg();
+  const btn = $('#laneShortcut');
+  btn.classList.toggle('hidden', !cfg);
+  if (cfg) { btn.textContent = cfg.label; btn.title = cfg.title; }
+  // 右组批量操作条：现状口径——零选择整体隐藏
+  const sel = state.sel[state.lane];
+  $('#selectOperable').disabled = !operable(state.lane) || list.length === 0;
+  $('#selectNone').disabled = sel.size === 0;
+  const group = $('#selGroup');
+  group.classList.toggle('hidden', sel.size === 0);
+  if (sel.size > 0) $('#selCount').textContent = `已选 ${sel.size} 项`;
+  const laneOfBtn = { '#planAdd': 'accepted', '#planReject': 'accepted', '#implGo': 'planned', '#planRemove': 'planned' };
+  for (const [s, laneKey] of Object.entries(laneOfBtn)) $(s).classList.toggle('hidden', state.lane !== laneKey);
+}
+
+function refineBadge(it) {
+  if (it.status !== 'accepted') return '';
+  const r = it.refine || 'unrefined';
+  const hint = r === 'unrefined' ? '已接受未完善：可由批量完善任务补全文档；点击查看批量完善面板'
+    : r === 'refining' ? '子代理正在完善本文档；点击查看批量完善面板'
+    : '文档已由批量完善补全；点击查看批量完善面板';
+  return `<button type="button" class="refine-badge rf-${r}" data-goto-refine title="${hint}">${REFINE_LABEL[r]}</button>`;
+}
+
+function renderList() {
+  const lane = state.lane;
+  $('#reqList').innerHTML = itemsOf(lane).map((it) => `
+    <article class="req-row">
+      <div class="card-top">
+        ${operable(lane) && it.status !== 'in-progress' && it.status !== 'done' ? `<input type="checkbox" data-check-id="${it.id}" ${state.sel[lane].has(it.id) ? 'checked' : ''} aria-label="选择 ${it.id}">` : ''}
+        <span class="cid">${it.id}</span>
+        ${refineBadge(it)}
+      </div>
+      <div class="card-title">${it.title}</div>
+      <span class="state-lane">${LANE_LABEL[lane]}</span>
+    </article>`).join('');
+}
+
+function renderReq() {
+  renderFilterBar(); renderCaption(); renderList();
+}
+
+/* ---------- 任务模块（跳转落点） ---------- */
+function refineCandidates() { return itemsOf('accepted').filter((it) => (it.refine || 'unrefined') !== 'refined'); }
+
+function renderTask() {
+  const body = $('#taskBody');
+  $('#taskScope').textContent = state.taskScopeNote;
+  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.bmode === state.taskMode));
+  if (state.taskError) {
+    body.innerHTML = `
+      <div class="notice err">批量${state.taskMode === 'refine' ? '完善' : '开发'}面板数据加载失败：演示模拟的接口错误（如 /api/${state.taskMode === 'refine' ? 'refine' : 'batch'}/current 拉取失败）。</div>
+      <div class="dep-toolbar"><button class="btn primary" id="taskRetry" type="button">重试</button>
+      <span class="muted small">提示：可在右上角「数据情景」切回「正常」后再重试。</span></div>`;
+    $('#taskRetry').addEventListener('click', () => loadTask(state.taskMode, state.taskScopeNote));
+    return;
+  }
+  if (state.taskMode === 'refine') {
+    const cands = refineCandidates();
+    body.innerHTML = cands.length ? `
+      <div class="notice">批量完善：对已接受条目批量补全文档——候选 = 已接受未完善（每轮实时读取）。派子代理只补文档，条目保持已接受。</div>
+      <div class="queue-line small">候选：已接受未完善 <b>${cands.length}</b> 项——${cands.map((c) => c.id).join('、')}</div>
+      <label class="field-inline">执行 Agent
+        <select id="agentSel"><option value="">选择执行 Agent…</option><option value="zcode">zcode（复制调度提示词）</option><option value="codex">codex（复制调度提示词）</option></select>
+      </label>
+      <label class="field-inline">开发人员 <input type="text" id="devInput" placeholder="如 张三（可留空）"></label>
+      <div class="dep-toolbar"><button class="btn primary" id="panelStart" type="button" disabled title="选择执行 Agent 后启动">启动</button>
+      <span class="muted small">启动 = 创建任务并复制主调度提示词（复制成功 ≠ 执行中）。</span></div>` : `
+      <div class="notice">暂无可完善候选：已接受条目均已完善（或尚无已接受条目）。</div>
+      <p class="muted small">本空态为任务面板现有反馈——「开始完善」按钮不做候选预判、不禁用，空态由面板承接（与完善徽标点击行为一致）。</p>`;
+  } else {
+    const scoped = state.sel.planned.size > 0;
+    const queue = scoped ? itemsOf('planned').filter((it) => state.sel.planned.has(it.id)) : itemsOf('planned');
+    body.innerHTML = `
+      <div class="notice">批量开发（仅子代理模式）：创建任务并复制主调度提示词，由对应会话逐项派子代理。</div>
+      <div class="hint-note">${scoped
+        ? `按勾选范围进入：本轮范围 = 勾选的 ${queue.length} 项（${queue.map((q) => q.id).join('、')}）。`
+        : '按默认范围进入：未勾选任何已计划条目，范围为全部已计划条目（最旧优先）。'}</div>
+      <div class="queue-line small">已计划队列（最旧优先）：${queue.map((q) => q.id).join('、') || '（空，等待已计划条目）'}</div>
+      <label class="field-inline">执行 Agent
+        <select id="agentSel"><option value="">选择执行 Agent…</option><option value="zcode">zcode（复制调度提示词）</option><option value="codex">codex（复制调度提示词）</option></select>
+      </label>
+      <label class="field-inline">开发人员 <input type="text" id="devInput" placeholder="如 张三（可留空）"></label>
+      <div class="dep-toolbar"><button class="btn primary" id="panelStart" type="button" disabled title="选择执行 Agent 后启动">启动</button></div>`;
+  }
+  const sel = $('#agentSel');
+  const start = $('#panelStart');
+  if (sel && start) sel.addEventListener('change', () => { start.disabled = !sel.value; });
+  if (start) start.addEventListener('click', () => {
+    toast(`✓ 演示：已按执行 Agent「${$('#agentSel').value}」创建任务并复制主调度提示词（不写入真实数据）`);
+  });
+}
+
+function loadTask(mode, scopeNote) {
+  state.view = 'task'; state.taskMode = mode; state.taskScopeNote = scopeNote;
+  state.taskError = ''; state.taskLoading = true;
+  $('#reqView').classList.add('hidden');
+  $('#taskView').classList.remove('hidden');
+  $$('.view-tab').forEach((t) => t.classList.toggle('active', t.dataset.nav === 'runs'));
+  $('#taskBody').innerHTML = '<p class="muted">加载中…</p>';
+  $('#taskScope').textContent = scopeNote;
+  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.bmode === mode));
+  setTimeout(() => {
+    state.taskLoading = false;
+    state.taskError = state.scenario === 'fail' ? 'load-failed' : '';
+    renderTask();
+  }, 650);
+}
+
+/* ---------- 交互绑定 ---------- */
+$('#filterBar').addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-lane]');
+  if (!chip) return;
+  state.lane = chip.dataset.lane;
+  renderReq();
+});
+
+$('#reqList').addEventListener('change', (e) => {
+  const check = e.target.closest('[data-check-id]');
+  if (!check) return;
+  const sel = state.sel[state.lane];
+  check.checked ? sel.add(check.dataset.checkId) : sel.delete(check.dataset.checkId);
+  renderCaption();
+});
+
+$('#reqList').addEventListener('click', (e) => {
+  const badge = e.target.closest('[data-goto-refine]');
+  if (badge) loadTask('refine', '入口：已接受行完善徽标（既有入口，保留不回退）');
+});
+
+$('#selectOperable').addEventListener('click', () => {
+  const sel = state.sel[state.lane];
+  itemsOf(state.lane).forEach((it) => sel.add(it.id));
+  renderReq();
+  toast('已全选当前筛选档内可见条目');
+});
+$('#selectNone').addEventListener('click', () => {
+  state.sel[state.lane].clear();
+  renderReq();
+});
+
+// 本需求核心：档位级快捷按钮
+$('#laneShortcut').addEventListener('click', () => {
+  const cfg = laneShortcutCfg();
+  if (!cfg) return;
+  if (cfg.act === 'refine') loadTask('refine', '入口：已接受列表头「开始完善」快捷按钮');
+  else {
+    const scoped = state.sel.planned.size > 0;
+    loadTask('develop', scoped
+      ? `入口：已计划列表头「开始开发」 · 沿用勾选范围（${state.sel.planned.size} 项）`
+      : '入口：已计划列表头「开始开发」 · 默认范围（全部已计划条目）');
+  }
+});
+
+// 既有入口（保留）：进入批量开发（仅在勾选 > 0 的右组中出现）
+$('#implGo').addEventListener('click', () => {
+  loadTask('develop', `入口：右组「进入批量开发」（勾选 ${state.sel.planned.size} 项为范围）`);
+});
+$('#planAdd').addEventListener('click', () => toast('演示：移入计划（不在本需求范围）'));
+$('#planReject').addEventListener('click', () => toast('演示：驳回待接受（不在本需求范围）'));
+$('#planRemove').addEventListener('click', () => toast('演示：移出计划（不在本需求范围）'));
+
+$('#taskBack').addEventListener('click', () => {
+  state.view = 'req';
+  $('#taskView').classList.add('hidden');
+  $('#reqView').classList.remove('hidden');
+  $$('.view-tab').forEach((t) => t.classList.toggle('active', t.dataset.nav === 'status'));
+});
+$$('.tab').forEach((t) => t.addEventListener('click', () => {
+  state.taskMode = t.dataset.bmode;
+  state.taskError = '';
+  renderTask();
+}));
+
+$$('.view-tab').forEach((t) => t.addEventListener('click', () => {
+  const nav = t.dataset.nav;
+  if (nav === 'status') $('#taskBack').click();
+  else if (nav === 'runs') loadTask(state.taskMode || 'refine', '入口：主导航「任务」模块');
+  else toast(`演示仅覆盖「需求」与「任务」模块，「${t.textContent}」不在本需求范围`);
+}));
+
+$('#scenarioSel').addEventListener('change', (e) => {
+  state.scenario = e.target.value;
+  if (state.view === 'task' && !state.taskLoading) { state.taskError = ''; renderTask(); }
+  else renderReq();
+  toast(`数据情景已切换：${e.target.selectedOptions[0].textContent}`);
+});
+
+/* ---------- 深浅色 ---------- */
+const THEME_MODES = [['auto', '外观：跟随系统'], ['light', '外观：浅色'], ['dark', '外观：深色']];
+let themeIdx = 0;
+function applyTheme() {
+  const [mode, label] = THEME_MODES[themeIdx];
+  const dark = mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : '';
+  $('#themeBtn').textContent = label;
+}
+$('#themeBtn').addEventListener('click', () => { themeIdx = (themeIdx + 1) % 3; applyTheme(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+renderReq();
+applyTheme();
+</script>
+</body>
+</html>

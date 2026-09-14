@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-007",
+  "type": "requirement",
+  "title": "支持快捷键",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-1",
+  "createdAt": "2026-09-10T00:41:45.396Z",
+  "updatedAt": "2026-09-11T05:52:21.859Z",
+  "agentCompletedAt": "2026-09-10T02:54:28.938Z",
+  "lastReport": {
+    "at": "2026-09-10T02:54:28.938Z",
+    "coverage": 90,
+    "framework": "vm 行为测试 + 静态契约（node:assert + node:vm）",
+    "summary": "看板单页快捷键：/ 聚焦当前模块搜索框、? 开居中帮助面板（重复不叠加、关闭恢复入口焦点、Tab 焦点圈定）、←/→ 沿用抽屉冻结范围导航（守卫扩展至全部弹窗+repeat/IME/修饰键）、Esc 分层关闭（帮助>项目管理>新建>抽屉）；全局 keydown 收敛为具名 onGlobalKeydown 唯一注册点，单次按键单次触发，快捷键路径零业务请求；顶栏帮助按钮+搜索框 / 提示+导航按钮 aria-keyshortcuts。11 用例全绿+135 文件回归全绿（两处既有测试最小适配：E10 补隐藏桩、T3 字面窗口）",
+    "runId": "run-20260910-147"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T00:41:45.396Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T00:44:20.098Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T01:56:46.580Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-095428-3ea2）"
+    },
+    {
+      "at": "2026-09-10T02:20:21.382Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-1",
+      "note": "认领（zcode-batch-031-1）"
+    },
+    {
+      "at": "2026-09-10T02:54:28.939Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.859Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-7c38",
+      "note": "人工确认完成"
+    }
+  ]
+}

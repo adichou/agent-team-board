@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260908-004",
+  "type": "bug",
+  "title": "单号的前缀已经用了 REQ，BUG 这些区分，不需要再加单独的类型图标来区分了",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-013-1",
+  "createdAt": "2026-09-08T02:10:42.369Z",
+  "updatedAt": "2026-09-11T05:52:18.135Z",
+  "agentCompletedAt": "2026-09-08T03:56:20.114Z",
+  "lastReport": {
+    "at": "2026-09-08T03:56:20.114Z",
+    "coverage": 100,
+    "framework": "Node 契约测试（vm 渲染 + 静态源码断言）",
+    "summary": "移除三处与单号并排的 REQ/BUG 类型徽章（需求列表行/详情抽屉头部/需求完善候选行），单号前缀已区分类型；清理 style.css 失引用的 .chip.req/.chip.bug；新增 type-chip-removed.test.mjs 4 用例（先红后绿），同步 detail-close-btn 与 pending-accept-inline 两条旧契约；npm test 全量 84 文件通过；引入来源按未定位归因（徽章先于首个登记需求，排查过程见 design.md）。",
+    "runId": "run-20260908-071"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T02:10:42.369Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T02:26:18.256Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T03:49:20.189Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-013-1",
+      "note": "认领（zcode-batch-013-1）"
+    },
+    {
+      "at": "2026-09-08T03:56:20.115Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-013-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.135Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-34bf",
+      "note": "人工确认完成"
+    }
+  ]
+}

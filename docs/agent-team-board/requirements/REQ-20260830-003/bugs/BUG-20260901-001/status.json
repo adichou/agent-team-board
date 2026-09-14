@@ -1,0 +1,60 @@
+{
+  "id": "BUG-20260901-001",
+  "type": "bug",
+  "title": "dev.md 待对齐重写丢失 loop「单条目失败不中断」契约",
+  "status": "done",
+  "parent": "REQ-20260830-003",
+  "owner": "zcode-loop-contract",
+  "createdAt": "2026-09-01T03:43:34.888Z",
+  "updatedAt": "2026-09-11T05:52:13.236Z",
+  "agentCompletedAt": "2026-09-02T09:55:30.489Z",
+  "lastReport": {
+    "at": "2026-09-02T09:55:30.489Z",
+    "coverage": null,
+    "framework": "node:assert 文档契约测试（loop-mode.test.mjs）",
+    "summary": "loop 契约恢复完成。【引入来源：REQ-20260831-001（重写 dev.md 循环模式一节时丢失既有契约条款；来源已核验存在，README「关联」节已记）】修复：1) dev.md 循环模式一节补回「失败不中断」条款——兼容两阶段语义（阶段一出方案或获批量同意后的阶段二实施失败→如实说明→跳过继续，条目保持待对齐/in-progress 交人工处置，loop 不因单条目失败终止）；2) 终止条件两种表述并存（「直到没有 accepted 条目」原文恢复 + 两阶段等价表述），标题与正文补 /dev loop 字面量；3) SKILL.md 调度规则 loop 条目同步补失败跳过语义；4) loop-mode.test.mjs #2/#3 断言语义化（接受两阶段表述，避免措辞微调误报）。测试：loop-mode 7/7 全绿（修复前 #2/#3 红，实测复现）；八套其余测试回归全绿（零运行时改动）。版本 0.3.7→0.3.8。"
+  },
+  "history": [
+    {
+      "at": "2026-09-01T03:43:34.888Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-09-01T07:13:28.046Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-01T07:16:34.465Z",
+      "from": "accepted",
+      "to": "pending-alignment",
+      "by": "zcode-loop-contract",
+      "note": "认领（出方案阶段，zcode-loop-contract）"
+    },
+    {
+      "at": "2026-09-01T07:23:13.127Z",
+      "from": "pending-alignment",
+      "to": "in-progress",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-02T09:55:30.489Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0902-3b3d",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.236Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-3c86",
+      "note": "人工确认完成"
+    }
+  ]
+}

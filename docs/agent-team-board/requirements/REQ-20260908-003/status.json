@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260908-003",
+  "type": "requirement",
+  "title": "支持待接受的需求删除",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-011-1",
+  "createdAt": "2026-09-08T00:43:15.707Z",
+  "updatedAt": "2026-09-11T05:52:17.851Z",
+  "agentCompletedAt": "2026-09-08T01:38:48.175Z",
+  "lastReport": {
+    "at": "2026-09-08T01:38:48.175Z",
+    "coverage": 100,
+    "framework": "node:assert 单测 + node:http 真实服务集成 + UI 静态/沙箱契约（scripts/tests/item-delete.test.mjs，10 用例）",
+    "summary": "core.deleteItem 仅删 submitted（需求/Bug；有下属 Bug 先拒并指引）+ server DELETE /api/item/:id（受既有跨站防护）+ 网页卡片/详情页删除按钮（页面内 danger uiConfirm，删后刷新并关抽屉）+ CLI atb delete；单号计数器不回退；全量回归 78 文件通过",
+    "runId": "run-20260908-064"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T00:43:15.707Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T00:45:15.535Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T01:34:24.413Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-011-1",
+      "note": "认领（zcode-batch-011-1）"
+    },
+    {
+      "at": "2026-09-08T01:38:48.175Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-011-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.851Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1f5b",
+      "note": "人工确认完成"
+    }
+  ]
+}

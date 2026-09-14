@@ -1,0 +1,60 @@
+{
+  "id": "REQ-20260906-004",
+  "type": "requirement",
+  "title": "File Board 文件详情栏过窄：支持拖拽分隔条调宽并记忆",
+  "status": "done",
+  "parent": null,
+  "owner": "REQ-20260906-004",
+  "createdAt": "2026-09-06T02:47:17.566Z",
+  "updatedAt": "2026-09-11T05:52:14.437Z",
+  "agentCompletedAt": "2026-09-06T03:44:29.959Z",
+  "lastReport": {
+    "at": "2026-09-06T03:44:29.959Z",
+    "coverage": 89,
+    "framework": "node:assert 纯函数单测+静态契约（file-splitter.test.mjs S1–S7；file-board.test.mjs F13）+ 内置浏览器实测",
+    "summary": "v2 追加（人工反馈：文件树层级缩进太多）：style.css 以更高特异性把 Wunderbaum 每级缩进占位 i.wb-indent 从 20px 压到 12px，叶节点 expander 兼作缩进占位单独回补图标宽保证同级文件/目录标题对齐，vendor 变量不动；新增 F13 先红后绿，实测第 4 级标题 167→143（省 24px）、叶/目录对齐 ✓。v1 分隔条功能不变：6px 可拖拽分隔条、180px~视口50% 夹取、双击回 300、localStorage 记忆、resize 重夹取，S1–S7 全绿，全量 npm test 22 文件 0 失败。覆盖率 89=自动化 8/9，M1 浅色主题视觉留人工复核。"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T02:47:17.566Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-bea7"
+    },
+    {
+      "at": "2026-09-06T02:47:57.111Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T03:00:20.157Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "REQ-20260906-004",
+      "note": "认领（REQ-20260906-004）"
+    },
+    {
+      "at": "2026-09-06T03:14:28.431Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-1b3b",
+      "note": "上报测试报告（覆盖率 88%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-06T03:44:29.959Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-990b",
+      "note": "上报测试报告（覆盖率 89%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.437Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0b5a",
+      "note": "人工确认完成"
+    }
+  ]
+}

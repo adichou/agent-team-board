@@ -1,0 +1,82 @@
+{
+  "id": "BUG-20260911-004",
+  "type": "bug",
+  "title": "营销模块的概览页面还是有问题，需要 Cmd+R 才能看到数据",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-035-1",
+  "createdAt": "2026-09-11T00:27:52.461Z",
+  "updatedAt": "2026-09-11T05:52:23.825Z",
+  "agentCompletedAt": "2026-09-11T02:22:54.663Z",
+  "lastReport": {
+    "at": "2026-09-11T02:22:54.663Z",
+    "coverage": 90,
+    "framework": "node:assert + vm（run-all.mjs 聚合）",
+    "summary": "根因：render() 写 data-mkt-pane 而 setTab() 读 dataset.pane，键不匹配致任何页签切换给全部 pane 加 hidden，概览空白须 Cmd+R 重绘。修复 setTab 改读 dataset.mktPane（一行），归因 REQ-20260910-019。新增 3 用例先红后绿，全量 187 测试文件 0 失败。",
+    "runId": "run-20260911-190"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T00:27:52.461Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:28:29.762Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "标题 + 描述修改：「营销模块的概览页面还是有问题」→「营销模块的概览页面还是有问题，需要 Cmd+R 才能看到数据」（README「## 现象」节整体替换）"
+    },
+    {
+      "at": "2026-09-11T00:28:35.807Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-11T01:40:26.766Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-11T01:40:32.766Z",
+      "from": "planned",
+      "to": "accepted",
+      "by": "board",
+      "note": "人工移出计划，退回已接受"
+    },
+    {
+      "at": "2026-09-11T02:13:32.280Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-100941-743e）"
+    },
+    {
+      "at": "2026-09-11T02:16:22.569Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-035-1",
+      "note": "认领（zcode-batch-035-1）"
+    },
+    {
+      "at": "2026-09-11T02:22:54.663Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-035-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.826Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-397f",
+      "note": "人工确认完成"
+    }
+  ]
+}

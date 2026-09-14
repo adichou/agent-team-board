@@ -1,0 +1,35 @@
+{
+  "name": "agent-team-board",
+  "version": "0.3.15",
+  "description": "智能体团队看板：需求与 Bug 的文件化管理、TDD 开发流程调度与本地 Status Board 网页看板。",
+  "author": {
+    "name": "adichou"
+  },
+  "license": "MIT",
+  "keywords": [
+    "kanban",
+    "requirements",
+    "bugs",
+    "tdd",
+    "workflow"
+  ],
+  "skills": "./skills",
+  "hooks": "./hooks/codex.json",
+  "interface": {
+    "displayName": "智能体团队看板",
+    "shortDescription": "需求 / Bug 看板 + Agent TDD 开发流程",
+    "longDescription": "以「文件为事实源」的协作体系：需求与 Bug 状态由状态机与 PreToolUse 钩子硬约束——Agent 只能提交与认领，接受与完成仅限人工在 Status Board 网页（本地端口 8888）或终端确认。Codex 端提供 skills 数据规范、CLI 与 command 型钩子（hooks/codex.json，按宿主 schema 提供）；slash 命令为 ZCode 专属能力。",
+    "developerName": "adichou",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "brandColor": "#4F46E5",
+    "defaultPrompt": [
+      "/req 支持登录 Passkey",
+      "/dev next 认领一个需求开始开发",
+      "/board 打开状态看板"
+    ]
+  }
+}

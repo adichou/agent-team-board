@@ -1,0 +1,75 @@
+{
+  "id": "REQ-20260911-001",
+  "type": "requirement",
+  "title": "修改需求的对话框改为使用侧拉框，参考新建条目界面",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-035-6",
+  "createdAt": "2026-09-11T00:42:31.940Z",
+  "updatedAt": "2026-09-11T05:52:23.873Z",
+  "agentCompletedAt": "2026-09-11T03:41:08.874Z",
+  "lastReport": {
+    "at": "2026-09-11T03:41:08.874Z",
+    "coverage": 12,
+    "framework": "node:assert + vm 沙箱静态/行为契约（scripts/tests/run-all.mjs 聚合）",
+    "summary": "「✎ 修改」居中弹窗+遮罩下线（uiEditForm/promptActive 移除），迁 #editModalWrap 右侧侧拉面板（.side-panel 对齐新建）：三态内容区（读取中/失败重试/表单）、读取与保存绑定打开时项目与条目（seq 守卫防迟到污染）、保存中锁定字段与关闭、失败留草稿可重试、Esc 只关编辑层详情保留、焦点返回入口；既有 edit-content/rename-reject 等契约测试同步迁移，全量 192 文件 0 失败",
+    "runId": "run-20260911-195"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T00:42:31.940Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T00:42:31.942Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T01:40:26.769Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-11T01:40:32.770Z",
+      "from": "planned",
+      "to": "accepted",
+      "by": "board",
+      "note": "人工移出计划，退回已接受"
+    },
+    {
+      "at": "2026-09-11T02:17:17.089Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-101402-ba6c）"
+    },
+    {
+      "at": "2026-09-11T03:20:09.842Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-035-6",
+      "note": "认领（zcode-batch-035-6）"
+    },
+    {
+      "at": "2026-09-11T03:41:08.874Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-035-6",
+      "note": "上报测试报告（覆盖率 12%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.873Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e990",
+      "note": "人工确认完成"
+    }
+  ]
+}

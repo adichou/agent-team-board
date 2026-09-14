@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/scripts/state-guard.mjs", "file"],
+            "timeoutMs": 10000,
+            "statusMessage": "看板状态守卫：检查 status.json 直写"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/scripts/state-guard.mjs", "bash"],
+            "timeoutMs": 10000,
+            "statusMessage": "看板状态守卫：人工专属状态命令与流程外提交"
+          }
+        ]
+      }
+    ]
+  }
+}

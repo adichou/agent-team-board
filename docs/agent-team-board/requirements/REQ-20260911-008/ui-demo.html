@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260911-008 演示 — 去新建会话自动拷贝最新提示词</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --line: #d9dce3; --text: #1f2430; --muted: #6b7280;
+    --accent: #2f6fed; --accent-weak: #e8effd; --ok: #1a8f4c; --ok-weak: #e5f5ec;
+    --warn: #b7791f; --warn-weak: #fdf3e3; --err: #c0392b; --err-weak: #fdecea;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  html[data-theme="dark"] {
+    --bg: #14161b; --panel: #1d2027; --line: #333844; --text: #e6e8ee; --muted: #9aa1ad;
+    --accent: #6c9bff; --accent-weak: #22304d; --ok: #52c98a; --ok-weak: #17301f;
+    --warn: #e0b25c; --warn-weak: #33290f; --err: #ef7b6d; --err-weak: #3a1b17;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h2 { font-size: 13.5px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  /* 演示控制条 */
+  .ctrl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+  .ctrl .chip { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 999px; padding: 3px 11px; font-size: 12.5px; cursor: pointer; }
+  .ctrl .chip.active { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .ctrl .spacer { flex: 1; }
+  /* 模拟任务抽屉 */
+  .drawer-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    border-bottom: 1px solid var(--line); padding-bottom: 9px; margin-bottom: 12px; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { border: 1px solid transparent; background: none; color: var(--muted); border-radius: 7px;
+    padding: 4px 12px; font-size: 13px; cursor: pointer; }
+  .tab.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+  .ws-entry { margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .ws-entry-link { color: var(--accent); text-decoration: none; font-size: 13px; cursor: pointer; }
+  .ws-entry-link.is-off { color: var(--muted); cursor: not-allowed; text-decoration: line-through; }
+  .ws-entry-note { color: var(--err); font-size: 12px; }
+  .ws-entry-state { color: var(--muted); font-size: 12.5px; }
+  .task-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+  .task-meta b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+  .prompt-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .prompt-toolbar .muted { color: var(--muted); font-size: 12.5px; flex: 1; }
+  pre.prompt { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+    word-break: break-all; max-height: 190px; overflow: auto; color: var(--text); }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
+    padding: 4px 12px; font-size: 12.5px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .notice { border-radius: 8px; padding: 8px 11px; font-size: 12.5px; margin-top: 10px; }
+  .notice.ok { background: var(--ok-weak); color: var(--ok); }
+  .notice.warn { background: var(--warn-weak); color: var(--warn); }
+  .notice.err { background: var(--err-weak); color: var(--err); }
+  .notice.info { background: var(--accent-weak); color: var(--accent); }
+  /* 剪贴板模拟 */
+  .clip-box { border: 1px dashed var(--line); border-radius: 8px; padding: 9px 11px;
+    font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; word-break: break-all;
+    min-height: 92px; max-height: 150px; overflow: auto; background: var(--bg); color: var(--text); }
+  .clip-src { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  /* 模拟会话窗口 */
+  .win { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 12px; }
+  .win-bar { display: flex; gap: 6px; align-items: center; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 6px 10px; font-size: 12.5px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+  .win-body { padding: 10px; }
+  .win-input { width: 100%; min-height: 84px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 8px; resize: vertical; }
+  .win-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .win-sent { font-size: 12px; color: var(--ok); margin-top: 6px; display: none; }
+  /* toast */
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column;
+    gap: 8px; z-index: 9; max-width: 380px; }
+  .toast { border-radius: 8px; padding: 8px 12px; font-size: 12.5px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); box-shadow: 0 4px 14px rgba(0,0,0,.14);
+    animation: pop .18s ease-out; }
+  .toast.ok { border-color: var(--ok); color: var(--ok); }
+  .toast.err { border-color: var(--err); color: var(--err); }
+  .toast.warn { border-color: var(--warn); color: var(--warn); }
+  @keyframes pop { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line);
+    border-top-color: var(--accent); border-radius: 50%; animation: rot .7s linear infinite; vertical-align: -2px; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<h1>REQ-20260911-008 演示 — 「去新建 Zcode / Codex 会话」自动拷贝最新提示词</h1>
+<div class="sub">全部数据为模拟，不访问真实服务；剪贴板以右侧「剪贴板模拟」面板呈现（演示页不写真实剪贴板）。现状（点击只打开不复制）与期望（点击先复制最新提示词再打开）可对比体验。</div>
+
+<div class="ctrl" id="ctrl">
+  <button class="chip active" data-scene="normal">正常（有任务）</button>
+  <button class="chip" data-scene="notask">面板无任务</button>
+  <button class="chip" data-scene="copyfail">复制失败</button>
+  <button class="chip" data-scene="fetchfail">提示词获取失败</button>
+  <button class="chip" data-scene="nozcode">未检测到 ZCode 宿主</button>
+  <button class="chip" data-scene="noproject">未选择项目</button>
+  <button class="chip" data-scene="probefail">客户端检测失败</button>
+  <span class="spacer"></span>
+  <label style="font-size:12.5px;color:var(--muted)"><input type="checkbox" id="legacy"> 现状模式（点击不复制，仅打开）</label>
+  <button class="chip" id="themeBtn">深浅色切换</button>
+</div>
+
+<div class="layout">
+  <!-- 左：模拟任务抽屉 -->
+  <div class="card">
+    <h2>任务抽屉（模拟）· 左侧为面板，右侧为头部「去新建会话」入口</h2>
+    <div class="drawer-head">
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-mode="develop">批量开发</button>
+        <button class="tab" data-mode="refine">批量完善</button>
+        <button class="tab" data-mode="commit">批量 Commit</button>
+      </nav>
+      <div class="ws-entry" id="wsEntry"></div>
+    </div>
+    <div id="panelBody"></div>
+    <div id="panelNotice"></div>
+    <div class="hint">期望行为：点击「去新建 XX 会话」→ ① 当前面板任务的最新主调度提示词写入剪贴板 → ② 触发深链打开 → ③ 到新会话直接 Cmd+V 粘贴发送。zcode 深链只打开工作区（会话手动新建）、codex 打开新会话但都不自动发送——自动的只是「拷贝」这一步。</div>
+  </div>
+
+  <!-- 右：剪贴板模拟 + 会话窗口模拟 -->
+  <div>
+    <div class="card">
+      <h2>剪贴板模拟（代替系统剪贴板）</h2>
+      <div class="clip-box" id="clipBox">（空）</div>
+      <div class="clip-src" id="clipSrc">尚未写入</div>
+    </div>
+    <div class="card" id="winCard" style="display:none; margin-top:12px;">
+      <h2 id="winTitle">目标会话（模拟窗口）</h2>
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span id="winBarTitle"></span></div>
+        <div class="win-body">
+          <textarea class="win-input" id="winInput" placeholder="（会话输入框：请粘贴提示词后发送）"></textarea>
+          <div class="win-actions">
+            <button class="btn" id="pasteBtn">⌘V 粘贴</button>
+            <button class="btn" id="sendBtn" disabled>发送</button>
+            <button class="btn" id="closeWinBtn">关闭窗口</button>
+          </div>
+          <div class="win-sent" id="winSent">✓ 提示词已粘贴并发送（模拟）：调度会话开始工作</div>
+        </div>
+      </div>
+      <div class="hint">演示口径：复制失败时仍打开会话（打开不依赖复制），但 toast 显著提示补救路径；此口径为 README「待确认」项之一。</div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- 模拟数据 ----------
+  var PROJECT = '/Users/demo/src/agent-team-board';
+  var PROMPTS = {
+    develop: { batch: 'batch-20260911-011', status: '执行中（剩 3 项）',
+      text: '【批量开发 · 主调度提示词】你是本项目批量开发的主调度会话（batch-20260911-011）。\n执行：node scripts/atb.mjs dev next --by dev-main\n逐项开发并回执；完成后 dev done <RUN-ID>。剩余 3 项候选，最旧优先。' },
+    refine: { batch: 'refine-20260911-004', status: '执行中（剩 2 项）',
+      text: '【批量完善 · 主调度提示词】你是批量完善主会话（refine-20260911-004）。\n执行：node scripts/atb.mjs refine next --by refine-004\n补全条目 README 后 refine done <RUN-ID>。剩余 2 项。' },
+    commit: { batch: 'commit-20260911-002', status: '待启动（候选 5）',
+      text: '【批量 Commit · 主调度提示词】（commit-20260911-002）\n执行：node scripts/atb.mjs commit next --by cm-002\n业务与测试分开提交、消息含单号、只 commit 不 push。候选 5 项。' }
+  };
+  var MODE_LABEL = { develop: '批量开发', refine: '批量完善', commit: '批量 Commit' };
+  var AGENT_LABEL = { zcode: 'Zcode', codex: 'Codex' };
+
+  // ---------- 演示状态 ----------
+  var state = {
+    mode: 'develop', scene: 'normal', legacy: false,
+    probe: 'probing',          // probing | ok | failed（宿主探测，模拟 BUG-20260910-005）
+    apps: { zcode: true, codex: true },
+    clipboard: null, clipSrc: '',
+    winOpen: false, winAgent: null,
+    fetchBusy: false
+  };
+
+  // ---------- 工具 ----------
+  function $(id) { return document.getElementById(id); }
+  function toast(msg, kind) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(function () { t.remove(); }, 4200);
+  }
+  function setClipboard(text, src) {
+    state.clipboard = text; state.clipSrc = src;
+    $('clipBox').textContent = text || '（空）';
+    $('clipSrc').textContent = text ? ('最近写入：' + src + ' · ' + new Date().toLocaleTimeString()) : '尚未写入';
+  }
+
+  // ---------- 头部入口渲染（对应 newSessionLinksHtml） ----------
+  function renderWsEntry() {
+    var el = $('wsEntry');
+    if (state.probe === 'failed') {
+      el.innerHTML = '<span class="ws-entry-state">客户端检测失败：无法确认本机 Zcode / Codex 是否可用</span>'
+        + '<a class="ws-entry-link" id="wsRetry">重新检测</a>';
+      $('wsRetry').onclick = function () { reprobe(); };
+      return;
+    }
+    if (state.probe === 'probing') {
+      el.innerHTML = '<span class="ws-entry-state"><span class="spin"></span> 正在检测本机 Agent 客户端…</span>';
+      return;
+    }
+    var cfg = [
+      { agent: 'zcode', label: '去新建 Zcode 会话' },
+      { agent: 'codex', label: '去新建 Codex 会话' }
+    ];
+    el.innerHTML = cfg.map(function (c) {
+      var missing = state.scene === 'nozcode' && c.agent === 'zcode';
+      if (missing) return '<a class="ws-entry-link is-off" data-agent="' + c.agent + '">' + c.label + '<span class="ws-entry-note">（未检测到）</span></a>';
+      if (state.scene === 'noproject') return '<a class="ws-entry-link is-off" data-agent="' + c.agent + '">' + c.label + '</a>';
+      return '<a class="ws-entry-link" tabindex="0" data-agent="' + c.agent + '" title="自动复制当前面板最新提示词并打开（提示词仍需手动粘贴发送）">' + c.label + '</a>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.ws-entry-link'), function (a) {
+      var go = function () { onNewSession(a.dataset.agent); };
+      a.onclick = go;
+      a.onkeydown = function (e) { if (e.key === 'Enter') go(); }; // 键盘与鼠标一致
+    });
+  }
+
+  // ---------- 面板渲染（提示词分区） ----------
+  function renderPanel() {
+    var body = $('panelBody'), notice = $('panelNotice');
+    notice.innerHTML = '';
+    if (state.scene === 'notask') {
+      body.innerHTML = '<div class="notice info">暂无任务：请先创建' + MODE_LABEL[state.mode] + '任务（创建时会自动复制提示词）。</div>'
+        + '<button class="btn" id="mockCreate" style="margin-top:10px">模拟创建任务并复制提示词</button>';
+      $('mockCreate').onclick = function () {
+        setScene('normal');
+        toast('✓ 任务已创建、提示词已复制（模拟回到正常场景）', 'ok');
+      };
+      return;
+    }
+    var p = PROMPTS[state.mode];
+    body.innerHTML =
+      '<div class="task-meta"><span>任务 <b>' + p.batch + '</b></span><span>状态 <b>' + p.status + '</b></span><span>项目 <b>' + (state.scene === 'noproject' ? '（未选择）' : PROJECT) + '</b></span></div>'
+      + '<div class="prompt-toolbar"><span class="muted">主调度提示词（在本项目的 Agent 会话粘贴发送）：</span>'
+      + '<button class="btn" id="recopyBtn">重新复制</button></div>'
+      + '<pre class="prompt">' + esc(p.text) + '</pre>';
+    $('recopyBtn').onclick = function () {
+      if (state.fetchBusy) return;
+      if (state.scene === 'fetchfail' && state.mode === 'develop') { fetchFail(); return; }
+      setClipboard(p.text, '面板「重新复制」（' + MODE_LABEL[state.mode] + '）');
+      toast('已复制提示词；请在当前项目的 Agent 会话粘贴发送', 'ok');
+    };
+  }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+  // ---------- 提示词获取（develop 面板模拟 GET /api/batch/prompt） ----------
+  function fetchPrompt(cb) {
+    state.fetchBusy = true;
+    var box = $('panelNotice');
+    box.innerHTML = '<div class="notice info"><span class="spin"></span> 正在获取最新提示词（/api/batch/prompt，模拟）…</div>';
+    setTimeout(function () {
+      state.fetchBusy = false;
+      if (state.scene === 'fetchfail') { fetchFail(); cb(false); return; }
+      box.innerHTML = '';
+      cb(PROMPTS[state.mode].text);
+    }, 700);
+  }
+  function fetchFail() {
+    $('panelNotice').innerHTML = '<div class="notice err">提示词获取失败：无法读取批次提示词（模拟接口错误）。可在提示词分区点「重新复制」重试。</div>';
+  }
+
+  // ---------- 核心：点击「去新建 XX 会话」 ----------
+  function onNewSession(agent) {
+    // 守卫（沿用 BUG-20260910-005 状态机：不导航也不复制）
+    if (state.scene === 'noproject') { toast('未选择项目：请先在顶栏选择项目后再新建会话', 'err'); return; }
+    if (state.scene === 'nozcode' && agent === 'zcode') {
+      toast('未检测到 ZCode.app：可能未安装或装在非默认路径，可直接打开 Zcode 手动新建会话并粘贴提示词', 'err'); return;
+    }
+    var open = function () {
+      openSession(agent); // 深链跳转（模拟）：zcode 打开工作区 / codex 打开新会话，均不发送提示词
+      var openMsg = agent === 'codex'
+        ? '已请求打开 Codex 新会话（' + PROJECT + '）：是否打开以客户端实际为准'
+        : '已请求打开 Zcode 工作区（' + PROJECT + '）：会话需手动新建';
+      toast(openMsg + (state.clipSrc.indexOf('自动拷贝') >= 0 ? '；提示词已在剪贴板，请粘贴发送' : ''), 'warn');
+    };
+    if (state.legacy) { open(); toast('现状模式：未复制任何内容，请回面板自行复制提示词', 'warn'); return; }
+    if (state.scene === 'notask') {
+      open();
+      toast('当前面板暂无任务提示词：请先创建任务（未复制）', 'err');
+      return;
+    }
+    var doCopy = function (text) {
+      if (state.scene === 'copyfail') {
+        open(); // 演示口径：复制失败仍打开（README 待确认项）
+        toast('复制失败：请回提示词分区点「重新复制」后再粘贴（会话已打开）', 'err');
+        return;
+      }
+      setClipboard(text, '「去新建' + AGENT_LABEL[agent] + '会话」自动拷贝（' + MODE_LABEL[state.mode] + '）');
+      open();
+      toast('✓ 已复制最新提示词并请求打开 ' + AGENT_LABEL[agent] + '：请在新建会话中 Cmd+V 粘贴发送', 'ok');
+    };
+    if (state.mode === 'develop') fetchPrompt(doCopy); // 开发面板经接口取队首（归一口径）
+    else doCopy(PROMPTS[state.mode].text);            // 完善 / Commit 面板用面板数据
+  }
+
+  // ---------- 模拟会话窗口 ----------
+  function openSession(agent) {
+    state.winOpen = true; state.winAgent = agent;
+    $('winCard').style.display = '';
+    $('winTitle').textContent = agent === 'codex' ? '目标会话（模拟窗口）· Codex 新会话' : '目标会话（模拟窗口）· Zcode 工作区（会话需手动新建）';
+    $('winBarTitle').textContent = (agent === 'codex' ? 'Codex · 新会话' : 'Zcode · 工作区') + ' — ' + PROJECT;
+    $('winInput').value = ''; $('winSent').style.display = 'none'; $('sendBtn').disabled = true;
+  }
+  $('pasteBtn').onclick = function () {
+    if (!state.clipboard) { toast('剪贴板里没有提示词：这正是本需求要消除的场景——请回看板复制（或体验期望模式）', 'err'); return; }
+    $('winInput').value = state.clipboard; $('sendBtn').disabled = false;
+    toast('已粘贴最新提示词（来源：' + state.clipSrc + '）', 'ok');
+  };
+  $('sendBtn').onclick = function () {
+    if (!$('winInput').value) return;
+    $('winSent').style.display = '';
+    toast('✓ 提示词已发送，调度会话开始工作（模拟）', 'ok');
+  };
+  $('closeWinBtn').onclick = function () { state.winOpen = false; $('winCard').style.display = 'none'; };
+
+  // ---------- 场景 / 页签 / 主题 ----------
+  function setScene(scene) {
+    state.scene = scene;
+    Array.prototype.forEach.call(document.querySelectorAll('#ctrl .chip[data-scene]'), function (c) {
+      c.classList.toggle('active', c.dataset.scene === scene);
+    });
+    renderAll();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#ctrl .chip[data-scene]'), function (c) {
+    c.onclick = function () { setScene(c.dataset.scene); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs .tab'), function (t) {
+    t.onclick = function () {
+      state.mode = t.dataset.mode;
+      Array.prototype.forEach.call(document.querySelectorAll('#tabs .tab'), function (x) { x.classList.toggle('active', x === t); });
+      renderPanel();
+      toast('已切换到「' + MODE_LABEL[state.mode] + '」：自动拷贝将取该面板任务的最新提示词');
+    };
+  });
+  $('legacy').onchange = function () {
+    state.legacy = this.checked;
+    toast(this.checked ? '现状模式：点击只打开深链，不复制（BUG-20260910-005 行为）' : '期望模式：点击先自动拷贝最新提示词再打开（本需求）');
+  };
+  $('themeBtn').onclick = function () {
+    var html = document.documentElement;
+    html.dataset.theme = html.dataset.theme === 'dark' ? '' : 'dark';
+  };
+
+  // ---------- 宿主探测（模拟 BUG-20260910-005：probing → ok/failed） ----------
+  function reprobe() {
+    state.probe = 'probing'; renderWsEntry();
+    setTimeout(function () {
+      state.probe = (state.scene === 'probefail') ? 'failed' : 'ok';
+      renderWsEntry();
+      if (state.probe === 'failed') toast('客户端检测失败：无法确认本机客户端（通道故障 ≠ 未安装），可重试或手动打开', 'err');
+      else toast('客户端检测完成：Zcode / Codex 均可用（模拟）', 'ok');
+    }, 900);
+  }
+
+  function renderAll() { renderWsEntry(); renderPanel(); }
+
+  // 初始：先「正在检测」再落定（覆盖加载态；probefail 场景演示检测失败 + 重新检测）
+  setClipboard('', '');
+  renderPanel(); renderWsEntry();
+  setTimeout(function () {
+    state.probe = (state.scene === 'probefail') ? 'failed' : 'ok';
+    renderWsEntry();
+    toast('提示：切换右侧「现状模式」可对比旧体验——点击只打开、不复制，粘贴时才发现剪贴板没有提示词');
+  }, 900);
+})();
+</script>
+</body>
+</html>

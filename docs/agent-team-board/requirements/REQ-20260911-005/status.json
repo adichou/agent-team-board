@@ -1,0 +1,68 @@
+{
+  "id": "REQ-20260911-005",
+  "type": "requirement",
+  "title": "支持英文国际化资源",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-i18n-en",
+  "createdAt": "2026-09-11T07:59:15.150Z",
+  "updatedAt": "2026-09-11T14:21:58.911Z",
+  "agentCompletedAt": "2026-09-11T11:08:43.025Z",
+  "lastReport": {
+    "at": "2026-09-11T11:08:43.025Z",
+    "coverage": 100,
+    "framework": "node:assert（5 测试文件 27 例）+ npm test 全量回归 + 浏览器实测",
+    "summary": "集中词典+运行时 DOM 翻译层（scripts/web/i18n.js，app.js 零改动）：EN 精确 667 条、动态 218 条（长模板优先+反向词典支持双语往返）、豁免 3 条；按系统语言自动检测（en-*→英文）、手动切换记忆 localStorage；MutationObserver 跟随 2s 轮询动态内容；覆盖测试卡点=实时扫描 884 条中文片段全命中；199 测试文件回归 0 失败；浏览器实测自动检测/往返/轮询/各视图残留审计全过",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-11T07:59:15.150Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T07:59:15.151Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T07:59:23.899Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-11T10:19:18.094Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-11T10:25:56.479Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-i18n-en",
+      "note": "认领（zcode-i18n-en）"
+    },
+    {
+      "at": "2026-09-11T11:08:43.025Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0911-8aba",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T14:21:58.912Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

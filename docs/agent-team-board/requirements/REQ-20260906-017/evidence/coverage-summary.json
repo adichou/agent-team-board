@@ -1,0 +1,27 @@
+{
+  "scope": "新增 submittedItems、syncAcceptance、acceptItems 三个函数（含内部回调）",
+  "metric": "V8 源码范围覆盖率，按 UTF-16 单元计算；不是全仓库行覆盖率",
+  "covered": 2883,
+  "total": 2890,
+  "percent": 99.76,
+  "functions": [
+    {
+      "function": "submittedItems",
+      "coveredUTF16Units": 108,
+      "totalUTF16Units": 108,
+      "percent": 100.0
+    },
+    {
+      "function": "syncAcceptance",
+      "coveredUTF16Units": 1391,
+      "totalUTF16Units": 1391,
+      "percent": 100.0
+    },
+    {
+      "function": "acceptItems",
+      "coveredUTF16Units": 1384,
+      "totalUTF16Units": 1391,
+      "percent": 99.5
+    }
+  ]
+}

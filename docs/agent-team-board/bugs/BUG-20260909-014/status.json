@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260909-014",
+  "type": "bug",
+  "title": "任务模块面板在批量完善和批量开发上方空白较多，而且需要去掉关闭按钮",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-024-3",
+  "createdAt": "2026-09-09T08:52:31.844Z",
+  "updatedAt": "2026-09-11T05:52:21.053Z",
+  "agentCompletedAt": "2026-09-09T09:34:14.689Z",
+  "lastReport": {
+    "at": "2026-09-09T09:34:14.689Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约断言（run-all.mjs）",
+    "summary": "任务面板头部整行移除 .batch-head：去掉 ✕ 关闭按钮及其绑定、去掉与顶栏重复的项目路径行；新增 .batch-drawer .drawer-head 紧凑内边距（12px 18px 0）并将 .batch-modes 上外边距归零，页签直接贴近面板顶部；归因 BUG-20260908-009；契约测试 batch-title-removed/detail-close-btn/settings-simplify 按新契约改写，先红后绿，全量 121 测试文件 0 失败",
+    "runId": "run-20260909-130"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T08:52:31.844Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T08:53:20.641Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T09:11:03.051Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260909-170203-5907）"
+    },
+    {
+      "at": "2026-09-09T09:28:45.673Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-024-3",
+      "note": "认领（zcode-batch-024-3）"
+    },
+    {
+      "at": "2026-09-09T09:34:14.689Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-024-3",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.054Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-c814",
+      "note": "人工确认完成"
+    }
+  ]
+}

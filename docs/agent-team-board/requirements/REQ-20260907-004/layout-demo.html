@@ -1,0 +1,375 @@
+<div id="atb-workbench-demo" aria-label="统一工作台布局演示">
+  <style>
+    #atb-workbench-demo { --atb-bg:light-dark(#ffffff,#171b24); --atb-nav:light-dark(#f5f6f9,#12161e); --atb-soft:light-dark(#f5f6fa,#202633); --atb-line:light-dark(#e5e7ed,#303746); --atb-ink:light-dark(#202837,#e8ebf4); --atb-muted:light-dark(#626e82,#a3aec1); --atb-accent:light-dark(#4e5bce,#acb3ff); --atb-selected:light-dark(#eef0ff,#292f4d); --atb-solid:light-dark(#5461d7,#7886ed); --atb-on-solid:light-dark(#ffffff,#101526); --atb-ok:light-dark(#237252,#84ceb0); --atb-warn:light-dark(#98601a,#e6b575); color:var(--atb-ink); font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; width:100%; }
+    #atb-workbench-demo * { box-sizing:border-box; }
+    #atb-workbench-demo .atb-window { container:atb-shell / inline-size; background:var(--atb-bg); border:1px solid var(--atb-line); border-radius:14px; margin-inline:auto; width:100%; position:relative; }
+    #atb-workbench-demo[data-screen="窄屏"] .atb-window { max-width:420px; }
+    #atb-workbench-demo button,#atb-workbench-demo input,#atb-workbench-demo select,#atb-workbench-demo textarea { font:inherit; color:inherit; }
+    #atb-workbench-demo button { cursor:pointer; }
+    #atb-workbench-demo button:disabled { opacity:.48; cursor:default; }
+    #atb-workbench-demo button,#atb-workbench-demo input,#atb-workbench-demo select,#atb-workbench-demo textarea { accent-color:var(--atb-solid); }
+    #atb-workbench-demo h2,#atb-workbench-demo h3,#atb-workbench-demo p { margin:0; }
+    #atb-workbench-demo h2 { font-size:20px; font-weight:500; letter-spacing:-.4px; }
+    #atb-workbench-demo h3 { font-size:15px; font-weight:500; }
+    #atb-workbench-demo strong { font-weight:500; }
+    #atb-workbench-demo .atb-icon { display:inline-flex; width:17px; min-width:17px; align-items:center; justify-content:center; }
+    #atb-workbench-demo .atb-icon:empty { display:none; }
+    #atb-workbench-demo .atb-top { min-height:58px; display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--atb-line); }
+    #atb-workbench-demo .atb-mark { width:30px; height:30px; border-radius:8px; background:var(--atb-solid); color:var(--atb-on-solid); display:grid; place-items:center; font-weight:500; font-size:16px; }
+    #atb-workbench-demo .atb-brand { font-weight:500; }
+    #atb-workbench-demo .atb-divider { color:var(--atb-muted); }
+    #atb-workbench-demo .atb-project { font-size:12px; color:var(--atb-muted); overflow-wrap:anywhere; }
+    #atb-workbench-demo .atb-demo { margin-left:auto; font-size:11px; color:var(--atb-muted); white-space:nowrap; }
+    #atb-workbench-demo .atb-frame { display:grid; grid-template-columns:156px minmax(0,1fr); min-height:620px; }
+    #atb-workbench-demo .atb-sidebar { padding:22px 10px 14px; background:var(--atb-nav); border-right:1px solid var(--atb-line); display:flex; flex-direction:column; gap:6px; border-radius:0 0 0 14px; }
+    #atb-workbench-demo .atb-nav-label { font-size:11px; color:var(--atb-muted); margin:0 12px 8px; }
+    #atb-workbench-demo .atb-nav-item { display:flex; align-items:center; gap:10px; width:100%; background:transparent; border:0; border-radius:7px; text-align:left; padding:10px 11px; color:var(--atb-muted); font-size:13px; }
+    #atb-workbench-demo .atb-nav-item[aria-current="page"] { background:var(--atb-selected); color:var(--atb-accent); font-weight:500; }
+    #atb-workbench-demo .atb-nav-item:hover { background:var(--atb-soft); }
+    #atb-workbench-demo .atb-sidebar-end { margin-top:auto; padding-top:24px; }
+    #atb-workbench-demo .atb-main { min-width:0; }
+    #atb-workbench-demo .atb-page-head { padding:24px 24px 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    #atb-workbench-demo .atb-subtitle { color:var(--atb-muted); font-size:12px; margin-top:4px; }
+    #atb-workbench-demo .atb-head-action { margin-left:auto; }
+    #atb-workbench-demo .atb-button { background:var(--atb-bg); border:1px solid var(--atb-line); border-radius:7px; padding:7px 11px; font-size:12px; display:inline-flex; align-items:center; gap:6px; justify-content:center; min-height:33px; }
+    #atb-workbench-demo .atb-button:hover { background:var(--atb-soft); }
+    #atb-workbench-demo .atb-button.atb-primary { background:var(--atb-solid); color:var(--atb-on-solid); border-color:var(--atb-solid); font-weight:500; }
+    #atb-workbench-demo .atb-button.atb-quiet { border-color:transparent; background:transparent; color:var(--atb-muted); }
+    #atb-workbench-demo .atb-button[aria-pressed="true"] { background:var(--atb-selected); color:var(--atb-accent); border-color:var(--atb-selected); }
+    #atb-workbench-demo .atb-toolbar { padding:0 24px 16px; display:flex; gap:10px; flex-wrap:wrap; }
+    #atb-workbench-demo .atb-search { display:flex; gap:8px; align-items:center; background:var(--atb-soft); border:1px solid transparent; border-radius:7px; padding:7px 10px; flex:1 1 180px; min-width:0; color:var(--atb-muted); }
+    #atb-workbench-demo .atb-search input { background:transparent; border:0; width:100%; min-width:0; font-size:13px; padding:0; }
+    #atb-workbench-demo input::placeholder,#atb-workbench-demo textarea::placeholder { color:var(--atb-muted); }
+    #atb-workbench-demo .atb-segment { display:flex; gap:3px; padding:3px; background:var(--atb-soft); border-radius:8px; }
+    #atb-workbench-demo .atb-segment button { background:transparent; color:var(--atb-muted); border:0; border-radius:5px; padding:4px 9px; font-size:12px; }
+    #atb-workbench-demo .atb-segment button[aria-pressed="true"] { background:var(--atb-bg); color:var(--atb-ink); }
+    #atb-workbench-demo .atb-filters { display:flex; flex-wrap:wrap; gap:5px; padding:0 24px 12px; border-bottom:1px solid var(--atb-line); }
+    #atb-workbench-demo .atb-filter { display:flex; gap:6px; align-items:center; border:0; padding:5px 8px; border-radius:6px; background:transparent; color:var(--atb-muted); font-size:12px; }
+    #atb-workbench-demo .atb-filter[aria-pressed="true"] { background:var(--atb-selected); color:var(--atb-accent); font-weight:500; }
+    #atb-workbench-demo .atb-count { font-size:11px; opacity:.85; }
+    #atb-workbench-demo .atb-split { display:grid; grid-template-columns:minmax(220px,.9fr) minmax(0,1.15fr); }
+    #atb-workbench-demo .atb-list { min-width:0; }
+    #atb-workbench-demo .atb-list-caption { display:flex; align-items:center; gap:7px; padding:12px 18px 8px; font-size:11px; color:var(--atb-muted); }
+    #atb-workbench-demo .atb-row { display:flex; align-items:flex-start; gap:9px; border-bottom:1px solid var(--atb-line); padding:14px 16px; position:relative; }
+    #atb-workbench-demo .atb-row.atb-picked { background:var(--atb-selected); box-shadow:inset 3px 0 var(--atb-accent); }
+    #atb-workbench-demo .atb-row > input { margin:4px 0 0; width:15px; height:15px; flex-shrink:0; }
+    #atb-workbench-demo .atb-row-open { flex:1; min-width:0; border:0; padding:0; background:transparent; text-align:left; display:block; }
+    #atb-workbench-demo .atb-row-id { font-size:11px; color:var(--atb-muted); display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-bottom:4px; }
+    #atb-workbench-demo .atb-row-title { display:block; font-size:13px; line-height:1.6; font-weight:500; }
+    #atb-workbench-demo .atb-row-meta { color:var(--atb-muted); font-size:11px; display:flex; justify-content:space-between; gap:8px; margin-top:7px; }
+    #atb-workbench-demo .atb-status { color:var(--atb-muted); display:inline-flex; gap:5px; align-items:center; font-size:11px; white-space:nowrap; }
+    #atb-workbench-demo .atb-status::before { content:""; width:5px; height:5px; border-radius:100%; background:currentColor; }
+    #atb-workbench-demo .atb-status.atb-running { color:var(--atb-accent); }
+    #atb-workbench-demo .atb-status.atb-success { color:var(--atb-ok); }
+    #atb-workbench-demo .atb-status.atb-attention { color:var(--atb-warn); }
+    #atb-workbench-demo .atb-type { border:1px solid var(--atb-line); padding:0 4px; border-radius:4px; font-size:10px; }
+    #atb-workbench-demo .atb-detail { min-width:0; border-left:1px solid var(--atb-line); padding:18px 22px 22px; }
+    #atb-workbench-demo .atb-detail-id { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:11px; color:var(--atb-muted); }
+    #atb-workbench-demo .atb-detail h2 { font-size:18px; margin:10px 0 13px; overflow-wrap:anywhere; }
+    #atb-workbench-demo .atb-props { display:flex; flex-wrap:wrap; gap:9px 18px; font-size:12px; color:var(--atb-muted); margin-bottom:18px; }
+    #atb-workbench-demo .atb-doc-tabs { display:flex; gap:13px; border-bottom:1px solid var(--atb-line); margin-bottom:17px; flex-wrap:wrap; }
+    #atb-workbench-demo .atb-doc-tab { border:0; background:transparent; color:var(--atb-muted); font-size:12px; padding:8px 0; border-bottom:2px solid transparent; }
+    #atb-workbench-demo .atb-doc-tab[aria-pressed="true"] { color:var(--atb-accent); border-bottom-color:var(--atb-accent); }
+    #atb-workbench-demo .atb-doc { font-size:13px; color:var(--atb-ink); line-height:1.85; }
+    #atb-workbench-demo .atb-doc h3 { margin:18px 0 7px; font-size:13px; }
+    #atb-workbench-demo .atb-doc h3:first-child { margin-top:0; }
+    #atb-workbench-demo .atb-doc p { margin-bottom:10px; }
+    #atb-workbench-demo .atb-doc ul { padding-left:19px; margin:7px 0; }
+    #atb-workbench-demo .atb-doc li { margin-bottom:5px; }
+    #atb-workbench-demo .atb-detail-bottom { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:24px; padding-top:16px; border-top:1px solid var(--atb-line); }
+    #atb-workbench-demo .atb-right { margin-left:auto; }
+    #atb-workbench-demo .atb-selection { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 18px; background:var(--atb-selected); font-size:12px; border-bottom:1px solid var(--atb-line); }
+    #atb-workbench-demo .atb-empty { padding:44px 24px; color:var(--atb-muted); font-size:13px; text-align:center; }
+    #atb-workbench-demo .atb-mobile-back { display:none; }
+    #atb-workbench-demo .atb-board { padding:18px; display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; background:var(--atb-nav); }
+    #atb-workbench-demo .atb-lane h3 { font-size:12px; margin-bottom:10px; display:flex; gap:7px; color:var(--atb-muted); }
+    #atb-workbench-demo .atb-board .atb-row { background:var(--atb-bg); border:1px solid var(--atb-line); border-radius:8px; padding:12px; margin-bottom:9px; }
+    #atb-workbench-demo .atb-board-detail { border-top:1px solid var(--atb-line); }
+    #atb-workbench-demo .atb-body-pad { padding:0 24px 24px; }
+    #atb-workbench-demo .atb-crumb { color:var(--atb-muted); font-size:12px; padding:0 24px 14px; display:flex; gap:8px; flex-wrap:wrap; }
+    #atb-workbench-demo .atb-files { margin:0 24px 16px; display:flex; flex-wrap:wrap; gap:7px; }
+    #atb-workbench-demo .atb-file-content { margin:0 24px 24px; border:1px solid var(--atb-line); border-radius:9px; }
+    #atb-workbench-demo .atb-file-bar { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:10px 14px; background:var(--atb-soft); border-radius:8px 8px 0 0; border-bottom:1px solid var(--atb-line); font-size:12px; }
+    #atb-workbench-demo .atb-file-text { padding:25px 28px; min-height:320px; }
+    #atb-workbench-demo pre { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    #atb-workbench-demo .atb-code-lines { counter-reset:atb-code; }
+    #atb-workbench-demo .atb-code-line { display:grid; grid-template-columns:28px minmax(0,1fr); gap:12px; font:12px/1.9 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+    #atb-workbench-demo .atb-code-line::before { counter-increment:atb-code; content:counter(atb-code); color:var(--atb-muted); text-align:right; }
+    #atb-workbench-demo .atb-message { padding:14px 0 19px; border-bottom:1px solid var(--atb-line); }
+    #atb-workbench-demo .atb-message-head { display:flex; gap:8px; align-items:center; font-size:11px; color:var(--atb-muted); margin-bottom:10px; }
+    #atb-workbench-demo .atb-avatar { display:grid; place-items:center; width:25px; height:25px; background:var(--atb-selected); color:var(--atb-accent); border-radius:6px; font-size:11px; }
+    #atb-workbench-demo .atb-compose { margin-top:18px; }
+    #atb-workbench-demo .atb-field { display:flex; flex-direction:column; gap:7px; font-size:12px; margin:16px 0; }
+    #atb-workbench-demo .atb-input { background:var(--atb-bg); border:1px solid var(--atb-line); border-radius:7px; padding:9px 10px; width:100%; min-width:0; }
+    #atb-workbench-demo textarea { resize:vertical; min-height:90px; }
+    #atb-workbench-demo .atb-inline { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    #atb-workbench-demo .atb-inline select { background:var(--atb-bg); border:1px solid var(--atb-line); border-radius:6px; padding:6px 9px; font-size:12px; }
+    #atb-workbench-demo .atb-run { border:1px solid var(--atb-line); border-radius:9px; padding:17px; margin-bottom:12px; background:var(--atb-bg); }
+    #atb-workbench-demo .atb-run-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    #atb-workbench-demo .atb-run-title { font-weight:500; font-size:14px; }
+    #atb-workbench-demo .atb-track { height:5px; background:var(--atb-soft); border-radius:5px; margin:16px 0 10px; }
+    #atb-workbench-demo .atb-track span { display:block; height:100%; background:var(--atb-solid); border-radius:5px; }
+    #atb-workbench-demo .atb-run-meta { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--atb-muted); }
+    #atb-workbench-demo .atb-run-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    #atb-workbench-demo .atb-log { background:var(--atb-soft); padding:14px; border-radius:7px; margin-top:15px; }
+    #atb-workbench-demo .atb-section-label { color:var(--atb-muted); font-size:12px; margin:12px 0; }
+    #atb-workbench-demo .atb-settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 20px; max-width:620px; }
+    #atb-workbench-demo .atb-settings-group { border-bottom:1px solid var(--atb-line); padding:0 0 20px; margin-bottom:20px; }
+    #atb-workbench-demo details { font-size:12px; margin:16px 0; color:var(--atb-muted); }
+    #atb-workbench-demo summary { cursor:pointer; }
+    #atb-workbench-demo .atb-toast { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:10px 18px; border-top:1px solid var(--atb-line); background:var(--atb-selected); color:var(--atb-accent); border-radius:0 0 14px 14px; font-size:12px; }
+    #atb-workbench-demo .atb-dialog-host:empty { display:none; }
+    #atb-workbench-demo .atb-dialog-host { position:absolute; inset:0; z-index:5; background:light-dark(#e8eaf2e8,#0d111bdf); border-radius:14px; padding:32px 18px; display:flex; align-items:flex-start; justify-content:center; }
+    #atb-workbench-demo .atb-dialog { background:var(--atb-bg); border:1px solid var(--atb-line); border-radius:12px; padding:24px; width:100%; max-width:470px; }
+    #atb-workbench-demo .atb-dialog h2 { margin-bottom:6px; }
+    #atb-workbench-demo .atb-dialog footer { display:flex; gap:9px; justify-content:flex-end; margin-top:22px; }
+    #atb-workbench-demo[data-density="紧凑"] .atb-row { padding-block:9px; }
+    #atb-workbench-demo[data-nav="顶栏"] .atb-frame { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); }
+    #atb-workbench-demo[data-nav="顶栏"] .atb-sidebar { flex-direction:row; align-items:center; flex-wrap:wrap; padding:8px 16px; border-right:0; border-bottom:1px solid var(--atb-line); border-radius:0; }
+    #atb-workbench-demo[data-nav="顶栏"] .atb-nav-label { display:none; }
+    #atb-workbench-demo[data-nav="顶栏"] .atb-nav-item { width:auto; }
+    #atb-workbench-demo[data-nav="顶栏"] .atb-sidebar-end { margin:0 0 0 auto; padding:0; }
+    @container atb-shell (max-width:780px) {
+      #atb-workbench-demo .atb-frame { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); min-height:580px; }
+      #atb-workbench-demo .atb-sidebar { flex-direction:row; align-items:center; flex-wrap:wrap; padding:8px 12px; border-right:0; border-bottom:1px solid var(--atb-line); border-radius:0; }
+      #atb-workbench-demo .atb-nav-label { display:none; }
+      #atb-workbench-demo .atb-nav-item { width:auto; gap:6px; padding:8px 10px; font-size:12px; }
+      #atb-workbench-demo .atb-sidebar-end { padding:0; margin:0 0 0 auto; }
+    }
+    @container atb-shell (max-width:590px) {
+      #atb-workbench-demo .atb-top { padding:12px; gap:9px; flex-wrap:wrap; }
+      #atb-workbench-demo .atb-brand { font-size:13px; }
+      #atb-workbench-demo .atb-top .atb-divider { display:none; }
+      #atb-workbench-demo .atb-project { width:calc(100% - 41px); margin-left:41px; margin-top:-5px; order:4; }
+      #atb-workbench-demo .atb-demo { font-size:10px; }
+      #atb-workbench-demo .atb-sidebar { padding:6px; gap:1px; }
+      #atb-workbench-demo .atb-sidebar .atb-icon { display:none; }
+      #atb-workbench-demo .atb-nav-item { padding:8px; font-size:12px; }
+      #atb-workbench-demo .atb-sidebar-end { margin-left:0; }
+      #atb-workbench-demo .atb-page-head { padding:20px 16px 14px; }
+      #atb-workbench-demo .atb-toolbar { padding:0 16px 14px; }
+      #atb-workbench-demo .atb-filters { padding-inline:12px; }
+      #atb-workbench-demo .atb-split { display:block; }
+      #atb-workbench-demo .atb-detail { display:none; border-left:0; padding:16px; }
+      #atb-workbench-demo[data-detail="true"] .atb-split .atb-detail { display:block; }
+      #atb-workbench-demo[data-detail="true"] .atb-split .atb-list { display:none; }
+      #atb-workbench-demo .atb-mobile-back { display:inline-flex; }
+      #atb-workbench-demo .atb-body-pad { padding-inline:16px; }
+      #atb-workbench-demo .atb-file-content { margin-inline:16px; }
+      #atb-workbench-demo .atb-file-text { padding:18px; }
+      #atb-workbench-demo .atb-crumb { padding-inline:16px; }
+      #atb-workbench-demo .atb-files { margin-inline:16px; }
+      #atb-workbench-demo .atb-settings-grid { grid-template-columns:1fr; }
+      #atb-workbench-demo .atb-view-switch { display:none; }
+      #atb-workbench-demo .atb-dialog { padding:18px; }
+      #atb-workbench-demo .atb-input,#atb-workbench-demo .atb-search input { font-size:16px; }
+    }
+    #atb-workbench-demo .atb-global-new { margin-left:4px; flex-shrink:0; }
+    #atb-workbench-demo .atb-page-head { padding:16px 24px; gap:20px; }
+    #atb-workbench-demo .atb-page-head .atb-subtitle { margin:0; font-size:13px; }
+    #atb-workbench-demo .atb-page-head .atb-search { margin-left:auto; flex:0 1 320px; }
+    @container atb-shell (max-width:590px) {
+      #atb-workbench-demo .atb-top { flex-wrap:nowrap; }
+      #atb-workbench-demo .atb-top .atb-project { display:none; }
+      #atb-workbench-demo .atb-top .atb-demo { display:none; }
+      #atb-workbench-demo .atb-top .atb-global-new { margin-left:auto; }
+      #atb-workbench-demo .atb-page-head { padding:13px 16px; gap:10px; }
+      #atb-workbench-demo .atb-page-head .atb-subtitle { font-size:12px; }
+      #atb-workbench-demo .atb-page-head .atb-search { flex:1 1 130px; }
+      #atb-workbench-demo[data-nav="顶栏"] .atb-sidebar { padding:7px; gap:1px; }
+      #atb-workbench-demo[data-nav="顶栏"] .atb-nav-item { padding:7px 9px; }
+    }
+    @media (pointer:coarse) {
+      #atb-workbench-demo .atb-button,#atb-workbench-demo .atb-filter,#atb-workbench-demo .atb-nav-item,#atb-workbench-demo .atb-doc-tab { min-height:44px; }
+    }
+  </style>
+  <div class="atb-window">
+    <header class="atb-top"><span class="atb-mark" aria-hidden="true">▦</span><span class="atb-brand">智能体团队看板</span><span class="atb-divider">/</span><span class="atb-project">agent-team-board</span><span class="atb-demo">示例数据</span><button type="button" class="atb-button atb-primary atb-global-new" data-action="new-task">＋ 新建</button></header>
+    <div class="atb-frame"><nav class="atb-sidebar" aria-label="工作台模块"></nav><main class="atb-main"></main></div>
+    <div class="atb-feedback" aria-live="polite"></div>
+    <div class="atb-dialog-host"></div>
+  </div>
+  <script>
+    (() => {
+      const root = document.getElementById('atb-workbench-demo');
+      const ui = { screen:'桌面', navigation:'顶栏', density:'舒适' };
+      const s = { module:'work', query:'', filter:'全部', layout:'列表', detail:'REQ-101', doc:'说明', mobileDetail:false, selected:new Set(), modal:null, mode:'Codex', file:'README.md', fileSource:false, folder:'docs', wrap:true, oc:'ASK-101', runFilter:'全部', log:null, toast:'', undo:null, narrow:false, settings:{mode:'Codex', model:'沿用本机配置', timeout:'60', retries:'2'} };
+      const tasks = [
+        {id:'REQ-101', title:'统一工作台：整理导航与全局布局', status:'待接受', type:'需求', owner:'未分配', time:'09:18', desc:'将需求、文件、讨论与执行管理组织为统一工作台，让日常浏览、批量操作和内容阅读各有明确的位置。'},
+        {id:'BUG-102', title:'窄屏下讨论内容被侧栏遮挡', status:'待接受', type:'Bug', owner:'未分配', time:'09:10', desc:'窄窗口进入 讨论 时，左侧导航覆盖标题和筛选按钮。期望导航占据独立区域，所有内容与操作都能完整访问。'},
+        {id:'REQ-103', title:'文件阅读支持预览与源码切换', status:'已接受', type:'需求', owner:'未分配', time:'08:56', desc:'文件浏览沿用横幅目录，正文保持足够的阅读空间；提供预览、源码、换行和复制路径操作。'},
+        {id:'REQ-104', title:'执行记录统一归入任务', status:'已接受', type:'需求', owner:'未分配', time:'08:42', desc:'将正在执行、排队批次、异常与历史记录集中展示，并能从记录跳转到对应需求或讨论。'},
+        {id:'REQ-105', title:'批次结束后自动接续下一批', status:'开发中', type:'需求', owner:'Codex · 阿迪', time:'08:30', desc:'当前批次完成后，按队列顺序接续下一批。任务显示当前任务、队列位置与暂停后的准确状态。'},
+        {id:'REQ-106', title:'详情页支持上一条与下一条', status:'待确认', type:'需求', owner:'Zcode · 阿迪', time:'昨天', desc:'阅读报告时支持连续浏览，切换条目和返回列表后保留筛选与滚动位置。'},
+        {id:'REQ-107', title:'统一文件预览的深浅色样式', status:'已完成', type:'需求', owner:'Codex · 阿迪', time:'昨天', desc:'文件正文、工具栏与滚动区域跟随系统主题，保证代码和 Markdown 都有清楚的阅读层级。'}
+      ];
+      const tickets = [
+        { id:'ASK-101', title:'批次暂停以后，当前任务会怎样？', status:'已回复', mode:'Codex', messages:[{by:'我',text:'点击“暂停后续”之后，当前任务会立即停止吗？'}, {by:'Codex',text:'“暂停后续”只停止领取下一项，当前任务会继续执行。需要中断当前任务时，应使用“停止当前执行”。\n\n建议在任务分别显示当前任务与后续队列，避免把两种操作混淆。'}]},
+        { id:'ASK-102', title:'文件预览中的行号如何复制？', status:'待回复', mode:'Zcode', messages:[{by:'我',text:'我想在讨论中引用某个文件的具体位置，如何复制文件路径和行号？'}] }
+      ];
+      const runs = [
+        {id:'BATCH-031', title:'批次自动接续', task:'REQ-105', mode:'Codex', phase:'进行中', progress:60, meta:'已处理 3 / 5 项 · 阿迪', paused:false},
+        {id:'BATCH-032', title:'详情导航与验收', task:'REQ-106', mode:'Zcode', phase:'待处理', progress:0, meta:'执行状态待核对 · 阿迪'},
+        {id:'BATCH-030', title:'文件主题适配', task:'REQ-107', mode:'Codex', phase:'已结束', progress:100, meta:'已处理 2 / 2 项 · 阿迪'}
+      ];
+      const modules = [['oncall','messages-square','讨论'],['work','list-checks','需求'],['runs','activity','任务'],['files','folder-open','文件']];
+      const files = {docs:['README.md','design.md','test-cases.md'],scripts:['app.js','server.mjs'],commands:['dev.md','board.md']};
+      const fileTexts = {
+        'README.md':'# Agent Team Board\n\n让每一项工作都有清晰的上下文。\n\n## 日常工作\n\n1. 在需求列表整理并接受需求。\n2. 将选中的条目派发给 Zcode 或 Codex。\n3. 在任务查看进度与结果。\n4. 阅读报告后完成人工验收。\n\n## 项目资料\n\n需求说明、设计、用例和测试报告与项目一起保存。',
+        'design.md':'# 工作台布局\n\n## 页面结构\n\n项目顶栏 → 模块导航 → 当前视图工具栏 → 内容。\n\n## 响应式\n\n宽屏并排显示列表与详情；窄屏按阅读任务切换页面。',
+        'test-cases.md':'# 布局验收用例\n\n1. 窄屏模块导航不会遮挡内容。\n2. 返回列表后保留筛选条件。\n3. 批量操作只作用于已选择的条目。',
+        'app.js':'// 示例：切换模块时保留各自的阅读位置。\nconst modules = ["work", "files", "oncall", "runs"];\n\nfunction openModule(name) {\n  if (!modules.includes(name)) return;\n  renderWorkspace(name);\n}',
+        'server.mjs':'// 示例：执行记录按项目分别保存。\nexport function executionSummary(project) {\n  return { project, running: 1, queued: 2 };\n}',
+        'dev.md':'# 实施流程\n\n阅读需求 → 认领 → 测试与实现 → 上报 → 人工验收。',
+        'board.md':'# 打开项目看板\n\n工作台按当前项目展示需求、文件、讨论和执行记录。'
+      };
+      const esc = x => String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const icon = name => `<span class="atb-icon"><i data-lucide="${name}" aria-hidden="true"></i></span>`;
+      const button = (text,action,cls='',extra='') => `<button type="button" class="atb-button ${cls}" data-action="${action}" ${extra}>${text}</button>`;
+      const phaseClass = p => ['开发中','进行中','回复中'].includes(p)?'atb-running':['已完成','已结束','已回复'].includes(p)?'atb-success':['待确认','待处理'].includes(p)?'atb-attention':'';
+      const status = p => `<span class="atb-status ${phaseClass(p)}">${esc(p)}</span>`;
+      const title = (name,sub,action='') => `<header class="atb-page-head"><div><p class="atb-subtitle">${sub}</p></div></header>`;
+      const search = (placeholder,extra='') => `<div class="atb-toolbar"><label class="atb-search">${icon('search')}<input id="atb-demo-search" type="search" aria-label="${placeholder}" placeholder="${placeholder}" value="${esc(s.query)}"></label>${extra}</div>`;
+      const match = x => (x.id+' '+x.title+' '+(x.desc||'')).toLowerCase().includes(s.query.toLowerCase());
+      const taskRow = it => `<div class="atb-row ${s.detail===it.id?'atb-picked':''}">${['待接受','已接受'].includes(it.status)?`<input type="checkbox" data-check="${it.id}" aria-label="选择 ${it.id}" ${s.selected.has(it.id)?'checked':''}>`:''}<button type="button" class="atb-row-open" data-open="${it.id}"><span class="atb-row-id"><span class="atb-type">${it.type}</span>${it.id}${status(it.status)}</span><span class="atb-row-title">${esc(it.title)}</span><span class="atb-row-meta"><span>${esc(it.owner)}</span><span>${it.time}</span></span></button></div>`;
+      function description(it) {
+        if(s.doc==='设计') return '<h3>区域安排</h3><p>顶栏负责项目定位，模块导航保持固定，页面工具栏只显示当前任务需要的操作。</p><h3>阅读与操作</h3><p>宽屏保留列表上下文；窄屏进入详情后，用明确的返回入口回到原列表。</p>';
+        if(s.doc==='用例') return '<h3>验收场景</h3><ul><li>切换模块后主导航位置稳定。</li><li>选中条目时显示批量操作，清空后收起。</li><li>查看详情后返回，筛选与搜索保持。</li><li>窄屏所有文字保持横排。</li></ul>';
+        if(s.doc==='报告') return it.status==='待确认'||it.status==='已完成'?'<h3>测试报告 · 示例</h3><p>导航切换、筛选保留和窄屏阅读场景已在示例报告中列出。</p><p>此处展示报告的阅读布局，实际结论以项目测试报告为准。</p>':'<h3>尚无测试报告</h3><p>实施并上报后，这里显示测试结论与验证记录。</p>';
+        if(s.doc==='历史') return `<h3>活动记录 · 示例</h3><p>09:18　创建条目</p><p>09:24　补充界面与交互说明</p><p>当前状态：${it.status}</p>`;
+        return `<h3>${it.type==='Bug'?'现象与期望':'背景与目标'}</h3><p>${esc(it.desc)}</p><h3>交互要求</h3><ul><li>优先展示标题、状态和当前需要的操作。</li><li>阅读内容与配置分区，返回时保留上下文。</li><li>错误反馈出现在对应任务附近。</li></ul><h3>验收标准</h3><p>宽屏与窄屏内容清晰可读，主要操作可达，状态变化反馈明确。</p>`;
+      }
+      function taskDetail() {
+        const it = tasks.find(x=>x.id===s.detail);
+        if(!it) return '<aside class="atb-detail"><div class="atb-empty">选择一项查看说明</div></aside>';
+        const action = it.status==='待接受'?button('接受需求','accept-one','atb-primary'):it.status==='已接受'?button('派发任务','dispatch-one','atb-primary'):it.status==='待确认'?button('确认完成','complete-one','atb-primary'):it.status==='开发中'?button('查看执行','show-run','atb-primary'):status('已完成');
+        return `<aside class="atb-detail" aria-label="条目详情"><div class="atb-detail-id">${button('← 返回','back','atb-quiet atb-mobile-back')}<span>${it.id}</span>${button('复制','copy-id','atb-quiet')}${button('关闭','close-detail','atb-quiet atb-right')}</div><h2>${esc(it.title)}</h2><div class="atb-props">${status(it.status)}<span>${esc(it.owner)}</span><span>${it.type}</span></div><div class="atb-doc-tabs" aria-label="条目文档">${['说明','设计','用例','报告','历史'].map(d=>`<button type="button" class="atb-doc-tab" data-doc="${d}" aria-pressed="${s.doc===d}">${d}</button>`).join('')}</div><div class="atb-doc">${description(it)}</div><details><summary>依赖与派发设置</summary><p>暂无前置依赖 · 沿用项目默认配置</p>${button('项目设置','settings','atb-quiet')}</details><footer class="atb-detail-bottom">${action}<span class="atb-right">${button('← 上一条','previous','atb-quiet')}${button('下一条 →','next','atb-quiet')}</span></footer></aside>`;
+      }
+      function work() {
+        const filters = ['全部','待接受','已接受','开发中','待确认','已完成'];
+        const list = tasks.filter(it=>(s.filter==='全部'||it.status===s.filter)&&match(it));
+        const chosen = tasks.filter(x=>s.selected.has(x.id));
+        const acceptCount = chosen.filter(x=>x.status==='待接受').length;
+        const dispatchCount = chosen.filter(x=>x.status==='已接受').length;
+        const selection = chosen.length?`<div class="atb-selection"><strong>已选 ${chosen.length} 项</strong>${acceptCount?button(`接受 ${acceptCount} 项`,'accept-selected','atb-primary'):''}${dispatchCount?button(`派发 ${dispatchCount} 项`,'dispatch-selected','atb-primary'):''}${button('清空','clear-selection','atb-quiet atb-right')}</div>`:'';
+        const layout = false;
+        let content = `<div class="atb-split"><section class="atb-list" aria-label="需求列表"><div class="atb-list-caption"><span>${list.length} 个条目</span>${button('选择可操作项','select-all','atb-quiet atb-right')}</div>${list.map(taskRow).join('')||'<div class="atb-empty">没有符合条件的条目</div>'}</section>${taskDetail()}</div>`;
+        if(layout) content = `<div class="atb-board">${filters.slice(1).filter(p=>s.filter==='全部'||s.filter===p).map(p=>`<section class="atb-lane"><h3>${p}<span>${list.filter(t=>t.status===p).length}</span></h3>${list.filter(t=>t.status===p).map(taskRow).join('')||'<p class="atb-subtitle">暂无条目</p>'}</section>`).join('')}</div>${s.detail?`<div class="atb-board-detail">${taskDetail()}</div>`:''}`;
+        return title('需求','从想法到验收，跟进每一项工作',button('＋ 新建','new-task','atb-primary'))+search('搜索需求、Bug 与说明',`<div class="atb-segment atb-view-switch" aria-label="呈现方式">${['列表','看板'].map(x=>`<button type="button" data-layout="${x}" aria-pressed="${s.layout===x}">${x}</button>`).join('')}</div>`)+`<nav class="atb-filters" aria-label="需求状态">${filters.map(f=>`<button type="button" class="atb-filter" data-filter="${f}" aria-pressed="${s.filter===f}">${f}<span class="atb-count">${tasks.filter(t=>f==='全部'||t.status===f).length}</span></button>`).join('')}</nav>${selection}${content}`;
+      }
+      function markdown(text) {
+        return text.split('\n\n').map(p=>p.startsWith('# ')?`<h2>${esc(p.slice(2))}</h2>`:p.startsWith('## ')?`<h3>${esc(p.slice(3))}</h3>`:`<p>${esc(p).replace(/\n/g,'<br>')}</p>`).join('');
+      }
+      function fileView() {
+        const available = s.query?Object.keys(fileTexts).filter(f=>f.toLowerCase().includes(s.query.toLowerCase())):files[s.folder];
+        const isMd = s.file.endsWith('.md');
+        const text = fileTexts[s.file]||'';
+        return title('文件','项目资料与源码，专注阅读')+search('搜索文件名')+`<div class="atb-crumb"><span>agent-team-board</span><span>›</span><strong>${s.folder}</strong></div><div class="atb-files" aria-label="目录">${Object.keys(files).map(f=>`<button type="button" class="atb-button" data-folder="${f}" aria-pressed="${s.folder===f}">${icon('folder')}${f}</button>`).join('')}</div><div class="atb-files" aria-label="当前目录文件">${available.map(f=>`<button type="button" class="atb-button" data-file="${f}" aria-pressed="${s.file===f}">${icon('file-text')}${f}</button>`).join('')||'<span class="atb-subtitle">没有匹配文件</span>'}</div><article class="atb-file-content"><div class="atb-file-bar"><strong>${s.file}</strong><span class="atb-right"></span>${isMd?button(s.fileSource?'切换预览':'查看源码','source'):''}${button('复制路径','copy-path')}</div><div class="atb-file-text atb-doc">${isMd&&!s.fileSource?markdown(text):`<div class="atb-code-lines">${text.split('\n').map(line=>`<div class="atb-code-line"><span>${esc(line)||' '}</span></div>`).join('')}</div>`}</div></article>`;
+      }
+      function oncall() {
+        const t=tickets.find(x=>x.id===s.oc)||tickets[0];
+        return title('讨论','把项目讨论留在对应的上下文里',button('＋ 新建讨论','new-consult','atb-primary'))+search('搜索讨论标题与编号')+`<div class="atb-split"><section class="atb-list" aria-label="讨论列表">${tickets.filter(match).map(x=>`<div class="atb-row ${t.id===x.id?'atb-picked':''}"><button type="button" class="atb-row-open" data-ticket="${x.id}"><span class="atb-row-id">${x.id}${status(x.status)}</span><span class="atb-row-title">${esc(x.title)}</span><span class="atb-row-meta"><span>${x.mode}</span><span>${x.messages.filter(m=>m.by!=='我').length} 次回复</span></span></button></div>`).join('')||'<div class="atb-empty">暂无匹配讨论</div>'}</section><article class="atb-detail" aria-label="讨论详情"><div class="atb-detail-id">${button('← 返回','back','atb-quiet atb-mobile-back')}${t.id}${status(t.status)}</div><h2>${esc(t.title)}</h2>${t.messages.map(m=>`<section class="atb-message"><div class="atb-message-head"><span class="atb-avatar">${m.by==='我'?'我':'AI'}</span><strong>${m.by}</strong><span>示例对话</span></div><div class="atb-doc">${esc(m.text).replace(/\n/g,'<br>')}</div></section>`).join('')}<form class="atb-compose" data-form="followup"><label class="atb-field">继续讨论<textarea name="question" class="atb-input" placeholder="补充问题或上下文…" required></textarea></label><div class="atb-inline"><select name="mode" aria-label="讨论派发模式"><option>Codex</option><option>Zcode</option></select><button class="atb-button atb-primary atb-right" type="button" data-submit="true">发送讨论</button></div></form></article></div>`;
+      }
+      function execution() {
+        const list=runs.filter(r=>(s.runFilter==='全部'||r.phase===s.runFilter)&&(r.title+' '+r.id+' '+r.task+' '+r.mode).toLowerCase().includes(s.query.toLowerCase()));
+        return title('任务','进度、队列与结果集中在这里',button('选择任务派发','choose-tasks','atb-primary'))+`<nav class="atb-filters" aria-label="执行筛选">${['全部','进行中','待处理','已结束'].map(p=>`<button type="button" class="atb-filter" data-run-filter="${p}" aria-pressed="${s.runFilter===p}">${p}<span class="atb-count">${runs.filter(r=>p==='全部'||r.phase===p).length}</span></button>`).join('')}</nav><div class="atb-body-pad"><p class="atb-section-label">当前项目 · Zcode / Codex</p>${list.map(r=>`<section class="atb-run"><div class="atb-run-head"><span class="atb-run-title">${esc(r.title)}</span><span class="atb-type">${r.mode}</span><span class="atb-right">${status(r.awaitingStart?'待启动':r.phase)}</span></div><div class="atb-run-meta"><span>${r.id}</span><span>${r.task}</span><span>${r.meta}</span></div>${r.phase==='进行中'?`<div class="atb-track" role="progressbar" aria-label="批次进度" aria-valuenow="${r.progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${r.progress}%"></span></div><p class="atb-subtitle">${r.paused?'已暂停后续领取，当前任务继续':'当前：验证批次接续逻辑'}</p>`:''}${r.phase==='待处理'?`<p class="atb-subtitle">${r.awaitingStart?'批次已准备，复制提示词到 Zcode 项目新会话发送。':'原会话状态需核对，请先查看执行记录。'}</p>`:''}<div class="atb-run-actions"><button type="button" class="atb-button" data-run-log="${r.id}">${s.log===r.id?'收起记录':'查看记录'}</button>${r.phase==='进行中'?`<button type="button" class="atb-button" data-pause="${r.id}">${r.paused?'继续后续':'暂停后续'}</button>`:''}${r.phase==='待处理'?(r.awaitingStart?`<button type="button" class="atb-button" data-prompt="${r.id}">复制提示词</button>`:button('核对说明','check-help')):''}<button type="button" class="atb-button atb-quiet atb-right" data-related="${r.task}">查看条目 →</button></div>${s.log===r.id?`<div class="atb-log"><pre>${r.awaitingStart?'示例主调度提示词\n\n在当前项目中逐项派发本批工作。\n每项独立执行，完成后回传结果。':r.phase==='待处理'?'09:24  等待原执行状态核对\n09:25  后续派发已暂停\n\n示例记录：核对后才能恢复。':r.phase==='已结束'?'08:30  收到条目报告\n08:31  完成记录核对\n08:31  本批次已结束':'09:18  创建独立执行\n09:19  读取条目说明\n09:20  执行测试与验证\n09:24  当前任务进行中'}</pre></div>`:''}</section>`).join('')||'<div class="atb-empty">暂无执行记录</div>'}</div>`;
+      }
+      function settings() {
+        return title('项目设置','当前项目的派发默认值')+`<form class="atb-body-pad" data-form="settings"><section class="atb-settings-group"><h3>派发配置</h3><div class="atb-settings-grid"><label class="atb-field">默认执行器<select name="mode" class="atb-input">${['Codex','Zcode'].map(v=>`<option ${s.settings.mode===v?'selected':''}>${v}</option>`).join('')}</select></label><label class="atb-field">模型<select name="model" class="atb-input">${['沿用本机配置','项目指定模型'].map(v=>`<option ${s.settings.model===v?'selected':''}>${v}</option>`).join('')}</select></label><label class="atb-field">单项时限（分钟）<input class="atb-input" name="timeout" type="number" min="5" max="240" value="${s.settings.timeout}" required></label><label class="atb-field">网络重试次数<input class="atb-input" name="retries" type="number" min="0" max="3" value="${s.settings.retries}" required></label></div><details><summary>高级配置：CLI 与环境</summary><label class="atb-field">CLI 路径<input class="atb-input" placeholder="自动探测" aria-label="CLI 路径"></label><p>登录与模型配置沿用本机环境。</p></details></section><section class="atb-settings-group"><h3>配置生效范围</h3><p class="atb-subtitle">新派发默认使用这些设置；单项覆盖与原执行恢复在派发时处理。</p></section><button type="button" data-submit="true" class="atb-button atb-primary">保存设置</button></form>`;
+      }
+      function modal() {
+        if(!s.modal) return '';
+        const dispatch=s.modal==='dispatch';
+        const consult=false;
+        const ids=s.dispatchIds||[];
+        return `<section class="atb-dialog" role="dialog" aria-modal="true" aria-label="${dispatch?'派发任务':'新建条目'}"><form data-form="${dispatch?'dispatch':consult?'consult':'create'}"><h2>${dispatch?'派发任务':'新建条目'}</h2><p class="atb-subtitle">${dispatch?`已选 ${ids.length} 项 · agent-team-board`:'保存到当前演示'}</p>${dispatch?`<label class="atb-field">派发模式<select class="atb-input" name="mode" id="atb-dispatch-mode"><option ${s.mode==='Codex'?'selected':''}>Codex</option><option ${s.mode==='Zcode'?'selected':''}>Zcode</option></select></label><label class="atb-field">负责人<input class="atb-input" name="owner" placeholder="未指定"></label><div class="atb-run-meta">${ids.join(' · ')}</div><p class="atb-subtitle" id="atb-mode-note">${s.mode==='Codex'?'后台逐项执行，进度统一显示在任务。':'创建批次并提供主调度提示词，在 Zcode 项目会话中发送。'}</p><details><summary>本次运行配置</summary><p>沿用项目默认值 · 时限 ${s.settings.timeout} 分钟 · 重试 ${s.settings.retries} 次</p></details>`:`${!consult?'<label class="atb-field">类型<select class="atb-input" name="type"><option>需求</option><option>Bug</option><option>讨论</option></select></label>':''}<label class="atb-field">标题<input class="atb-input" name="title" placeholder="一句话说清要处理的事" maxlength="120" required></label><label class="atb-field">${consult?'问题':'说明'}<textarea class="atb-input" name="description" placeholder="补充背景、期望与必要上下文" required></textarea></label>`}<footer>${button('取消','cancel')}<button type="button" data-submit="true" class="atb-button atb-primary">${dispatch?'确认派发':consult?'创建讨论':'创建条目'}</button></footer></form></section>`;
+      }
+      function render() {
+        root.dataset.screen=ui.screen; root.dataset.nav=ui.navigation; root.dataset.density=ui.density; root.dataset.detail=String(s.mobileDetail);
+        root.querySelector('.atb-sidebar').innerHTML='<span class="atb-nav-label">项目工作台</span>'+modules.map(([id,ico,label])=>`<button type="button" class="atb-nav-item" data-module="${id}" ${s.module===id?'aria-current="page"':''}>${icon(ico)}${label}</button>`).join('')+`<div class="atb-sidebar-end"><button type="button" class="atb-nav-item" data-module="settings" ${s.module==='settings'?'aria-current="page"':''}>${icon('settings-2')}设置</button></div>`;
+        root.querySelector('.atb-main').innerHTML=({work,files:fileView,oncall,runs:execution,settings})[s.module]();
+        const head=root.querySelector('.atb-page-head');
+        const toolbar=root.querySelector('.atb-toolbar');
+        if(toolbar) {head.append(toolbar.querySelector('.atb-search'));toolbar.remove();}
+        else if(s.module==='runs') {const holder=document.createElement('div');holder.innerHTML=search('搜索任务、编号或执行器');head.append(holder.querySelector('.atb-search'));}
+        root.querySelector('.atb-feedback').innerHTML=s.toast?`<div class="atb-toast"><span>${esc(s.toast)}</span>${s.undo?button('撤销','undo','atb-quiet'):''}${button('关闭提示','dismiss','atb-quiet atb-right')}</div>`:'';
+        root.querySelector('.atb-dialog-host').innerHTML=modal();
+        if(globalThis.lucide) globalThis.lucide.createIcons({attrs:{width:16,height:16}});
+      }
+      function notify(message,undo=null) {s.toast=message;s.undo=undo;}
+      function navigate(module) {s.module=module;s.query='';s.mobileDetail=false;s.selected.clear();s.toast='';s.undo=null;}
+      function transition(ids,to) {const before=tasks.filter(x=>ids.includes(x.id)).map(x=>({id:x.id,status:x.status}));before.forEach(x=>tasks.find(t=>t.id===x.id).status=to);s.selected.clear();notify(`已将 ${before.length} 项设为${to}（演示）`,()=>before.forEach(x=>tasks.find(t=>t.id===x.id).status=x.status));}
+      async function copy(text) {try {await navigator.clipboard.writeText(text);notify('已复制：'+text);} catch {notify('当前预览不支持剪贴板，可手动复制：'+text);} render();}
+      root.addEventListener('click',event=>{
+        const b=event.target.closest('button'); if(!b||!root.contains(b)||b.type==='submit') return;
+        if(b.dataset.submit) {const form=b.closest('form');if(form.reportValidity()) handleForm(form);return;}
+        if(b.dataset.module) navigate(b.dataset.module);
+        else if(b.dataset.open) {s.detail=b.dataset.open;s.doc='说明';s.mobileDetail=true;}
+        else if(b.dataset.filter) {s.filter=b.dataset.filter;s.selected.clear();s.mobileDetail=false;}
+        else if(b.dataset.layout) {s.layout=b.dataset.layout;s.detail=null;s.mobileDetail=false;}
+        else if(b.dataset.doc) s.doc=b.dataset.doc;
+        else if(b.dataset.folder) {s.folder=b.dataset.folder;s.file=files[s.folder][0];s.query='';s.fileSource=false;}
+        else if(b.dataset.file) {s.file=b.dataset.file;s.fileSource=false;}
+        else if(b.dataset.ticket) {s.oc=b.dataset.ticket;s.mobileDetail=true;}
+        else if(b.dataset.runFilter) s.runFilter=b.dataset.runFilter;
+        else if(b.dataset.runLog) s.log=s.log===b.dataset.runLog?null:b.dataset.runLog;
+        else if(b.dataset.prompt) {copy('演示批次 '+b.dataset.prompt+'：在当前项目中逐项派发本批工作，每项独立执行并回传结果。');return;}
+        else if(b.dataset.pause) {const run=runs.find(r=>r.id===b.dataset.pause);run.paused=!run.paused;notify(run.paused?'已暂停后续领取，当前任务继续（演示）':'已恢复后续领取（演示）');}
+        else if(b.dataset.related) {navigate('work');s.filter='全部';s.detail=b.dataset.related;s.mobileDetail=true;}
+        else {
+          const act=b.dataset.action;
+          if(act==='new-task') s.modal='create';
+          if(act==='new-consult') s.modal='consult';
+          if(act==='cancel') s.modal=null;
+          if(act==='back') s.mobileDetail=false;
+          if(act==='close-detail') {s.detail=null;s.mobileDetail=false;}
+          if(act==='clear-selection') s.selected.clear();
+          if(act==='select-all') tasks.filter(t=>(s.filter==='全部'||s.filter===t.status)&&match(t)&&['待接受','已接受'].includes(t.status)).forEach(t=>s.selected.add(t.id));
+          if(act==='accept-one') transition([s.detail],'已接受');
+          if(act==='accept-selected') transition(tasks.filter(t=>s.selected.has(t.id)&&t.status==='待接受').map(t=>t.id),'已接受');
+          if(act==='complete-one') transition([s.detail],'已完成');
+          if(act==='dispatch-one'||act==='dispatch-selected') {s.dispatchIds=act==='dispatch-one'?[s.detail]:tasks.filter(t=>s.selected.has(t.id)&&t.status==='已接受').map(t=>t.id);s.modal='dispatch';}
+          if(act==='copy-id') {copy(s.detail);return;}
+          if(act==='copy-path') {copy(`${s.folder}/${s.file}`);return;}
+          if(act==='source') s.fileSource=!s.fileSource;
+          if(act==='show-run') {const id=s.detail;navigate('runs');const run=runs.find(r=>r.task===id);s.log=run?run.id:null;}
+          if(act==='choose-tasks') {navigate('work');s.filter='已接受';s.detail=null;}
+          if(act==='settings') navigate('settings');
+          if(act==='check-help') notify('先核对原会话和执行记录；确认后再恢复后续派发。');
+          if(act==='dismiss') {s.toast='';s.undo=null;}
+          if(act==='undo'&&s.undo) {s.undo();notify('已撤销本次状态修改（演示）');}
+          if(act==='previous'||act==='next') {const items=tasks.filter(t=>(s.filter==='全部'||s.filter===t.status)&&match(t));const at=items.findIndex(t=>t.id===s.detail);const next=items[at+(act==='next'?1:-1)];if(next){s.detail=next.id;s.doc='说明';}else notify(act==='next'?'已是最后一条':'已是第一条');}
+        }
+        render();
+      });
+      root.addEventListener('change',event=>{
+        const el=event.target;
+        if(el.dataset.check) {el.checked?s.selected.add(el.dataset.check):s.selected.delete(el.dataset.check);render();}
+        if(el.id==='atb-dispatch-mode') {s.mode=el.value;root.querySelector('#atb-mode-note').textContent=s.mode==='Codex'?'后台逐项执行，进度统一显示在任务。':'创建批次并提供主调度提示词，在 Zcode 项目会话中发送。';}
+      });
+      root.addEventListener('input',event=>{
+        if(event.target.id!=='atb-demo-search')return;
+        s.query=event.target.value;render();const input=root.querySelector('#atb-demo-search');input.focus();
+      });
+      function handleForm(form) {
+        const data=new FormData(form);
+        if(form.dataset.form==='create'&&data.get('type')==='讨论') {const id='ASK-'+(101+tickets.length);tickets.unshift({id,title:String(data.get('title')),status:'待回复',mode:s.mode,messages:[{by:'我',text:String(data.get('description'))}]});navigate('oncall');s.oc=id;s.mobileDetail=true;s.modal=null;notify('讨论单已创建到本次演示');}
+        else if(form.dataset.form==='create') {navigate('work');const id=(data.get('type')==='Bug'?'BUG':'REQ')+'-'+(108+tasks.length-7);tasks.unshift({id,title:String(data.get('title')),type:String(data.get('type')),desc:String(data.get('description')),status:'待接受',owner:'未分配',time:'刚刚'});s.detail=id;s.mobileDetail=true;s.filter='全部';s.query='';s.modal=null;notify('条目已创建到本次演示');}
+        if(form.dataset.form==='consult') {const id='ASK-'+(101+tickets.length);tickets.unshift({id,title:String(data.get('title')),status:'待回复',mode:s.mode,messages:[{by:'我',text:String(data.get('description'))}]});s.oc=id;s.mobileDetail=true;s.query='';s.modal=null;notify('讨论已创建到本次演示');}
+        if(form.dataset.form==='followup') {const ticket=tickets.find(t=>t.id===s.oc);ticket.messages.push({by:'我',text:String(data.get('question'))});ticket.status='待回复';ticket.mode=String(data.get('mode'));notify('追问已加入演示队列，未调用真实 Agent');}
+        if(form.dataset.form==='settings') {s.settings={mode:String(data.get('mode')),model:String(data.get('model')),timeout:String(data.get('timeout')),retries:String(data.get('retries'))};notify('设置已保存到本次演示');}
+        if(form.dataset.form==='dispatch') {const mode=String(data.get('mode'));const selected=tasks.filter(t=>s.dispatchIds.includes(t.id));selected.forEach(t=>{if(mode==='Codex'){t.status='开发中';t.owner=mode+' · '+(data.get('owner')||'未指定');}});runs.unshift({id:'BATCH-'+(31+runs.length),title:`${selected.length} 项需求派发`,task:selected[0].id,mode,awaitingStart:mode==='Zcode',phase:mode==='Codex'?'进行中':'待处理',progress:0,meta:mode==='Codex'?'示例任务 · 等待开始':'待启动 · 主调度提示词已准备'});s.modal=null;navigate('runs');s.runFilter='全部';notify(mode==='Codex'?'已创建演示执行，可查看队列与记录':'已创建演示批次；实际使用时复制提示词到 Zcode 会话发送');}
+        render();
+      }
+      root.addEventListener('submit',event=>{event.preventDefault();handleForm(event.target);});
+      root.addEventListener('keydown',event=>{if(event.key==='Escape'){s.modal=null;s.mobileDetail=false;render();}});
+      render();
+      const observer=new ResizeObserver(entries=>{const narrow=entries[0].contentRect.width<=590;if(s.narrow!==narrow){s.narrow=narrow;render();}});observer.observe(root.querySelector('.atb-window'));
+      if(globalThis.Tweak) {
+        const tweak=new Tweak({container:root,onChange:render});
+        tweak.addSelect(ui,'screen',{label:'预览尺寸',options:['桌面','窄屏']});
+        tweak.addSelect(ui,'density',{label:'列表密度',options:['舒适','紧凑']});
+      }
+    })();
+  </script>
+</div>

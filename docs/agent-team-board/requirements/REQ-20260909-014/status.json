@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260909-014",
+  "type": "requirement",
+  "title": "需求模块详细页面的说明，设计，测试用例文档支持右键菜单“讨论”",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-027-1",
+  "createdAt": "2026-09-09T12:25:26.416Z",
+  "updatedAt": "2026-09-11T05:52:21.198Z",
+  "agentCompletedAt": "2026-09-09T15:17:33.701Z",
+  "lastReport": {
+    "at": "2026-09-09T15:17:33.701Z",
+    "coverage": 90,
+    "framework": "node:test 风格自研断言（vm 纯函数 + 静态契约，run-all 聚合）",
+    "summary": "文档页签右键「讨论」：loadDoc 渲染后用 parseDocBlocks（req-disc parseBlocks 副本+CommonMark 化增强：松散列表跨空行/缩进续行/懒续行/围栏记号长度/引用分块/异族列表分块）为 #docView 顶层块标注 data-doc-start/end/kind，子序列校验失准即停（宁缺勿错）；doc-level contextmenu 委托：需求单文档页签就绪时弹单例菜单（视口内收；外部pointerdown/Esc/滚动/resize/切页签/关抽屉收起），选中→文字+绝对路径+精确行（段落/代码内换行计数，富文本取覆盖范围），无选中→路径+落点块行范围；copyPlain 双回退，成功 toast，失败页内自绘只读文本域（不用 window.prompt）。仅改 app.js/style.css，无后端/无记录。新增测试 doc-ctx-discuss-20260909-014（17断言）+ drawer-tabs 桩补 closeDocCtxMenu；447 份真实文档块数与 marked 顶层节点 100% 对齐；npm test 124 文件全绿",
+    "runId": "run-20260909-133"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T12:25:26.416Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T12:25:45.385Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T12:42:42.030Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260909-203534-a933）"
+    },
+    {
+      "at": "2026-09-09T14:53:27.160Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-027-1",
+      "note": "认领（zcode-batch-027-1）"
+    },
+    {
+      "at": "2026-09-09T15:17:33.701Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-027-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.198Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6504",
+      "note": "人工确认完成"
+    }
+  ]
+}

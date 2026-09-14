@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260911-008 演示 · 已完成档截断提示与「开始 Commit」同行</title>
+<style>
+  /* 主题变量对齐 scripts/web/style.css（深浅色双套） */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --done: #16a34a; --warn: #dc2626;
+    --ok-bg: #ecfdf5; --ok-text: #047857; --info-bg: #eff6ff; --info-text: #1d4ed8;
+    --list-bg: rgba(127, 140, 170, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --primary: #3b82f6; --done: #4ade80; --warn: #f87171;
+      --ok-bg: #052e1c; --ok-text: #6ee7b7; --info-bg: #0b1d3a; --info-text: #93c5fd;
+      --list-bg: rgba(127, 140, 170, 0.07);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+    --border: #263041; --primary: #3b82f6; --done: #4ade80; --warn: #f87171;
+    --ok-bg: #052e1c; --ok-text: #6ee7b7; --info-bg: #0b1d3a; --info-text: #93c5fd;
+    --list-bg: rgba(127, 140, 170, 0.07);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .layout { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .controls { flex: 0 0 250px; max-width: 100%; }
+  .stage { flex: 1 1 420px; min-width: 0; }
+  .ctl-group { margin-bottom: 14px; }
+  .ctl-group > strong { display: block; font-size: 13px; margin-bottom: 6px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button {
+    font: inherit; font-size: 12.5px; padding: 4px 10px; cursor: pointer;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 7px;
+  }
+  .seg button[aria-pressed="true"] { color: var(--primary); border-color: var(--primary); background: var(--info-bg); }
+  input[type="range"] { width: 100%; accent-color: var(--primary); }
+  .val { color: var(--primary); font-variant-numeric: tabular-nums; }
+  /* 看板列表容器：模拟需求列表列（req-list-wrap） */
+  .board {
+    background: var(--list-bg); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 12px 12px; margin-left: auto; margin-right: auto;
+    transition: max-width 0.05s linear;
+  }
+  .board-label { font-size: 12px; color: var(--muted); text-align: center; margin-bottom: 8px; }
+  /* ===== 复刻 .req-caption 单行工具栏（scripts/web/style.css）===== */
+  .req-caption {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 2px 4px 8px; border-bottom: 1px solid var(--border);
+  }
+  .caption-hint { color: var(--muted); font-size: 12px; flex: none; }
+  .caption-hint.hidden, .hidden { display: none; }
+  .caption-actions {
+    display: flex; align-items: center; flex-wrap: nowrap; gap: 8px;
+    margin-left: auto; flex: none;
+  }
+  .btn {
+    font: inherit; font-size: 12.5px; line-height: 1; padding: 6px 10px;
+    border-radius: 7px; border: 1px solid var(--border); cursor: pointer;
+    background: var(--panel); color: var(--text);
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn:active { transform: translateY(1px); }
+  /* 列表行（示意） */
+  .req-row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 2px;
+    border-bottom: 1px dashed var(--border); font-size: 13px;
+  }
+  .req-row:last-of-type { border-bottom: none; }
+  .badge-done {
+    font-size: 11px; color: var(--done); border: 1px solid var(--done);
+    border-radius: 5px; padding: 1px 5px; flex: none;
+  }
+  .row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notice { color: var(--muted); font-size: 13px; padding: 12px 2px; }
+  /* 状态反馈区 */
+  .feedback { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .fb-badge {
+    font-size: 13px; border-radius: 7px; padding: 4px 10px; border: 1px solid var(--border);
+  }
+  .fb-badge.ok { color: var(--ok-text); background: var(--ok-bg); border-color: var(--ok-text); }
+  .fb-badge.bad { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border-color: var(--warn); }
+  .fb-note { color: var(--muted); font-size: 12.5px; flex-basis: 100%; }
+  .toast {
+    margin-top: 10px; font-size: 12.5px; color: var(--info-text); background: var(--info-bg);
+    border: 1px solid var(--info-text); border-radius: 7px; padding: 6px 10px; display: none;
+  }
+  .toast.show { display: block; }
+  pre.wireframe {
+    background: var(--list-bg); border: 1px dashed var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; line-height: 1.5; overflow-x: auto; color: var(--muted); margin: 12px 0 0;
+  }
+  .legend { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+  .legend b { color: var(--text); }
+</style>
+</head>
+<body>
+  <h1>BUG-20260911-008 演示：已完成档截断提示与「▶ 开始 Commit」同行</h1>
+  <p class="sub">看板需求列表头单行工具栏（#reqCaption）：已完成档默认截断时 #reqCount 提示文案过长，把右侧「▶ 开始 Commit」挤到第二行。切开关与列宽，观察缺陷现象与期望修复后状态。</p>
+
+  <div class="layout">
+    <!-- 控制面板 -->
+    <div class="panel controls">
+      <div class="ctl-group">
+        <strong>① 文案方案（缺陷 vs 期望）</strong>
+        <div class="seg" id="segMode">
+          <button type="button" data-mode="bug" aria-pressed="true">缺陷现状（现长文案）</button>
+          <button type="button" data-mode="fixed" aria-pressed="false">期望修复（精简文案）</button>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <strong>② 档位 / 状态</strong>
+        <div class="seg" id="segState">
+          <button type="button" data-state="truncated" aria-pressed="true">已完成·截断 241 项</button>
+          <button type="button" data-state="notTruncated" aria-pressed="false">已完成·未截断 80 项</button>
+          <button type="button" data-state="empty" aria-pressed="false">已完成·空档 0 项</button>
+          <button type="button" data-state="searchHit" aria-pressed="false">搜索命中</button>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <strong>③ 列表列宽：<span class="val" id="widthVal">324</span> px（宽屏下限约 324px）</strong>
+        <input type="range" id="widthRange" min="280" max="720" step="2" value="324"
+               aria-label="模拟需求列表列宽">
+      </div>
+      <div class="ctl-group">
+        <strong>④ 主题</strong>
+        <div class="seg" id="segTheme">
+          <button type="button" data-theme-opt="auto" aria-pressed="true">跟随系统</button>
+          <button type="button" data-theme-opt="light" aria-pressed="false">浅色</button>
+          <button type="button" data-theme-opt="dark" aria-pressed="false">深色</button>
+        </div>
+      </div>
+      <p class="legend">说明：本 Bug 属静态工具栏文案长度问题，无加载 / 请求失败态；此处覆盖 <b>正常（截断）</b>、<b>未截断（无提示）</b>、<b>空档</b>、<b>搜索命中</b>四种状态切换。</p>
+    </div>
+
+    <!-- 舞台：模拟看板列表列 -->
+    <div class="panel stage">
+      <div class="board" id="board">
+        <div class="board-label">需求列表列（示意，宽度可调）</div>
+        <div class="req-caption" id="reqCaption">
+          <span class="caption-hint hidden" id="reqCount" aria-live="polite"></span>
+          <div class="caption-actions" id="captionActions">
+            <button type="button" class="btn primary" id="laneQuickEntry"
+                    title="进入任务模块批量 Commit 面板：对已完成条目批量归因提交到本地 Git（与勾选无关；只 commit 不 push）"
+                    aria-label="▶ 开始 Commit">▶ 开始 Commit</button>
+          </div>
+        </div>
+        <div id="reqList"></div>
+      </div>
+
+      <div class="feedback">
+        <span class="fb-badge" id="fbSame">—</span>
+        <span class="fb-badge" id="fbState">—</span>
+        <span class="fb-note" id="fbNote"></span>
+      </div>
+      <div class="toast" id="toast"></div>
+
+      <pre class="wireframe">线框（期望修复后，列表列 324px）：
+┌─────────────────────────────────────┐
+│ 100 / 241 项，仅列最新 ▶ 开始 Commit │ ← 提示与按钮同行
+├─────────────────────────────────────┤
+│ [已完成] REQ-20260910-005 …          │
+└─────────────────────────────────────┘
+
+线框（缺陷现状）：
+┌─────────────────────────────────────┐
+│ 100 / 241 个条目（已完成默认仅显示最 │ ← 长文案占满首行
+│ 新 100 项，更早请用搜索获取）        │
+│                        ▶ 开始 Commit │ ← 被挤到第二行
+├─────────────────────────────────────┤
+│ [已完成] REQ-20260910-005 …          │
+└─────────────────────────────────────┘</pre>
+    </div>
+  </div>
+
+<script>
+  'use strict';
+  // ===== 状态配置：文案对齐 scripts/web/app.js renderBoard 的 #reqCount 口径 =====
+  var LIMIT = 100; // REQ_DONE_LIST_LIMIT（scripts/web/app.js）
+  var MODES = {
+    bug: {
+      truncatedHint: function (shown, total) {
+        return shown + ' / ' + total + ' 个条目（已完成默认仅显示最新 ' + LIMIT + ' 项，更早请用搜索获取）';
+      }
+    },
+    fixed: {
+      truncatedHint: function (shown, total) {
+        return shown + ' / ' + total + ' 项，仅列最新 ' + LIMIT + '，更早请搜索';
+      }
+    }
+  };
+  var STATES = {
+    truncated: {
+      label: '已完成 · 默认截断（241 项，显示最新 100）',
+      hint: null, // 按 mode 生成
+      rows: [
+        { id: 'REQ-20260910-005', title: '已完成档「开始 Commit」快捷入口' },
+        { id: 'REQ-20260909-015', title: '开源选型评估规范' },
+        { id: 'REQ-20260908-018', title: '批量移入计划' },
+        { id: 'REQ-20260908-027', title: '批量驳回待接受' }
+      ],
+      footer: '……列表默认仅渲染前 ' + LIMIT + ' 项（示意）'
+    },
+    notTruncated: {
+      label: '已完成 · 未截断（80 项 ≤ 100，无提示）',
+      hint: '',
+      rows: [
+        { id: 'REQ-20260910-005', title: '已完成档「开始 Commit」快捷入口' },
+        { id: 'REQ-20260909-015', title: '开源选型评估规范' }
+      ],
+      footer: ''
+    },
+    empty: {
+      label: '已完成 · 空档（0 项，无提示与条目）',
+      hint: '',
+      rows: [],
+      footer: ''
+    },
+    searchHit: {
+      label: '已完成 · 搜索命中（提示文案两种方案下一致，不受本修复影响）',
+      hint: '搜索命中条目 5 项（当前档可见 3 项）',
+      rows: [
+        { id: 'REQ-20260910-005', title: '已完成档「开始 Commit」快捷入口（命中）' },
+        { id: 'REQ-20260909-015', title: '开源选型评估规范（命中）' }
+      ],
+      footer: ''
+    }
+  };
+  var state = { mode: 'bug', lane: 'truncated', width: 324 };
+
+  function $(id) { return document.getElementById(id); }
+
+  // 文案生成：截断档按 mode 取「现长文案 / 精简文案」，其余状态固定
+  function hintText() {
+    var s = STATES[state.lane];
+    if (s.hint !== null) return s.hint;
+    return MODES[state.mode].truncatedHint(LIMIT, 241);
+  }
+
+  function renderRows() {
+    var s = STATES[state.lane];
+    var list = $('reqList');
+    var html = '';
+    if (s.rows.length === 0) {
+      html = '<div class="notice">当前筛选与搜索下没有条目。</div>';
+    } else {
+      for (var i = 0; i < s.rows.length; i++) {
+        var r = s.rows[i];
+        html += '<div class="req-row"><span class="badge-done">已完成</span>' +
+          '<span class="row-title">' + r.id + ' ' + r.title + '</span></div>';
+      }
+      if (s.footer) html += '<div class="notice">' + s.footer + '</div>';
+    }
+    list.innerHTML = html;
+  }
+
+  // 同行检测：比对 #reqCount 与「▶ 开始 Commit」的视觉行位置（rect.top 差 < 4px 视为同行）
+  function detectSameLine() {
+    var hint = $('reqCount');
+    var btn = $('laneQuickEntry');
+    var hintVisible = !hint.classList.contains('hidden') && hint.textContent.trim() !== '';
+    if (!hintVisible) return 'noHint';
+    var dh = hint.getBoundingClientRect();
+    var db = btn.getBoundingClientRect();
+    return Math.abs(dh.top - db.top) < 4 ? 'same' : 'wrapped';
+  }
+
+  function render() {
+    var hint = $('reqCount');
+    var text = hintText();
+    hint.textContent = text;
+    hint.classList.toggle('hidden', !text);
+    $('board').style.maxWidth = state.width + 'px';
+    renderRows();
+
+    var same = detectSameLine();
+    var fbSame = $('fbSame');
+    if (same === 'same') {
+      fbSame.textContent = '✓ 同行：提示与「▶ 开始 Commit」在同一行';
+      fbSame.className = 'fb-badge ok';
+    } else if (same === 'wrapped') {
+      fbSame.textContent = '✗ 已换行：「▶ 开始 Commit」被挤到第二行（缺陷现象）';
+      fbSame.className = 'fb-badge bad';
+    } else {
+      fbSame.textContent = '· 无提示：仅「▶ 开始 Commit」单组一行';
+      fbSame.className = 'fb-badge';
+    }
+    $('fbState').textContent = STATES[state.lane].label;
+    var modeTxt = state.mode === 'bug' ? '缺陷现状（现文案）' : '期望修复（精简文案）';
+    $('fbNote').textContent = '当前：' + modeTxt + ' · 列表列宽 ' + state.width + 'px' +
+      (text ? ' · 提示文案「' + text + '」' : ' · 无提示文案');
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  // 分段开关通用绑定
+  function bindSeg(segId, attr, apply) {
+    var seg = $(segId);
+    seg.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      var opts = seg.querySelectorAll('button');
+      for (var i = 0; i < opts.length; i++) opts[i].setAttribute('aria-pressed', String(opts[i] === btn));
+      apply(btn.getAttribute(attr));
+      render();
+    });
+  }
+
+  bindSeg('segMode', 'data-mode', function (v) {
+    state.mode = v;
+    toast(v === 'bug' ? '切换到缺陷现状：现长文案（约 38 字）' : '切换到期望修复：精简文案，提示与按钮应同行');
+  });
+  bindSeg('segState', 'data-state', function (v) {
+    state.lane = v;
+    toast('状态切换：' + STATES[v].label);
+  });
+  bindSeg('segTheme', 'data-theme-opt', function (v) {
+    document.documentElement.removeAttribute('data-theme');
+    if (v !== 'auto') document.documentElement.setAttribute('data-theme', v);
+    toast(v === 'auto' ? '主题：跟随系统' : '主题：' + (v === 'dark' ? '深色' : '浅色'));
+  });
+
+  $('widthRange').addEventListener('input', function (e) {
+    state.width = Number(e.target.value);
+    $('widthVal').textContent = String(state.width);
+    render();
+  });
+
+  $('laneQuickEntry').addEventListener('click', function () {
+    toast('仅演示按钮占位：真实界面为导航到任务模块批量 Commit 面板，不执行任何 Git 操作');
+  });
+
+  // 视口变化（含系统深浅色切换）后重测同行状态
+  window.addEventListener('resize', render);
+  render();
+</script>
+</body>
+</html>

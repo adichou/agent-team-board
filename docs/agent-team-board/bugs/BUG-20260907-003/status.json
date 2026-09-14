@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-003",
+  "type": "bug",
+  "title": "文件看板源码视图全损：buildCodeView 误返回布尔参数，所有代码文件无法查看",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.628Z",
+  "updatedAt": "2026-09-11T05:52:16.670Z",
+  "agentCompletedAt": "2026-09-07T15:29:22.766Z",
+  "lastReport": {
+    "at": "2026-09-07T15:29:22.766Z",
+    "coverage": 100,
+    "framework": "node 静态契约 + vm DOM stub 行为测试（run-all.mjs）",
+    "summary": "app.js buildCodeView 末行 return wrap → return wrapEl（1 行）；引入来源 REQ-20260906-021 已核验；file-board 新增 G1 回归（修复前红/后绿），file-board 25/25、run-all 65 文件 0 失败",
+    "runId": "run-20260907-041"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.628Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-2269"
+    },
+    {
+      "at": "2026-09-07T15:09:44.994Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T15:23:48.146Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T15:29:22.766Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.670Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-25db",
+      "note": "人工确认完成"
+    }
+  ]
+}

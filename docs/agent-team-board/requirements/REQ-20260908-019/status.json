@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-019",
+  "type": "requirement",
+  "title": "批量执行去掉上限的设置",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-015-1",
+  "createdAt": "2026-09-08T06:11:13.526Z",
+  "updatedAt": "2026-09-11T05:52:18.753Z",
+  "agentCompletedAt": "2026-09-08T07:09:07.107Z",
+  "lastReport": {
+    "at": "2026-09-08T07:09:07.107Z",
+    "coverage": 92,
+    "framework": "node:test",
+    "summary": "移除批次上限设置：createBatch 候选按范围全量冻结、批次记录不写 limit、BATCH_LIMIT_* 常量删除；CLI batch create 去掉 --limit（传入提示已移除），usage/输出/摘要视图去上限；/api/batch/create 忽略 body.limit 且响应不回显，/api/batch/current 同步；Web 创建面板删上限输入框、状态行去上限；settings.json 不再写/读 defaults.batchLimit，存量字段原样保留；SKILL.md 与 batch-execution.md 文档同步。Z02a/Z02d/S2/serve/E7/U6/N5/T1 等用例先行改写跑红（8 处）后实现跑绿，全量 87 测试文件 0 失败。测试中发现 impl-scope S1 既有偶发排序翻转（同毫秒创建 tiebreak 按 id 使 BUG 先于 REQ，非本次引入），已登记 BUG-20260908-007。",
+    "runId": "run-20260908-076"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T06:11:13.526Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T06:11:14.932Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T06:11:16.563Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T06:46:47.986Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-015-1",
+      "note": "认领（zcode-batch-015-1）"
+    },
+    {
+      "at": "2026-09-08T07:09:07.107Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-015-1",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.753Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-735a",
+      "note": "人工确认完成"
+    }
+  ]
+}

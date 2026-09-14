@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260907-005",
+  "type": "requirement",
+  "title": "待确认改为待测试。已完成界面去掉待确认按钮。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260907-006-1",
+  "createdAt": "2026-09-07T08:22:11.860Z",
+  "updatedAt": "2026-09-11T05:52:16.624Z",
+  "agentCompletedAt": "2026-09-07T09:15:14.117Z",
+  "lastReport": {
+    "at": "2026-09-07T09:15:14.117Z",
+    "coverage": 100,
+    "framework": "node 契约/沙箱测试（npm test）",
+    "summary": "前端展示层更名「待确认」为「待测试」（LANE_LABEL/LANE_HINT/筛选档/角标/详情页提示），新增 testFlagHtml 使已完成(done)视图不再渲染待测试角标与「已上报完成」提示（agentCompletedAt 保留不清空）；同步 style.css 注释、README 两处文案与 confirm-lane/workbench-layout/detail-close-btn 断言；先红后绿，npm test 59 文件 556 用例全过。",
+    "runId": "run-20260907-035"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T08:22:11.860Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-07T08:22:24.891Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T09:09:14.244Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-20260907-006-1",
+      "note": "认领（zcode-batch-20260907-006-1）"
+    },
+    {
+      "at": "2026-09-07T09:15:14.117Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260907-006-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:16.624Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-52c8",
+      "note": "人工确认完成"
+    }
+  ]
+}

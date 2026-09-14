@@ -1,0 +1,60 @@
+{
+  "id": "REQ-20260901-005",
+  "type": "requirement",
+  "title": "认领者统一显示会话名（不再缺省 terminal）",
+  "status": "done",
+  "parent": null,
+  "owner": "terminal",
+  "createdAt": "2026-09-01T04:00:02.525Z",
+  "updatedAt": "2026-09-11T05:52:13.457Z",
+  "agentCompletedAt": "2026-09-01T06:45:33.306Z",
+  "lastReport": {
+    "at": "2026-09-01T06:45:33.306Z",
+    "coverage": null,
+    "framework": "node:assert 集成测试（core 直调）",
+    "summary": "认领者统一显示会话名完成（按对齐方案 A+B）：core.mjs 新增 resolveActorName——优先级为显式 --by / API 参数 → ZCODE_SESSION_ID/CLAUDE_SESSION_ID → 可读缺省名（前缀-MMDD-4位hex随机，crypto 生成，进程内缓存复用；前缀由 ATB_AGENT_NAME 注入如 zcode/codex，缺省 atb），裸 terminal 不再产生；actor()/claim/report 及认领锁 owner 同源走新解析。SKILL.md 会话调度规则与 dev.md 阶段一第 3 步写入会话名约定：主动 --by 语义名（全小写连字符，如 zcode-fileboard），多会话并行可区分。历史旧值不迁移（保留可追溯）。TDD：新增 actor-name.test.mjs N1–N6 先红后绿全过；七套既有测试回归全绿。版本 0.3.5→0.3.6。"
+  },
+  "history": [
+    {
+      "at": "2026-09-01T04:00:02.525Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-09-01T04:04:06.378Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-01T04:19:07.756Z",
+      "from": "accepted",
+      "to": "pending-alignment",
+      "by": "terminal",
+      "note": "认领（出方案阶段，terminal）"
+    },
+    {
+      "at": "2026-09-01T06:39:20.454Z",
+      "from": "pending-alignment",
+      "to": "in-progress",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-01T06:45:33.306Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0901-0d7b",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.457Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-f971",
+      "note": "人工确认完成"
+    }
+  ]
+}

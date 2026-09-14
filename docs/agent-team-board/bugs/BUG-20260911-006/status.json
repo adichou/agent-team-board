@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260911-006",
+  "type": "bug",
+  "title": "全局任务中需要加上批量 Commit 的任务状态",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-035-3",
+  "createdAt": "2026-09-11T01:44:52.869Z",
+  "updatedAt": "2026-09-11T05:52:23.966Z",
+  "agentCompletedAt": "2026-09-11T02:40:11.939Z",
+  "lastReport": {
+    "at": "2026-09-11T02:40:11.939Z",
+    "coverage": 95,
+    "framework": "node:assert + http 集成",
+    "summary": "全局聚合纳入批量 Commit：commit-store 新增只读 commitBatchBrief（不调 checkCommitBatch/不碰锁），server projectTaskRows 加 commit 段且 corruptBatchIds 扫描覆盖 commits/batches；前端类型筛选/徽标/计数（已提交=committed，异常=失败+中断）/跳转（commit→gotoRuns('commit')）增 commit 档；新增 C1-C5 用例先红后绿，C3 验证账本逐字节只读；归因 REQ-20260910-003（遗留项见 BUG-20260910-014）；全量 189 测试文件失败 0",
+    "runId": "run-20260911-192"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T01:44:52.869Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T01:44:52.870Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T01:58:47.085Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-095112-aa34）"
+    },
+    {
+      "at": "2026-09-11T02:31:18.889Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-035-3",
+      "note": "认领（zcode-batch-035-3）"
+    },
+    {
+      "at": "2026-09-11T02:40:11.939Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-035-3",
+      "note": "上报测试报告（覆盖率 95%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:23.966Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-969d",
+      "note": "人工确认完成"
+    }
+  ]
+}

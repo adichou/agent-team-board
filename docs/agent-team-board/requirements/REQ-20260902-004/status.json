@@ -1,0 +1,60 @@
+{
+  "id": "REQ-20260902-004",
+  "type": "requirement",
+  "title": "Status Board 一键派发需求给当前项目的全新会话，并注入预设提示词。支持 zcode 和 codex 两个 Agent",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-dispatch",
+  "createdAt": "2026-09-02T14:49:22.175Z",
+  "updatedAt": "2026-09-11T05:52:13.697Z",
+  "agentCompletedAt": "2026-09-03T00:53:48.686Z",
+  "lastReport": {
+    "at": "2026-09-03T00:53:48.686Z",
+    "coverage": null,
+    "framework": "node:assert 静态契约（dispatch.test.mjs P1–P4）",
+    "summary": "一键派发完成（v1 形态，按对齐默认）：抽屉对 accepted 条目渲染派发区——「派发给 zcode」「派发给 codex」两按钮，点击生成预设提示词并写入剪贴板（zcode 版=/dev <ID> + 标题注释增强版；codex 版=无 slash 命令，改为 agent-team-board skill 指引措辞），反馈「已复制 ✓ 粘贴到新会话」1.8s 后恢复；样式用全局主题变量。机制边界（方案已声明获默认）：本地 server 无法直接创建两客户端的应用内会话（无公开 deeplink/CLI），v1 交付复制提示词形态；若日后获得会话 deeplink 可升级真一键。派发的新会话仍受看板流程约束。测试：新增 dispatch.test.mjs P1–P4 先红后绿全过；十三套测试回归全绿。server/core 零改动。版本 0.3.13→0.3.14。"
+  },
+  "history": [
+    {
+      "at": "2026-09-02T14:49:22.175Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-02T23:48:54.957Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-02T23:51:28.846Z",
+      "from": "accepted",
+      "to": "pending-alignment",
+      "by": "zcode-dispatch",
+      "note": "认领（出方案阶段，zcode-dispatch）"
+    },
+    {
+      "at": "2026-09-03T00:13:03.646Z",
+      "from": "pending-alignment",
+      "to": "in-progress",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-03T00:53:48.686Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0903-4297",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.697Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e53c",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "id": "REQ-20260909-013",
+  "type": "requirement",
+  "title": "隐藏文件模块",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-035-5",
+  "createdAt": "2026-09-09T12:18:00.147Z",
+  "updatedAt": "2026-09-11T05:52:21.149Z",
+  "agentCompletedAt": "2026-09-11T03:19:32.823Z",
+  "lastReport": {
+    "at": "2026-09-11T03:19:32.823Z",
+    "coverage": 12,
+    "framework": "node:assert + node:vm",
+    "summary": "暂态隐藏讨论/文件模块：app.js 新增 HIDDEN_VIEWS 单开关门控 setView 深链快照兜底回落、详情讨论纪要页签/来源讨论行/req-disc 挂载、poll 的 oncall/req-disc 请求、搜索在文件查看入口；index.html 移除两导航按钮与新建 ask 选项；服务端与数据零改动，恢复步骤见 design.md。TDD：新测试 9/10 红转 10/10 绿；同步更新 17 个既有测试口径；npm test 191 文件 0 失败",
+    "runId": "run-20260911-194"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T12:18:00.147Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T12:19:24.760Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "标题修改：「隐藏讨论模块和文件模块，暂时没有更好的实现」→「隐藏讨论模块、文件模块和需求模块中详情页的讨论纪要，暂时没有更好的实现」"
+    },
+    {
+      "at": "2026-09-09T12:25:45.391Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T12:35:00.208Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260909-202623-94aa）"
+    },
+    {
+      "at": "2026-09-09T12:40:48.625Z",
+      "from": "planned",
+      "to": "accepted",
+      "by": "board",
+      "note": "人工移出计划，退回已接受"
+    },
+    {
+      "at": "2026-09-09T12:40:58.206Z",
+      "from": "accepted",
+      "to": "submitted",
+      "by": "board",
+      "note": "人工驳回接受，退回待接受"
+    },
+    {
+      "at": "2026-09-11T00:44:06.654Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "标题 + 描述修改：「隐藏讨论模块、文件模块和需求模块中详情页的讨论纪要，暂时没有更好的实现」→「隐藏文件模块」（README「## 描述」节整体替换）"
+    },
+    {
+      "at": "2026-09-11T00:44:08.637Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-11T01:40:26.761Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-11T01:40:32.760Z",
+      "from": "planned",
+      "to": "accepted",
+      "by": "board",
+      "note": "人工移出计划，退回已接受"
+    },
+    {
+      "at": "2026-09-11T02:22:07.122Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-101805-bc0b）"
+    },
+    {
+      "at": "2026-09-11T02:51:50.750Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-035-5",
+      "note": "认领（zcode-batch-035-5）"
+    },
+    {
+      "at": "2026-09-11T03:19:32.823Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-035-5",
+      "note": "上报测试报告（覆盖率 12%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.149Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2705",
+      "note": "人工确认完成"
+    }
+  ]
+}

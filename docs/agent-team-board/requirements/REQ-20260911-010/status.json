@@ -2,11 +2,11 @@
   "id": "REQ-20260911-010",
   "type": "requirement",
   "title": "回退批量 Commit 的相关功能，但需保留已完成需求的 commit 号显示这个功能",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-040-4",
   "createdAt": "2026-09-11T15:33:33.667Z",
-  "updatedAt": "2026-09-11T17:40:00.507Z",
+  "updatedAt": "2026-09-11T17:48:50.191Z",
   "agentCompletedAt": "2026-09-11T17:40:00.507Z",
   "lastReport": {
     "at": "2026-09-11T17:40:00.507Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-040-4",
       "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T17:48:50.191Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

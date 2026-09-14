@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-014",
+  "type": "bug",
+  "title": "Codex CLI 无法解析 agent-team-board hooks 的 process 类型",
+  "status": "done",
+  "parent": "REQ-20260906-003",
+  "owner": "zcode-batch-003-01",
+  "createdAt": "2026-09-06T14:12:18.039Z",
+  "updatedAt": "2026-09-11T05:52:15.892Z",
+  "agentCompletedAt": "2026-09-06T19:20:52.590Z",
+  "lastReport": {
+    "at": "2026-09-06T19:20:52.590Z",
+    "coverage": 0,
+    "framework": "node:assert 子进程契约实测 + codex 0.153.4 宿主 exec 验证 + npm test 全量回归",
+    "summary": "新增 hooks/codex.json（Codex command schema：$PLUGIN_ROOT 引 state-guard file/bash，timeout 秒）并由 .codex-plugin manifest hooks 条目覆盖默认 hooks/hooks.json，Codex 启动不再报 unknown variant process（exec 实证）；state-guard file 模式补 apply_patch patch 文本目标解析，Codex 编辑形态下 status.json 直写与源码保护恢复拦截。ZCode 侧 hooks.json 零改动。新增 9 用例+57 测试文件全绿。已知限制：本机 codex shell 工具因缺 code-mode host fail closed，端到端 hook 触发留人工终审（证据 dispatch/runs/run-20260907-028/verify-codex-host.log）。覆盖率未统计（无行覆盖工具），coverage=0",
+    "runId": "run-20260907-028"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T14:12:18.039Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-9865"
+    },
+    {
+      "at": "2026-09-06T16:33:32.659Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T19:07:04.826Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "认领（zcode-batch-003-01）"
+    },
+    {
+      "at": "2026-09-06T19:20:52.590Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-003-01",
+      "note": "上报测试报告（覆盖率 0%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.892Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-dd9f",
+      "note": "人工确认完成"
+    }
+  ]
+}

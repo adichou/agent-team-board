@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-013",
+  "type": "requirement",
+  "title": "在开发中和已完成之间增加待确认分类",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-001-1",
+  "createdAt": "2026-09-06T03:53:26.881Z",
+  "updatedAt": "2026-09-11T05:52:14.851Z",
+  "agentCompletedAt": "2026-09-06T12:30:34.064Z",
+  "lastReport": {
+    "at": "2026-09-06T12:30:34.064Z",
+    "coverage": 7,
+    "framework": "node assert 契约测试（VM+静态）",
+    "summary": "看板新增「待确认」派生列（LANES+laneOf：in-progress 且 agentCompletedAt），位于开发中与已完成之间；拖放映射/tab/计数/tooltip 同步，拖入待确认列拒绝并提示；CSS 五列网格+独立紫 --confirming，flag 配色随列。新增 confirm-lane.test.mjs 7 用例先红后绿；全量 39 文件仅存量 BUG-20260906-012 红灯（与本条目无关）。测试输出：dispatch/runs/run-20260906-002/test-output.log",
+    "runId": "run-20260906-002"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T03:53:26.881Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T03:54:15.437Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T11:56:27.492Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-001-1",
+      "note": "认领（zcode-batch-001-1）"
+    },
+    {
+      "at": "2026-09-06T12:30:34.065Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-001-1",
+      "note": "上报测试报告（覆盖率 7%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.851Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2278",
+      "note": "人工确认完成"
+    }
+  ]
+}

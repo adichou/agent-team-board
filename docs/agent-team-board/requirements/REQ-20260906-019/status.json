@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-019",
+  "type": "requirement",
+  "title": "Codex 一键派发要使用批量实施的方案，放弃当前的方案",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-003-21",
+  "createdAt": "2026-09-06T09:44:42.838Z",
+  "updatedAt": "2026-09-11T05:52:15.659Z",
+  "agentCompletedAt": "2026-09-06T17:27:10.553Z",
+  "lastReport": {
+    "at": "2026-09-06T17:27:10.553Z",
+    "coverage": 82,
+    "framework": "node:assert 契约/集成测试（npm test 聚合）",
+    "summary": "一键派发codex改走批量实施方案：调度器新增dispatchItem（共用hub/项目锁/账本/结算，不改写开关与scope），server以POST /api/dispatch/codex/item替换旧.command+open端点并清理OPEN_CMD/ATB_CODEX_CLI接缝，前端launchCodex改调新端点成功后打开批量实施抽屉Codex页签，移除codex://深链与剪贴板兜底及lib旧构建函数；新增D21-D25/T7并重写dispatch-launch契约与集成用例，npm test全量46文件0失败",
+    "runId": "run-20260907-021"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T09:44:42.838Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T16:33:32.650Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T17:20:33.941Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-003-21",
+      "note": "认领（zcode-batch-003-21）"
+    },
+    {
+      "at": "2026-09-06T17:27:10.554Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-003-21",
+      "note": "上报测试报告（覆盖率 82%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.659Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-233f",
+      "note": "人工确认完成"
+    }
+  ]
+}

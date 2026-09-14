@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260910-027 演示 · 删除所有任务中的「开发人员」设置</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --line: #e2e7ef; --ink: #1b2434; --muted: #66748c;
+    --primary: #2563eb; --primary-ink: #ffffff; --ok: #16a34a; --warn: #dc2626; --info: #2563eb;
+    --chip-bg: #e9edf3; --pre-bg: #fbfcfe; --shadow: 0 1px 2px rgba(16,24,40,.06);
+    --ok-bg: rgba(22,163,74,.08); --info-bg: rgba(37,99,235,.08); --warn-bg: rgba(220,38,38,.08);
+  }
+  html[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --line: #263041; --ink: #e5eaf3; --muted: #8b98ad;
+    --primary: #3b82f6; --primary-ink: #ffffff; --ok: #4ade80; --warn: #f87171; --info: #60a5fa;
+    --chip-bg: #212a3a; --pre-bg: #111722; --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --ok-bg: rgba(74,222,128,.1); --info-bg: rgba(96,165,250,.1); --warn-bg: rgba(248,113,113,.1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  header.topbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  header.topbar b { font-size: 15px; }
+  header.topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  header.topbar .path { color: var(--muted); font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  header.topbar .spacer { flex: 1; }
+  nav.modtabs { display: flex; gap: 4px; padding: 8px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  nav.modtabs button { border: 1px solid transparent; border-bottom: none; background: transparent; color: var(--muted); padding: 6px 14px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; }
+  nav.modtabs button.active { background: var(--bg); color: var(--ink); border-color: var(--line); font-weight: 600; }
+  main.wrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; padding: 14px 16px; max-width: 1220px; margin: 0 auto; }
+  @media (max-width: 960px) { main.wrap { grid-template-columns: 1fr; } }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 8px; font-size: 14px; }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .spacer { flex: 1; }
+  .seg { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: var(--panel); color: var(--muted); padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.active { background: var(--primary); color: var(--primary-ink); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.06); color: var(--primary-ink); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+  .notice { border: 1px solid var(--line); border-left: 3px solid var(--info); background: var(--info-bg); padding: 6px 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
+  .notice.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .notice.ok { border-left-color: var(--ok); background: var(--ok-bg); }
+  .batch-create { display: flex; flex-direction: column; gap: 10px; border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; }
+  .batch-stats { font-size: 13px; color: var(--muted); }
+  .batch-stats b { color: var(--ink); }
+  .field-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+  .field-inline input { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 260px; max-width: 100%; }
+  .head-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .head-line .spacer { flex: 1; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; border: 1px solid var(--line); background: var(--chip-bg); }
+  .chip.st-prepared { color: var(--info); border-color: var(--info); }
+  .cid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--primary); }
+  .queue-mini { border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .queue-mini .row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 760px) { .row2 { grid-template-columns: 1fr; } }
+  .cell { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; position: relative; }
+  .cell.cur { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .cell .tag { position: absolute; top: -9px; left: 8px; font-size: 11px; background: var(--chip-bg); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--muted); }
+  .cell.cur .tag { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+  .status-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; margin: 4px 0; }
+  pre.snippet { border: 1px dashed var(--line); background: var(--pre-bg); border-radius: 6px; padding: 8px 10px; font: 12px/1.7 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; margin: 6px 0 2px; }
+  #logList { list-style: none; margin: 4px 0 0; padding: 0; max-height: 300px; overflow: auto; }
+  #logList li { border-top: 1px dashed var(--line); padding: 5px 2px; font-size: 12px; }
+  #logList li:first-child { border-top: none; }
+  #toast { position: fixed; right: 16px; bottom: 16px; max-width: 480px; background: var(--panel); color: var(--ink); border: 1px solid var(--ok); border-left-width: 3px; border-radius: 8px; padding: 8px 12px; font-size: 13px; box-shadow: var(--shadow); opacity: 0; transform: translateY(8px); transition: all .25s; pointer-events: none; z-index: 9; }
+  #toast.show { opacity: 1; transform: none; }
+  #toast.err { border-color: var(--warn); }
+  footer.note { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 16px 20px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="dot"></span>
+  <b>REQ-20260910-027 演示 · 删除所有任务中的「开发人员」设置</b>
+  <span class="path">docs/agent-team-board/requirements/REQ-20260910-027/ui-demo.html</span>
+  <span class="spacer"></span>
+  <button type="button" class="btn" id="themeBtn">浅色</button>
+</header>
+
+<nav class="modtabs" id="taskTabs">
+  <button type="button" data-task="develop" class="active">批量开发</button>
+  <button type="button" data-task="refine">批量完善</button>
+  <button type="button" data-task="commit">批量 Commit</button>
+</nav>
+
+<main class="wrap">
+  <div>
+    <section class="card">
+      <div class="toolbar">
+        <span class="muted small">形态对照</span>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-mode="now" class="active">现状（含开发人员输入）</button>
+          <button type="button" data-mode="after">删除后（本需求目标）</button>
+        </div>
+        <span class="spacer"></span>
+        <span class="muted small">面板状态</span>
+        <div class="seg" id="stateSeg">
+          <button type="button" data-state="normal" class="active">正常</button>
+          <button type="button" data-state="empty">无候选</button>
+          <button type="button" data-state="loading">加载中</button>
+          <button type="button" data-state="error">加载失败</button>
+        </div>
+      </div>
+      <div id="panel"></div>
+      <div id="result"></div>
+    </section>
+  </div>
+  <aside>
+    <section class="card">
+      <h3>演示要点</h3>
+      <ul class="small" style="margin:4px 0;padding-left:18px">
+        <li>三类批量任务（批量开发 / 批量完善 / 批量 Commit）启动区的「开发人员」输入框整体删除；</li>
+        <li>「启动」仍为创建任务 + 复制主调度提示词，流程不变，只是不再有开发人员这一步；</li>
+        <li>创建成功后的展示侧（运行面板状态行 / 排队批次行 / 全局任务行）不再出现「开发人员」；提示词不再含会话命名指令；</li>
+        <li>状态反馈保持既有口径：无候选启动禁用并说明原因、加载中、加载失败可重试；</li>
+        <li>现状形态下输入的开发人员会「记忆」（模拟 localStorage <span class="mono">atb.batch.dev</span>），删除后该链路不存在。</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h3>操作日志</h3>
+      <ul id="logList"></ul>
+    </section>
+  </aside>
+</main>
+
+<div id="toast" role="status"></div>
+<footer class="note">本演示为纯前端静态模拟（单文件、无外网依赖、无构建），不访问项目账本与网络；布局与文案按 scripts/web/app.js 现状复刻，仅用于需求评审。</footer>
+
+<script>
+'use strict';
+const $ = (s, r) => (r || document).querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const fmtTime = (d) => {
+  const p = (x) => String(x).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+// 三类任务启动区的现状文案与结构（按 scripts/web/app.js 复刻）
+const TASKS = {
+  develop: {
+    short: '批量开发',
+    n: 5,
+    stats: (n) => `已计划候选 <b>${n}</b> · 受依赖阻塞 <b>1</b>（最旧优先，实时读取；运行中新置计划的条目自动进入队列）`,
+    statsEmpty: '已计划候选 <b>0</b> · 受依赖阻塞 <b>0</b>（最旧优先，实时读取；运行中新置计划的条目自动进入队列）',
+    emptyNotice: '暂无已计划候选：请先在看板接受条目，并在详情页「移入计划」（仅已计划且未被认领的条目可入批）。',
+    disabledTitle: '暂无已计划候选：请先在看板接受条目并「移入计划」',
+    startTitle: '',
+    note: '已计划队列（最旧优先）：REQ-20260910-021、REQ-20260910-024、REQ-20260910-026 等 5 项——运行中新置计划的条目自动进入队列。启动 = 创建任务并复制调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）；提示词通用，可在任意一种 Agent 会话粘贴执行。',
+    noteEmpty: '已计划队列（最旧优先）：（空，等待已计划条目）——运行中新置计划的条目自动进入队列。启动 = 创建任务并复制调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）。',
+    queue: null,
+    placeholder: '如 张三（可留空）',
+    modeText: '子代理模式（提示词通用，任意 Agent 会话可执行）',
+    promptHead: '# 批量开发主调度提示词（通用版）',
+  },
+  refine: {
+    short: '批量完善',
+    n: 3,
+    stats: (n) => `候选：已接受未完善 <b>${n}</b> 项（每轮实时读取，含本轮新接受的单）`,
+    statsEmpty: '候选：已接受未完善 <b>0</b> 项（每轮实时读取，含本轮新接受的单）',
+    emptyNotice: '暂无可完善候选：已接受条目均已完善（或尚无已接受条目）。',
+    disabledTitle: '暂无可完善候选：已接受条目均已完善（或尚无已接受条目）',
+    startTitle: '创建任务并复制通用主调度提示词（子代理模型跟随主调度会话）',
+    note: '启动 = 创建任务并复制主调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）；提示词通用，可在任意一种 Agent 会话粘贴执行；条目保持 accepted，不占实施互斥。',
+    queue: { label: '待完善队列（最近 2 条）', items: ['REQ-20260910-027', 'REQ-20260910-028'] },
+    placeholder: '如 张三（可留空，仅展示与命名用）',
+    modeText: '子代理模式（提示词通用）',
+    promptHead: '# 批量完善主调度提示词（通用版）',
+  },
+  commit: {
+    short: '批量 Commit',
+    n: 9,
+    stats: (n) => `候选：已完成 <b>${n}</b> 项（默认口径；创建时按 git 历史幂等过滤已提交单）`,
+    statsEmpty: '候选：已完成 <b>0</b> 项（默认口径；创建时按 git 历史幂等过滤已提交单）',
+    emptyNotice: '暂无已完成候选：请先人工确认条目完成（done）后再创建批量 Commit 任务。',
+    disabledTitle: '暂无已完成候选：请先人工确认条目完成（done）',
+    startTitle: '创建批量 Commit 任务并复制主调度提示词',
+    note: '启动 = 创建任务并复制主调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）；提交消息须为「类型: 描述 单号」，业务与测试代码分开提交；失败/无法归因的单出局，不阻塞其他单。',
+    queue: { label: '待提交队列（最近 2 条）', items: ['REQ-20260909-018', 'REQ-20260909-021'] },
+    placeholder: '如 张三（可留空，仅展示与命名用）',
+    modeText: '子代理模式（人工触发；只 commit 不 push）',
+    promptHead: '# 批量 Commit 主调度提示词',
+  },
+};
+
+const state = { task: 'develop', mode: 'now', view: 'normal', prev: 'normal', creating: false, created: null, rememberedDev: '' };
+
+/* ---------- 日志与 toast ---------- */
+function log(msg) {
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="muted mono">${fmtTime(new Date())}</span> ${esc(msg)}`;
+  const list = $('#logList');
+  list.insertBefore(li, list.firstChild);
+  while (list.children.length > 60) list.removeChild(list.lastChild);
+}
+let toastTimer = null;
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 3800);
+}
+
+/* ---------- 启动区渲染 ---------- */
+function devInputHtml(cfg) {
+  return `<label class="field-inline">开发人员
+    <input id="devInput" type="text" maxlength="30" value="${esc(state.rememberedDev)}" placeholder="${esc(cfg.placeholder)}">
+  </label>`;
+}
+function startBtnHtml(cfg, empty) {
+  const t = empty ? ` disabled title="${esc(cfg.disabledTitle)}"` : (cfg.startTitle ? ` title="${esc(cfg.startTitle)}"` : '');
+  return `<button type="button" class="btn primary" id="startBtn"${t}>${state.creating ? '创建中…' : '启动'}</button>`;
+}
+function renderPanel() {
+  const cfg = TASKS[state.task];
+  const box = $('#panel');
+  if (state.view === 'loading') {
+    box.innerHTML = '<p class="muted">加载中…</p>';
+    return;
+  }
+  if (state.view === 'error') {
+    box.innerHTML = `<div class="notice warn">任务面板加载失败：演示模拟的接口错误（现状与删除后形态的失败口径一致）。
+      <button type="button" class="btn" id="retryBtn">重试</button></div>`;
+    return;
+  }
+  const empty = state.view === 'empty';
+  const parts = [];
+  parts.push(`<div class="batch-stats">${empty ? cfg.statsEmpty : cfg.stats(cfg.n)}</div>`);
+  parts.push(empty ? `<div class="notice">${esc(cfg.emptyNotice)}</div>` : '');
+  if (state.task === 'refine' && empty) {
+    // 批量完善现状：无候选时输入框与启动按钮整段不渲染（app.js renderRefinePanel 现状复刻）
+    parts.push(`<p class="muted small" style="margin:0">（批量完善启动区现状：无候选时不渲染「开发人员」输入与「启动」按钮；删除后形态同此，仅在有候选时也再无输入框）</p>`);
+  } else {
+    if (state.mode === 'now') {
+      parts.push(state.task === 'develop'
+        ? `<div class="head-line">${devInputHtml(cfg)}<span class="spacer"></span>${startBtnHtml(cfg, empty)}</div>`
+        : `${devInputHtml(cfg)}<div>${startBtnHtml(cfg, empty)}</div>`);
+    } else {
+      parts.push(state.task === 'develop'
+        ? `<div class="head-line"><span class="muted small">（删除后：本行不再有「开发人员」输入框）</span><span class="spacer"></span>${startBtnHtml(cfg, empty)}</div>`
+        : `<div>${startBtnHtml(cfg, empty)}</div>`);
+    }
+  }
+  parts.push(`<p class="muted small" style="margin:0">${esc(empty ? cfg.noteEmpty || cfg.note : cfg.note)}</p>`);
+  if (cfg.queue && !empty) {
+    parts.push(`<div class="queue-mini"><span class="muted small">${esc(cfg.queue.label)}：</span>${
+      cfg.queue.items.map((id) => `<div class="row"><span class="chip">待处理</span><span class="cid">${esc(id)}</span><span class="muted small">缺失原因：验收标准待补充</span></div>`).join('')
+    }</div>`);
+  }
+  box.innerHTML = `<section class="batch-create">${parts.filter(Boolean).join('\n')}</section>`;
+}
+
+/* ---------- 创建成功后的展示侧对照 ---------- */
+function statusLineHtml(batchId, at, withDev, devText) {
+  return `<div class="status-line">
+    <span class="chip st-prepared">待启动</span>
+    <span class="cid">${esc(batchId)}</span>
+    <span class="muted small">${esc(TASKS[state.task].modeText)} · 创建 ${esc(at)}${withDev ? ` · 开发人员 ${esc(devText)}` : ''}</span>
+  </div>`;
+}
+function renderResult() {
+  const box = $('#result');
+  const c = state.created;
+  if (!c) { box.innerHTML = ''; return; }
+  const cfg = TASKS[c.task];
+  const devNow = c.dev || '未指定';
+  const row = (title, nowHtml, afterHtml) => `
+    <div style="margin:10px 0 2px"><span class="small muted">${esc(title)}</span></div>
+    <div class="row2">
+      <div class="cell${state.mode === 'now' ? ' cur' : ''}"><span class="tag">现状</span>${nowHtml}</div>
+      <div class="cell${state.mode === 'after' ? ' cur' : ''}"><span class="tag">删除后</span>${afterHtml}</div>
+    </div>`;
+  const queueRow = (withDev) =>
+    `<div class="status-line"><span class="chip">排队中</span><span class="cid">${esc(c.batchId)}</span><span class="muted small">第 2 位 · ${cfg.n} 项 · 创建 ${esc(c.at)}${withDev ? ` · 开发人员 ${esc(devNow)}` : ''}</span></div>`;
+  const globalMeta = (withDev) =>
+    `<div class="status-line small"><span>已完成 <b>1</b></span><span>异常 <b>0</b></span><span>待处理 <b>${cfg.n - 1}</b></span><span class="muted">共 ${cfg.n}</span>${withDev ? `<span>开发人员 ${esc(devNow)}</span>` : ''}<span class="muted">创建 ${esc(c.at)}</span></div>`;
+  const promptNow = c.dev
+    ? `${esc(cfg.promptHead)}\n（…）\n请将当前会话名改为：${esc(c.batchId)}-${esc(c.dev)}。\n（…）`
+    : `${esc(cfg.promptHead)}\n（…）\n（现状·未填写开发人员：提示词本就不含命名指令——未填不加，既有行为）`;
+  const promptAfter = `${esc(cfg.promptHead)}\n（…）\n（删除后：任何情况都不含「请将当前会话名改为：<批次号>-<开发人员>」指令）`;
+  box.innerHTML = `
+    <div class="notice ok">✓ ${esc(cfg.short)}任务已创建、提示词已复制，请在对应项目会话粘贴发送（批次 ${esc(c.batchId)}，候选 ${cfg.n}；状态：待启动）。复制成功 ≠ 执行中，登记运行后才算执行中。</div>
+    ${row('运行面板状态行（概况页签）', statusLineHtml(c.batchId, c.at, true, devNow), statusLineHtml(c.batchId, c.at, false))}
+    ${row('排队批次行（队列页签）', queueRow(true), queueRow(false))}
+    ${row('全局任务面板任务行 meta', globalMeta(true), globalMeta(false))}
+    ${row('主调度提示词（节选）', `<pre class="snippet">${promptNow}</pre>`, `<pre class="snippet">${promptAfter}</pre>`)}
+    <div class="toolbar"><button type="button" class="btn" id="resetBtn">重置演示（回到启动区）</button></div>`;
+}
+
+function render() { renderPanel(); renderResult(); }
+
+/* ---------- 交互 ---------- */
+function onStart() {
+  if (state.creating) return;
+  const cfg = TASKS[state.task];
+  state.creating = true;
+  renderPanel();
+  log(`点击「启动」：创建${cfg.short}任务并复制主调度提示词`);
+  setTimeout(() => {
+    state.creating = false;
+    state.created = {
+      task: state.task,
+      batchId: 'batch-20260910-' + String(Math.floor(1000 + Math.random() * 9000)),
+      at: fmtTime(new Date()),
+      dev: state.mode === 'now' ? (state.rememberedDev || '') : '',
+    };
+    if (state.mode === 'now') {
+      if (state.rememberedDev) log(`现状：写 localStorage atb.batch.dev = ${state.rememberedDev}（记忆上次值；账本记 developer 字段）`);
+      else log('现状：开发人员为空 → 移除记忆值（下次回到 git user.name 首次预填）；账本 developer = null');
+    } else {
+      log('删除后：创建请求不携带 developer；不读写 localStorage；账本无开发人员来源');
+    }
+    toast(`✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（批次 ${state.created.batchId}，候选 ${cfg.n}；状态：待启动）`);
+    render();
+  }, 900);
+}
+
+$('#taskTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-task]');
+  if (!b || b.dataset.task === state.task) return;
+  state.task = b.dataset.task;
+  state.created = null;
+  state.creating = false;
+  document.querySelectorAll('#taskTabs button').forEach((x) => x.classList.toggle('active', x === b));
+  log(`切换任务面板：${TASKS[state.task].short}`);
+  render();
+});
+$('#modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b || b.dataset.mode === state.mode) return;
+  state.mode = b.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach((x) => x.classList.toggle('active', x === b));
+  log(state.mode === 'after'
+    ? '切换到「删除后」形态：启动区无开发人员输入框，展示侧与提示词均无开发人员'
+    : '切换到「现状」形态：复刻当前线上行为（含开发人员输入与记忆链路）');
+  render();
+});
+$('#stateSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-state]');
+  if (!b || b.dataset.state === state.view) return;
+  if (state.view === 'normal' || state.view === 'empty') state.prev = state.view;
+  state.view = b.dataset.state;
+  state.created = null;
+  state.creating = false;
+  document.querySelectorAll('#stateSeg button').forEach((x) => x.classList.toggle('active', x === b));
+  const label = { normal: '正常（有候选，可启动）', empty: '空（无候选，启动禁用并说明原因）', loading: '加载中', error: '加载失败（可重试）' }[state.view];
+  log(`切换面板状态：${label}`);
+  render();
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#startBtn')) { onStart(); return; }
+  if (e.target.closest('#retryBtn')) {
+    log('点击「重试」：重新拉取任务面板…');
+    state.view = 'loading';
+    render();
+    setTimeout(() => {
+      state.view = state.prev || 'normal';
+      log('重试成功：面板恢复');
+      toast('重试成功：任务面板已恢复');
+      render();
+    }, 700);
+    return;
+  }
+  if (e.target.closest('#resetBtn')) {
+    state.created = null;
+    log('重置演示：回到启动区');
+    render();
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'devInput') {
+    state.rememberedDev = e.target.value.trim();
+    log(state.rememberedDev
+      ? `输入开发人员「${state.rememberedDev}」（现状：仅展示与会话命名用，不参与权限；限 30 字符）`
+      : '清空开发人员（现状：记忆值随之移除）');
+  }
+});
+$('#themeBtn').addEventListener('click', () => {
+  const html = document.documentElement;
+  const dark = html.dataset.theme === 'dark';
+  html.dataset.theme = dark ? 'light' : 'dark';
+  $('#themeBtn').textContent = dark ? '深色' : '浅色';
+});
+
+render();
+log('演示就绪：默认「现状」形态 + 批量开发 + 正常状态。可切换形态 / 任务 / 状态进行对照。');
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260906-011",
+  "type": "bug",
+  "title": "npm test 回归：detail-close-btn T2 被批量实施抽屉的 space-between 连带击穿",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-002-1",
+  "createdAt": "2026-09-06T08:02:46.493Z",
+  "updatedAt": "2026-09-11T05:52:15.567Z",
+  "agentCompletedAt": "2026-09-06T16:14:52.248Z",
+  "lastReport": {
+    "at": "2026-09-06T16:14:52.248Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约测试",
+    "summary": "收窄 detail-close-btn T2 断言到 renderDrawer 函数体（drawerHeadBlock 辅助函数同步收窄并固定作用域），生产代码零改动；本文件 T1–T4 4/4 通过，全量 npm test 43 文件失败 0；引入来源 REQ-20260906-002 已写入 README 关联节",
+    "runId": "run-20260907-013"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T08:02:46.493Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-96db"
+    },
+    {
+      "at": "2026-09-06T08:26:56.754Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T16:10:30.317Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "认领（zcode-batch-002-1）"
+    },
+    {
+      "at": "2026-09-06T16:14:52.248Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-002-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:15.567Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-24ec",
+      "note": "人工确认完成"
+    }
+  ]
+}

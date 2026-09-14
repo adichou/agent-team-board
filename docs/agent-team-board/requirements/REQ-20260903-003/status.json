@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260903-003",
+  "type": "requirement",
+  "title": "一键派发升级：深链拉起 codex 新会话预填提示词；zcode 深链打开项目工作区（会话标题以单号关联）",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-dispatch-deeplink",
+  "createdAt": "2026-09-03T02:00:48.212Z",
+  "updatedAt": "2026-09-11T05:52:13.971Z",
+  "agentCompletedAt": "2026-09-03T04:12:32.330Z",
+  "lastReport": {
+    "at": "2026-09-03T04:12:32.330Z",
+    "coverage": 92,
+    "framework": "node:assert（t() 风格静态契约 + 纯函数单测 + 临时端口集成）",
+    "summary": "新增 lib/dispatch.mjs 纯函数（shQuote 单引号转义、.command 生成、两条降级深链构造）+ 服务端 POST /api/dispatch/codex（CLI 探测→mkdtemp 生成 0o755 脚本→open 拉起；缺位返回 deeplink 降级信号；ATB_CODEX_CLI/ATB_OPEN_CMD 测试接缝）+ 前端 launchCodex/launchZcode（剪贴板常驻兜底→端点/深链，反馈「已拉起 Codex 会话 ✓」「已复制并打开 ZCode ✓」）。12 项自动化用例全绿（含 /bin/sh 回读注入探针、假 CLI+open 记录器集成），全量 15 个测试文件无回归，v1 提示词语义不变；7736 服务已重启加载新端点并实测非法单号 400。M1/M2 真实拉起待用户手工验收。另登记 BUG-20260903-004（claim 提示文案残留待对齐措辞）。"
+  },
+  "history": [
+    {
+      "at": "2026-09-03T02:00:48.212Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0903-a0c4"
+    },
+    {
+      "at": "2026-09-03T03:33:42.989Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-03T03:36:31.317Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-dispatch-deeplink",
+      "note": "认领（zcode-dispatch-deeplink）"
+    },
+    {
+      "at": "2026-09-03T04:12:32.330Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0903-f549",
+      "note": "上报测试报告（覆盖率 92%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.971Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-7f70",
+      "note": "人工确认完成"
+    }
+  ]
+}

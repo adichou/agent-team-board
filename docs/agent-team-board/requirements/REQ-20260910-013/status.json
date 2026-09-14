@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-013",
+  "type": "requirement",
+  "title": "增加一个批量commit 的功能，要求参考批量完善和批量开发的。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-15",
+  "createdAt": "2026-09-10T04:44:03.696Z",
+  "updatedAt": "2026-09-11T05:52:22.430Z",
+  "agentCompletedAt": "2026-09-10T06:44:29.782Z",
+  "lastReport": {
+    "at": "2026-09-10T06:44:29.782Z",
+    "coverage": 70,
+    "framework": "node:assert/strict + CLI 端到端（真实 git 仓库夹具）",
+    "summary": "新增 atb commit 批量流程（create/next/done/fail/release/check/summary/records/pause/abort），与 batch/refine 同构：默认候选=done 单、--include-reported 纳入已上报待确认、--ids 圈定；git 历史含单号即幂等出局（create 过滤+next 落 skipped 账）；done 核验五类前缀/含单号/描述≤20字/测试业务分离/条目目录 doc 类；账本 docs/agent-team-board/commits/（CMT 批次+run 含 hash）；占用 impl.lock 与开发互斥；只读 git，不 push 不动工作区。新测试 commit-batch-20260910-013.test.mjs 8 用例先红后绿；npm test 全量 148 文件 0 失败",
+    "runId": "run-20260910-161"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T04:44:03.696Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T04:44:08.040Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T05:24:11.692Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-132118-287b）"
+    },
+    {
+      "at": "2026-09-10T06:29:31.711Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-15",
+      "note": "认领（zcode-batch-031-15）"
+    },
+    {
+      "at": "2026-09-10T06:44:29.782Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-15",
+      "note": "上报测试报告（覆盖率 70%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.430Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0247",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260909-012 演示 · 讨论详情多页签布局（概况 / 纪要 / 成果 / 提示词）</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2328; --muted: #6a737d;
+    --border: #d8dee4; --primary: #1f6feb; --primary-ink: #ffffff;
+    --ok-bg: rgba(22, 163, 74, 0.08); --ok-ink: #1a7f37;
+    --warn-bg: rgba(210, 153, 34, 0.10); --warn-ink: #9a6700;
+    --err-bg: rgba(207, 34, 46, 0.08); --err-ink: #cf222e;
+    --chip-bg: #eef1f4; --hover: #f0f3f6; --code-bg: #f0f3f6;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --primary: #4493f8; --primary-ink: #ffffff;
+    --ok-bg: rgba(63, 185, 80, 0.12); --ok-ink: #3fb950;
+    --warn-bg: rgba(187, 128, 9, 0.15); --warn-ink: #d29922;
+    --err-bg: rgba(248, 81, 73, 0.12); --err-ink: #f85149;
+    --chip-bg: #21262d; --hover: #1c2129; --code-bg: #1c2129;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header.demo-head {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  header.demo-head h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header.demo-head .sub { color: var(--muted); font-size: 12px; }
+  header.demo-head .grow { flex: 1; }
+  button.btn {
+    font: inherit; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+  }
+  button.btn:hover { background: var(--hover); }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+  button.btn.primary:hover { filter: brightness(1.08); }
+  button.btn.small { padding: 2px 8px; font-size: 12px; }
+  button.btn:disabled { opacity: .55; cursor: not-allowed; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .hidden { display: none !important; }
+
+  .wrap { max-width: 1200px; margin: 14px auto; padding: 0 14px; }
+  .filters { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .filter-chip {
+    font: inherit; font-size: 13px; padding: 3px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+  }
+  .filter-chip.active { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+  .filter-chip .cnt { opacity: .8; font-size: 12px; }
+  .filter-tip { margin-left: auto; }
+
+  .split { display: grid; grid-template-columns: 300px 1fr; gap: 12px; align-items: start; }
+  .list-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .list-caption { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .list-body { max-height: 520px; overflow: auto; }
+  .disc-card { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .disc-card:last-child { border-bottom: none; }
+  .disc-card:hover { background: var(--hover); }
+  .disc-card.selected { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--chip-bg); }
+  .chip.discussing { background: var(--ok-bg); color: var(--ok-ink); }
+  .chip.archived { background: var(--chip-bg); color: var(--muted); }
+  .chip.failed { background: var(--err-bg); color: var(--err-ink); }
+  .card-title { font-weight: 600; margin: 3px 0 2px; }
+  .card-meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+
+  .detail { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; min-height: 520px; }
+  .detail-empty { padding: 40px 20px; text-align: center; }
+  .detail-head { padding: 10px 14px 0; }
+  .detail-head h2 { margin: 6px 0 8px; font-size: 16px; }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-bottom: 8px; }
+  .grow { flex: 1; }
+
+  nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding: 0 8px; }
+  nav.tabs .tab {
+    font: inherit; font-size: 13px; padding: 7px 12px 6px; cursor: pointer; border: none;
+    background: transparent; color: var(--muted); border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0;
+  }
+  nav.tabs .tab:hover { color: var(--ink); background: var(--hover); }
+  nav.tabs .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  nav.tabs .tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .tab .badge { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 0 6px; margin-left: 2px; }
+  .tab.active .badge { background: color-mix(in srgb, var(--primary) 14%, transparent); }
+
+  .pane { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 14px; }
+  .meta-grid label { display: block; font-size: 12px; color: var(--muted); }
+  .meta-grid span { font-size: 13px; }
+  .notice { border-radius: 8px; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border); background: var(--chip-bg); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-ink); border-color: transparent; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+  .notice.loading { background: var(--chip-bg); color: var(--muted); }
+  .paper { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+  .paper h4 { margin: 2px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .paper .md p { margin: 4px 0; }
+  .round { border-top: 1px dashed var(--border); margin-top: 10px; padding-top: 8px; }
+  .round-q, .round-a { padding: 6px 10px; border-radius: 8px; margin: 6px 0; }
+  .round-q { background: var(--chip-bg); }
+  .round-a { background: var(--code-bg); }
+  .draft-card, .created-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .created-card { background: var(--ok-bg); }
+  .field { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+  .field input[type=text], .field textarea, .prompt textarea {
+    font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--ink); width: 100%;
+  }
+  .field textarea, .prompt textarea { resize: vertical; }
+  .result-ok { color: var(--ok-ink); }
+  .result-fail { color: var(--err-ink); }
+  .link { color: var(--primary); cursor: pointer; text-decoration: underline; }
+  .checkline { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+  .prompt { display: flex; flex-direction: column; gap: 6px; }
+  .prompt textarea { min-height: 170px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    padding: 8px 18px; border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.16); z-index: 50;
+  }
+  #toast.err { border-color: var(--err-ink); color: var(--err-ink); }
+  footer.demo-foot { text-align: center; padding: 14px 0 22px; }
+  #pollState { color: var(--muted); font-size: 12px; }
+
+  @media (max-width: 900px) {
+    .split { grid-template-columns: 1fr; }
+    body.detail-open .list-sec { display: none; }
+    .detail .back { display: inline-flex; }
+  }
+  @media (min-width: 901px) { .detail .back { display: none; } }
+</style>
+</head>
+<body>
+<header class="demo-head">
+  <strong>▦ 智能体团队看板</strong>
+  <span class="sub">讨论模块 · REQ-20260909-012 详情多页签布局演示</span>
+  <span class="grow"></span>
+  <button type="button" class="btn small" id="themeBtn">🌓 深浅色</button>
+</header>
+
+<div class="wrap">
+  <nav class="filters" role="group" aria-label="按状态筛选">
+    <button type="button" class="filter-chip active" data-filter="discussing">讨论中 <span class="cnt" id="cntDiscussing"></span></button>
+    <button type="button" class="filter-chip" data-filter="archived">已归档 <span class="cnt" id="cntArchived"></span></button>
+    <span class="muted small filter-tip">开放式讨论 · Agent 会话交流 · 看板沉淀成果</span>
+  </nav>
+
+  <div class="split">
+    <section class="list-sec" aria-label="讨论记录">
+      <div class="list-wrap">
+        <div class="list-caption muted small" id="listCaption"></div>
+        <div class="list-body" id="discList"></div>
+      </div>
+    </section>
+    <section class="detail" id="detail" aria-label="讨论详情">
+      <div class="detail-empty muted">从左侧选择一条讨论记录，查看页签化详情演示。</div>
+    </section>
+  </div>
+
+  <footer class="demo-foot">
+    <span id="pollState">模拟 2s 轮询：等待首次刷新…</span>
+    <div class="muted small" style="margin-top:4px">交互演示 · 数据均为页面内存模拟，不连接 Agent、不写看板数据</div>
+  </footer>
+</div>
+
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- 演示数据（内存模拟 /api/discussion/board 与 /api/discussion/:id） ---------- */
+
+  const NOW = Date.now();
+  const t = (minAgo) => new Date(NOW - minAgo * 60000).toISOString();
+
+  const START_PROMPT = `你是本次开放式讨论的 Agent。请在当前会话与用户自由讨论以下主题：
+1. 讨论编号：ASK-20260909-001
+2. 讨论背景：见看板详情「纪要」页签。
+3. 结束时：按约定目录落盘 minutes.md（纪要）、candidates.json（候选草稿，可为空）、最后写 PUBLISH.json 发布标记。
+（演示文本——复制只代表提示词已生成，不代表 Agent 已连接）`;
+
+  const FINISH_PROMPT = `讨论收尾提示词（复制回原 Agent 会话）：
+1. 请把本次讨论结论整理为 minutes.md；
+2. 需要沉淀为需求 / Bug 的结论写入 candidates.json（没有就写空数组）；
+3. 最后创建 PUBLISH.json 发布标记；落盘后回看板「成果」页签确认草稿。
+（演示文本）`;
+
+  const discs = {
+    'ASK-20260909-001': {
+      id: 'ASK-20260909-001', title: '批量任务提示词通用化的开放式讨论', status: 'discussing',
+      background: '背景：批量完善与批量开发的调度提示词按执行 Agent 维护两套版本，维护成本高于差异收益。想讨论通用化的边界与设置区去留。',
+      outcomeState: 'published', finishPromptAt: t(120), reading: false,
+      minutes: '### 结论要点\n\n- 两类任务同为「主调度会话 + 每项一个子代理」模式，提示词可通用化。\n- 设置区按 Agent 的配置建议移除，仅保留与 Agent 无关的开关。\n- 存量任务提示词已冻结，不回溯改写。',
+      candidates: [
+        { id: 'd1', type: 'requirement', title: '提示词通用化（不再区分执行 Agent）', description: '批量完善与批量开发各保留一版通用主调度提示词。', acceptance: '新建任务提示词无 Agent 分叉字样。' },
+        { id: 'd2', type: 'bug', title: '设置页仍展示已移除的 Agent 列', description: '设置加载后残留旧 Agent 行。', repro: '打开设置 → 批量任务', actual: '仍显示 Agent 表格', expected: '仅显示通用开关', acceptance: '设置区无 Agent 配置。' },
+        { id: 'd3', type: 'requirement', title: '启动流程去 Agent 化', description: '启动区不再出现执行 Agent 下拉与空占位。', acceptance: '点击启动直接创建并复制提示词。' },
+      ],
+      created: [{ draftId: 'd0', type: 'requirement', itemId: 'REQ-20260909-011', itemTitle: '优化批量任务提示词并去掉设置中的 Agent 配置', itemStatus: 'accepted' }],
+      legacyRounds: [],
+      createdAt: t(240), updatedAt: t(9),
+    },
+    'ASK-20260909-002': {
+      id: 'ASK-20260909-002', title: '关于看板夜间配色的自由讨论（空态演示）', status: 'discussing',
+      background: '聊聊深色模式下的对比度与品牌色取舍，暂不需要产出条目。',
+      outcomeState: 'waiting', finishPromptAt: null, reading: false,
+      minutes: null, candidates: [], created: [], legacyRounds: [],
+      createdAt: t(600), updatedAt: t(300),
+    },
+    'ASK-20260909-003': {
+      id: 'ASK-20260909-003', title: '纪要目录被移动导致的读取问题（失败态演示）', status: 'discussing',
+      background: '讨论已收尾，但成果目录疑似被移动，纪要读取失败。',
+      outcomeState: 'error', errorReason: '成果读取失败（演示：讨论目录可能被移动或删除）',
+      finishPromptAt: t(200), reading: false,
+      minutes: null, candidates: [], created: [], legacyRounds: [],
+      createdAt: t(400), updatedAt: t(30),
+    },
+    'ASK-20260908-031': {
+      id: 'ASK-20260908-031', title: '旧版看板代答时期的咨询记录（归档回看演示）', status: 'archived',
+      background: '旧版看板代答时期的讨论单，含历史问答轮次与附件说明。',
+      outcomeState: 'published', finishPromptAt: t(2000), reading: false,
+      minutes: '### 旧单纪要\n\n结论已沉淀为条目；历史问答轮次只读保留在「纪要」页签尾部。',
+      candidates: [],
+      created: [{ draftId: 'x1', type: 'bug', itemId: 'BUG-20260908-021', itemTitle: '文档内演示链接接管失效', itemStatus: 'done' }],
+      legacyRounds: [
+        { no: 1, mode: '看板代答', question: '详情抽屉里的相对链接为什么打不开？', answer: '旧版未接管文档内相对 .html 演示链接，后由 BUG-20260908-021 修复接管。' },
+        { no: 2, mode: '看板代答', question: '附件在哪里看？', answer: '旧轮次附件走 /api/oncall/ticket 附件端点，点击可放大（本演示以占位说明代替真实附件）。' },
+      ],
+      createdAt: t(9000), updatedAt: t(5000),
+    },
+  };
+
+  const TYPE_LABEL = { requirement: '需求', bug: 'Bug' };
+  const STATUS_LABEL = { discussing: '讨论中', archived: '已归档' };
+  const ITEM_STATUS = { submitted: '待接受', accepted: '已接受', planned: '已计划', 'in-progress': '开发中', done: '已完成' };
+  const PHASE = { waiting: '等待纪要', ready: '纪要已生成', drafts: '有待创建草稿', error: '纪要读取失败', none: '外部会话中', archived: '成果已保留' };
+  // 页签集合（REQ-20260909-012 建议归组，最终集合以 design.md 为准）
+  const TABS = [
+    { key: 'overview', label: '概况' },
+    { key: 'minutes', label: '纪要' },
+    { key: 'results', label: '成果' },
+    { key: 'prompt', label: '提示词' },
+  ];
+
+  const state = {
+    filter: 'discussing',
+    selectedId: null,
+    tab: 'overview',            // 打开记录时重置默认页签（口径同现状）
+    promptKind: null,           // start | finish（提示词页签展示哪个）
+    draftEdits: {},             // `${discId}/${draftId}` → 字段编辑值（切换记录保留）
+    createResults: null,        // 最近一次批量创建逐项结果
+    creating: false,
+    pollCount: 0,
+    theme: null,
+  };
+
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (iso) => { const d = new Date(iso); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const draftKey = (discId, draftId) => `${discId}/${draftId}`;
+
+  function toast(msg, isErr = false) {
+    const el = $('#toast');
+    el.classList.toggle('err', isErr);
+    el.classList.remove('hidden');
+    el.textContent = msg;
+    clearTimeout(toast.__t);
+    toast.__t = setTimeout(() => el.classList.add('hidden'), 3400);
+  }
+
+  /* ---------- 列表 ---------- */
+
+  function phaseOf(d) {
+    if (d.status === 'archived') return PHASE.archived;
+    if (d.outcomeState === 'error') return PHASE.error;
+    if (d.outcomeState === 'published') {
+      const pending = d.candidates.length - d.created.length;
+      return pending > 0 ? PHASE.drafts : PHASE.ready;
+    }
+    return d.finishPromptAt ? PHASE.waiting : PHASE.none;
+  }
+
+  function renderCounts() {
+    const all = Object.values(discs);
+    $('#cntDiscussing').textContent = all.filter((x) => x.status === 'discussing').length;
+    $('#cntArchived').textContent = all.filter((x) => x.status === 'archived').length;
+  }
+
+  function renderList() {
+    renderCounts();
+    const shown = Object.values(discs)
+      .filter((x) => x.status === state.filter)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    $('#listCaption').textContent = `${shown.length} 条记录 · 按最近更新`;
+    const list = $('#discList');
+    if (!shown.length) {
+      list.innerHTML = '<div class="pane muted">当前筛选下没有讨论记录。</div>';
+      return;
+    }
+    list.innerHTML = shown.map((d) => `
+      <div class="disc-card${state.selectedId === d.id ? ' selected' : ''}" data-open="${d.id}" role="button" tabindex="0">
+        <div class="card-top"><span class="cid">${esc(d.id)}</span>
+          <span class="chip ${d.status}">${STATUS_LABEL[d.status]}</span>
+          ${d.outcomeState === 'error' ? '<span class="chip failed">⚠ 读取失败</span>' : ''}
+        </div>
+        <div class="card-title">${esc(d.title)}</div>
+        <div class="card-meta"><span>${phaseOf(d)}</span>${d.created.length ? `<span>🧩 ${d.created.length} 条已生成</span>` : ''}<span>${fmt(d.updatedAt)}</span></div>
+      </div>`).join('');
+    for (const c of list.querySelectorAll('[data-open]')) {
+      c.addEventListener('click', () => openItem(c.dataset.open));
+      c.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openItem(c.dataset.open); } });
+    }
+  }
+
+  /* ---------- 详情（页签化布局核心演示） ---------- */
+
+  function editOf(d, dr) {
+    const base = { selected: true, title: dr.title || '', description: dr.description || '', repro: dr.repro || '', actual: dr.actual || '', expected: dr.expected || '', acceptance: dr.acceptance || '' };
+    return { ...base, ...(state.draftEdits[draftKey(d.id, dr.id)] || {}) };
+  }
+
+  function noticeOf(d) {
+    if (d.reading) return { cls: 'notice loading', text: '正在读取纪要……（按约定目录检测发布标记）' };
+    if (d.outcomeState === 'error') return { cls: 'notice warn', text: `纪要读取失败：${d.errorReason || '未知原因'}` };
+    if (d.outcomeState === 'published') {
+      const pending = d.candidates.length - d.created.length;
+      return pending > 0
+        ? { cls: 'notice ok', text: `纪要已生成，有 ${pending} 项候选草稿待确认创建。` }
+        : { cls: 'notice ok', text: '纪要已读取，可编辑候选条目并创建需求或 Bug。' };
+    }
+    if (d.finishPromptAt) return { cls: 'notice', text: '讨论仍在进行：等待 Agent 按约定目录输出纪要，落盘后这里会自动展示。' };
+    return { cls: 'notice', text: '在 Agent 会话中自由讨论，结束后回这里生成收尾提示词。' };
+  }
+
+  function badgeOf(key, d) {
+    if (key === 'results') {
+      const n = d.candidates.filter((x) => !d.created.some((c) => c.draftId === x.id)).length;
+      return n ? `<span class="badge">${n}</span>` : '';
+    }
+    return '';
+  }
+
+  function paneOverview(d) {
+    const notice = noticeOf(d);
+    return `
+      <section class="meta-grid" aria-label="基本信息">
+        <div><label>讨论方式</label><span>Agent 外部会话</span></div>
+        <div><label>讨论范围</label><span>开放式 · 无需关联需求</span></div>
+        <div><label>成果</label><span>${d.created.length} 条已生成 · ${Math.max(0, d.candidates.length - d.created.length)} 项草稿</span></div>
+        <div><label>创建</label><span>${fmt(d.createdAt)}</span></div>
+        <div><label>更新</label><span>${fmt(d.updatedAt)}</span></div>
+        <div><label>阶段</label><span>${phaseOf(d)}</span></div>
+      </section>
+      <div class="${notice.cls}" role="status">${esc(notice.text)}
+        ${d.outcomeState === 'error' ? ' <button type="button" class="btn small" data-act="reread">重新读取纪要</button>' : ''}
+      </div>
+      <p class="muted small">通知条与基本信息归入「概况」页签（是否常驻页签行之上属待确认项，本演示归入概况）。</p>`;
+  }
+
+  function paneMinutes(d) {
+    let body;
+    if (d.reading) body = '<p class="muted">读取中……</p>';
+    else if (d.outcomeState === 'error') body = '<p class="muted">尚未生成可用的纪要（Agent 输出被拒绝或读取失败，未渲染半成品）。</p>';
+    else if (d.minutes) body = `<div class="md">${esc(d.minutes).replace(/^### (.*)$/gm, '<strong>$1</strong>').replace(/\n- /g, '<br>• ').replace(/\n\n/g, '<br>')}</div>`;
+    else body = '<p class="muted">尚无纪要。对话内容保留在 Agent 会话中，讨论完毕后生成收尾提示词让 Agent 落盘。</p>';
+    const rounds = (d.legacyRounds || []).map((r) => `
+      <div class="round">
+        <div class="card-top"><span class="chip">第 ${r.no} 轮</span>${r.mode ? `<span class="chip">${esc(r.mode)}</span>` : ''}</div>
+        ${r.question ? `<div class="round-q"><strong>问</strong>：${esc(r.question)}</div>` : ''}
+        ${r.answer ? `<div class="round-a"><strong>答</strong>：${esc(r.answer)}</div>` : ''}
+      </div>`).join('');
+    return `
+      <section class="paper">
+        <h4>讨论背景</h4>
+        <div class="md">${d.background && d.background.trim() ? esc(d.background) : '<span class="muted">（未填写背景）</span>'}</div>
+        <h4 style="margin-top:10px">讨论纪要</h4>
+        ${body}
+      </section>
+      ${(d.legacyRounds || []).length ? `
+      <section class="paper">
+        <h4>历史问答（旧版看板代答记录，只读保留）</h4>
+        ${rounds}
+        <p class="muted small">（历史问答保留在「纪要」尾部还是独立页签属待确认项）</p>
+      </section>` : ''}`;
+  }
+
+  function paneResults(d) {
+    const created = d.created.length ? `
+      <section class="created-card">
+        <h4 style="margin:0">已创建成果（待接受；不可重复创建）</h4>
+        ${d.created.map((c) => `
+          <p class="small" style="margin:0"><span class="chip">${TYPE_LABEL[c.type] || esc(c.type)}</span>
+            <strong>${esc(c.itemTitle)}</strong><br>
+            <span class="cid link" data-jump="${esc(c.itemId)}">${esc(c.itemId)}</span> · ${ITEM_STATUS[c.itemStatus] || c.itemStatus} · 来源 ${esc(d.id)}</p>`).join('')}
+      </section>` : '';
+    const drafts = d.candidates.filter((x) => !d.created.some((c) => c.draftId === x.id));
+    if (!drafts.length) {
+      return created || `
+        <div class="paper">
+          <p style="margin:4px 0">当前没有候选条目。纪要可以只有结论，不必生成需求或 Bug。</p>
+          <p class="muted small" style="margin:4px 0">（零候选为正常空态；归档无须以生成条目为前提）</p>
+        </div>`;
+    }
+    const disabled = state.creating ? 'disabled' : '';
+    return `
+      ${created}
+      ${drafts.map((dr) => {
+        const e = editOf(d, dr);
+        const res = state.createResults?.[draftKey(d.id, dr.id)];
+        return `
+        <div class="draft-card" data-draft="${esc(dr.id)}">
+          <label class="checkline"><input type="checkbox" data-field="selected" ${e.selected ? 'checked' : ''} ${disabled}>
+            创建${TYPE_LABEL[dr.type] || dr.type}${dr.type === 'bug' ? '（含复现 / 实际 / 预期）' : ''}</label>
+          <p class="muted small" style="margin:0">类型：${TYPE_LABEL[dr.type] || dr.type} · 由纪要草稿生成，未经确认不会自动创建</p>
+          <label class="field">标题<input type="text" data-field="title" value="${esc(e.title)}" maxlength="120" ${disabled}></label>
+          <label class="field">描述 / 现象<textarea rows="2" data-field="description" ${disabled}>${esc(e.description)}</textarea></label>
+          ${dr.type === 'bug' ? `
+          <label class="field">复现步骤<textarea rows="2" data-field="repro" ${disabled}>${esc(e.repro)}</textarea></label>
+          <label class="field">实际结果<input type="text" data-field="actual" value="${esc(e.actual)}" ${disabled}></label>
+          <label class="field">预期结果<input type="text" data-field="expected" value="${esc(e.expected)}" ${disabled}></label>` : ''}
+          <label class="field">验收标准<textarea rows="2" data-field="acceptance" ${disabled}>${esc(e.acceptance)}</textarea></label>
+          ${res && !res.ok ? `<p class="result-fail small" style="margin:0">创建失败：${esc(res.error || '未知原因')}</p><button type="button" class="btn small" data-retry="${esc(dr.id)}">重试此项</button>` : ''}
+          ${res && res.ok ? `<p class="result-ok small" style="margin:0">✓ 已创建为 ${esc(res.itemId)}（待接受）</p>` : ''}
+        </div>`;
+      }).join('')}
+      <div class="toolbar"><button type="button" class="btn primary" data-act="create" ${disabled}>${state.creating ? '创建中……' : '创建勾选的条目'}</button>
+      <span class="muted small">批量创建逐项反馈：演示中第 1 个勾选项将首次失败，可「重试此项」</span></div>`;
+  }
+
+  function panePrompt(d) {
+    const kind = state.promptKind;
+    if (!kind) return `
+      <div class="paper"><p style="margin:4px 0">尚未展开提示词。点击头部「启动提示词」或「讨论完毕」后，提示词在本页签展示与复制。</p>
+      <p class="muted small" style="margin:4px 0">（提示词独立成页签还是保留浮层形态属待确认项，本演示按页签形态）</p></div>`;
+    const text = kind === 'finish' ? FINISH_PROMPT : START_PROMPT;
+    return `
+      <div class="prompt">
+        <label class="muted small" for="promptText">${kind === 'finish' ? '收尾提示词（复制回原 Agent 会话）' : '启动提示词（复制到 Agent 新会话）'}</label>
+        <textarea id="promptText" readonly rows="9">${esc(text)}</textarea>
+        <div class="toolbar">
+          <button type="button" class="btn primary" data-act="copy">复制提示词</button>
+          <button type="button" class="btn" data-act="hidePrompt">收起</button>
+          <span class="muted small">复制只代表提示词已生成，不代表 Agent 已连接</span>
+        </div>
+      </div>`;
+  }
+
+  // 详情重渲染：页签行 + 分区（当前分区可见、其余 hidden；aria 对齐任务模块页签模式）
+  function renderDetail() {
+    const wrap = $('#detail');
+    const d = state.selectedId ? discs[state.selectedId] : null;
+    if (!d) {
+      document.body.classList.remove('detail-open');
+      wrap.innerHTML = '<div class="detail-empty muted">从左侧选择一条讨论记录，查看页签化详情演示。</div>';
+      return;
+    }
+    document.body.classList.add('detail-open');
+    const panes = { overview: paneOverview(d), minutes: paneMinutes(d), results: paneResults(d), prompt: panePrompt(d) };
+    wrap.innerHTML = `
+      <div class="detail-head">
+        <div class="card-top">
+          <button type="button" class="btn small back" data-act="back">← 返回列表</button>
+          <span class="cid">${esc(d.id)}</span>
+          <span class="chip ${d.status}">${STATUS_LABEL[d.status]}</span>
+        </div>
+        <h2>${esc(d.title)}</h2>
+        <div class="actions">
+          <button type="button" class="btn" data-act="start">启动提示词</button>
+          ${d.status === 'discussing' ? '<button type="button" class="btn" data-act="finish">讨论完毕</button>' : ''}
+          <span class="grow"></span>
+          <button type="button" class="btn ${d.status === 'archived' ? 'primary' : ''}" data-act="archive">${d.status === 'archived' ? '继续讨论' : '归档讨论'}</button>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="讨论详情分区">
+        ${TABS.map((p) => `<button type="button" class="tab${state.tab === p.key ? ' active' : ''}" role="tab" aria-selected="${state.tab === p.key ? 'true' : 'false'}" data-tab="${p.key}">${p.label}${badgeOf(p.key, d)}</button>`).join('')}
+      </nav>
+      ${TABS.map((p) => `<section class="pane${state.tab === p.key ? '' : ' hidden'}" data-pane="${p.key}" role="tabpanel" aria-label="${p.label}">${panes[p.key]}</section>`).join('')}`;
+    bindDetail(d);
+  }
+
+  function bindDetail(d) {
+    const wrap = $('#detail');
+    for (const b of wrap.querySelectorAll('[data-tab]')) {
+      b.addEventListener('click', () => { state.tab = b.dataset.tab; renderDetail(); }); // 纯前端切换，不发请求
+    }
+    for (const b of wrap.querySelectorAll('[data-act]')) {
+      b.addEventListener('click', () => doAct(b.dataset.act, d));
+    }
+    for (const b of wrap.querySelectorAll('[data-retry]')) {
+      b.addEventListener('click', () => doCreate(d, d.candidates.filter((x) => x.id === b.dataset.retry)));
+    }
+    for (const el of wrap.querySelectorAll('[data-draft] [data-field]')) {
+      const key = draftKey(d.id, el.closest('[data-draft]').dataset.draft);
+      const field = el.dataset.field;
+      el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', () => {
+        state.draftEdits[key] = state.draftEdits[key] || {};
+        state.draftEdits[key][field] = el.type === 'checkbox' ? el.checked : el.value;
+      });
+    }
+    for (const b of wrap.querySelectorAll('[data-jump]')) {
+      b.addEventListener('click', () => toast(`演示：跳转条目详情 ${b.dataset.jump}`));
+    }
+  }
+
+  /* ---------- 交互（口径对齐 oncall.js 现状） ---------- */
+
+  function openItem(id) {
+    state.selectedId = id;
+    state.tab = 'overview';     // 换记录重置默认页签（现状重置 minutes 的等价口径）
+    state.promptKind = null;
+    state.createResults = null;
+    const d = discs[id];
+    // 加载态演示：读取中 → 数据到达（后台轮询不闪加载态，此处模拟打开详情的显式读取）
+    d.reading = true;
+    renderList();
+    renderDetail();
+    setTimeout(() => { d.reading = false; renderDetail(); renderList(); }, 700);
+  }
+
+  function closeDetail() {
+    state.selectedId = null;
+    state.promptKind = null;
+    renderDetail();
+    renderList();
+  }
+
+  function doAct(act, d) {
+    if (act === 'back') return closeDetail();
+    if (act === 'start') { state.promptKind = 'start'; state.tab = 'prompt'; return renderDetail(); }
+    if (act === 'finish') {
+      // 讨论完毕：置收尾阶段并生成收尾提示词，自动定位提示词页签（等价现状「浮层 + 跳纪要」）
+      d.finishPromptAt = d.finishPromptAt || new Date().toISOString();
+      state.promptKind = 'finish';
+      state.tab = 'prompt';
+      renderDetail();
+      toast('已生成收尾提示词。讨论保持「讨论中」，等待纪要只是阶段反馈。');
+      return;
+    }
+    if (act === 'archive') {
+      d.status = d.status === 'archived' ? 'discussing' : 'archived';
+      state.filter = d.status; // 归档/恢复后筛选跟随（现状口径）
+      renderDetail(); renderList();
+      toast(d.status === 'archived' ? '讨论已归档（无须先生成条目）；纪要与已创建成果仍保留展示。' : '讨论已恢复「讨论中」；此前纪要与已生成条目不丢失。');
+      return;
+    }
+    if (act === 'reread') {
+      d.reading = true;
+      renderDetail();
+      setTimeout(() => {
+        d.reading = false;
+        d.outcomeState = 'published';           // 演示：重新读取成功恢复
+        d.errorReason = null;
+        d.minutes = d.minutes || '### 重新读取成功\n\n- 目录已恢复，纪要与候选草稿可用。';
+        if (!d.candidates.length) d.candidates = [{ id: 'r1', type: 'requirement', title: '纪要目录移动后应提示恢复路径', description: '读取失败时给出可操作的恢复指引。', acceptance: '失败通知含恢复建议。' }];
+        renderDetail(); renderList();
+        toast('纪要已重新读取成功。');
+      }, 800);
+      return;
+    }
+    if (act === 'copy') {
+      const text = state.promptKind === 'finish' ? FINISH_PROMPT : START_PROMPT;
+      const ok = (() => { try { navigator.clipboard?.writeText(text); return true; } catch { return false; } })();
+      toast(ok ? '✓ 提示词已复制，请粘贴到 Agent 会话' : '剪贴板不可用：已全选提示词，请按 ⌘C / Ctrl+C 手动复制', !ok);
+      return;
+    }
+    if (act === 'hidePrompt') { state.promptKind = null; state.tab = 'overview'; return renderDetail(); }
+    if (act === 'create') {
+      const drafts = d.candidates.filter((x) => !d.created.some((c) => c.draftId === x.id));
+      return doCreate(d, drafts);
+    }
+  }
+
+  function doCreate(d, drafts) {
+    const payload = [];
+    const problems = [];
+    for (const dr of drafts) {
+      const e = editOf(d, dr);
+      if (!e.selected) continue;
+      if (!e.title.trim() || !e.description.trim()) { problems.push(`「${dr.title || dr.id}」的标题与描述为必填`); continue; }
+      payload.push(dr);
+    }
+    if (problems.length) toast(`请先补全勾选条目的必填字段：${problems.join('；')}`, true);
+    if (!payload.length) { if (!problems.length) toast('请先勾选候选条目。'); return; }
+    state.creating = true;
+    renderDetail();
+    setTimeout(() => {
+      state.creating = false;
+      const results = {};
+      const isRetry = state.createResults !== null; // 重试必然成功（演示口径：失败项可单独重试）
+      let first = true;
+      let seq = 20;
+      for (const dr of payload) {
+        if (!isRetry && first) { results[draftKey(d.id, dr.id)] = { ok: false, error: '网络异常（演示）' }; first = false; } // 首次批量创建演示一项失败
+        else {
+          const itemId = dr.type === 'bug' ? `BUG-20260909-0${seq++}` : `REQ-20260909-0${seq++}`;
+          results[draftKey(d.id, dr.id)] = { ok: true, itemId };
+          d.created.push({ draftId: dr.id, type: dr.type, itemId, itemTitle: editOf(d, dr).title, itemStatus: 'submitted' });
+        }
+      }
+      state.createResults = results;
+      state.tab = 'results'; // 创建完成自动回到成果分区（现状跳 drafts 的等价口径）
+      renderDetail(); renderList();
+      const ok = Object.values(results).filter((r) => r.ok).length;
+      const fail = Object.values(results).length - ok;
+      toast(fail ? `创建完成：成功 ${ok} 条，失败 ${fail} 条；失败项可单独重试，成功项不会重复创建。` : `创建完成：成功 ${ok} 条，均为待接受；刷新或重试不会重复创建。`, fail > 0);
+    }, 600);
+  }
+
+  /* ---------- 模拟 2s 轮询：刷新列表与详情，当前页签保持、不打断编辑 ---------- */
+
+  function editing() {
+    const el = document.activeElement;
+    return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && $('#detail')?.contains(el));
+  }
+
+  function poll() {
+    state.pollCount += 1;
+    $('#pollState').textContent = `模拟 2s 轮询：已刷新 ${state.pollCount} 次 · 当前页签「${TABS.find((p) => p.key === state.tab)?.label || '—'}」保持 · 草稿编辑中${editing() ? '跳过详情重绘（失焦后补上）' : '正常刷新'}`;
+    renderList();
+    if (!editing() && state.selectedId) renderDetail(); // 编辑中不重建详情 DOM，防打断
+  }
+  setInterval(poll, 2000);
+
+  /* ---------- 筛选 / 主题 / 初始化 ---------- */
+
+  for (const chip of document.querySelectorAll('.filter-chip')) {
+    chip.addEventListener('click', () => {
+      state.filter = chip.dataset.filter;
+      document.querySelectorAll('.filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
+      renderList();
+    });
+  }
+
+  $('#themeBtn').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme
+      || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    toast(`已切换到${next === 'dark' ? '深色' : '浅色'}外观（默认跟随系统）`);
+  });
+
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.selectedId) closeDetail(); });
+
+  renderList();
+  renderDetail();
+  // 初始打开一条常态记录，便于直接查看页签化布局
+  openItem('ASK-20260909-001');
+})();
+</script>
+</body>
+</html>

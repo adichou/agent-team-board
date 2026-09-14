@@ -1,0 +1,35 @@
+#!/bin/sh
+# atb —— Agent Team Board 终端命令包装器（REQ-20260908-007）
+# 职责：定位本脚本所属插件根目录，转交 scripts/atb.mjs 执行；所有参数原样透传。
+# 支持经符号链接调用（如 ~/.local/bin/atb → <插件根>/bin/atb），链接会被逐层解析。
+# 安装：node <插件根>/scripts/atb.mjs cli install（或手动 ln -s <插件根>/bin/atb <PATH目录>/atb）
+
+script=$0
+
+# 相对路径转绝对（以调用时工作目录为基准）
+case $script in
+  /*) ;;
+  *) script=$(pwd)/$script ;;
+esac
+
+# 逐层穿透符号链接（POSIX readlink 单层语义，不依赖 GNU readlink -f）
+while [ -L "$script" ]; do
+  link=$(readlink "$script") || break
+  case $link in
+    /*) script=$link ;;
+    *) script=$(dirname "$script")/$link ;;
+  esac
+done
+
+# 上跳一层（bin/ → 插件根），pwd -P 取物理路径
+root=$(CDPATH= cd "$(dirname "$script")/.." && pwd -P) || {
+  echo "✗ atb：无法定位插件根目录（来自 $0）" >&2
+  exit 1
+}
+
+if command -v node >/dev/null 2>&1; then
+  exec node "$root/scripts/atb.mjs" "$@"
+fi
+
+echo "✗ atb：未找到 node，请先安装 Node.js（https://nodejs.org/）" >&2
+exit 1

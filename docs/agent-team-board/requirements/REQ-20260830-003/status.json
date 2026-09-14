@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260830-003",
+  "type": "requirement",
+  "title": "/dev 支持 loop：连续开发直到所有已接受条目完成",
+  "status": "done",
+  "parent": null,
+  "owner": "loop-session",
+  "createdAt": "2026-08-29T17:07:07.887Z",
+  "updatedAt": "2026-09-03T01:44:54.779Z",
+  "agentCompletedAt": "2026-08-29T23:42:22.790Z",
+  "lastReport": {
+    "at": "2026-08-29T23:42:22.790Z",
+    "coverage": 7,
+    "framework": "node:assert 文档契约测试",
+    "summary": "为 /dev 增加 loop 循环模式：commands/dev.md 新增循环模式一节（反复 next 直到无 accepted、认领冲突/单条目失败跳过继续、结束输出总结、铁律不变），argument-hint 扩为 <ID | next | loop>；SKILL.md 的 TDD 流程与会话调度规则同步 loop 语义。新增 scripts/tests/loop-mode.test.mjs 7 个文档契约用例，先红后绿；layout/file-board/multi-project 三套回归测试全过。插件缓存为源码仓库软链，改动即时生效。"
+  },
+  "history": [
+    {
+      "at": "2026-08-29T17:07:07.887Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-08-29T17:08:18.879Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-08-29T23:40:13.776Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "loop-session",
+      "note": "认领（loop-session）"
+    },
+    {
+      "at": "2026-08-29T23:42:22.790Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告（覆盖率 7%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-03T01:44:54.779Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": ""
+    }
+  ]
+}

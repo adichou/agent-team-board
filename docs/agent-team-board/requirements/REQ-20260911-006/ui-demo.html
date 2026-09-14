@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260911-006 回退 REQ-20260911-004 — 设置页对照演示</title>
+<!--
+  单文件可交互演示（无外网依赖 / 无构建步骤，浏览器直接打开）。
+  演示内容：回退 REQ-20260911-004（设置模块「批量 Commit 提交目录范围」分区）前后的设置页对照。
+  - 回退前（现状）：设置页 = 「批量任务」分区 + 「批量 Commit」分区（目录范围白名单）。
+  - 回退后（目标）：设置页仅剩「批量任务」分区，交互不回归。
+  状态切换：正常 / 加载中 / 加载失败（+ 重试）；保存三态（保存中 / 成功 / 失败·草稿保留）；
+  深浅色主题切换。全部数据为模拟，不访问真实服务、不执行任何 Git 操作。
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #e5e7eb; --muted: #6b7280;
+    --text: #1f2937; --primary: #4f46e5; --primary-weak: rgba(79, 70, 229, .1);
+    --ok: #047857; --ok-bg: #ecfdf5; --err: #b91c1c; --err-bg: #fef2f2;
+    --warn: #92400e; --warn-bg: #fffbeb; --info: #1d4ed8; --info-bg: #eff6ff;
+    --skeleton: #e5e7eb; --skeleton-hi: #f3f4f6;
+  }
+  html[data-theme="dark"] {
+    --bg: #111827; --panel: #1f2937; --border: #374151; --muted: #9ca3af;
+    --text: #e5e7eb; --primary: #818cf8; --primary-weak: rgba(129, 140, 248, .16);
+    --ok: #34d399; --ok-bg: rgba(6, 78, 59, .35); --err: #f87171; --err-bg: rgba(127, 29, 29, .35);
+    --warn: #fbbf24; --warn-bg: rgba(120, 53, 15, .35); --info: #93c5fd; --info-bg: rgba(30, 58, 138, .35);
+    --skeleton: #374151; --skeleton-hi: #4b5563;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13.5px/1.65 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  }
+  /* ---------- 演示工具栏 ---------- */
+  .demo-bar {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px 18px;
+    align-items: center; padding: 10px 16px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-bar .brand { font-weight: 600; }
+  .demo-bar .brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text); padding: 5px 12px;
+    cursor: pointer; font-size: 12.5px;
+  }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .demo-bar label.switch { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .demo-bar .note { width: 100%; color: var(--muted); font-size: 12px; margin: 0; }
+  /* ---------- 页面骨架（模拟看板） ---------- */
+  .board { display: flex; min-height: calc(100vh - 92px); }
+  .side {
+    width: 168px; flex: none; border-right: 1px solid var(--border); background: var(--panel);
+    padding: 14px 10px; font-size: 13px;
+  }
+  .side .nav { display: block; padding: 7px 10px; border-radius: 7px; color: var(--muted); text-decoration: none; }
+  .side .nav.active { background: var(--primary-weak); color: var(--primary); font-weight: 600; }
+  .main { flex: 1; padding: 18px 22px; max-width: 880px; }
+  h3.page-title { margin: 0 0 14px; font-size: 16px; }
+  /* ---------- 分区卡片（对应看板 cx-config） ---------- */
+  .cx-config {
+    border: 1px solid var(--border); background: var(--panel); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  .cx-config h4 { margin: 0 0 6px; font-size: 14px; }
+  .cx-config h5 { font-size: 12.5px; color: var(--muted); font-weight: 600; margin: 0 0 4px; }
+  p.muted { color: var(--muted); margin: 4px 0 8px; }
+  .small { font-size: 12px; }
+  .ts-block { margin: 8px 0 12px; padding-left: 4px; }
+  .field-inline { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .dep-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 7px; padding: 6px 14px; font-size: 12.5px; cursor: pointer;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .notice { border-radius: 7px; padding: 6px 10px; margin: 8px 0; font-size: 12.5px; border: 1px solid transparent; }
+  .notice.info { background: var(--info-bg); color: var(--info); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.err { background: var(--err-bg); color: var(--err); }
+  .hidden { display: none !important; }
+  /* 批量 Commit 分区：目录清单（回退前形态，对应 004 引入的 .commit-settings） */
+  .dir-group { margin: 10px 0 4px; }
+  .dir-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 4px 18px; }
+  .dir-item { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+  .dir-item label { cursor: pointer; display: flex; gap: 6px; align-items: baseline; }
+  .dir-item .path { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .dir-item .tag {
+    font-size: 11.5px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0 5px; white-space: nowrap;
+  }
+  .dir-item .tag.src { color: var(--primary); border-color: var(--primary); opacity: .8; }
+  /* 加载骨架 / 失败 */
+  .skel { height: 14px; border-radius: 6px; background: var(--skeleton); margin: 8px 0; position: relative; overflow: hidden; }
+  .skel::after {
+    content: ""; position: absolute; inset: 0; width: 40%;
+    background: var(--skeleton-hi); animation: sweep 1.1s ease-in-out infinite;
+  }
+  @keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+  /* toast */
+  #toast {
+    position: fixed; right: 18px; bottom: 18px; z-index: 50; display: flex; flex-direction: column; gap: 8px;
+  }
+  #toast .t {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-left: 3px solid var(--ok); border-radius: 8px; padding: 8px 14px; font-size: 12.5px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.12); animation: pop .18s ease-out;
+  }
+  #toast .t.err { border-left-color: var(--err); }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* 回退标注 */
+  .revert-badge {
+    display: inline-block; font-size: 11px; border-radius: 5px; padding: 1px 7px; margin-left: 8px;
+    background: var(--err-bg); color: var(--err); border: 1px solid var(--err); vertical-align: 2px;
+  }
+  .legend { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+  <div class="demo-bar">
+    <span class="brand">REQ-20260911-006<small>回退 REQ-20260911-004 · 设置页对照演示（纯模拟）</small></span>
+    <div class="seg" id="modeSeg" role="tablist" aria-label="回退前后切换">
+      <button type="button" data-mode="before" class="on">回退前（现状）</button>
+      <button type="button" data-mode="after">回退后（目标）</button>
+    </div>
+    <div class="seg" id="stateSeg" role="tablist" aria-label="数据状态切换">
+      <button type="button" data-state="ready" class="on">正常加载</button>
+      <button type="button" data-state="loading">加载中</button>
+      <button type="button" data-state="error">加载失败</button>
+    </div>
+    <label class="switch"><input type="checkbox" id="simFail"> 模拟保存失败</label>
+    <div class="seg" id="themeSeg" aria-label="主题切换">
+      <button type="button" data-theme="light" class="on">浅色</button>
+      <button type="button" data-theme="dark">深色</button>
+    </div>
+    <p class="note">「批量任务」与「批量 Commit」两分区共用同一设置数据源（/api/tasks/settings）：加载中显示骨架、加载失败显示错误条 + 重试。回退后「批量 Commit」分区整体移除，仅剩「批量任务」分区。</p>
+  </div>
+
+  <div class="board">
+    <nav class="side">
+      <span class="nav">需求列表</span>
+      <span class="nav">任务</span>
+      <span class="nav">讨论</span>
+      <span class="nav active">设置</span>
+      <span class="nav">营销</span>
+    </nav>
+    <main class="main">
+      <h3 class="page-title" id="pageTitle">设置</h3>
+      <p class="legend" id="legend"></p>
+      <div id="settingsArea" aria-live="polite"><!-- 由 render() 填充 --></div>
+    </main>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 模拟常量（与真实实现同口径：scripts/web/app.js 6897 行起，仅展示用） ---------- */
+  var COMMIT_SCOPE_CATALOG = [
+    { key: 'scripts/',      group: 'src',   note: '业务源码' },
+    { key: 'bin/',           group: 'src',   note: 'CLI 入口' },
+    { key: 'commands/',      group: 'src',   note: '斜杠命令' },
+    { key: 'electron/',      group: 'src',   note: 'Electron 壳' },
+    { key: 'hooks/',         group: 'src',   note: '钩子配置' },
+    { key: 'skills/',        group: 'src',   note: 'Agent skills' },
+    { key: '__root__',       group: 'src',   note: 'package.json 等根级文件', root: true },
+    { key: 'docs/',          group: 'other', note: '条目文档与看板数据' },
+    { key: 'output/',        group: 'other', note: '素材·生成物' },
+    { key: '.codex-plugin/', group: 'other', note: '插件元数据' },
+    { key: '.zcode/',        group: 'other', note: '会话数据' },
+    { key: '.zcode-plugin/', group: 'other', note: '插件元数据' }
+  ];
+  var DEFAULT_DIRS = ['scripts/', 'bin/', 'commands/', 'electron/', 'hooks/', 'skills/', 'docs/'];
+  var GROUP_LABEL = { src: '源代码相关目录（默认勾选）', other: '其他目录' };
+  var ROOT_LABEL = '（根文件）';
+
+  /* ---------- 演示状态 ---------- */
+  var S = {
+    mode: 'before',        // before = 回退前（现状）；after = 回退后（目标）
+    view: 'ready',         // ready | loading | error
+    simFail: false,
+    autoPlan: true,        // 批量任务：完善完成后自动转入计划（模拟已保存值，当前项目实存 true）
+    tsDirty: false,
+    commitConfigured: false, // 模拟「未保存过 commit 设置」→ 现状展示「未配置 · 默认生效」
+    commitDirs: DEFAULT_DIRS.slice(),
+    commitRoot: true,
+    csDirty: false
+  };
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  function toast(msg, isErr) {
+    var box = $('#toast');
+    var t = document.createElement('div');
+    t.className = 't' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    box.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3200);
+  }
+
+  /* ---------- 分区渲染 ---------- */
+  function taskSettingsHtml() {
+    return '<section class="cx-config task-settings" id="tsSection">'
+      + '<h4>批量任务</h4>'
+      + '<p class="muted small">两类批量任务均为子代理模式，子代理模型跟随主调度会话；保存仅对后续新任务生效。</p>'
+      + '<div class="ts-block">'
+      + '<label class="field-inline" title="开启后完善完成即自动移入计划；默认关闭＝人工移入计划。">'
+      + '<input type="checkbox" id="tsAutoPlan"' + (S.autoPlan ? ' checked' : '') + '> 完善完成后自动转入计划</label>'
+      + '<p class="muted small" style="margin:2px 0 0">开启后完善完成即自动移入计划；默认关闭＝人工移入计划。</p>'
+      + '</div>'
+      + '<div class="dep-toolbar">'
+      + '<button type="button" class="btn primary" id="tsSave">保存批量任务设置</button>'
+      + '<span class="muted small" id="tsStatus" role="status">已加载设置</span>'
+      + '</div></section>';
+  }
+
+  function commitSettingsHtml() {
+    var items = function (group) {
+      return COMMIT_SCOPE_CATALOG.filter(function (c) { return c.group === group; }).map(function (c) {
+        var checked = c.root ? S.commitRoot : S.commitDirs.indexOf(c.key) >= 0;
+        return '<div class="dir-item"><label><input type="checkbox" data-cdir="' + esc(c.key) + '"'
+          + (checked ? ' checked' : '') + '> <span class="path">'
+          + esc(c.key === '__root__' ? ROOT_LABEL : c.key) + '</span></label>'
+          + '<span class="tag' + (group === 'src' ? ' src' : '') + '">' + esc(c.note) + '</span></div>';
+      }).join('');
+    };
+    return '<section class="cx-config commit-settings" id="csSection">'
+      + '<h4>批量 Commit<span class="revert-badge">回退后移除</span></h4>'
+      + '<p class="muted small">提交目录范围：仅范围内的目录与根级文件允许被批量 Commit 提交到 git；范围外改动不提交、不暂存，原样保留在工作区。保存仅对后续新创建的批量 Commit 任务生效。</p>'
+      + (S.commitConfigured ? '' : '<div class="notice info">未配置 · 默认生效（源代码相关目录与条目文档）——保存后按自定义范围生效。</div>')
+      + '<div class="dir-group"><h5>' + GROUP_LABEL.src + '</h5><div class="dir-list">' + items('src') + '</div></div>'
+      + '<div class="dir-group"><h5>' + GROUP_LABEL.other + '</h5><div class="dir-list">' + items('other') + '</div></div>'
+      + '<div class="notice warn' + (csDraftEmpty() ? '' : ' hidden') + '" id="csEmptyWarn">提交目录范围为空：批量 Commit 将无内容可提交。请至少勾选一个目录（或允许根级文件），或点「恢复默认」。</div>'
+      + '<div class="dep-toolbar">'
+      + '<button type="button" class="btn" id="csReset">恢复默认（源代码目录与条目文档）</button>'
+      + '<button type="button" class="btn primary" id="csSave"' + (csDraftEmpty() ? ' disabled' : '') + '>保存批量 Commit 设置</button>'
+      + '<span class="muted small" id="csStatus" role="status">'
+      + (S.commitConfigured ? '已加载设置' : '已加载设置（未配置，按默认生效）') + '</span>'
+      + '</div></section>';
+  }
+
+  function loadingHtml() {
+    return '<section class="cx-config task-settings" aria-busy="true">'
+      + '<h4>批量任务</h4><p class="muted small">正在加载任务设置…</p>'
+      + '<div class="skel" style="width:70%"></div><div class="skel" style="width:46%"></div><div class="skel" style="width:58%"></div>'
+      + '</section>';
+  }
+
+  function errorHtml() {
+    return '<section class="cx-config task-settings"><h4>批量任务</h4>'
+      + '<div class="notice err">任务设置加载失败：模拟网络错误 <button type="button" class="btn" id="tsRetry">重试</button></div>'
+      + '</section>';
+  }
+
+  function csDraftEmpty() {
+    return S.commitDirs.length === 0 && !S.commitRoot;
+  }
+
+  /* ---------- 主渲染 ---------- */
+  function render() {
+    var area = $('#settingsArea');
+    var legend = $('#legend');
+    $('#pageTitle').textContent = '设置' + (S.mode === 'after' ? '（回退后：仅批量任务分区）' : '');
+    if (S.mode === 'before') {
+      legend.innerHTML = '现状：设置页含「批量任务」与「批量 Commit」两分区（REQ-20260911-004 已实施）。';
+    } else {
+      legend.innerHTML = '目标（本单回退）：「批量 Commit」分区整体移除，设置页仅剩「批量任务」分区；其余交互不回归。';
+    }
+    if (S.view === 'loading') { area.innerHTML = loadingHtml(); return; }
+    if (S.view === 'error') { area.innerHTML = errorHtml(); bindRetry(); return; }
+    // 就绪态：回退前 = 批量任务 + 批量 Commit；回退后 = 仅批量任务
+    area.innerHTML = taskSettingsHtml() + (S.mode === 'before' ? commitSettingsHtml() : '');
+    bindTask();
+    if (S.mode === 'before') bindCommit();
+  }
+
+  /* ---------- 交互绑定 ---------- */
+  function bindRetry() {
+    var b = $('#tsRetry');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      S.view = 'loading';
+      setSeg('stateSeg', 'loading', 'state');
+      render();
+      setTimeout(function () {
+        S.view = 'ready';
+        setSeg('stateSeg', 'ready', 'state');
+        render();
+        toast('已重新加载设置');
+      }, 900);
+    });
+  }
+
+  function bindTask() {
+    var cb = $('#tsAutoPlan'), save = $('#tsSave'), status = $('#tsStatus');
+    if (!save) return;
+    cb.addEventListener('change', function () {
+      S.tsDirty = true;
+      status.textContent = '有未保存的更改';
+    });
+    save.addEventListener('click', function () {
+      save.disabled = true; save.textContent = '保存中…';
+      setTimeout(function () {
+        if (S.simFail) {
+          status.textContent = '保存失败：模拟写入失败（草稿已保留，可重试）';
+          toast('保存失败：模拟写入失败', true);
+        } else {
+          S.autoPlan = cb.checked; S.tsDirty = false;
+          status.textContent = '已保存，仅对后续启动的任务生效';
+          toast('✓ 已保存批量任务设置（仅对后续启动的任务生效）');
+        }
+        save.disabled = false; save.textContent = '保存批量任务设置';
+      }, 700);
+    });
+  }
+
+  function bindCommit() {
+    var boxes = document.querySelectorAll('input[data-cdir]');
+    var save = $('#csSave'), reset = $('#csReset'), status = $('#csStatus'), warn = $('#csEmptyWarn');
+    var refresh = function () {
+      var empty = csDraftEmpty();
+      warn.classList.toggle('hidden', !empty);
+      save.disabled = empty;
+    };
+    Array.prototype.forEach.call(boxes, function (b) {
+      b.addEventListener('change', function () {
+        if (b.dataset.cdir === '__root__') S.commitRoot = b.checked;
+        else {
+          var i = S.commitDirs.indexOf(b.dataset.cdir);
+          if (b.checked && i < 0) S.commitDirs.push(b.dataset.cdir);
+          if (!b.checked && i >= 0) S.commitDirs.splice(i, 1);
+        }
+        S.csDirty = true;
+        status.textContent = '有未保存的更改';
+        refresh();
+      });
+    });
+    reset.addEventListener('click', function () {
+      S.commitDirs = DEFAULT_DIRS.slice(); S.commitRoot = true; S.csDirty = true;
+      Array.prototype.forEach.call(boxes, function (b) {
+        b.checked = b.dataset.cdir === '__root__' || DEFAULT_DIRS.indexOf(b.dataset.cdir) >= 0;
+      });
+      status.textContent = '有未保存的更改';
+      refresh();
+      toast('已恢复默认清单（源代码目录与条目文档）——仍需保存后生效');
+    });
+    save.addEventListener('click', function () {
+      if (csDraftEmpty()) return;
+      save.disabled = true; save.textContent = '保存中…';
+      setTimeout(function () {
+        if (S.simFail) {
+          status.textContent = '保存失败：模拟写入失败（草稿已保留，可重试）';
+          toast('保存失败：模拟写入失败', true);
+        } else {
+          S.commitConfigured = true; S.csDirty = false;
+          status.textContent = '已保存，仅对后续新创建的批量 Commit 任务生效';
+          toast('✓ 已保存批量 Commit 设置（仅对后续新创建的批量 Commit 任务生效）');
+        }
+        save.textContent = '保存批量 Commit 设置';
+        refresh();
+      }, 700);
+    });
+    refresh();
+  }
+
+  /* ---------- 工具栏 ---------- */
+  function setSeg(segId, val, kind) {
+    var seg = document.getElementById(segId);
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b.dataset[kind] === val);
+    });
+  }
+
+  $('#modeSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    S.mode = b.dataset.mode;
+    setSeg('modeSeg', S.mode, 'mode');
+    render();
+  });
+  $('#stateSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    S.view = b.dataset.state;
+    setSeg('stateSeg', S.view, 'state');
+    render();
+  });
+  $('#simFail').addEventListener('change', function (e) {
+    S.simFail = e.target.checked;
+    toast(S.simFail ? '已开启「模拟保存失败」：下次保存将失败（草稿保留）' : '已关闭「模拟保存失败」');
+  });
+  $('#themeSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    document.documentElement.dataset.theme = b.dataset.theme;
+    setSeg('themeSeg', b.dataset.theme, 'theme');
+  });
+  // 初始主题跟随系统（可手动覆盖）
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.dataset.theme = 'dark';
+    setSeg('themeSeg', 'dark', 'theme');
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

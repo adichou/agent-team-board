@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-013 演示 — 隐藏讨论 / 文件模块与详情「讨论纪要」页签</title>
+<style>
+  /* 视觉令牌沿用看板 style.css 的浅 / 深双主题（prefers-color-scheme） */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --accepted: #2563eb; --submitted: #64748b; --viewrail-accent: #4f46e5;
+    --viewrail-accent-soft: rgba(79,70,229,.1); --warn: #dc2626;
+    --ok-bg: #ecfdf5; --ok-text: #047857; --info-bg: #eff6ff; --info-text: #1d4ed8;
+    --warn-bg: #fef2f2; --warn-text: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+      --accepted: #60a5fa; --submitted: #94a3b8; --viewrail-accent: #818cf8;
+      --viewrail-accent-soft: rgba(129,140,248,.16); --warn: #f87171;
+      --ok-bg: #052e1c; --ok-text: #6ee7b7; --info-bg: #0b1d3a; --info-text: #93c5fd;
+      --warn-bg: #3a1212; --warn-text: #fca5a5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ---------- 演示页骨架 ---------- */
+  .demo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px 16px; background: linear-gradient(135deg, #4f46e5, #0ea5e9); color: #fff; }
+  .demo-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .demo-head .spacer { flex: 1; }
+  .seg { display: inline-flex; background: rgba(255,255,255,.16); border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: transparent; color: #fff; padding: 5px 14px; border-radius: 6px; }
+  .seg button.on { background: #fff; color: #1b2434; font-weight: 600; }
+  .demo-banner { padding: 6px 16px; background: var(--info-bg); color: var(--info-text); font-size: 12px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 12px 16px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ---------- 看板 mock ---------- */
+  .board { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .topbar .proj { border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    border-radius: 6px; padding: 4px 8px; }
+  .topbar .grow { flex: 1; }
+  .module-nav { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); align-items: center; }
+  .module-nav .view-tab { border: 0; background: transparent; color: var(--muted);
+    padding: 5px 12px; border-radius: 6px; transition: background-color .18s, color .18s; }
+  .module-nav .view-tab:hover { color: var(--text); background: rgba(127,140,170,.12); }
+  .module-nav .view-tab.active { color: var(--viewrail-accent); background: var(--viewrail-accent-soft); font-weight: 600; }
+  .module-nav .view-tab.gone { display: none; }  /* 目标态：隐藏入口不占位 */
+  .module-nav .nav-extra { margin-left: auto; }
+  .urlbar { display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid var(--border);
+    background: var(--bg); font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .urlbar .box { flex: 1; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; background: var(--panel);
+    color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .placeholder-view { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+  .workspace { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 0; }
+  @media (max-width: 720px) { .workspace { grid-template-columns: 1fr; } }
+  .req-list { border-right: 1px solid var(--border); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .req-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; background: var(--panel); }
+  .req-card:hover { border-color: var(--viewrail-accent); }
+  .req-card.sel { border-color: var(--viewrail-accent); box-shadow: 0 0 0 2px var(--viewrail-accent-soft); }
+  .req-card .row1 { display: flex; gap: 6px; align-items: center; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--viewrail-accent); }
+  .chip { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--border); color: var(--muted); }
+  .chip.s-accepted { color: var(--accepted); border-color: var(--accepted); }
+  .req-card .t { margin: 3px 0 0; font-size: 12px; }
+
+  /* ---------- 详情抽屉 mock ---------- */
+  .drawer-pane-wrap { padding: 12px 14px; min-height: 260px; }
+  .drawer-head .card-top { display: flex; align-items: center; gap: 8px; }
+  .drawer-head h2 { margin: 6px 0 10px; font-size: 15px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 12px; }
+  .tabs .tab { border: 0; background: transparent; color: var(--muted); padding: 7px 10px;
+    border-bottom: 2px solid transparent; }
+  .tabs .tab.active { color: var(--viewrail-accent); border-bottom-color: var(--viewrail-accent); font-weight: 600; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 14px; }
+  .meta-grid label { display: block; font-size: 11px; color: var(--muted); }
+  .notice { border-radius: 8px; padding: 7px 10px; margin: 10px 0; font-size: 12px; border: 1px solid var(--border); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-text); border-color: transparent; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+  .notice.info { background: var(--info-bg); color: var(--info-text); border-color: transparent; }
+  .md-demo { border: 1px dashed var(--border); border-radius: 8px; padding: 10px; }
+  .md-demo p { margin: 0 0 8px; }
+  .doc-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .doc-table th, .doc-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+  .bug-list { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .bug-list li { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+    display: flex; gap: 8px; align-items: center; font-size: 12px; }
+  .link { color: var(--viewrail-accent); cursor: pointer; text-decoration: underline; }
+  .rd-box { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 10px; }
+  .rd-bar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 12px; }
+  .btn:hover { border-color: var(--viewrail-accent); }
+  .btn.primary { background: var(--viewrail-accent); border-color: var(--viewrail-accent); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+
+  /* ---------- 右侧说明面板 ---------- */
+  .side { display: flex; flex-direction: column; gap: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 10px 12px; }
+  .panel h3 { margin: 0 0 8px; font-size: 13px; }
+  .chg { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
+  .chg:last-child { border-bottom: 0; }
+  .chg .mark { flex: none; width: 16px; height: 16px; border-radius: 4px; display: inline-flex;
+    align-items: center; justify-content: center; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
+  .chg.hit .mark { background: var(--viewrail-accent); border-color: var(--viewrail-accent); color: #fff; }
+  .netlog { font-family: ui-monospace, Menlo, monospace; font-size: 11px; max-height: 150px; overflow: auto;
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); }
+  .netlog .entry { display: flex; gap: 6px; }
+  .netlog .get { color: var(--ok-text); }
+  .netlog .entry.sup { color: var(--muted); text-decoration: line-through; }
+  .legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+
+  /* ---------- 新建弹窗 mock ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 15, 25, .45); display: none;
+    align-items: center; justify-content: center; z-index: 30; }
+  .modal-wrap.on { display: flex; }
+  .modal { width: min(420px, calc(100vw - 32px)); background: var(--panel); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 14px 16px; }
+  .modal-head { display: flex; align-items: center; margin-bottom: 8px; }
+  .modal-head h3 { margin: 0; font-size: 14px; flex: 1; }
+  .field { display: block; margin: 8px 0; font-size: 12px; color: var(--muted); }
+  .field input, .field select, .field textarea { width: 100%; margin-top: 4px; border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; background: var(--bg); color: var(--text); font: inherit; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-left: 3px solid var(--ok-text); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; max-width: 80vw; }
+  .toast.on { opacity: 1; }
+  .toast.err { border-left-color: var(--warn); }
+</style>
+</head>
+<body>
+
+<header class="demo-head">
+  <h1>REQ-20260909-013 演示 — 隐藏讨论 / 文件模块与详情「讨论纪要」页签</h1>
+  <span class="spacer"></span>
+  <div class="seg" role="group" aria-label="场景切换">
+    <button type="button" id="sceneNow" class="on">隐藏前示意</button>
+    <button type="button" id="sceneTarget">目标（隐藏后）</button>
+  </div>
+</header>
+<div class="demo-banner">
+  静态交互演示（单文件、无外网依赖）：切换右上场景对比三处收敛——顶栏导航去掉「讨论 / 文件」（「需求 / 任务 / 营销 / 发布 / 设置」不受影响）、详情抽屉五页签收敛为四页签（去掉「讨论纪要」）、新建弹窗类型收敛为需求 / Bug。所有条目数据均为演示用假数据；完整目标方案中的附带范围仍待确认，详见 README。
+</div>
+
+<div class="layout">
+  <!-- ============ 看板 mock ============ -->
+  <div class="board">
+    <div class="topbar">
+      <span class="muted small">项目</span>
+      <select class="proj" aria-label="项目选择（演示）"><option>agent-team-board</option></select>
+      <span class="muted small">搜索框位置（演示省略）</span>
+      <span class="grow"></span>
+      <button type="button" class="btn primary" id="btnNew">＋ 新建</button>
+    </div>
+    <nav class="module-nav" role="group" aria-label="模块导航">
+      <button type="button" class="view-tab nav-disc" data-view="oncall">讨论</button>
+      <button type="button" class="view-tab active" data-view="status">需求</button>
+      <button type="button" class="view-tab" data-view="runs">任务</button>
+      <button type="button" class="view-tab nav-file" data-view="files">文件</button>
+      <button type="button" class="view-tab" data-view="marketing">营销</button>
+      <button type="button" class="view-tab" data-view="release">发布</button>
+      <button type="button" class="view-tab nav-extra" data-view="settings">设置</button>
+    </nav>
+    <div class="urlbar">
+      <span class="muted small">地址</span>
+      <span class="box" id="urlBox">http://127.0.0.1:8888/?project=agent-team-board&amp;view=status</span>
+      <select id="oldView" aria-label="旧链接模块"><option value="oncall">讨论</option><option value="files">文件</option></select>
+      <button type="button" class="btn small" id="btnOldLink" title="模拟从书签 / 刷新打开旧模块深链">模拟打开旧链接</button>
+    </div>
+
+    <!-- 讨论视图（演示占位；目标态不可达） -->
+    <section id="viewOncall" class="placeholder-view" hidden>
+      <p><strong>【演示占位】讨论模块（#oncallView）</strong></p>
+      <p class="small">真实界面为讨论两态列表 + 详情四页签（概况 / 纪要 / 成果 / 提示词，REQ-20260909-012）。</p>
+      <p class="small" id="oncallNote"></p>
+    </section>
+    <!-- 文件视图（演示占位；目标态不可达） -->
+    <section id="viewFiles" class="placeholder-view" hidden>
+      <p><strong>【演示占位】文件模块（#fileView）</strong></p>
+      <p class="small">真实界面为面包屑 + 分层横幅条带 + 文件查看器（REQ-20260906-007）。</p>
+      <p class="small" id="filesNote"></p>
+    </section>
+    <!-- 营销 / 发布（演示占位，两场景一致：不在隐藏范围） -->
+    <section id="viewMarketing" class="placeholder-view" hidden>
+      <p><strong>【演示占位】营销模块（#marketingView）</strong></p>
+      <p class="small">本项不隐藏、不改动营销模块（REQ-20260910-019）；两场景入口均保留。</p>
+    </section>
+    <section id="viewRelease" class="placeholder-view" hidden>
+      <p><strong>【演示占位】发布模块（#releaseView）</strong></p>
+      <p class="small">本项不隐藏、不改动发布模块（REQ-20260910-029）；两场景入口均保留。</p>
+    </section>
+    <!-- 任务 / 设置（演示占位，两场景一致） -->
+    <section id="viewRuns" class="placeholder-view" hidden>
+      <p><strong>【演示占位】任务模块（#runsView）</strong></p>
+      <p class="small">本项不改动任务与设置模块。</p>
+    </section>
+    <section id="viewSettings" class="placeholder-view" hidden>
+      <p><strong>【演示占位】设置模块（#settingsView）</strong></p>
+      <p class="small">本项不改动任务与设置模块。</p>
+    </section>
+
+    <!-- 需求模块：列表 + 详情抽屉 -->
+    <section id="viewStatus">
+      <div class="workspace">
+        <div class="req-list" aria-label="需求列表（演示）">
+          <article class="req-card sel" data-item="REQ-20260909-013">
+            <div class="row1"><span class="cid">REQ-20260909-013</span><span class="chip s-accepted">已接受</span></div>
+            <p class="t">隐藏文件模块（范围沿用既有验收，详见 README）…</p>
+          </article>
+          <article class="req-card" data-item="REQ-20260909-006">
+            <div class="row1"><span class="cid">REQ-20260909-006</span><span class="chip s-accepted">已完成</span></div>
+            <p class="t">需求 bug 单详情页布局优化，使用页签式布局（演示数据）</p>
+          </article>
+        </div>
+        <aside aria-label="条目详情抽屉（演示）">
+          <div class="drawer-head" style="padding:12px 14px 0">
+            <div class="card-top">
+              <span class="cid">REQ-20260909-013</span>
+              <span class="chip s-accepted">已接受</span>
+            </div>
+            <h2>隐藏文件模块</h2>
+          </div>
+          <nav class="tabs" role="tablist" aria-label="详情分页">
+            <button type="button" class="tab active" data-tab="info" role="tab" aria-selected="true">基本信息</button>
+            <button type="button" class="tab" data-tab="readme" role="tab" aria-selected="false">说明</button>
+            <button type="button" class="tab" data-tab="design" role="tab" aria-selected="false">设计</button>
+            <button type="button" class="tab" data-tab="test" role="tab" aria-selected="false">测试用例</button>
+            <button type="button" class="tab tab-disc" data-tab="disc" role="tab" aria-selected="false">讨论纪要</button>
+          </nav>
+          <div class="drawer-pane-wrap" id="paneWrap"><!-- 由 JS 渲染 --></div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 右侧说明面板 ============ -->
+  <div class="side">
+    <div class="panel">
+      <h3>改动点清单（当前场景生效项打勾）</h3>
+      <div id="chgList"></div>
+    </div>
+    <div class="panel">
+      <h3>网络请求记录（演示）</h3>
+      <p class="muted small" style="margin:0 0 6px">现状场景：打开详情 / 切「讨论纪要」会发出讨论相关请求；目标场景：相关请求不再发出（删除线示意被抑制）。</p>
+      <div class="netlog" id="netlog"><div class="muted">（暂无请求）</div></div>
+      <div style="display:flex; gap:8px; margin-top:8px; align-items:center">
+        <label class="small" style="display:flex; gap:4px; align-items:center; margin:0">
+          <input type="checkbox" id="failNext"> 模拟下一次文档请求失败
+        </label>
+        <span class="grow"></span>
+        <button type="button" class="btn small" id="btnClearLog">清空</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>状态反馈速览</h3>
+      <div class="legend">
+        <span>· 正常态：导航 / 页签 / 弹窗切换即时生效</span>
+        <span>· 空态：「设计」页签演示文档缺失空态</span>
+        <span>· 加载态：「测试用例」页签首次点击演示加载占位</span>
+        <span>· 失败态：勾选模拟失败后文档请求报错 + 重试</span>
+        <span>· 回落态：目标场景点「模拟打开旧链接」演示深链回落</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建弹窗 mock -->
+<div class="modal-wrap" id="modalWrap">
+  <div class="modal" role="dialog" aria-label="新建条目（演示）">
+    <div class="modal-head"><h3>新建条目</h3><button type="button" class="btn small" id="modalClose">✕</button></div>
+    <label class="field">类型
+      <select id="fType">
+        <option value="req">需求（REQ）</option>
+        <option value="bug">Bug（BUG）</option>
+        <option value="ask">讨论（开放式）</option>
+      </select>
+    </label>
+    <label class="field">标题
+      <input id="fTitle" maxlength="120" placeholder="一句话说清这条需求 / Bug / 讨论">
+    </label>
+    <label class="field">描述
+      <textarea id="fDesc" rows="3" placeholder="验收标准、现象与复现步骤等（可留空，后续补充）"></textarea>
+    </label>
+    <p class="muted small" id="modalNote" style="margin:4px 0 0"></p>
+    <div class="modal-foot">
+      <button type="button" class="btn" id="modalCancel">取消</button>
+      <button type="button" class="btn primary" id="modalSubmit">创建</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ========== 演示状态 ========== */
+const S = { scene: 'now', view: 'status', tab: 'info', failNext: false };
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+/* 改动点清单（mark 在目标场景点亮） */
+const CHANGES = [
+  ['顶栏「讨论」导航入口隐藏（index.html data-view="oncall"）', true],
+  ['顶栏「文件」导航入口隐藏（index.html data-view="files"）', true],
+  ['详情抽屉「讨论纪要」页签隐藏：五页签 → 四页签（app.js renderDrawer data-tab="disc"）', true],
+  ['「讨论纪要」页签内容与请求不再渲染 / 发出（/api/oncall/tickets、/api/req-disc）', true],
+  ['新建弹窗类型收敛为 需求 / Bug（待确认 2）', true],
+  ['基本信息「来源讨论」跳转行不再展示（待确认 3）', true],
+  ['旧深链 ?view=oncall / ?view=files 回落需求模块', true],
+  ['数据与服务端接口保留：隐藏 ≠ 删除（恢复点记录于 design.md）', true],
+];
+
+function renderChanges() {
+  const box = $('#chgList');
+  box.replaceChildren(...CHANGES.map(([text]) => {
+    const row = document.createElement('div');
+    row.className = 'chg' + (S.scene === 'target' ? ' hit' : '');
+    const mark = document.createElement('span');
+    mark.className = 'mark';
+    mark.textContent = S.scene === 'target' ? '✓' : '';
+    const span = document.createElement('span');
+    span.textContent = text;
+    row.append(mark, span);
+    return row;
+  }));
+}
+
+/* ========== toast ========== */
+let toastTimer;
+function toast(msg, err = false) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.toggle('err', err);
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 3200);
+}
+
+/* ========== 网络请求记录 ========== */
+function logNet(path, opts = {}) {
+  const box = $('#netlog');
+  if (box.querySelector('.muted')) box.replaceChildren();
+  const row = document.createElement('div');
+  row.className = 'entry' + (opts.suppressed ? ' sup' : '');
+  const t = document.createElement('span');
+  t.className = 'muted';
+  t.textContent = new Date().toTimeString().slice(0, 8);
+  const m = document.createElement('span');
+  m.className = 'get';
+  m.textContent = 'GET';
+  const p = document.createElement('span');
+  p.textContent = path + (opts.suppressed ? '（已隐藏：请求不再发出）' : '');
+  row.append(t, m, p);
+  box.prepend(row);
+  while (box.children.length > 14) box.lastChild.remove();
+}
+
+/* ========== 场景切换 ========== */
+function applyScene() {
+  const target = S.scene === 'target';
+  $('#sceneNow').classList.toggle('on', !target);
+  $('#sceneTarget').classList.toggle('on', target);
+  // 导航入口：目标态隐藏「讨论」「文件」（不占位；营销 / 发布等其余入口不受影响）
+  $('.nav-disc').classList.toggle('gone', target);
+  $('.nav-file').classList.toggle('gone', target);
+  // 详情页签：目标态隐藏「讨论纪要」
+  const discTab = $('.tab-disc');
+  discTab.classList.toggle('gone', target);
+  if (target && S.tab === 'disc') S.tab = 'info';
+  // 新建弹窗类型
+  const ask = $('#fType option[value="ask"]');
+  ask.hidden = target; ask.disabled = target;
+  if (target && $('#fType').value === 'ask') $('#fType').value = 'req';
+  $('#modalNote').textContent = target
+    ? '目标场景：类型仅 需求 / Bug（「讨论」选项随模块隐藏，待确认项 2）'
+    : '';
+  // 若当前停留在被隐藏视图 → 回落需求模块
+  if (target && (S.view === 'oncall' || S.view === 'files')) {
+    setView(S.view);
+  } else {
+    syncUrl();
+  }
+  renderChanges();
+  renderViewNote();
+  renderTab();
+}
+
+$('#sceneNow').addEventListener('click', () => { S.scene = 'now'; applyScene(); });
+$('#sceneTarget').addEventListener('click', () => { S.scene = 'target'; applyScene(); });
+
+/* ========== 视图切换（含深链回落） ========== */
+function syncUrl() {
+  const view = S.view === 'status' ? '' : `&view=${S.view}`;
+  $('#urlBox').textContent = `http://127.0.0.1:8888/?project=agent-team-board${view}`;
+}
+function setView(v, opts = {}) {
+  const target = S.scene === 'target';
+  if (target && (v === 'oncall' || v === 'files')) {
+    // 回落：目标态不接受被隐藏视图（对应 setView 未知视图回落 status 的既有机制）
+    toast(`「${v === 'oncall' ? '讨论' : '文件'}」模块已隐藏，旧链接已回落到需求模块`, true);
+    v = 'status';
+  }
+  S.view = v;
+  const SEC = { status: 'viewStatus', oncall: 'viewOncall', files: 'viewFiles', marketing: 'viewMarketing', release: 'viewRelease', runs: 'viewRuns', settings: 'viewSettings' };
+  for (const b of $$('.view-tab')) b.classList.toggle('active', b.dataset.view === v && !b.classList.contains('gone'));
+  for (const [view, id] of Object.entries(SEC)) $('#' + id).hidden = view !== v;
+  syncUrl();
+  renderViewNote();
+  if (opts.fallback) return;
+  if (v === 'oncall' && S.scene === 'now') toast('已进入讨论模块（现状场景演示）');
+}
+$$('.view-tab').forEach((b) => b.addEventListener('click', () => {
+  if (b.classList.contains('gone')) return;
+  setView(b.dataset.view);
+}));
+
+function renderViewNote() {
+  const target = S.scene === 'target';
+  $('#oncallNote').textContent = target
+    ? '目标场景：本模块入口已隐藏，正常操作无法到达（数据与 /api/discussion* 接口保留）。'
+    : '现状场景：可从顶栏「讨论」进入；创建 / 查看纪要走本模块。';
+  $('#filesNote').textContent = target
+    ? '目标场景：本模块入口已隐藏；详情文档内的 .html 演示链接经 /api/item/:id/demo/:name 打开，不受影响。'
+    : '现状场景：可从顶栏「文件」浏览 docs/agent-team-board/ 全树。';
+}
+
+/* 旧深链模拟 */
+$('#btnOldLink').addEventListener('click', () => {
+  setView($('#oldView').value);
+});
+
+/* ========== 详情页签 ========== */
+const DOCS = {
+  readme: { title: 'README.md', body: () => `
+    <div class="md-demo">
+      <p><strong>描述</strong></p>
+      <p>看板当前围绕「讨论纪要」建设了三处界面……（节选，详见真实 README）本项为暂态隐藏：仅界面不可见、不可达，数据与服务端能力全部保留。</p>
+      <p class="muted small">说明页签经 loadDoc 渲染 README；首次激活显示「加载中…」，再次激活走 docCache 回填。</p>
+    </div>` },
+  test: { title: 'test-cases.md', body: () => `
+    <table class="doc-table">
+      <tr><th>#</th><th>用例</th><th>优先级</th><th>结果</th></tr>
+      <tr><td>1</td><td>目标场景顶栏无「讨论 / 文件」入口</td><td>P0</td><td>—</td></tr>
+      <tr><td>2</td><td>详情页签行为四页签，无「讨论纪要」</td><td>P0</td><td>—</td></tr>
+      <tr><td>3</td><td>旧深链 view=oncall 回落需求模块</td><td>P1</td><td>—</td></tr>
+    </table>` },
+};
+
+let renderVersion = 0;
+function renderTab() {
+  const version = ++renderVersion;
+  const wrap = $('#paneWrap');
+  for (const b of $$('.tabs .tab')) {
+    const on = b.dataset.tab === S.tab && !b.classList.contains('gone');
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  const target = S.scene === 'target';
+
+  if (S.tab === 'info') {
+    wrap.innerHTML = `
+      <section class="meta-grid">
+        <div><label>状态</label><span class="chip s-accepted">已接受</span></div>
+        <div><label>类型</label><span>需求</span></div>
+        <div><label>认领者</label><span>—</span></div>
+        <div><label>创建</label><span>09-09 12:18</span></div>
+        <div><label>更新</label><span>09-09 12:25</span></div>
+        ${target ? '' : `<div><label>来源讨论</label><span class="link" id="srcDisc" title="现状：点击跳入讨论模块详情">DISC-20260909-001（演示数据）</span></div>`}
+      </section>
+      ${target ? '' : '<p class="muted small" style="margin:6px 0 0">现状场景：基本信息含「来源讨论」跳转行；目标场景整行不展示（数据字段保留，待确认项 3）。</p>'}
+      <div class="notice info">状态操作按钮、下属 Bug 列表、批量执行设置等区块本项不改（演示省略）。</div>`;
+    const src = $('#srcDisc');
+    if (src) src.addEventListener('click', () => {
+      if (S.scene === 'now') { setView('oncall'); toast('现状：跳入讨论模块并打开 DISC-20260909-001（演示）'); }
+    });
+    return;
+  }
+
+  if (S.tab === 'design') {
+    wrap.innerHTML = `
+      <p class="muted">尚未创建，开发阶段补充。</p>
+      <p class="muted small">空态演示：design.md 缺失时页签固定显示但给空态、不发请求（REQ-20260909-006 口径不回归）。</p>`;
+    return;
+  }
+
+  if (S.tab === 'readme' || S.tab === 'test') {
+    const doc = DOCS[S.tab];
+    wrap.innerHTML = '<p class="muted">加载中…</p><p class="muted small">加载态演示：首次激活经 loadDoc 拉取文档。</p>';
+    logNet(`/api/item/REQ-20260909-013/doc/${doc.title}`);
+    setTimeout(() => {
+      if (version !== renderVersion) return;
+      if (S.failNext) {
+        S.failNext = false;
+        $('#failNext').checked = false;
+        wrap.innerHTML = `
+          <div class="notice warn">文档加载失败：模拟网络错误（演示）。</div>
+          <button type="button" class="btn small" id="docRetry">重试</button>`;
+        $('#docRetry').addEventListener('click', () => renderTab());
+        toast('加载失败：模拟网络错误（演示）', true);
+        return;
+      }
+      wrap.innerHTML = doc.body() + '<p class="muted small">正常态：内容回填并写入 docCache。</p>';
+    }, 420);
+    return;
+  }
+
+  if (S.tab === 'disc') {
+    // 仅现状场景可达
+    wrap.innerHTML = `
+      <section>
+        <h4 style="margin:4px 0 6px;font-size:13px">关联讨论（旧绑定记录） <span class="muted small">（1）</span></h4>
+        <ul class="bug-list">
+          <li><span class="cid">DISC-20260909-001</span><span style="flex:1">开放式讨论演示数据</span>
+            <span class="chip">讨论中</span><span class="muted small">1 轮 · 09-09 12:10</span></li>
+        </ul>
+      </section>
+      <div class="rd-box" aria-label="文档讨论区块（#reqDocDisc 演示）">
+        <div class="rd-bar-row">
+          <span class="chip">尚未开始讨论</span>
+          <span class="muted small" style="flex:1">在 Agent 会话讨论，在看板归档与应用（不改变需求状态）</span>
+          <button type="button" class="btn small primary">开始讨论</button>
+        </div>
+        <p class="muted small" style="margin:8px 0 0">REQ-20260909-003 文档讨论区块：提示词 / 引用 / 纪要归档 / 说明同步（子页签「说明 / 讨论纪要」；演示省略内部交互）。</p>
+      </div>
+      <p class="muted small">现状场景：打开本页签即发起 /api/oncall/tickets 与 /api/req-disc 请求；目标场景本页签不渲染、请求不发出（见右侧网络记录）。</p>`;
+    logNet('/api/oncall/tickets?req=REQ-20260909-013');
+    logNet('/api/req-disc?req=REQ-20260909-013');
+  }
+}
+
+$$('.tabs .tab').forEach((b) => b.addEventListener('click', () => {
+  if (b.classList.contains('gone')) return;
+  S.tab = b.dataset.tab;
+  renderTab();
+}));
+
+/* ========== 新建弹窗 ========== */
+$('#btnNew').addEventListener('click', () => $('#modalWrap').classList.add('on'));
+$('#modalClose').addEventListener('click', () => $('#modalWrap').classList.remove('on'));
+$('#modalCancel').addEventListener('click', () => $('#modalWrap').classList.remove('on'));
+$('#modalWrap').addEventListener('click', (e) => { if (e.target === $('#modalWrap')) $('#modalWrap').classList.remove('on'); });
+$('#modalSubmit').addEventListener('click', () => {
+  const type = $('#fType').value;
+  const title = $('#fTitle').value.trim();
+  if (!title) { toast('请填写标题（演示校验）', true); return; }
+  $('#modalWrap').classList.remove('on');
+  if (type === 'ask' && S.scene === 'now') {
+    setView('oncall');
+    toast('✓ 已创建讨论单（待接受），进入讨论模块定位（现状场景演示）');
+    logNet('/api/new（type=ask，演示）');
+    return;
+  }
+  toast(`✓ 已创建 ${type === 'req' ? 'REQ' : 'BUG'}-20990909-999（待接受）— 演示假数据`);
+});
+
+/* ========== 其它 ========== */
+$('#failNext').addEventListener('change', (e) => { S.failNext = e.target.checked; });
+$('#btnClearLog').addEventListener('click', () => $('#netlog').replaceChildren(Object.assign(document.createElement('div'), { className: 'muted', textContent: '（暂无请求）' })));
+$$('.req-card').forEach((c) => c.addEventListener('click', () => {
+  $$('.req-card').forEach((x) => x.classList.toggle('sel', x === c));
+  S.tab = 'info';
+  renderTab();
+}));
+
+renderChanges();
+renderViewNote();
+renderTab();
+syncUrl();
+</script>
+</body>
+</html>

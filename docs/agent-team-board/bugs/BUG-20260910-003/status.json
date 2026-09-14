@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260910-003",
+  "type": "bug",
+  "title": "详细页面中的说明，方案等内容的呈现没有滚动条，请修复",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-3",
+  "createdAt": "2026-09-10T00:50:15.773Z",
+  "updatedAt": "2026-09-10T04:27:08.363Z",
+  "agentCompletedAt": "2026-09-10T03:29:21.996Z",
+  "lastReport": {
+    "at": "2026-09-10T03:29:21.996Z",
+    "coverage": 100,
+    "framework": "node:assert 静态契约测试（S1–S4）+ Electron 离屏实测六场景",
+    "summary": "根因：宽屏 .req-split 隐式 grid 行 auto 随抽屉长文档撑高（实测 900px 视口下抽屉 3343px），被 .req-view overflow:hidden 裁剪且祖先链无任何可滚容器。修复：grid-template-rows: minmax(0,1fr) 锁定行高，drawer-body 成唯一滚动容器；窄屏 absolute 与讨论模块复用方无回归，BUG-20260909-018 短文档拉伸不回退。归因 REQ-20260907-004。测试：S1 先红后绿，drawer-height 等全量 137 文件 0 失败。",
+    "runId": "run-20260910-149"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T00:50:15.773Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T00:52:23.118Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T02:12:06.407Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-100943-0a70）"
+    },
+    {
+      "at": "2026-09-10T03:11:09.609Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-3",
+      "note": "认领（zcode-batch-031-3）"
+    },
+    {
+      "at": "2026-09-10T03:29:21.997Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-3",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-10T04:27:08.363Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

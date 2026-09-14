@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260909-016 界面演示 — 设置「批量任务」描述精简</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e3e6ea; --text: #24292f;
+    --muted: #6a737d; --primary: #1f6feb; --err: #cf222e;
+    --info-bg: #ddf4ff; --ok-bg: #dafbe1; --warn-bg: #fff8c5; --err-bg: #ffebe9;
+  }
+  html.dark {
+    --bg: #0d1117; --card: #161b22; --line: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --primary: #4493f8;
+    --info-bg: #122d42; --ok-bg: #12261e; --warn-bg: #2d2506; --err-bg: #3d1719;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .demo-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 16px; background: #24292f; color: #fff; }
+  .demo-top .title { font-weight: 600; }
+  .demo-top .title .small { display: block; font-weight: 400; opacity: .75; }
+  .demo-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .tool { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #ffffffcc; }
+  .tool input { accent-color: #f85149; }
+  #darkBtn { border: 1px solid #ffffff55; background: transparent; color: #fff; border-radius: 6px; padding: 4px 10px; }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 14px 16px 48px; }
+  .demo-note { background: var(--info-bg); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+
+  .statebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .statebar .lbl { font-size: 12.5px; color: var(--muted); }
+  .statebar button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 6px; padding: 3px 12px; font-size: 12.5px; }
+  .statebar button.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .col-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .col-head .name { font-weight: 600; font-size: 13.5px; }
+  .badge { font-size: 11.5px; border-radius: 10px; padding: 1px 9px; border: 1px solid transparent; white-space: nowrap; }
+  .badge.bad { color: var(--err); border-color: var(--err); background: var(--err-bg); }
+  .badge.good { color: #1a7f37; border-color: #1a7f37; background: var(--ok-bg); }
+  html.dark .badge.good { color: #3fb950; border-color: #3fb950; }
+
+  /* 复刻 scripts/web/style.css 的 cx-config / task-settings 观感 */
+  .cx-config { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .cx-config h4 { margin: 0 0 10px; font-size: 14px; }
+  .cx-config p { margin: 4px 0; }
+  .ts-block { margin: 8px 0 12px; padding-left: 4px; }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin: 4px 14px 4px 0; cursor: default; }
+  input[type="checkbox"] { width: 15px; height: 15px; vertical-align: middle; accent-color: var(--primary); }
+  .dep-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 6px; padding: 4px 12px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .notice { border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+  .notice.err { background: var(--err-bg); color: var(--err); }
+
+  .count { display: inline-block; font-size: 11px; color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+  .count.over { color: var(--err); border-color: var(--err); }
+  .count.ok { color: #1a7f37; border-color: #1a7f37; }
+  html.dark .count.ok { color: #3fb950; }
+
+  #toastWrap { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 30; }
+  .toast { background: #24292f; color: #fff; border-radius: 8px; padding: 8px 14px; font-size: 13px; box-shadow: 0 4px 14px #0003; max-width: 340px; }
+  .toast.err { background: var(--err); }
+
+  .legend { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .legend code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<div class="demo-top">
+  <div class="title">BUG-20260909-016 界面演示 — 设置「批量任务」描述精简
+    <span class="small">验收口径示意，非已实现效果；仅前端模拟，不写入看板数据</span>
+  </div>
+  <div class="demo-tools">
+    <label class="tool"><input type="checkbox" id="failSave"> 模拟保存失败</label>
+    <label class="tool"><input type="checkbox" id="failLoad"> 下次加载失败</label>
+    <button id="darkBtn">深浅色切换</button>
+  </div>
+</div>
+
+<main>
+  <div class="demo-note">
+    左侧为缺陷现状（<code>scripts/web/app.js</code> <code>taskSettingsHtml</code> 现行文案逐字复刻，三段合计 285 字、两处重复）；
+    右侧为精简建议形态（合计约 66 字，语义四要点保留）。两栏均可交互：切换开关、点击保存观察状态反馈；用下方状态按钮切换 加载中 / 加载失败 / 正常。
+  </div>
+
+  <div class="statebar">
+    <span class="lbl">设置加载状态（两栏联动）：</span>
+    <button type="button" data-state="loading">加载中</button>
+    <button type="button" data-state="error">加载失败</button>
+    <button type="button" data-state="ready" class="active">正常（就绪）</button>
+  </div>
+
+  <div class="cols">
+    <!-- 缺陷现状 -->
+    <section>
+      <div class="col-head"><span class="name">缺陷现状</span><span class="badge bad">三段冗长 · 119 / 73 / 93 字 · 重复</span></div>
+      <div class="cx-config task-settings" id="panelNow"></div>
+    </section>
+    <!-- 精简建议 -->
+    <section>
+      <div class="col-head"><span class="name">精简建议</span><span class="badge good">单句短说明 · 39 / 27 字 · 不重复</span></div>
+      <div class="cx-config task-settings" id="panelNew"></div>
+    </section>
+  </div>
+
+  <p class="legend">
+    语义四要点（两栏均不丢）：① 两类批量任务均为子代理模式；② 子代理模型跟随主调度会话；③ 开关默认关闭＝人工移入计划（开启＝完善完成后自动移入计划）；④ 保存仅对后续新任务（后续完善回执）生效、不追溯。
+    行为契约不变：开关 aria-label「完善完成后自动转入计划」、草稿提示「有未保存的更改」、保存载荷仅 refine.autoPlanAfterDone、保存中防重复、失败草稿保留。
+  </p>
+</main>
+
+<div id="toastWrap"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // 现状文案：与 scripts/web/app.js taskSettingsHtml 逐字一致
+  var NOW = {
+    desc: '批量完善与批量开发均为子代理模式：主调度提示词单一通用版，可在任意一种 Agent 会话粘贴执行；子代理模型与智能/推理档位跟随主调度会话（与当前主调度会话一致），无需按 Agent 配置。保存后仅对后续新启动的任务生效；进行中的任务保持原设置。',
+    sub: '开启后：完善回执 done 核验通过且条目仍为已接受时，自动移入计划（planned）并进入批量开发候选；默认关闭 = 人工移入计划；保存后仅对后续完善回执生效，进行中与已完成的完善运行不追溯。',
+    title: '开启后：完善回执 done 核验通过且条目仍为已接受时，自动移入计划（planned）并进入批量开发候选；默认关闭 = 人工移入计划。仅对后续完善回执生效',
+    showTitleTip: true // 现状：title 悬停提示与可见说明重复（演示以虚线小标签提示，鼠标悬停开关文字可见）
+  };
+  // 精简建议文案（README 期望行为的建议形态；最终文案待开发阶段确认）
+  var NEW = {
+    desc: '两类批量任务均为子代理模式，子代理模型跟随主调度会话；保存仅对后续新任务生效。',
+    sub: '开启后完善完成即自动移入计划；默认关闭＝人工移入计划。',
+    title: '开启后完善完成即自动移入计划；默认关闭＝人工移入计划。', // 与可见说明同一短句，不再两处长文
+    showTitleTip: false
+  };
+
+  function len(s) { return String(s || '').replace(/\s/g, '').length; }
+  function countTag(text, ok) {
+    return '<span class="count ' + (ok ? 'ok' : 'over') + '">' + len(text) + ' 字</span>';
+  }
+
+  var state = { load: 'ready', autoPlan: false, saving: false };
+  var panels = { now: document.getElementById('panelNow'), neo: document.getElementById('panelNew') };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+
+  function panelHtml(kind, cfg) {
+    var checked = state.autoPlan ? ' checked' : '';
+    if (state.load === 'loading') {
+      return '<h4>批量任务</h4><p class="muted small">正在加载任务设置…</p>';
+    }
+    if (state.load === 'error') {
+      return '<h4>批量任务</h4><div class="notice err">任务设置加载失败：演示模拟的网络错误 <button type="button" class="btn small" data-act="retry">重试</button></div>';
+    }
+    var tipBadge = cfg.showTitleTip
+      ? '<span class="count over" title="' + esc(cfg.title) + '">另有 73 字悬停 title 与之重复</span>'
+      : '<span class="count ok">title 同此短句，不再重复</span>';
+    return '<h4>批量任务</h4>'
+      + '<p class="muted small">' + esc(cfg.desc) + countTag(cfg.desc, kind === 'neo') + '</p>'
+      + '<div class="ts-block">'
+      +   '<label class="field-inline" title="' + esc(cfg.title) + '">'
+      +     '<input type="checkbox" data-act="toggle" aria-label="完善完成后自动转入计划"' + checked + '> 完善完成后自动转入计划'
+      +   '</label>'
+      +   '<p class="muted small" style="margin:2px 0 0">' + esc(cfg.sub) + countTag(cfg.sub, kind === 'neo') + ' ' + tipBadge + '</p>'
+      + '</div>'
+      + '<div class="dep-toolbar">'
+      +   '<button type="button" class="btn primary" data-act="save" ' + (state.saving ? 'disabled' : '') + '>' + (state.saving ? '保存中…' : '保存批量任务设置') + '</button>'
+      +   '<span class="muted small" data-role="status" role="status">已加载设置</span>'
+      + '</div>';
+  }
+
+  function render() {
+    panels.now.innerHTML = panelHtml('now', NOW);
+    panels.neo.innerHTML = panelHtml('neo', NEW);
+  }
+
+  function statusText(msg) {
+    document.querySelectorAll('[data-role="status"]').forEach(function (el) { el.textContent = msg; });
+  }
+
+  // 保存失败路径：不重绘面板（草稿保留在复选框中，与真实行为一致），仅恢复保存按钮
+  function restoreSaveButtons() {
+    document.querySelectorAll('[data-act="save"]').forEach(function (b) { b.disabled = false; b.textContent = '保存批量任务设置'; });
+  }
+
+  function toast(msg, isErr) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    document.getElementById('toastWrap').appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+    var btn = el.closest ? el.closest('button') : null;
+    if (btn) {
+      var act = btn.dataset.act || btn.dataset.state;
+      if (act === 'retry') { setState('loading'); setTimeout(function () { setState('ready'); }, 700); return; }
+      if (act === 'save') {
+        // 草稿值取自被点击面板的开关（保存载荷仅 refine.autoPlanAfterDone——契约口径）
+        var host = btn.closest('.cx-config');
+        var draft = host ? host.querySelector('[data-act="toggle"]') : null;
+        var draftOn = draft ? draft.checked : state.autoPlan;
+        state.saving = true; render(); statusText('');
+        setTimeout(function () {
+          state.saving = false;
+          var fail = document.getElementById('failSave').checked;
+          if (fail) {
+            restoreSaveButtons();
+            statusText('保存失败：演示模拟错误（草稿已保留，可重试）');
+            toast('保存失败：演示模拟错误', true);
+          } else {
+            state.autoPlan = draftOn; render(); // 成功后按已保存值回显勾选
+            statusText('已保存，仅对后续启动的任务生效');
+            toast('✓ 已保存批量任务设置（流转开关仅对后续完善回执生效）');
+          }
+        }, 800);
+        return;
+      }
+      if (act === 'loading' || act === 'error' || act === 'ready') { setState(act); return; }
+    }
+    if (el && el.dataset && el.dataset.act === 'toggle') return; // change 事件处理草稿提示
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target.dataset && e.target.dataset.act === 'toggle') statusText('有未保存的更改');
+  });
+
+  function setState(next) {
+    if (next === 'loading') {
+      state.load = 'loading';
+      render();
+      setTimeout(function () {
+        state.load = document.getElementById('failLoad').checked ? 'error' : 'ready';
+        document.getElementById('failLoad').checked = false;
+        render();
+      }, 900);
+      return;
+    }
+    state.load = next; render();
+  }
+
+  document.querySelectorAll('.statebar button[data-state]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.statebar button').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+    });
+  });
+
+  // 深浅色：跟随系统 + 手动切换
+  var root = document.documentElement;
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) root.classList.add('dark');
+  document.getElementById('darkBtn').addEventListener('click', function () { root.classList.toggle('dark'); });
+
+  render();
+})();
+</script>
+</body>
+</html>

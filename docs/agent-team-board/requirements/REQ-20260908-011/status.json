@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260908-011",
+  "type": "requirement",
+  "title": "修改单需支持修改标题和描述。",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-1",
+  "createdAt": "2026-09-08T02:54:27.275Z",
+  "updatedAt": "2026-09-11T05:52:18.327Z",
+  "agentCompletedAt": "2026-09-08T13:28:58.185Z",
+  "lastReport": {
+    "at": "2026-09-08T13:28:58.185Z",
+    "coverage": 90,
+    "framework": "Node 原生断言脚本（node:assert/strict + vm 沙箱 + 真实 HTTP/CLI 子进程）",
+    "summary": "core 新增 editItem（仅 submitted，标题+描述一次改完，先全量校验再落盘保证原子性，README 需求「## 描述」/Bug「## 现象」节整体替换，空描述写回（待补充），history 一条留痕；renameItem 保留兼容）；server 新增 POST /api/item/:id/content；CLI rename 支持 --desc（- 走 stdin，标题可省略）；前端 uiPrompt 升级双字段 uiEditForm（预填/取消/Esc/遮罩/保存中禁用/失败保留可重试），editItem 预填 README 描述节并提交 /content，无变化前端先拦截；按钮文案消歧：✎ 改标题/描述 + 修改提示词。新增 edit-content.test.mjs 19 用例全绿，同步更新 rename-reject/edit-prompt 被替换契约断言，npm test 全量 89 文件 0 失败。待确认项按 design 默认方案落地（见 design.md 实施记录）。",
+    "runId": "run-20260908-079"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T02:54:27.275Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-08T04:19:26.941Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T13:08:44.306Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T13:10:28.568Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "认领（zcode-batch-018-1）"
+    },
+    {
+      "at": "2026-09-08T13:28:58.186Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-1",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:18.327Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-6da8",
+      "note": "人工确认完成"
+    }
+  ]
+}

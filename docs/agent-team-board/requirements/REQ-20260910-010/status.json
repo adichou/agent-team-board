@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-010",
+  "type": "requirement",
+  "title": "项目管理中，提供自动检测不存在的目录并支持一键移出所有不存在的目录",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-5",
+  "createdAt": "2026-09-10T01:48:25.208Z",
+  "updatedAt": "2026-09-10T04:26:22.252Z",
+  "agentCompletedAt": "2026-09-10T04:15:18.912Z",
+  "lastReport": {
+    "at": "2026-09-10T04:15:18.912Z",
+    "coverage": 15,
+    "framework": "node:assert/strict + 真实起 server 集成 + 前端静态契约",
+    "summary": "新增 /api/project/scan 只读检测（存在/不存在/检测失败三态+汇总）与 /api/project/remove-missing 批量移出（服务端确认时重新核实，恢复存在/已移出/无法确定一律跳过并报告原因）；单项移出放宽支持目录已不存在的注册记录；前端管理面板自动检测+重新检测+一键移出（两步确认、分项结果、busy 防重、列表与切换器联动、空态引导）。新测试 missing-dir-detect-20260910-010.test.mjs 15 用例全绿，npm test 全量 139 文件 0 失败。",
+    "runId": "run-20260910-151"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T01:48:25.208Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T01:48:43.579Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T02:17:52.035Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-101506-42a4）"
+    },
+    {
+      "at": "2026-09-10T04:05:39.503Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-5",
+      "note": "认领（zcode-batch-031-5）"
+    },
+    {
+      "at": "2026-09-10T04:15:18.912Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-5",
+      "note": "上报测试报告（覆盖率 15%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-10T04:26:22.253Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

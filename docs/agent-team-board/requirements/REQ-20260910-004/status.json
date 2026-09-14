@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-004",
+  "type": "requirement",
+  "title": "StatusBoard 命令优先以提示词中提及的项目来打开看板，若提示词中没有项目再根据左侧项目栏的项目来打开卡板",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-01",
+  "createdAt": "2026-09-09T16:21:08.101Z",
+  "updatedAt": "2026-09-11T05:52:21.717Z",
+  "agentCompletedAt": "2026-09-10T01:05:28.925Z",
+  "lastReport": {
+    "at": "2026-09-10T01:05:28.925Z",
+    "coverage": 100,
+    "framework": "Node 原生 assert 静态契约测试",
+    "summary": "board.md 与 SKILL.md Status Board 节写明两级优先级：提示词提及项目优先（绝对路径含~展开/项目名注册表末段忽略大小写唯一命中/歧义无命中列候选请澄清不猜测），未提及走会话项目兜底；argument-hint 接受可选项目参数，删除无需参数；新增静态契约测试 B1-B9，全量 132 测试文件失败 0",
+    "runId": "run-20260910-144"
+  },
+  "history": [
+    {
+      "at": "2026-09-09T16:21:08.101Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-09T16:21:10.870Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-09T17:16:42.650Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-011112-21b5）"
+    },
+    {
+      "at": "2026-09-10T00:58:32.774Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-01",
+      "note": "认领（zcode-batch-029-01）"
+    },
+    {
+      "at": "2026-09-10T01:05:28.925Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.718Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-9a57",
+      "note": "人工确认完成"
+    }
+  ]
+}

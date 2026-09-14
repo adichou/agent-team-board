@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260906-003",
+  "type": "requirement",
+  "title": "Codex 后台自动派发：每单独立会话、日志追踪与进程回收",
+  "status": "done",
+  "parent": null,
+  "owner": "REQ-20260906-003",
+  "createdAt": "2026-09-06T02:41:45.846Z",
+  "updatedAt": "2026-09-11T05:52:14.392Z",
+  "agentCompletedAt": "2026-09-06T05:23:05.813Z",
+  "lastReport": {
+    "at": "2026-09-06T05:23:05.813Z",
+    "coverage": 72,
+    "framework": "node:test（六套新增 .test.mjs + 假 CLI fixtures，含 D16 停止不重派回归）",
+    "summary": "Codex 后台自动派发全链路落地：①dispatch-store（settings/policies/runs 账本/impl.lock 封装/字节偏移增量日志）②codex-adapter（参数数组+stdin 提示词、JSONL 流容错、独立进程组+ps lstart 启动时刻、取消 SIGINT→宽限→SIGKILL、超时、同组残留工具回收、auth/quota/network 分类）③execution-verifier（owner=单号、新 report 时间证据、--run 关联、报告文件核对；退出 0/turn.completed 不单独构成成功）④scheduler（accepted 选单/需求优先/依赖 done/预留-持锁-执行-核对-放锁；空队列只本地轮询；续跑默认 2 轮仅用确切 threadId；网络退避重试有持久化记录；auth/quota/CLI 缺失/git 脏工作区暂停执行器；崩溃恢复含 PID+启动时刻核对、重启默认等待人工；停止后同条目不自动重派——D16 回归）⑤server /api/dispatch/*（settings/静态预检/模型验证按钮/toggle 门槛/stop/resume-item/runs/增量 log）+ 条目详情 lastCodexRun + SIGTERM 优雅关停落账 ⑥共用批量实施抽屉 Codex 页（配置/预检分层/当前执行含等待会话创建与停止中/等待原因/执行记录分页/摘要·日志·错误·最终回复·测试报告五视图增量加载/恢复本项/桌面入口如实禁用）⑦Electron stopService SIGTERM→宽限→SIGKILL、壳退出先协调服务收尾。与并行 REQ-20260906-002 会话收敛：impl.lock 统一互斥（owner=单号放行 worker claim）、policies deps schema 委托 batch.mjs、settings 共用 counters 保留、runs 按 executor/batchId 双向隔离。如实边界：C22/C23 真实连续执行与真实取消恢复待人工隔离项目见证（未消耗真实模型请求，不假称已支持无人值守）；桌面侧栏可见性明示未接通；逃逸进程组与共享 daemon 不误杀、不假称零残留；非 git 项目工作区核对如实跳过。全量 33 套测试仅 detail-close-btn T2 失败（REQ-20260906-005 会话在途，非本需求引入）。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T02:41:45.846Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0906-7488"
+    },
+    {
+      "at": "2026-09-06T03:00:10.056Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T03:49:50.832Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "REQ-20260906-003",
+      "note": "认领（REQ-20260906-003）"
+    },
+    {
+      "at": "2026-09-06T05:16:30.630Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-2100",
+      "note": "上报测试报告（覆盖率 70%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-06T05:23:05.813Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-416a",
+      "note": "上报测试报告（覆盖率 72%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.392Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2b04",
+      "note": "人工确认完成"
+    }
+  ]
+}

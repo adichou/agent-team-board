@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-017 演示 · 全选 / 全不选图标尺寸与其他操作图标对齐</title>
+<style>
+  /* ---------- 主题变量（取自 scripts/web/style.css 深浅色口径，纯离线） ---------- */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --chip-req: #4f46e5; --chip-bug: #e11d48; --primary: #2563eb; --warn: #dc2626;
+  }
+  [data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e6ebf3; --muted: #8b98ad;
+    --border: #2a3446; --shadow: 0 1px 3px rgba(0,0,0,.4);
+    --chip-req: #6366f1; --chip-bug: #fb7185; --primary: #3b82f6; --warn: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 18px;
+  }
+  .demo-head h1 { font-size: 16px; margin: 0 0 2px; }
+  .demo-head .sub { color: var(--muted); margin: 0 0 12px; font-size: 12px; }
+  /* ---------- 控制条 ---------- */
+  .ctrlbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .ctrl-label { font-size: 12px; color: var(--muted); flex: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; font-weight: 600; }
+  .seg.warnseg button[aria-pressed="true"] { background: var(--warn); }
+  .ghost {
+    appearance: none; background: var(--panel); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .ghost:hover { color: var(--text); border-color: var(--muted); }
+  /* ---------- 面板 ---------- */
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 13px; margin: 0 0 8px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  /* ---------- 尺寸对照条 ---------- */
+  .compare-row { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-end; }
+  .cmp-group { display: flex; flex-direction: column; gap: 6px; }
+  .cmp-label { font-size: 11.5px; color: var(--muted); }
+  .baseline { border-top: 1px dashed var(--muted); opacity: .6; flex: 1; min-width: 40px; }
+  /* ---------- 按钮（复刻 scripts/web/style.css 的 .btn 口径） ---------- */
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 550; cursor: pointer;
+  }
+  .btn:hover { filter: brightness(1.04); border-color: var(--muted); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.warn { background: transparent; border-color: var(--warn); color: var(--warn); }
+  .btn.small { padding: 4px 10px; font-size: 12px; font-weight: 400; }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--muted); padding: 4px 10px; font-weight: 500; }
+  .btn.quiet:hover { color: var(--text); background: rgba(127,140,170,.12); }
+  .btn.quiet:disabled:hover { color: var(--muted); background: transparent; }
+  /* 图标按钮小方格：与项目内两条规则同值（.req-caption 与 .req-row .row-acts 的 .btn.icon-act） */
+  .req-caption .btn.icon-act { padding: 3px 5px; font-size: 13px; line-height: 1; min-width: 26px; min-height: 24px; text-align: center; }
+  .row-acts .btn.icon-act { padding: 3px 5px; font-size: 13px; line-height: 1; min-width: 26px; min-height: 24px; text-align: center; }
+  /* 修复后（已实施，BUG-20260910-017）：仅缩小 ☑ / ☐ 字号对齐卡片操作图标的视觉高度，
+     实现为 icon-check 修饰类 + 11px 字号（与 scripts/web/style.css 最终口径一致） */
+  body.mode-fixed .req-caption .btn.icon-act { font-size: 11px; }
+  .btn:focus-visible, .seg button:focus-visible, .ghost:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  /* ---------- 看板模拟（结构对齐 scripts/web/index.html #reqCaption / #reqList） ---------- */
+  .req-caption {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 2px 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  .caption-hint { color: var(--muted); font-size: 12px; }
+  .caption-actions { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; margin-left: auto; }
+  .sel-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .sel-count { font-weight: 600; font-size: 12.5px; color: #4f46e5; }
+  [data-theme="dark"] .sel-count { color: #818cf8; }
+  .hidden { display: none !important; }
+  .accept-result { font-size: 12px; margin: 8px 4px 0; overflow-wrap: anywhere; }
+  .accept-result ul { margin: 4px 0; padding-left: 18px; }
+  .accept-result.err { color: var(--warn); }
+  .req-list { display: flex; flex-direction: column; gap: 8px; }
+  .req-row {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 10px 12px;
+  }
+  .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: nowrap; }
+  .item-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .row-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .chip { font-size: 10px; font-weight: 700; letter-spacing: .5px; color: #fff; border-radius: 5px; padding: 1px 6px; flex: none; }
+  .chip.req { background: var(--chip-req); }
+  .chip.bug { background: var(--chip-bug); }
+  .accept-check { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex: none; cursor: pointer; }
+  .accept-check:disabled { cursor: not-allowed; }
+  .req-empty { margin: 18px 6px; text-align: center; color: var(--muted); }
+  .skel { height: 44px; border-radius: 10px; background: linear-gradient(100deg, var(--border) 40%, var(--panel) 50%, var(--border) 60%); background-size: 200% 100%; animation: sk 1.1s linear infinite; }
+  @keyframes sk { to { background-position: -200% 0; } }
+  /* ---------- toast / 页脚 ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 8px;
+    font-size: 12.5px; box-shadow: var(--shadow); z-index: 9; max-width: 86vw;
+  }
+  .demo-foot { color: var(--muted); font-size: 12px; }
+  .demo-foot b { color: var(--text); }
+  .demo-foot li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+<header class="demo-head">
+  <h1>BUG-20260910-017 演示 · 「全选 / 全不选」图标尺寸与其他操作图标不一致</h1>
+  <p class="sub">单文件离线演示 · 数据与加载 / 失败反馈均为模拟，不写入看板 · 「修复后」与实际实施口径一致（icon-check 修饰类 + 11px 字号）</p>
+  <div class="ctrlbar">
+    <span class="ctrl-label">形态：</span>
+    <div class="seg warnseg" id="modeSeg" role="group" aria-label="缺陷 / 修复形态切换">
+      <button type="button" data-v="bug" aria-pressed="true">缺陷现象（现状）</button>
+      <button type="button" data-v="fixed" aria-pressed="false">修复后（已实施口径）</button>
+    </div>
+    <span class="ctrl-label">档位：</span>
+    <div class="seg" id="laneSeg" role="group" aria-label="筛选档位切换">
+      <button type="button" data-v="submitted" aria-pressed="true">待接受</button>
+      <button type="button" data-v="accepted" aria-pressed="false">已接受</button>
+      <button type="button" data-v="planned" aria-pressed="false">已计划</button>
+      <button type="button" data-v="developing" aria-pressed="false">开发中</button>
+    </div>
+    <span class="ctrl-label">状态：</span>
+    <div class="seg" id="stateSeg" role="group" aria-label="列表状态切换">
+      <button type="button" data-v="normal" aria-pressed="true">正常</button>
+      <button type="button" data-v="empty" aria-pressed="false">空</button>
+      <button type="button" data-v="loading" aria-pressed="false">加载</button>
+      <button type="button" data-v="fail" aria-pressed="false">失败</button>
+    </div>
+    <button type="button" class="ghost" id="themeBtn">🌙 深色</button>
+  </div>
+</header>
+
+<section class="panel" aria-label="尺寸对照">
+  <h2>尺寸对照（实际渲染尺寸，二者 CSS 盒规格本就相同：min 26×24 / 13px）</h2>
+  <div class="compare-row">
+    <div class="cmp-group">
+      <span class="cmp-label">工具栏 全选 / 全不选（随上方「形态」切换）</span>
+      <div class="req-caption" style="border-bottom: none; padding-bottom: 0;">
+        <button type="button" class="btn small quiet icon-act" aria-label="全选（对照示意）" title="全选：仅勾选当前筛选档内可见的可操作条目">☑</button>
+        <button type="button" class="btn small quiet icon-act" aria-label="全不选（对照示意）" title="全不选：仅取消当前筛选档的勾选">☐</button>
+      </div>
+    </div>
+    <div class="baseline" aria-hidden="true"></div>
+    <div class="cmp-group">
+      <span class="cmp-label">卡片操作图标（对照基准 · BUG-20260910-007 口径）</span>
+      <div class="row-acts">
+        <button type="button" class="btn small icon-act" aria-label="复制单号（对照示意）" title="复制单号">⧉</button>
+        <button type="button" class="btn small icon-act" aria-label="接受（对照示意）" title="接受（仅待接受）">✓</button>
+        <button type="button" class="btn small icon-act" aria-label="编辑（对照示意）" title="编辑标题与描述（仅待接受）">✎</button>
+        <button type="button" class="btn small icon-act" aria-label="删除（对照示意）" title="删除（仅待接受，不可恢复）">🗑</button>
+      </div>
+    </div>
+  </div>
+  <p class="hint">现状：☑（U+2611）/ ☐（U+2610）字形渲染接近满 em 见方，同一 13px 字号下视觉明显大于 ✓ / ✎ / ⧉ / 🗑。修复后（已实施，BUG-20260910-017）：仅缩小 ☑ / ☐ 字号（icon-check 修饰类 + 11px）对齐视觉高度，盒规格 26×24 与行内图标口径均不变。</p>
+</section>
+
+<main class="panel" aria-label="看板列表模拟">
+  <div class="req-caption" id="caption">
+    <span id="reqCount" class="caption-hint"></span>
+    <button type="button" id="selectOperable" class="btn small quiet icon-act" aria-label="全选" title="全选：仅勾选当前筛选档内可见的可操作条目（待接受 / 已接受 / 已计划；叠搜索范围）">☑</button>
+    <button type="button" id="selectNone" class="btn small quiet icon-act" disabled aria-label="全不选" title="全不选：仅取消当前筛选档的勾选">☐</button>
+    <div class="caption-actions">
+      <div id="selGroup" class="sel-group hidden" role="group" aria-label="批量操作">
+        <span id="selCount" class="sel-count">已选 0 项</span>
+        <button type="button" id="acceptSelected" class="btn primary hidden" disabled>接受所选</button>
+        <button type="button" id="planAdd" class="btn primary hidden" disabled title="移入计划（排入开发计划）：勾选的已接受条目逐条置为已计划">移入计划</button>
+        <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受">驳回待接受</button>
+        <button type="button" id="planRemove" class="btn warn hidden" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
+      </div>
+      <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始完善" title="进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ 开始完善</button>
+    </div>
+  </div>
+  <div id="acceptResult" class="accept-result hidden" role="status" aria-live="polite"></div>
+  <div id="reqList" class="req-list"></div>
+</main>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<footer class="demo-foot panel">
+  <ul>
+    <li><b>布局</b>：列表头工具栏左起 全选 ☑、全不选 ☐、「已选 N 项」+ 当前档批量动作，快捷入口（▶ 开始完善 / ▶ 开始开发）靠右与之同行；列表卡片首行右侧为 ⧉ / ✓ / ✎ / 🗑 操作图标。缺陷与修复两种形态下布局结构均不变，仅图标视觉尺寸不同。</li>
+    <li><b>交互</b>：全选仅勾选当前档可见可操作条目（叠搜索范围，所见即所选）；全不选仅清当前档，其他档勾选保留（可切档验证跨档保留）；批量动作按档显隐、进行中按钮文案变「接受中… / 移入中… / 驳回中… / 移出中…」并禁用全选 / 全不选 / 复选框防误触；卡片操作图标可悬停看提示、点击有反馈（复制 / 接受 / 删除为演示态模拟）。</li>
+    <li><b>状态反馈</b>：正常——计数与批量动作即时更新，零选择时批量动作组隐藏；空——空态说明、全选与全不选禁用；加载——骨架屏、选择控件与批量动作禁用；失败——结果区显示「完成 N 项，M 项失败」与逐条失败清单（编号：错误信息），部分成功口径保留。深 / 浅色主题均可切换验证（原缺陷两种主题下均可见）。</li>
+    <li><b>口径引用</b>：图标化来自 REQ-20260910-026；卡片操作图标口径来自 BUG-20260910-007；全选 / 全不选按档语义来自 REQ-20260908-027（叠 BUG-20260907-016 跨档保留）、非选择档隐藏来自 BUG-20260909-008、单行工具栏来自 REQ-20260910-008。</li>
+  </ul>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const LANES = { submitted: '待接受', accepted: '已接受', planned: '已计划', developing: '开发中' };
+  const SELECTABLE = ['submitted', 'accepted', 'planned'];
+
+  // 演示数据（纯内存模拟，不写入看板）
+  const data = {
+    submitted: [
+      { id: 'REQ-20260910-101', kind: 'req', title: '示例需求：列表导出 CSV（待接受）' },
+      { id: 'BUG-20260910-055', kind: 'bug', title: '示例缺陷：空态文案截断（待接受）' },
+      { id: 'REQ-20260910-102', kind: 'req', title: '示例需求：搜索命中高亮优化（待接受）' },
+    ],
+    accepted: [
+      { id: 'REQ-20260910-020', kind: 'req', title: '示例需求：批量完善面板排序（已接受）' },
+      { id: 'BUG-20260910-030', kind: 'bug', title: '示例缺陷：抽屉滚动溢出（已接受）' },
+      { id: 'REQ-20260910-021', kind: 'req', title: '示例需求：讨论筛选记忆（已接受）' },
+    ],
+    planned: [
+      { id: 'REQ-20260910-011', kind: 'req', title: '示例需求：任务面板进度条（已计划）' },
+      { id: 'REQ-20260910-012', kind: 'req', title: '示例需求：营销页签文案（已计划）' },
+    ],
+    developing: [
+      { id: 'REQ-20260909-050', kind: 'req', title: '示例需求：状态机守卫加固（开发中 · 非选择档，无选择控件）' },
+    ],
+  };
+  // 各档勾选集合独立保留（BUG-20260907-016 跨档保留契约）
+  const selected = { submitted: new Set(), accepted: new Set(), planned: new Set() };
+
+  const state = { lane: 'submitted', uiState: 'normal', pending: false, result: null };
+
+  // ---------- toast ----------
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 1900);
+  }
+
+  const laneItems = () => (state.uiState === 'empty' ? [] : data[state.lane] || []);
+  const laneSel = () => selected[state.lane] || null;
+
+  // ---------- 工具栏 ----------
+  function renderCaption() {
+    const selectable = SELECTABLE.includes(state.lane) && state.uiState !== 'empty' && state.uiState !== 'loading';
+    const sel = laneSel();
+    const count = sel ? sel.size : 0;
+    const items = laneItems().filter((it) => SELECTABLE.includes(state.lane));
+    $('#selectOperable').classList.toggle('hidden', !SELECTABLE.includes(state.lane));
+    $('#selectNone').classList.toggle('hidden', !SELECTABLE.includes(state.lane));
+    $('#selectOperable').disabled = !selectable || state.pending || items.length === 0;
+    $('#selectNone').disabled = !selectable || state.pending || count === 0;
+
+    $('#reqCount').textContent =
+      state.uiState === 'loading' ? '同步中…（演示加载态）'
+      : state.uiState === 'empty' ? '当前档暂无条目（演示空态）'
+      : '';
+
+    // 批量动作组：零选择整组隐藏（REQ-20260909-002 / 008 口径）
+    const group = $('#selGroup');
+    group.classList.toggle('hidden', !selectable || count === 0);
+    $('#selCount').textContent = `已选 ${count} 项`;
+    const laneOfBtn = { '#acceptSelected': 'submitted', '#planAdd': 'accepted', '#planReject': 'accepted', '#planRemove': 'planned' };
+    const pendText = {
+      '#acceptSelected': ['接受中…', '接受所选'],
+      '#planAdd': ['移入中…', '移入计划'],
+      '#planReject': ['驳回中…', '驳回待接受'],
+      '#planRemove': ['移出中…', '移出计划'],
+    };
+    for (const [s, laneKey] of Object.entries(laneOfBtn)) {
+      const btn = $(s);
+      const isLane = state.lane === laneKey;
+      btn.classList.toggle('hidden', !isLane || !selectable);
+      btn.disabled = state.pending || count === 0;
+      btn.textContent = state.pending && isLane ? pendText[s][0] : pendText[s][1];
+    }
+    // 快捷入口：已接受 → 开始完善；已计划 → 开始开发；其余隐藏（与勾选无关，批量进行中不禁用）
+    const quick = $('#laneQuickEntry');
+    const conf = state.lane === 'accepted'
+      ? { label: '▶ 开始完善', title: '进入任务模块批量完善面板（演示：仅导航提示）' }
+      : state.lane === 'planned'
+        ? { label: '▶ 开始开发', title: '进入任务模块批量开发面板（演示：仅导航提示）' }
+        : null;
+    quick.classList.toggle('hidden', !conf);
+    if (conf) { quick.textContent = conf.label; quick.title = conf.title; quick.setAttribute('aria-label', conf.label); }
+  }
+
+  // ---------- 结果区 ----------
+  function renderResult() {
+    const el = $('#acceptResult');
+    if (!state.result) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    const { message, failures } = state.result;
+    el.innerHTML = `${message}${failures && failures.length ? `<ul>${failures.map((f) => `<li>${f}</li>`).join('')}</ul>` : ''}`;
+    el.classList.toggle('err', Boolean(failures && failures.length));
+    el.classList.remove('hidden');
+  }
+
+  // ---------- 列表 ----------
+  function renderList() {
+    const list = $('#reqList');
+    list.innerHTML = '';
+    if (state.uiState === 'loading') {
+      for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'skel'; list.appendChild(d); }
+      const p = document.createElement('p'); p.className = 'req-empty'; p.textContent = '加载中…（演示加载态：选择控件与批量动作禁用）';
+      list.appendChild(p);
+      return;
+    }
+    const items = laneItems();
+    if (!items.length) {
+      const p = document.createElement('p'); p.className = 'req-empty'; p.textContent = '当前筛选档暂无条目（演示空态：全选 / 全不选禁用，无批量动作空占位）';
+      list.appendChild(p);
+      return;
+    }
+    const sel = laneSel();
+    const selectable = SELECTABLE.includes(state.lane);
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'req-row';
+      const checked = sel ? sel.has(it.id) : false;
+      const checkHtml = selectable
+        ? `<input type="checkbox" class="accept-check" data-lane-id="${it.id}" ${checked ? 'checked' : ''} ${state.pending ? 'disabled' : ''} aria-label="勾选 ${it.id}">`
+        : '';
+      const acts = selectable && state.lane === 'submitted'
+        ? `<button type="button" class="btn small icon-act" data-accept-id="${it.id}" aria-label="接受 ${it.id}" title="接受（仅待接受）">✓</button>
+           <button type="button" class="btn small icon-act" data-rename-id="${it.id}" aria-label="编辑 ${it.id} 标题与描述" title="编辑标题与描述（仅待接受）">✎</button>
+           <button type="button" class="btn small icon-act" data-delete-id="${it.id}" aria-label="删除 ${it.id}" title="删除（仅待接受，移除整个条目目录且不可恢复）">🗑</button>`
+        : '';
+      row.innerHTML = `
+        <div class="card-top">
+          ${checkHtml}
+          <span class="chip ${it.kind}">${it.kind === 'req' ? 'REQ' : 'BUG'}</span>
+          <span class="item-id">${it.id}</span>
+          <span class="row-acts">
+            <button type="button" class="btn small icon-act" data-copy-id="${it.id}" aria-label="复制单号 ${it.id}" title="复制单号 ${it.id}">⧉</button>
+            ${acts}
+          </span>
+        </div>
+        <div>${it.title}</div>`;
+      list.appendChild(row);
+    }
+  }
+
+  function renderAll() { renderCaption(); renderList(); renderResult(); }
+
+  // ---------- 交互：勾选 / 全选 / 全不选 ----------
+  $('#reqList').addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-lane-id]');
+    if (!cb || state.pending) return;
+    const sel = laneSel();
+    if (cb.checked) sel.add(cb.dataset.laneId); else sel.delete(cb.dataset.laneId);
+    renderCaption();
+  });
+
+  $('#selectOperable').addEventListener('click', () => {
+    if (state.pending) return;
+    const sel = laneSel();
+    if (!sel) return;
+    data[state.lane].forEach((it) => sel.add(it.id)); // 所见即所选：仅当前档可见可操作条目
+    renderAll();
+    toast(`全选：已勾选当前档 ${sel.size} 项（其他档勾选不动）`);
+  });
+
+  $('#selectNone').addEventListener('click', () => {
+    if (state.pending) return;
+    const sel = laneSel();
+    if (!sel) return;
+    const n = sel.size;
+    sel.clear(); // 仅清当前档，其他档保留（切档回来可验证）
+    renderAll();
+    toast(`全不选：已取消当前档 ${n} 项勾选（其他档保留）`);
+  });
+
+  // ---------- 批量动作（模拟：pending → 成功 / 部分失败） ----------
+  const BATCH = {
+    '#acceptSelected': { from: 'submitted', to: null, verb: '接受', move: '待接受 → 已接受' },
+    '#planAdd': { from: 'accepted', to: 'planned', verb: '移入计划', move: '已接受 → 已计划' },
+    '#planReject': { from: 'accepted', to: 'submitted', verb: '驳回待接受', move: '已接受 → 待接受' },
+    '#planRemove': { from: 'planned', to: 'accepted', verb: '移出计划', move: '已计划 → 已接受' },
+  };
+  for (const [s, cfg] of Object.entries(BATCH)) {
+    $(s).addEventListener('click', () => {
+      if (state.pending || state.lane !== cfg.from) return;
+      const sel = selected[cfg.from];
+      const ids = [...sel];
+      if (!ids.length) return;
+      state.pending = true;
+      state.result = null;
+      renderCaption();
+      setTimeout(() => {
+        state.pending = false;
+        const failures = [];
+        let done = 0;
+        ids.forEach((id, i) => {
+          const fail = state.uiState === 'fail' && i === 0; // 失败态：首条失败，其余成功（部分成功口径）
+          if (fail) { failures.push(`${id}：模拟失败：服务器 500（演示）`); return; }
+          const idx = data[cfg.from].findIndex((it) => it.id === id);
+          if (idx >= 0) {
+            const [it] = data[cfg.from].splice(idx, 1);
+            if (cfg.to) data[cfg.to].push(it);
+          }
+          done++;
+        });
+        sel.clear();
+        state.result = {
+          message: `${cfg.verb}完成 ${done} 项${failures.length ? `，${failures.length} 项失败` : ''}（${cfg.move}；演示模拟）`,
+          failures,
+        };
+        renderAll();
+        toast(failures.length ? '批量操作部分失败：见结果区清单' : `${cfg.verb}完成（演示模拟）`);
+      }, 900);
+    });
+  }
+
+  // ---------- 快捷入口（仅导航提示） ----------
+  $('#laneQuickEntry').addEventListener('click', () => toast('仅导航：进入任务模块对应面板（演示提示，不创建任务）'));
+
+  // ---------- 卡片操作图标（演示态模拟） ----------
+  $('#reqList').addEventListener('click', (e) => {
+    const copy = e.target.closest('[data-copy-id]');
+    if (copy) {
+      const id = copy.dataset.copyId;
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(id).catch(() => {});
+      toast(`已复制单号 ${id}（演示）`);
+      return;
+    }
+    const acc = e.target.closest('[data-accept-id]');
+    if (acc) {
+      const id = acc.dataset.acceptId;
+      const idx = data.submitted.findIndex((it) => it.id === id);
+      if (idx >= 0) { const [it] = data.submitted.splice(idx, 1); selected.submitted.delete(id); data.accepted.push(it); }
+      renderAll();
+      toast(`已接受 ${id}（待接受 → 已接受，演示模拟）`);
+      return;
+    }
+    const ren = e.target.closest('[data-rename-id]');
+    if (ren) { toast('编辑标题与描述由真实看板弹窗承载（演示）'); return; }
+    const del = e.target.closest('[data-delete-id]');
+    if (del) {
+      const id = del.dataset.deleteId;
+      if (window.confirm(`删除 ${id}：移除整个条目目录且不可恢复（演示，仅移出演示数据）？`)) {
+        const idx = data.submitted.findIndex((it) => it.id === id);
+        if (idx >= 0) data.submitted.splice(idx, 1);
+        selected.submitted.delete(id);
+        renderAll();
+        toast(`已删除 ${id}（演示模拟）`);
+      }
+    }
+  });
+
+  // ---------- 控制条 ----------
+  function bindSeg(id, fn) {
+    $(id).addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-v]');
+      if (!btn) return;
+      $(id).querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+      fn(btn.dataset.v);
+    });
+  }
+  bindSeg('#modeSeg', (v) => {
+    document.body.classList.toggle('mode-fixed', v === 'fixed');
+    toast(v === 'fixed' ? '修复后（已实施口径）：☑ / ☐ 字号缩小对齐卡片操作图标视觉高度' : '缺陷现象（现状）：☑ / ☐ 字形明显大于其他操作图标');
+  });
+  bindSeg('#laneSeg', (v) => { state.lane = v; state.result = null; renderAll(); });
+  bindSeg('#stateSeg', (v) => { state.uiState = v; state.result = null; renderAll(); });
+  $('#themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme === 'dark';
+    root.dataset.theme = dark ? 'light' : 'dark';
+    $('#themeBtn').textContent = dark ? '🌙 深色' : '☀️ 浅色';
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

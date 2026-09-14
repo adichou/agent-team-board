@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>侧拉面板统一演示 · REQ-20260910-014</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --accent-soft: rgba(37,99,235,.09);
+    --warn: #dc2626; --warn-soft: rgba(220,38,38,.09); --ok: #16a34a; --ok-soft: rgba(22,163,74,.1);
+    --shadow: 0 6px 24px rgba(15,23,42,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --primary: #3b82f6; --accent-soft: rgba(59,130,246,.16);
+      --warn: #f87171; --warn-soft: rgba(248,113,113,.14); --ok: #4ade80; --ok-soft: rgba(74,222,128,.14);
+      --shadow: 0 6px 24px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, "PingFang SC", "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 5px 12px; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  button.danger { background: transparent; border-color: var(--warn); color: var(--warn); }
+  button.warn { background: transparent; border-color: var(--warn); color: var(--warn); }
+  button.small { padding: 2px 9px; font-size: 12.5px; }
+  button:disabled { opacity: .45; cursor: wait; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: -1px; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ===== 演示控制条（不属于模拟应用） ===== */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 10px 18px; background: var(--panel); border-bottom: 1px dashed var(--border); font-size: 13px; }
+  .demo-bar .grp { display: inline-flex; gap: 8px; align-items: center; }
+  .demo-bar .grp > span { color: var(--muted); }
+  .demo-bar select { padding: 3px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel); }
+  .demo-note { color: var(--muted); }
+
+  /* ===== 模拟应用窗口 ===== */
+  .app { position: relative; display: flex; flex-direction: column; height: calc(100vh - 46px); min-height: 460px; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex: none; }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .logo { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #6366f1, #3b82f6); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  .brand h1 { font-size: 15px; margin: 0; }
+  .mod-tabs { display: flex; gap: 2px; margin-left: 6px; }
+  .mod-tabs .tab { border: 0; background: none; padding: 6px 11px; border-radius: 8px; color: var(--muted); font-weight: 500; }
+  .mod-tabs .tab.active { color: var(--primary); background: var(--accent-soft); }
+  .top-acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .project-sel { padding: 4px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel); }
+
+  .page-head { display: flex; align-items: center; gap: 12px; padding: 7px 18px; background: var(--panel); border-bottom: 1px solid var(--border); flex: none; }
+  .module-sub { margin: 0; color: var(--muted); font-size: 12px; }
+  .content { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px; }
+  .req-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
+  .req-row .id { font-weight: 650; font-size: 12.5px; color: var(--primary); }
+  .req-row .st { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  /* ===== 弹层公共 ===== */
+  .mask { position: fixed; inset: 0; background: rgba(10,16,26,.4); z-index: 30; display: grid; place-items: center; padding: 20px; }
+  .modal { width: min(480px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px 18px; max-height: 86vh; overflow: auto; }
+  .modal.wide { width: min(560px, 92vw); }
+  .layer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .layer-head h3 { margin: 0; font-size: 15px; }
+  .icon-btn { border: 0; background: none; font-size: 15px; padding: 4px 8px; border-radius: 7px; color: var(--muted); }
+  .icon-btn:hover { background: var(--accent-soft); color: var(--text); }
+  .field { display: block; margin: 12px 0; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .field input, .field select, .field textarea { display: block; width: 100%; margin-top: 5px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-weight: 400; }
+  .layer-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+  /* ===== 侧拉面板（目标形态，对齐全局面板） ===== */
+  .side-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 25; width: min(560px, 92vw); display: flex; flex-direction: column; background: var(--bg); border-left: 1px solid var(--border); box-shadow: -8px 0 30px rgba(10,16,26,.25); }
+  .sp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); flex: none; }
+  .sp-head h2 { margin: 0; font-size: 15px; }
+  .sp-head p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+  .sp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 28px; }
+  @media (max-width: 640px) { .side-panel { width: 100vw; border-left: none; } .sp-head { padding: 12px; flex-wrap: wrap; } .sp-body { padding: 10px 10px 24px; } }
+
+  /* ===== 新建表单 ===== */
+  .shot-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .shot-empty { font-size: 12px; }
+
+  /* ===== 项目管理 ===== */
+  .notice { padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 12.5px; margin: 10px 0; }
+  .proj-target { padding: 8px 12px; border-left: 3px solid var(--primary); background: var(--accent-soft); font-size: 12.5px; border-radius: 0 8px 8px 0; margin: 10px 0; }
+  .proj-scan { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 12px 0; background: var(--panel); }
+  .proj-scan-top { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+  .proj-scan-summary { margin: 0; font-size: 12.5px; }
+  .proj-scan-acts { display: flex; gap: 8px; }
+  .proj-row { display: flex; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+  .proj-row:last-child { border-bottom: none; }
+  .proj-info { flex: 1; min-width: 0; }
+  .proj-name { font-weight: 650; }
+  .proj-cur { display: inline-block; margin-left: 6px; padding: 0 7px; font-size: 11px; color: var(--primary); background: var(--accent-soft); border-radius: 99px; font-weight: 500; }
+  .proj-path { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .proj-scan-state { font-size: 12px; margin-top: 2px; }
+  .proj-scan-state.ok { color: var(--ok); }
+  .proj-scan-state.missing { color: var(--warn); }
+  .proj-scan-state.pending { color: var(--muted); }
+  .proj-acts { display: flex; gap: 6px; flex: none; }
+  .proj-confirm { border: 1px solid var(--warn); border-radius: 10px; padding: 10px 12px; margin-top: 12px; background: var(--warn-soft); }
+  .proj-confirm p { margin: 0 0 8px; font-size: 12.5px; white-space: pre-line; }
+  .skeleton-row { height: 58px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); margin-bottom: 8px; }
+
+  /* ===== 全局面板内容 ===== */
+  .g-task { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; cursor: pointer; background: var(--panel); }
+  .g-task:hover { background: var(--accent-soft); }
+  .g-task .t { font-size: 13px; }
+  .g-group { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .g-group-head { padding: 9px 14px; border-bottom: 1px solid var(--border); font-weight: 650; font-size: 13px; background: var(--bg); }
+  .g-task:last-child { border-bottom: none; }
+
+  /* ===== toast ===== */
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 60; padding: 9px 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 13px; max-width: min(560px, 90vw); }
+  .toast.err { border-color: var(--warn); color: var(--warn); }
+
+  .form-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px 14px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+
+<!-- 演示控制条：形态对照 + 状态场景（内存模拟，不读写磁盘） -->
+<div class="demo-bar">
+  <div class="grp"><span>弹出形态：</span>
+    <label><input type="radio" name="mode" value="old" checked> 现状 · 居中弹窗</label>
+    <label><input type="radio" name="mode" value="new"> 目标 · 侧拉面板</label>
+  </div>
+  <div class="grp"><span>场景状态：</span>
+    <select id="sceneSel">
+      <option value="normal">正常（创建成功 / 检测完成）</option>
+      <option value="empty">空（暂无项目）</option>
+      <option value="loading">加载（创建中 / 检测中）</option>
+      <option value="fail">失败（创建失败 / 检测失败）</option>
+    </select>
+  </div>
+  <span class="demo-note">提示：Esc 分层关闭（管理项目 → 新建 → 全局），关闭后焦点返回入口按钮</span>
+</div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">▦</span><h1>智能体团队看板</h1></div>
+    <nav class="mod-tabs" aria-label="模块导航">
+      <button type="button" class="tab">讨论</button>
+      <button type="button" class="tab active">需求</button>
+      <button type="button" class="tab">任务</button>
+      <button type="button" class="tab">文件</button>
+    </nav>
+    <div class="top-acts">
+      <select class="project-sel" aria-label="切换项目"><option>agent-team-board</option></select>
+      <button type="button" id="btnProjManage" aria-haspopup="dialog" aria-expanded="false">管理项目</button>
+      <button type="button" id="btnGlobal" aria-haspopup="dialog" aria-expanded="false">全局</button>
+      <button type="button" id="btnNew" aria-haspopup="dialog" aria-expanded="false">＋ 新建</button>
+    </div>
+  </header>
+  <section class="page-head"><p class="module-sub">需求 · 按状态筛选（演示静态行）</p></section>
+  <main class="content" id="reqContent">
+    <div class="req-row"><span class="id">REQ-20260910-012</span><span>app 版的布局优化</span><span class="st">已完成</span></div>
+    <div class="req-row"><span class="id">REQ-20260910-013</span><span>讨论模块引用图片放大预览</span><span class="st">开发中</span></div>
+    <div class="req-row"><span class="id">REQ-20260910-014</span><span>管理项目和新建按钮采用和全局按钮一样的侧拉面板</span><span class="st">已接受</span></div>
+  </main>
+</div>
+
+<!-- ===== 新建（内容随形态复用；两层 DOM 分别挂在弹窗与侧拉容器下） ===== -->
+<template id="tplNew">
+  <div class="form-wrap">
+    <label class="field">类型
+      <select data-f="type">
+        <option value="req">需求（REQ）</option>
+        <option value="bug">Bug（BUG）</option>
+        <option value="ask">讨论</option>
+      </select>
+    </label>
+    <label class="field">标题
+      <input data-f="title" maxlength="120" placeholder="一句话说清这条需求 / Bug / 讨论">
+    </label>
+    <label class="field"><span data-f="descLabel">描述</span>
+      <textarea data-f="desc" rows="4" placeholder="验收标准、现象与复现步骤等（可留空，后续补充）"></textarea>
+    </label>
+    <div class="field" data-f="shotRow">
+      <div class="shot-head"><span>截图（可选）</span><span class="muted small">0 / 9</span>
+        <button type="button" class="small">上传图片</button><span class="muted small">或直接 ⌘V 粘贴</span></div>
+      <p class="muted small shot-empty">粘贴或选择图片，创建后写入描述（png / jpg / webp 等，单张 ≤ 8MB）</p>
+    </div>
+    <footer class="layer-foot">
+      <button type="button" data-act="cancel">取消</button>
+      <button type="button" class="primary" data-act="create">创建</button>
+    </footer>
+  </div>
+</template>
+
+<!-- ===== 项目管理（同理复用） ===== -->
+<template id="tplProj">
+  <div class="form-wrap">
+    <label class="field">操作
+      <select data-f="mode">
+        <option value="init">初始化项目（在新目录创建看板数据）</option>
+        <option value="import">导入项目（加入已有看板数据的项目）</option>
+      </select>
+    </label>
+    <label class="field">项目根目录绝对路径
+      <input data-f="path" placeholder="/absolute/path/to/project" spellcheck="false">
+    </label>
+    <p class="proj-target hidden" data-f="target" aria-live="polite"></p>
+    <footer class="layer-foot">
+      <button type="button" data-act="cancel">关闭</button>
+      <button type="button" class="primary" data-act="parse">解析路径</button>
+    </footer>
+  </div>
+  <p class="notice" data-f="notice" aria-live="polite">初始化 = 在新目录创建看板数据；导入 = 加入已有看板数据的项目；移出仅移出列表，目录与文档保留。</p>
+  <div class="proj-scan" aria-label="目录存在性检测">
+    <div class="proj-scan-top">
+      <p class="proj-scan-summary" data-f="scanSummary" aria-live="polite"></p>
+      <div class="proj-scan-acts">
+        <button type="button" class="small" data-act="rescan">重新检测</button>
+        <button type="button" class="small warn" data-act="removeMissing">移出所有不存在目录</button>
+      </div>
+    </div>
+  </div>
+  <div data-f="list" aria-label="已注册项目"></div>
+  <section class="proj-confirm hidden" data-f="confirmSingle">
+    <p data-f="confirmText"></p>
+    <div class="layer-foot" style="margin-top:8px">
+      <button type="button" data-act="confirmCancel">取消</button>
+      <button type="button" class="danger" data-act="confirmOk">确认移出</button>
+    </div>
+  </section>
+  <section class="proj-confirm hidden" data-f="confirmBatch">
+    <p data-f="confirmBatchText"></p>
+    <div class="layer-foot" style="margin-top:8px">
+      <button type="button" data-act="batchCancel">取消</button>
+      <button type="button" class="danger" data-act="batchOk">确认移出</button>
+    </div>
+  </section>
+</template>
+
+<!-- ===== 全局面板（参照形态，常为侧拉） ===== -->
+<aside class="side-panel hidden" id="globalPanel" role="dialog" aria-label="全局任务（跨项目）">
+  <header class="sp-head">
+    <div><h2>全局任务</h2><p>跨项目：全部注册项目的批量任务，不随顶栏项目选择变化</p></div>
+    <button type="button" class="icon-btn" data-close="global" aria-label="关闭全局任务面板" title="关闭全局任务（Esc）">✕</button>
+  </header>
+  <div class="sp-body">
+    <div class="g-group">
+      <div class="g-group-head">agent-team-board</div>
+      <div class="g-task"><span class="t">批次 run-20260910-136 · 批量完善</span><span class="muted small">执行中 · 8 / 12</span></div>
+      <div class="g-task"><span class="t">批次 run-20260910-129 · 批量开发</span><span class="muted small">已完成 · 6 / 6</span></div>
+    </div>
+  </div>
+</aside>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script>
+/* ================= 演示状态（内存模拟，不读写磁盘） ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const mode = () => document.querySelector('input[name="mode"]:checked').value;
+const scene = () => $('#sceneSel').value;
+
+const PROJ_NORMAL = [
+  { name: 'agent-team-board', path: '/Users/adichou/Documents/src/agent-team-board', cur: true, scan: 'ok' },
+  { name: 'video-info-repo', path: '/Volumes/data/video-info-repo', cur: false, scan: 'ok' },
+  { name: 'demo-old', path: '/Volumes/removed/demo-old', cur: false, scan: 'missing' },
+];
+const SCAN_TEXT = { ok: '✓ 目录存在', missing: '✕ 目录不存在', pending: '检测中…' };
+let projects = PROJ_NORMAL.map(p => ({ ...p }));
+let projParsed = false; // 解析路径两步确认：false=待解析，true=待执行
+let timer = null;
+
+function toast(msg, err) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!err);
+  t.classList.remove('hidden');
+  clearTimeout(timer);
+  timer = setTimeout(() => t.classList.add('hidden'), 2600);
+}
+
+/* ================= 弹层容器：按形态组装 ================= */
+const LAYERS = {
+  new:  { btn: '#btnNew',  title: '新建条目', sub: '需求 / Bug / 讨论三类同一表单，按类型切换字段', tpl: '#tplNew', focus: '[data-f="title"]' },
+  proj: { btn: '#btnProjManage', title: '项目管理', sub: '初始化 / 导入 / 移出；移出仅移出列表，目录与文档保留', tpl: '#tplProj', focus: '[data-f="path"]' },
+  global: { fixed: true },
+};
+const openStack = []; // 打开顺序栈：Esc 先关最后打开的（一次一层）
+
+function buildLayer(key) {
+  const conf = LAYERS[key];
+  const body = $(conf.tpl).content.cloneNode(true);
+  if (mode() === 'old') {
+    const wrap = document.createElement('div');
+    wrap.className = 'mask hidden';
+    wrap.dataset.layer = key;
+    const box = document.createElement('div');
+    box.className = 'modal' + (key === 'proj' ? ' wide' : '');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', conf.title);
+    const head = document.createElement('div');
+    head.className = 'layer-head';
+    head.innerHTML = `<h3>${conf.title}</h3><button type="button" class="icon-btn" data-close="${key}" aria-label="关闭${conf.title}">✕</button>`;
+    box.append(head, body);
+    wrap.append(box);
+    // 现状：新建弹窗点遮罩空白可关闭；项目管理弹窗不关闭（内含确认操作，防误触）
+    if (key === 'new') wrap.addEventListener('click', (e) => { if (e.target === wrap) closeLayer(key); });
+    return wrap;
+  }
+  const wrap = document.createElement('aside');
+  wrap.className = 'side-panel hidden';
+  wrap.dataset.layer = key;
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-label', conf.title);
+  const head = document.createElement('header');
+  head.className = 'sp-head';
+  head.innerHTML = `<div><h2>${conf.title}</h2><p>${conf.sub}</p></div><button type="button" class="icon-btn" data-close="${key}" aria-label="关闭${conf.title}" title="关闭（Esc）">✕</button>`;
+  wrap.append(head);
+  const bodyBox = document.createElement('div');
+  bodyBox.className = 'sp-body';
+  bodyBox.append(body);
+  wrap.append(bodyBox);
+  return wrap;
+}
+
+function openLayer(key) {
+  if (openStack.includes(key)) return; // 打开幂等：重复点击不叠加
+  let el = document.querySelector(`[data-layer="${key}"]`);
+  if (!el) { el = buildLayer(key); document.body.append(el); bindLayer(key, el); }
+  if (key === 'proj') { projParsed = false; renderProj(el); }
+  if (key === 'new') resetNewForm(el);
+  el.classList.remove('hidden');
+  openStack.push(key);
+  $(LAYERS[key].btn)?.setAttribute('aria-expanded', 'true');
+  const f = el.querySelector(LAYERS[key].focus || '.icon-btn');
+  f?.focus(); // 打开焦点进入面板；关闭返回入口（见 closeLayer）
+}
+
+function closeLayer(key, { focus = true } = {}) {
+  const el = document.querySelector(`[data-layer="${key}"]`);
+  if (!el || el.classList.contains('hidden')) return;
+  el.classList.add('hidden');
+  const i = openStack.indexOf(key);
+  if (i >= 0) openStack.splice(i, 1);
+  $(LAYERS[key].btn)?.setAttribute('aria-expanded', 'false');
+  if (focus) $(LAYERS[key].btn)?.focus(); // 焦点返回入口按钮
+}
+
+/* Esc 分层关闭：一次只关最上层（管理项目 → 新建 → 全局按打开逆序） */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !openStack.length) return;
+  closeLayer(openStack[openStack.length - 1]);
+});
+
+/* ================= 新建表单 ================= */
+function resetNewForm(el) {
+  el.querySelector('[data-f="type"]').value = 'req';
+  el.querySelector('[data-f="title"]').value = '';
+  el.querySelector('[data-f="desc"]').value = '';
+  const btn = el.querySelector('[data-act="create"]');
+  btn.disabled = false;
+  btn.textContent = '创建';
+  syncNewFields(el);
+}
+function syncNewFields(el) {
+  const isAsk = el.querySelector('[data-f="type"]').value === 'ask';
+  el.querySelector('[data-f="shotRow"]').classList.toggle('hidden', isAsk);
+  el.querySelector('[data-f="descLabel"]').textContent = isAsk ? '背景（可选）' : '描述';
+}
+function submitNew(el) {
+  const btn = el.querySelector('[data-act="create"]');
+  const title = el.querySelector('[data-f="title"]').value.trim();
+  if (!title) { toast('标题不能为空', true); el.querySelector('[data-f="title"]').focus(); return; }
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = '创建中…'; // 提交中防重复（加载态）
+  setTimeout(() => {
+    if (scene() === 'loading') return; // 场景=加载：停在「创建中…」
+    if (scene() === 'fail') {          // 场景=失败：保留草稿可重试
+      btn.disabled = false; btn.textContent = '创建';
+      toast('创建失败：演示模拟的网络错误（已保留标题 / 描述 / 截图，可重试）', true);
+      return;
+    }
+    closeLayer('new', { focus: false });
+    toast(`✓ 已创建 REQ-20260910-0${15 + Math.floor(Math.random() * 80)}（待接受）`);
+    $(LAYERS.new.btn)?.setAttribute('aria-expanded', 'false');
+  }, 900);
+}
+
+/* ================= 项目管理 ================= */
+function scanSummaryText() {
+  if (scene() === 'empty') return '未注册任何项目';
+  if (scene() === 'loading') return '目录检测中…';
+  if (scene() === 'fail') return '检测失败：演示模拟的服务异常（可重新检测）';
+  const n = projects.length, miss = projects.filter(p => p.scan === 'missing').length;
+  return `共 ${n} 个项目：${miss ? `${miss} 个目录不存在，` : ''}其余正常`;
+}
+function renderProj(el) {
+  const list = el.querySelector('[data-f="list"]');
+  el.querySelector('[data-f="scanSummary"]').textContent = scanSummaryText();
+  el.querySelector('[data-f="target"]').classList.add('hidden');
+  const parseBtn = el.querySelector('[data-act="parse"]');
+  parseBtn.textContent = projParsed ? '确认执行' : '解析路径';
+  el.querySelector('[data-f="confirmSingle"]').classList.add('hidden');
+  el.querySelector('[data-f="confirmBatch"]').classList.add('hidden');
+  if (scene() === 'loading') {
+    list.innerHTML = '<div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>';
+    return;
+  }
+  if (scene() === 'empty' || !projects.length) {
+    list.innerHTML = '<p class="notice">暂无项目。使用上方表单初始化或导入项目。</p>';
+    return;
+  }
+  const st = scene() === 'fail' ? 'pending' : null;
+  list.innerHTML = projects.map((p, i) => `
+    <div class="proj-row">
+      <div class="proj-info">
+        <div class="proj-name">${p.name}${p.cur ? '<span class="proj-cur">当前</span>' : ''}</div>
+        <div class="proj-path" title="${p.path}">${p.path}</div>
+        <div class="proj-scan-state ${st ? 'pending' : p.scan}">${st ? '✕ 检测失败' : SCAN_TEXT[p.scan]}</div>
+      </div>
+      <div class="proj-acts">
+        <button type="button" class="small" data-pj-switch="${i}">切换</button>
+        <button type="button" class="small warn" data-pj-remove="${i}">移出</button>
+      </div>
+    </div>`).join('');
+}
+let pendingRemove = -1, batchMode = false;
+
+function bindLayer(key, el) {
+  if (key === 'new') {
+    el.querySelector('[data-f="type"]').addEventListener('change', () => syncNewFields(el));
+    el.querySelector('[data-act="create"]').addEventListener('click', () => submitNew(el));
+    el.querySelector('[data-act="cancel"]').addEventListener('click', () => closeLayer(key));
+  }
+  if (key === 'proj') {
+    el.addEventListener('click', (e) => {
+      const sw = e.target.closest('[data-pj-switch]');
+      const rm = e.target.closest('[data-pj-remove]');
+      if (sw) { toast(`✓ 已切换到 ${projects[+sw.dataset.pjSwitch].name}`); return; }
+      if (rm) {
+        pendingRemove = +rm.dataset.pjRemove; batchMode = false;
+        const p = projects[pendingRemove];
+        el.querySelector('[data-f="confirmText"]').textContent =
+          `移出 ${p.name}？\n${p.path}\n仅从列表移出，目录及需求、Bug 文档保留；之后可重新导入。`;
+        el.querySelector('[data-f="confirmSingle"]').classList.remove('hidden');
+        return;
+      }
+      const act = e.target.dataset?.act;
+      if (act === 'cancel') closeLayer(key);
+      if (act === 'parse') {
+        if (scene() === 'fail') { toast('解析失败：演示模拟的路径不可访问', true); return; }
+        if (!projParsed) { // 两步确认第一步：先展示将写入的目标位置
+          const path = el.querySelector('[data-f="path"]').value.trim() || '/absolute/path/to/project';
+          const t = el.querySelector('[data-f="target"]');
+          t.textContent = `将写入：${path}/docs/agent-team-board/（确认后执行 ${el.querySelector('[data-f="mode"]').value === 'init' ? '初始化' : '导入'}）`;
+          t.classList.remove('hidden');
+          projParsed = true;
+          el.querySelector('[data-act="parse"]').textContent = '确认执行';
+          return;
+        }
+        projParsed = false;
+        el.querySelector('[data-act="parse"]').textContent = '解析路径';
+        el.querySelector('[data-f="target"]').classList.add('hidden');
+        toast(scene() === 'loading' ? '执行中…（演示加载态：操作挂起）' : '✓ 已完成（演示模拟）');
+      }
+      if (act === 'rescan') { renderProj(el); toast('已重新检测（演示模拟）'); }
+      if (act === 'removeMissing') {
+        if (!projects.some(p => p.scan === 'missing')) { toast('没有可移出的不存在目录', true); return; }
+        batchMode = true;
+        el.querySelector('[data-f="confirmBatchText"]').textContent =
+          `将移出 ${projects.filter(p => p.scan === 'missing').length} 个目录不存在的项目；仅移出列表，目录及文档保留。`;
+        el.querySelector('[data-f="confirmBatch"]').classList.remove('hidden');
+      }
+      if (act === 'confirmCancel') { pendingRemove = -1; el.querySelector('[data-f="confirmSingle"]').classList.add('hidden'); }
+      if (act === 'confirmOk') {
+        const p = projects.splice(pendingRemove, 1)[0];
+        pendingRemove = -1;
+        renderProj(el);
+        toast(`✓ 已移出 ${p.name}（目录与文档保留）`);
+      }
+      if (act === 'batchCancel') { batchMode = false; el.querySelector('[data-f="confirmBatch"]').classList.add('hidden'); }
+      if (act === 'batchOk') {
+        projects = projects.filter(p => p.scan !== 'missing');
+        batchMode = false;
+        renderProj(el);
+        toast('✓ 已移出全部不存在目录');
+      }
+    });
+  }
+}
+
+/* ================= 入口与全局关闭 ================= */
+$('#btnNew').addEventListener('click', () => openLayer('new'));
+$('#btnProjManage').addEventListener('click', () => openLayer('proj'));
+$('#btnGlobal').addEventListener('click', () => {
+  const p = $('#globalPanel');
+  if (!p.classList.contains('hidden')) return;
+  p.classList.remove('hidden');
+  openStack.push('global');
+  $('#btnGlobal').setAttribute('aria-expanded', 'true');
+  p.querySelector('.icon-btn').focus();
+});
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('[data-close]');
+  if (c) closeLayer(c.dataset.close);
+});
+
+/* 形态切换：关闭已打开弹层，下次按新形态组装（内容模板复用，功能一致） */
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', () => {
+  [...openStack].forEach(closeLayer);
+  document.querySelectorAll('[data-layer]').forEach((n) => n.remove());
+}));
+
+/* 场景切换：打开中的项目管理面板即时重渲染（状态反馈联动） */
+$('#sceneSel').addEventListener('change', () => {
+  projects = PROJ_NORMAL.map(p => ({ ...p }));
+  const el = document.querySelector('[data-layer="proj"]');
+  if (el && !el.classList.contains('hidden')) renderProj(el);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-008",
+  "type": "requirement",
+  "title": "需求和文件切换栏移到智能体团队看板右侧，使用切换样式",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-002-01",
+  "createdAt": "2026-09-06T03:37:14.692Z",
+  "updatedAt": "2026-09-11T05:52:14.622Z",
+  "agentCompletedAt": "2026-09-06T15:01:39.940Z",
+  "lastReport": {
+    "at": "2026-09-06T15:01:39.940Z",
+    "coverage": 83,
+    "framework": "node:assert 静态契约测试",
+    "summary": "「需求/文件」切换栏移到顶栏右侧：index.html 将 nav.view-tabs 移入 .top-actions 首位（项目选择器之前），顶栏变为左品牌/右动作组两端布局；style.css 为 .view-tab 增加 background-color/color/box-shadow 0.18s 平滑过渡，沿用 REQ-20260906-001 靛蓝分段切换样式（淡靛蓝底槽+胶囊+激活态填充白字）；窄屏 ≤1020 左缘竖排与 --viewrail-h 机制零改动。新增契约测试 view-tabs-right.test.mjs（T1-T5 先红后绿）；全量回归 43 个测试文件中 42 通过，唯一失败 detail-close-btn.test.mjs 为批量抽屉内联布局导致的既有回归，与本条目无关，已登记 BUG-20260906-017。",
+    "runId": "run-20260906-005"
+  },
+  "history": [
+    {
+      "at": "2026-09-06T03:37:14.692Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T14:05:57.467Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T14:59:04.958Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-002-01",
+      "note": "认领（zcode-batch-002-01）"
+    },
+    {
+      "at": "2026-09-06T15:01:39.940Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-002-01",
+      "note": "上报测试报告（覆盖率 83%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.622Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-1a47",
+      "note": "人工确认完成"
+    }
+  ]
+}

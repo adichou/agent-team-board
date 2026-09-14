@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260911-007",
+  "type": "requirement",
+  "title": "受阻待人工决策条目的承接机制：持久呈现、人工决策入口与复工通路",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-040-1",
+  "createdAt": "2026-09-11T14:43:46.066Z",
+  "updatedAt": "2026-09-11T17:48:55.955Z",
+  "agentCompletedAt": "2026-09-11T15:45:12.741Z",
+  "lastReport": {
+    "at": "2026-09-11T15:45:12.741Z",
+    "coverage": null,
+    "framework": "node:test（assert + 子进程 CLI/钩子/HTTP 实测 + vm/静态 UI 契约）",
+    "summary": "待人工决策承接闭环落地：新增 holds/holds.json 账本与条目 decisions.md 留痕、atb hold declare/list/show/answer/resume/cancel、core 认领与确认完成防呆、resumeItemToPlanned 复工专用通路回已计划、state-guard 拦 Agent 决策/复工、/api/holds 等服务端接口与 Status Board 持久聚合区/决策面板/角标/force 二次确认；SKILL/worker-spec/batch-execution 同步；全量 201 个测试文件通过",
+    "runId": "run-20260911-202"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T14:43:46.066Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0911-cf59"
+    },
+    {
+      "at": "2026-09-11T14:47:02.887Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-11T14:53:24.339Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-224851-b17b）"
+    },
+    {
+      "at": "2026-09-11T15:01:53.594Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-040-1",
+      "note": "认领（zcode-batch-040-1）"
+    },
+    {
+      "at": "2026-09-11T15:45:12.741Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-040-1",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T17:48:55.956Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

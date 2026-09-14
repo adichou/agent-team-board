@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260908-014",
+  "type": "bug",
+  "title": "批量完善终止后面板缺少重新启动入口",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-018-01",
+  "createdAt": "2026-09-08T12:13:47.074Z",
+  "updatedAt": "2026-09-11T05:52:19.269Z",
+  "agentCompletedAt": "2026-09-08T15:40:15.532Z",
+  "lastReport": {
+    "at": "2026-09-08T15:40:15.532Z",
+    "coverage": 4,
+    "framework": "node:test 风格自研断言（vm 渲染用例 + 深测夹具）",
+    "summary": "方案1修复终止后重启动口缺失：renderRefinePanel 中 refineNext 条件由 batchDone&&!b.aborted 放宽为 batchDone（含终止态），无候选时禁用并 title 提示暂无可完善候选，终止 warn notice 补重启指引；引入来源归因 REQ-20260908-020。新增 refine-ui R12-8 用例（先红后绿）；深测 D06 FAIL转PASS，D01-D11 全 PASS（D12 属既有独立Bug BUG-20260908-015）；npm test 95 文件 0 失败",
+    "runId": "run-20260908-093"
+  },
+  "history": [
+    {
+      "at": "2026-09-08T12:13:47.074Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0908-4c4f"
+    },
+    {
+      "at": "2026-09-08T12:33:46.957Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-08T14:08:42.386Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-08T15:32:19.436Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-018-01",
+      "note": "认领（zcode-batch-018-01）"
+    },
+    {
+      "at": "2026-09-08T15:40:15.532Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-018-01",
+      "note": "上报测试报告（覆盖率 4%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:19.269Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-2e24",
+      "note": "人工确认完成"
+    }
+  ]
+}

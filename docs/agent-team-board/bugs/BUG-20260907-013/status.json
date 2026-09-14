@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-013",
+  "type": "bug",
+  "title": "状态守卫误拦：无锁时以重定向日志方式启动/引用插件脚本的命令被判为改写源码",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.986Z",
+  "updatedAt": "2026-09-11T05:52:17.136Z",
+  "agentCompletedAt": "2026-09-07T16:58:57.834Z",
+  "lastReport": {
+    "at": "2026-09-07T16:58:57.834Z",
+    "coverage": 100,
+    "framework": "node:test(assert)+子进程实测",
+    "summary": "守卫 bash 模式第(4)检查改为写目标语义关联：新增 rewriteTargetTokens 提取重定向/tee/cp/mv/rm/chmod/sed -i/perl -pi/find 写动作的落盘目标并逐一 realpath 判定是否插件源码，插件路径仅作读取/执行/遍历来源时放行；目标不可静态解析（内联代码/sed w 脚本/残缺命令）回退段级保守拦截。判例演进：node <SRC> >/tmp、cp <SRC> /tmp、find …-fprint /tmp 改放行。code-guard 35 用例全绿（新增 C1-C3），run-all 70 文件回归 0 失败，无锁冒烟三场景符合预期。引入来源：REQ-20260901-003（已核验存在，README 关联节归因）。",
+    "runId": "run-20260908-051"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.986Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-2d77"
+    },
+    {
+      "at": "2026-09-07T15:09:45.084Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T16:49:58.153Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T16:58:57.834Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.136Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0a8a",
+      "note": "人工确认完成"
+    }
+  ]
+}

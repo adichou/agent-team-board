@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-006",
+  "type": "requirement",
+  "title": "布局优化，列表的操作按钮要平铺在一行内",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-030-1",
+  "createdAt": "2026-09-10T00:41:25.782Z",
+  "updatedAt": "2026-09-11T05:52:21.812Z",
+  "agentCompletedAt": "2026-09-10T02:08:32.931Z",
+  "lastReport": {
+    "at": "2026-09-10T02:08:32.931Z",
+    "coverage": 100,
+    "framework": "node-assert-static",
+    "summary": "列表行操作区平铺单行：复制按钮移入 .row-acts 首位（顺序 复制→接受→修改→删除），单号归信息区；row-acts nowrap+max-width:100%+overflow-x:auto 保证整体换行/极窄局部滚动；按钮 flex:none+nowrap 不折行，操作区内复制按钮与其余按钮等高；接受/修改/删除仍仅 submitted，抽屉与 Bug 子项复制按钮不受影响。新增 req-row-actions-inline.test.mjs 6/6，全量 134 个测试文件 0 失败",
+    "runId": "run-20260910-146"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T00:41:25.782Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T00:44:20.104Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T01:51:41.833Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-094920-d5b1）"
+    },
+    {
+      "at": "2026-09-10T01:57:03.099Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-030-1",
+      "note": "认领（zcode-batch-030-1）"
+    },
+    {
+      "at": "2026-09-10T02:08:32.931Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-030-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.812Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a7f9",
+      "note": "人工确认完成"
+    }
+  ]
+}

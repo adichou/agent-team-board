@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260910-010 演示 · 待测试界面为什么会有这个紫蓝色边框？</title>
+<style>
+  /* ---------- 主题变量（对照 scripts/web/style.css） ---------- */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --submitted: #64748b; --accepted: #2563eb; --planned: #0891b2; --inprogress: #d97706;
+    --confirming: #7c3aed; --done: #16a34a;
+    --primary: #2563eb;
+    --viewrail-accent: #4f46e5;          /* 视图切换栏专属强调色（REQ-20260906-001） */
+    --viewrail-accent-soft: rgba(79, 70, 229, 0.1);
+    --warn: #dc2626; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --err-bg: #fef2f2;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --submitted: #94a3b8; --accepted: #60a5fa; --planned: #22d3ee; --inprogress: #fbbf24;
+    --confirming: #a78bfa; --done: #4ade80;
+    --primary: #3b82f6;
+    --viewrail-accent: #818cf8;
+    --viewrail-accent-soft: rgba(129, 140, 248, 0.16);
+    --warn: #f87171; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+    --info-bg: #0b1d3a; --info-text: #93c5fd; --err-bg: #2a1215;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+      --submitted: #94a3b8; --accepted: #60a5fa; --planned: #22d3ee; --inprogress: #fbbf24;
+      --confirming: #a78bfa; --done: #4ade80;
+      --primary: #3b82f6;
+      --viewrail-accent: #818cf8;
+      --viewrail-accent-soft: rgba(129, 140, 248, 0.16);
+      --warn: #f87171; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+      --info-bg: #0b1d3a; --info-text: #93c5fd; --err-bg: #2a1215;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  code { background: rgba(127,140,170,.15); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  .muted { color: var(--muted); }
+
+  /* ---------- 演示控制条 ---------- */
+  .demo-bar {
+    flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .demo-title { font-weight: 650; font-size: 13.5px; margin-right: 4px; }
+  .demo-group { display: inline-flex; align-items: center; gap: 6px; }
+  .demo-label { font-size: 12px; color: var(--muted); flex: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    font: inherit; font-size: 12.5px; font-weight: 550; padding: 4px 10px; cursor: pointer;
+  }
+  .seg button.on { background: var(--viewrail-accent-soft); color: var(--viewrail-accent); }
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 5px 12px; font: inherit; font-size: 12.5px; font-weight: 550; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---------- 状态筛选条 ---------- */
+  .filter-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 18px 6px; flex: none; }
+  .filter-chip {
+    appearance: none; border: 1px solid var(--border); background: transparent; color: var(--muted);
+    padding: 4px 10px; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 550; cursor: pointer; white-space: nowrap;
+  }
+  .filter-chip.active { color: var(--viewrail-accent); border-color: var(--viewrail-accent); background: var(--viewrail-accent-soft); }
+  .sort-line { padding: 0 18px 8px; flex: none; display: flex; align-items: center; gap: 8px; }
+  .sort-select { height: 24px; padding: 0 4px; font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+
+  /* ---------- 列表 + 抽屉并排（1fr : 2fr，对照 .req-split） ---------- */
+  .req-view { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .req-split {
+    flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-rows: minmax(0, 1fr); gap: 14px; padding: 8px 18px 18px; align-items: stretch;
+  }
+  .req-list-wrap { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .req-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+
+  .req-row {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; cursor: pointer; flex: none;
+  }
+  .req-row:hover { filter: brightness(1.03); }
+  /* ===== 缺陷现状：picked = 详情抽屉当前打开行，蓝边 + 靛紫左条（style.css .req-row.picked 原样复刻） ===== */
+  body[data-mode="defect"] .req-row.picked { border-color: var(--primary); box-shadow: inset 3px 0 var(--viewrail-accent); }
+  /* ===== 修复后示意（最终方案以开发阶段 design.md 为准）：中性色标记 + 行内可见「详情打开中」标签 ===== */
+  body[data-mode="fixed"] .req-row.picked { border-color: var(--muted); background: color-mix(in srgb, var(--panel) 96%, var(--muted)); }
+  .picked-tag {
+    display: none; font-size: 10.5px; font-weight: 650; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 99px; padding: 0 7px; flex: none;
+  }
+  body[data-mode="fixed"] .req-row.picked .picked-tag { display: inline-block; }
+
+  .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); }
+  .card-title { font-weight: 600; font-size: 13.5px; }
+  .card-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .row-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .row-acts .btn { padding: 3px 9px; font-size: 12px; }
+  .accept-check { width: 15px; height: 15px; margin: 0; accent-color: var(--primary); flex: none; }
+
+  .notice { border: 1px solid var(--border); background: var(--info-bg); color: var(--info-text); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; }
+  .notice.err { background: var(--err-bg); color: var(--warn); }
+  .req-empty { margin: 18px 6px; text-align: center; }
+
+  /* ---------- 详情抽屉 ---------- */
+  .drawer {
+    min-width: 0; min-height: 0; display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  }
+  .drawer-empty { flex: 1; display: grid; place-items: center; color: var(--muted); }
+  .drawer-head { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); flex: none; }
+  .drawer-head .card-top { margin-bottom: 2px; }
+  .drawer-head h2 { margin: 2px 0 0; font-size: 15px; }
+  .drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .drawer-tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--border); flex: none; }
+  .drawer-tab { appearance: none; border: none; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; padding: 8px 10px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .drawer-tab.active { color: var(--viewrail-accent); border-bottom-color: var(--viewrail-accent); }
+  .field { display: flex; gap: 8px; font-size: 12.5px; }
+  .field b { flex: none; color: var(--muted); font-weight: 550; width: 52px; }
+  .icon-btn { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  .icon-btn:hover { background: rgba(127,140,170,.15); color: var(--text); }
+  .flag {
+    margin-left: auto; font-size: 11px; font-weight: 600; color: var(--confirming);
+    border: 1px solid currentColor; border-radius: 99px; padding: 0 7px; flex: none;
+  }
+
+  /* ---------- 演示说明 ---------- */
+  .explain { flex: none; border-top: 1px solid var(--border); background: var(--panel); padding: 8px 18px 10px; font-size: 12px; color: var(--muted); }
+  .explain b { color: var(--text); }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%) translateY(8px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 14px; font-size: 12.5px; box-shadow: 0 4px 18px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 860px) {
+    .req-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1.4fr); }
+    body { overflow: auto; }
+  }
+</style>
+</head>
+<body data-mode="defect">
+
+<div class="demo-bar">
+  <span class="demo-title">BUG-20260910-010 交互演示</span>
+  <span class="demo-group">
+    <span class="demo-label">对照</span>
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on">缺陷现象</button>
+      <button type="button" data-mode="fixed">修复后示意</button>
+    </span>
+  </span>
+  <span class="demo-group">
+    <span class="demo-label">数据状态</span>
+    <span class="seg" id="stateSeg">
+      <button type="button" data-state="normal" class="on">正常</button>
+      <button type="button" data-state="loading">加载</button>
+      <button type="button" data-state="empty">空</button>
+      <button type="button" data-state="error">失败</button>
+    </span>
+  </span>
+  <button type="button" class="btn" id="reloadBtn" title="演示视图快照恢复抽屉后边框再度出现">模拟页面刷新</button>
+  <button type="button" class="btn" id="themeBtn">深浅色切换</button>
+</div>
+
+<div class="filter-bar" id="filterBar"></div>
+<div class="sort-line">
+  <span class="muted" style="font-size:12px">排序</span>
+  <select class="sort-select" disabled><option>最新更新</option></select>
+  <span class="muted" style="font-size:12px">（截图顶部即该排序下拉）</span>
+</div>
+
+<div class="req-view">
+  <div class="req-split">
+    <div class="req-list-wrap"><div class="req-list" id="reqList"></div></div>
+    <div class="drawer" id="drawer"></div>
+  </div>
+</div>
+
+<div class="explain" id="explain"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ================= 演示数据（对照截图时刻的看板：已计划档三条 + 待测试/已完成各一条） ================= */
+var LANES = [
+  { key: 'submitted', label: '待接受', hint: '新条目，等待人工接受', count: 0 },
+  { key: 'accepted',  label: '已接受', hint: '已接受，可在详情页「移入计划」排入开发计划', count: 0 },
+  { key: 'planned',   label: '已计划', hint: '已排入开发计划，开发启动后最旧优先处理', count: 3 },
+  { key: 'developing',label: '开发中', hint: 'Agent 开发中（未上报）', count: 0 },
+  { key: 'confirming',label: '待测试', hint: 'Agent 已上报完成，等待人工测试', count: 1 },
+  { key: 'done',      label: '已完成', hint: '已人工确认完成', count: 1 }
+];
+var ITEMS = [
+  { id: 'REQ-20260910-011', lane: 'planned', status: '已计划', checkbox: true,
+    title: '去掉接受、驳回待接受和加入计划，移出计划等二次提示框，意义不大，因为可以撤销',
+    meta: ['下属 Bug 1 · 未完成 1', '09-10 12:28'] },
+  { id: 'BUG-20260910-008', lane: 'planned', status: '已计划', checkbox: true,
+    title: '任务面板「批量完善」入口点击后无反馈', meta: ['09-10 12:02'] },
+  { id: 'REQ-20260910-012', lane: 'planned', status: '已计划', checkbox: true,
+    title: '列表行悬停提示与详情字段口径统一', meta: ['09-10 11:41'] },
+  { id: 'REQ-20260910-009', lane: 'confirming', status: '待测试', checkbox: false, flag: true,
+    title: '搜索模块优化', meta: ['下属 Bug 2 · 未完成 2', '09-10 12:01'] },
+  { id: 'BUG-20260910-003', lane: 'done', status: '已完成', checkbox: false,
+    title: '详情抽屉页签在窄屏溢出不可滚动', meta: ['09-10 12:27'] }
+];
+
+/* ================= 状态 ================= */
+var state = {
+  mode: 'defect',        // defect | fixed
+  data: 'normal',        // normal | loading | empty | error
+  lane: 'planned',
+  drawerId: null         // 详情抽屉当前打开的条目 —— picked 的唯一来源（app.js reqRowEl）
+};
+
+var $ = function (s) { return document.querySelector(s); };
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function laneOf(key) { for (var i = 0; i < LANES.length; i++) if (LANES[i].key === key) return LANES[i]; return LANES[0]; }
+
+function toast(msg) {
+  var t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(function () { t.classList.remove('show'); }, 2200);
+}
+
+/* ================= 筛选条 ================= */
+function renderFilterBar() {
+  $('#filterBar').innerHTML = LANES.map(function (l) {
+    return '<button type="button" class="filter-chip' + (state.lane === l.key ? ' active' : '') +
+      '" data-lane="' + l.key + '" title="' + esc(l.hint) + '">' + l.label + ' <span style="opacity:.72">' + l.count + '</span></button>';
+  }).join('');
+}
+
+/* ================= 列表 ================= */
+function rowTitle(it) {
+  // 缺陷现状：悬停只有档位说明，边框无解释；修复后示意：补充「详情打开中」
+  var hint = laneOf(it.lane).hint;
+  if (state.mode === 'fixed' && state.drawerId === it.id) hint += '；详情打开中（右侧抽屉正展示此条目）';
+  return hint;
+}
+function renderList() {
+  var list = $('#reqList');
+  if (state.data === 'loading') {
+    list.innerHTML = '<div class="notice req-empty">加载中…</div>';
+    return;
+  }
+  if (state.data === 'error') {
+    list.innerHTML = '<div class="notice err req-empty">列表加载失败：服务离线或接口异常。<div style="margin-top:8px">' +
+      '<button type="button" class="btn" id="retryBtn">重试</button></div></div>';
+    $('#retryBtn').addEventListener('click', function () {
+      setSeg('#stateSeg', 'data-state', 'normal', function (v) { state.data = v; });
+      render();
+      toast('重试成功，数据已恢复');
+    });
+    return;
+  }
+  var items = state.data === 'empty' ? [] : ITEMS.filter(function (it) { return it.lane === state.lane; });
+  if (!items.length) {
+    list.innerHTML = '<div class="notice req-empty">当前筛选与搜索下没有条目。</div>';
+    return;
+  }
+  list.innerHTML = '';
+  items.forEach(function (it) {
+    var el = document.createElement('article');
+    el.className = 'req-row' + (state.drawerId === it.id ? ' picked' : '');
+    el.title = rowTitle(it);
+    el.innerHTML =
+      '<div class="card-top">' +
+        (it.checkbox ? '<input type="checkbox" class="accept-check" aria-label="选择 ' + esc(it.id) + '" onclick="event.stopPropagation()">' : '') +
+        '<span class="cid">' + esc(it.id) + '</span>' +
+        '<span class="picked-tag">详情打开中</span>' +   /* 修复后示意才显示（CSS 控制） */
+        '<span class="row-acts"><button type="button" class="btn" onclick="event.stopPropagation()">复制</button></span>' +
+      '</div>' +
+      '<div class="card-title">' + esc(it.title) + '</div>' +
+      '<div class="card-meta">' + it.meta.map(esc).join(' · ') + '</div>';
+    el.addEventListener('click', function () { openDrawer(it.id); });
+    list.appendChild(el);
+  });
+}
+
+/* ================= 抽屉 ================= */
+function renderDrawer() {
+  var d = $('#drawer');
+  if (!state.drawerId) {
+    d.innerHTML = '<div class="drawer-empty muted">选择左侧列表中的条目查看详情</div>';
+    return;
+  }
+  var it = ITEMS.filter(function (x) { return x.id === state.drawerId; })[0];
+  if (!it) { d.innerHTML = '<div class="drawer-empty muted">选择左侧列表中的条目查看详情</div>'; return; }
+  d.innerHTML =
+    '<div class="drawer-head">' +
+      '<div class="card-top"><span class="cid">' + esc(it.id) + '</span>' +
+      '<button type="button" class="icon-btn" id="drawerClose" title="关闭" aria-label="关闭">✕</button>' +
+      (it.flag ? '<span class="flag">待测试</span>' : '') + '</div>' +
+      '<h2>' + esc(it.title) + '</h2>' +
+    '</div>' +
+    '<div class="drawer-tabs">' +
+      '<button type="button" class="drawer-tab active">基本信息</button>' +
+      '<button type="button" class="drawer-tab">说明</button>' +
+      '<button type="button" class="drawer-tab">设计</button>' +
+      '<button type="button" class="drawer-tab">讨论纪要</button>' +
+    '</div>' +
+    '<div class="drawer-body">' +
+      '<div class="field"><b>状态</b><span>' + it.status + '</span></div>' +
+      '<div class="field"><b>提示</b><span class="muted">' + esc(laneOf(it.lane).hint) + '</span></div>' +
+      '<div class="notice">本抽屉为「' + esc(it.id) + '」的详情。抽屉打开期间，左侧列表对应行会带高亮标记——缺陷现状下该标记无任何文字解释。</div>' +
+      (state.mode === 'fixed' ? '<div class="notice">修复后示意：列表行以中性色边框标记「详情打开中」，悬停提示同步说明含义，不再与状态色混淆。</div>' : '') +
+    '</div>';
+  $('#drawerClose').addEventListener('click', closeDrawer);
+}
+function openDrawer(id) {
+  state.drawerId = id;
+  renderList();
+  renderDrawer();
+}
+function closeDrawer() {
+  state.drawerId = null;
+  renderList();
+  renderDrawer();
+}
+
+/* ================= 说明区 ================= */
+function renderExplain() {
+  var e = $('#explain');
+  if (state.mode === 'defect') {
+    e.innerHTML = '<b>缺陷现象：</b>列表中被点开详情的行带 <code>border-color: var(--primary)</code> 蓝边 + <code>inset 3px var(--viewrail-accent)</code> 靛紫左条（<code>.req-row.picked</code>），界面内无任何解释；深色下与「待测试」档紫色（' +
+      '<span style="color:var(--confirming);font-weight:650">#a78bfa</span>）相近，易被误读为状态标识。点击卡片、或点「模拟页面刷新」（视图快照恢复抽屉）可复现。';
+  } else {
+    e.innerHTML = '<b>修复后示意（最终方案以开发阶段 design.md 为准）：</b>「详情打开中」改用中性色边框与行内文字标签表达，悬停提示补充含义，不再复用视图切换栏专属强调色 <code>--viewrail-accent</code>，与六档状态色均可区分。';
+  }
+}
+
+/* ================= 控制条 ================= */
+function setSeg(sel, attr, val, apply) {
+  document.querySelectorAll(sel + ' button').forEach(function (b) {
+    var on = b.getAttribute(attr) === val;
+    b.classList.toggle('on', on);
+    if (on) apply(val);
+  });
+}
+function render() { renderFilterBar(); renderList(); renderDrawer(); renderExplain(); }
+
+document.querySelectorAll('#modeSeg button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    setSeg('#modeSeg', 'data-mode', b.getAttribute('data-mode'), function (v) { state.mode = v; });
+    document.body.setAttribute('data-mode', state.mode);
+    render();
+  });
+});
+document.querySelectorAll('#stateSeg button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    setSeg('#stateSeg', 'data-state', b.getAttribute('data-state'), function (v) { state.data = v; });
+    render();
+  });
+});
+$('#filterBar').addEventListener('click', function (e) {
+  var chip = e.target.closest('[data-lane]');
+  if (!chip) return;
+  state.lane = chip.getAttribute('data-lane');
+  if (state.drawerId && !ITEMS.some(function (it) { return it.id === state.drawerId && it.lane === state.lane; })) state.drawerId = null;
+  render();
+});
+$('#reloadBtn').addEventListener('click', function () {
+  // 演示 REQ-20260910-001 视图快照：刷新后抽屉恢复 → picked 边框「无操作也出现」
+  if (state.data !== 'normal') { toast('请先切回「正常」数据状态'); return; }
+  if (!state.drawerId) state.drawerId = (ITEMS.filter(function (it) { return it.lane === state.lane; })[0] || {}).id || null;
+  render();
+  toast('页面已刷新：视图快照恢复抽屉，边框随picked再次出现');
+});
+$('#themeBtn').addEventListener('click', function () {
+  var root = document.documentElement;
+  var cur = root.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && state.drawerId) closeDrawer();
+});
+
+render();
+</script>
+</body>
+</html>

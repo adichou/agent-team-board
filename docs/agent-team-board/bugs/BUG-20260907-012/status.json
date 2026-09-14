@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260907-012",
+  "type": "bug",
+  "title": "run receipt 用法提示与实现不符：--report-ref 被标为可选，实际 reported 回执必填",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-009-1",
+  "createdAt": "2026-09-07T09:00:50.951Z",
+  "updatedAt": "2026-09-11T05:52:17.088Z",
+  "agentCompletedAt": "2026-09-07T16:49:17.281Z",
+  "lastReport": {
+    "at": "2026-09-07T16:49:17.281Z",
+    "coverage": 100,
+    "framework": "node:test",
+    "summary": "run receipt 用法提示与实现对齐：atb.mjs 主 USAGE 与 BATCH_USAGE 拆为 reported 必带 --report-ref / blocked|failed 必带 --reason 两行；finishRun 报错追加修正命令示例；SKILL.md 速查同步必填呈现；新增 receipt-usage-hint.test.mjs（H1–H4），npm test 70 文件全通过",
+    "runId": "run-20260908-050"
+  },
+  "history": [
+    {
+      "at": "2026-09-07T09:00:50.951Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0907-071e"
+    },
+    {
+      "at": "2026-09-07T15:09:45.073Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-07T16:44:28.960Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "认领（zcode-batch-009-1）"
+    },
+    {
+      "at": "2026-09-07T16:49:17.282Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-009-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:17.088Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-8d46",
+      "note": "人工确认完成"
+    }
+  ]
+}

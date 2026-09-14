@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-005",
+  "type": "requirement",
+  "title": "支持项目管理",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-029-1",
+  "createdAt": "2026-09-10T00:40:03.166Z",
+  "updatedAt": "2026-09-11T05:52:21.764Z",
+  "agentCompletedAt": "2026-09-10T01:32:18.653Z",
+  "lastReport": {
+    "at": "2026-09-10T01:32:18.653Z",
+    "coverage": 14,
+    "framework": "Node assert（真实 server 集成 + 静态契约）",
+    "summary": "项目管理落地：server 注册表增 removed 闸门（防轮询/深链隐式重现、空表不回播）；新增 /api/project/preview 与 /api/project/remove，register 支持 requireInitialized 导入校验，init 支持 body.path（兼容 ?project=）并在落盘后显式登记；前端顶栏「管理项目」弹窗（初始化两步确认/导入/切换/移出确认、busy 禁用、失败保留输入）与无项目空态、clearProjectState 清 URL/记忆/旧画面；P1–P14 全过，npm test 133 文件失败 0",
+    "runId": "run-20260910-145"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T00:40:03.166Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T00:44:20.109Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T00:55:23.347Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-085253-c76f）"
+    },
+    {
+      "at": "2026-09-10T01:06:24.955Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "认领（zcode-batch-029-1）"
+    },
+    {
+      "at": "2026-09-10T01:32:18.654Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-029-1",
+      "note": "上报测试报告（覆盖率 14%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:21.764Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-e48f",
+      "note": "人工确认完成"
+    }
+  ]
+}

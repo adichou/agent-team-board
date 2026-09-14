@@ -1,0 +1,53 @@
+{
+  "id": "REQ-20260830-005",
+  "type": "requirement",
+  "title": "看板卡片一键复制 REQ/BUG 单号",
+  "status": "done",
+  "parent": null,
+  "owner": "terminal",
+  "createdAt": "2026-08-30T14:59:12.893Z",
+  "updatedAt": "2026-09-11T05:52:13.093Z",
+  "agentCompletedAt": "2026-08-30T15:11:18.641Z",
+  "lastReport": {
+    "at": "2026-08-30T15:11:18.641Z",
+    "coverage": null,
+    "framework": "node:assert 静态契约 + 浏览器实测（部分）",
+    "summary": "卡片单号一键复制完成（零依赖）：卡片、抽屉详情头、抽屉下属 Bug 列表三处单号均可点击复制（.cid.link 可点态 + hover 样式 + title 提示）；实现优先 navigator.clipboard.writeText（127.0.0.1 安全上下文可用），异常降级 execCommand('copy')（隐藏 textarea），仍失败 toast 提示「复制失败，请手动框选」；成功反馈就地显示「已复制 ✓」1.2 秒后恢复原文（反馈期间 dataset.copied 防重复点击），不用全局 toast；复制点击 stopPropagation 不冒泡开抽屉，与拖拽换列、2 秒轮询增量渲染不冲突。TDD：新增 scripts/tests/copy-id.test.mjs（C1–C4 先红后绿全过）；C5 浏览器点击目验因当日 IAB 输入管线故障未能完成（点击无事件响应），逻辑由契约覆盖，待人工点击任一单号确认。版本 0.2.2→0.2.3。"
+  },
+  "history": [
+    {
+      "at": "2026-08-30T14:59:12.893Z",
+      "from": null,
+      "to": "submitted",
+      "by": "terminal"
+    },
+    {
+      "at": "2026-08-30T15:00:27.186Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-08-30T15:02:31.893Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "认领（terminal）"
+    },
+    {
+      "at": "2026-08-30T15:11:18.641Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "terminal",
+      "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:13.093Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-a3a9",
+      "note": "人工确认完成"
+    }
+  ]
+}

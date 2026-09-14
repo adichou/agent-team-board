@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260911-002",
+  "type": "requirement",
+  "title": "营销和发布模块隐藏",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-036-1",
+  "createdAt": "2026-09-11T04:13:29.279Z",
+  "updatedAt": "2026-09-11T05:52:24.060Z",
+  "agentCompletedAt": "2026-09-11T05:19:59.299Z",
+  "lastReport": {
+    "at": "2026-09-11T05:19:59.299Z",
+    "coverage": 12,
+    "framework": "node:assert + node:vm",
+    "summary": "暂态隐藏营销/发布模块：HIDDEN_VIEWS 同一开关扩展为 oncall/files/marketing/release；index.html 移除两导航按钮收敛为 需求/任务/设置；MODULE_SUB 移出两键；深链/快照回落需求模块+一次性提示+URL view 参数清理；零 /api/marketing|release 请求；服务端路由、模块源码、容器与数据零改动；恢复步骤记录于 design.md。新测试 8/8 绿，同步更新 9 个既有测试口径，npm test 193 文件 0 失败",
+    "runId": "run-20260911-196"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T04:13:29.279Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T04:13:29.280Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T04:21:24.233Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260911-121521-b59a）"
+    },
+    {
+      "at": "2026-09-11T05:09:35.732Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-036-1",
+      "note": "认领（zcode-batch-036-1）"
+    },
+    {
+      "at": "2026-09-11T05:19:59.299Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-036-1",
+      "note": "上报测试报告（覆盖率 12%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:24.060Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-72cf",
+      "note": "人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260906-012",
+  "type": "requirement",
+  "title": "单条派发任务中，会话名更改为单号 标题",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-dispatch-session-title",
+  "createdAt": "2026-09-06T03:48:20.919Z",
+  "updatedAt": "2026-09-11T05:52:14.804Z",
+  "agentCompletedAt": "2026-09-06T04:07:41.506Z",
+  "lastReport": {
+    "at": "2026-09-06T04:07:41.506Z",
+    "coverage": 100,
+    "framework": "node:assert/strict 静态契约 + 自建 runner（scripts/tests/run-all.mjs）",
+    "summary": "dispatchPrompt 两版改名指令由「单号」升级为「单号 标题」（scripts/web/app.js:456-461，zcode 版第二行与 codex 版句首）；P1.5 契约同步改造（新形态恰好 2 次 + 旧形态残留 0）先跑红后跑绿；dispatch.test/dispatch-launch 全绿、node --check 通过；scripts/lib/dispatch.mjs 与深链未动（终端标签标题仍单号）；全量 31 测试文件与基线一致，5 个既有失败均属并行中的批量派发/调度需求（batch-*/scheduler），与本条无关。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-06T03:48:20.919Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-06T03:54:09.006Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-06T04:04:00.709Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-dispatch-session-title",
+      "note": "认领（zcode-dispatch-session-title）"
+    },
+    {
+      "at": "2026-09-06T04:07:41.506Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0906-0cae",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:14.804Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-64f2",
+      "note": "人工确认完成"
+    }
+  ]
+}

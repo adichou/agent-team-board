@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>REQ-20260909-015 开源许可页签 · 可交互演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --panel-2: #fafbfc; --border: #d9dee4;
+    --text: #24292f; --muted: #6a737d; --accent: #0969da; --accent-weak: #ddf4ff;
+    --ok: #1a7f37; --ok-bg: #dafbe1; --warn: #9a6700; --warn-bg: #fff8c5;
+    --danger: #cf222e; --danger-bg: #ffebe9; --shadow: 0 8px 24px rgba(31,35,40,.12);
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2129; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #4493f8; --accent-weak: #121d2f;
+    --ok: #3fb950; --ok-bg: #143c22; --warn: #d29922; --warn-bg: #3a2d05;
+    --danger: #f85149; --danger-bg: #3d1418; --shadow: 0 8px 24px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .panel h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600; letter-spacing: .3px; }
+  .ctl-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .ctl-row:last-child { margin-bottom: 0; }
+  .ctl-label { font-size: 12px; color: var(--muted); min-width: 64px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel-2); color: var(--text); padding: 5px 12px;
+    font-size: 12.5px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); }
+  .legend .chip { display: inline-flex; align-items: center; gap: 5px; }
+
+  /* —— 模拟详情抽屉 —— */
+  .drawer { max-width: 860px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .drawer-head { padding: 14px 18px 8px; }
+  .drawer-head .id { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--accent); }
+  .drawer-head .top { display: flex; align-items: center; justify-content: space-between; }
+  .drawer-head h3 { margin: 6px 0 0; font-size: 16px; }
+  .x { border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+    border-radius: 6px; width: 26px; height: 26px; cursor: pointer; }
+  .tabs { display: flex; gap: 4px; padding: 8px 14px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab { border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted);
+    padding: 7px 13px; font-size: 13px; cursor: pointer; border-radius: 8px 8px 0 0; position: relative; }
+  .tab:hover { color: var(--text); background: var(--panel-2); }
+  .tab.active { color: var(--accent); background: var(--panel-2); border-color: var(--border); font-weight: 600; }
+  .tab .new-flag { position: absolute; top: -7px; right: -10px; font-size: 10px; background: var(--danger);
+    color: #fff; border-radius: 6px; padding: 0 5px; font-weight: 600; }
+  .drawer-body { padding: 16px 18px 20px; min-height: 300px; background: var(--panel); }
+  .pane { display: none; }
+  .pane.show { display: block; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 16px; margin-bottom: 14px; }
+  .meta-grid label { display: block; font-size: 11.5px; color: var(--muted); }
+  .meta-grid span { font-size: 13px; }
+  .md h4 { margin: 2px 0 8px; font-size: 14px; }
+  .md p { margin: 0 0 10px; color: var(--text); }
+  .md .muted, .muted { color: var(--muted); }
+  .doc-hint { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+  table.oss { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.oss th, table.oss td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+  table.oss th { background: var(--panel-2); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  table.oss td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; white-space: nowrap; }
+  table.oss a { color: var(--accent); text-decoration: none; }
+  table.oss a:hover { text-decoration: underline; }
+  .badge { display: inline-block; border-radius: 10px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .b-ok { color: var(--ok); background: var(--ok-bg); }
+  .b-warn { color: var(--warn); background: var(--warn-bg); }
+  .b-danger { color: var(--danger); background: var(--danger-bg); }
+  .row-alert td { background: color-mix(in srgb, var(--danger-bg) 55%, transparent); }
+  .alert-line { margin-top: 8px; font-size: 12.5px; color: var(--danger); background: var(--danger-bg);
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: 8px; padding: 7px 10px; }
+
+  .state-box { border: 1px dashed var(--border); border-radius: 10px; padding: 28px 18px; text-align: center; color: var(--muted); background: var(--panel-2); }
+  .state-box .big { font-size: 15px; color: var(--text); margin-bottom: 6px; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .retry { margin-top: 10px; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    border-radius: 8px; padding: 5px 16px; font-size: 13px; cursor: pointer; }
+  .cache-hit { font-size: 11.5px; color: var(--ok); }
+  .notice { border: 1px solid var(--border); background: var(--accent-weak); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 12.5px; margin-bottom: 12px; }
+  footer { max-width: 860px; margin: 12px auto 0; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+  <h1>REQ-20260909-015 · 「开源许可」页签可交互演示</h1>
+  <p class="sub">需求或 Bug 方案设计优先复用开源库（依赖引用、禁止复制源码）；详情页在「设计」页签之后新增「开源许可」页签，展示所用开源库的 License 与仓库地址。仅页面内存模拟，不连接看板服务、不写任何数据。</p>
+
+  <div class="panel">
+    <h2>演示控制</h2>
+    <div class="ctl-row">
+      <span class="ctl-label">页签形态</span>
+      <div class="seg" id="segMode">
+        <button data-v="target" class="on">目标（设计之后插入开源许可）</button>
+        <button data-v="current">现状（无开源许可页签）</button>
+      </div>
+    </div>
+    <div class="ctl-row">
+      <span class="ctl-label">条目场景</span>
+      <div class="seg" id="segScene">
+        <button data-v="used" class="on">使用开源库（含违规示例）</button>
+        <button data-v="used-report">使用开源库 + 测试报告</button>
+        <button data-v="unused">未使用（页签隐藏）</button>
+        <button data-v="unused-fixed">未使用（固定空态口径）</button>
+      </div>
+    </div>
+    <div class="ctl-row">
+      <span class="ctl-label">文档状态</span>
+      <div class="seg" id="segState">
+        <button data-v="ok" class="on">正常</button>
+        <button data-v="loading">加载中</button>
+        <button data-v="fail">加载失败</button>
+      </div>
+    </div>
+    <div class="ctl-row">
+      <span class="ctl-label">外观</span>
+      <div class="seg" id="segTheme">
+        <button data-v="auto" class="on">跟随系统</button>
+        <button data-v="light">浅色</button>
+        <button data-v="dark">深色</button>
+      </div>
+    </div>
+    <div class="ctl-row">
+      <span class="ctl-label">合规图例</span>
+      <div class="legend">
+        <span class="chip"><span class="badge b-ok">MIT 等</span>白名单（开源友好）</span>
+        <span class="chip"><span class="badge b-warn">待确认</span>白名单外 / 未声明</span>
+        <span class="chip"><span class="badge b-danger">GPL 系</span>禁用（强传染，禁止引入）</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer">
+    <div class="drawer-head">
+      <div class="top">
+        <span class="id">REQ-20260909-015</span>
+        <button class="x" title="关闭（演示不生效）">✕</button>
+      </div>
+      <h3>需求或 Bug 方案设计时要牵引 Agent 尽可能复用网络上优秀的开源库，而不是重复造轮子</h3>
+    </div>
+    <nav class="tabs" id="tabRow" role="tablist" aria-label="详情分页（模拟）"></nav>
+    <div class="drawer-body">
+      <div class="pane" data-pane="info">
+        <section class="meta-grid">
+          <div><label>状态</label><span>accepted（已接受）</span></div>
+          <div><label>类型</label><span>需求</span></div>
+          <div><label>认领者</label><span>—</span></div>
+          <div><label>创建</label><span>2026-09-09 12:52</span></div>
+          <div><label>更新</label><span>2026-09-09 20:58</span></div>
+          <div><label>文档</label><span id="metaDocs">README · design · test-cases</span></div>
+        </section>
+        <div class="md">
+          <h4>描述（摘要）</h4>
+          <p>1、开源库要引用，而不是复制代码到项目中。2、若使用了开源库，其 License 和仓库地址要在需求详细页面中单独页签展示，页签放在设计页签之后。只能使用开源友好的 License，避免陷入强制开源的境地。</p>
+          <p class="muted">本页为「基本信息」页签演示内容，保持现状不动。</p>
+        </div>
+      </div>
+
+      <div class="pane" data-pane="readme"><div class="md">
+        <h4>README.md（说明）</h4>
+        <p>描述 + 验收标准 + 界面布局 / 交互行为 / 状态反馈……（演示占位）</p>
+      </div></div>
+
+      <div class="pane" data-pane="design"><div class="md">
+        <h4>design.md（设计）</h4>
+        <p>背景 / 方案 / 风险与边界……（演示占位）</p>
+        <p class="muted">目标口径下，design.md「方案」节新增开源选型要求：自研前先评估可复用的成熟开源库；引用而非复制源码；只用开源友好许可。</p>
+      </div></div>
+
+      <div class="pane" data-pane="licenses">
+        <div class="doc-hint" id="licHint"></div>
+        <div id="licBody"></div>
+      </div>
+
+      <div class="pane" data-pane="cases"><div class="md">
+        <h4>test-cases.md（测试用例）</h4>
+        <p>| # | 用例 | 优先级 | 结果 |……（演示占位）</p>
+      </div></div>
+
+      <div class="pane" data-pane="report"><div class="md">
+        <h4>test-report.md（测试报告）</h4>
+        <p>仅在文件存在时作为附加页签出现（既有口径，本演示同样适用 licenses.md）。（演示占位）</p>
+      </div></div>
+
+      <div class="pane" data-pane="disc"><div class="md">
+        <h4>讨论纪要</h4>
+        <p class="muted">REQ-20260909-013 提议隐藏本页签——「开源许可」插在「设计」与「测试用例」之间，与其去留正交、互不影响。（演示占位）</p>
+      </div></div>
+    </div>
+  </div>
+
+  <footer>ui-demo.html · 单文件内联 CSS/JS · 无外网依赖 · 无构建步骤 · 深浅色跟随系统</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = {
+    mode: 'target',        // target=目标（含开源许可页签） current=现状
+    scene: 'used',         // used / used-report / unused / unused-fixed
+    docState: 'ok',        // ok / loading / fail
+    tab: 'info',
+    licLoaded: false,      // 模拟按需加载：首次拉取后才算 loaded
+    licCached: false,      // 缓存命中标记
+    theme: 'auto'
+  };
+
+  var TABS = [
+    { key: 'info',    label: '基本信息' },
+    { key: 'readme',  label: '说明' },
+    { key: 'design',  label: '设计' },
+    { key: 'licenses', label: '开源许可', isNew: true },
+    { key: 'cases',   label: '测试用例' },
+    { key: 'report',  label: '测试报告', conditional: true },
+    { key: 'disc',    label: '讨论纪要' }
+  ];
+
+  // 场景 → 条目目录内实际文件集合（licenses.md 存在才有页签；unused-fixed 演示固定显示空态口径）
+  function sceneFiles() {
+    var files = ['README.md', 'design.md', 'test-cases.md'];
+    if (state.scene === 'used' || state.scene === 'used-report') files.push('licenses.md');
+    if (state.scene === 'used-report') files.push('test-report.md');
+    return files;
+  }
+
+  var OSS_ROWS = [
+    { name: 'marked',    ver: '12.0.2',  via: 'npm',   lic: 'MIT',        repo: 'https://github.com/markedjs/marked',     level: 'ok' },
+    { name: 'dompurify', ver: '3.1.6',   via: 'npm',   lic: 'Apache-2.0', repo: 'https://github.com/cure53/DOMPurify',    level: 'ok' },
+    { name: 'Chart.js',  ver: '4.4.3',   via: 'npm',   lic: 'MIT',        repo: 'https://github.com/chartjs/Chart.js',    level: 'ok' },
+    { name: 'bad-ui-kit（示例）', ver: '1.4.0', via: 'vendor（复制源码）', lic: 'GPL-3.0', repo: 'https://example.com/bad-ui-kit', level: 'danger',
+      note: 'vendor 例外须标注复制范围与原因' },
+    { name: 'tiny-util（示例）', ver: '0.9.1', via: 'npm', lic: '未声明', repo: 'https://example.com/tiny-util', level: 'warn' }
+  ];
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function renderTabs() {
+    var row = document.getElementById('tabRow');
+    var files = sceneFiles();
+    var showLic = (state.mode === 'target') &&
+      (files.indexOf('licenses.md') >= 0 || state.scene === 'unused-fixed');
+    var html = '';
+    for (var i = 0; i < TABS.length; i++) {
+      var t = TABS[i];
+      if (t.key === 'licenses' && !showLic) continue;
+      if (t.conditional && files.indexOf('test-report.md') < 0) continue;
+      var on = state.tab === t.key ? ' active' : '';
+      var flag = t.isNew ? '<span class="new-flag">新</span>' : '';
+      html += '<button type="button" class="tab' + on + '" role="tab" data-tab="' + t.key + '"' +
+        (on ? ' aria-selected="true"' : ' aria-selected="false"') + '>' + t.label + flag + '</button>';
+    }
+    row.innerHTML = html;
+    Array.prototype.forEach.call(row.querySelectorAll('.tab'), function (b) {
+      b.addEventListener('click', function () { activate(b.dataset.tab); });
+    });
+    // 当前页签被隐藏（场景切换）→ 回落基本信息（沿用 drawerTabValid 失效回落口径）
+    var keys = Array.prototype.map.call(row.querySelectorAll('.tab'), function (b) { return b.dataset.tab; });
+    if (keys.indexOf(state.tab) < 0) activate('info', true);
+  }
+
+  function renderMeta() {
+    var files = sceneFiles().map(function (f) {
+      return f.replace(/\.md$/, '').replace('README', 'README(说明)').replace('test-cases', 'test-cases(用例)')
+        .replace('licenses', 'licenses(开源许可)').replace('test-report', 'test-report(报告)');
+    });
+    document.getElementById('metaDocs').textContent = files.join(' · ');
+  }
+
+  function licTableHtml() {
+    var rows = '';
+    OSS_ROWS.forEach(function (r) {
+      var badge = r.level === 'ok'
+        ? '<span class="badge b-ok">' + esc(r.lic) + '</span>'
+        : r.level === 'warn'
+          ? '<span class="badge b-warn">' + esc(r.lic) + ' · 待确认</span>'
+          : '<span class="badge b-danger">' + esc(r.lic) + ' · 禁止引入</span>';
+      rows += '<tr' + (r.level === 'danger' ? ' class="row-alert"' : '') + '>' +
+        '<td>' + esc(r.name) + '</td>' +
+        '<td class="mono">' + esc(r.ver) + '</td>' +
+        '<td>' + esc(r.via) + (r.note ? '<div class="muted" style="font-size:11.5px">' + esc(r.note) + '</div>' : '') + '</td>' +
+        '<td>' + badge + '</td>' +
+        '<td class="mono"><a href="' + esc(r.repo) + '" target="_blank" rel="noopener noreferrer">' + esc(r.repo) + '</a></td>' +
+        '</tr>';
+    });
+    return '<table class="oss"><thead><tr><th>库名</th><th>版本</th><th>引入方式</th><th>License</th><th>仓库地址</th></tr></thead><tbody>' +
+      rows + '</tbody></table>' +
+      '<div class="alert-line">⚠ 「' + esc(OSS_ROWS[3].name) + '」为 GPL-3.0 强传染许可且以 vendor 方式复制源码，双重违规：请替换为白名单许可的等价库；vendor 需在 licenses.md 标注复制范围与原因。</div>' +
+      '<p class="doc-hint" style="margin-top:10px">表格由条目目录内 licenses.md 以 Markdown 渲染；Agent 在方案设计 / 实施阶段随 design.md 一并维护。</p>';
+  }
+
+  var loadTimer = null;
+  function renderLicenses() {
+    var body = document.getElementById('licBody');
+    var hint = document.getElementById('licHint');
+    clearTimeout(loadTimer);
+
+    // 未使用开源库：默认口径 → 页签不出现（本函数仅在固定空态口径下被渲染）
+    if (state.scene === 'unused-fixed') {
+      hint.textContent = '固定显示口径（待确认 2）：文件未创建也给页签。';
+      body.innerHTML = '<div class="state-box"><div class="big">本条目未引用开源库</div>' +
+        '<div>未创建 licenses.md。方案设计若后续引入开源库，Agent 须同步维护该文件。</div></div>';
+      return;
+    }
+    if (state.docState === 'loading') {
+      hint.textContent = '首次激活页签：GET /api/item/:id/doc/licenses.md';
+      state.licLoaded = false; state.licCached = false;
+      body.innerHTML = '<div class="state-box"><span class="spin"></span>加载中…</div>';
+      loadTimer = setTimeout(function () {
+        if (state.docState === 'loading' && state.tab === 'licenses') {
+          state.docState = 'ok'; syncSeg('segState', 'ok');
+          state.licLoaded = true; renderLicenses();
+        }
+      }, 900);
+      return;
+    }
+    if (state.docState === 'fail') {
+      hint.textContent = '文档请求失败：toast 报错，内容区给重试入口（沿用 loadDoc catch 口径）。';
+      state.licLoaded = false; state.licCached = false;
+      body.innerHTML = '<div class="state-box"><div class="big">⚠ licenses.md 加载失败</div>' +
+        '<div>请求失败：文档不存在或服务不可用（模拟）</div>' +
+        '<button type="button" class="retry" id="licRetry">重试</button></div>';
+      document.getElementById('licRetry').addEventListener('click', function () {
+        state.docState = 'loading'; syncSeg('segState', 'loading'); renderLicenses();
+      });
+      return;
+    }
+    // 正常
+    if (state.licCached) {
+      hint.innerHTML = '再次激活命中 docCache，不重复请求 <span class="cache-hit">● 缓存回填</span>';
+    } else {
+      hint.textContent = '首次加载完成并写入 docCache；切走再切回即时回填。';
+    }
+    body.innerHTML = licTableHtml();
+    state.licLoaded = true;
+  }
+
+  function activate(key, silent) {
+    state.tab = key;
+    var row = document.getElementById('tabRow');
+    Array.prototype.forEach.call(row.querySelectorAll('.tab'), function (b) {
+      var on = b.dataset.tab === key;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.pane'), function (p) {
+      p.classList.toggle('show', p.dataset.pane === key);
+    });
+    if (key === 'licenses') {
+      if (state.licLoaded && state.docState === 'ok') state.licCached = true; // 缓存命中标记
+      renderLicenses();
+    }
+  }
+
+  function syncSeg(id, val) {
+    Array.prototype.forEach.call(document.querySelectorAll('#' + id + ' button'), function (b) {
+      b.classList.toggle('on', b.dataset.v === val);
+    });
+  }
+
+  function bindSeg(id, fn) {
+    Array.prototype.forEach.call(document.querySelectorAll('#' + id + ' button'), function (b) {
+      b.addEventListener('click', function () {
+        syncSeg(id, b.dataset.v);
+        fn(b.dataset.v);
+      });
+    });
+  }
+
+  function applyTheme() {
+    var dark = state.theme === 'dark' ||
+      (state.theme === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }
+
+  function hasLicTab() {
+    return !!document.querySelector('#tabRow .tab[data-tab="licenses"]');
+  }
+  bindSeg('segMode', function (v) {
+    state.mode = v;
+    state.licLoaded = false; state.licCached = false;
+    renderTabs(); renderMeta(); // 页签被隐藏时 renderTabs 内回落「基本信息」
+  });
+  bindSeg('segScene', function (v) {
+    state.scene = v;
+    state.licLoaded = false; state.licCached = false;
+    renderTabs(); renderMeta();
+  });
+  bindSeg('segState', function (v) {
+    state.docState = v;
+    state.licLoaded = false; state.licCached = false;
+    if (hasLicTab()) {
+      if (state.tab !== 'licenses') activate('licenses');
+      else renderLicenses();
+    }
+  });
+  bindSeg('segTheme', function (v) { state.theme = v; applyTheme(); });
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  }
+
+  // 初始渲染：默认停在「开源许可」页签直观展示目标形态
+  applyTheme();
+  renderTabs();
+  renderMeta();
+  activate('licenses');
+})();
+</script>
+</body>
+</html>

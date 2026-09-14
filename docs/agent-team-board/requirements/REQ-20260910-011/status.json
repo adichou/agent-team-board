@@ -1,0 +1,61 @@
+{
+  "id": "REQ-20260910-011",
+  "type": "requirement",
+  "title": "去掉接受、驳回待接受和加入计划，移出计划等二次提示框，意义不大，因为可以撤销",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-031-12",
+  "createdAt": "2026-09-10T03:21:48.465Z",
+  "updatedAt": "2026-09-11T05:52:22.188Z",
+  "agentCompletedAt": "2026-09-10T06:04:05.117Z",
+  "lastReport": {
+    "at": "2026-09-10T06:04:05.117Z",
+    "coverage": 12,
+    "framework": "node:assert/strict + vm 前端沙箱 + 静态契约",
+    "summary": "接受/移入计划/驳回待接受/移出计划四流转去掉 uiConfirm 二次确认（skipConfirm 退役），卡片与详情单条入口 single 路径成功 toast 附撤销按钮走合法回退边；ACTION_UNDO 补 submitted→accepted；删除等不可撤销确认保留并防回归。新增 no-confirm-undo-20260910-011.test.mjs 9 用例，同步更新 6 个旧契约测试，npm test 145 文件 0 失败",
+    "runId": "run-20260910-158"
+  },
+  "history": [
+    {
+      "at": "2026-09-10T03:21:48.465Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-10T03:21:53.174Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-10T04:28:38.028Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260910-122149-be0d）"
+    },
+    {
+      "at": "2026-09-10T05:50:27.181Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-031-12",
+      "note": "认领（zcode-batch-031-12）"
+    },
+    {
+      "at": "2026-09-10T06:04:05.117Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-031-12",
+      "note": "上报测试报告（覆盖率 12%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-11T05:52:22.188Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "atb-0911-0663",
+      "note": "人工确认完成"
+    }
+  ]
+}
