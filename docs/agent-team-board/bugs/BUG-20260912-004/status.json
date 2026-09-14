@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260912-004",
+  "type": "bug",
+  "title": "操作提示出现多个已，请定位",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "BUG-20260912-004",
+  "createdAt": "2026-09-12T02:11:47.601Z",
+  "updatedAt": "2026-09-12T06:43:42.195Z",
+  "agentCompletedAt": "2026-09-12T06:43:42.195Z",
+  "lastReport": {
+    "at": "2026-09-12T06:43:42.195Z",
+    "coverage": 90,
+    "framework": "node:assert/strict + run-all",
+    "summary": "移除 i18n 动态词典中无 ASCII 锚点的自匹配泛化词条（✓ ◇ 已◇），为驳回完成/驳回接受提示补精确双向词条，源码模板片段移入 ALLOWLIST；新增「英文模板必须含 ASCII 锚点」结构防线与 zh 幂等/中英往返/DOM 幂等回归测试 6 例；npm test 207 文件全过，app.js 零改动；归因 REQ-20260911-005",
+    "runId": "run-20260912-210"
+  },
+  "history": [
+    {
+      "at": "2026-09-12T02:11:47.601Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-12T02:11:47.601Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-12T02:37:52.178Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260912-101559-6ee3）"
+    },
+    {
+      "at": "2026-09-12T06:36:52.146Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "BUG-20260912-004",
+      "note": "认领（BUG-20260912-004）"
+    },
+    {
+      "at": "2026-09-12T06:43:42.195Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "BUG-20260912-004",
+      "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    }
+  ]
+}
