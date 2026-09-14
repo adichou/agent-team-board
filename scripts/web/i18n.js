@@ -16,6 +16,10 @@ const EN = {
   '当前分支：—（不是 git 仓库）': 'Current branch: — (not a git repository)',
   '已存在': 'exists',
   '未创建': 'not created',
+  // BUG-20260912-001：状态行拆段（分支名/状态词各成独立文本节点）后按段翻译，
+  // 整句动态键「当前分支：◇ · dev 分支：◇」因捕获组不翻译而移除（英文残留中文）。
+  '当前分支：': 'Current branch: ',
+  '· dev 分支：': '· dev branch: ',
   '已在 dev 分支': 'On the dev branch',
   '初始化 dev 分支': 'Initialize the dev branch',
   '项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。': 'The project is not a git repository: initialize git in the terminal first (new projects are initialized automatically via atb init).',
@@ -717,7 +721,7 @@ const EN_DYNAMIC = {
   // REQ-20260911-009 Git 工作流：状态/失败就近反馈（动态拼接）
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
   '失败：◇（可重试；已存在的分支不会重复创建）': 'Failed: $1 (retryable; an existing branch is never re-created)',
-  '当前分支：◇ · dev 分支：◇': 'Current branch: $1 · dev branch: $2',
+  // BUG-20260912-001：状态行改为按段翻译（见 EN 区注释），原整句动态键移除
   '已选 ◇ 项': '$1 selected',
   '接受 ◇': 'Accept $1',
   '/ 强度 ◇ · 来源 ◇ · 快照时间 ◇◇': '/ effort $1 · source $2 · snapshot $3$4',
@@ -1085,7 +1089,13 @@ function translateTree(root, skip) {
     if (!raw.trim()) return;
     const m = raw.match(/^(\s*)([\s\S]*?)(\s*)$/);
     if (!m) return;
-    const out = t(m[2]);
+    let out = t(m[2]);
+    if (out === m[2] && m[3]) {
+      // BUG-20260912-001：词典值尾随空白（如 'Current branch: '）会被此处剥离的
+      // 外侧空白吞掉，反向（en→zh）查不中；把空白贴回键里重试一次（往返不留英文残段）。
+      const out2 = t(m[2] + m[3]);
+      if (out2 !== m[2] + m[3]) { root.nodeValue = m[1] + out2; return; }
+    }
     if (out !== m[2]) root.nodeValue = m[1] + out + m[3];
   }
 }
