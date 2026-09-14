@@ -379,7 +379,7 @@ function logSearchStub(h, st) {
   };
 }
 
-t('N7g 提交记录搜索：搜索行渲染、q 透传、命中计数与高亮、跨页命中、无匹配空态、清除恢复、切分支重置、同分支重载保持关键词、搜索态分页与失败重试、防重复触发、与顶部模块搜索互不串扰', async () => {
+t('N7g 提交记录搜索：搜索控件渲染（BUG-20260914-016 与分支名同一头部行）、q 透传、命中计数与高亮、跨页命中、无匹配空态、清除恢复、切分支重置、同分支重载保持关键词、搜索态分页与失败重试、防重复触发、与顶部模块搜索互不串扰', async () => {
   const st = statePayload();
   const h = setup({ state: st, candidates: candidatesPayload() });
   logSearchStub(h, st);
@@ -393,12 +393,22 @@ t('N7g 提交记录搜索：搜索行渲染、q 透传、命中计数与高亮�
   const setInput = (v) => { const i = el('#bldLogSearchInput'); i.value = v; i.listeners.input(); };
   const fire = (sel, ev = 'click', arg) => el(sel).listeners[ev](arg);
 
-  // 未选分支：无搜索行；选中后出现输入框（placeholder）+ 搜索按钮，默认列表无命中计数
-  assert.doesNotMatch(inner(), /bld-log-search/, '未选分支不出搜索行');
+  // 未选分支：无搜索控件；选中后出现输入框（placeholder）+ 搜索按钮，默认列表无命中计数
+  assert.doesNotMatch(inner(), /bld-log-search/, '未选分支不出搜索控件');
   h.run(`window.ATBBuild.selectBranch('dev')`);
   await new Promise((r) => setTimeout(r, 10));
   assert.match(inner(), /id="bldLogSearchInput"[^>]*placeholder="搜提交说明 \/ 作者 \/ hash…"/, '选中分支出现搜索输入框（placeholder）');
   assert.match(inner(), /id="bldLogSearchGo"[^>]*>搜索</, '搜索按钮');
+  // BUG-20260914-016：搜索控件与分支名同一头部行（不再在头部行下方独占一行）
+  const oneRow = inner();
+  assert.equal((oneRow.match(/class="bld-log-search"/g) || []).length, 1, '搜索控件容器唯一（无独立搜索行）');
+  const iHead = oneRow.indexOf('<div class="bld-log-head">');
+  const iStrong = oneRow.indexOf('<strong>dev</strong>', iHead);
+  const iSearch = oneRow.indexOf('class="bld-log-search"', iHead);
+  const iInput = oneRow.indexOf('id="bldLogSearchInput"', iHead);
+  const iRefresh = oneRow.indexOf('id="bldLogRefresh"', iHead);
+  assert.ok(iHead >= 0 && iHead < iStrong && iStrong < iSearch && iSearch < iInput && iInput < iRefresh,
+    '分支名 → 搜索输入框/按钮 → 刷新 依次同在 bld-log-head 头部行内');
   assert.doesNotMatch(inner(), /条匹配/, '默认列表无命中计数行');
   assert.doesNotMatch(inner(), /data-log-search-clear/, '无关键词不出清除入口');
 
@@ -520,16 +530,23 @@ t('N7g 提交记录搜索：搜索行渲染、q 透传、命中计数与高亮�
   h.run(`window.ATBBuild.setQuery('')`);
 });
 
-t('N7i 搜索静态契约：搜索输入 / 按钮 / 清除在 bindCommon 绑定；搜索行与命中计数样式类存在', () => {
+t('N7i 搜索静态契约：搜索输入 / 按钮 / 清除在 bindCommon 绑定；搜索控件并入头部行（BUG-20260914-016）与命中计数样式类存在', () => {
   assert.match(buildJs, /#bldLogSearchInput/, 'bindCommon 绑定搜索输入框（草稿回写 + 回车提交）');
   assert.match(buildJs, /#bldLogSearchGo/, 'bindCommon 绑定搜索按钮');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-log-search-clear\]'\)/, 'bindCommon 循环绑定 data-log-search-clear 清除入口');
-  assert.match(buildJs, /bld-log-search/, '渲染搜索行容器类');
+  assert.match(buildJs, /bld-log-search/, '渲染搜索控件容器类');
   assert.match(buildJs, /bld-log-count/, '渲染命中计数行类');
+  // 搜索控件渲染进 bld-log-head 头部行（build.js 模板：strong 后接 searchRow、行内收尾刷新）
+  assert.match(buildJs, /<div class="bld-log-head"><strong>\$\{esc\(state\.logBranch \|\| '提交记录'\)\}<\/strong>\$\{searchRow\}/,
+    '搜索控件模板注入头部行（与分支名同一行）');
   const css = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
-  assert.match(css, /\.bld-log-search/, 'style.css 含搜索行样式');
+  assert.match(css, /\.bld-log-search/, 'style.css 含搜索控件样式');
   assert.match(css, /\.bld-log-count/, 'style.css 含命中计数样式');
   assert.match(css, /\.bld-log li mark/, 'style.css 含命中高亮样式');
+  // 头部行排布：去掉 space-between（搜索控件吃掉剩余宽度），允许折行防窄屏/长名溢出
+  assert.doesNotMatch(css, /\.bld-log-head \{[^}]*justify-content: space-between/, '头部行不再两端分散（搜索控件占据剩余宽度）');
+  assert.match(css, /\.bld-log-head \{[^}]*flex-wrap: wrap/, '头部行允许折行（窄屏 / 长分支名不横向溢出）');
+  assert.match(css, /\.bld-log-search \{[^}]*flex: 1 1 160px/, '搜索控件容器弹性吃掉头部行剩余宽度');
 });
 
 t('N7h i18n 词典：提交搜索新增文案入 EN / EN_DYNAMIC（值无中文、静态键不重复）', async () => {

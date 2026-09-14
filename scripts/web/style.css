@@ -3075,7 +3075,10 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 @media (prefers-reduced-motion: reduce) {
   .bld-push.attn { animation: none; }
 }
-.bld-log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+/* BUG-20260914-016：头部行合并搜索控件——分支名 + 搜索 + 刷新同一行；去掉 space-between
+   （搜索容器弹性吃掉剩余宽度），允许折行：窄屏 / 长分支名放不下时按序折回，不横向溢出 */
+.bld-log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.bld-log-head > strong { flex: none; }
 .bld-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .bld-log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
 .bld-log code { font-size: 12px; color: var(--info-text); }
@@ -3090,8 +3093,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }
 .bld-log-eof { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; }
-/* REQ-20260914-002 提交记录搜索行 + 命中计数 + 高亮（跟随系统深浅色变量） */
-.bld-log-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+/* REQ-20260914-002 提交记录搜索控件 + 命中计数 + 高亮（跟随系统深浅色变量）；
+   BUG-20260914-016：并入头部行后不再独占一行，去掉自身 margin，弹性吃掉行内剩余宽度 */
+.bld-log-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 160px; min-width: 0; }
 .bld-log-search input[type="search"] { flex: 1 1 160px; min-width: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
 .bld-log-search input[type="search"]:disabled { opacity: 0.55; }
 .bld-log-count { margin-bottom: 8px; color: var(--muted); }
