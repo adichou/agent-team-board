@@ -7048,9 +7048,23 @@ function taskSettingsAreaHtml() {
   return taskSettingsHtml(ts);
 }
 
+// REQ-20260912-001：Git 工作流详细描述——dev + main 双分支协作总述、分支职责
+// （dev 承载需求设计/开发/测试，main 承载版本构建与发布构建物）、每个需求或 Bug
+// 单开发完自动提交到本地。就绪态（含非 git 仓库）始终展示，初始化前即可了解全貌。
+function gitWorkflowDescHtml() {
+  return `
+      <p class="muted small" style="margin:0 0 2px">采用 dev + main 双分支协作：</p>
+      <ul class="muted small" style="margin:2px 0 4px;padding-left:18px">
+        <li>dev 分支承载需求设计、开发和测试；main 分支承载版本构建，发布构建物。</li>
+        <li>每个需求或 Bug 单开发完自动提交到本地（仅本地分支操作，不 push）。</li>
+      </ul>`;
+}
+
 // REQ-20260911-009 设置页「Git 工作流」分区：展示当前分支与 dev 分支状态，
 // 主操作「初始化 dev 分支」（按需创建 + 整体切换，幂等）；加载/执行期间按钮禁用，
 // 非 git 仓库禁用并提示（不出现可点击但必然失败的入口），失败给原因与重试。
+// REQ-20260912-001：单行提示升级为详细工作流描述（gitWorkflowDescHtml），
+// 非 git 仓库在其后保留初始化指引。
 function gitWorkflowAreaHtml() {
   const g = state.git;
   if (g.loading) {
@@ -7075,13 +7089,14 @@ function gitWorkflowAreaHtml() {
   const btn = onDev
     ? `<button type="button" class="btn" id="gwInit" disabled>已在 dev 分支</button>`
     : `<button type="button" class="btn primary" id="gwInit"${(!d.isRepo || g.busy) ? ' disabled' : ''}>初始化 dev 分支</button>`;
-  const hint = !d.isRepo
-    ? '项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。'
-    : '开发在 dev 分支进行，到待测试自动提交；仅本地分支操作，不 push。';
+  const notRepo = !d.isRepo
+    ? `<p class="muted small" style="margin:0 0 2px">项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。</p>`
+    : '';
   return `
     <section class="cx-config git-workflow">
       <h4>Git 工作流</h4>
-      <p class="muted small">${hint}</p>
+      ${gitWorkflowDescHtml()}
+      ${notRepo}
       <div class="ts-block"><p style="margin:2px 0 0">${statusLine}</p></div>
       <div class="dep-toolbar">
         ${btn}

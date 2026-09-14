@@ -19,7 +19,10 @@ const EN = {
   '已在 dev 分支': 'On the dev branch',
   '初始化 dev 分支': 'Initialize the dev branch',
   '项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。': 'The project is not a git repository: initialize git in the terminal first (new projects are initialized automatically via atb init).',
-  '开发在 dev 分支进行，到待测试自动提交；仅本地分支操作，不 push。': 'Development happens on the dev branch with auto-commit on reaching in-test; local branch operations only, no push.',
+  // REQ-20260912-001 设置页「Git 工作流」详细描述（双分支协作 / 分支职责 / 自动提交）
+  '采用 dev + main 双分支协作：': 'Adopt the dev + main dual-branch workflow:',
+  'dev 分支承载需求设计、开发和测试；main 分支承载版本构建，发布构建物。': 'The dev branch carries requirement design, development, and testing; the main branch carries version builds and release artifacts.',
+  '每个需求或 Bug 单开发完自动提交到本地（仅本地分支操作，不 push）。': 'Each requirement or bug item is auto-committed locally once development finishes (local branch operations only, no push).',
   '正在创建并切换到 dev 分支…': 'Creating and switching to the dev branch…',
   '初始化 dev 分支？': 'Initialize the dev branch?',
   '将按需创建 dev 分支，并把整个项目工作区切换到 dev（已在 dev 则仅提示就绪；仅本地分支操作，不 push）。': 'Creates the dev branch as needed and switches the whole workspace to it (already on dev: just reports ready; local branch operations only, no push).',

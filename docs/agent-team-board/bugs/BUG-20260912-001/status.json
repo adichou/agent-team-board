@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260912-001",
+  "type": "bug",
+  "title": "中英文国际化要求在批量开发提示词中添加要求，确保每次开发都要确保中英资源正确",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-041-1",
+  "createdAt": "2026-09-11T17:12:08.231Z",
+  "updatedAt": "2026-09-11T18:52:20.269Z",
+  "agentCompletedAt": "2026-09-11T18:52:20.269Z",
+  "lastReport": {
+    "at": "2026-09-11T18:52:20.269Z",
+    "coverage": 100,
+    "framework": "node --test (run-all.mjs)",
+    "summary": "引入来源REQ-20260911-009（经list核验）：Git工作流状态行整句动态拼接成单文本节点，动态键捕获组原样回填致英文残留「已存在/未创建」，静态词条永不命中。修复：app.js状态行分支名与状态词各包span拆独立文本节点（仍零i18n引用），词典补「当前分支：」「· dev 分支：」两段词条并移除不可达旧动态键，translateTree补尾随空白往返重试。新增bug-git-status-i18n-20260912-001测试6例先红后绿，i18n五件套全绿，全量205测试文件0失败。",
+    "runId": "run-20260912-207"
+  },
+  "history": [
+    {
+      "at": "2026-09-11T17:12:08.231Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-11T17:12:08.232Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-11T18:12:01.292Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-11T18:34:54.350Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-041-1",
+      "note": "认领（zcode-batch-041-1）"
+    },
+    {
+      "at": "2026-09-11T18:52:20.270Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-041-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
