@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260913-006",
+  "type": "bug",
+  "title": "批量实施 auto-commit 漏提交业务源码：预留时已脏的 build.js 永远不入任何单的提交，HEAD 上已提交的 test/biz 组合自相矛盾 zcode-batch-047-1",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-4",
+  "createdAt": "2026-09-13T13:33:02.947Z",
+  "updatedAt": "2026-09-14T01:23:03.290Z",
+  "agentCompletedAt": "2026-09-14T01:23:03.290Z",
+  "lastReport": {
+    "at": "2026-09-14T01:23:03.290Z",
+    "coverage": 100,
+    "framework": "node:assert 自研 runner（新增 auto-commit-pre-dirty-20260913-006.test.mjs 6 用例 + 全量回归 218 文件 0 失败）",
+    "summary": "快照升级：预留时已脏的已跟踪文件记录内容哈希（trackedHashes）；diffWorkingTree 区分 changed/dirtyTouched（同码内容变），旧快照无基线维持旧行为。处置层：此类路径列入 pendingManual（回执+auto-commit.json 明细含建议），不再静默留脏；本单 test/业务组一并暂扣（heldGroups）保证提交历史自洽；doc 组照常；无提交时不点亮徽标。引入来源已归因 REQ-20260911-009。",
+    "runId": "run-20260914-220"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T13:33:02.947Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0913-ba30"
+    },
+    {
+      "at": "2026-09-13T15:31:50.509Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-13T15:56:41.398Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-234906-0fac）"
+    },
+    {
+      "at": "2026-09-14T01:08:15.163Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-4",
+      "note": "认领（zcode-batch-048-4）"
+    },
+    {
+      "at": "2026-09-14T01:23:03.290Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-4",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
