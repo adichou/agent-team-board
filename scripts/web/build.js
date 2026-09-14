@@ -67,6 +67,11 @@ const ATBBuild = (() => {
     logPage: 1,          // BUG-20260914-009：当前渲染页（1 起）
     logPageSize: 50,     // 每页条数（20/50/100）
     logRetryTarget: null, // 翻页失败后重试的目标页
+    // REQ-20260914-002：提交记录关键词搜索——logQuery 为已提交生效的关键词（空 = 默认分页列表，
+    // 搜索范围 = 当前所选分支全部提交，服务端过滤）；logQueryInput 为输入框草稿（重渲染回填防丢字），
+    // 与顶部模块搜索 state.query 互不串扰
+    logQuery: '',
+    logQueryInput: '',
     syncBusy: false,
     pushBusy: false,
     // BUG-20260914-011：最近一次同步结果（{ pushed, failed, skipped, remote }）——空态细分依据；
@@ -147,6 +152,22 @@ const ATBBuild = (() => {
       </div>`;
   }
 
+  // REQ-20260914-002：命中关键词高亮（可选增强落地口径）——转义后按大小写不敏感固定子串
+  // 切分包裹 <mark>（非正则；q 空或未命中返回纯转义文本）。toLowerCase 改变长度的大小写
+  // 特例（罕见 Unicode）下退回纯转义，保证不切错位。
+  function markMatch(text, q) {
+    const s = String(text == null ? '' : text);
+    const kw = String(q || '');
+    if (!kw) return esc(s);
+    const lower = s.toLowerCase();
+    const kLower = kw.toLowerCase();
+    if (lower.length !== s.length || kLower.length !== kw.length) return esc(s);
+    const i = lower.indexOf(kLower);
+    if (i < 0) return esc(s);
+    const end = i + kw.length;
+    return esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, end)) + '</mark>' + markMatch(s.slice(end), kw);
+  }
+
   function buildPrompt(v) {
     const lines = [];
     lines.push(`请为看板版本 ${v.id} 生成「版本名称」与「版本描述」。`);
@@ -207,6 +228,7 @@ const ATBBuild = (() => {
         branches: null, branchesPhase: 'idle', branchesError: null,
         logBranch: null, branchLog: null, logPhase: 'idle', logError: null,
         logPage: 1, logPageSize: 50, logRetryTarget: null, // BUG-20260914-009：分页状态随项目切换重置
+        logQuery: '', logQueryInput: '', // REQ-20260914-002：搜索状态随项目切换重置
         syncBusy: false, pushBusy: false,
         remoteSynced: false, // BUG-20260914-006：本会话是否已成功同步远端——空态区分依据
         lastSync: null, // BUG-20260914-011：同步结果明细（pushed/failed/skipped）随项目切换重置
@@ -244,13 +266,20 @@ const ATBBuild = (() => {
   }
 
   // BUG-20260914-009：选中分支查看提交记录（分页）——切换分支重置回第一页（page 可省略）。
+  // REQ-20260914-002：切换分支同时重置搜索（关键词与草稿清空、回默认列表）；同分支重载
+  //（「⟳ 和远端同步」后 doSync 内本函数同名重载链路）不重置，保持关键词口径重查。
   function selectBranch(branch, page = 1) {
+    if (branch !== state.logBranch) {
+      state.logQuery = '';
+      state.logQueryInput = '';
+    }
     state.logBranch = branch;
     return loadLog(page);
   }
 
   // 加载指定页提交记录：请求带 limit/offset；翻页失败保留已加载内容（页码回退）+
   // 行内错误与重试入口；首次加载失败维持原口径（清空 + error 态）。
+  // REQ-20260914-002：logQuery 非空时请求附加 q（服务端全量过滤分页，能命中当前页之外的提交）。
   async function loadLog(page = 1) {
     const branch = state.logBranch;
     if (!branch) return;
@@ -261,7 +290,8 @@ const ATBBuild = (() => {
     render();
     try {
       const size = state.logPageSize;
-      const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}&limit=${size}&offset=${(state.logPage - 1) * size}`);
+      const q = state.logQuery ? `&q=${encodeURIComponent(state.logQuery)}` : '';
+      const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}&limit=${size}&offset=${(state.logPage - 1) * size}${q}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       state.branchLog = data;
@@ -280,6 +310,22 @@ const ATBBuild = (() => {
       }
     }
     render();
+  }
+
+  // REQ-20260914-002：提交搜索——提交当前输入框草稿为生效关键词并回第一页；
+  // 空白关键词等同清除（恢复默认列表）；执行中（loading）忽略重复触发。
+  function submitLogSearch() {
+    if (state.logPhase === 'loading') return;
+    state.logQuery = String(state.logQueryInput || '').trim();
+    return loadLog(1);
+  }
+
+  // REQ-20260914-002：清除搜索——关键词与草稿清空，回默认全量分页列表第一页。
+  function clearLogSearch() {
+    if (state.logPhase === 'loading') return;
+    state.logQuery = '';
+    state.logQueryInput = '';
+    return loadLog(1);
   }
 
   function gotoLogPage(page) {
@@ -1146,26 +1192,49 @@ const ATBBuild = (() => {
         <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || remoteEmpty}</div>`;
     }
     const log = state.logBranch ? (() => {
-      if (state.logPhase === 'loading') return '<p class="muted">加载提交记录中…</p>';
+      // REQ-20260914-002：搜索执行中指示与默认加载同范式（防重复：输入框与按钮随 loading 禁用）
+      if (state.logPhase === 'loading') return `<p class="muted">${state.logQuery ? '搜索中…' : '加载提交记录中…'}</p>`;
       if (state.logPhase === 'error') return `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError || '')}</p>`;
       const commits = state.branchLog?.commits || [];
+      const inSearch = !!state.logQuery;
+      // REQ-20260914-002：无命中空态（与「该分支暂无提交」区分；一键清除回默认列表）
+      if (inSearch && !commits.length && !state.logError) {
+        return `<p class="muted small">没有匹配的提交（关键词：${esc(state.logQuery)}）</p>
+          <p><button type="button" class="btn small quiet" data-log-search-clear>清除</button></p>`;
+      }
       if (!commits.length) return '<p class="muted small">该分支暂无提交</p>';
       // BUG-20260914-009：分页展示全部提交（替代 50 条静默截断）——翻页失败保留旧内容时
       // 在列表上方显示行内错误 + 重试（重发失败时的目标页）
       const errBar = state.logError ? `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError)} <button type="button" class="btn small" id="bldLogRetry">重试</button></p>` : '';
+      // REQ-20260914-002：命中计数行——仅在展示数据与当前关键词一致时显示（翻页失败保留旧
+      // 内容时不误报计数）；行渲染沿用既有口径 + 命中词高亮
+      const countBar = inSearch && state.branchLog?.query === state.logQuery && !state.logError
+        ? `<div class="bld-log-count small" role="status">共 ${state.branchLog.total} 条匹配（关键词：${esc(state.logQuery)}）</div>`
+        : '';
       const listHtml = `<ul class="bld-log">${commits.map((c) => `<li>
-        <code>${esc(c.short || c.hash.slice(0, 8))}</code> <span>${esc(c.subject)}</span>
-        <span class="muted small">${esc(c.author)} · ${esc(fmtTime(c.date))}</span></li>`).join('')}</ul>`;
+        <code>${markMatch(c.short || c.hash.slice(0, 8), state.logQuery)}</code> <span>${markMatch(c.subject, state.logQuery)}</span>
+        <span class="muted small">${markMatch(c.author, state.logQuery)} · ${esc(fmtTime(c.date))}</span></li>`).join('')}</ul>`;
       const total = Number(state.branchLog?.total ?? commits.length);
       const size = state.logPageSize;
       const pages = Math.max(1, Math.ceil(total / size));
       const page = Math.min(Math.max(1, state.logPage), pages);
       const start = (page - 1) * size;
+      // 末页反馈按展示数据自身模式选词（搜索态 = 匹配 / 默认 = 提交）
       const eof = page === pages
-        ? `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条提交（可翻至分支首个提交）</div>`
+        ? (state.branchLog?.query
+          ? `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条匹配</div>`
+          : `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条提交（可翻至分支首个提交）</div>`)
         : '';
-      return errBar + listHtml + eof + logPagerHtml(page, pages, size, total);
+      return errBar + countBar + listHtml + eof + logPagerHtml(page, pages, size, total);
     })() : '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
+    // REQ-20260914-002：搜索行（分支名 + 刷新下方）——关键词输入 + 搜索触发 + 清除入口；
+    // 执行中禁用防重复触发；清除入口仅在已有生效关键词时出现（无匹配空态内另有同口径入口）
+    const searchRow = state.logBranch ? `
+          <div class="bld-log-search" role="search">
+            <input type="search" id="bldLogSearchInput" placeholder="搜提交说明 / 作者 / hash…" value="${esc(state.logQueryInput)}" aria-label="搜索提交记录"${state.logPhase === 'loading' ? ' disabled' : ''}>
+            <button type="button" class="btn small" id="bldLogSearchGo"${state.logPhase === 'loading' ? ' disabled' : ''}>${state.logPhase === 'loading' ? '搜索中…' : '搜索'}</button>
+            ${state.logQuery ? '<button type="button" class="btn small quiet" data-log-search-clear>清除</button>' : ''}
+          </div>` : '';
     return `
       <div class="rel-split bld-branch-split">
         <div class="rel-list" aria-label="分支列表">
@@ -1177,7 +1246,7 @@ const ATBBuild = (() => {
         </div>
         <div class="rel-detail" aria-label="提交记录">
           <div class="bld-log-head"><strong>${esc(state.logBranch || '提交记录')}</strong>
-            ${state.logBranch ? '<button type="button" class="btn small quiet" id="bldLogRefresh">刷新</button>' : ''}</div>
+            ${state.logBranch ? '<button type="button" class="btn small quiet" id="bldLogRefresh">刷新</button>' : ''}</div>${searchRow}
           ${log}
         </div>
       </div>`;
@@ -1360,6 +1429,15 @@ const ATBBuild = (() => {
     q('#bldLogRefresh')?.addEventListener('click', () => state.logBranch && loadLog(state.logPage));
     q('#bldLogRetry')?.addEventListener('click', retryLogPage);
     q('#bldLogSize')?.addEventListener('change', (e) => setLogPageSize(Number(e.target?.value)));
+    // REQ-20260914-002：提交搜索——草稿随输入回写（防重渲染丢字）、回车 / 按钮提交、
+    // 一键清除（搜索行与无匹配空态共用 data-log-search-clear 口径）
+    const searchInput = q('#bldLogSearchInput');
+    searchInput?.addEventListener('input', () => { state.logQueryInput = searchInput.value; });
+    searchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLogSearch(); });
+    q('#bldLogSearchGo')?.addEventListener('click', submitLogSearch);
+    for (const el of view.querySelectorAll('[data-log-search-clear]')) {
+      el.addEventListener('click', clearLogSearch);
+    }
     for (const el of view.querySelectorAll('[data-pg]')) {
       el.addEventListener('click', () => {
         const v = el.dataset.pg;
@@ -1397,6 +1475,8 @@ const ATBBuild = (() => {
     openCreatePanel, openAddPanel, selectBranch,
     // BUG-20260914-009：提交记录分页行为接缝（测试与翻页交互）
     gotoLogPage, setLogPageSize, retryLogPage,
+    // REQ-20260914-002：提交记录搜索行为接缝（测试与搜索交互）
+    submitLogSearch, clearLogSearch, markMatch,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；

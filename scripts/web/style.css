@@ -3090,6 +3090,12 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }
 .bld-log-eof { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; }
+/* REQ-20260914-002 提交记录搜索行 + 命中计数 + 高亮（跟随系统深浅色变量） */
+.bld-log-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.bld-log-search input[type="search"] { flex: 1 1 160px; min-width: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.bld-log-search input[type="search"]:disabled { opacity: 0.55; }
+.bld-log-count { margin-bottom: 8px; color: var(--muted); }
+.bld-log li mark { background: var(--info-bg); color: var(--info-text); border-radius: 3px; padding: 0 1px; }
 @media (max-width: 960px) {
   .bld-branch-split { grid-template-columns: minmax(0, 1fr); }
   .bld-log-range { margin-left: 0; width: 100%; }

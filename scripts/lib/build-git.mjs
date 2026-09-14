@@ -86,6 +86,35 @@ export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   return { branch: ref, commits, total, limit: n, offset: skip };
 }
 
+// 只读：指定分支提交记录关键词搜索（REQ-20260914-002）——提交说明 subject / 作者 author /
+// 短 hash / 完整 hash 四字段任一命中即算，大小写不敏感的固定子串匹配（非正则）。一次读全量
+// 提交元数据在 Node 侧过滤（关键词不进 git 参数，无注入面），limit/offset 在命中结果上分页
+//（归一口径同 branchLog），total 为命中总数，响应 { branch, query, commits, total, limit, offset }；
+// q 空白（trim 后空）走 branchLog 默认分页。校验口径与 branchLog 一致（assertRefName / 非仓库 /
+// refs/heads/<ref> 存在性），纯只读，不引入任何 git 写操作。
+export function branchSearchLog(root, branch, { q, limit = 50, offset = 0 } = {}) {
+  const ref = assertRefName(branch);
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
+  const kw = String(q || '').trim().slice(0, 200);
+  if (!kw) return branchLog(root, ref, { limit, offset });
+  const n = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
+  const skip = Math.max(0, Math.floor(Number(offset) || 0));
+  gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
+  const out = gitOk(root, ['log', ref, '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '搜索提交记录');
+  const lower = kw.toLowerCase();
+  const hits = [];
+  for (const line of out.split('\n')) {
+    if (!line.trim()) continue;
+    const [hash, short, author, date, ...rest] = line.split('\t');
+    const subject = rest.join('\t');
+    if (subject.toLowerCase().includes(lower) || author.toLowerCase().includes(lower)
+      || short.toLowerCase().includes(lower) || hash.toLowerCase().includes(lower)) {
+      hits.push({ hash, short, author, date, subject });
+    }
+  }
+  return { branch: ref, query: kw, commits: hits.slice(skip, skip + n), total: hits.length, limit: n, offset: skip };
+}
+
 // 受限写：同步远端（fetch --all --prune；附带清理失效远端分支引用——design.md 落定口径）。
 export function fetchRemote(root) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再同步远端');
