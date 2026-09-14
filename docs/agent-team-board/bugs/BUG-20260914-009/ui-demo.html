@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-009 演示 · 分支浏览提交记录（50 条截断 vs 分页修复）</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --panel: #ffffff; --border: #d8dee8; --text: #1f2733;
+    --muted: #6b7686; --accent: #2f6fed; --accent-soft: #e8effd;
+    --ok: #1a9e63; --ok-soft: #e2f5ec; --err: #c0392b; --err-soft: #fdeceb;
+    --warn: #9a6700; --warn-soft: #fff3d6; --code: #2f6fed; --hover: #f0f4fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+      --bg: #161a22; --panel: #1e2430; --border: #333c4d; --text: #e6ebf4;
+      --muted: #93a0b4; --accent: #6c9bff; --accent-soft: #22304d;
+      --ok: #4ac48a; --ok-soft: #17322a; --err: #ff8a7a; --err-soft: #3a211e;
+      --warn: #e2b341; --warn-soft: #383013; --code: #82b1ff; --hover: #263043;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161a22; --panel: #1e2430; --border: #333c4d; --text: #e6ebf4;
+    --muted: #93a0b4; --accent: #6c9bff; --accent-soft: #22304d;
+    --ok: #4ac48a; --ok-soft: #17322a; --err: #ff8a7a; --err-soft: #3a211e;
+    --warn: #e2b341; --warn-soft: #383013; --code: #82b1ff; --hover: #263043;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  .demo-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  .demo-top h1 { font-size: 15px; margin: 0 8px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button:not(.on):hover { background: var(--hover); }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+  .chip.bug { background: var(--err-soft); color: var(--err); }
+  .chip.fixed { background: var(--ok-soft); color: var(--ok); }
+  .top-note { font-size: 12px; color: var(--muted); }
+  .theme-btn { margin-left: auto; }
+  .board-tabs { display: flex; gap: 4px; padding: 8px 16px 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .board-tabs .btab { padding: 6px 12px; font-size: 13px; color: var(--muted); border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; cursor: default; }
+  .board-tabs .btab.active { color: var(--accent); border-color: var(--border); background: var(--bg); font-weight: 600; }
+  .sub-tabs { display: flex; gap: 8px; padding: 10px 16px; }
+  .sub-tabs button { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 999px; padding: 4px 14px; font-size: 13px; cursor: pointer; }
+  .sub-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .scene-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0 16px 10px; }
+  .scene-bar .lab { font-size: 12px; color: var(--muted); }
+  .scene-bar button { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  .scene-bar button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .split { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(320px, 2.1fr); gap: 12px; padding: 0 16px 24px; max-width: 1180px; margin: 0 auto; }
+  @media (max-width: 780px) { .split { grid-template-columns: 1fr; } }
+  .pane { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-height: 420px; }
+  .pane h3 { margin: 0 0 8px; font-size: 13px; }
+  .tools { display: flex; gap: 8px; margin-bottom: 10px; }
+  .tools button, .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .tools button:hover:not(:disabled), .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .group-head { font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+  .branch { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+  .branch:hover { background: var(--hover); }
+  .branch.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .branch .name { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .branch .push { margin-left: auto; font-size: 11px; padding: 1px 8px; }
+  .st-run { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--ok-soft); color: var(--ok); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .log-head strong { font-family: ui-monospace, Menlo, monospace; }
+  .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
+  .log code { font-size: 12px; color: var(--code); font-family: ui-monospace, Menlo, monospace; }
+  .log li .meta { margin-left: auto; }
+  .notice { border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin: 8px 0; }
+  .notice.warn { background: var(--warn-soft); color: var(--warn); }
+  .notice.err { background: var(--err-soft); color: var(--err); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  .placeholder { color: var(--muted); padding: 24px 8px; text-align: center; }
+  .pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .pager button { min-width: 30px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+  .pager button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pager button:hover:not(:disabled):not(.on) { background: var(--hover); }
+  .pager .gap { color: var(--muted); }
+  .pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .range-info { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .eof { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+  .foot { max-width: 1180px; margin: 0 auto 30px; padding: 0 16px; font-size: 12.5px; color: var(--muted); }
+  .foot b { color: var(--text); }
+</style>
+</head>
+<body>
+  <div class="demo-top">
+    <h1>BUG-20260914-009 演示</h1>
+    <div class="seg" id="modeSeg" role="group" aria-label="模式切换">
+      <button type="button" data-mode="bug" class="on">缺陷现状</button>
+      <button type="button" data-mode="fixed">期望修复</button>
+    </div>
+    <span class="chip bug" id="modeChip">现状：仅最近 50 条，无分页</span>
+    <span class="top-note">构建 → 分支浏览 · dev 分支提交记录（演示数据 137 条）</span>
+    <button type="button" class="btn theme-btn" id="themeBtn">主题：跟随系统</button>
+  </div>
+
+  <div class="board-tabs">
+    <span class="btab">需求</span><span class="btab">构建</span><span class="btab">任务</span>
+  </div>
+  <div class="sub-tabs">
+    <button type="button">版本计划</button>
+    <button type="button" class="on">分支浏览</button>
+  </div>
+
+  <div class="scene-bar">
+    <span class="lab">状态场景：</span>
+    <button type="button" data-scene="normal" class="on">正常</button>
+    <button type="button" data-scene="loading">加载中</button>
+    <button type="button" data-scene="error">读取失败</button>
+    <button type="button" data-scene="none">未选分支</button>
+    <span class="lab" style="margin-left:10px">提示：先在左侧点一个分支（dev 共 137 条提交）</span>
+  </div>
+
+  <div class="split">
+    <section class="pane" aria-label="分支列表">
+      <div class="tools">
+        <button type="button" id="syncBtn">⟳ 和远端同步</button>
+        <button type="button" id="branchRefresh">刷新</button>
+      </div>
+      <div class="group-head">本地</div>
+      <div id="localBranches"></div>
+      <div class="group-head">远端</div>
+      <div id="remoteBranches"></div>
+    </section>
+    <section class="pane" aria-label="提交记录">
+      <div class="log-head">
+        <strong id="logTitle">提交记录</strong>
+        <span style="display:flex;gap:8px;align-items:center">
+          <span id="fixedSizeCtl" style="display:none">
+            <label class="small muted" for="pageSize">每页</label>
+            <select id="pageSize"><option value="20">20 条</option><option value="50">50 条</option></select>
+          </span>
+          <button type="button" class="btn" id="logRefresh">刷新</button>
+        </span>
+      </div>
+      <div id="logBody"></div>
+      <div id="pagerBox"></div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <p><b>缺陷现状（bug 模式）</b>：右侧列表在第 50 条静默截断——无分页 / 加载更多入口、不显示总数，第 51 条及更早的提交在界面上永远不可见（服务端 <code>branch-log</code> 默认只返回最近 50 条，数据层上限 200 且不支持翻页）。</p>
+    <p><b>期望修复（fixed 模式）</b>：分页展示全部提交（页码 / 上一页 / 下一页 + 每页条数），显示「第 x–y 条 / 共 N 条」，末页有「已到末尾」反馈；切换分支重置回第一页；加载中 / 失败 / 空分支状态反馈保持既有口径。具体分页交互形式（页码 vs 加载更多）待开发阶段 design.md 落定，本演示以页码方案示意。</p>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 演示数据：确定性生成（dev 137 / main 62 / feature 8 / empty-wip 0） ---------- */
+  var AUTHORS = ['adi', 'zcode-agent', 'refine-2', 'dev-1'];
+  var TYPES = ['docs', 'test', 'feat', 'fix'];
+  var SUBJECTS = [
+    '完善看板条目文档', '测试全量通过', '看板界面批注修复', '批量执行链路调整',
+    '补充设计说明', '界面状态反馈补齐', '服务端接口校验收紧', '提交记录展示调整'
+  ];
+  function seeded(n) { // 简单可复现伪随机
+    var x = Math.sin(n * 999 + 7) * 10000;
+    return x - Math.floor(x);
+  }
+  function hex(n, i) {
+    var s = '';
+    for (var k = 0; k < n; k++) s += Math.floor(seeded(i * 131 + k) * 16).toString(16);
+    return s;
+  }
+  function itemId(i) {
+    var kind = seeded(i * 17 + 3) > 0.4 ? 'REQ' : 'BUG';
+    var d = 20260900 + Math.floor(seeded(i * 29 + 11) * 14) + 1;
+    var seq = String(1 + Math.floor(seeded(i * 41 + 5) * 40)).padStart(3, '0');
+    return kind + '-' + d + '-' + seq;
+  }
+  function genCommits(total, seed) {
+    var out = [];
+    var t = Date.UTC(2026, 8, 14, 12, 0, 0);
+    for (var i = 0; i < total; i++) {
+      var r = seeded(i * 53 + seed);
+      out.push({
+        hash: hex(40, i + seed),
+        short: null,
+        subject: TYPES[Math.floor(r * TYPES.length)] + ': ' + SUBJECTS[Math.floor(seeded(i * 19 + seed) * SUBJECTS.length)] + ' ' + itemId(i),
+        author: AUTHORS[Math.floor(seeded(i * 7 + seed) * AUTHORS.length)],
+        date: new Date(t - i * 3600e3 * 7).toISOString()
+      });
+    }
+    out.forEach(function (c) { c.short = c.hash.slice(0, 7); });
+    return out;
+  }
+  var BRANCHES = [
+    { name: 'dev', total: 137, current: true, remote: false },
+    { name: 'main', total: 62, current: false, remote: false },
+    { name: 'feature/board-ui', total: 8, current: false, remote: false },
+    { name: 'empty-wip', total: 0, current: false, remote: false },
+    { name: 'origin/main', total: 62, current: false, remote: true },
+    { name: 'origin/dev', total: 137, current: false, remote: true }
+  ];
+  var COMMITS = {}; // branch -> commits[]
+  BRANCHES.forEach(function (b, idx) { COMMITS[b.name] = genCommits(b.total, idx + 1); });
+
+  var DEFECT_LIMIT = 50;
+
+  /* ---------- 状态 ---------- */
+  var state = {
+    mode: 'bug',          // 'bug' | 'fixed'
+    scene: 'normal',      // normal | loading | error | none
+    branch: null,         // 当前选中分支名
+    page: 1,
+    pageSize: 20,
+    loading: false,
+    error: null,
+    loadSeq: 0
+  };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fmtTime(iso) {
+    var d = new Date(iso);
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+  }
+  function findBranch(name) {
+    for (var i = 0; i < BRANCHES.length; i++) if (BRANCHES[i].name === name) return BRANCHES[i];
+    return null;
+  }
+
+  /* ---------- 渲染 ---------- */
+  function renderBranchList() {
+    var html = '';
+    BRANCHES.filter(function (b) { return !b.remote; }).forEach(function (b) {
+      html += '<div class="branch' + (state.branch === b.name ? ' sel' : '') + '" data-branch="' + esc(b.name) + '" role="button" tabindex="0">'
+        + '<span class="name">' + esc(b.name) + '</span>'
+        + (b.current ? '<span class="st-run">当前</span>' : '<button type="button" class="btn push" data-push="' + esc(b.name) + '">推送</button>')
+        + '</div>';
+    });
+    $('#localBranches').innerHTML = html;
+    $('#remoteBranches').innerHTML = BRANCHES.filter(function (b) { return b.remote; })
+      .map(function (b) {
+        return '<div class="branch' + (state.branch === b.name ? ' sel' : '') + '" data-branch="' + esc(b.name) + '" role="button" tabindex="0"><span class="name">' + esc(b.name) + '</span></div>';
+      }).join('') || '<p class="muted small">（无远端分支）</p>';
+  }
+
+  function commitLi(c) {
+    return '<li><code>' + esc(c.short) + '</code> <span>' + esc(c.subject) + '</span>'
+      + '<span class="meta muted small">' + esc(c.author) + ' · ' + fmtTime(c.date) + '</span></li>';
+  }
+
+  function renderLog() {
+    var body = $('#logBody'), pager = $('#pagerBox');
+    pager.innerHTML = '';
+    $('#logTitle').textContent = state.branch || '提交记录';
+    $('#logRefresh').style.display = state.branch ? '' : 'none';
+    $('#fixedSizeCtl').style.display = (state.mode === 'fixed' && state.branch && !state.loading && !state.error) ? '' : 'none';
+
+    if (!state.branch) {
+      body.innerHTML = '<div class="placeholder">点击左侧分支查看提交记录</div>';
+      return;
+    }
+    if (state.loading) {
+      body.innerHTML = '<p class="muted">加载提交记录中…</p>';
+      return;
+    }
+    if (state.error) {
+      body.innerHTML = '<p class="notice err" role="alert">提交记录读取失败：' + esc(state.error)
+        + ' <button type="button" class="btn" id="logRetry">重试</button></p>'
+        + '<p class="muted small">（把上方「状态场景」切回「正常」后点重试即可恢复）</p>';
+      return;
+    }
+    var all = COMMITS[state.branch] || [];
+    if (!all.length) {
+      body.innerHTML = '<p class="muted small">该分支暂无提交</p>';
+      return;
+    }
+
+    if (state.mode === 'bug') {
+      // 缺陷现状：只渲染最近 50 条，无任何分页入口，仅一条截断说明
+      var shown = all.slice(0, DEFECT_LIMIT);
+      body.innerHTML =
+        '<ul class="log">' + shown.map(commitLi).join('') + '</ul>' +
+        (all.length > DEFECT_LIMIT
+          ? '<p class="notice warn" role="note">⚠ 已到列表末尾：仅显示最近 ' + DEFECT_LIMIT + ' 条，实际共 ' + all.length
+            + ' 条提交——无分页 / 加载更多入口，更早的提交在本界面无法查看（缺陷现状）。</p>'
+          : '');
+      return;
+    }
+
+    // 期望修复：分页展示全部
+    var total = all.length;
+    var pages = Math.max(1, Math.ceil(total / state.pageSize));
+    if (state.page > pages) state.page = pages;
+    var start = (state.page - 1) * state.pageSize;
+    var slice = all.slice(start, start + state.pageSize);
+    body.innerHTML = '<ul class="log">' + slice.map(commitLi).join('') + '</ul>'
+      + (state.page === pages ? '<div class="eof">已到末尾 · 共 ' + total + ' 条提交（可翻至分支首个提交）</div>' : '');
+
+    var btns = '';
+    btns += '<button type="button" data-pg="prev"' + (state.page <= 1 ? ' disabled' : '') + '>上一页</button>';
+    // 页码（最多 7 个，带省略号）
+    var want = [];
+    for (var p = 1; p <= pages; p++) {
+      if (p === 1 || p === pages || Math.abs(p - state.page) <= 1) want.push(p);
+      else if (want[want.length - 1] !== '…') want.push('…');
+    }
+    want.forEach(function (w) {
+      if (w === '…') btns += '<span class="gap">…</span>';
+      else btns += '<button type="button" data-pg="' + w + '"' + (w === state.page ? ' class="on" aria-current="page"' : '') + '>' + w + '</button>';
+    });
+    btns += '<button type="button" data-pg="next"' + (state.page >= pages ? ' disabled' : '') + '>下一页</button>';
+    pager.innerHTML = '<div class="pager">' + btns
+      + '<span class="range-info">第 ' + (start + 1) + '–' + (start + slice.length) + ' 条 / 共 ' + total + ' 条</span></div>';
+  }
+
+  function render() {
+    var chip = $('#modeChip');
+    if (state.mode === 'bug') {
+      chip.className = 'chip bug';
+      chip.textContent = '现状：仅最近 50 条，无分页';
+    } else {
+      chip.className = 'chip fixed';
+      chip.textContent = '期望：分页展示全部提交';
+    }
+    document.querySelectorAll('#modeSeg button').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.mode === state.mode);
+    });
+    document.querySelectorAll('.scene-bar button[data-scene]').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.scene === state.scene);
+    });
+    renderBranchList();
+    renderLog();
+  }
+
+  /* ---------- 加载（模拟 600ms 网络时延；场景决定结果） ---------- */
+  function loadBranch(branch, opts) {
+    opts = opts || {};
+    state.branch = branch;
+    state.error = null;
+    state.loading = false;
+    if (opts.resetPage) state.page = 1;
+    if (state.scene === 'none') { state.branch = null; render(); return; }
+    if (state.scene === 'loading') { // 演示：停在加载态（真实环境为短暂过渡态）
+      state.loading = true; render(); return;
+    }
+    if (state.scene === 'error') {
+      state.loading = true; render();
+      var seq = ++state.loadSeq;
+      setTimeout(function () {
+        if (seq !== state.loadSeq) return;
+        state.loading = false;
+        state.error = '模拟网络错误（ECONNRESET）：git log 读取失败';
+        render();
+      }, 600);
+      return;
+    }
+    state.loading = true; render();
+    var s2 = ++state.loadSeq;
+    setTimeout(function () {
+      if (s2 !== state.loadSeq) return;
+      state.loading = false;
+      render();
+    }, 600);
+  }
+
+  /* ---------- 事件 ---------- */
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target : null;
+    var el;
+    if ((el = e.target.closest('#modeSeg button'))) {
+      state.mode = el.dataset.mode;
+      state.page = 1;
+      render();
+      return;
+    }
+    if ((el = e.target.closest('.scene-bar button[data-scene]'))) {
+      state.scene = el.dataset.scene;
+      state.error = null;
+      state.loading = false;
+      if (state.scene === 'none') { state.branch = null; render(); return; }
+      render();
+      if (state.branch) loadBranch(state.branch); // 应用新场景到当前分支
+      return;
+    }
+    if ((el = e.target.closest('.branch'))) {
+      if (e.target.closest('[data-push]')) { alert('推送 ' + e.target.closest('[data-push]').dataset.push + '：仅演示，不执行'); return; }
+      loadBranch(el.dataset.branch, { resetPage: true });
+      return;
+    }
+    if ((el = e.target.closest('[data-pg]'))) {
+      var pages = Math.max(1, Math.ceil((COMMITS[state.branch] || []).length / state.pageSize));
+      var v = el.dataset.pg;
+      var next = v === 'prev' ? state.page - 1 : v === 'next' ? state.page + 1 : Number(v);
+      if (next >= 1 && next <= pages && next !== state.page) {
+        state.page = next;
+        // 翻页轻微加载反馈
+        state.loading = true; render();
+        var seq = ++state.loadSeq;
+        setTimeout(function () { if (seq !== state.loadSeq) return; state.loading = false; render(); }, 250);
+      }
+      return;
+    }
+    if (e.target.closest('#logRetry')) { loadBranch(state.branch); return; }
+    if (e.target.closest('#logRefresh')) { loadBranch(state.branch, { resetPage: true }); return; }
+    if (e.target.closest('#branchRefresh')) { render(); return; }
+    if (e.target.closest('#syncBtn')) { alert('fetch --all --prune：仅演示，不执行'); return; }
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id === 'pageSize') {
+      state.pageSize = Number(e.target.value) || 20;
+      state.page = 1;
+      render();
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('branch')) {
+      e.preventDefault();
+      loadBranch(e.target.dataset.branch, { resetPage: true });
+    }
+  });
+
+  /* ---------- 主题 ---------- */
+  var theme = 'auto';
+  $('#themeBtn').addEventListener('click', function () {
+    theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
+    document.documentElement.dataset.theme = theme;
+    this.textContent = '主题：' + (theme === 'auto' ? '跟随系统' : theme === 'light' ? '浅色' : '深色');
+  });
+
+  /* ---------- 初始：演示 dev 分支（缺陷现状，恰好停在 50 条截断说明上） ---------- */
+  render();
+  loadBranch('dev', { resetPage: true });
+})();
+</script>
+</body>
+</html>
