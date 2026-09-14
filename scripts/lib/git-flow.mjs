@@ -1,8 +1,9 @@
 // REQ-20260911-009 dev 分支开发 + 到待测试自动 commit —— Git 工作流数据层。
 // 三个职责：
 //   1. 初始化：ensureDevWorkflow —— 按需 `git init`（-b main）、按需创建 dev 分支并把
-//      工作区切到 dev（幂等；空仓库走「未出生分支改名」等价路径）。只做本地分支操作，
-//      不 push、不配置远端、不执行丢弃/还原/暂存无关改动。
+//      工作区切到 dev（幂等；空仓库走「未出生分支改名」等价路径），并幂等补建本地 main
+//      （BUG-20260914-003：该路径下 main 从未出生，详见 ensureMainBranch）。只做本地分支
+//      操作，不 push、不配置远端、不执行丢弃/还原/暂存无关改动。
 //   2. 自动提交：autoCommitForRun —— 批量开发回执核验通过（reported）后，以
 //      「领取时工作区快照 → 收尾时差集」做确定性归因，把本单改动按 doc / test /
 //      业务三组提交（git add -A 指定路径 + git commit --only，只 commit 不 push）。
@@ -70,6 +71,8 @@ export function gitBranchState(root) {
 // 幂等初始化：非 git 项目 → git init -b main；随后按需创建 dev 并切换工作区。
 // 空仓库（尚无任何提交）：HEAD 未出生，`git switch -c dev` 等价于把未出生分支改名，
 // 首个提交自然落在 dev（README「待确认」的等价方案结论）。
+// BUG-20260914-003：该路径使 `refs/heads/main` 从未出生（构建模块「合并入 main」与
+// 分支浏览均以本地 main 存在为前提）——收尾调用 ensureMainBranch 幂等补建。
 export function ensureDevWorkflow(root) {
   if (!isGitRepo(root)) {
     gitOk(root, ['init', '-q', '-b', MAIN_BRANCH], 'git init');
@@ -90,7 +93,26 @@ export function ensureDevWorkflow(root) {
   if (after.branch !== DEV_BRANCH) {
     throw new AtbError(`初始化后当前分支应为 ${DEV_BRANCH}（实际 ${after.branch || '未知'}）`);
   }
-  return { isRepo: true, gitInited: !before.isRepo, devCreated, switched, before, after };
+  const mainCreated = ensureMainBranch(root);
+  return { isRepo: true, gitInited: !before.isRepo, devCreated, switched, mainCreated, before, after };
+}
+
+// BUG-20260914-003 main 出生保障（幂等补建，ensureDevWorkflow 收尾调用）：
+// 仓库已有提交且 `refs/heads/main` 缺失时，在当前分支历史的根提交
+// （`git rev-list --max-parents=0 HEAD` 首行；多根历史取首行，罕见场景）上
+// `git branch main <root>` 补建本地 main——只创建分支，不切换、不推送、不触碰工作区。
+// 空仓库（HEAD 未出生，尚无基点）跳过不报错；main 已存在不动。补建后本地 main 作为
+// 版本合并目标累积合并提交，口径与 build-git precheckMerge「main 分支不存在」一致。
+export function ensureMainBranch(root) {
+  if (gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${MAIN_BRANCH}`]).status === 0) {
+    return false; // main 已存在：幂等不动
+  }
+  const roots = gitRaw(root, ['rev-list', '--max-parents=0', 'HEAD']);
+  if (roots.status !== 0) return false; // HEAD 未出生（尚无提交）：无补建基点
+  const first = String(roots.stdout || '').trim().split('\n').map((s) => s.trim()).filter(Boolean)[0];
+  if (!first) return false;
+  gitOk(root, ['branch', MAIN_BRANCH, first], '补建 main 分支');
+  return true;
 }
 
 // ---------- 2. 工作区快照与归因 ----------

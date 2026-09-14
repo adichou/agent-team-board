@@ -983,8 +983,16 @@ const ATBBuild = (() => {
         <div class="bld-branch" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span>
           <button type="button" class="btn small quiet bld-push" data-push="${esc(x)}" title="推送到远端">推送</button></div>`).join('');
       const remote = (b.remote || []).map((x) => `<div class="bld-branch bld-remote" data-branch="${esc(x)}" role="button" tabindex="0"><span>${esc(x)}</span></div>`).join('');
+      // BUG-20260914-003：本地有分支但缺 main 时给出可解释提示（与「合并入 main」
+      // precheckMerge「main 分支不存在」报错口径一致），引导经设置页 Git 工作流幂等补建。
+      // 空仓库（无任何本地分支 = 尚无提交、无补建基点）不出提示。
+      const locals = b.local || [];
+      const mainMissing = locals.length > 0 && !locals.includes('main');
+      const mainHint = mainMissing
+        ? `<p class="bld-main-hint" role="note">⚠ 本地缺少 main 分支：版本计划「合并入 main」将报「main 分支不存在」。可到「设置 → Git 工作流」执行初始化（幂等，将在首个提交上补建 main，不推送远端）。</p>`
+        : '';
       list = `
-        <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local || '<p class="muted small">（无其他本地分支）</p>'}</div>
+        <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${local || '<p class="muted small">（无其他本地分支）</p>'}${mainHint}</div>
         <div class="bld-branch-group"><div class="bld-group-head">远端</div>${remote || '<p class="muted small">（无远端分支：先「同步远端」或推送本地分支）</p>'}</div>`;
     }
     const log = state.logBranch ? (() => {

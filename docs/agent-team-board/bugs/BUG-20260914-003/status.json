@@ -2,11 +2,11 @@
   "id": "BUG-20260914-003",
   "type": "bug",
   "title": "为什么会显示无其他本地分支的？main 分支应该是要显示的",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-8",
   "createdAt": "2026-09-14T02:47:19.499Z",
-  "updatedAt": "2026-09-14T03:40:40.029Z",
+  "updatedAt": "2026-09-14T04:37:23.113Z",
   "agentCompletedAt": "2026-09-14T03:40:40.029Z",
   "lastReport": {
     "at": "2026-09-14T03:40:40.029Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-8",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T04:37:23.113Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
