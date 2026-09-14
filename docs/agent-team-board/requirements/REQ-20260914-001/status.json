@@ -2,19 +2,53 @@
   "id": "REQ-20260914-001",
   "type": "requirement",
   "title": "自动提交不完整时挂起条目并暂停队列，人工确认后恢复开发",
-  "status": "submitted",
+  "status": "in-progress",
   "parent": null,
-  "owner": null,
+  "owner": "zcode-batch-048-19",
   "createdAt": "2026-09-14T07:40:13.313Z",
-  "updatedAt": "2026-09-14T07:40:13.313Z",
-  "agentCompletedAt": null,
-  "lastReport": null,
+  "updatedAt": "2026-09-14T09:43:11.683Z",
+  "agentCompletedAt": "2026-09-14T09:43:11.683Z",
+  "lastReport": {
+    "at": "2026-09-14T09:43:11.683Z",
+    "coverage": null,
+    "framework": "自研 node 脚本（run-all）",
+    "summary": "开发/分析两阶段人工确认闭环全量实施：confirm 账本+挂起守卫（next/claim/createBatch/refine next）+指纹与版本绑定核验+授权补交+答案回传续跑+队列恢复编排+任务页卡片与统一确认面板+i18n；新增 3 测试文件 23 例全过，npm test 232 文件 0 失败，11 个存量用例按新队列语义同步更新",
+    "runId": "run-20260914-237"
+  },
   "history": [
     {
       "at": "2026-09-14T07:40:13.313Z",
       "from": null,
       "to": "submitted",
       "by": "atb-0914-38d1"
+    },
+    {
+      "at": "2026-09-14T08:19:06.817Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T08:32:35.658Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-162537-04f2）"
+    },
+    {
+      "at": "2026-09-14T08:38:56.314Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-19",
+      "note": "认领（zcode-batch-048-19）"
+    },
+    {
+      "at": "2026-09-14T09:43:11.683Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-19",
+      "note": "上报测试报告，待人工确认完成"
     }
   ]
 }
