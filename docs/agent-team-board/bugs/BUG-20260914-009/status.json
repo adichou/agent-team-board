@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-009",
+  "type": "bug",
+  "title": "dev 界面只加载最近 50 条，需要修复成显示所有，并支持分页展示",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-009",
+  "createdAt": "2026-09-14T04:51:58.340Z",
+  "updatedAt": "2026-09-14T06:01:25.435Z",
+  "agentCompletedAt": "2026-09-14T06:01:25.435Z",
+  "lastReport": {
+    "at": "2026-09-14T06:01:25.435Z",
+    "coverage": null,
+    "framework": "node:assert/strict + vm 桩 DOM + 真实 server HTTP（项目自研测试口径）",
+    "summary": "分支浏览提交记录放开 50 条静默截断并支持分页：数据层 branchLog 改 {limit,offset}（默认 50/0、clamp 1..500、git log --skip 偏移、rev-list --count 返回 total）；服务端 /api/build/branch-log 透传 limit/offset 与 total；前端分页条（上一页/页码折叠/下一页/每页 20/50/100 + 第 x–y 条 / 共 N 条 + 末页已到末尾反馈）、翻页失败保留旧内容可重试、切分支重置第一页、刷新当前页。新增 build-serve S8b（>200 条跨页/末页/非法参数归一/超界空页）与 build-ui N7e/N7f（vm 行为 + 静态契约），先红后绿；全量 226 文件 0 失败。引入来源归因 REQ-20260913-001。",
+    "runId": "run-20260914-231"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T04:51:58.340Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T04:51:58.341Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T05:00:09.317Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-125215-33e7）"
+    },
+    {
+      "at": "2026-09-14T05:46:37.523Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-009",
+      "note": "认领（zcode-batch-048-BUG-20260914-009）"
+    },
+    {
+      "at": "2026-09-14T06:01:25.436Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-009",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}
