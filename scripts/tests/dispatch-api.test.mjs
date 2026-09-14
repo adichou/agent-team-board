@@ -2,6 +2,8 @@
 // REQ-20260906-003 Status Board 派发 API 集成测试 —— 以假 codex CLI 包装器驱动服务端到端链路
 // 用法：node scripts/tests/dispatch-api.test.mjs
 // 覆盖：设置校验/静态预检/开关门槛/执行上报/增量日志/停止当前/优雅关停（C01/C02/C08/C10/C19 局部）
+// BUG-20260914-013：stop() 改确定性收尾（SIGTERM→有界等待→SIGKILL），并以 ATB_SHUTDOWN_FORCE_MS
+//       对齐服务端强退时限，消除「5s 内未退 → 静默泄漏」窗口。
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,6 +13,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as core from '../lib/core.mjs';
+import { stopChild } from './lib/test-process.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SERVER = path.join(PLUGIN_ROOT, 'scripts', 'server.mjs');
@@ -61,6 +64,8 @@ function startServer(projectRoot) {
       ATB_TICK_MS: '60',
       ATB_CANCEL_GRACE_MS: '200',
       ATB_SETTLE_MS: '150',
+      // BUG-20260914-013：服务端优雅关停强退兜底收紧到 8s（缺省 20s），stop() 等待上限与之对齐
+      ATB_SHUTDOWN_FORCE_MS: '8000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -90,8 +95,8 @@ function startServer(projectRoot) {
     port, child, req, P, base,
     get logs() { return logs; },
     async stop() {
-      child.kill('SIGTERM');
-      await new Promise((r) => { child.on('exit', r); setTimeout(r, 5000); });
+      // BUG-20260914-013：确定性收尾——SIGTERM 有界等待（覆盖 8s 强退兜底），超时 SIGKILL，仍存活抛错
+      await stopChild(child, { timeoutMs: 12_000 });
     },
   };
 }
