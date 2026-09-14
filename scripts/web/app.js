@@ -71,8 +71,7 @@ function testFlagHtml(it) {
 // REQ-20260907-012 曾以批次进入状态 chip（in-batch / not-in-batch）替代已接受便签；
 // REQ-20260908-010 起批次候选口径切换为已计划单，该显示失效，BUG-20260908-020 删除之，
 // 已接受行恢复通用 chip 与 LANE_HINT 悬停。
-// batchEntry 字段现仅服务 planned 条件的详情 notice（批次派发面向已计划单）。
-const BATCH_ENTRY_STATUS_LABEL = { prepared: '排队中', running: '执行中', paused: '已暂停', needs_attention: '需人工处理' };
+// REQ-20260913-003：去批次概念——条目入轮状态字段随服务端数据源下线，前端不再消费。
 // REQ-20260907-004：看板模式与拖拽换列已随布局重构移除；状态流转走详情页按钮与批量接受。
 const DOC_LABEL = {
   'README.md': '说明',
@@ -1389,7 +1388,7 @@ function renderSearchFeedback() {
     if (st) body = `<span class="hits-note">命中 ${st.matched} / 共 ${st.total}（当前筛选可见 ${st.visible}）</span>`;
   } else if (view === 'runs') {
     // BUG-20260910-009：两面板列表真实按关键词前端过滤后，口径说明与行为一致
-    body = '<span class="hits-note">关键词在下方面板内前端过滤（编号 / 标题 / 执行器；排队批次含批次号），不发请求</span>';
+    body = '<span class="hits-note">关键词在下方面板内前端过滤（编号 / 标题 / 执行器），不发请求</span>';
   } else if (view === 'build') {
     // REQ-20260913-001：构建模块搜索为前端过滤（版本名 / 单号）
     const st = window.ATBBuild?.searchStats?.();
@@ -2920,7 +2919,7 @@ function renderHolds() {
   area.dataset.rendered = '1';
   area.classList.remove('hidden');
   area.innerHTML = `<header class="hold-area-head">⚠ 待人工确认（${items.length}）</header>
-    <p class="muted small hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随批次结束消失</p>
+    <p class="muted small hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失</p>
     ${items.map((h) => holdCardHtml(h)).join('')}`;
   for (const btn of area.querySelectorAll('[data-hold-toggle]')) {
     btn.addEventListener('click', () => toggleHoldTimeline(btn.dataset.holdToggle));
@@ -3441,9 +3440,8 @@ function drawerActionsNoticeHtml(it) {
       return `<div class="notice info">未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在 ZCode 会话运行 <code>/dev ${esc(it.id)}</code> 让 Agent 直接认领。</div>`;
     case 'planned': {
       // REQ-20260908-010：已计划——等待开发启动按最旧优先处理；未进入开发中前可移出计划
-      const e = it.batchEntry;
-      const entry = e && e.batchId ? `已入批次 <code>${esc(e.batchId)}</code>（${BATCH_ENTRY_STATUS_LABEL[e.status] || '批次中'}）。` : '';
-      return `<div class="notice info">${entry}已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。</div>`;
+      // REQ-20260913-003：去批次概念——不再显示入轮状态（对应数据源已下线）
+      return `<div class="notice info">已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。</div>`;
     }
     default:
       return '';
@@ -4466,10 +4464,9 @@ async function submitNew(e, { accept = false } = {}) {
 /* ---------- 批量开发抽屉（REQ-20260906-002；REQ-20260908-010 改名） ---------- */
 
 // 批次阶段 → 面板文案；待启动/执行中严格区分：复制成功≠启动，登记运行后才算执行中
-// queued=true（REQ-20260906-025）：非队首的排队批次，prepared 显示「排队中」
+// REQ-20260913-003：去批次概念——「排队中」（非队首排队批次）分支随批次排队移除
 // REQ-20260908-020：aborted（人工终止）显示「已终止」
-function batchStatusLabel(s, queued = false) {
-  if (queued && s === 'prepared') return '排队中';
+function batchStatusLabel(s) {
   const LABELS = {
     prepared: '待启动',
     running: '执行中',
@@ -4656,7 +4653,7 @@ async function retryRunFromRecord(runId, kind) {
         });
         const copied = await copyDispatchText(res.prompt);
         toast(copied
-          ? `任务已创建、提示词已复制，请在对应项目会话粘贴发送（${res.batchId}，条目 ${rec.itemId}；状态：待启动）`
+          ? `任务已创建、提示词已复制，请在对应项目会话粘贴发送（条目 ${rec.itemId}；状态：待启动）`
           : '任务已创建，但复制失败：请展开提示词手动复制', !copied);
       } else {
         await createBatchAndCopy({ ids: [rec.itemId] });
@@ -4779,20 +4776,21 @@ const GLOBAL_KIND_FILTERS = [
   { key: 'refine', label: '批量完善' },
 ];
 const GLOBAL_KIND_LABEL = { develop: '批量开发', refine: '批量完善' };
-// BUG-20260911-007：kind 兜底前缀表——批次号前缀与账本类型的固定对应（refine-store RFB- /
+// BUG-20260911-007：kind 兜底前缀表——账本目录前缀与任务类型的固定对应（refine-store RFB- /
 // dispatch batch-）。前端实时读盘而看板服务为常驻进程（路由启动时固化，
 // BUG-20260907-017 同型机制），旧服务进程可能返回缺 kind / 未知 kind 的旧口径简报。
 // REQ-20260911-010：CMT- 前缀随批量 Commit 回退移除（服务端不再产出 CMT 简报行）。
 const GLOBAL_KIND_PREFIXES = [['RFB-', 'refine'], ['batch-', 'develop']];
 
-// BUG-20260911-007：任务行类型兜底。原始 kind 缺失 / 不在词表时按批次号前缀推断；前缀也
-// 认不出则归 'unknown'（中性档，至少在「全部类型」筛选下可见）。没有本兜底时类型筛选裸比对
-// t.kind，外来简报会在所有筛选档位下静默消失——而汇总行按 status 计数不看 kind，于是出现
-// 「执行中 1 但 0 匹配」的自相矛盾态。返回 { kind, inferred }（inferred=true 供行内诊断 flag）。
+// BUG-20260911-007：任务行类型兜底。原始 kind 缺失 / 不在词表时按简报携带的账本标识前缀推断
+//（REQ-20260913-003 起简报不再透出批次号，此处仅兼容旧服务进程残留的 batchId 字段，不作渲染）；
+// 前缀也认不出则归 'unknown'（中性档，至少在「全部类型」筛选下可见）。没有本兜底时类型筛选
+// 裸比对 t.kind，外来简报会在所有筛选档位下静默消失——而汇总行按 status 计数不看 kind，于是
+// 出现「执行中 1 但 0 匹配」的自相矛盾态。返回 { kind, inferred }（inferred=true 供行内诊断 flag）。
 function globalTaskKind(task) {
-  const raw = task && task.kind;
+  const rawKind = task && task.kind;
   // Object.prototype.hasOwnProperty：词表对象键不得混入原型链键（如 'toString'）
-  if (Object.prototype.hasOwnProperty.call(GLOBAL_KIND_LABEL, raw)) return { kind: raw, inferred: false };
+  if (Object.prototype.hasOwnProperty.call(GLOBAL_KIND_LABEL, rawKind)) return { kind: rawKind, inferred: false };
   const id = String((task && task.batchId) || '');
   const hit = GLOBAL_KIND_PREFIXES.find(([p]) => id.startsWith(p));
   return { kind: hit ? hit[1] : 'unknown', inferred: true };
@@ -4828,12 +4826,13 @@ function globalCountsParts(task) {
   };
 }
 
-// 关键词过滤（前端，不发请求）：项目名 / 项目路径 / 批次号 / 当前条目编号与标题 / owner
+// 关键词过滤（前端，不发请求）：项目名 / 项目路径 / 当前条目编号与标题 / owner
+// REQ-20260913-003：去批次概念——批次号不再是匹配字段
 // REQ-20260910-027：开发人员不再是匹配字段
 function globalTaskMatches(task, projRow, q) {
   if (!q) return true;
   const cur = task.current || {};
-  return [projRow.name, projRow.root, task.batchId, cur.itemId, cur.title, cur.owner]
+  return [projRow.name, projRow.root, cur.itemId, cur.title, cur.owner]
     .some((x) => String(x || '').toLowerCase().includes(q));
 }
 
@@ -4860,12 +4859,12 @@ async function refreshGlobal() {
 
 function globalSummaryText(projects) {
   const tasks = projects.flatMap((p) => p.tasks || []);
-  const by = { running: 0, prepared: 0, paused: 0, needs_attention: 0, queued: 0 };
+  // REQ-20260913-003：去批次概念——汇总条只按本轮执行状态计数
+  const by = { running: 0, prepared: 0, paused: 0, needs_attention: 0 };
   for (const t of tasks) {
-    if (t.queued && t.status === 'prepared') by.queued++;
-    else if (by[t.status] != null) by[t.status]++;
+    if (by[t.status] != null) by[t.status]++;
   }
-  return `执行中 <b>${by.running}</b> · 待启动 <b>${by.prepared}</b> · 排队中 <b>${by.queued}</b> · 已暂停 <b>${by.paused}</b> · 待核对 <b>${by.needs_attention}</b>`;
+  return `执行中 <b>${by.running}</b> · 待启动 <b>${by.prepared}</b> · 已暂停 <b>${by.paused}</b> · 待核对 <b>${by.needs_attention}</b>`;
 }
 
 function globalFilterChipsHtml() {
@@ -4891,16 +4890,15 @@ function globalTaskRowHtml(task) {
   // 绝不静默消失。unknown 档仅在「全部类型」筛选下可见（前缀推不出时无类型档可归）。
   const rawKind = task && task.kind;
   const kindWarn = inferred
-    ? `<span class="flag" title="${esc(`简报类型字段缺失或未知（${rawKind == null || rawKind === '' ? '缺失' : `原始值 ${rawKind}`}），已按批次号前缀${effKind === 'unknown' ? '未能识别类型，按「未知类型」兜底展示（仅在「全部类型」筛选下可见）' : `推断为${kindLabel}`}。常驻看板服务的路由在启动时固化而静态前端实时读盘，服务进程可能旧于前端：请重启看板服务（atb serve / npm run app）后刷新；若重启后仍出现请按 BUG-20260911-007 反馈`)}">${effKind === 'unknown' ? '类型未知' : '类型推断'}</span>`
+    ? `<span class="flag" title="${esc(`简报类型字段缺失或未知（${rawKind == null || rawKind === '' ? '缺失' : `原始值 ${rawKind}`}），已按账本标识前缀${effKind === 'unknown' ? '未能识别类型，按「未知类型」兜底展示（仅在「全部类型」筛选下可见）' : `推断为${kindLabel}`}。常驻看板服务的路由在启动时固化而静态前端实时读盘，服务进程可能旧于前端：请重启看板服务（atb serve / npm run app）后刷新；若重启后仍出现请按 BUG-20260911-007 反馈`)}">${effKind === 'unknown' ? '类型未知' : '类型推断'}</span>`
     : '';
   return `
     <article class="global-task" data-ggoto-runs="${esc(effKind)}" data-gproject="${esc(task.root || '')}"
-             title="点击进入该项目任务模块（${esc(kindLabel)} · ${esc(task.batchId)}）">
+             title="点击进入该项目任务模块（${esc(kindLabel)}）">
       <div class="global-task-top">
-        <span class="chip batch-st ${task.aborted ? 's-aborted' : `s-${esc(stKey)}`}">${esc(batchStatusLabel(task.status, !!task.queued))}</span>
+        <span class="chip batch-st ${task.aborted ? 's-aborted' : `s-${esc(stKey)}`}">${esc(batchStatusLabel(task.status))}</span>
         ${task.pauseRequested ? '<span class="flag" title="已请求暂停后续领取：当前项继续，完成后暂停">已请求暂停</span>' : ''}
         <span class="chip kind-chip">${esc(kindLabel)}</span>
-        <span class="cid">${esc(task.batchId)}</span>
         ${kindWarn}
         <button type="button" class="btn small global-enter">进入项目任务</button>
       </div>
@@ -5123,10 +5121,10 @@ async function refreshBatch() {
     // BUG-20260909-006：不再按勾选集合过滤统计（?ids= 随范围链路移除），口径恒为已计划队列全量
     const data = await api('/api/batch/current');
     // stats（创建面板候选/受阻数）变化须计入签名，否则候选变化不重渲染；
-    // queue（REQ-20260906-025）入队/出队也要触发重渲染；
+    // REQ-20260913-003：批次排队列表（queue）已移除，不再计入签名；
     // pending/recordsTotal/attempt（REQ-20260908-026）：队列与最近记录变化触发重渲染
     const sig = JSON.stringify({
-      b: data.batch, c: data.current, n: data.counts, s: data.stats, q: data.queue,
+      b: data.batch, c: data.current, n: data.counts, s: data.stats,
       p: data.pending, rt: data.recordsTotal,
       r: (data.records || []).map((x) => x.runId + x.result + x.attempt),
     });
@@ -5888,7 +5886,7 @@ async function appendRunLog(runId, name, manual = false) {
 
 /* ---------- 任务运行面板二级页签（REQ-20260909-008） ---------- */
 
-// 运行态四分区：概况（状态/通知/详情/计数/操作）、队列（待处理 + 排队批次）、提示词、记录。
+// 运行态四分区：概况（状态/通知/详情/计数/操作）、队列（待处理）、提示词、记录。
 // 启动态（无进行中任务）不拆页签，保持启动区 + 队列单屏。
 const TASK_PANES = [
   { key: 'overview', label: '概况' },
@@ -6007,8 +6005,8 @@ function renderZcodeBatchPanel() {
   const data = state.batchData;
   if (!data) return '<p class="muted">加载中…</p>';
   // BUG-20260910-009：任务搜索（state.search.q）前端过滤本面板列表——待开发/待处理队列按编号/标题、
-  // 排队批次按批次号、处理记录按执行编号/编号/标题/执行器；概况页签与统计保持全量账面口径。
-  // REQ-20260910-027：开发人员不再是排队批次的匹配字段。
+  // 处理记录按执行编号/编号/标题/执行器；概况页签与统计保持全量账面口径。
+  // REQ-20260913-003：排队批次节已移除（去批次概念），本面板仅过滤队列与记录。
   // 可选链兼容既有 vm 桩测试的最小 state（无 search 时不过滤）
   const ql = String(state.search?.q || '').trim().toLowerCase();
   // BUG-20260909-006：勾选范围行（scopeLine）已随「进入批量开发」入口移除，候选恒为已计划队列
@@ -6019,7 +6017,7 @@ function renderZcodeBatchPanel() {
     return `
       <section class="batch-create">
         <div class="batch-stats">已计划候选 <b>${stats.candidates}</b> · 受依赖阻塞 <b>${stats.blocked}</b>（最旧优先，实时读取；运行中新置计划的条目自动进入队列）</div>
-        ${stats.candidates ? '' : '<div class="notice">暂无已计划候选：请先在看板接受条目，并在详情页「移入计划」（仅已计划且未被认领的条目可入批）。</div>'}
+        ${stats.candidates ? '' : '<div class="notice">暂无已计划候选：请先在看板接受条目，并在详情页「移入计划」（仅已计划且未被认领的条目进入实时队列）。</div>'}
       </section>
       ${pendingQueueHtml(queue, { action: '待开发', q: ql })}`;
   }
@@ -6042,40 +6040,20 @@ function renderZcodeBatchPanel() {
   if (counts.blocked) extraParts.push(`受阻待处理 ${counts.blocked}`);
   const nextDisabled = !nextCandidates;
   const nextTitle = nextCandidates ? '以已计划队列（最旧优先）重建任务并复制提示词' : '暂无已计划候选：请先在看板接受条目并「移入计划」';
-  // 排队批次列表（REQ-20260906-025）：队首之外按 FIFO 展示，当前批次结束后自动接续；
-  // BUG-20260910-009：按批次号过滤（队首当前批次不在列表，不参与匹配；REQ-20260910-027 起不再按开发人员匹配），
-  // 无排队批次整节不显示（现状保留）；有批次但无命中时保留节并给无匹配空态
-  const allQueued = (data.queue || []).filter((x) => x.batchId !== b.batchId);
-  const queuedBatches = ql
-    ? allQueued.filter((x) => String(x.batchId || '').toLowerCase().includes(ql))
-    : allQueued;
-  const queuedHidden = allQueued.length - queuedBatches.length;
-  const queueListHtml = queuedBatches.length || (ql && allQueued.length) ? `
-      <section class="batch-queue">
-        <div class="muted small">排队批次（当前批次结束后同一调度会话自动接续）${queuedHidden ? `（${queuedHidden} 条被搜索过滤）` : ''}：</div>
-        ${queuedBatches.length ? `<ul class="batch-queue-list">
-          ${queuedBatches.map((q) => `
-          <li class="batch-queue-item">
-            <span class="chip batch-st s-${esc(q.status)}">${batchStatusLabel(q.status, true)}</span>
-            <span class="cid">${esc(q.batchId)}</span>
-            <span class="muted small">第 ${q.queuePosition} 位 · ${q.total} 项 · 创建 ${fmtTime(q.createdAt)}${q.pauseRequested ? ' · 已请求暂停' : ''}</span>
-            <button type="button" class="btn danger" data-del-batch="${esc(q.batchId)}" data-del-total="${q.total}" title="删除该排队批次（未在执行）：仅移除批次账本，候选条目回到可入批候选池，队列位次自动前移">删除</button>
-          </li>`).join('')}
-        </ul>` : '<p class="muted small" style="margin:2px 0 0">没有匹配的排队批次，清空搜索恢复。</p>'}
-      </section>` : '';
   // REQ-20260909-008：运行态按二级页签归组（概况/队列/提示词/记录），单屏切换不再长滚动；
   // 当前分区记忆在 state.batch.pane，一级页签切换与轮询重渲染均不重置
+  // REQ-20260913-003：去批次概念——概况不再显示轮次编号 chip；轮次排队节与相关排队/删除
+  // 入口随批次排队能力一并移除；队列分区仅保留实时待处理队列。
   return taskPaneShell('develop', state.batch, {
     overview: `
       <div class="batch-status-line">
         <span class="chip batch-st ${b.aborted ? 's-aborted' : `s-${esc(b.status)}`}">${b.aborted ? '已终止' : batchStatusLabel(b.status)}</span>
-        <span class="cid">${esc(b.batchId)}</span>
         <span class="muted small">${taskAgentModeText(b)} · 创建 ${fmtTime(b.createdAt)}</span>
       </div>
       ${data.nextAction === 'needs_attention' ? `<div class="notice warn">${esc(data.notice || '执行状态待核对')}</div>` : ''}
       ${b.aborted ? '<div class="notice warn">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止。</div>' : ''}
       ${b.pauseRequested ? '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>' : ''}
-      ${batchDone && !b.aborted ? `<div class="notice ok">${esc(data.notice || '本批范围已处理完毕')}</div>` : ''}
+      ${batchDone && !b.aborted ? `<div class="notice ok">${esc(data.notice || '本轮已处理完毕')}</div>` : ''}
       ${batchDone ? `<div class="drawer-actions batch-actions">
         <button type="button" class="btn primary" id="batchNext" ${nextDisabled ? `disabled title="${nextTitle}"` : `title="${nextTitle}"`}>启动新一轮</button>
       </div>` : ''}
@@ -6097,18 +6075,17 @@ function renderZcodeBatchPanel() {
       <div class="drawer-actions batch-actions">
         ${!terminal ? `<button type="button" class="btn ${b.pauseRequested ? 'primary' : 'warn'}" id="batchPause">${b.pauseRequested ? '恢复后续领取' : '暂停后续领取'}</button>` : ''}
         ${!batchDone ? '<button type="button" class="btn danger" id="batchAbort" title="停止派发后续项；剩余项出局；本轮记录保留；在途子代理需在对应会话人工停止">终止任务</button>' : ''}
-        ${!batchDone && data.nextAction !== 'needs_attention' ? `<button type="button" class="btn" id="queueNewBatch" title="以当前已计划候选创建新批次，FIFO 排到队尾，当前批次结束后自动接续">排队新批次</button>` : ''}
-        ${!data.current && b.status !== 'needs_attention' ? `<button type="button" class="btn danger" id="batchDelete" title="该批次当前无在途执行；删除仅移除批次账本，条目与运行记录不受影响，队列位次自动前移">删除本批次</button>` : ''}
       </div>
       <p class="muted small">「暂停后续领取」只阻止领取下一项（当前项继续）；立即停止正在运行的工具请到 Zcode 原生任务界面操作。</p>`,
-    // 队列分区：排队批次（REQ-20260906-025）+ 待处理队列（终态待处理记 0，给空态说明而非空白）
-    queue: `${queueListHtml}
-      ${!terminal ? pendingQueueHtml(data.pending || [], { action: '待开发', q: ql }) : '<p class="muted small" style="margin:2px 0 0">任务已收尾：本轮待处理队列已清空。</p>'}`,
+    // 队列分区：仅实时待处理队列（终态待处理记 0，给空态说明而非空白）
+    queue: !terminal
+      ? pendingQueueHtml(data.pending || [], { action: '待开发', q: ql })
+      : '<p class="muted small" style="margin:2px 0 0">任务已收尾：本轮待处理队列已清空。</p>',
     prompt: `
       <div class="batch-prompt-block">
         <div class="dep-toolbar">
           <span class="muted small">主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：</span>
-          <button type="button" class="btn" id="batchRecopy" title="复制失败可重试；重试复制不会创建新批次">重新复制</button>
+          <button type="button" class="btn" id="batchRecopy" title="复制失败可重试；重试复制不会创建新任务">重新复制</button>
           <button type="button" class="btn" id="batchResumeCopy" title="主会话退出/压缩后，新会话用同一提示词续接">复制续接提示词</button>
         </div>
         <pre id="batchPrompt" class="batch-prompt" tabindex="0">${esc(b.prompt)}</pre>
@@ -6194,13 +6171,12 @@ function renderRefinePanel() {
     overview: `
       <div class="batch-status-line">
         <span class="chip batch-st ${b.aborted ? 's-aborted' : `s-${esc(b.status)}`}">${b.aborted ? '已终止' : batchStatusLabel(b.status)}</span>
-        <span class="cid">${esc(b.batchId)}</span>
         <span class="muted small">${taskAgentModeText(b)} · 创建 ${fmtTime(b.createdAt)}</span>
       </div>
       ${data.notice ? `<div class="notice">${esc(data.notice)}</div>` : ''}
       ${b.aborted ? '<div class="notice warn">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止；终止后可立即「启动新一轮」。</div>' : ''}
       ${b.pauseRequested ? '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>' : ''}
-      ${batchDone && !b.aborted ? '<div class="notice ok">本批完善范围已处理完毕（条目保持已接受，后续流转由人工判断）。</div>' : ''}
+      ${batchDone && !b.aborted ? '<div class="notice ok">本轮完善队列已处理完毕（条目保持已接受，后续流转由人工判断）。</div>' : ''}
       ${batchDone ? `<div class="drawer-actions batch-actions">
         <button type="button" class="btn primary" id="refineNext" ${nextDisabled ? `disabled title="${nextTitle}"` : `title="${nextTitle}"`}>启动新一轮</button>
       </div>` : ''}
@@ -6237,7 +6213,7 @@ function renderRefinePanel() {
           <button type="button" class="btn" id="refineRecopy" title="重试复制不会创建新任务">重新复制</button>
         </div>
         <pre id="refinePrompt" class="batch-prompt" tabindex="0">${esc(b.prompt)}</pre>
-      </div>` : '<p class="muted small">暂无调度提示词（存量批次可能缺失）。</p>',
+      </div>` : '<p class="muted small">暂无调度提示词。</p>',
     records: runAttemptsHtml(data.records || [], data.recordsTotal ?? (data.records || []).length, 'refine', ql),
   });
 }
@@ -6258,11 +6234,11 @@ async function createRefineBatchAndCopy() {
     });
     if (res.created === false) {
       const copied = await copyDispatchText(res.prompt);
-      toast(`未新建完善任务：${res.batchId} 已有未结束的完善任务（幂等返回）${copied ? '，已复制其提示词' : ''}`, true);
+      toast(`未新建完善任务：已有未结束的完善任务（幂等返回）${copied ? '，已复制其提示词' : ''}`, true);
     } else {
       const copied = await copyDispatchText(res.prompt);
       // REQ-20260908-026：统一成功口径——任务已创建、提示词已复制（复制成功 ≠ 执行中）
-      if (copied) toast(`✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（完善任务 ${res.batchId}，候选 ${res.counts.candidates}，子代理模式；状态：待启动）`);
+      if (copied) toast(`✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 ${res.counts.candidates}，子代理模式；状态：待启动）`);
       else toast('任务已创建，但复制失败：请展开提示词手动复制，或点「重新复制」（不会创建新任务）', true);
     }
     state.refine.sig = '';
@@ -6279,7 +6255,8 @@ async function toggleRefinePause() {
     await api('/api/refine/pause', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchId: b.batchId, paused: !b.pauseRequested }),
+      // REQ-20260913-003：缺省解析队首账本，前端不再传批次号
+      body: JSON.stringify({ paused: !b.pauseRequested }),
     });
     state.refine.sig = '';
     await refreshRefine();
@@ -6293,7 +6270,7 @@ async function abortRefineTask() {
   const b = state.refine.data?.batch;
   if (!b) return;
   const ok = await uiConfirm({
-    title: `终止批量完善任务 ${b.batchId}？`,
+    title: '终止批量完善任务？',
     message: '确认后停止派发后续项：账本剩余未领取项标记出局，在途项标记人工终止并释放占用；本轮全部处理记录保留。在途子代理需在对应 Agent 会话人工停止。终止后可立即「启动新一轮」。',
     confirmText: '终止任务',
     danger: true,
@@ -6303,9 +6280,9 @@ async function abortRefineTask() {
     const r = await api('/api/refine/abort', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchId: b.batchId }),
+      body: JSON.stringify({}),
     });
-    toast(`✓ 已终止完善任务 ${b.batchId}：${r.notice || ''}`);
+    toast(`✓ 已终止完善任务：${r.notice || ''}`);
     state.refine.sig = '';
     await refreshRefine();
   } catch (e) {
@@ -6318,7 +6295,7 @@ async function abortDevTask() {
   const b = state.batchData?.batch;
   if (!b) return;
   const ok = await uiConfirm({
-    title: `终止批量开发任务 ${b.batchId}？`,
+    title: '终止批量开发任务？',
     message: '确认后停止派发后续项：账本剩余未领取项标记出局，在途项标记人工终止并释放项目占用（已认领条目的业务状态不动，由人工后续处理）；本轮全部处理记录保留。在途子代理需在对应 Agent 会话人工停止。终止后可立即「启动新一轮」。',
     confirmText: '终止任务',
     danger: true,
@@ -6328,9 +6305,9 @@ async function abortDevTask() {
     const r = await api('/api/batch/abort', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchId: b.batchId }),
+      body: JSON.stringify({}),
     });
-    toast(`✓ 已终止开发任务 ${b.batchId}：${r.notice || ''}`);
+    toast(`✓ 已终止开发任务：${r.notice || ''}`);
     state.batchSig = '';
     await refreshBatch();
   } catch (e) {
@@ -6577,18 +6554,7 @@ function bindBatchDrawer() {
   refreshWorkspaceApps(); // 宿主探测（fire-and-forget；成功/失败均重渲染刷出头部入口最终态）
   const pauseBtn = drawer.querySelector('#batchPause');
   if (pauseBtn) pauseBtn.addEventListener('click', toggleBatchPause);
-  // REQ-20260907-013：执行中排队新批次（复用创建流程）+ 删除未在执行的批次
-  const queueNewBtn = drawer.querySelector('#queueNewBatch');
-  if (queueNewBtn) queueNewBtn.addEventListener('click', () => createBatchAndCopy());
-  const batchDelBtn = drawer.querySelector('#batchDelete');
-  if (batchDelBtn) batchDelBtn.addEventListener('click', () => {
-    const d = state.batchData;
-    const b = d && d.batch;
-    if (b) deleteBatchById(b.batchId, (d.counts && d.counts.total) || 0, true);
-  });
-  for (const el of drawer.querySelectorAll('[data-del-batch]')) {
-    el.addEventListener('click', () => deleteBatchById(el.dataset.delBatch, Number(el.dataset.delTotal || 0), false));
-  }
+  // REQ-20260913-003：去批次概念——轮次排队与删除相关入口随批次排队能力移除
   // REQ-20260908-026：本轮处理记录「重新执行」（异常/已中断记录）
   for (const el of drawer.querySelectorAll('[data-retry-run]')) {
     el.addEventListener('click', () => retryRunFromRecord(el.dataset.retryRun, el.dataset.retryKind));
@@ -6625,6 +6591,8 @@ async function createBatchAndCopy(opts = {}) {
   // REQ-20260910-027：开发人员设置已移除——不再提交该值、无 localStorage 记忆回退
   // REQ-20260908-026：opts.ids 显式范围（终态任务重试以单条目重建新任务）；
   // BUG-20260909-006：列表勾选集合回退已移除——缺省即为已计划队列全量候选
+  // REQ-20260913-003：去批次概念——重复启动由服务端 400 明确提示（同一时间只有一轮执行），
+  // 不再存在排队/幂等返回分支；成功回执不携带批次号。
   const ids = (opts.ids && opts.ids.length) ? [...opts.ids] : null;
   try {
     const res = await api('/api/batch/create', {
@@ -6633,21 +6601,14 @@ async function createBatchAndCopy(opts = {}) {
       body: JSON.stringify(ids ? { ids } : {}),
     });
     if (res.created === false) {
-      // 幂等返回旧批（并发窗口）：如实说明未新建，不宣称「已创建」（REQ-20260906-022）；
-      // 排队幂等（REQ-20260906-025）：队尾候选一致，返回的是已有排队批次而非当前执行批次
+      // 幂等返回旧轮（并发窗口）：如实说明未新建，不宣称「已创建」（REQ-20260906-022）
       const copied0 = await copyDispatchText(res.prompt);
-      if (res.queued) {
-        toast(`已加入队列：批次 ${res.batchId} 排第 ${res.queuePosition} 位（重复创建返回已有排队批次）${copied0 ? '，已复制其提示词' : '；复制失败请在下方手动复制'}`);
-      } else {
-        toast(`未新建批次：当前批次 ${res.batchId} 尚未结束${copied0 ? '，已复制其提示词' : '；复制失败请在下方手动复制'}`, true);
-      }
+      toast(`未新建任务：当前任务尚未结束${copied0 ? '，已复制其提示词' : '；复制失败请在下方手动复制'}`, true);
     } else {
       const copied = await copyDispatchText(res.prompt);
       if (copied) {
-        // REQ-20260908-026：统一成功口径——任务已创建、提示词已复制；入队信息附带（REQ-20260906-025）
-        toast(res.queued
-          ? `✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（批次 ${res.batchId} 已加入队列，排第 ${res.queuePosition} 位，当前批次结束后自动开始）`
-          : `✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（批次 ${res.batchId}，候选 ${res.counts.candidates}，受阻 ${res.counts.blocked}；状态：待启动）`);
+        // REQ-20260908-026：统一成功口径——任务已创建、提示词已复制
+        toast(`✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 ${res.counts.candidates}，受阻 ${res.counts.blocked}；状态：待启动）`);
       } else {
         toast('任务已创建，但复制失败：请在下方选中提示词手动复制，或点「重新复制」（不会产生新任务）', true);
       }
@@ -6661,7 +6622,7 @@ async function createBatchAndCopy(opts = {}) {
 
 async function copyBatchPrompt(okMsg) {
   try {
-    const res = await api('/api/batch/prompt'); // 重复获取同一批次提示词，不新建批次
+    const res = await api('/api/batch/prompt'); // 重复获取同一轮任务提示词，不新建任务
     const copied = await copyDispatchText(res.prompt);
     if (copied) toast(`✓ ${okMsg}`);
     else toast('复制失败：请手动选中提示词文本复制', true);
@@ -6670,30 +6631,8 @@ async function copyBatchPrompt(okMsg) {
   }
 }
 
-// REQ-20260907-013 删除未在执行的批次：页面内确认（danger）→ 调删除接口 → 刷新面板。
-// 仅移除批次账本；条目与运行记录不受影响；在途运行 / 待人工核对由服务端拒绝并 toast 原因。
-async function deleteBatchById(batchId, total = 0, isCurrent = false) {
-  if (!batchId) return;
-  const ok = await uiConfirm({
-    title: `删除批次 ${batchId}？`,
-    message: `${total ? `共 ${total} 项候选。` : ''}该批次不在执行中；仅移除批次账本，条目与运行记录不受影响，候选条目回到可入批候选池，队列位次自动前移。`,
-    confirmText: '删除',
-    danger: true,
-  });
-  if (!ok) return;
-  try {
-    await api('/api/batch/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchId }),
-    });
-    toast(`✓ 已删除批次 ${batchId}${isCurrent ? '；面板已切换到当前队首' : '；队列位次已前移'}`);
-    state.batchSig = '';
-    await refreshBatch();
-  } catch (e) {
-    toast(e.message, true);
-  }
-}
+// REQ-20260913-003：删除未在执行轮次的页面入口随批次排队概念移除——
+// 前端不再提供该删除操作（服务端删除路由保留，供 CLI 处理存量账本）。
 
 async function toggleBatchPause() {
   const b = state.batchData?.batch;
@@ -6702,7 +6641,8 @@ async function toggleBatchPause() {
     await api('/api/batch/pause', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchId: b.batchId, paused: !b.pauseRequested }),
+      // REQ-20260913-003：缺省解析队首账本，前端不再传批次号
+      body: JSON.stringify({ paused: !b.pauseRequested }),
     });
     state.batchSig = '';
     await refreshBatch();

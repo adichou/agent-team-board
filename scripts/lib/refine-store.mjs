@@ -399,16 +399,18 @@ export function queueHeadRefineBatch(dataDir) {
 
 // 主调度提示词（REQ-20260909-011 通用化：单一版本，不再按执行 Agent 分叉——同一份提示词可在
 // 任意一种 Agent 会话中直接粘贴执行；调度要素与既有口径完整保留）。
+// REQ-20260913-003 去批次化：不含批次号/--batch 核对入口/排队接续，含实时取单指令
+// （每完成一项实时从已接受未完善队列领取下一项，队列取空即本轮结束）。
 // REQ-20260909-005：modelSource='follow'（默认）→ 注入「与主调度会话保持一致」指令。
 // BUG-20260909-017：模型指令行统一跟随口径——manual 或仅传 model/level（兼容旧调用）同样注入
-// FOLLOW_SESSION_PROMPT_LINE，REQ-20260908-020 时代的「子代理模型配置：…（来自设置「批量任务」…）」
-// 固定行不再生成；均未传 → 不注入（直连调用不变）。agent 参数保留但忽略（兼容旧调用签名）。
+// FOLLOW_SESSION_PROMPT_LINE；均未传 → 不注入（直连调用不变）。agent 参数保留但忽略（兼容旧调用签名）。
 // BUG-20260910-008：autoPlan（「完善完成后自动转入计划」开关，默认 false）分态约束段——关闭沿
 // REQ-20260908-020 原约束行（零回归）；开启时说明 done 回执后系统自动 accepted → planned 属预期
-// 系统行为、不得据此暂停（防严格 Agent 把系统流转当约束违反而中断批次推进），Agent 纪律不放宽。
-export function buildRefinePrompt({ projectRoot, batchId, developer = null, agent = null, modelSource = null, model = null, level = null, autoPlan = false, atbPath = ATB_PATH }) {
+// 系统行为、不得据此暂停（防严格 Agent 把系统流转当约束违反而中断推进），Agent 纪律不放宽。
+export function buildRefinePrompt({ projectRoot, batchId = null, developer = null, agent = null, modelSource = null, model = null, level = null, autoPlan = false, atbPath = ATB_PATH }) {
+  void batchId; // REQ-20260913-003：调度不依赖批次标识，参数仅作兼容
   void agent; // REQ-20260909-011：执行端无关，参数仅作兼容
-  void developer; // REQ-20260910-027：开发人员设置已移除，参数仅作兼容（不再生成会话命名指令）
+  void developer; // REQ-20260910-027：开发人员已移除，参数仅作兼容（不再生成会话命名指令）
   const modelLine = modelSource === 'follow' || modelSource === 'manual' || model || level
     ? FOLLOW_SESSION_PROMPT_LINE
     : null;
@@ -419,17 +421,17 @@ export function buildRefinePrompt({ projectRoot, batchId, developer = null, agen
   return [
     '你是当前项目的批量完善调度员，只负责派发与接收短回执。',
     `项目：${projectRoot}`,
-    `完善批次：${batchId}`,
     ...(modelLine ? [modelLine] : []),
     '',
-    '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善本批',
-    '一个已接受条目的文档。子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+    '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。',
+    '实时取单：每完成一项，立即核对并从当前已接受未完善队列（需求优先、最旧优先）领取下一项；运行中新接受的单立即可领取，无需任何并入操作；实时队列取空即本轮结束。',
+    '子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
     '每个子代理只做一项；同一时间只运行一个；不要让子代理再派发子代理。',
     '',
     `CLI 约定：atb 指 node ${atbPath}（下同）。`,
     '',
     '子代理流程（每项一个）：',
-    `1. 领取：atb refine next --by ${byPrefix}-<批次尾号>-<序号> --dir ${JSON.stringify(projectRoot)}`,
+    `1. 领取：atb refine next --by ${byPrefix}-<序号> --dir ${JSON.stringify(projectRoot)}`,
     '   （返回条目、目录、缺失原因；stop 时按提示结束）',
     '   领取/回执命令在子代理会话内执行（工作目录用 --dir 指定）。',
     '2. 阅读条目现有说明与项目代码/文档，直接编辑条目目录下的 markdown 补全：',
@@ -444,7 +446,7 @@ export function buildRefinePrompt({ projectRoot, batchId, developer = null, agen
     '',
     ...constraintLines,
     REFINE_DEMO_PERMIT_LINE,
-    `4. 主会话核对：atb refine check --batch ${batchId} --dir ${JSON.stringify(projectRoot)}`,
+    `4. 主会话核对：atb refine check --dir ${JSON.stringify(projectRoot)}`,
     '   nextAction=continue 时派发下一个子代理；stop 时结束。主会话只接收规定的短回执，不复制子代理的完整文档内容。',
   ].join('\n');
 }
@@ -492,15 +494,14 @@ export function refineAutoPlanOn(dataDir) {
   }
 }
 
-// 创建完善任务：冻结候选快照（缺失原因 + 指纹基线，基线为初始值，领取时按当前文档重冻结——
-// BUG-20260908-011：创建到领取之间的人工编辑不再使条目出局）。
-// REQ-20260909-011 通用子代理模式：mode/agent 缺省记 subagent（提示词单一通用版，不再按 Agent 分叉）；
-// 显式传 zcode / codex 仍合法（存量语义兼容）。幂等判断不再按 mode 分叉——通用化后仅一条完善线，
-// 存在任意未结束完善批次即幂等返回（存量在途批次同样幂等，避免并行批次）。
-// 候选口径 = 已接受未完善；新接受单由每轮 next 实时吸收（不再因创建时点冻结被排除）。
-// 并发重复派发保护：未结束完善批次已冻结条目不入新批；同线已有未结束批次 → 幂等返回
-// （BUG-20260908-012：不再要求队尾候选与当前一致——候选口径为每轮实时读取，
-// 创建后新接受的单由原批次每轮 next 吸收，不新建第二个未结束批次）。
+// 启动一轮批量完善（REQ-20260913-003 去批次化）：不再冻结候选快照、不再排队——
+// - 账本 candidates 置空（显式 ids 仅作队首种子，供终态任务单条目重建路径），每次领取实时读取
+//   当前已接受未完善队列（见 effectiveRefineCandidates / nextRefineItem）；基线指纹沿用
+//   「领取时冻结」口径（BUG-20260908-011：创建/吸收到领取之间的人工编辑不作为出局门槛）；
+// - 同一项目同一时间只有一轮完善执行：创建前盘点未结束账本，空转（无在途运行且无剩余）账本
+//   就地收尾后仍存在未结束账本 → 抛「已有进行中的完善任务」，不产生排队对象；
+// - 启动行为保持「复制调度提示词，登记运行后才算执行中」口径。
+// REQ-20260909-011 通用子代理模式：mode/agent 缺省记 subagent；显式传 zcode / codex 仍合法。
 // REQ-20260909-005：modelSource（follow | manual）来自调用方；follow 时忽略 model/level。
 export function createRefineBatch(dataDir, { ids = null, mode = REFINE_SUBAGENT_MODE, agent = null, developer = null, projectRoot, modelSource = null, model = null, level = null } = {}) {
   if (!REFINE_MODES.includes(mode)) throw new AtbError(`mode 必须是 ${REFINE_MODES.join(' | ')}，得到：${mode}`);
@@ -509,18 +510,11 @@ export function createRefineBatch(dataDir, { ids = null, mode = REFINE_SUBAGENT_
   void developer; // REQ-20260910-027：开发人员设置已移除，入参保留但忽略（不再校验/落账）
   const scoped = ids != null;
   if (scoped && !Array.isArray(ids)) throw new AtbError('ids 必须是编号数组');
-  let base = refineCandidates(dataDir);
-  if (scoped) {
-    const want = new Set(ids.filter((x) => typeof x === 'string'));
-    base = base.filter((x) => want.has(x.id));
-    if (!base.length) {
-      throw new AtbError('勾选的条目均不可完善：可能已完善或不在已接受状态，请重新勾选');
-    }
-  }
-  if (!base.length) throw new AtbError('没有可完善候选：已接受条目均已完善（或尚无已接受条目）');
 
-  // 队列盘点：收尾无在途运行且无剩余的空批就地 finished，防旧空批卡住幂等判断
-  const pending = [];
+  // 队列盘点（REQ-20260913-003：先于候选检查——已有进行中的一轮时，即便当前无新增候选
+  // 也必须以「重复启动」拒绝，不得误报「没有可完善候选」）：收尾无在途运行且无剩余（实时口径）
+  // 的空账本就地 finished，防旧空转轮卡住启动；其余未结束账本即进行中的一轮——
+  // 拒绝重复启动（不排队、不新建对象）。
   for (const b of unfinishedRefineBatches(dataDir)) {
     const st = refineBatchState(dataDir, b);
     const active = st.currentRun && !FINAL_REFINE_PHASES.has(st.currentRun.phase);
@@ -531,45 +525,35 @@ export function createRefineBatch(dataDir, { ids = null, mode = REFINE_SUBAGENT_
       }
       continue;
     }
-    pending.push(b);
+    throw new AtbError(
+      `已有进行中的完善任务（${b.status === 'prepared' ? '待启动' : '执行中'}）：同一时间只有一轮执行，无需重复启动；` +
+      '如需重开请先完成、恢复或终止当前任务',
+    );
   }
 
-  // 同线幂等（BUG-20260908-012 同模式口径，REQ-20260909-011 起不再按 mode 分叉——通用化后仅一条
-  // 完善线）：已有未结束批次 → 一律幂等返回最新（队尾）批次，不重复入队；
-  // 候选是否较创建时新增不再影响判断（新接受单由原批次每轮 next 实时吸收，用例 27 单进行中任务）。
-  // 勾选范围（--ids）创建路径维持原口径：勾选集合与队尾候选完全一致才幂等，否则按剩余候选新建。
-  const tail = pending[pending.length - 1] || null;
-  if (tail && !scoped) {
-    return { batch: tail, created: false, queued: pending.length > 1, queuePosition: pending.length };
-  }
-  if (tail && scoped) {
-    const frozenOther = new Set(pending.filter((b) => b !== tail).flatMap((b) => (b.candidates || []).map((c) => c.id)));
-    const freshNow = base.filter((x) => !frozenOther.has(x.id)).map((x) => x.id);
-    if (JSON.stringify((tail.candidates || []).map((c) => c.id)) === JSON.stringify(freshNow)) {
-      return { batch: tail, created: false, queued: pending.length > 1, queuePosition: pending.length };
+  let base = refineCandidates(dataDir);
+  if (scoped) {
+    const want = new Set(ids.filter((x) => typeof x === 'string'));
+    base = base.filter((x) => want.has(x.id));
+    if (!base.length) {
+      throw new AtbError('勾选的条目均不可完善：可能已完善或不在已接受状态，请重新勾选');
     }
   }
-
-  // 新候选：排除所有未结束完善批次已冻结的条目（跨模式；两条完善线不同时改同一批文档）
-  const frozenBefore = new Set(pending.flatMap((b) => (b.candidates || []).map((c) => c.id)));
-  const candidates = base.filter((x) => !frozenBefore.has(x.id));
-  if (!candidates.length) {
-    throw new AtbError(pending.length
-      ? '没有新的可完善候选：未完善的已接受条目均已进入更早的未结束完善任务'
-      : '没有可完善候选：已接受条目均已完善（或尚无已接受条目）');
-  }
+  if (!base.length) throw new AtbError('没有可完善候选：已接受条目均已完善（或尚无已接受条目）');
 
   const { id: batchId } = nextRefineId(dataDir, 'batch');
-  const frozen = candidates.map((x) => {
+  // REQ-20260913-003：不再冻结候选——缺省 seed 为空（领取时实时读取已接受未完善队列），
+  // 仅显式 ids（终态任务单条目重建）作为队首种子落账（带基线/缺失原因快照）。
+  const seed = scoped ? base.map((x) => {
     const dir = resolveItemDir(dataDir, x.id).dir;
     return { id: x.id, type: x.type, title: x.title, reasons: [...x.reasons], baseline: docsFingerprint(dir) };
-  });
+  }) : [];
   const batch = {
     version: 1,
     batchId,
     kind: 'refine',
     mode,
-    agent: execAgent, // REQ-20260908-020：执行 Agent（zcode | codex），子代理模式双 Agent 差异化提示词的依据
+    agent: execAgent, // REQ-20260908-020：执行 Agent（子代理模式双 Agent 差异化提示词的依据）
     projectRoot,
     // REQ-20260910-027：developer 字段不再写（存量账本保留不迁移，读取侧不透出）
     createdAt: nowIso(),
@@ -578,14 +562,14 @@ export function createRefineBatch(dataDir, { ids = null, mode = REFINE_SUBAGENT_
     pauseRequested: false,
     abortRequested: false,
     currentRunId: null,
-    candidates: frozen,
+    candidates: seed,
     // BUG-20260910-008：创建时按当前开关分态冻结提示词（关闭=原口径零回归；开启=附系统流转说明，
-    // 防止 Agent 把 done 后系统 accepted → planned 误判为约束违反而暂停批次推进）
-    prompt: buildRefinePrompt({ projectRoot, batchId, agent: execAgent, modelSource: modelSource === 'follow' ? 'follow' : (modelSource === 'manual' ? 'manual' : null), model: modelSource === 'follow' ? null : model, level: modelSource === 'follow' ? null : level, autoPlan: refineAutoPlanOn(dataDir) }),
+    // 防止 Agent 把 done 后系统 accepted → planned 误判为约束违反而暂停推进）
+    prompt: buildRefinePrompt({ projectRoot, agent: execAgent, modelSource: modelSource === 'follow' ? 'follow' : (modelSource === 'manual' ? 'manual' : null), model: modelSource === 'follow' ? null : model, level: modelSource === 'follow' ? null : level, autoPlan: refineAutoPlanOn(dataDir) }),
   };
   fs.mkdirSync(path.dirname(refineBatchPath(dataDir, batchId)), { recursive: true });
   saveRefineBatch(dataDir, batch);
-  return { batch, created: true, queued: pending.length > 0, queuePosition: pending.length + 1 };
+  return { batch, created: true };
 }
 
 // ---------- 运行账本 ----------
@@ -680,7 +664,9 @@ function refineBatchState(dataDir, batch) {
     currentRun = runs.find((r) => r.runId === batch.currentRunId)
       || readJson(path.join(refineRunDir(dataDir, batch.currentRunId), 'run.json'));
   }
-  const counts = { total: batch.candidates.length, done: 0, failed: 0, skipped: 0, interrupted: 0, remaining: 0 };
+  // REQ-20260913-003：候选按实时口径盘点（不再依赖建轮时冻结快照）
+  const candidates = effectiveRefineCandidates(dataDir, batch);
+  const counts = { total: candidates.length, done: 0, failed: 0, skipped: 0, interrupted: 0, remaining: 0 };
   for (const r of finalByItem.values()) {
     if (reacceptable.has(r.itemId) || retryItems.has(r.itemId)) continue; // 重新排队待处理：不占终态计数
     if (r.phase === 'done') counts.done++;
@@ -688,7 +674,7 @@ function refineBatchState(dataDir, batch) {
     else if (r.phase === 'skipped') counts.skipped++;
     else if (r.phase === 'interrupted') counts.interrupted++;
   }
-  counts.remaining = batch.candidates
+  counts.remaining = candidates
     .filter((c) => !finalByItem.has(c.id) || reacceptable.has(c.id) || retryItems.has(c.id)).length;
   return { runs, finalByItem, activeByItem, reacceptable, retryItems, currentRun, counts };
 }
@@ -750,25 +736,34 @@ export function releaseRefineLockForRun(dataDir, runId, owner) {
 
 // ---------- 领取与回执（zcode worker 入口） ----------
 
-// REQ-20260908-020 实时队列：领取时吸收「创建任务之后新接受」的未完善条目——调度不依赖
-// 创建时冻结的候选快照（与批量开发 batch next 吸收 planned 的口径对齐）；
-// 吸收的条目须排除已冻结在其他未结束任务中的（一个条目至多属于一个任务，防重复完善）。
-// 指纹基线在吸收时逐项冻结为初始值，领取时按当前文档重冻结（BUG-20260908-011：
-// 吸收到领取之间的人工编辑同样不作为出局门槛）。
-function absorbNewRefineCandidates(dataDir, batch) {
-  const known = new Set(batch.candidates.map((c) => c.id));
+// 实时候选（REQ-20260913-003）：本轮执行不再冻结候选快照——每次盘点都实时读取当前已接受
+// 未完善队列（需求优先、最旧优先）。返回生效候选 = 账本已登记候选（含显式 ids 队首种子与存量
+// 账本，带基线/缺失原因快照）∪ 当前实时候选（物化为候选对象，基线为当前指纹的初始值——
+// 领取时按当前文档重冻结，BUG-20260908-011 口径不变；排除其他未结束账本已登记条目，兼容存量数据）。
+export function effectiveRefineCandidates(dataDir, batch) {
+  const known = new Set((batch.candidates || []).map((c) => c.id));
   for (const other of unfinishedRefineBatches(dataDir)) {
     if (other.batchId !== batch.batchId) {
       for (const c of other.candidates || []) known.add(c.id);
     }
   }
   const fresh = refineCandidates(dataDir).filter((x) => !known.has(x.id));
+  const materialized = fresh.map((x) => {
+    let baseline = '';
+    try { baseline = docsFingerprint(resolveItemDir(dataDir, x.id).dir); } catch { /* 目录异常：留空，领取时再冻结 */ }
+    return { id: x.id, type: x.type, title: x.title, reasons: [...x.reasons], baseline };
+  });
+  return [...(batch.candidates || []), ...materialized];
+}
+
+// 实时吸收落盘（REQ-20260908-020 沿革）：把实时候选物化进账本（领取核验 done 时要按账本候选的
+// 基线比对「文档确有变更」）。调用点：next / check / summary / 回执收尾 / 释放 / 结算——展示层
+// 摘要读取同样吸收，保证面板待处理队列实时（新接受的单立即可见、立即可领取）。
+function absorbNewRefineCandidates(dataDir, batch) {
+  const known = new Set(batch.candidates.map((c) => c.id));
+  const fresh = effectiveRefineCandidates(dataDir, batch).filter((c) => !known.has(c.id));
   if (fresh.length) {
-    const frozen = fresh.map((x) => {
-      const dir = resolveItemDir(dataDir, x.id).dir;
-      return { id: x.id, type: x.type, title: x.title, reasons: [...x.reasons], baseline: docsFingerprint(dir) };
-    });
-    batch.candidates.push(...frozen);
+    batch.candidates.push(...fresh);
     saveRefineBatch(dataDir, batch);
   }
 }
@@ -800,12 +795,12 @@ export function nextRefineItem(dataDir, batchId, { owner = null } = {}) {
   owner = owner || actor();
   ensureRefine(dataDir);
   const batch = getRefineBatch(dataDir, batchId);
-  // 排队保护：存在更早的未结束完善批次时不得越过队首领取
+  // 存量数据排队保护：存在更早的未结束完善账本时不得越过队首领取
   const prior = unfinishedRefineBatches(dataDir).find((b) => b.batchId !== batchId &&
     (String(b.createdAt || '').localeCompare(String(batch.createdAt || '')) < 0 ||
       (String(b.createdAt || '') === String(batch.createdAt || '') && b.batchId < batchId)));
   if (prior) {
-    throw new AtbError(`完善批次 ${batchId} 排队中：前序批次 ${prior.batchId} 尚未结束，不得抢先领取`);
+    throw new AtbError(`完善任务 ${batchId} 排队中：前序任务 ${prior.batchId} 尚未结束，不得抢先领取`);
   }
   if (batch.abortRequested) {
     return { stop: 'aborted', counts: refineBatchState(dataDir, batch).counts, notice: '任务已终止：不再派发后续项' };
@@ -1095,7 +1090,9 @@ export function abortRefineBatch(dataDir, batchId) {
     setRefineItemState(dataDir, r.itemId, 'unrefined', { runId: r.runId });
   }
   const handled = new Set([...state.finalByItem.keys(), ...state.activeByItem.keys()]);
-  for (const cand of batch.candidates) {
+  // REQ-20260913-003：剩余项按实时口径出局（建轮不冻结——账本 candidates 可能为空，
+  // 实时候选同样需要落 skipped 出局账，终止后计数才归零）
+  for (const cand of effectiveRefineCandidates(dataDir, batch)) {
     if (handled.has(cand.id)) continue;
     skipRun(dataDir, batch, cand, '任务终止，剩余项出局');
   }
@@ -1179,7 +1176,7 @@ export function checkRefineBatch(dataDir, batchId) {
     notice = '已暂停后续领取（在途执行不受影响）';
   } else if (state.counts.remaining === 0) {
     nextAction = 'stop';
-    notice = '本批完善范围已处理完毕（条目均保持已接受，后续流转由人工判断）';
+    notice = '本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）';
     if (batch.status !== 'finished') {
       batch.status = 'finished';
       saveRefineBatch(dataDir, batch);
@@ -1310,7 +1307,7 @@ export function refineSummary(dataDir, batchId = null) {
 // 归一到 ON/OFF 文案（两方向，幂等；账本不回写）；缺省不触碰约束行（既有调用零回归）
 export function refineBatchPublicView(b, { autoPlan = null } = {}) {
   return {
-    batchId: b.batchId,
+    // REQ-20260913-003：批次号不再透出（面板/全局视图去批次概念；账本内部键保留）
     mode: b.mode,
     agent: b.agent || b.mode, // REQ-20260908-020：执行 Agent（存量批次缺字段回退 mode）
     status: b.status,
@@ -1334,7 +1331,6 @@ export function refineBatchBrief(dataDir, batchOrId) {
   const cur = state.currentRun;
   return {
     kind: 'refine',
-    batchId: b.batchId,
     mode: b.mode,
     status: b.status,
     pauseRequested: Boolean(b.pauseRequested),

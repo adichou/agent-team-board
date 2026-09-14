@@ -994,7 +994,8 @@ async function refineCmd(rest) {
       notice: s.check.notice || null,
     };
     if (jsonOut) { console.log(JSON.stringify(payload)); return; }
-    console.log(`完善批次 ${s.batch.batchId} [${s.batch.status}]（${s.batch.mode}）  nextAction: ${s.check.nextAction}`);
+    // REQ-20260913-003：公开视图不再透出批次号——文本摘要按本轮执行状态输出
+    console.log(`完善任务 [${s.batch.status}]（${s.batch.mode}）  nextAction: ${s.check.nextAction}`);
     console.log(`  计数：${JSON.stringify(s.counts)}`);
     if (s.currentRun) console.log(`  当前执行：${s.currentRun.itemId}（${s.currentRun.runId}，${s.currentRun.phase}）`);
     for (const rec of s.records) console.log(`  · ${rec.itemId} ${rec.result} ${rec.at}${rec.summary ? `（${rec.summary}）` : ''}${rec.reason ? `（${rec.reason}）` : ''}`);

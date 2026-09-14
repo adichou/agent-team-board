@@ -59,7 +59,8 @@ export function normalizePromptModelLine(prompt) {
 export const REFINE_SCHEDULER_KEEP_ACCEPTED_LINE = '硬性约束：条目全程保持 accepted（已接受）；不要修改业务源码；不要修改条目 status.json；';
 export const REFINE_SCHEDULER_AUTO_PLAN_LINES = [
   '硬性约束：完善期间条目保持 accepted（已接受）；不要修改业务源码；不要修改条目 status.json；',
-  '不要执行 atb status（改条目状态仅限人工与系统）；本批已开启「完善完成后自动转入计划」：',
+  // REQ-20260913-003：「本批」→「本轮」（去批次概念；存量冻结的「本批已开启」由归一层统一改写）
+  '不要执行 atb status（改条目状态仅限人工与系统）；本轮已开启「完善完成后自动转入计划」：',
   '子代理 refine done 回执核验通过后，系统（非 Agent）会自动把条目 accepted → planned（回显「已自动转入计划」）；',
   '看到该输出或条目变为 planned 均属预期系统行为，不要据此暂停、中止或等待人工确认——照常 refine check，',
   'nextAction=continue 时继续派发下一个子代理；',
@@ -122,6 +123,17 @@ const LEGACY_DEV_HEAD = '每轮新启动一个 general-purpose 子 Agent，按�
 const LEGACY_DEV_BODY = '一个可实施条目，认领、实施、测试并上报。每个子 Agent 只做一项。';
 const LEGACY_CODEX_NOTE_RE = /^codex 口径：领取\/回执命令在子会话内执行（工作目录用 --dir .* 指定）；$/;
 
+// REQ-20260913-003 去批次概念：现行生成层的头行（批量开发 / 批量完善），与 batch.generatePrompt /
+// refine.buildRefinePrompt 的现行输出逐字一致——归一层把存量冻结的旧头行（含「本批」口径）统一
+// 归一到这两行；旧头行常量（DEV_HEAD_LINE / REFINE_HEAD_* / REFINE_NAME_*）即旧口径的精确形态。
+const DEV_HEAD_NOW = '每轮新启动一个子代理，按执行规范领取当前队列中最早的一个可实施条目，认领、实施、测试并上报。';
+const REFINE_HEAD_NOW = '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。';
+// REQ-20260913-003：存量冻结提示词的批次行删除规则（整行精确/前缀形态，展示层，账本不回写）——
+// 「批次：…」「完善批次：…」行删除；nextBatch 排队接续行删除；「只传…批次标识…」行换现行口径。
+const LEGACY_BATCH_LINE_RE = /^(批次|完善批次)：\S+/;
+const LEGACY_DEV_SCOPE_LINE = '只传本项目、批次标识与规范路径，不复制本会话的历史实施记录。';
+const DEV_SCOPE_LINE_NOW = '只传项目根与规范路径，不复制本会话的历史实施记录。';
+
 // BUG-20260910-008：整行连续序列替换（完善约束段 OFF ⇄ ON 两方向归一共用）——命中 from 数组
 // 的完整连续行序列时整段替换为 to，全部出现处均替换；未命中原样返回（幂等）。
 function replaceLineSeq(lines, from, to) {
@@ -148,8 +160,16 @@ function replaceLineSeq(lines, from, to) {
 export function normalizePromptForDisplay(prompt, { autoPlan = null } = {}) {
   if (typeof prompt !== 'string' || !prompt) return prompt;
   // 领取前缀归一（字符串级字面量替换，不碰其余文本）
-  const text = prompt.split('--by zcode-refine-').join('--by refine-')
-    .split('--by codex-refine-').join('--by refine-');
+  let text = prompt.split('--by zcode-refine-').join('--by refine-')
+    .split('--by codex-refine-').join('--by refine-')
+    // REQ-20260913-003：完善领取前缀去批次尾号（refine-<批次尾号>-<序号> → refine-<序号>）
+    .split('--by refine-<批次尾号>-<序号>').join('--by refine-<序号>');
+  // REQ-20260913-003：核对入口去批次标识——「批次摘要入口」前缀换「调度核对入口」，
+  // `--batch <id>` 实参整体移除（含前导空格）；对新版生成输出幂等（新版不含这些形态）。
+  if (text.includes('批次')) {
+    text = text.split('批次摘要入口：').join('调度核对入口：')
+      .replace(/ ?--batch \S+/g, '');
+  }
   const lines = text.split('\n');
   let out = [];
   let lastPushed = null;
@@ -158,6 +178,10 @@ export function normalizePromptForDisplay(prompt, { autoPlan = null } = {}) {
     if (LEGACY_MODEL_LINE_RE.test(s)) { out.push(FOLLOW_SESSION_PROMPT_LINE); lastPushed = FOLLOW_SESSION_PROMPT_LINE; continue; }
     if (s.startsWith(LEGACY_FOLLOW_LINE_PREFIX) && s !== FOLLOW_SESSION_PROMPT_LINE) { out.push(FOLLOW_SESSION_PROMPT_LINE); lastPushed = FOLLOW_SESSION_PROMPT_LINE; continue; }
     if (isLegacyExecLine(s)) continue; // 执行端行删除
+    // REQ-20260913-003：批次行与排队接续说明行删除（展示层，账本不回写）
+    if (LEGACY_BATCH_LINE_RE.test(s)) continue;
+    if (s.includes('nextBatch')) continue;
+    if (s === LEGACY_DEV_SCOPE_LINE) { out.push(DEV_SCOPE_LINE_NOW); lastPushed = DEV_SCOPE_LINE_NOW; continue; }
     if (LEGACY_CODEX_NOTE_RE.test(s)) {
       out.push('领取/回执命令在子代理会话内执行（工作目录用 --dir 指定）。');
       lastPushed = out[out.length - 1];
@@ -193,6 +217,22 @@ export function normalizePromptForDisplay(prompt, { autoPlan = null } = {}) {
   // 对现行生成输出幂等。
   out = replaceLineSeq(out, [LEGACY_REFINE_BUG_DOC_LINE], REFINE_BUG_DOC_LINES);
   out = replaceLineSeq(out, [LEGACY_REFINE_DEMO_PERMIT_REQ_ONLY], [REFINE_DEMO_PERMIT_LINE]);
+  // REQ-20260913-003：头行归一到现行「当前队列中最早」口径（两行拆分形态与单行旧句均收敛；
+  // 对现行生成输出幂等——现行输出即 DEV_HEAD_NOW / REFINE_HEAD_NOW，不再命中旧序列）
+  out = replaceLineSeq(out, [DEV_HEAD_LINE], [DEV_HEAD_NOW]);
+  out = replaceLineSeq(out, [REFINE_HEAD_FULL], [REFINE_HEAD_NOW]);
+  out = replaceLineSeq(out, [REFINE_HEAD_SPLIT, REFINE_NAME_WITH_BODY], [REFINE_HEAD_NOW]);
+  // REQ-20260913-003：措辞级收尾（旧头行归一后仍可能残留的批次量词）——「批次调度员」→
+  // 「批量开发调度员」、「批次计数」→「本轮计数」、「本批」→「本轮」（含 AUTO_PLAN 约束段的
+  // 「本批已开启」，与 REFINE_SCHEDULER_AUTO_PLAN_LINES 现行「本轮已开启」措辞对齐，使下方
+  // 开关分态整段替换仍可命中）。对新版生成输出幂等（新版不含这些措辞）。
+  if (out.some((l) => l.includes('批'))) {
+    out = out.join('\n')
+      .split('批次调度员').join('批量开发调度员')
+      .split('批次计数').join('本轮计数')
+      .split('本批').join('本轮')
+      .split('\n');
+  }
   // BUG-20260910-008：完善约束段按开关分态归一（其余规则之上最后套用；对现行生成输出幂等）
   if (autoPlan === true) {
     out = replaceLineSeq(out, [REFINE_SCHEDULER_KEEP_ACCEPTED_LINE], REFINE_SCHEDULER_AUTO_PLAN_LINES);
