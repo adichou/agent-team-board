@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-012",
+  "type": "bug",
+  "title": "main 分支的推送按钮不需要，请去掉",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-012",
+  "createdAt": "2026-09-14T05:24:04.771Z",
+  "updatedAt": "2026-09-14T06:56:11.094Z",
+  "agentCompletedAt": "2026-09-14T06:56:11.094Z",
+  "lastReport": {
+    "at": "2026-09-14T06:56:11.094Z",
+    "coverage": 100,
+    "framework": "node:test-style custom scripts/tests/run-all.mjs (229 files) + vm 行为测试",
+    "summary": "分支浏览本地分组 main 行不再渲染「推送」按钮（renderBranchesPane 条件省略，行保留可浏览）；服务端不封禁 push（design.md 落定）；关联更新 006/011 测试载荷使 attn 断言基于非 main 分支；新增 4 用例 + 全量 229 文件回归通过",
+    "runId": "run-20260914-235"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T05:24:04.771Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T05:24:04.772Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T05:38:25.572Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-133158-013c）"
+    },
+    {
+      "at": "2026-09-14T06:47:12.469Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-012",
+      "note": "认领（zcode-batch-048-BUG-20260914-012）"
+    },
+    {
+      "at": "2026-09-14T06:56:11.094Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-012",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}
