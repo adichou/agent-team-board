@@ -6150,6 +6150,10 @@ function renderRefinePanel() {
   const rec = data.current;
   const lastReceipt = (data.records || [])[0] || null;
   const batchDone = b.status === 'finished' && (counts.remaining ?? 0) === 0;
+  // BUG-20260914-001：正常收尾态（finished、未终止、未暂停、剩余 0）时服务端 notice 即收尾文案
+  // （checkRefineBatch 同口径生成，与 CLI `atb refine check` 逐字一致），改由下方绿色 notice ok 条
+  // 单条承接展示，不再以普通 notice 叠加重复渲染；终止/暂停/运行中等其余场景 notice 展示口径不变
+  const doneNoticeOnly = batchDone && !b.aborted && !b.pauseRequested;
   // BUG-20260908-015：终态批次（已终止/已结束）不再提供「暂停后续」入口，与「终止任务」收尾后隐藏口径一致
   const batchTerminal = b.aborted || b.status === 'finished';
   // BUG-20260908-014：重启动口按「批次已收尾」判定（含终止态），终止后仍可启动新任务；
@@ -6173,10 +6177,10 @@ function renderRefinePanel() {
         <span class="chip batch-st ${b.aborted ? 's-aborted' : `s-${esc(b.status)}`}">${b.aborted ? '已终止' : batchStatusLabel(b.status)}</span>
         <span class="muted small">${taskAgentModeText(b)} · 创建 ${fmtTime(b.createdAt)}</span>
       </div>
-      ${data.notice ? `<div class="notice">${esc(data.notice)}</div>` : ''}
+      ${data.notice && !doneNoticeOnly ? `<div class="notice">${esc(data.notice)}</div>` : ''}
       ${b.aborted ? '<div class="notice warn">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止；终止后可立即「启动新一轮」。</div>' : ''}
       ${b.pauseRequested ? '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>' : ''}
-      ${batchDone && !b.aborted ? '<div class="notice ok">本轮完善队列已处理完毕（条目保持已接受，后续流转由人工判断）。</div>' : ''}
+      ${batchDone && !b.aborted ? `<div class="notice ok">${esc(data.notice || '本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）')}</div>` : ''}
       ${batchDone ? `<div class="drawer-actions batch-actions">
         <button type="button" class="btn primary" id="refineNext" ${nextDisabled ? `disabled title="${nextTitle}"` : `title="${nextTitle}"`}>启动新一轮</button>
       </div>` : ''}

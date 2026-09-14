@@ -684,7 +684,7 @@ const EN = {
   '本轮已处理完毕': 'This round is fully processed',
   '排队中': 'Queued',
   '已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。': 'Planned; development processes the oldest first automatically. Before it starts, "Remove from plan" reverts it to accepted.',
-  '本轮完善队列已处理完毕（条目保持已接受，后续流转由人工判断）。': 'This refine round is fully processed (items stay accepted; next steps are up to you).',
+  '本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）': 'This refine round is fully processed (items all stay accepted; next steps are up to you).',
   '保留原记录并增加一次执行尝试；不可重试时会给出原因与后续操作': 'Keeps the original record and adds one more attempt; when retry is impossible, the reason and next steps are shown',
   '全选：仅勾选当前筛选档内可见的可操作条目（待接受 / 已接受 / 已计划；叠搜索范围）': 'Select all: checks only operable items visible in the current lane (pending / accepted / planned; scoped by search)',
   '复制文件相对路径': 'Copy the file\'s relative path',
