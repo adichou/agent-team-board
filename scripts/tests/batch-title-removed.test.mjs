@@ -90,8 +90,8 @@ t('T1 动态渲染：批量完善子面板头部无「任务」大标题，其�
   assert.doesNotMatch(head, /class="batch-head"/, '头部不应再渲染 .batch-head 行（BUG-20260909-014 整行移除）');
   assert.doesNotMatch(head, /class="path"/, '头部不应再渲染项目路径 span.path（顶栏 #dataDir 已展示）');
   assert.doesNotMatch(head, /id="batchClose"/, '头部不应再渲染「✕」关闭按钮（离开模块走导航页签）');
-  assert.match(head, /data-bmode="refine"[^>]*>批量完善</, '「批量完善」子面板 Tab 应保留');
-  assert.match(head, /data-bmode="develop"[^>]*>批量开发</, '「批量开发」子面板 Tab 应保留');
+  assert.match(head, /data-bmode="refine"[^>]*>AI 分析</, '「AI 分析」子面板 Tab 应保留（REQ-20260913-005 改名）');
+  assert.match(head, /data-bmode="develop"[^>]*>AI 开发</, '「AI 开发」子面板 Tab 应保留（REQ-20260913-005 改名）');
   assert.match(head, /<header class="drawer-head">/, '抽屉头部容器结构保留（样式由 .drawer-head 承担）');
 });
 

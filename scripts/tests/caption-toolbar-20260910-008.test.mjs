@@ -216,14 +216,14 @@ t('L4 按档显隐：待接受/已接受/已计划 全选与全不选可见，�
   h.state.reqFilter = 'accepted';
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '已接受档快捷入口可见');
-  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ 开始完善', '已接受档文案');
+  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ 开始 AI 分析', '已接受档文案（REQ-20260913-005 改名）');
   h.state.plan.selected.add('REQ-20990101-001');
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '快捷入口与勾选无关（右组出现仍可见）');
   h.state.plan.selected.clear();
   h.state.reqFilter = 'planned';
   h.run('syncAcceptance()');
-  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ 开始开发', '已计划档文案');
+  assert.equal(h.document.querySelector('#laneQuickEntry').textContent, '▶ 开始 AI 开发', '已计划档文案（REQ-20260913-005 改名）');
   // REQ-20260911-010：已完成档「开始 Commit」快捷入口已随批量 Commit 回退移除
   // （详见 lane-quick-entry-commit-20260911-005.test.mjs），本测试守 done 与其余三档均隐藏
   h.state.reqFilter = 'done';

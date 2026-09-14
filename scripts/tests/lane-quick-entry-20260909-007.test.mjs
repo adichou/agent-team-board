@@ -129,14 +129,14 @@ t('Q2 显隐与文案：已接受档「▶ 开始完善」（title 含批量完�
   h.run("state.reqFilter = 'accepted'");
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '已接受档显示快捷按钮');
-  assert.equal(btn.textContent, '▶ 开始完善', '已接受档文案');
-  assert.match(btn.title, /批量完善/, '已接受档 title 指向批量完善面板');
+  assert.equal(btn.textContent, '▶ 开始 AI 分析', '已接受档文案（REQ-20260913-005 改名）');
+  assert.match(btn.title, /AI 分析/, '已接受档 title 指向 AI 分析面板');
   assert.match(btn.title, /与勾选无关/, '已接受档 title 说明与勾选无关');
   h.run("state.reqFilter = 'planned'");
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '已计划档显示快捷按钮');
-  assert.equal(btn.textContent, '▶ 开始开发', '已计划档文案');
-  assert.match(btn.title, /批量开发/, '已计划档 title 指向批量开发面板');
+  assert.equal(btn.textContent, '▶ 开始 AI 开发', '已计划档文案（REQ-20260913-005 改名）');
+  assert.match(btn.title, /AI 开发/, '已计划档 title 指向 AI 开发面板');
   assert.match(btn.title, /已计划队列/, '已计划档 title 说明范围=已计划队列（BUG-20260909-006 口径）');
   // BUG-20260911-005：done 档改由「开始 Commit」快捷入口接管（详见 lane-quick-entry-commit-20260911-005.test.mjs），
   // 本测试只守其余三档（待接受 / 开发中 / 待测试）不显示
@@ -149,7 +149,7 @@ t('Q2 显隐与文案：已接受档「▶ 开始完善」（title 含批量完�
   h.state.reqFilter = 'accepted';
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false);
-  assert.equal(btn.textContent, '▶ 开始完善');
+  assert.equal(btn.textContent, '▶ 开始 AI 分析');
 });
 
 // Q3 「开始完善」点击行为：gotoRuns('refine')——切任务模块 + 拉取完善面板数据；不创建任务、无确认弹窗

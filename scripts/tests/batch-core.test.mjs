@@ -499,7 +499,7 @@ t('Z15 在途 run 未收尾：next 拒绝再派（不产生第二实施任务）
     const sum = batch.batchSummary(p.dataDir, bt.batchId);
     assert.equal(sum.batch.batchId, bt.batchId);
     assert.ok(sum.currentRun && sum.currentRun.runId === run.runId, '摘要应含当前执行');
-    assert.ok(sum.batch.prompt.includes('批量开发调度员'), '摘要应可取续接提示词（去批次口径，REQ-20260913-003）');
+    assert.ok(sum.batch.prompt.includes('AI 开发调度员'), '摘要应可取续接提示词（去批次口径，REQ-20260913-003；REQ-20260913-005 改名）');
     assert.ok(Array.isArray(sum.records), '摘要应含执行记录');
     // 未收尾不得被续接抢占：模拟新主会话同样被拒
     assert.throws(() => batch.nextItem(p.dataDir, bt.batchId, { owner: 'zcode-new-main' }), /在途|核对|未收尾/);

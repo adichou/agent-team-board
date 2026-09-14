@@ -290,7 +290,7 @@ t('D4 usage 文案：说明开启开关时 done 后系统自动 accepted → pla
 
 t('E1 行为零回归：done 流转输出 / autoPlanRefinedItem 接入 / state-guard / HUMAN_ONLY_TO 契约不变', () => {
   const cli = fs.readFileSync(ATB, 'utf8');
-  assert.match(cli, /已自动转入计划：\$\{receipt\.itemId\}（accepted → planned，进入批量开发候选）/, 'done 成功流转输出行不变');
+  assert.match(cli, /已自动转入计划：\$\{receipt\.itemId\}（accepted → planned，进入 AI 开发候选）/, 'done 成功流转输出行不变（REQ-20260913-005 改名）');
   assert.match(cli, /未开启自动转入计划：需人工移入计划（设置 → 批量任务 → 完善完成后自动转入计划）/, 'done 未开启输出行不变');
   const lib = fs.readFileSync(path.join(pluginRoot, 'scripts', 'lib', 'refine-store.mjs'), 'utf8');
   assert.match(lib, /autoPlanRefinedItem\(dataDir, run\.itemId, runId\)/, 'finishRefineRun 仍内部接入自动流转');

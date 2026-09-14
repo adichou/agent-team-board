@@ -207,7 +207,7 @@ t('RT-06 存量冻结提示词展示归一：批次行/摘要入口/接续/完�
   const dev = taskSettings.normalizePromptForDisplay(legacyDev);
   for (const w of ['批次', 'batchId', '--batch', 'nextBatch']) assert.ok(!dev.includes(w), `归一后开发提示词仍含「${w}」`);
   assert.ok(dev.includes('调度核对入口') && dev.includes('batch check --dir'), '摘要入口应归一为无批次核对入口');
-  assert.ok(dev.includes('批量开发调度员'), '调度员措辞应去批次');
+  assert.ok(dev.includes('AI 开发调度员'), '调度员措辞应去批次并按 REQ-20260913-005 用新名');
 
   const legacyRf = [
     '你是当前项目的批量完善调度员，只负责派发与接收短回执。',

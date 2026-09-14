@@ -100,8 +100,8 @@ t('N1 一级页签「批量完善 / 批量开发」独立保留；二级页签�
   const html = drawer.innerHTML;
   const modes = html.match(/<nav class="tabs batch-modes">[\s\S]*?<\/nav>/);
   assert.ok(modes, '一级页签行 .tabs.batch-modes 应保留');
-  assert.match(modes[0], /data-bmode="refine"[^>]*>批量完善</, '「批量完善」一级页签保留');
-  assert.match(modes[0], /data-bmode="develop"[^>]*>批量开发</, '「批量开发」一级页签保留');
+  assert.match(modes[0], /data-bmode="refine"[^>]*>AI 分析</, '「AI 分析」一级页签保留（REQ-20260913-005 改名）');
+  assert.match(modes[0], /data-bmode="develop"[^>]*>AI 开发</, '「AI 开发」一级页签保留（REQ-20260913-005 改名）');
   assert.doesNotMatch(modes[0], /data-task-pane/, '一级页签行不得混入二级页签');
   // 位置契约：一级页签 → 二级页签 → 分区内容
   const pModes = html.indexOf('class="tabs batch-modes"');
