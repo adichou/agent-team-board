@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-015 演示 · AI 分析 / AI 开发执行中时快捷入口按钮无状态变化</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1c2436; --border: #2a3450;
+    --text: #dbe2f4; --muted: #8b96b3; --link: #6ea8fe;
+    --primary: #3b82f6; --danger: #ef4444; --warn-text: #fbbf24; --warn-border: rgba(251, 191, 36, 0.4);
+    --ok-text: #4ade80; --ok-bg: rgba(34, 197, 94, 0.10); --ok-border: rgba(74, 222, 128, 0.35);
+    --warn-bg: rgba(220, 38, 38, 0.10); --danger-text: #f87171;
+    --info-text: #7dd3fc; --info-bg: rgba(56, 189, 248, 0.10);
+    --chip-ref: #fbbf24; --chip-ref-bg: rgba(251, 191, 36, 0.12);
+  }
+  html[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef1f8; --border: #d4dae8;
+    --text: #1f2740; --muted: #5f6a85; --link: #1d66d0;
+    --primary: #2563eb; --danger: #dc2626; --warn-text: #a16207; --warn-border: rgba(202, 138, 4, 0.45);
+    --ok-text: #15803d; --ok-bg: rgba(22, 163, 74, 0.10); --ok-border: rgba(22, 163, 74, 0.35);
+    --warn-bg: rgba(220, 38, 38, 0.08); --danger-text: #b91c1c;
+    --info-text: #0369a1; --info-bg: rgba(14, 165, 233, 0.10);
+    --chip-ref: #a16207; --chip-ref-bg: rgba(202, 138, 4, 0.12);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 18px 16px 70px; }
+  a { color: var(--link); }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+
+  /* ===== 演示控制面板 ===== */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+  .seg button { appearance: none; border: 0; background: transparent; color: var(--muted); padding: 5px 14px; cursor: pointer; font-size: 12.5px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  select { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; }
+  .demo-note { color: var(--muted); font-size: 12px; margin: 8px 0 14px; }
+  .demo-note b { color: var(--text); }
+  .defect-mark { color: var(--danger-text); font-weight: 600; }
+  .fixed-mark { color: var(--ok-text); font-weight: 600; }
+
+  /* ===== 看板骨架 ===== */
+  .board { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .pill { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 99px; padding: 4px 16px; cursor: pointer; font-size: 13px; }
+  .pill.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .poll { margin-left: auto; font-size: 12px; color: var(--ok-text); cursor: help; }
+  .poll.off { color: var(--danger-text); }
+  .poll.pulse { animation: pulse 0.6s ease; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+
+  .filterbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 8px; }
+  .fchip { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 99px; padding: 2px 12px; cursor: pointer; font-size: 12.5px; }
+  .fchip.on { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .fchip .cnt { opacity: 0.75; font-size: 11.5px; }
+
+  .caption { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 7px 0; }
+  .caption .hint { color: var(--muted); font-size: 12px; }
+  .btn { appearance: none; border: 1px solid var(--border); background: var(--panel2); color: var(--text); border-radius: 8px; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .sel-group { display: inline-flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  /* 本 Bug 焦点按钮：缺陷/修复高亮外框（仅演示标注，真实看板无此框） */
+  #laneQuickEntry.focus-defect { outline: 2px dashed var(--danger-text); outline-offset: 2px; }
+  #laneQuickEntry.focus-fixed { outline: 2px dashed var(--ok-text); outline-offset: 2px; }
+
+  .rows { padding: 8px 0 2px; }
+  .row { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 8px; }
+  .row:hover { background: var(--panel2); }
+  .row .cid { color: var(--link); font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+  .row .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { border: 1px solid var(--border); border-radius: 99px; padding: 1px 9px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .badge.refining { color: var(--chip-ref); border-color: var(--warn-border); background: var(--chip-ref-bg); }
+  .badge.state { color: var(--muted); }
+  .empty { color: var(--muted); text-align: center; padding: 26px 0 18px; font-size: 12.5px; }
+  .loading { color: var(--muted); padding: 26px 0 18px; text-align: center; font-size: 12.5px; }
+
+  .notice { border-radius: 8px; padding: 7px 12px; margin: 10px 0 0; font-size: 12.5px; }
+  .notice.warn { background: var(--warn-bg); color: var(--danger-text); border: 1px solid rgba(239, 68, 68, 0.35); }
+  .notice.info { background: var(--info-bg); color: var(--info-text); border: 1px solid rgba(56, 189, 248, 0.3); }
+
+  /* ===== 任务面板（跳转目的地，简化示意） ===== */
+  .drawer { position: fixed; top: 0; right: -420px; width: 400px; max-width: 92vw; height: 100vh; background: var(--panel); border-left: 1px solid var(--border); transition: right 0.25s ease; padding: 14px 16px; overflow-y: auto; z-index: 30; }
+  .drawer.open { right: 0; }
+  .drawer h3 { margin: 0 0 10px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .drawer .tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .drawer .tab { appearance: none; background: none; border: 0; color: var(--muted); padding: 5px 2px 8px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+  .drawer .tab.on { color: var(--text); border-bottom-color: var(--primary); }
+  .chip { border-radius: 99px; padding: 2px 10px; font-size: 12px; border: 1px solid; }
+  .chip.run { color: var(--info-text); border-color: rgba(56, 189, 248, 0.4); background: var(--info-bg); }
+  .chip.done { color: var(--ok-text); border-color: var(--ok-border); background: var(--ok-bg); }
+  .meta { display: grid; grid-template-columns: 96px 1fr; gap: 5px 10px; margin: 10px 0; font-size: 12.5px; }
+  .meta label { color: var(--muted); }
+  .drawer .close { float: right; }
+  .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.18); opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 20; }
+  .mask.on { opacity: 1; pointer-events: auto; }
+
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px; font-size: 12.5px; opacity: 0; transition: all 0.25s; z-index: 40; pointer-events: none; max-width: 80vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260914-015 演示 · AI 分析 / AI 开发执行中时，快捷入口按钮无状态变化</h1>
+  <p class="sub">按钮原型：看板「需求」列表工具条右侧 <code>#laneQuickEntry</code>（已接受档「▶ 开始 AI 分析」/ 已计划档「▶ 开始 AI 开发」，点击进入任务模块对应面板）。用下方控制项切换场景观察差异。</p>
+
+  <div class="demo-bar">
+    <span class="lbl">对照</span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="defect" class="on">缺陷现状</button>
+      <button data-mode="fixed">修复后</button>
+    </div>
+    <span class="lbl">任务状态</span>
+    <select id="taskSel">
+      <option value="idle">空闲（无任务）</option>
+      <option value="prepared">待启动（已复制提示词，未登记运行）</option>
+      <option value="refining" selected>AI 分析执行中</option>
+      <option value="finished">AI 分析已结束</option>
+      <option value="developing">AI 开发执行中</option>
+      <option value="offline">服务离线（轮询失败）</option>
+    </select>
+    <span class="lbl">主题</span>
+    <div class="seg" id="themeSeg">
+      <button data-theme="dark" class="on">深色</button>
+      <button data-theme="light">浅色</button>
+    </div>
+  </div>
+  <p class="demo-note" id="demoNote"></p>
+
+  <div class="board">
+    <div class="top">
+      <button class="pill on">需求</button>
+      <button class="pill" id="navTasks">任务</button>
+      <button class="pill">设置</button>
+      <span class="poll" id="pollDot" title="实时连接：每 2 秒自动刷新">●</span>
+    </div>
+
+    <div class="filterbar" id="filterBar"></div>
+
+    <div class="caption">
+      <span class="hint">全选 / 全不选（随档）</span>
+      <div class="sel-group" id="selGroup"><span id="selCount">已选 0 项</span><button class="btn small" id="laneBatchBtn" disabled>移入计划</button></div>
+      <span class="spacer"></span>
+      <button type="button" id="laneQuickEntry" class="btn small primary">▶ 开始 AI 分析</button>
+    </div>
+
+    <div class="rows" id="rows"></div>
+    <div class="notice info" id="stateNotice" hidden></div>
+  </div>
+
+  <p class="demo-note">提示：执行中态点击按钮——<span class="defect-mark">缺陷现状</span>仍会跳转任务面板（看不出任务在跑）；<span class="fixed-mark">修复后</span>按钮禁用不可点、文案变「AI 分析中 / AI 开发中」。切档 / 任务状态切换会经约 0.6 秒「轮询刷新」延迟生效，模拟真实 2 秒轮询同步；「待启动」态已定稿（design.md）：复制成功 ≠ 执行中，保持可点原文案。</p>
+</div>
+
+<div class="mask" id="mask"></div>
+<aside class="drawer" id="drawer" aria-label="任务面板示意">
+  <button class="btn small close" id="drawerClose">✕ 关闭</button>
+  <h3>任务模块 <span class="chip run" id="drawerChip">执行中</span></h3>
+  <div class="tabs"><button class="tab on">AI 分析</button><button class="tab">AI 开发</button></div>
+  <div id="drawerBody"></div>
+</aside>
+<div id="toast"></div>
+
+<script>
+/* ---------- 演示数据（模拟 /api/board 轮询返回） ---------- */
+const LANES = [
+  { key: 'submitted', label: '待接受' },
+  { key: 'accepted', label: '已接受' },
+  { key: 'planned', label: '已计划' },
+  { key: 'developing', label: '开发中' },
+  { key: 'confirming', label: '待测试' },
+  { key: 'done', label: '已完成' },
+];
+const ROWS = {
+  submitted: [
+    { id: 'BUG-20260914-016', title: '看板导出 Markdown 时附件链接丢失' },
+    { id: 'REQ-20260914-008', title: '任务记录支持按执行器筛选' },
+  ],
+  accepted: [
+    { id: 'REQ-20260914-005', title: '详情页展示条目完整流转历史' },
+    { id: 'BUG-20260914-015', title: 'AI 分析/开发中时快捷入口按钮需禁用并改文案（本 Bug）' },
+    { id: 'REQ-20260914-003', title: '看板支持按创建时间倒序排列' },
+  ],
+  planned: [
+    { id: 'REQ-20260913-009', title: '批量完善面板队列导出清单' },
+    { id: 'BUG-20260913-004', title: '搜索词高亮在详情页不生效' },
+  ],
+  developing: [{ id: 'REQ-20260912-002', title: '设置页新增执行环境自检' }],
+  confirming: [], // 空档：演示空态
+  done: [{ id: 'REQ-20260911-006', title: '已完成档列表默认截断展示' }],
+};
+const REFINED = new Set(['REQ-20260914-003']); // 已完善示例
+const REFINING_ID = 'BUG-20260914-015'; // 执行中正被完善的条目
+
+const state = { mode: 'defect', task: 'refining', lane: 'accepted', loading: true };
+
+const $ = (s) => document.querySelector(s);
+const quick = $('#laneQuickEntry');
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ---------- 按钮态计算（缺陷 vs 修复的核心差异） ---------- */
+function quickConf() {
+  const lane = state.lane, task = state.task;
+  if (lane === 'accepted') {
+    const running = task === 'refining';
+    return {
+      visible: true, running,
+      normal: { label: '▶ 开始 AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' },
+      busy: { label: 'AI 分析中', title: 'AI 分析任务执行中：子代理正逐条完善文档，收尾后自动恢复可点' },
+    };
+  }
+  if (lane === 'planned') {
+    const running = task === 'developing';
+    return {
+      visible: true, running,
+      normal: { label: '▶ 开始 AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' },
+      busy: { label: 'AI 开发中', title: 'AI 开发任务执行中：队列逐条实施，收尾后自动恢复可点' },
+    };
+  }
+  return { visible: false };
+}
+
+function apply(pulse) {
+  const dot = $('#pollDot');
+  const offline = state.task === 'offline';
+  dot.textContent = offline ? '○' : '●';
+  dot.title = offline ? '服务离线：数据停止刷新（按钮保持最后已知状态）' : '实时连接：每 2 秒自动刷新';
+  dot.classList.toggle('off', offline);
+  if (pulse) { dot.classList.remove('pulse'); void dot.offsetWidth; dot.classList.add('pulse'); }
+
+  const conf = quickConf();
+  quick.classList.toggle('hidden', !conf.visible); // 非 已接受/已计划 档不显示
+  quick.style.display = conf.visible ? '' : 'none';
+  if (conf.visible) {
+    const busy = state.mode === 'fixed' && conf.running; // 修复后才禁用；缺陷现状恒可点
+    const c = busy ? conf.busy : conf.normal;
+    quick.textContent = c.label;
+    quick.title = busy ? c.title : (conf.running && state.mode === 'defect'
+      ? c.title + '（缺陷：任务已在执行，按钮仍显示可启动的样子）' : c.title);
+    quick.setAttribute('aria-label', busy ? c.label : c.normal.label);
+    quick.disabled = busy;
+    quick.classList.toggle('focus-defect', conf.running && state.mode === 'defect');
+    quick.classList.toggle('focus-fixed', busy);
+  }
+
+  // 档位批量按钮文案（仅示意，已接受档「移入计划」/已计划档「移出计划」）
+  const batch = $('#laneBatchBtn');
+  batch.textContent = state.lane === 'planned' ? '移出计划' : '移入计划';
+  batch.disabled = true;
+  $('#selCount').textContent = `已选 0 项`;
+
+  // 任务侧状态反馈条
+  const n = $('#stateNotice');
+  if (offline) { n.hidden = false; n.className = 'notice warn'; n.textContent = '服务离线：数据停止刷新——按钮保持最后已知状态，不误报「执行中/空闲」。'; }
+  else if (state.task === 'refining') { n.hidden = false; n.className = 'notice info'; n.textContent = 'AI 分析任务执行中：子代理正完善 BUG-20260914-015（列表行「完善中」徽标同步可见）。'; }
+  else if (state.task === 'developing') { n.hidden = false; n.className = 'notice info'; n.textContent = 'AI 开发任务执行中：已计划队列最旧优先逐条实施。'; }
+  else if (state.task === 'prepared') { n.hidden = false; n.className = 'notice info'; n.textContent = '任务待启动：提示词已复制、未登记运行（复制成功 ≠ 执行中）——已定稿口径：仅「执行中」禁用，待启动保持可点原文案。'; }
+  else if (state.task === 'finished') { n.hidden = false; n.className = 'notice info'; n.textContent = 'AI 分析批次已收尾：按钮随轮询恢复「▶ 开始 AI 分析」可点。'; }
+  else n.hidden = true;
+
+  renderFilter(); renderRows(); renderNote();
+}
+
+function renderFilter() {
+  $('#filterBar').innerHTML = LANES.map((l) => {
+    const cnt = (ROWS[l.key] || []).length;
+    return `<button class="fchip${state.lane === l.key ? ' on' : ''}" data-lane="${l.key}">${l.label} <span class="cnt">${cnt}</span></button>`;
+  }).join('');
+  document.querySelectorAll('.fchip').forEach((b) => b.addEventListener('click', () => {
+    state.lane = b.dataset.lane; apply(true);
+  }));
+}
+
+function renderRows() {
+  const box = $('#rows');
+  if (state.loading) { box.innerHTML = '<div class="loading">加载中…（首次进入看板拉取 /api/board）</div>'; return; }
+  const list = ROWS[state.lane] || [];
+  if (!list.length) { box.innerHTML = '<div class="empty">本档暂无条目</div>'; return; }
+  box.innerHTML = list.map((r) => {
+    const badges = [];
+    if (state.lane === 'accepted') {
+      if (state.task === 'refining' && r.id === REFINING_ID) badges.push('<span class="badge refining" title="子代理正在完善本文档">完善中</span>');
+      else if (REFINED.has(r.id)) badges.push('<span class="badge" title="文档已由 AI 分析补全">已完善</span>');
+      else badges.push('<span class="badge" title="已接受未完善：可由 AI 分析任务补全文档">未完善</span>');
+    }
+    const laneLabel = (LANES.find((l) => l.key === state.lane) || {}).label || '';
+    return `<div class="row"><span class="cid">${r.id}</span><span class="title">${r.title}</span>${badges.join('')}<span class="badge state">${laneLabel}</span></div>`;
+  }).join('');
+}
+
+function renderNote() {
+  const conf = quickConf();
+  $('#demoNote').innerHTML = !conf.visible
+    ? '当前档（非 已接受 / 已计划）不显示快捷入口按钮——现状口径保持。'
+    : conf.running
+      ? (state.mode === 'defect'
+        ? '<span class="defect-mark">缺陷现状</span>：任务执行中，按钮仍为「' + conf.normal.label + '」且可点击——与未启动时无差别。'
+        : '<span class="fixed-mark">修复后</span>：按钮禁用、文案「' + conf.busy.label + '」，点击无响应，悬浮提示说明执行中。')
+      : '当前任务状态下按钮为正常可点态「' + conf.normal.label + '」：点击进入任务模块对应面板（仅导航）。';
+}
+
+/* ---------- 交互绑定 ---------- */
+quick.addEventListener('click', () => {
+  const conf = quickConf();
+  if (state.mode === 'fixed' && conf.running) { toast('按钮已禁用：任务执行中，不触发跳转'); return; }
+  openDrawer(conf.running);
+});
+
+$('#modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.mode = b.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  apply(true);
+});
+
+$('#taskSel').addEventListener('change', (e) => {
+  state.task = e.target.value;
+  $('#pollDot').classList.add('pulse');
+  state.loading = true; renderRows(); // 模拟轮询窗口
+  setTimeout(() => { state.loading = false; apply(true); }, 600);
+});
+
+$('#themeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.documentElement.dataset.theme = b.dataset.theme;
+  document.querySelectorAll('#themeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+});
+
+$('#navTasks').addEventListener('click', () => openDrawer(quickConf().running));
+
+function openDrawer(running) {
+  $('#drawerChip').textContent = running ? '执行中' : '待启动';
+  $('#drawerChip').className = 'chip ' + (running ? 'run' : 'done');
+  $('#drawerBody').innerHTML = `
+    <div class="meta">
+      <label>批次状态</label><span>${running ? '执行中（子代理逐条处理）' : '无进行中批次：可在面板内「启动」'}</span>
+      <label>当前条目</label><span>${running ? 'BUG-20260914-015（完善中）' : '—'}</span>
+      <label>开始时间</label><span>${running ? '14:32' : '—'}</span>
+      <label>剩余 / 总数</label><span>${running ? '2 / 3' : '—'}</span>
+    </div>
+    <p style="color:var(--muted);font-size:12.5px;margin:8px 0 0">此为任务模块对应面板的简化示意（真实界面见看板「任务」页签）。${running ? '缺陷现状下：执行中从这里仍只能靠进入面板才能看出任务在跑。' : ''}</p>`;
+  $('#drawer').classList.add('open'); $('#mask').classList.add('on');
+}
+function closeDrawer() { $('#drawer').classList.remove('open'); $('#mask').classList.remove('on'); }
+$('#drawerClose').addEventListener('click', closeDrawer);
+$('#mask').addEventListener('click', closeDrawer);
+
+/* 模拟主轮询心跳：每 2s 闪一次指示（状态已由控制项驱动） */
+setInterval(() => {
+  if (state.task === 'offline') return;
+  const d = $('#pollDot');
+  d.classList.remove('pulse'); void d.offsetWidth; d.classList.add('pulse');
+}, 2000);
+
+/* 初始：先加载态，再呈现默认场景（AI 分析执行中 + 缺陷现状） */
+apply();
+setTimeout(() => { state.loading = false; apply(true); }, 700);
+</script>
+</body>
+</html>

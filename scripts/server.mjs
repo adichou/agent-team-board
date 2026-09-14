@@ -2018,7 +2018,9 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 //                                    totalDone=占用过滤前 done 总数供前端区分空态）
 //   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
 //   GET  /api/build/branch-log        指定分支提交记录（BUG-20260914-009 分页：?limit= 默认 50 上限 500、
-//                                    ?offset= 偏移默认 0；返回 hash/short/subject/author/date + total 总数）
+//                                    ?offset= 偏移默认 0；返回 hash/short/subject/author/date + total 总数；
+//                                    REQ-20260914-002：可选 ?q= 关键词 → 搜索模式，subject/author/hash
+//                                    大小写不敏感子串匹配，服务端全量过滤后分页，total 为命中总数）
 //   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
 //                                    BUG-20260913-001：非 done 条目拒绝纳入；
 //                                    BUG-20260914-004：已纳入任一版本的条目拒绝纳入，数据层兜底）
@@ -2092,6 +2094,16 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/branch-log') {
     const branch = u.searchParams.get('branch') || '';
     // BUG-20260914-009：limit/offset 分页参数（缺省/非法由数据层归一：默认 50/0，负数 clamp）
+    // REQ-20260914-002：可选 q 关键词 → 搜索模式（subject/author/hash 大小写不敏感子串匹配，
+    // 服务端全量过滤后按 limit/offset 分页，total 为命中总数；q 空白走默认分页，只读口径不变）
+    const q = (u.searchParams.get('q') || '').trim();
+    if (q) {
+      return sendJson(res, 200, buildGit.branchSearchLog(root, branch, {
+        q,
+        limit: u.searchParams.get('limit'),
+        offset: u.searchParams.get('offset'),
+      }));
+    }
     return sendJson(res, 200, buildGit.branchLog(root, branch, {
       limit: u.searchParams.get('limit'),
       offset: u.searchParams.get('offset'),

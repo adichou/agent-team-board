@@ -333,6 +333,223 @@ t('N7f 分页静态契约：data-pg / 每页条数下拉 / 重试按钮在 bindC
   assert.match(css, /\.bld-log-eof/, 'style.css 含末页反馈样式');
 });
 
+/* ---------- N7g REQ-20260914-002 提交记录关键词搜索 ---------- */
+
+// 搜索桩：模拟服务端 contract（q 全量过滤后分页；无 q 默认分页）。
+// 合成 137 条（#1 最新），#120 为默认分页第 2 页以远的旧提交（跨页命中样本）；
+// 偶数号作者 Alice（68 条）、奇数号 Bob（69 条）。
+function logSearchStub(h, st) {
+  h.sandbox.__branches = { isRepo: true, current: 'dev', local: ['dev', 'main'], remote: [] };
+  h.sandbox.__logReqs = [];
+  h.sandbox.__logFail = false;
+  h.sandbox.__logHold = null;
+  h.sandbox.__logTotal = 137;
+  h.sandbox.fetch = async (url) => {
+    const up = new URL(String(url), 'http://local');
+    if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(st)) };
+    if (up.pathname === '/api/build/branches') return { ok: true, json: async () => JSON.parse(JSON.stringify(h.sandbox.__branches)) };
+    if (up.pathname === '/api/build/branch-log') {
+      h.sandbox.__logReqs.push(up.pathname + up.search);
+      if (h.sandbox.__logHold) await h.sandbox.__logHold;
+      if (h.sandbox.__logFail) return { ok: false, status: 500, json: async () => ({ error: 'boom' }) };
+      const total = h.sandbox.__logTotal;
+      const q = String(up.searchParams.get('q') || '').trim().toLowerCase();
+      const limit = Number(up.searchParams.get('limit') || 50);
+      const offset = Number(up.searchParams.get('offset') || 0);
+      const mk = (num) => ({
+        hash: H1, short: H1.slice(0, 7),
+        subject: num === 120 ? 'fix: 跨页关键词 REQ-OLD-1201' : `提交 ${num}`,
+        author: num % 2 === 0 ? 'Alice' : 'Bob',
+        date: '2026-09-13T01:00:00.000Z',
+      });
+      let hits;
+      if (!q) {
+        const n = Math.max(0, Math.min(limit, total - offset));
+        hits = Array.from({ length: n }, (_, i) => mk(offset + i + 1));
+        return { ok: true, json: async () => ({ branch: up.searchParams.get('branch'), commits: hits, total, limit, offset }) };
+      }
+      hits = [];
+      for (let num = 1; num <= total; num++) {
+        const c = mk(num);
+        if (`${c.subject}\t${c.author}\t${c.short}\t${c.hash}`.toLowerCase().includes(q)) hits.push(c);
+      }
+      return { ok: true, json: async () => ({ branch: up.searchParams.get('branch'), query: up.searchParams.get('q').trim(), commits: hits.slice(offset, offset + limit), total: hits.length, limit, offset }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+}
+
+t('N7g 提交记录搜索：搜索行渲染、q 透传、命中计数与高亮、跨页命中、无匹配空态、清除恢复、切分支重置、同分支重载保持关键词、搜索态分页与失败重试、防重复触发、与顶部模块搜索互不串扰', async () => {
+  const st = statePayload();
+  const h = setup({ state: st, candidates: candidatesPayload() });
+  logSearchStub(h, st);
+  await h.run(`window.ATBBuild.enter('/p/a')`);
+  await h.run(`window.ATBBuild.setTab('branches')`);
+  await new Promise((r) => setTimeout(r, 10));
+  const reqs = () => h.sandbox.__logReqs;
+  const inner = () => h.run(`document.querySelector('#buildView').innerHTML`);
+  // 元素经 #buildView 内查找（与 build.js bindCommon 绑定同一 vm 元素桩）
+  const el = (sel) => h.run(`document.querySelector('#buildView').querySelector(${JSON.stringify(sel)})`);
+  const setInput = (v) => { const i = el('#bldLogSearchInput'); i.value = v; i.listeners.input(); };
+  const fire = (sel, ev = 'click', arg) => el(sel).listeners[ev](arg);
+
+  // 未选分支：无搜索行；选中后出现输入框（placeholder）+ 搜索按钮，默认列表无命中计数
+  assert.doesNotMatch(inner(), /bld-log-search/, '未选分支不出搜索行');
+  h.run(`window.ATBBuild.selectBranch('dev')`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /id="bldLogSearchInput"[^>]*placeholder="搜提交说明 \/ 作者 \/ hash…"/, '选中分支出现搜索输入框（placeholder）');
+  assert.match(inner(), /id="bldLogSearchGo"[^>]*>搜索</, '搜索按钮');
+  assert.doesNotMatch(inner(), /条匹配/, '默认列表无命中计数行');
+  assert.doesNotMatch(inner(), /data-log-search-clear/, '无关键词不出清除入口');
+
+  // 提交搜索（点按钮 / 回车同路径）：请求带 q；命中计数 + 作者高亮 <mark>；新→旧沿用列表行
+  setInput('alice');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /[?&]limit=50&offset=0&q=alice/, '搜索请求回第一页且带 q');
+  assert.match(inner(), /共 68 条匹配（关键词：alice）/, '命中计数「共 68 条匹配」');
+  assert.match(inner(), /<mark>Alice<\/mark>/, '命中词在作者上高亮 <mark>');
+  assert.match(inner(), /bld-log-pager/, '搜索结果沿用既有分页条');
+  assert.match(inner(), /第 1–50 条 \/ 共 68 条/, '搜索态进度区间');
+
+  // 回车同路径提交
+  setInput('bob');
+  fire('#bldLogSearchInput', 'keydown', { key: 'Enter' });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /q=bob/, '输入框回车同样发起搜索');
+  assert.match(inner(), /共 69 条匹配（关键词：bob）/);
+
+  // 跨页命中：只出现在默认分页第 2 页以远的关键词（旧提交 #120）能搜出
+  setInput('REQ-OLD-1201');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /共 1 条匹配（关键词：REQ-OLD-1201）/, '跨页命中计数为 1');
+  assert.match(inner(), /fix: 跨页关键词 <mark>REQ-OLD-1201<\/mark>/, '命中默认分页第 2 页以远的提交且说明高亮');
+
+  // 无匹配空态：区分「该分支暂无提交」，提供一键清除
+  setInput('zzz');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /没有匹配的提交（关键词：zzz）/, '无匹配空态文案');
+  assert.doesNotMatch(inner(), /该分支暂无提交/, '与「该分支暂无提交」区分');
+  assert.match(inner(), /data-log-search-clear/, '空态提供一键清除');
+
+  // 清除恢复：回默认全量分页列表（BUG-20260914-009 口径不回归；DOM 绑定静态契约见 N7i）
+  h.run(`window.ATBBuild.clearLogSearch()`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!/[?&]q=/.test(reqs().at(-1)), '清除后请求不带 q');
+  assert.match(inner(), /第 1–50 条 \/ 共 137 条/, '恢复默认全量列表第一页');
+  assert.doesNotMatch(inner(), /条匹配/, '命中计数行消失');
+  // 空白关键词提交等同清除
+  setInput('alice');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  setInput('   ');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(!/[?&]q=/.test(reqs().at(-1)), '空白关键词等同清除（不带 q）');
+
+  // 切换分支重置搜索；同分支重载（doSync 链路口径）保持关键词
+  setInput('alice');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  h.run(`window.ATBBuild.selectBranch('main')`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /branch=main&limit=50&offset=0/, '切换分支重置回第一页');
+  assert.doesNotMatch(reqs().at(-1), /[?&]q=/, '切换分支清空搜索词（请求不带 q）');
+  assert.match(inner(), /value=""/, '切换分支清空搜索框草稿');
+  h.run(`window.ATBBuild.selectBranch('dev')`);
+  await new Promise((r) => setTimeout(r, 10));
+  setInput('alice');
+  fire('#bldLogSearchGo');
+  await new Promise((r) => setTimeout(r, 10));
+  h.run(`window.ATBBuild.selectBranch('dev')`); // 同分支重载（同步后 reload 链路）
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /q=alice/, '同分支重载保持关键词重查');
+  // 「刷新」保持关键词
+  fire('#bldLogRefresh');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /q=alice/, '刷新保持关键词重查');
+
+  // 搜索态分页：翻页带 q、每页条数切换回第一页、末页反馈、翻页失败保留内容可重试（重试带 q）
+  h.run(`window.ATBBuild.gotoLogPage(2)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /limit=50&offset=50&q=alice/, '搜索态翻页 offset 跟随且带 q');
+  assert.match(inner(), /第 51–68 条 \/ 共 68 条/, '搜索态末页进度区间收口');
+  assert.match(inner(), /已到末尾 · 共 68 条匹配/, '搜索态末页反馈文案');
+  h.sandbox.__logFail = true;
+  h.run(`window.ATBBuild.gotoLogPage(1)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(inner(), /第 51–68 条 \/ 共 68 条/, '搜索态翻页失败保留已加载内容');
+  assert.match(inner(), /提交记录读取失败：boom/, '行内错误信息');
+  assert.match(inner(), /id="bldLogRetry"/, '失败提供重试按钮');
+  h.sandbox.__logFail = false;
+  h.run(`window.ATBBuild.retryLogPage()`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /offset=0&q=alice/, '重试重发目标页且带 q');
+  h.run(`window.ATBBuild.setLogPageSize(100)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /limit=100&offset=0&q=alice/, '搜索态每页条数切换回第一页且带 q');
+  assert.match(inner(), /第 1–68 条 \/ 共 68 条/, '新每页条数搜索态进度区间');
+
+  // 搜索执行中防重复触发：入口禁用、重复提交不发新请求
+  let release;
+  h.sandbox.__logHold = new Promise((res) => { release = res; });
+  const before = reqs().length;
+  setInput('bob');
+  const pending = h.run(`window.ATBBuild.submitLogSearch && window.ATBBuild.submitLogSearch()`);
+  const busy = inner();
+  assert.match(busy, /id="bldLogSearchGo" disabled/, '搜索执行中按钮禁用');
+  assert.match(busy, /id="bldLogSearchInput"[^>]* disabled/, '搜索执行中输入框禁用');
+  assert.match(busy, /搜索中…/, '搜索中指示');
+  h.run(`window.ATBBuild.submitLogSearch()`); // loading 中重复提交：忽略
+  release();
+  await pending;
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(reqs().length, before + 1, '执行中重复触发不产生新请求');
+  assert.match(inner(), /共 69 条匹配（关键词：bob）/, '完成后正常展示');
+
+  // 与顶部模块搜索互不串扰：setQuery 只影响版本列表过滤，不注入提交搜索
+  h.run(`window.ATBBuild.setQuery('v1.0')`);
+  const stats = JSON.parse(JSON.stringify(h.run(`window.ATBBuild.searchStats()`)));
+  assert.deepEqual(stats, { matched: 1, total: 1 }, '顶部搜索过滤版本列表');
+  assert.match(inner(), /共 69 条匹配（关键词：bob）/, '提交搜索状态不受顶部搜索影响');
+  h.run(`window.ATBBuild.gotoLogPage(1)`);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(reqs().at(-1), /q=bob/, '提交搜索请求词不受顶部搜索词影响');
+  h.run(`window.ATBBuild.setQuery('')`);
+});
+
+t('N7i 搜索静态契约：搜索输入 / 按钮 / 清除在 bindCommon 绑定；搜索行与命中计数样式类存在', () => {
+  assert.match(buildJs, /#bldLogSearchInput/, 'bindCommon 绑定搜索输入框（草稿回写 + 回车提交）');
+  assert.match(buildJs, /#bldLogSearchGo/, 'bindCommon 绑定搜索按钮');
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-log-search-clear\]'\)/, 'bindCommon 循环绑定 data-log-search-clear 清除入口');
+  assert.match(buildJs, /bld-log-search/, '渲染搜索行容器类');
+  assert.match(buildJs, /bld-log-count/, '渲染命中计数行类');
+  const css = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
+  assert.match(css, /\.bld-log-search/, 'style.css 含搜索行样式');
+  assert.match(css, /\.bld-log-count/, 'style.css 含命中计数样式');
+  assert.match(css, /\.bld-log li mark/, 'style.css 含命中高亮样式');
+});
+
+t('N7h i18n 词典：提交搜索新增文案入 EN / EN_DYNAMIC（值无中文、静态键不重复）', async () => {
+  await import('../web/i18n.js');
+  const I = globalThis.ATBI18N;
+  const { EN, EN_DYNAMIC } = I._dict;
+  for (const k of ['搜提交说明 / 作者 / hash…', '搜索', '清除', '搜索中…']) {
+    assert.ok(EN[k], `EN 应含「${k}」`);
+    assert.ok(!/[\u4e00-\u9fff]/.test(EN[k]), `EN 值不含中文：${k}`);
+  }
+  for (const k of ['共 ◇ 条匹配（关键词：◇）', '没有匹配的提交（关键词：◇）', '已到末尾 · 共 ◇ 条匹配']) {
+    assert.ok(EN_DYNAMIC[k], `EN_DYNAMIC 应含「${k}」`);
+    assert.ok(!/[\u4e00-\u9fff]/.test(EN_DYNAMIC[k]), `EN_DYNAMIC 值不含中文：${k}`);
+  }
+  const values = Object.values(EN);
+  for (const k of ['搜提交说明 / 作者 / hash…', '搜索', '清除', '搜索中…']) {
+    assert.equal(values.filter((v) => v === EN[k]).length, 1, `EN 值唯一（无重复）：${k}`);
+  }
+});
+
 /* ---------- N9 REQ-20260913-004 版本删除 ---------- */
 
 const ver = (id, name, status = 'draft') => ({

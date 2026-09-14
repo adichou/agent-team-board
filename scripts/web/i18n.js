@@ -54,6 +54,11 @@ const EN = {
   '合并中': 'Merging',
   '已合并': 'Merged',
   '关键词在版本列表内前端过滤（版本名 / 单号），不发请求': 'Keywords filter the version list client-side (name / item id); no request is made',
+  // REQ-20260914-002 分支浏览提交记录搜索（搜索行静态文案；计数 / 空态 / 末页动态拼接见 EN_DYNAMIC）
+  '搜提交说明 / 作者 / hash…': 'Search subject / author / hash…',
+  '搜索': 'Search',
+  '清除': 'Clear',
+  '搜索中…': 'Searching commits…',
   // REQ-20260911-009 设置页「Git 工作流」分区（dev 分支初始化）
   'Git 工作流': 'Git workflow',
   '正在获取 Git 状态…': 'Loading Git status…',
@@ -821,6 +826,10 @@ const EN_DYNAMIC = {
   '删除版本（◇）': 'Delete version ($1)',
   '✓ 已删除版本（◇）': '✓ Version deleted ($1)',
   '✕ 删除失败：◇': '✕ Delete failed: $1',
+  // REQ-20260914-002 分支浏览提交记录搜索：命中计数 / 无匹配空态 / 搜索态末页反馈（动态拼接）
+  '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
+  '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',
+  '已到末尾 · 共 ◇ 条匹配': 'End of results · $1 matches in total',
   // REQ-20260911-009 Git 工作流：状态/失败就近反馈（动态拼接）
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
   '失败：◇（可重试；已存在的分支不会重复创建）': 'Failed: $1 (retryable; an existing branch is never re-created)',
