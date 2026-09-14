@@ -3,6 +3,8 @@
 // 界面：模块内两个子页签——版本计划（默认）：左版本列表 + 右版本详情（信息编辑 / 条目 ↔ commit 关联
 // 与增删 / 提示词与回答回填 / 合并入 main）；分支浏览：左分支列表（当前 / 本地 / 远端分组）+ 右提交记录。
 // 语义边界（与后端一致，design.md 落定口径）：
+//   - 仅已完成（done）的需求单 / Bug 单可纳入版本（BUG-20260913-001）：新建版本 / 添加条目
+//     候选只列 done 条目（后端接口已收窄，前端再过滤一次防御旧数据）；无候选时给明确空态；
 //   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选（全选只纳入有 commit 候选的条目）；
 //   - 「提示词与回答回填」为同一弹窗两段式：上段复制提示词、下段粘贴回答解析回填，无需关闭再打开；
 //   - 合并入 main 前弹确认框（列 commit 清单），确认即授权；执行中禁用重复触发；
@@ -67,6 +69,12 @@ const ATBBuild = (() => {
   };
 
   /* ---------- 纯函数（导出供测试与面板复用） ---------- */
+
+  // BUG-20260913-001 口径：仅已完成（done）条目可纳入版本——候选接口已在后端收窄，
+  // 前端再过滤一次防御旧缓存 / 混杂数据，保证界面与数据口径一致。
+  function doneCandidates(items) {
+    return (items || []).filter((x) => x.status === 'done');
+  }
 
   // 全选口径：只纳入有 commit 候选的条目（无提交条目自动跳过并提示）
   function selectableCandidates(items) {
@@ -190,7 +198,7 @@ const ATBBuild = (() => {
       const r = await api('/candidates');
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
-      state.createPanel.candidates = data.items || [];
+      state.createPanel.candidates = doneCandidates(data.items || []); // BUG-20260913-001：仅 done 条目进候选
       for (const it of selectableCandidates(state.createPanel.candidates)) {
         state.createPanel.commits[it.itemId] = it.commits[0]; // 默认取最近一次关联提交
       }
@@ -290,7 +298,8 @@ const ATBBuild = (() => {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       const have = new Set(v.items.map((x) => x.itemId));
-      state.addPanel.candidates = (data.items || []).filter((x) => !have.has(x.itemId)); // 候选不含已在本版本中的条目
+      // BUG-20260913-001：与新建版本同口径——仅 done 条目进候选，且排除已在本版本中的条目
+      state.addPanel.candidates = doneCandidates(data.items || []).filter((x) => !have.has(x.itemId));
       for (const it of selectableCandidates(state.addPanel.candidates)) {
         state.addPanel.commits[it.itemId] = it.commits[0];
       }
@@ -539,7 +548,7 @@ const ATBBuild = (() => {
         : '<span class="muted small">暂无关联提交（先完成开发提交）</span>';
       return `<label class="check bld-cand${disabledIds?.has(it.itemId) ? ' off' : ''}">
         <input type="checkbox" data-pick="${panelKey}" data-item="${esc(it.itemId)}"${checked}${dis}>
-        <span class="bld-cand-title">${esc(it.itemId)} ${esc(it.title || '')}</span>${commits}
+        <span class="bld-cand-title" title="${esc(it.title || '')}">${esc(it.itemId)} ${esc(it.title || '')}</span>${commits}
       </label>`;
     }).join('');
   }
@@ -556,7 +565,9 @@ const ATBBuild = (() => {
         </header>
         <div class="rel-panel-body">
           ${p.loadError ? `<p class="rel-form-err" role="alert">${esc(p.loadError)} <button type="button" class="btn small" id="bldPanelRetry">重试</button></p>` : ''}
-          ${p.candidates ? `
+          ${!p.candidates ? '<p class="muted">正在读取条目…</p>'
+            : p.candidates.length === 0 ? '<p class="muted bld-cand-empty">暂无可纳入版本的条目：仅已完成（done）的需求单 / Bug 单会出现在候选中</p>'
+            : `
           <div class="bld-pick-bar">
             <button type="button" class="btn small" id="bldPickAll">全选</button>
             <button type="button" class="btn small" id="bldPickNone">全不选</button>
@@ -565,7 +576,7 @@ const ATBBuild = (() => {
           ${renderCandidateRows(p, p === state.createPanel ? 'createPanel' : 'addPanel')}
           ${p === state.createPanel ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）
             <input id="bldNewName" value="${esc(p.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}
-          ${p.error ? `<p class="rel-form-err" role="alert">${esc(p.error)}</p>` : ''}` : '<p class="muted">正在读取条目…</p>'}
+          ${p.error ? `<p class="rel-form-err" role="alert">${esc(p.error)}</p>` : ''}`}
         </div>
         <footer class="rel-panel-foot">
           <button type="button" class="btn primary" id="${footId}" ${p.busy || !p.candidates ? 'disabled' : ''}>${esc(footLabel)}</button>
@@ -786,8 +797,8 @@ const ATBBuild = (() => {
     view.innerHTML = `
       <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}</nav>
       ${body}
-      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '选择需求单 / Bug 单并指定 commit；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
-      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '选择要加入本版本的需求单 / Bug 单（已在本版本中的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
+      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
+      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）的需求单 / Bug 单可加入本版本（已在本版本中的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
       ${renderAnswerModal()}
       ${renderMergeConfirm()}
       ${renderPushConfirm()}`;
@@ -894,9 +905,9 @@ const ATBBuild = (() => {
 
   return {
     enter, refresh, setTab, setQuery, snapshot, restoreView, notifyState: notify,
-    openCreatePanel, selectBranch,
+    openCreatePanel, openAddPanel, selectBranch,
     // 纯函数接缝（测试与面板复用）
-    selectableCandidates, parseAnswer, buildPrompt,
+    doneCandidates, selectableCandidates, parseAnswer, buildPrompt,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };

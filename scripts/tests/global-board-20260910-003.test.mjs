@@ -47,14 +47,13 @@ const plannedItem = (dataDir, title) => {
   return st;
 };
 
-// projDev：3 个已计划条目 → 批次1（2 项）+ 批次2（1 项，排队中），再领取批次1 一项转执行中
-//（顺序注意：领取会实时吸收新置计划条目进当前批次，须先建齐批次再领取）
+// projDev：3 个已计划条目 → 一轮执行（REQ-20260913-003：不排队——账本候选实时读取），
+// 领取 1 项转执行中（在途预留；条目保持 planned 仍计入实时候选）
 const devDir = core.dataDirFrom(projDev) || core.initData(projDev);
 const devA = plannedItem(devDir, '开发条目 A');
 const devB = plannedItem(devDir, '开发条目 B');
 const devC = plannedItem(devDir, '开发条目 C');
 const devBatch1 = batch.createBatch(devDir, { ids: [devA.id, devB.id], projectRoot: projDev, developer: '张三' }); // developer 为遗留入参（REQ-20260910-027 起忽略）
-const devBatch2 = batch.createBatch(devDir, { ids: [devC.id], projectRoot: projDev });
 const devClaim = batch.nextItem(devDir, devBatch1.batch.batchId, { owner: 'zcode-batch-028-1' });
 
 // projRefine：1 个已接受条目 → 完善批次（领取 1 项转执行中）
@@ -157,17 +156,17 @@ t('G1 聚合全部注册项目：开发 + 完善批次字段口径与面板一�
   assert.equal(devRow.status, 'ok');
   assert.equal(devRow.name, 'projDev');
   const devTasks = devRow.tasks;
-  assert.equal(devTasks.length, 2, 'projDev 应有 2 个在工作批次（执行中 + 排队中）');
-  const t1 = devTasks.find((x) => x.batchId === devBatch1.batch.batchId);
-  assert.ok(t1, '批次1 应出现在全局聚合');
-  assert.equal(t1.kind, 'develop');
+  assert.equal(devTasks.length, 1, 'projDev 应有 1 个在工作轮次（REQ-20260913-003：不排队，一轮执行）');
+  const t1 = devTasks.find((x) => x.kind === 'develop');
+  assert.ok(t1, '开发轮次应出现在全局聚合');
+  assert.equal('batchId' in t1, false, 'REQ-20260913-003：简报不再透出批次号');
   assert.equal(t1.status, 'running');
   assert.equal('developer' in t1, false, 'REQ-20260910-027：brief 不再透出 developer');
-  assert.equal(t1.counts.total, 2);
-  assert.equal(t1.counts.remaining, 2, '在途项未上报仍计入待处理（与面板 taskStatsLine 同口径）');
+  assert.equal(t1.counts.total, 3, '实时候选全量计入（建轮不冻结）');
+  assert.equal(t1.counts.remaining, 3, '在途项未上报仍计入待处理（与面板 taskStatsLine 同口径）');
   assert.equal(t1.counts.reported, 0);
   assert.ok(t1.createdAt && t1.lastActivityAt, '应带创建与最后活动时间');
-  assert.ok(t1.current, '执行中批次应有当前条目');
+  assert.ok(t1.current, '执行中轮次应有当前条目');
   assert.equal(t1.current.itemId, devClaim.itemId);
   assert.equal(t1.current.owner, 'zcode-batch-028-1');
   assert.equal(t1.current.title, '开发条目 A');
@@ -177,7 +176,7 @@ t('G1 聚合全部注册项目：开发 + 完善批次字段口径与面板一�
   assert.equal(rfRow.tasks.length, 1);
   const rt = rfRow.tasks[0];
   assert.equal(rt.kind, 'refine');
-  assert.equal(rt.batchId, rfBatch.batch.batchId);
+  assert.equal('batchId' in rt, false, 'REQ-20260913-003：完善简报不再透出批次号');
   assert.equal(rt.status, 'running');
   assert.equal('developer' in rt, false, 'REQ-20260910-027：brief 不再透出 developer');
   assert.equal(rt.current.itemId, rfClaim.itemId);
@@ -216,15 +215,11 @@ t('G4 单项目读盘失败只影响该项目行', async () => {
   assert.equal(projRow(projRefine).status, 'ok');
 });
 
-t('G5 非队首 prepared 批次标 queued=true；pauseRequested 如实透出', async () => {
+t('G5 排队标记已移除（REQ-20260913-003）；pauseRequested 如实透出', async () => {
   const devRow = projRow(projDev);
-  const t2 = devRow.tasks.find((x) => x.batchId === devBatch2.batch.batchId);
-  assert.ok(t2, '排队批次应出现');
-  assert.equal(t2.status, 'prepared');
-  assert.equal(t2.queued, true, '非队首 prepared 批次应标记排队中');
-  assert.equal(t2.current, null, '排队批次无当前条目');
-  const t1 = devRow.tasks.find((x) => x.batchId === devBatch1.batch.batchId);
-  assert.equal(t1.queued, false, '队首批次不是排队中');
+  assert.equal(devRow.tasks.length, 1, '同一项目只有一轮执行（无排队批次行）');
+  const t1 = devRow.tasks[0];
+  assert.equal('queued' in t1, false, '简报不再携带排队标记');
   assert.equal(t1.pauseRequested, false, 'pauseRequested 字段应存在且如实');
 });
 

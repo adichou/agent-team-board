@@ -31,6 +31,9 @@ const AGENT_WORDS = /zcode|Zcode|codex|Codex|general-purpose/;
 const FOLLOW = taskSettings.FOLLOW_SESSION_PROMPT_LINE;
 const HEAD_LINE = '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善本批';
 const NAME_LINE = '一个已接受条目的文档。子代理会话命名统一为：<条目编号>（与主调度会话区分）。';
+// REQ-20260913-003：现行单行头（归一层把旧两行/旧单行头统一收敛到现行口径）
+const REFINE_HEAD_NOW = '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。';
+const DEV_HEAD_NOW = '每轮新启动一个子代理，按执行规范领取当前队列中最早的一个可实施条目，认领、实施、测试并上报。';
 
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
@@ -154,8 +157,8 @@ function legacyDevModelLine(root, batchId, specPath, atb) {
 
 function assertGeneric(out, label) {
   assert.doesNotMatch(out, AGENT_WORDS, `${label}：归一后全文不含执行端专属字样（实际透出：${(String(out).match(AGENT_WORDS) || [''])[0]}）`);
-  assert.ok(out.includes('在当前项目的 Agent 会话中执行本提示词') || out.includes('每轮新启动一个子代理，按执行规范自行选择本批一个可实施条目'),
-    `${label}：保留现行通用调度口径`);
+  assert.ok(out.includes(REFINE_HEAD_NOW) || out.includes(DEV_HEAD_NOW),
+    `${label}：保留现行通用调度口径（REQ-20260913-003 单行头）`);
 }
 
 // ---------- A 归一函数 ----------
@@ -164,8 +167,9 @@ t('A1 变体 B（zcode 执行段 + 旧模型行 + zcode-refine 前缀）：执�
   const out = taskSettings.normalizePromptForDisplay(legacyRefineZcode('/tmp/p', 'RFB-20260909-022', '/tmp/atb.mjs'));
   assertGeneric(out, 'A1');
   assert.ok(out.includes(FOLLOW), '旧模型行替换为跟随指令行');
-  assert.ok(out.includes(`${HEAD_LINE}\n${NAME_LINE}`), '执行端段归一为现行通用两行（与 buildRefinePrompt 一致）');
-  assert.ok(out.includes('--by refine-<批次尾号>-<序号>'), '领取前缀归一为通用前缀');
+  assert.ok(out.includes(REFINE_HEAD_NOW), '执行端段归一为现行通用单行头（与 buildRefinePrompt 一致）');
+  assert.ok(out.includes('--by refine-<序号>'), '领取前缀归一为通用前缀（去批次尾号，REQ-20260913-003）');
+  assert.ok(!out.includes('完善批次：'), '存量批次行删除（展示层）');
   assert.ok(!out.includes('-refine-<序号>，与主调度会话区分'), '旧命名行（<批次号>-refine-<序号>）不再出现');
   assert.ok(out.includes('每个子 Agent 只做一项；同一时间只运行一个；不要让子代理再派发子代理。'), '其余正文行逐字保留');
 });
@@ -179,24 +183,24 @@ t('A2 变体 B 行序（009 形态：「每个子 Agent」行在执行 Agent 行
   ].join('\n');
   const out = taskSettings.normalizePromptForDisplay(legacy);
   assertGeneric(out, 'A2');
-  assert.ok(out.includes('在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善本批一个已接受条目的文档。'), '头行归一为单行完整句');
+  assert.ok(out.includes(REFINE_HEAD_NOW), '头行归一为现行单行完整句（当前队列最早，REQ-20260913-003）');
   assert.ok(out.includes('子代理会话命名统一为：<条目编号>（与主调度会话区分）。'), '旧命名行归一为通用命名句');
 });
 
 t('A3 变体 A（最老：general-purpose 头行 + 待接受口径）：头行归一为单行完整句，前缀归一', () => {
   const out = taskSettings.normalizePromptForDisplay(legacyRefineOldest('/tmp/p', '/tmp/atb.mjs'));
   assertGeneric(out, 'A3');
-  assert.ok(out.includes('在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善本批一个已接受条目的文档。'), 'general-purpose 头行归一（待接受 → 已接受）');
-  assert.ok(out.includes('--by refine-<批次尾号>-<序号>'), '领取前缀归一');
+  assert.ok(out.includes(REFINE_HEAD_NOW), 'general-purpose 头行归一（待接受 → 已接受 → 当前队列最早）');
+  assert.ok(out.includes('--by refine-<序号>'), '领取前缀归一（去批次尾号）');
   assert.ok(out.includes('你是当前项目的需求完善调度员'), '其余行逐字保留');
 });
 
 t('A4 变体 C（codex 执行段 + codex 口径行）：执行端行删除、codex 口径行与命名行归一，前缀归一', () => {
   const out = taskSettings.normalizePromptForDisplay(legacyRefineCodex('/tmp/p', 'RFB-20260909-017'));
   assertGeneric(out, 'A4');
-  assert.ok(out.includes(`${HEAD_LINE}\n${NAME_LINE}`), '执行端段归一为现行通用两行');
+  assert.ok(out.includes(REFINE_HEAD_NOW), '执行端段归一为现行通用单行头');
   assert.ok(out.includes('领取/回执命令在子代理会话内执行（工作目录用 --dir 指定）。'), 'codex 口径行归一为通用说明');
-  assert.ok(out.includes('--by refine-<批次尾号>-<序号>'), '领取前缀归一');
+  assert.ok(out.includes('--by refine-<序号>'), '领取前缀归一（去批次尾号）');
 });
 
 t('A5 开发侧存量：点名 codex exec 的旧跟随行整行替换为现行 FOLLOW_SESSION_PROMPT_LINE；旧模型行同；general-purpose 段归一为现行两行', () => {
@@ -204,7 +208,8 @@ t('A5 开发侧存量：点名 codex exec 的旧跟随行整行替换为现行 F
   assertGeneric(followOld, 'A5-follow');
   assert.ok(followOld.includes(FOLLOW), '旧跟随行替换为现行跟随指令行');
   assert.ok(!followOld.includes('codex exec'), '不再点名 codex exec 参数');
-  assert.ok(followOld.includes('每轮新启动一个子代理，按执行规范自行选择本批一个可实施条目，认领、实施、测试并上报。\n每个子代理只做一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。'), 'general-purpose 段归一为现行两行');
+  assert.ok(followOld.includes(DEV_HEAD_NOW), 'general-purpose 段归一为现行开发头行（当前队列最早，REQ-20260913-003）');
+  assert.ok(followOld.includes('每个子代理只做一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。'), '命名行归一保留');
   const modelOld = taskSettings.normalizePromptForDisplay(legacyDevModelLine('/tmp/p', 'batch-20260908-018', '/tmp/spec.md', '/tmp/atb.mjs'));
   assertGeneric(modelOld, 'A5-model');
   assert.ok(modelOld.includes(FOLLOW), '旧模型行替换为跟随指令行');
@@ -222,7 +227,11 @@ t('A6 幂等与透传：现行 buildRefinePrompt / generatePrompt 输出原样�
     HEAD_LINE,
     NAME_LINE,
   ].join('\n');
-  assert.equal(taskSettings.normalizePromptForDisplay(b17), taskSettings.normalizePromptModelLine(b17), '旧模型行夹具与既有归一口径一致');
+  // REQ-20260913-003：两行头进一步归一为现行单行头，模型行替换口径不变（FOLLOW 行仍出现）
+  const n17 = taskSettings.normalizePromptForDisplay(b17);
+  assert.ok(n17.includes(FOLLOW), '旧模型行替换为跟随指令行');
+  assert.ok(n17.includes(REFINE_HEAD_NOW), '两行头归一为现行单行头');
+  void taskSettings.normalizePromptModelLine;
   assert.equal(taskSettings.normalizePromptForDisplay(null), null, 'null 透传');
   assert.equal(taskSettings.normalizePromptForDisplay(undefined), undefined, 'undefined 透传');
   assert.equal(taskSettings.normalizePromptForDisplay(''), '', '空串透传');
@@ -252,18 +261,15 @@ t('B1 完善数据层：refineBatchPublicView / refineSummary 归一 zcode 旧�
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
 
-t('B2 完善 CLI：refine create 幂等回显（JSON 与文本）与 refine summary 不透出执行端字样', () => {
+t('B2 完善 CLI：refine create 重复启动被拒（REQ-20260913-003）；refine summary 不透出执行端字样', () => {
   const p = mkProject('atb-b29-b2-');
   try {
-    mkAccepted(p.dataDir, '幂等回显');
+    mkAccepted(p.dataDir, '回显');
     const first = atbJson(['refine', 'create'], p.root);
     freezeRefinePrompt(p.dataDir, first.batchId, legacyRefineZcode(p.root, first.batchId, ATB));
-    const again = atbJson(['refine', 'create'], p.root);
-    assert.equal(again.created, false, '在途批次幂等返回');
-    assertGeneric(again.prompt, 'B2-json');
-    const text = spawnSync(process.execPath, [ATB, 'refine', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(text.status, 0, '文本模式回显应成功');
-    assert.doesNotMatch(text.stdout, AGENT_WORDS, '文本回显不含执行端字样');
+    const again = spawnSync(process.execPath, [ATB, 'refine', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
+    assert.notEqual(again.status, 0, '未结束轮内重复创建应被拒');
+    assert.doesNotMatch(again.stdout + again.stderr, AGENT_WORDS, '拒绝输出不含执行端字样');
     const sum = atbJson(['refine', 'summary'], p.root);
     assertGeneric(sum.batch.prompt, 'B2-summary');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
@@ -286,12 +292,9 @@ t('C1 开发数据层与 CLI：batch create 幂等回显、batch summary（batch
     assert.equal(first.created, true, '首批创建成功');
     const specPath = path.join(p.dataDir, 'worker-spec.md');
     freezeDevPrompt(p.dataDir, first.batchId, legacyDevFollowOld(p.root, first.batchId, specPath, ATB));
-    const again = atbJson(['batch', 'create'], p.root);
-    assert.equal(again.created, false, '队尾候选一致幂等返回');
-    assertGeneric(again.prompt, 'C1-json');
-    const text = spawnSync(process.execPath, [ATB, 'batch', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(text.status, 0, '文本模式回显应成功');
-    assert.doesNotMatch(text.stdout, AGENT_WORDS, '文本回显不含执行端字样');
+    const again = spawnSync(process.execPath, [ATB, 'batch', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
+    assert.notEqual(again.status, 0, '未结束轮内重复创建应被拒（REQ-20260913-003）');
+    assert.doesNotMatch(again.stdout + again.stderr, AGENT_WORDS, '拒绝输出不含执行端字样');
     const sum = atbJson(['batch', 'summary'], p.root);
     assertGeneric(sum.batch.prompt, 'C1-summary(batchPublicView)');
     const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'dispatch', 'batches', first.batchId, 'batch.json'), 'utf8'));
@@ -331,12 +334,12 @@ t('C2 开发服务端：/api/batch/create 幂等返回、/api/batch/prompt、/ap
     mkPlanned(dataDir, '服务端开发口径');
     const first = await req('POST', '/api/batch/create', {});
     assert.equal(first.status, 200);
+    const firstId = batch.queueHeadBatch(dataDir).batchId;
     const specPath = path.join(dataDir, 'worker-spec.md');
-    freezeDevPrompt(dataDir, first.json.batchId, legacyDevModelLine(root, first.json.batchId, specPath, ATB));
+    freezeDevPrompt(dataDir, firstId, legacyDevModelLine(root, firstId, specPath, ATB));
     const again = await req('POST', '/api/batch/create', {});
-    assert.equal(again.status, 200);
-    assert.equal(again.json.created, false, '幂等返回在途批次');
-    assertGeneric(again.json.prompt, 'C2-create');
+    assert.equal(again.status, 400, '重复启动 400（REQ-20260913-003）');
+    assert.match(String(again.json && again.json.error || ''), /已有进行中的任务/);
     const pr = await req('GET', '/api/batch/prompt');
     assert.equal(pr.status, 200);
     assertGeneric(pr.json.prompt, 'C2-prompt');

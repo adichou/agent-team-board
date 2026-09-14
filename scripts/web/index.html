@@ -143,7 +143,7 @@
           <!-- REQ-20260908-018：批量移入计划（已接受 → 已计划，人工排期），逐条流转、单项失败不回滚 -->
           <button type="button" id="planAdd" class="btn primary hidden" disabled title="移入计划（排入开发计划）：勾选的已接受条目逐条置为已计划，开发启动后最旧优先处理">移入计划</button>
           <!-- REQ-20260908-027：批量驳回待接受（已接受 → 待接受），完善中的单被服务端拦截计入失败清单 -->
-          <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮批量完善结束后再驳回">驳回待接受</button>
+          <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮 AI 分析结束后再驳回">驳回待接受</button>
           <!-- BUG-20260909-006：已计划列表的批量开发入口移除（批量开发入口唯一收敛任务模块，口径=已计划队列）；
                已计划档勾选仅为「移出计划」服务 -->
           <button type="button" id="planRemove" class="btn warn hidden" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
@@ -151,12 +151,12 @@
           <!-- REQ-20260909-007：档位快捷入口——已接受档「开始完善」/ 已计划档「开始开发」，空间足够时靠右、
                与勾选无关仅导航（初始隐藏，syncAcceptance 按当前档切换显隐与文案；任务创建仍由面板内「启动」承接）；
                REQ-20260910-026：与批量动作组同入 #captionActions 恒定同一行 -->
-          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始完善" title="进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ 开始完善</button>
+          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始 AI 分析" title="进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ 开始 AI 分析</button>
           </div>
         </div>
         <div id="acceptResult" class="accept-result hidden" role="status" aria-live="polite"></div>
         <div id="reqList" class="req-list"></div>
-        <!-- REQ-20260911-007 待人工确认持久聚合区：不随批次结束消失；worker 声明 hold 的 in-progress
+        <!-- REQ-20260911-007 待人工确认持久聚合区：不随本轮任务结束消失；worker 声明 hold 的 in-progress
              条目在此呈现（等待时长 / 未答清单 / 补决策 / 复工 / 确认完成防呆）。空态整体隐藏不占版面 -->
         <div id="holdArea" class="hold-area hidden" role="region" aria-label="待人工确认" aria-live="polite"></div>
       </section>
@@ -182,7 +182,7 @@
 
   <div id="oncallLightbox" class="oncall-lightbox hidden" title="点击任意处关闭放大图"><img alt="放大查看"></div>
 
-  <!-- REQ-20260907-004 任务模块：集中呈现批次、队列、执行记录与对应操作（页面化，不再用抽屉遮罩） -->
+  <!-- REQ-20260907-004 任务模块：集中呈现任务轮次、队列、执行记录与对应操作（页面化，不再用抽屉遮罩） -->
   <section id="runsView" class="runs-view hidden" aria-label="任务">
     <aside id="batchDrawer" class="batch-drawer" aria-label="任务面板"></aside>
   </section>
@@ -216,7 +216,7 @@
     </header>
     <div class="global-panel-tools">
       <p class="global-panel-scope" title="不随顶栏项目选择变化">跨项目批量任务</p>
-      <input id="globalSearchInput" class="search-input" type="search" placeholder="搜项目 / 批次号 / 条目编号…" autocomplete="off" enterkeyhint="search" aria-label="搜索全局任务（跨项目）" />
+      <input id="globalSearchInput" class="search-input" type="search" placeholder="搜项目 / 条目编号…" autocomplete="off" enterkeyhint="search" aria-label="搜索全局任务（跨项目）" />
     </div>
     <div id="globalPanelBody" class="global-panel-body" aria-label="全局任务列表"></div>
   </aside>
@@ -439,7 +439,7 @@
           <tr><td><kbd class="sk">Tab</kbd> / <kbd class="sk">Shift+Tab</kbd></td><td>顺序移动焦点</td><td>沿用原生顺序；本帮助开启时焦点留在帮助内</td></tr>
         </tbody>
       </table>
-      <p class="muted small shortcut-note">输入框、文本域、下拉选择、contenteditable 及中文输入法组合输入期间不触发以上快捷键；带 Ctrl / ⌘ / Alt 的组合键与未列出的按键保留浏览器默认行为。快捷键只触发现有界面入口，不直接接受、计划、删除条目或启动批次。</p>
+      <p class="muted small shortcut-note">输入框、文本域、下拉选择、contenteditable 及中文输入法组合输入期间不触发以上快捷键；带 Ctrl / ⌘ / Alt 的组合键与未列出的按键保留浏览器默认行为。快捷键只触发现有界面入口，不直接接受、计划、删除条目或启动批量任务。</p>
     </div>
   </div>
 

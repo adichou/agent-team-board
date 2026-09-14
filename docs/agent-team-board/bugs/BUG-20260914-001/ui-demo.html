@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-001 演示 · AI 分析收尾提示重复显示</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1c2436; --border: #2a3450;
+    --text: #dbe2f4; --muted: #8b96b3; --link: #6ea8fe;
+    --ok-bg: rgba(34, 197, 94, 0.10); --ok-text: #4ade80; --ok-border: rgba(74, 222, 128, 0.35);
+    --warn: #f87171; --warn-bg: rgba(220, 38, 38, 0.10);
+    --info-text: #7dd3fc; --info-bg: rgba(56, 189, 248, 0.10);
+    --chip-ok-text: #4ade80; --chip-ok-border: rgba(74, 222, 128, 0.4);
+    --chip-warn-text: #fbbf24; --chip-warn-border: rgba(251, 191, 36, 0.4);
+    --primary: #3b82f6; --danger: #ef4444;
+  }
+  html[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef1f8; --border: #d4dae8;
+    --text: #1f2740; --muted: #5f6a85; --link: #1d66d0;
+    --ok-bg: rgba(22, 163, 74, 0.10); --ok-text: #15803d; --ok-border: rgba(22, 163, 74, 0.35);
+    --warn: #b91c1c; --warn-bg: rgba(220, 38, 38, 0.08);
+    --info-text: #0369a1; --info-bg: rgba(14, 165, 233, 0.10);
+    --chip-ok-text: #15803d; --chip-ok-border: rgba(22, 163, 74, 0.4);
+    --chip-warn-text: #a16207; --chip-warn-border: rgba(202, 138, 4, 0.45);
+    --primary: #2563eb; --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 16px 60px; }
+  a { color: var(--link); }
+
+  /* ===== 演示控制面板 ===== */
+  .demo-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 14px;
+  }
+  .demo-bar .lbl { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    padding: 5px 14px; cursor: pointer; font-size: 12.5px;
+  }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .demo-bar select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 8px; font-size: 12.5px;
+  }
+  .demo-bar .spacer { flex: 1; }
+  .demo-note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+  .demo-note b { color: var(--text); }
+  .dup-flag { color: var(--warn); font-weight: 600; }
+
+  /* ===== 看板头部（一级页签） ===== */
+  .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .pill {
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 99px; padding: 5px 16px; cursor: pointer; font-size: 13px;
+  }
+  .pill.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .top .links { margin-left: auto; display: flex; gap: 14px; font-size: 12.5px; }
+
+  /* ===== 面板 ===== */
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .subtabs { display: flex; gap: 18px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .subtab {
+    appearance: none; background: none; border: 0; color: var(--muted);
+    padding: 6px 2px 8px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent;
+  }
+  .subtab.on { color: var(--text); border-bottom-color: var(--primary); }
+
+  .status-line { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
+  .chip {
+    border-radius: 99px; padding: 2px 10px; font-size: 12px; border: 1px solid;
+  }
+  .chip.ok { color: var(--chip-ok-text); border-color: var(--chip-ok-border); background: var(--ok-bg); }
+  .chip.run { color: var(--info-text); border-color: rgba(125, 211, 252, .4); background: var(--info-bg); }
+  .chip.warn { color: var(--chip-warn-text); border-color: var(--chip-warn-border); background: var(--warn-bg); }
+
+  .notice { border-radius: 9px; padding: 9px 12px; font-size: 12.5px; margin: 10px 0; }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-border); }
+  .notice.info { background: var(--info-bg); color: var(--info-text); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice .src { display: block; font-size: 11px; opacity: .75; margin-top: 2px; }
+  .notice.dup { outline: 2px dashed rgba(248, 113, 113, .55); outline-offset: 2px; }
+
+  .actions { display: flex; gap: 10px; margin: 6px 0 14px; flex-wrap: wrap; }
+  .btn {
+    appearance: none; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); padding: 6px 16px;
+    cursor: pointer; font-size: 12.5px;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+  .btn.warn2 { background: transparent; border-color: var(--chip-warn-border); color: var(--chip-warn-text); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px 16px; margin: 8px 0 12px;
+  }
+  .meta-grid > div { background: var(--panel2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; }
+  .meta-grid label { display: block; color: var(--muted); font-size: 11.5px; margin-bottom: 2px; }
+  .cid { color: var(--link); cursor: pointer; }
+  .cid:hover { text-decoration: underline; }
+
+  .stats { color: var(--muted); font-size: 12.5px; border-top: 1px dashed var(--border); padding-top: 10px; }
+  .stats b { color: var(--text); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  td.done { color: var(--ok-text); }
+  td.run { color: var(--info-text); }
+
+  pre.prompt {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 9px;
+    padding: 10px 12px; font-size: 12px; white-space: pre-wrap; color: var(--muted);
+  }
+
+  /* toast */
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 9px; padding: 8px 16px; font-size: 12.5px; opacity: 0;
+    pointer-events: none; transition: all .25s; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .footer-note { color: var(--muted); font-size: 11.5px; margin-top: 14px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="demo-note">
+    <b>BUG-20260914-001 可交互演示</b> —— AI 分析任务收尾时重复显示「本轮完善队列已处理完毕（…）」。
+    用下方控制面板切换 <b>缺陷现状 / 修复后</b> 与批次状态，观察概况页提示区的差异：
+    <span class="dup-flag">缺陷现状 = 同屏两条、措辞不一致；修复后 = 仅一条、文案统一。</span>
+  </p>
+
+  <div class="demo-bar">
+    <span class="lbl">版本</span>
+    <div class="seg" id="segMode">
+      <button data-mode="defect" class="on">缺陷现状</button>
+      <button data-mode="fixed">修复后</button>
+    </div>
+    <span class="lbl">批次状态</span>
+    <select id="phase">
+      <option value="finished" selected>正常收尾（剩余 0）— 缺陷场景</option>
+      <option value="running">运行中（在途执行）</option>
+      <option value="paused">已暂停</option>
+      <option value="aborted">已终止</option>
+      <option value="empty">无任务（空候选 / 启动区）</option>
+    </select>
+    <span class="spacer"></span>
+    <button class="btn" id="btnSimPoll" title="模拟前端轮询重渲染（sig 变化 → renderRefinePanel 重跑）">模拟轮询刷新</button>
+    <button class="btn" id="btnTheme">浅色 / 深色</button>
+  </div>
+
+  <!-- ===== 看板一级页签 ===== -->
+  <div class="top">
+    <button class="pill on">AI 分析</button>
+    <button class="pill" id="pillDev">AI 开发</button>
+    <div class="links">
+      <a href="javascript:void(0)" onclick="toast('演示：跳转新建 Zcode 会话说明（真实应用为外链）')">去新建 Zcode 会话</a>
+      <a href="javascript:void(0)" onclick="toast('演示：跳转新建 Codex 会话说明（真实应用为外链）')">去新建 Codex 会话</a>
+    </div>
+  </div>
+
+  <!-- ===== AI 分析面板 ===== -->
+  <div class="panel" id="panel">
+    <div class="subtabs" id="subtabs">
+      <button class="subtab on" data-pane="overview">概况</button>
+      <button class="subtab" data-pane="queue">队列</button>
+      <button class="subtab" data-pane="prompt">提示词</button>
+      <button class="subtab" data-pane="records">记录</button>
+    </div>
+    <div id="pane"></div>
+  </div>
+
+  <p class="footer-note">单文件演示页 · 内联 CSS/JS · 无外网依赖 —— 仅复刻「AI 分析 → 概况」相关布局与状态，非完整产品。</p>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  var state = { mode: 'defect', phase: 'finished', pane: 'overview', renderN: 0 };
+  var $ = function (s) { return document.querySelector(s); };
+
+  // 服务端口径文案：checkRefineBatch() 在 remaining===0 时返回（refine-store.mjs）
+  var SERVER_NOTICE = '本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）';
+  // 前端口径文案：renderRefinePanel() batchDone 硬编码（app.js）
+  var FRONT_NOTICE = '本轮完善队列已处理完毕（条目保持已接受，后续流转由人工判断）。';
+
+  var RUNS = [
+    { id: 'REQ-20260910-031', title: '清单导出增加 CSV 格式', owner: 'refine-2', result: 'done', sum: '补 README 描述与验收标准' },
+    { id: 'BUG-20260910-012', title: '看板刷新后滚动位置丢失', owner: 'refine-1', result: 'done', sum: '补现象/复现/期望/验收 + ui-demo' }
+  ];
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  var toastTimer;
+  window.toast = function (msg) {
+    var t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  };
+
+  function noticeHtml(cls, text, src, dup) {
+    return '<div class="notice ' + cls + (dup ? ' dup' : '') + '">' + esc(text) +
+      (src ? '<span class="src">' + esc(src) + '</span>' : '') + '</div>';
+  }
+
+  function metaGrid(phase) {
+    var cur = phase === 'running' ? '<span class="cid" onclick="toast(\'演示：跳转条目详情\')">REQ-20260910-031</span> 清单导出…' : '本轮已结束';
+    var owner = phase === 'running' ? 'refine-2' : '—';
+    var started = phase === 'empty' ? '—' : '09-14 08:32';
+    var receipt = phase === 'empty' ? '—' : '补 README 描述与验收标准';
+    return '<div class="meta-grid">' +
+      '<div><label>当前条目</label><span>' + cur + '</span></div>' +
+      '<div><label>子代理会话</label><span>' + owner + '</span></div>' +
+      '<div><label>开始时间</label><span>' + started + '</span></div>' +
+      '<div><label>耗时</label><span>' + (phase === 'running' ? '已用时 6 分钟' : (phase === 'empty' ? '—' : '4 分 12 秒')) + '</span></div>' +
+      '<div><label>最近回执</label><span>' + esc(receipt) + '</span></div>' +
+      '<div><label>最后活动</label><span>' + (phase === 'empty' ? '—' : '09-14 09:41') + '</span></div>' +
+      '</div>';
+  }
+
+  function statsLine(done, remaining, total) {
+    return '<div class="stats">已完成 <b>' + done + '</b> · 异常 <b>0</b> · 进行中 <b>' + (remaining ? 0 : 0) + '</b> · 剩余 <b>' + remaining + '</b> · 共 <b>' + total + '</b> 项</div>';
+  }
+
+  function renderOverview() {
+    var p = state.phase, mode = state.mode, h = '';
+
+    if (p === 'empty') {
+      h += '<p style="color:var(--muted);font-size:12.5px;margin:0 0 6px">AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准），Bug 补现象/复现步骤/期望行为/验收说明。</p>';
+      h += '<div class="notice">暂无可完善候选：已接受条目均已完善（或尚无已接受条目）。</div>';
+      h += '<div class="actions"><button class="btn primary" disabled title="暂无可完善候选">启动</button></div>';
+      $('#pane').innerHTML = h; return;
+    }
+
+    // —— 状态行 ——
+    var chip = p === 'finished' ? '<span class="chip ok">已结束</span>'
+      : p === 'running' ? '<span class="chip run">执行中</span>'
+      : p === 'paused' ? '<span class="chip warn">已暂停</span>'
+      : '<span class="chip warn">已终止</span>';
+    h += '<div class="status-line">' + chip +
+      '<span style="color:var(--muted);font-size:12px">子代理模式（提示词通用，任意 Agent 会话可执行） · 创建 09-14 08:30</span></div>';
+
+    // —— 提示区（缺陷核心） ——
+    var serverNoticeLive = (p === 'finished' || p === 'running' || p === 'paused' || p === 'aborted');
+    var serverText = p === 'finished' ? SERVER_NOTICE
+      : p === 'running' ? '当前执行未收尾（run-20260914-0832-aa11 REQ-20260910-031 owner refine-2），等待子 Agent 回执后核对'
+      : p === 'paused' ? '已暂停后续领取（在途执行不受影响）'
+      : '任务已人工终止：不再派发后续项；在途子代理请在对应子代理会话人工停止';
+
+    if (p === 'finished') {
+      if (mode === 'defect') {
+        // 缺陷现状：服务端 notice（普通样式）+ 前端硬编码 ok 条同时渲染 → 重复且文案不一致
+        h += noticeHtml('', SERVER_NOTICE, '来源① /api/refine/current → data.notice（refine-store.mjs checkRefineBatch）', true);
+        h += noticeHtml('ok', FRONT_NOTICE, '来源② app.js renderRefinePanel() batchDone 硬编码', true);
+      } else {
+        // 修复后：仅渲染一条（ok 样式，文案与服务端 notice 逐字一致——含「均」、不加句号）
+        h += noticeHtml('ok', SERVER_NOTICE, '修复后：单一来源渲染，文案与 checkRefineBatch 统一');
+      }
+    } else if (serverNoticeLive) {
+      h += noticeHtml(p === 'aborted' ? 'warn' : (p === 'paused' ? 'info' : ''), serverText);
+    }
+
+    if (p === 'aborted') {
+      h += noticeHtml('warn', '任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止；终止后可立即「启动新一轮」。');
+    }
+    if (p === 'paused') {
+      h += noticeHtml('info', '已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。');
+    }
+
+    // —— 按钮行 ——
+    var done = p === 'running' ? 1 : 2, remaining = p === 'running' ? 1 : 0, total = 2;
+    if (p === 'finished') {
+      h += '<div class="actions"><button class="btn primary" id="btnNext" title="以当前已接受未完善候选创建新任务">启动新一轮</button></div>';
+    } else {
+      h += '<div class="actions">' +
+        (p === 'running' || p === 'paused' ? '<button class="btn ' + (p === 'paused' ? 'primary' : 'warn2') + '" id="btnPause">' + (p === 'paused' ? '恢复后续领取' : '暂停后续领取') + '</button>' : '') +
+        (p !== 'aborted' ? '<button class="btn danger" id="btnAbort" title="停止派发后续项；剩余项出局；本轮记录保留">终止任务</button>' : '') +
+        (p === 'aborted' ? '<button class="btn primary" id="btnNext">启动新一轮</button>' : '') +
+        '</div>';
+    }
+
+    h += metaGrid(p);
+    h += statsLine(done, remaining, total);
+    $('#pane').innerHTML = h;
+
+    var bn = $('#btnNext'); if (bn) bn.onclick = function () { toast('演示：创建新一轮任务并复制主调度提示词'); };
+    var bp = $('#btnPause'); if (bp) bp.onclick = function () {
+      state.phase = state.phase === 'paused' ? 'running' : 'paused';
+      $('#phase').value = state.phase; render(); toast(state.phase === 'paused' ? '已请求暂停后续领取' : '已恢复后续领取');
+    };
+    var ba = $('#btnAbort'); if (ba) ba.onclick = function () {
+      state.phase = 'aborted'; $('#phase').value = 'aborted'; render(); toast('任务已人工终止（演示）');
+    };
+  }
+
+  function renderQueue() {
+    var p = state.phase;
+    if (p === 'empty') {
+      $('#pane').innerHTML = '<p style="color:var(--muted)">暂无待完善条目。</p>'; return;
+    }
+    if (p === 'finished' || p === 'aborted') {
+      $('#pane').innerHTML = '<p style="color:var(--muted);font-size:12.5px;margin:2px 0 0">任务已收尾：待完善队列已清空（条目保持已接受）。</p>'; return;
+    }
+    var rows = state.phase === 'running'
+      ? '<tr><td><span class="cid">BUG-20260913-007</span> 深浅色切换后表格斑马纹未更新</td><td>缺界面展示、缺验收说明</td><td>待完善</td></tr>'
+      : '';
+    $('#pane').innerHTML = '<table><tr><th>条目</th><th>缺失原因</th><th>操作</th></tr>' + rows +
+      (rows ? '' : '<tr><td colspan="3" style="color:var(--muted)">在途条目处理完成后，剩余候选将出现在此处。</td></tr>') + '</table>';
+  }
+
+  function renderPrompt() {
+    $('#pane').innerHTML =
+      '<div class="actions" style="margin-top:2px"><span style="color:var(--muted);font-size:12px">主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：</span>' +
+      '<button class="btn" onclick="toast(\'演示：重新复制不会创建新任务\')">重新复制</button></div>' +
+      '<pre class="prompt">你是批量完善主调度：执行 atb refine next 领取条目 → 派子代理补文档 → atb refine done 回执 → atb refine check 核对，直至 nextAction=stop（本轮完善队列已处理完毕…）。</pre>';
+  }
+
+  function renderRecords() {
+    var rows = RUNS.map(function (r) {
+      return '<tr><td><span class="cid" onclick="toast(\'演示：跳转条目详情\')">' + r.id + '</span> ' + esc(r.title) + '</td>' +
+        '<td>' + r.owner + '</td><td class="done">完成</td><td>' + esc(r.sum) + '</td><td>09-14 09:38</td></tr>';
+    }).join('');
+    $('#pane').innerHTML = '<table><tr><th>条目</th><th>执行器</th><th>结果</th><th>最近回执</th><th>时间</th></tr>' + rows + '</table>' +
+      '<p style="color:var(--muted);font-size:12px">共 2 条 · 展示最近 2 次尝试</p>';
+  }
+
+  function render() {
+    state.renderN++;
+    if (state.pane === 'overview') renderOverview();
+    else if (state.pane === 'queue') renderQueue();
+    else if (state.pane === 'prompt') renderPrompt();
+    else renderRecords();
+    document.querySelectorAll('.subtab').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.pane === state.pane);
+    });
+  }
+
+  // —— 事件绑定 ——
+  $('#segMode').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    state.mode = b.dataset.mode;
+    document.querySelectorAll('#segMode button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    render();
+    if (state.phase === 'finished') {
+      toast(state.mode === 'defect'
+        ? '缺陷现状：收尾提示出现 2 次，且「均」/句号不一致（虚线框标出重复对）'
+        : '修复后：收尾提示仅 1 次，文案与服务端 checkRefineBatch 统一');
+    } else {
+      toast('当前批次状态（' + $('#phase').selectedOptions[0].text.split('（')[0] + '）不受该 Bug 影响，两种版本一致');
+    }
+  });
+
+  $('#phase').addEventListener('change', function () { state.phase = this.value; render(); });
+
+  $('#subtabs').addEventListener('click', function (e) {
+    var b = e.target.closest('.subtab'); if (!b) return;
+    state.pane = b.dataset.pane; render();
+  });
+
+  $('#btnSimPoll').addEventListener('click', function () {
+    render();
+    toast('已模拟轮询重渲染（第 ' + state.renderN + ' 次）：提示区条数不变——'
+      + (state.phase === 'finished' && state.mode === 'defect' ? '仍为重复 2 条' : '正常'));
+  });
+
+  $('#btnTheme').addEventListener('click', function () {
+    var el = document.documentElement;
+    var light = el.dataset.theme === 'light';
+    el.dataset.theme = light ? '' : 'light';
+    toast(light ? '已切换深色' : '已切换浅色（演示可选适配）');
+  });
+
+  $('#pillDev').addEventListener('click', function () { toast('演示聚焦「AI 分析」页；AI 开发页签在此不展开'); });
+
+  render();
+})();
+</script>
+</body>
+</html>

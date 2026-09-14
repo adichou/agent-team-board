@@ -112,11 +112,12 @@ t('HTTP：终止批次 /api/batch/current 透出 abortRequested/aborted=true；�
     assert.ok(up, '服务应启动');
 
     let r = await req(port, 'POST', `/api/batch/create${P}`, {});
-    const batchId = r.json.batchId;
+    assert.equal('batchId' in r.json, false, '创建响应不再透出批次号（REQ-20260913-003）');
+    const batchId = batch.queueHeadBatch(core.dataDirFrom(A.root)).batchId;
 
     // 存量缺字段（未终止批次）：两个字段按 Boolean 归一化输出 false（布尔型，不是 undefined）
     r = await req(port, 'GET', `/api/batch/current${P}`);
-    assert.equal(r.json.batch.batchId, batchId);
+    assert.equal('batchId' in r.json.batch, false, 'current 批次载荷不再透出批次号（REQ-20260913-003）');
     assert.equal(typeof r.json.batch.abortRequested, 'boolean', 'abortRequested 应为布尔型');
     assert.equal(typeof r.json.batch.aborted, 'boolean', 'aborted 应为布尔型');
     assert.equal(r.json.batch.abortRequested, false, '未终止批次 abortRequested 应为 false');
@@ -126,13 +127,14 @@ t('HTTP：终止批次 /api/batch/current 透出 abortRequested/aborted=true；�
     r = await req(port, 'POST', `/api/batch/abort${P}`, { batchId });
     assert.equal(r.status, 200, `abort 应成功（${JSON.stringify(r.json)}）`);
     r = await req(port, 'GET', `/api/batch/current${P}`);
-    assert.equal(r.json.batch.batchId, batchId, '无后续批次时 current 回退展示同一终止批次');
+    assert.equal(batch.queueHeadBatch(core.dataDirFrom(A.root)), null, '终止批次不得回到未结束队列');
+    assert.equal(batch.latestBatch(core.dataDirFrom(A.root)).batchId, batchId, '无后续轮次时 current 回退展示同一终止轮次');
     assert.equal(r.json.batch.status, 'finished', '终止批次终态为 finished');
     assert.equal(r.json.batch.abortRequested, true, '终止批次应透出 abortRequested=true');
     assert.equal(r.json.batch.aborted, true, '终止批次应透出 aborted=true');
     assert.equal(typeof r.json.batch.abortRequested, 'boolean', 'abortRequested 应为布尔型');
     assert.equal(typeof r.json.batch.aborted, 'boolean', 'aborted 应为布尔型');
-    assert.ok(r.json.queue.every((q) => q.batchId !== batchId), '终止批次不得回到未结束队列');
+    assert.equal('queue' in r.json, false, 'current 不再携带排队列表（REQ-20260913-003）');
 
     // 自然结束批次：字段为 false，不误判为人工终止
     const nr = await runAtb(['new', 'req', '自然收尾'], A.root);
@@ -141,12 +143,12 @@ t('HTTP：终止批次 /api/batch/current 透出 abortRequested/aborted=true；�
     await runAtb(['status', m[1], 'accepted'], A.root);
     await runAtb(['status', m[1], 'planned'], A.root);
     r = await req(port, 'POST', `/api/batch/create${P}`, {});
-    const batchId2 = r.json.batchId;
     const dataDir = core.dataDirFrom(A.root);
+    const batchId2 = batch.queueHeadBatch(dataDir).batchId;
     await drainBatch(dataDir, batchId2);
     assert.equal(batch.getBatch(dataDir, batchId2).status, 'finished', '全部回执后批次应自然收尾');
     r = await req(port, 'GET', `/api/batch/current${P}`);
-    assert.equal(r.json.batch.batchId, batchId2, 'current 回退展示最新自然结束批次');
+    assert.equal(batch.latestBatch(dataDir).batchId, batchId2, 'current 回退展示最新自然结束批次');
     assert.equal(r.json.batch.status, 'finished');
     assert.equal(r.json.batch.abortRequested, false, '自然结束不得误判为人工终止（abortRequested）');
     assert.equal(r.json.batch.aborted, false, '自然结束不得误判为人工终止（aborted）');

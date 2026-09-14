@@ -126,7 +126,8 @@ t('S6 实时队列：批次创建后新置计划的条目可被取到；处理�
   const p = mkProject('atb-planned-live-');
   const a = mkItem(p, { title: 'A 最旧', plan: true });
   const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
-  assert.deepEqual(bt.candidates, [a], '创建时冻结当前已计划快照');
+  assert.deepEqual(bt.candidates, [], '建轮不冻结候选快照（REQ-20260913-003）');
+  assert.deepEqual(batch.effectiveCandidates(p.dataDir, bt), [a], '生效候选实时读取当前已计划队列');
   const b = mkItem(p, { title: 'B 新计划', plan: true });                     // 创建批次之后才置计划
   const run1 = batch.nextItem(p.dataDir, bt.batchId, { owner: 'w1' });
   assert.equal(run1.itemId, a, '最旧优先：先处理 A');

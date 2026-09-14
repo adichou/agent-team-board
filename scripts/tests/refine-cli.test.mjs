@@ -44,11 +44,10 @@ t('R10 CLI 全链路：create（含提示词）→ next → 补文档 → done �
   const bad = atb(['refine', 'create', '--dev', '李四'], root);
   assert.notEqual(bad.code, 0, '--dev 应被拒绝');
   assert.ok(bad.err.includes('开发人员设置已移除'), 'die 信息（stderr）应说明开发人员设置已移除');
-  // create --json
-  r = atb(['refine', 'create'], root); // 幂等返回（队尾一致）
-  assert.equal(r.code, 0);
-  const j = JSON.parse(atb(['refine', 'create', '--json'], root).out.split('\n').filter(Boolean).pop());
-  assert.equal(j.created, false, '同候选重复创建幂等返回');
+  // REQ-20260913-003：未结束轮内重复创建被拒（不幂等返回、不排队）
+  r = atb(['refine', 'create'], root);
+  assert.notEqual(r.code, 0, '重复创建应被拒');
+  assert.ok((r.err + r.out).includes('已有进行中的完善任务'), '应说明重复启动被拒');
 
   // next --json：领取第一项
   const nx = JSON.parse(atb(['refine', 'next', '--by', 'zcode-refine-001-1', '--json'], root).out.split('\n').filter(Boolean).pop());
@@ -95,7 +94,9 @@ t('R10 CLI 全链路：create（含提示词）→ next → 补文档 → done �
   assert.match(r.out, /failed/);
   r = atb(['refine', 'summary'], root);
   assert.equal(r.code, 0);
-  assert.match(r.out, /RFB-\d{8}-001/);
+  // REQ-20260913-003：摘要不再透出批次号，按本轮执行状态输出
+  assert.match(r.out, /完善任务 \[/);
+  assert.ok(!r.out.includes('undefined'), '不得出现 undefined 批次号');
 });
 
 t('R10b CLI release 与 pause：认领冲突换单释放互斥；暂停后 next 提示 stop', () => {
@@ -150,7 +151,6 @@ t('R10d（BUG-20260908-015）CLI：已终止/已结束批次 refine pause 报错
   const dataDir = core.dataDirFrom(root);
   const x = core.createItem(dataDir, { type: 'requirement', title: '终止后CLI暂停' });
   core.setStatus(dataDir, x.id, 'accepted', { by: 'human' });
-  atb(['refine', 'create'], root);
   const created = JSON.parse(atb(['refine', 'create', '--json'], root).out.split('\n').filter(Boolean).pop());
   const batchId = created.batchId;
   atb(['refine', 'abort', '--batch', batchId], root);
@@ -171,6 +171,7 @@ t('R10d（BUG-20260908-015）CLI：已终止/已结束批次 refine pause 报错
   const y = core.createItem(dataDir, { type: 'requirement', title: '正常CLI暂停' });
   core.setStatus(dataDir, y.id, 'accepted', { by: 'human' });
   const created2 = JSON.parse(atb(['refine', 'create', '--json'], root).out.split('\n').filter(Boolean).pop());
+  assert.equal(created2.created, true, '终止后可再启动新一轮');
   r = atb(['refine', 'pause', '--batch', created2.batchId], root);
   assert.equal(r.code, 0, `正常批次 pause 应成功（${r.err}）`);
   r = atb(['refine', 'next', '--by', 'w1'], root);

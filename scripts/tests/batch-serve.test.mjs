@@ -87,14 +87,15 @@ t('批次接口：创建幂等、limit 入参忽略（REQ-20260908-019）、暂�
     let r = await req(port, 'POST', `/api/batch/create?project=${encodeURIComponent(A.root)}`, { limit: 101 });
     assert.equal(r.status, 200, 'limit=101 应被忽略并照常创建');
     assert.equal('limit' in r.json, false, '创建响应不应再回显 limit');
-    assert.equal(r.json.counts.candidates, 2, '候选应全量冻结（不按 limit 截断）');
-    const { batchId, prompt, counts } = r.json;
-    assert.ok(batchId && prompt.includes(batchId), '应返回批次与提示词');
+    assert.equal(r.json.counts.candidates, 2, '实时候选全量生效（不按 limit 截断）');
+    const { prompt, counts } = r.json;
+    assert.ok(prompt.includes(A.root) && prompt.includes('batch check --dir'), '应返回通用调度提示词');
+    assert.ok(!prompt.includes('批次'), 'REQ-20260913-003：提示词不含批次口径');
     assert.equal(counts.candidates, 2, `A 项目候选应为 2（得到 ${counts.candidates}）`);
+    // REQ-20260913-003：不排队——重复创建被 400 拒绝（limit 入参同样被忽略）
     r = await req(port, 'POST', `/api/batch/create?project=${encodeURIComponent(A.root)}`, { limit: 0 });
-    assert.equal(r.status, 200);
-    assert.equal(r.json.batchId, batchId, '重复创建应同批次（limit 入参被忽略）');
-    assert.equal(r.json.created, false);
+    assert.equal(r.status, 400);
+    assert.match(String(r.json && r.json.error || ''), /已有进行中的任务/);
 
     // 重复取提示词不建新批次
     r = await req(port, 'GET', `/api/batch/prompt?project=${encodeURIComponent(A.root)}`);
@@ -103,8 +104,8 @@ t('批次接口：创建幂等、limit 入参忽略（REQ-20260908-019）、暂�
 
     // current 摘要：prepared（待启动），不带 B 项目条目，不回显 limit（REQ-20260908-019）
     r = await req(port, 'GET', `/api/batch/current?project=${encodeURIComponent(A.root)}`);
-    assert.equal(r.json.batch.batchId, batchId);
     assert.equal(r.json.batch.status, 'prepared');
+    assert.equal('batchId' in r.json.batch, false, 'REQ-20260913-003：current 批次载荷不再透出批次号');
     assert.equal('limit' in r.json.batch, false, 'current 响应不应再回显 limit');
     // REQ-20260908-026：current 新增 pending 待处理队列（本项目单号）；跨项目单号可同号，隔离按唯一标题校验
     assert.ok(!JSON.stringify(r.json).includes('b-条目'), 'A 项目摘要不得混入 B 项目条目');
@@ -172,25 +173,21 @@ t('REQ-20260910-027 开发人员移除：create 遗留 developer 忽略、响应
     assert.equal('developer' in r.json, false, 'create 响应不应再带 developer');
     assert.ok(!r.json.prompt.includes('会话名'), '提示词不应含会话命名指令');
 
-    // current：batch 视图与 queue 排队项均无 developer
+    // current：batch 视图无 developer；REQ-20260913-003：排队列表（queue）已整体移除
     r = await req(port, 'GET', `/api/batch/current?project=${encodeURIComponent(A.root)}`);
     assert.equal('developer' in r.json.batch, false, 'current 的 batch 不应带 developer');
-    assert.ok(Array.isArray(r.json.queue) && r.json.queue.every((q) => !('developer' in q)), 'queue 项不应带 developer');
+    assert.equal('queue' in r.json, false, 'REQ-20260913-003：current 不再携带排队列表');
 
-    // 排队批次（第二批，冻结新条目）同样无 developer；非法值不再 400（校验随功能移除）
-    await runAtb(['new', 'req', 'dev-排队条目'], A.root);
+    // 重复创建（含显式 ids 与超长 developer）被拒；非法值不再 400（校验随功能移除，忽略语义不变）
+    await runAtb(['new', 'req', 'dev-重复启动条目'], A.root);
     const reqDir = path.join(A.root, 'docs', 'agent-team-board', 'requirements');
     const found = fs.readdirSync(reqDir).filter((d) => d.startsWith('REQ-'));
     const third = found[found.length - 1];
     await runAtb(['status', third, 'accepted'], A.root);
     await runAtb(['status', third, 'planned'], A.root);
     r = await req(port, 'POST', `/api/batch/create?project=${encodeURIComponent(A.root)}`, { ids: [third], developer: 'x'.repeat(31) });
-    assert.equal(r.status, 200, '超长 developer 应被忽略（不再 400）');
-    assert.equal(r.json.queued, true, '第二批应入队排队');
-    r = await req(port, 'GET', `/api/batch/current?project=${encodeURIComponent(A.root)}`);
-    const queued = (r.json.queue || []).filter((q) => q.batchId !== r.json.batch.batchId);
-    assert.ok(queued.length >= 1, '应存在排队批次');
-    assert.ok(queued.every((q) => !('developer' in q)), '排队批次不应带 developer');
+    assert.equal(r.status, 400, '超长 developer 被忽略；重复启动按 REQ-20260913-003 拒绝');
+    assert.match(String(r.json && r.json.error || ''), /已有进行中的任务/);
 
     // 无批次项目：不再返回 gitUser 预填键（stats 口径不变）
     r = await req(port, 'GET', `/api/batch/current?project=${encodeURIComponent(G)}`);
@@ -222,7 +219,8 @@ t('BUG-20260908-023 已终止/已结束批次 /api/batch/pause 返回错误而�
     assert.ok(up, '服务应启动');
 
     let r = await req(port, 'POST', `/api/batch/create${P}`, {});
-    const batchId = r.json.batchId;
+    assert.equal('batchId' in r.json, false, 'REQ-20260913-003：创建响应不再透出批次号');
+    const batchId = batch.queueHeadBatch(core.dataDirFrom(A.root)).batchId;
     r = await req(port, 'POST', `/api/batch/abort${P}`, { batchId });
     assert.equal(r.status, 200, `abort 应成功（${JSON.stringify(r.json)}）`);
     assert.equal(r.json.aborted, true);
@@ -240,7 +238,8 @@ t('BUG-20260908-023 已终止/已结束批次 /api/batch/pause 返回错误而�
     r = await req(port, 'GET', `/api/batch/current${P}`);
     assert.equal(r.json.batch.status, 'finished', '不得复活为 paused');
     assert.equal(r.json.batch.pauseRequested, false, '不得写入暂停请求');
-    assert.deepEqual((r.json.queue || []).map((q) => q.batchId), [], '终态批次不入未结束队列');
+    assert.equal('queue' in r.json, false, 'REQ-20260913-003：current 不再携带排队列表');
+    assert.ok(!batch.unfinishedBatches(core.dataDirFrom(A.root)).some((b) => b.batchId === batchId), '终态批次不入未结束队列');
 
     // 自然收尾（正常结束）批次：新增候选建新批次，库层跑完全部回执后同样拒绝暂停/恢复
     const nr = await new Promise((resolve) => {
@@ -254,8 +253,8 @@ t('BUG-20260908-023 已终止/已结束批次 /api/batch/pause 返回错误而�
     await runAtb(['status', m[1], 'accepted'], A.root);
     await runAtb(['status', m[1], 'planned'], A.root);
     r = await req(port, 'POST', `/api/batch/create${P}`, {});
-    const batchId2 = r.json.batchId;
     const dataDir = core.dataDirFrom(A.root);
+    const batchId2 = batch.queueHeadBatch(dataDir).batchId;
     // 被终止批次出局的旧候选仍为 planned、重新进入新批次：逐项收尾直至自然结束
     let got = batch.nextItem(dataDir, batchId2, { owner: 'lib-w1' });
     while (got && got.itemId) {

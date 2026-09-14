@@ -73,7 +73,8 @@ t('F2 四处冻结点统一记录版本：创建/吸收/重排队/领取均 v2: 
   accept(dataDir, a.id);
   const b = core.createItem(dataDir, { type: 'requirement', title: '在途新接受' });
   accept(dataDir, b.id);
-  const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
+  // ids 种子落账携带创建时冻结点（缺省建轮不冻结，REQ-20260913-003）
+  const { batch } = refine.createRefineBatch(dataDir, { ids: [a.id], mode: 'zcode', projectRoot: root });
   const baseOf = (id) => refine.getRefineBatch(dataDir, batch.batchId).candidates
     .find((c) => c.id === id).baseline;
   // ① 创建时冻结
@@ -189,7 +190,8 @@ t('F6 事故序列回归：裸基线在途批次领取→补全→done 记账，
   const a = core.createItem(dataDir, { type: 'requirement', title: 'r1' });
   accept(dataDir, a.id);
   const dir = core.resolveItemDir(dataDir, a.id).dir;
-  const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
+  // ids 种子落账（裸基线改写在账本候选上，缺省建轮不冻结，REQ-20260913-003）
+  const { batch } = refine.createRefineBatch(dataDir, { ids: [a.id], mode: 'zcode', projectRoot: root });
   // 模拟版本化上线前冻结的裸基线（v1 时代口径；REQ-20260908-021 演进使其与重算必然不等）
   rewriteBaseline(dataDir, batch.batchId, a.id, refine.docsFingerprintAt(dir, 1));
   const bare = refine.getRefineBatch(dataDir, batch.batchId).candidates.find((c) => c.id === a.id).baseline;

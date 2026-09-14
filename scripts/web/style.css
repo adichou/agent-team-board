@@ -2894,6 +2894,10 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .rel-card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-card .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rel-card .meta.err { color: var(--warn); white-space: normal; }
+/* BUG-20260913-004：版本卡片行内操作（参照需求列表 .req-row .row-acts 口径）——
+   小号按钮独立成行，长版本名换行不破版；深浅色沿用 .btn 主题变量 */
+.rel-card .card-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.rel-card .card-acts .btn { flex: none; white-space: nowrap; }
 .chip.git { background: var(--info-bg); color: var(--info-text); }
 .chip.apple { background: var(--ok-bg); color: var(--ok-text); }
 /* REQ-20260910-030 桌面应用（Electron）：与 Git / Apple 并列的第三种目标 chip 配色（主题变量，深浅色随系统） */
@@ -3031,6 +3035,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 8px 10px;
 }
 .bld-prompt-box textarea { resize: vertical; }
+/* BUG-20260913-005：回填弹窗上段「去新建 XX 会话」入口行——复用任务面板 .ws-entry-link 链接
+   样式与状态说明口径，弹窗内独立一行 flex-wrap，窄屏自动换行；深浅色沿用现有变量 */
+.bld-session-entry { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
 .bld-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 /* 分支浏览 */
 .bld-branch-split { grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); }

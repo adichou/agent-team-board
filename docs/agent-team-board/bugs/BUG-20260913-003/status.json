@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260913-003",
+  "type": "bug",
+  "title": "bug 单的文档也要支持讨论菜单，参考需求的文档",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-20260913-045-1",
+  "createdAt": "2026-09-13T11:21:24.183Z",
+  "updatedAt": "2026-09-13T12:09:36.679Z",
+  "agentCompletedAt": "2026-09-13T12:09:36.679Z",
+  "lastReport": {
+    "at": "2026-09-13T12:09:36.679Z",
+    "coverage": 100,
+    "framework": "node:assert/strict + vm 静态契约 + run-all",
+    "summary": "Bug 单详情抽屉文档页签同口径启用右键「讨论」菜单（复用 REQ-20260909-014 链路）：onDocCtxMenu 类型门槛改 requirement|bug 白名单；docRefPath 增 parent 参按 resolveItemDir 口径拼装真实磁盘路径（独立 bugs/<编号>/、归属 requirements/<REQ>/bugs/<编号>/）。新增测试 7 例并更新既有 T5 断言，npm test 213 文件全过。引入来源 REQ-20260909-014（经 atb list 核验）",
+    "runId": "run-20260913-214"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T11:21:24.183Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-13T11:21:24.184Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-13T11:33:22.203Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-192218-e02f）"
+    },
+    {
+      "at": "2026-09-13T11:59:18.811Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260913-045-1",
+      "note": "认领（zcode-batch-20260913-045-1）"
+    },
+    {
+      "at": "2026-09-13T12:09:36.680Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260913-045-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

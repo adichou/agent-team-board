@@ -36,8 +36,8 @@ t('R12-2 任务模块（REQ-20260908-020）：子面板为「批量完善 / 批�
   assert.doesNotMatch(js, /data-bmode="codex"/, 'Codex 后台自动派发 tab 入口隐藏');
   const tabs = js.match(/<nav class="tabs batch-modes">[\s\S]*?<\/nav>/);
   assert.ok(tabs, '应有子面板 tabs');
-  assert.match(tabs[0], /批量完善/);
-  assert.match(tabs[0], /批量开发/);
+  assert.match(tabs[0], /AI 分析/);
+  assert.match(tabs[0], /AI 开发/);
   const refresh = js.match(/async function refreshBatch\(\)[\s\S]*?\n\}/);
   assert.ok(refresh, '应存在 refreshBatch');
   assert.match(refresh[0], /mode === 'refine'/, 'refreshBatch 应分发 refine 模式');
@@ -111,7 +111,7 @@ t('R12-6（REQ-20260908-020）看板徽标：已接受单渲染三态徽标，�
   assert.match(js, /gotoRuns\('refine'\)/, '点击进入批量完善面板');
   // 详情页驳回按钮完善中禁用（悬停提示）
   const actions = js.match(/function drawerActionsButtonHtml\([\s\S]*?\n\}/)[0];
-  assert.match(actions, /完善中，待本轮批量完善结束后再驳回/, '完善中驳回入口禁用并提示');
+  assert.match(actions, /完善中，待本轮 AI 分析结束后再驳回/, '完善中驳回入口禁用并提示');
 });
 
 t('R12-7（REQ-20260909-011）设置模块「批量任务」分区精简：通用说明 + 完善流转开关 + 保存；无按 Agent 表格', () => {

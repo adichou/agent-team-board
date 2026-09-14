@@ -148,27 +148,30 @@ t('R2 候选清单（REQ-20260908-020）：仅已接受且未完善；文档完�
   assert.equal(cands.length, 3, '待接受单不进候选');
 });
 
-t('R3 创建：冻结候选+原因+基线；ids 过滤范围；同模式未结束批次幂等返回；无候选报错；zcode 提示词含流程与约束', () => {
+t('R3 创建：ids 种子+原因+基线；未结束轮重复启动拒绝；无候选报错；zcode 提示词含流程与约束（REQ-20260913-003 不冻结）', () => {
   const { root, dataDir } = mkProject();
   const req1 = core.createItem(dataDir, { type: 'requirement', title: 'r1' });
   const bug1 = core.createItem(dataDir, { type: 'bug', title: 'b1' });
   for (const x of [req1, bug1]) accept(dataDir, x.id);
-  // ids 过滤：只冻结勾选项
+  // 勾选集合全部不可完善（不存在/已完善/不在已接受）→ 报错不建轮
+  //（须在建轮前验证：未结束轮内重复启动拒绝会先于范围校验短路，REQ-20260913-003）
+  assert.throws(() => refine.createRefineBatch(dataDir, { ids: ['REQ-19990101-999'], mode: 'zcode', projectRoot: root }), /不可完善/, '空过滤集应整体报错');
+  // ids 过滤：只作队首种子
   const only = refine.createRefineBatch(dataDir, { ids: [req1.id], mode: 'zcode', projectRoot: root });
   assert.equal(only.created, true);
-  assert.deepEqual(only.batch.candidates.map((c) => c.id), [req1.id], '勾选集合过滤范围');
+  assert.deepEqual(only.batch.candidates.map((c) => c.id), [req1.id], '勾选集合作队首种子');
   assert.equal(only.batch.candidates[0].baseline, refine.docsFingerprint(core.resolveItemDir(dataDir, req1.id).dir), '基线=当前指纹');
-  // 勾选集合全部不可完善（不存在/已完善/不在已接受）→ 报错不冻结
-  assert.throws(() => refine.createRefineBatch(dataDir, { ids: ['REQ-19990101-999'], mode: 'zcode', projectRoot: root }), /不可完善/, '空过滤集应整体报错');
 
-  // BUG-20260908-012：勾选批未结束期间整批创建 → 幂等返回同一批次，不再为剩余候选新建第二个未结束批次
-  const full = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root, developer: '张三' }); // 遗留入参（REQ-20260910-027 起忽略）
-  assert.equal(full.created, false, '已有同模式未结束批次 → 幂等返回不新建');
-  assert.equal(full.batch.batchId, only.batch.batchId);
-  assert.equal(refine.unfinishedRefineBatches(dataDir).length, 1, '同模式始终只有一个未结束批次');
-  // 剩余候选 bug1 由原批次下一轮实时吸收（每轮实时读取口径，见 R4）
+  // REQ-20260913-003：未结束轮内重复启动被拒（不幂等返回、不建第二线）；剩余候选 bug1 归本轮实时队列
+  assert.throws(
+    () => refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root, developer: '张三' }),
+    /已有进行中的完善任务/,
+    '未结束轮内重复启动应被拒（developer 遗留入参同时被忽略）',
+  );
+  assert.equal(refine.unfinishedRefineBatches(dataDir).length, 1, '始终只有一个未结束轮');
+  assert.ok(refine.effectiveRefineCandidates(dataDir, only.batch).some((c) => c.id === bug1.id), '剩余候选实时并入本轮生效候选');
 
-  // 全新项目：整批创建冻结全量候选 + 落提示词（REQ-20260910-027：developer 不再落账）
+  // 全新项目：整批建轮不冻结候选 + 落提示词（REQ-20260910-027：developer 不再落账）
   const fresh = mkProject();
   const fr1 = core.createItem(fresh.dataDir, { type: 'requirement', title: 'r1' });
   const fb1 = core.createItem(fresh.dataDir, { type: 'bug', title: 'b1' });
@@ -176,10 +179,14 @@ t('R3 创建：冻结候选+原因+基线；ids 过滤范围；同模式未结�
   const full2 = refine.createRefineBatch(fresh.dataDir, { mode: 'zcode', projectRoot: fresh.root, developer: '张三' });
   assert.equal(full2.created, true);
   assert.match(full2.batch.batchId, /^RFB-\d{8}-\d{3}$/, '独立 RFB 序列');
-  assert.deepEqual(full2.batch.candidates.map((c) => c.id), [fr1.id, fb1.id], '整批创建冻结全部候选');
+  assert.deepEqual(full2.batch.candidates, [], '整批建轮不再冻结候选快照');
   assert.equal('developer' in full2.batch, false, 'REQ-20260910-027：账本不再写 developer');
   assert.ok(!full2.batch.prompt.includes('会话名'), '提示词无会话命名指令');
-  assert.ok(full2.batch.candidates[0].reasons.length, '冻结缺失原因');
+  assert.ok(full2.batch.prompt.includes('atb refine next'), 'zcode 提示词含领取命令');
+  assert.ok(full2.batch.prompt.includes('atb refine check'), 'zcode 提示词含核对命令');
+  assert.ok(full2.batch.prompt.includes('不要修改业务源码'), '提示词约束不改业务源码');
+  assert.ok(full2.batch.prompt.includes('保持 accepted'), '提示词约束保持已接受状态');
+  assert.ok(full2.batch.prompt.includes('待确认'), '提示词要求未知事实标待确认');
   assert.ok(full2.batch.prompt.includes('atb refine next'), 'zcode 提示词含领取命令');
   assert.ok(full2.batch.prompt.includes('atb refine check'), 'zcode 提示词含核对命令');
   assert.ok(full2.batch.prompt.includes('不要修改业务源码'), '提示词约束不改业务源码');
@@ -197,7 +204,7 @@ t('R3 创建：冻结候选+原因+基线；ids 过滤范围；同模式未结�
   assert.ok(cx.batch.prompt && !/zcode|Zcode|codex|Codex|general-purpose/.test(cx.batch.prompt), 'REQ-20260909-011：提示词单一通用版（无执行端字样）');
 });
 
-t('R4 重复启动幂等（BUG-20260908-012）：候选一致与候选新增均返回同一进行中批次；新候选由原批次下一轮吸收；条目保持 accepted', () => {
+t('R4 重复启动拒绝 + 实时队列（REQ-20260913-003）：候选一致与候选新增均拒绝新建；新候选由本轮吸收；条目保持 accepted', () => {
   const { root, dataDir } = mkProject();
   const items = ['r1', 'r2'].map((title) => {
     const x = core.createItem(dataDir, { type: 'requirement', title });
@@ -206,20 +213,20 @@ t('R4 重复启动幂等（BUG-20260908-012）：候选一致与候选新增均�
   });
   const [req1, req2] = items;
   const first = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
-  const again = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
-  assert.equal(again.created, false, '队尾候选一致 → 幂等返回（既有口径保留）');
-  assert.equal(again.batch.batchId, first.batch.batchId);
-  // 创建任务后新接受单 → 重复创建仍幂等返回同一批次，不产生第二个未结束批次
+  assert.throws(
+    () => refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root }),
+    /已有进行中的完善任务/,
+    '重复启动被拒（不幂等返回、不排队）',
+  );
+  // 创建任务后新接受单 → 重复创建同样被拒，不产生第二个未结束轮
   const r3item = core.createItem(dataDir, { type: 'requirement', title: 'r3' });
   accept(dataDir, r3item.id);
-  const repeat = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
-  assert.equal(repeat.created, false, '候选新增后重复创建 → 幂等返回不新建');
-  assert.equal(repeat.batch.batchId, first.batch.batchId, '返回原进行中批次');
+  assert.throws(() => refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root }), /已有进行中的完善任务/, '候选新增后重复创建同样被拒');
   const unfinished = refine.unfinishedRefineBatches(dataDir);
-  assert.equal(unfinished.length, 1, '同一模式始终只有一个未结束完善批次');
+  assert.equal(unfinished.length, 1, '始终只有一个未结束完善轮');
   assert.equal(unfinished[0].batchId, first.batch.batchId);
 
-  // 新候选由原批次后续领取轮实时吸收（每轮实时读取口径）
+  // 新候选由本轮后续领取轮实时吸收（每轮实时读取口径）
   const got1 = refine.nextRefineItem(dataDir, first.batch.batchId, { owner: 'w1' });
   assert.equal(got1.itemId, req1.id, '按冻结序领取第一项');
   fs.writeFileSync(path.join(got1.itemDir, 'README.md'), '# r1\n\n## 描述\n补全后的说明，超过三十个字符以保证判定完整。\n\n## 验收标准\n\n- [x] 可筛选\n');
@@ -239,26 +246,33 @@ t('R4 重复启动幂等（BUG-20260908-012）：候选一致与候选新增均�
   }
 });
 
-t('R4b 重复派发保护（REQ-20260909-011 通用化口径）：已冻结条目不入新批；显式旧 mode 创建幂等返回不建第二条线；排队批次不得抢先领取', () => {
+t('R4b 重复派发保护（REQ-20260913-003 口径）：未结束轮内一律拒绝新建（含显式旧 mode / 显式 ids）；存量排队账本不得抢先领取', () => {
   const { root, dataDir } = mkProject();
   const r1 = core.createItem(dataDir, { type: 'requirement', title: 'r1' });
   accept(dataDir, r1.id);
   const b1 = refine.createRefineBatch(dataDir, { projectRoot: root }); // 通用子代理模式
-  // 显式旧 mode 入参（存量语义兼容）：不再按 mode 分叉——一律幂等返回既有未结束批次，不建第二条线
-  const again = refine.createRefineBatch(dataDir, { mode: 'codex', projectRoot: root });
-  assert.equal(again.created, false, '显式 codex 幂等返回，不并行新建');
-  assert.equal(again.batch.batchId, b1.batch.batchId, '返回同一未结束批次');
-  // 新接受候选：全量重复创建仍幂等（新候选由原批次每轮吸收）；勾选范围（ids）路径可为新候选建排队批次
+  // 显式旧 mode 入参（存量语义兼容）：不按 mode 分叉——一律按重复启动拒绝，不建第二条线
+  assert.throws(
+    () => refine.createRefineBatch(dataDir, { mode: 'codex', projectRoot: root }),
+    /已有进行中的完善任务/,
+    '显式 codex 重复创建被拒，不并行新建',
+  );
+  // 新接受候选：全量与勾选范围（ids）重复创建均被拒（新候选由本轮实时队列吸收）
   const r2 = core.createItem(dataDir, { type: 'requirement', title: 'r2' });
   accept(dataDir, r2.id);
-  const again2 = refine.createRefineBatch(dataDir, { projectRoot: root });
-  assert.equal(again2.created, false, '全量重复创建幂等（新候选由原批次吸收）');
-  const b2 = refine.createRefineBatch(dataDir, { ids: [r2.id], projectRoot: root });
-  assert.equal(b2.created, true, '勾选范围创建新批（已冻结条目不入）');
-  assert.deepEqual(b2.batch.candidates.map((c) => c.id), [r2.id], '仅新候选入批（已冻结条目不入其他批次）');
-  assert.equal(b2.queued, true, '存在未结束批次 → 排队');
-  assert.throws(() => refine.nextRefineItem(dataDir, b2.batch.batchId, { owner: 'w2' }), /排队中/, '不得越过队首领取');
-  assert.doesNotThrow(() => refine.nextRefineItem(dataDir, b1.batch.batchId, { owner: 'w1' }), '队首批次可领取');
+  assert.throws(() => refine.createRefineBatch(dataDir, { projectRoot: root }), /已有进行中的完善任务/, '全量重复创建被拒（新候选由本轮吸收）');
+  assert.throws(() => refine.createRefineBatch(dataDir, { ids: [r2.id], projectRoot: root }), /已有进行中的完善任务/, '勾选范围重复创建同样被拒');
+  assert.equal(refine.unfinishedRefineBatches(dataDir).length, 1, '不产生第二个未结束轮');
+  // 存量排队数据防抢（升级前账本形态）：后位账本不得越过队首领取
+  const b2Id = 'RFB-20990101-099';
+  const raw = refine.getRefineBatch(dataDir, b1.batch.batchId);
+  const dirB = path.join(dataDir, 'refine', 'batches', b2Id);
+  fs.mkdirSync(dirB, { recursive: true });
+  fs.writeFileSync(path.join(dirB, 'batch.json'), JSON.stringify({
+    ...raw, batchId: b2Id, createdAt: '2099-01-02T00:00:00.000Z', status: 'prepared', currentRunId: null, candidates: [],
+  }));
+  assert.throws(() => refine.nextRefineItem(dataDir, b2Id, { owner: 'w2' }), /排队中/, '不得越过队首领取');
+  assert.doesNotThrow(() => refine.nextRefineItem(dataDir, b1.batch.batchId, { owner: 'w1' }), '队首账本可领取');
 });
 
 t('R5 领取：预留+互斥；未收尾重复领取被拒；状态变化出局记 skipped；人工编辑不跳过（BUG-20260908-011）', () => {
@@ -351,7 +365,8 @@ t('R8 check 协议：counts/nextAction/≤2KiB；全部处理完 stop+finished�
   assert.equal(runs.records[0].result, 'done');
   assert.equal(runs.records[0].summary, '补全了描述与验收');
   const s = refine.refineSummary(dataDir, batch.batchId);
-  assert.equal(s.batch.batchId, batch.batchId);
+  assert.equal('batchId' in s.batch, false, 'REQ-20260913-003：公开视图不再透出批次号');
+  assert.equal(refine.getRefineBatch(dataDir, batch.batchId).batchId, batch.batchId);
   assert.equal(s.counts.done, 1);
 });
 
@@ -371,9 +386,10 @@ t('R9 暂停/恢复与 release：pause 后 next 返回 stop=paused；release 释
   refine.pauseRefineBatch(dataDir, batch.batchId, false);
   const got2 = refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w2' });
   assert.equal(got2.itemId, core.listItems(dataDir).find((x) => x.title === 'r2').id, '恢复后继续领取下一项');
-  // 摘要缺省批次解析：最新未结束批次
+  // 摘要缺省批次解析：队首未结束账本（公开视图不再透出批次号）
   const s = refine.refineSummary(dataDir);
-  assert.equal(s.batch.batchId, batch.batchId);
+  assert.equal('batchId' in s.batch, false, 'REQ-20260913-003：公开视图不再透出批次号');
+  assert.equal(refine.queueHeadRefineBatch(dataDir).batchId, batch.batchId);
 });
 
 t('R11 上报显示单号和标题（REQ-20260908-014）：done/failed 回执、check.current、records 均含 title；快照缺失回退实时读；条目已删且无快照为 null', () => {
@@ -808,8 +824,9 @@ t('S10（回归）存量冻结批次原因快照不重算：旧口径原因原�
   const { root, dataDir } = mkProject();
   const req = core.createItem(dataDir, { type: 'requirement', title: 'r1' });
   accept(dataDir, req.id);
-  const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
+  const { batch } = refine.createRefineBatch(dataDir, { ids: [req.id], mode: 'zcode', projectRoot: root });
   // 模拟创建于旧口径（REQ-20260908-015 之前）的已冻结批次：直接改账本里的原因快照
+  //（ids 显式种子落账，保证 candidates[0] 存在——REQ-20260913-003 起缺省建轮不冻结候选）
   const bfile = path.join(dataDir, 'refine', 'batches', batch.batchId, 'batch.json');
   const raw = JSON.parse(fs.readFileSync(bfile, 'utf8'));
   raw.candidates[0].reasons = ['README 描述待补充', 'design 仅模板', 'test-cases 无用例'];

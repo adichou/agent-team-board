@@ -86,7 +86,7 @@ export function ensureDispatch(dataDir) {
     try {
       fs.copyFileSync(WORKER_SPEC_SRC, specDst);
     } catch {
-      fs.writeFileSync(specDst, '# 批量开发执行规范\n\n（生成时插件规范文件缺失，请更新插件后重新创建批次。）\n');
+      fs.writeFileSync(specDst, '# AI 开发执行规范\n\n（生成时插件规范文件缺失，请更新插件后重新启动任务。）\n');
     }
   }
   // 运行账本不进版本控制；不得误排除既有需求文档
@@ -303,21 +303,6 @@ export function queueHeadBatch(dataDir) {
   return unfinishedBatches(dataDir)[0] || null;
 }
 
-// REQ-20260907-012：条目「是否已进入批次」索引 —— 未结束批次 candidates → 最早批次
-// （与队列派发顺序一致：先入先派）。批次 finished 后其候选不再计入（unfinishedBatches 口径）。
-// 供 /api/board、/api/item/:id 为 planned 条目附加 batchEntry 展示用
-// （BUG-20260908-020 起 accepted 不再附加——批次派发面向已计划单）。
-export function batchEntryIndex(dataDir) {
-  const index = new Map();
-  for (const b of unfinishedBatches(dataDir)) {
-    for (const itemId of b.candidates || []) {
-      if (!index.has(itemId)) index.set(itemId, { batchId: b.batchId, status: b.status });
-    }
-  }
-  return index;
-}
-
-
 // 批次保留清理（REQ-20260906-023）：保留最近 keep 个批次目录，更旧的删除。
 // 「最旧」按 createdAt（次键 batchId，编号含日期与全局递增序号，字符串序即创建序）；
 // 存在未收尾运行（在途执行）的批次跳过不删，防止删除正在执行的批次账本；
@@ -386,6 +371,10 @@ function batchRuns(dataDir, batchId) {
 // REQ-20260908-026：retryItems 标记「异常/已中断记录已重新执行」——该条目回到待处理
 // （不计入异常终态计数），下一轮 next 重新领取并产生新执行尝试（保留原记录）。
 const FINAL_OR_SKIP = (phase) => FINAL_RUN_PHASES.has(phase) || phase === 'skipped';
+// 批次动态状态：终态运行映射、计数、在途运行（候选按实时口径盘点，REQ-20260913-003）
+// REQ-20260908-020：skipped（任务终止出局）同为终态——计入 counts.skipped 且不再算待处理。
+// REQ-20260908-026：retryItems 标记「异常/已中断记录已重新执行」——该条目回到待处理
+// （不计入异常终态计数），下一轮 next 重新领取并产生新执行尝试（保留原记录）。
 function batchState(dataDir, batch) {
   const runs = batchRuns(dataDir, batch.batchId);
   const retryItems = new Set(Object.keys(batch.retryItems || {}));
@@ -397,8 +386,9 @@ function batchState(dataDir, batch) {
   if (batch.currentRunId) {
     currentRun = runs.find((r) => r.runId === batch.currentRunId) || readJson(runPath(dataDir, batch.currentRunId));
   }
+  const candidates = effectiveCandidates(dataDir, batch);
   const counts = {
-    total: batch.candidates.length,
+    total: candidates.length,
     reported: 0,
     blocked: 0,
     failed: 0,
@@ -416,19 +406,19 @@ function batchState(dataDir, batch) {
     else if (r.phase === 'failed') counts.failed++;
     else if (r.phase === 'skipped') counts.skipped++;
   }
-  counts.remaining = batch.candidates.filter((id) => !finalByItem.has(id) || retryItems.has(id)).length;
+  counts.remaining = candidates.filter((id) => !finalByItem.has(id) || retryItems.has(id)).length;
   return { runs, finalByItem, retryItems, currentRun, counts };
 }
 
 // 剩余候选的当前可派发性盘点（BUG-20260906-001）：与 nextItem 的逐候选出局判定同口径——
-// 已有终态运行跳过；目录损坏 / 冻结后被认领或流转（含升级前遗留的 accepted 候选）→ 出局；
+// 已有终态运行跳过；目录损坏 / 盘点后被认领或流转（含升级前遗留的 accepted 候选）→ 出局；
 // 依赖未满足 → 受阻；否则可派发。check 的 stop 判定与 next 的 stop=blocked 收尾共用，保证两处不会口径漂移。
 function remainingDisposition(dataDir, batch, state, policies = null) {
   const pol = policies || readPolicies(dataDir);
   const blockedIds = [];
   const outIds = [];
   let dispatchable = 0;
-  for (const itemId of batch.candidates) {
+  for (const itemId of effectiveCandidates(dataDir, batch)) {
     // REQ-20260908-026：retryItems 标记的条目已回到待处理，按普通候选盘点
     if (state.finalByItem.has(itemId) && !state.retryItems.has(itemId)) continue;
     let st = null;
@@ -445,59 +435,55 @@ function remainingDisposition(dataDir, batch, state, policies = null) {
   return { dispatchable, blockedIds, outIds };
 }
 
-// 主调度提示词（batch-execution.md §6 模板；只含路径/标识/规则，不含队列）
-// REQ-20260910-027：开发人员设置已移除——不再生成「请将当前会话名改为：<batchId>-<开发人员>」
-// 命名指令；developer 参数保留但忽略（兼容旧调用，与 agent 参数同法）。
-// REQ-20260909-011 通用化：单一版本（agent 参数保留但忽略）——不再按执行 Agent 分叉，
-// 同一份提示词可在任意一种 Agent 会话中直接粘贴执行；调度要素完整保留。
+// 主调度提示词（REQ-20260913-003 去批次化：不含批次号/批次摘要入口/排队接续，核对入口不依赖
+// 批次标识；含实时取单指令——每完成一项实时从已计划队列最旧优先领取下一项，队列取空即本轮结束）。
+// REQ-20260910-027：开发人员设置已移除——不再生成会话命名指令；developer 参数保留但忽略（兼容旧调用）。
+// REQ-20260909-011 通用化：单一版本（agent 参数保留但忽略）——同一份提示词可在任意一种 Agent 会话中
+// 直接粘贴执行；调度要素完整保留。
 // REQ-20260909-005：modelSource='follow'（默认）→ 注入「与主调度会话保持一致」指令
 // （FOLLOW_SESSION_PROMPT_LINE）。
 // BUG-20260909-017：模型指令行统一跟随口径——manual 或仅传 model/level（兼容旧调用）同样注入
-// 跟随指令，REQ-20260908-020 时代的「子代理模型配置：…」固定行不再生成；均未传 → 不注入任何行
-// （直连调用行为不变）。
-export function generatePrompt({ projectRoot, batchId, workerSpecPath, developer = null, agent = null, modelSource = null, model = null, level = null, atbPath = ATB_PATH }) {
+// 跟随指令；均未传 → 不注入任何行（直连调用行为不变）。
+export function generatePrompt({ projectRoot, workerSpecPath, batchId = null, developer = null, agent = null, modelSource = null, model = null, level = null, atbPath = ATB_PATH }) {
+  void batchId; // REQ-20260913-003：调度不依赖批次标识，参数仅作兼容
   void agent; // REQ-20260909-011：执行端无关，参数仅作兼容
   void developer; // REQ-20260910-027：开发人员已移除，参数仅作兼容
   const head = [
-    '你是当前项目的批次调度员，只负责派发与接收短回执。',
+    '你是当前项目的 AI 开发调度员，只负责派发与接收短回执。',
     `项目：${projectRoot}`,
-    `批次：${batchId}`,
   ];
   const modelLine = modelSource === 'follow' || modelSource === 'manual' || model || level
     ? [FOLLOW_SESSION_PROMPT_LINE]
     : [];
   const common = [
     `执行规范：${workerSpecPath}`,
-    `批次摘要入口：node ${atbPath} batch check --batch ${batchId} --dir ${projectRoot}`,
+    `调度核对入口：node ${atbPath} batch check --dir ${projectRoot}`,
     '',
-    '每轮新启动一个子代理，按执行规范自行选择本批一个可实施条目，认领、实施、测试并上报。',
+    '每轮新启动一个子代理，按执行规范领取当前队列中最早的一个可实施条目，认领、实施、测试并上报。',
+    '实时取单：每完成一项，立即核对并从当前已计划队列（最旧优先）领取下一项；运行中新移入计划的条目立即可领取，无需任何并入操作；实时队列取空即本轮结束。',
     '每个子代理只做一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
     '同一时间只运行一个；不要让子代理再派发子代理。',
-    '只传本项目、批次标识与规范路径，不复制本会话的历史实施记录。',
+    '只传项目根与规范路径，不复制本会话的历史实施记录。',
     '',
     '完整需求、代码、测试日志、报告均由子代理按需读取或落盘。',
     '主会话只接收规定的短回执，并调用最小核对入口。',
     'nextAction=continue 时启动下一个新子代理；stop 时结束；',
     'needs_attention 时说明简短原因和记录入口，等待人工处理。',
-    'stop 且核对响应携带 nextBatch 时为批次排队自动接续（REQ-20260906-025）：',
-    '同一会话不重开，直接以 nextBatch.batchId 替换本提示词中的批次标识与核对入口继续执行下一批。',
     '不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。',
-    '收尾只给批次计数和异常入口。不得代替人工接受需求或确认完成。',
+    '收尾只给本轮计数和异常入口。不得代替人工接受需求或确认完成。',
   ];
   return [...head, ...modelLine, ...common].join('\n');
 }
 
-// 创建批次：冻结候选快照。REQ-20260906-025 批次排队——
-// 有未结束批次时不再幂等返回，改为新建入队（FIFO 排在其后）：
-// - 排队批次只冻结「创建时点的新候选」：前序未结束批次已冻结的条目不再重复入批；
-// - 队尾未结束批次冻结集合与本次一致 → 幂等返回该批（防重复点击重复入队）；
-// - 无前序未结束批次时 queued=false、queuePosition=1，行为与既往一致。
-// ids（BUG-20260909-006 起语义收敛）：显式指定候选——候选 = 规范候选序 ∩ ids，未指定条目不入本批。
-// 现役调用方为终态任务「按原配置重试本项」的单条目重建（REQ-20260908-026）；列表勾选范围已随
-// 「进入批量开发」入口移除（BUG-20260909-006），批量开发口径唯一化为已计划队列全量。
-// REQ-20260908-019：上限设置已移除，候选按范围全量冻结（不再截断）；多余 limit 入参被忽略。
-// REQ-20260909-011：agent 缺省记通用子代理模式标识 subagent（提示词单一通用版，不再按 Agent 分叉）；
-// 显式传 zcode / codex 仍合法（存量语义兼容）；mode 维持 'zcode'（队列盘点过滤口径不变）。
+// 启动一轮批量开发（REQ-20260913-003 去批次化）：不再冻结候选快照、不再排队——
+// - 账本 candidates 置空（显式 ids 仅作队首种子，供终态任务单条目重建路径），每次领取实时读取
+//   当前已计划队列（见 effectiveCandidates / nextItem）；
+// - 同一项目同一时间只有一轮执行：创建前盘点未结束账本，空转（无在途运行且无剩余）账本就地
+//   收尾后仍存在未结束账本（待启动/执行中/暂停/待核对）→ 抛「已有进行中的任务」，不产生排队对象；
+// - 启动行为保持「复制调度提示词，登记运行后才算执行中」口径。
+// ids（BUG-20260909-006 起语义收敛）：显式指定队首种子——种子 = 规范候选序 ∩ ids；
+// 现役调用方为终态任务「按原配置重试本项」的单条目重建（REQ-20260908-026）。
+// REQ-20260909-011：agent 缺省记通用子代理模式标识 subagent；mode 维持 'zcode'。
 // REQ-20260909-005：modelSource（follow | manual）来自调用方；follow 时忽略 model/level。
 export function createBatch(dataDir, { ids = null, projectRoot, mode = 'zcode', agent = null, developer = null, modelSource = null, model = null, level = null } = {}) {
   ensureDispatch(dataDir);
@@ -507,63 +493,53 @@ export function createBatch(dataDir, { ids = null, projectRoot, mode = 'zcode', 
     throw new AtbError('ids 必须是编号数组');
   }
   const scoped = ids != null;
-  const want = scoped ? new Set(ids.filter((x) => typeof x === 'string')) : null;
-  let base = candidateItems(dataDir);
-  if (scoped) base = base.filter((x) => want.has(x.id));
-  // scoped 空集先报错（显式指定集合无候选，错误信息指向重新指定/置计划）
-  if (scoped && !base.length) {
-    throw new AtbError('指定的条目均不可入批：可能已被认领或不在已计划状态');
-  }
 
-  // 队列盘点：无在途运行且无待处理的未结束批次就地收尾（原 latest 收尾推广到全队列），
-  // 防止旧空批卡住幂等判断；其余未结束批次即本批的前序队列。
-  const pending = [];
-  for (const b of unfinishedBatches(dataDir).filter((b) => !mode || b.mode === mode)) {
+  // 队列盘点（REQ-20260913-003：先于候选检查——已有进行中的一轮时，即便当前无新增候选
+  // 也必须以「重复启动」拒绝，不得误报「没有可实施候选」；盘点不按 mode 区分——同项目
+  // 同一时间只有一个执行会话，zcode 轮同样拦下 codex 启动）：无在途运行且无剩余（实时口径）
+  // 的未结束账本就地收尾，防旧空转轮卡住启动；待核对（needs_attention）轮承载人工恢复入口，
+  // 不自动收尾——按重复启动拒绝；其余未结束账本即进行中的一轮——不排队、不新建对象。
+  for (const b of unfinishedBatches(dataDir)) {
     const st = batchState(dataDir, b);
     const active = st.currentRun && !FINAL_RUN_PHASES.has(st.currentRun.phase);
-    if (!active && st.counts.remaining === 0) {
+    if (b.status !== 'needs_attention' && !active && st.counts.remaining === 0) {
       if (b.status !== 'finished') {
         b.status = 'finished';
         saveBatch(dataDir, b);
       }
       continue;
     }
-    pending.push(b);
+    throw new AtbError(
+      `已有进行中的任务（${b.status === 'prepared' ? '待启动' : '执行中'}）：同一时间只有一轮执行，无需重复启动；` +
+      '如需重开请先完成、恢复或终止当前任务',
+    );
   }
 
-  // 队尾幂等：最新未结束批次的冻结集合与「本次新候选（排除其余前序批次候选）」
-  // 一致 → 返回它，不重复入队。
-  const tail = pending[pending.length - 1];
-  if (tail) {
-    const frozenOther = new Set(pending.filter((b) => b !== tail).flatMap((b) => b.candidates || []));
-    const freshNow = base.filter((x) => !frozenOther.has(x.id)).map((x) => x.id);
-    if (JSON.stringify(tail.candidates) === JSON.stringify(freshNow)) {
-      const queuePosition = pending.length;
-      return { batch: tail, created: false, queued: queuePosition > 1, queuePosition };
-    }
+  const want = scoped ? new Set(ids.filter((x) => typeof x === 'string')) : null;
+  let base = candidateItems(dataDir);
+  if (scoped) base = base.filter((x) => want.has(x.id));
+  // scoped 空集先报错（显式指定集合无候选，错误信息指向重新指定/置计划）
+  if (scoped && !base.length) {
+    throw new AtbError('指定的条目均不可入队：可能已被认领或不在已计划状态');
   }
-
-  // 新候选：排除前序未结束批次已冻结的条目（无前序时即全量，语义不变）
-  const frozenBefore = new Set(pending.flatMap((b) => b.candidates || []));
-  const candidates = pending.length ? base.filter((x) => !frozenBefore.has(x.id)) : base;
-  if (!candidates.length) {
-    throw new AtbError(pending.length
-      ? '没有新的可实施候选：已计划条目均已进入更早的未结束批次，请先置计划新条目再创建'
-      : '没有可实施候选：请先在 Status Board 接受条目并「移入计划」（仅 planned 且未被认领的条目可入批）');
+  if (!scoped && !base.length) {
+    throw new AtbError('没有可实施候选：请先在 Status Board 接受条目并「移入计划」（仅 planned 且未被认领的条目会进入实时队列）');
   }
 
   const batchId = nextDispatchId(dataDir, 'batch');
   const workerSpecPath = path.join(dispatchDir(dataDir), 'worker-spec.md');
-  const prompt = generatePrompt({ projectRoot, batchId, workerSpecPath, agent: execAgent, modelSource: modelSource === 'follow' ? 'follow' : (modelSource === 'manual' ? 'manual' : null), model: modelSource === 'follow' ? null : model, level: modelSource === 'follow' ? null : level });
+  const prompt = generatePrompt({ projectRoot, workerSpecPath, agent: execAgent, modelSource: modelSource === 'follow' ? 'follow' : (modelSource === 'manual' ? 'manual' : null), model: modelSource === 'follow' ? null : model, level: modelSource === 'follow' ? null : level });
   const batch = {
     batchId,
     mode,
-    agent: execAgent, // REQ-20260908-020：执行 Agent（存量批次缺字段同义 zcode）
+    agent: execAgent, // REQ-20260908-020：执行 Agent（存量账本缺字段同义 zcode）
     projectRoot,
     createdAt: nowIso(),
     lastActivityAt: nowIso(),
     // REQ-20260910-027：developer 字段不再写（存量账本保留不迁移，读取侧不透出）
-    candidates: candidates.map((x) => x.id), // REQ-20260908-019：不再写 limit，候选全量
+    // REQ-20260913-003：不再冻结候选——缺省 candidates 为空（领取时实时读取已计划队列），
+    // 仅显式 ids（终态任务单条目重建）作为队首种子落账。
+    candidates: scoped ? base.map((x) => x.id) : [],
     prompt,
     status: 'prepared',
     pauseRequested: false,
@@ -572,15 +548,23 @@ export function createBatch(dataDir, { ids = null, projectRoot, mode = 'zcode', 
   };
   fs.mkdirSync(path.dirname(batchPath(dataDir, batchId)), { recursive: true });
   saveBatch(dataDir, batch);
-  // REQ-20260906-023：新批次落盘后清理超出保留上限的最旧批次（幂等返回不触发）
+  // REQ-20260906-023：新账本落盘后清理超出保留上限的最旧记录
   const pruned = pruneBatches(dataDir);
-  return { batch, created: true, queued: pending.length > 0, queuePosition: pending.length + 1, pruned };
+  return { batch, created: true, pruned };
 }
 
-// 创建时的受阻计数（供看板展示，依赖后续满足会动态解除）
+// 创建时的受阻计数（供看板展示，依赖后续满足会动态解除；实时口径含未入账候选）
 export function blockedCountAtCreate(dataDir, batch) {
   const policies = readPolicies(dataDir);
-  return batch.candidates.filter((id) => depBlocked(dataDir, id, policies)).length;
+  return effectiveCandidates(dataDir, batch)
+    .filter((id) => {
+      try {
+        return readStatus(resolveItemDir(dataDir, id).dir).status === 'planned';
+      } catch {
+        return false;
+      }
+    })
+    .filter((id) => depBlocked(dataDir, id, policies)).length;
 }
 
 // ---------- 实施互斥（.locks/impl.lock；无超时接管，异常走人工核对） ----------
@@ -623,45 +607,39 @@ function releaseImplLockIf(dataDir, pred) {
   }
 }
 
-// ---------- 预留与领取（worker 入口） ----------
+// ---------- 领取与核对（worker 入口） ----------
 
-// REQ-20260908-010 实时队列：领取时吸收「创建批次之后新置计划」的条目——调度不依赖
-// 创建时冻结的候选快照，运行中置计划的条目无需重启/新建批次即可被后续取到。
-// 吸收的条目须排除已冻结在其他未结束批次中的（与 createBatch 同口径，
-// 一个条目至多属于一个批次，防双批重复派发）。
-function absorbNewCandidates(dataDir, batch) {
+// 实时候选（REQ-20260913-003）：批次概念退役后，本轮执行不再冻结候选快照——每次盘点都实时
+// 读取当前已计划队列（最旧优先）。返回生效候选 = 账本已登记候选（含显式 ids 队首种子与存量账本）
+// ∪ 当前实时候选（排除其他未结束账本已登记条目，兼容存量排队数据，一个条目至多属于一轮）。
+export function effectiveCandidates(dataDir, batch) {
   const known = new Set(batch.candidates);
   for (const other of unfinishedBatches(dataDir)) {
     if (other.batchId !== batch.batchId) {
       for (const id of other.candidates || []) known.add(id);
     }
   }
-  const fresh = candidateItems(dataDir).filter((x) => !known.has(x.id)).map((x) => x.id);
-  if (fresh.length) {
-    batch.candidates.push(...fresh);
-    saveBatch(dataDir, batch);
-  }
+  return [...batch.candidates, ...candidateItems(dataDir).filter((x) => !known.has(x.id)).map((x) => x.id)];
 }
 
 export function nextItem(dataDir, batchId, { owner = null } = {}) {
   owner = owner || actor();
   const batch = getBatch(dataDir, batchId);
   if (batch.status === 'needs_attention') {
-    throw new AtbError(`批次 ${batchId} 待人工核对（needs_attention），请先到 Status Board 查看失败原因`);
+    throw new AtbError(`任务 ${batchId} 待人工核对（needs_attention），请先到 Status Board 查看失败原因`);
   }
-  // REQ-20260906-025 防抢：存在更早的未结束批次时本批仍在排队，不得越过队首领取；
+  // 存量数据防抢：存在更早的未结束账本时本轮仍在排队，不得越过队首领取；
   // impl 互斥为第二道防线，此检查保证 A 项间空隙 B 也不会被派发。
   const prior = unfinishedBatches(dataDir).find((b) => b.batchId !== batchId &&
     (String(b.createdAt || '').localeCompare(String(batch.createdAt || '')) < 0 ||
       (String(b.createdAt || '') === String(batch.createdAt || '') && b.batchId < batchId)));
   if (prior) {
-    throw new AtbError(`批次 ${batchId} 排队中：前序批次 ${prior.batchId} 尚未结束，当前批次结束后自动接续，不得抢先领取`);
+    throw new AtbError(`任务 ${batchId} 排队中：前序任务 ${prior.batchId} 尚未结束，当前任务结束后自动接续，不得抢先领取`);
   }
   // REQ-20260908-020：任务已终止——停止派发（在途执行不受影响，需在对应子代理会话人工停止）
   if (batch.abortRequested) {
     return { stop: 'aborted', counts: batchState(dataDir, batch).counts, notice: '任务已终止：不再派发后续项' };
   }
-  absorbNewCandidates(dataDir, batch); // 实时队列：先吸收新置计划条目再盘点
   const state0 = batchState(dataDir, batch);
   if (state0.currentRun && !FINAL_RUN_PHASES.has(state0.currentRun.phase)) {
     const r = state0.currentRun;
@@ -678,7 +656,8 @@ export function nextItem(dataDir, batchId, { owner = null } = {}) {
   // 回执收尾（finishRun/releaseReservation）才释放；获取失败即说明被占用（Z04）
   acquireImplLock(dataDir, { kind: 'batch', batchId, owner, at: nowIso() });
   const policies = readPolicies(dataDir);
-  for (const itemId of batch.candidates) {
+  const candidates = effectiveCandidates(dataDir, batch);
+  for (const itemId of candidates) {
     // 已有终态运行跳过；REQ-20260908-026：retryItems 标记的条目重新领取（新执行尝试）
     if (state0.finalByItem.has(itemId) && !state0.retryItems.has(itemId)) continue;
     let st = null;
@@ -687,7 +666,7 @@ export function nextItem(dataDir, batchId, { owner = null } = {}) {
     } catch {
       continue; // 条目目录损坏：跳过，不派发
     }
-    if (st.status !== 'planned' || st.owner) continue; // 冻结后被认领/流转（含升级前遗留 accepted）：自然出局
+    if (st.status !== 'planned' || st.owner) continue; // 已被认领/流转：自然出局
     if (depBlocked(dataDir, itemId, policies)) continue; // 依赖未满足：本轮跳过
     if (batch.retryItems && batch.retryItems[itemId]) {
       delete batch.retryItems[itemId]; // 重新领取成功：清除重试标记（随下方 saveBatch 落盘）
@@ -896,6 +875,10 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
     receipt.autoCommit = {
       status: autoCommit.status,
       commits: (autoCommit.commits || []).map((c) => c.hash),
+      // BUG-20260913-006：待人工路径随回执显式上抛（预留前已脏且本单动过，不静默留脏）
+      ...(Array.isArray(autoCommit.pendingManual) && autoCommit.pendingManual.length
+        ? { pendingManual: autoCommit.pendingManual.slice(0, 20) }
+        : {}),
       ...(autoCommit.reason ? { reason: autoCommit.reason } : {}),
     };
   }
@@ -957,14 +940,13 @@ export function checkBatch(dataDir, batchId) {
   let notice = '';
   let blockedPending = 0;
   let finishedNow = false;
-  let nextBatch = null;
   if (active) {
     nextAction = 'needs_attention';
     notice = `当前执行未收尾（${currentRun.runId} ${currentRun.itemId} owner ${currentRun.owner}），执行状态待核对`;
   } else if (batch.status === 'needs_attention') {
     nextAction = 'needs_attention';
     const bad = state.runs.find((r) => FINAL_RUN_PHASES.has(r.phase) && r.phase !== 'reported');
-    notice = `批次待人工核对：${bad ? `${bad.itemId} ${bad.phase}（${bad.reason || ''}）` : '存在失败/受阻运行'}`
+    notice = `任务待人工核对：${bad ? `${bad.itemId} ${bad.phase}（${bad.reason || ''}）` : '存在失败/受阻运行'}`
       + '；核对遗留改动后通过 暂停→恢复 解除项目占用';
   } else if (batch.abortRequested) {
     nextAction = 'stop';
@@ -974,7 +956,7 @@ export function checkBatch(dataDir, batchId) {
     notice = '已暂停后续领取（在途执行不受影响；立即停止请到 Zcode 原生任务界面操作）';
   } else if (state.counts.remaining === 0) {
     nextAction = 'stop';
-    notice = '本批范围已处理完毕（新接受的条目留给下一批）';
+    notice = '本轮队列已处理完毕：实时队列已取空，可启动新一轮';
     if (batch.status !== 'finished') {
       batch.status = 'finished';
       saveBatch(dataDir, batch);
@@ -982,7 +964,7 @@ export function checkBatch(dataDir, batchId) {
     finishedNow = true;
   } else {
     // BUG-20260906-001：remaining 只看终态运行，覆盖不了「剩余项当前全部不可派发」——
-    // 全部依赖受阻（或冻结后被认领/流转）时若仍返回 continue，主调度会反复派空 worker
+    // 全部依赖受阻（或盘点后被认领/流转）时若仍返回 continue，主调度会反复派空 worker
     // （next 每轮都 stop=blocked）。须与 next 同口径判 stop，并带准确受阻计数。
     const dispo = remainingDisposition(dataDir, batch, state);
     blockedPending = dispo.blockedIds.length;
@@ -990,23 +972,13 @@ export function checkBatch(dataDir, batchId) {
       nextAction = 'stop';
       const parts = [];
       if (dispo.blockedIds.length) parts.push(`依赖受阻 ${dispo.blockedIds.length} 项`);
-      if (dispo.outIds.length) parts.push(`冻结后已被认领或流转 ${dispo.outIds.length} 项`);
-      notice = `本批剩余 ${state.counts.remaining} 项暂不可实施（${parts.join('，')}），不派空 worker`;
+      if (dispo.outIds.length) parts.push(`已被认领或流转 ${dispo.outIds.length} 项`);
+      notice = `本轮剩余 ${state.counts.remaining} 项暂不可实施（${parts.join('，')}），不派空 worker`;
       if (batch.status !== 'finished') {
         batch.status = 'finished';
         saveBatch(dataDir, batch);
       }
       finishedNow = true;
-    }
-  }
-
-  // REQ-20260906-025 自动接续：本批真正收尾（置 finished，非暂停）且队列中还有排队批次时，
-  // 携带下一批次标识——主调度同一会话直接接续执行该批次（见 generatePrompt 接续说明）。
-  if (finishedNow) {
-    const next = unfinishedBatches(dataDir).find((b) => b.batchId !== batch.batchId);
-    if (next) {
-      nextBatch = { batchId: next.batchId, total: next.candidates.length };
-      notice += `；队列中有下一批次 ${next.batchId}（${next.candidates.length} 项），同一会话自动接续`;
     }
   }
 
@@ -1019,7 +991,6 @@ export function checkBatch(dataDir, batchId) {
       : null,
     counts: blockedPending ? { ...state.counts, blockedPending } : state.counts,
     nextAction,
-    ...(nextBatch ? { nextBatch } : {}),
     notice: notice || undefined,
   };
   const bytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
@@ -1099,7 +1070,7 @@ export function abortBatch(dataDir, batchId) {
     saveRun(dataDir, r);
   }
   const handled = new Set(state.runs.filter((r) => FINAL_OR_SKIP(r.phase) || r.phase === 'interrupted').map((r) => r.itemId));
-  for (const itemId of batch.candidates) {
+  for (const itemId of effectiveCandidates(dataDir, batch)) {
     if (handled.has(itemId)) continue;
     skipBatchRun(dataDir, batch, itemId, '任务终止，剩余项出局');
   }
@@ -1153,17 +1124,17 @@ function itemTitleOrEmpty(dataDir, itemId) {
   }
 }
 
-// 批次摘要（新主会话续接 / 看板展示）：当前执行、计数、最近记录与提示词。
-// 缺省解析队首（最早未结束批次，REQ-20260906-025），排队批次不被最新批次顶掉；
-// 全部结束时回退最新批次（已结束面板 / 创建下一批入口语义）。
+// 批次摘要（新主会话续接 / 看板展示）：当前执行、计数、最近记录与提示词（候选实时口径）。
+// 缺省解析队首（最早未结束账本），排队账本不被最新账本顶掉；
+// 全部结束时回退最新账本（已结束面板 / 启动新一轮入口语义）。
 export function batchSummary(dataDir, batchId = null) {
   const batch = batchId
     ? getBatch(dataDir, batchId)
     : (queueHeadBatch(dataDir) || latestBatch(dataDir));
-  if (!batch) throw new AtbError('尚无批次：请先在看板创建');
+  if (!batch) throw new AtbError('尚无进行中的任务：请先在看板启动');
   const state = batchState(dataDir, batch);
   const policies = readPolicies(dataDir);
-  const blockedIds = batch.candidates
+  const blockedIds = effectiveCandidates(dataDir, batch)
     .filter((id) => (!state.finalByItem.has(id) || state.retryItems.has(id)) && depBlocked(dataDir, id, policies))
     .filter((id) => {
       try {
@@ -1174,7 +1145,7 @@ export function batchSummary(dataDir, batchId = null) {
     });
   const { records, total: recordsTotal } = listRuns(dataDir, batch.batchId, { offset: 0, limit: 5 });
   // REQ-20260908-026：待处理队列（按领取顺序，含重试标记条目）——面板仅展示最近 2 条
-  const pending = batch.candidates
+  const pending = effectiveCandidates(dataDir, batch)
     .filter((id) => !state.finalByItem.has(id) || state.retryItems.has(id))
     .map((id) => ({ id, title: itemTitleOrEmpty(dataDir, id) }));
   return {
@@ -1189,17 +1160,15 @@ export function batchSummary(dataDir, batchId = null) {
   };
 }
 
-// REQ-20260910-003 全局看板：批次简报（纯只读）。计数与当前项与 /api/batch/current 面板
-// 同源（batchState 同一函数），保证同一批次在项目内面板与全局总览显示相同状态与计数；
-// 不调用 checkBatch（它可能改批次状态）、不写任何账本、不碰锁。queued 由服务端按
-// 「非队首的 prepared 批次」补标（与 batchStatusLabel(s, queued=true) 排队中口径一致）。
+// REQ-20260910-003 全局看板：本轮执行简报（纯只读，REQ-20260913-003 起不透出批次号）。
+// 计数与当前项与 /api/batch/current 面板同源（batchState 同一函数，实时候选口径）；
+// 不调用 checkBatch（它可能改账本状态）、不写任何账本、不碰锁。
 export function batchBrief(dataDir, batchOrId) {
   const b = typeof batchOrId === 'string' ? getBatch(dataDir, batchOrId) : batchOrId;
   const state = batchState(dataDir, b);
   const cur = state.currentRun;
   return {
     kind: 'develop',
-    batchId: b.batchId,
     mode: b.mode,
     status: b.status,
     pauseRequested: Boolean(b.pauseRequested),

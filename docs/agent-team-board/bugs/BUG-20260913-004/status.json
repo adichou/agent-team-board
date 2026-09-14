@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260913-004",
+  "type": "bug",
+  "title": "版本的提示词与回答回填，合并入 main 两个按钮位置需要改到左侧列表项目中，参考需求列表的设计。",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-046-1",
+  "createdAt": "2026-09-13T11:47:36.031Z",
+  "updatedAt": "2026-09-13T12:36:30.380Z",
+  "agentCompletedAt": "2026-09-13T12:36:30.380Z",
+  "lastReport": {
+    "at": "2026-09-13T12:36:30.380Z",
+    "coverage": 100,
+    "framework": "node assert + vm（scripts/tests/*.test.mjs）",
+    "summary": "版本计划两操作按钮（AI 完善/合并入 main）自详情底部迁入左侧每张版本卡片（参照需求列表 row-acts 口径），按钮文案与弹窗标题更名「AI 完善」，i18n 同步；按 data-ver-* 对所在卡片版本生效且不改选中态，详情底部不再重复渲染；copyPrompt/doMerge 改按弹窗记录 verId 定位。新增 7 例测试先红后绿，全量 214 个测试文件通过。归因：REQ-20260913-001（经 atb list 核验）。",
+    "runId": "run-20260913-215"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T11:47:36.031Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-13T11:47:36.031Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-13T12:02:16.587Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-195042-b623）"
+    },
+    {
+      "at": "2026-09-13T12:18:08.946Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-046-1",
+      "note": "认领（zcode-batch-046-1）"
+    },
+    {
+      "at": "2026-09-13T12:36:30.380Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-046-1",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

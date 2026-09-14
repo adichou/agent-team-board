@@ -94,6 +94,9 @@ export function ensureDevWorkflow(root) {
 }
 
 // ---------- 2. 工作区快照与归因 ----------
+// BUG-20260913-006：预留时已脏的已跟踪文件也记录内容哈希（trackedHashes）；差集区分
+// changed（可归因）与 dirtyTouched（预留前已脏且本单动过——无法安全归因，待人工），
+// 收尾不再静默留脏。
 
 const sha1Of = (file) => {
   try {
@@ -103,8 +106,11 @@ const sha1Of = (file) => {
   }
 };
 
-// 工作区快照：porcelain 条目 path→XY 码；未跟踪文件（??）记录内容哈希——
-// 未跟踪文件的 porcelain 码不随内容修改变化，必须以内容哈希探测变更。
+// 工作区快照：porcelain 条目 path→XY 码；未跟踪文件（??）与预留时已脏的已跟踪文件
+// 都记录内容哈希——这两类的 porcelain 码不随内容修改变化，必须以内容哈希探测变更。
+// BUG-20260913-006：预留时已脏的已跟踪文件原先只有状态码（如 ' M'），运行期再改仍同码，
+// 差集永远看不到 → 改动永久无归属、静默留脏；比照未跟踪文件补记内容哈希作识别基线。
+// 旧快照（无 trackedHashes 字段）没有内容基线：差集维持升级前行为，不做猜测归因。
 // 非 git 项目返回 null（自动提交跳过）。
 export function workingTreeSnapshot(root) {
   if (!isGitRepo(root)) return null;
@@ -112,6 +118,7 @@ export function workingTreeSnapshot(root) {
   if (out.status !== 0) return null;
   const entries = {};
   const untracked = {};
+  const trackedHashes = {};
   for (const line of String(out.stdout || '').split('\n')) {
     if (!line) continue;
     const code = line.slice(0, 2);
@@ -120,21 +127,27 @@ export function workingTreeSnapshot(root) {
     if (p.includes(' -> ')) p = p.split(' -> ').pop().trim(); // 重命名取目标路径
     if (!p) continue;
     entries[p] = code;
+    const h = sha1Of(path.join(root, p));
     if (code === '??') {
-      const h = sha1Of(path.join(root, p));
       if (h != null) untracked[p] = h;
+    } else if (h != null) {
+      trackedHashes[p] = h; // 预留时已脏的已跟踪文件（含暂存/工作区任一位脏）
     }
   }
-  return { entries, untracked, at: nowIso() };
+  return { entries, untracked, trackedHashes, at: nowIso() };
 }
 
-// 快照 → 现在的变更路径：当前仍脏且状态码/内容哈希与快照不同者。
+// 快照 → 现在的差集（BUG-20260913-006 细化口径）：
+//   changed      —— 状态码变化或未跟踪内容哈希变化的路径（可确定性归因，进本单 test/业务组）；
+//   dirtyTouched —— 预留时已脏（快照有 trackedHashes 基线）且状态码不变但内容哈希变化的
+//                   路径：无法区分「预留前改动」与「本单改动」，不得整文件自动提交 → 待人工。
 // 已被提交的路径退出 porcelain（不再脏）→ 不再计入（重试不重复提交）；
-// 预留前就脏且运行期间未动过的路径保持同码/同哈希 → 不计入（不卷入无关改动）。
-export function changedPathsSince(root, snapshot) {
+// 预留前就脏且运行期间未动过的路径保持同码同哈希 → 不计入（不卷入无关改动）。
+export function diffWorkingTree(root, snapshot) {
   const now = workingTreeSnapshot(root);
   if (!now || !snapshot) return null;
   const changed = [];
+  const dirtyTouched = [];
   for (const [p, code] of Object.entries(now.entries)) {
     const beforeCode = snapshot.entries ? snapshot.entries[p] : undefined;
     if (code === '??') {
@@ -143,9 +156,20 @@ export function changedPathsSince(root, snapshot) {
       if (beforeHash !== nowHash) changed.push(p); // 新未跟踪文件（beforeHash=undefined）或内容已变
       continue;
     }
-    if (beforeCode !== code) changed.push(p);
+    if (beforeCode !== code) { changed.push(p); continue; }
+    const beforeHash = snapshot.trackedHashes ? snapshot.trackedHashes[p] : undefined;
+    if (beforeHash == null) continue; // 旧快照无哈希基线 / 预留时该路径未脏：无可比内容
+    const nowHash = now.trackedHashes ? now.trackedHashes[p] : undefined;
+    if (nowHash !== beforeHash) dirtyTouched.push(p); // 同码但内容变：预留前已脏且本单动过
   }
-  return changed;
+  return { changed, dirtyTouched };
+}
+
+// 兼容口径：快照以来发生变化的全部路径（含待人工的 dirtyTouched）。
+export function changedPathsSince(root, snapshot) {
+  const diff = diffWorkingTree(root, snapshot);
+  if (!diff) return null;
+  return [...diff.changed, ...diff.dirtyTouched];
 }
 
 // 数据账本 .gitignore 补齐：自动提交账本目录（commits/runs、commits/batches）不进版本控制。
@@ -210,8 +234,12 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     if (!nowSnap) {
       return { status: 'skipped', commits: [], reason: '无法读取当前工作区状态，跳过自动提交' };
     }
-    const changed = changedPathsSince(projectRoot, run.treeSnapshot) || [];
-    if (!changed.length && !Object.keys(nowSnap.entries).length) {
+    // BUG-20260913-006：diff 细化为 changed（可归因）与 dirtyTouched（预留前已脏且本单
+    // 动过、同码内容变——无法区分预留前/本单改动，不得整文件自动提交）。
+    const diff = diffWorkingTree(projectRoot, run.treeSnapshot);
+    const changed = diff ? diff.changed : [];
+    const dirtyTouched = diff ? diff.dirtyTouched : [];
+    if (!changed.length && !dirtyTouched.length && !Object.keys(nowSnap.entries).length) {
       return { status: 'skipped', commits: [], reason: '本单无待提交改动（工作区相对预留时无变化）' };
     }
 
@@ -228,9 +256,16 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     //            纳入（含预留前注册产生的未跟踪文档，它们从属于本单）；看板共享文件
     //            （.gitignore / config.json / dispatch 索引等）随本单 doc 提交收纳；
     //   test / 业务组 = 严格按快照差集（非看板路径）——预留前已存在的无关改动绝不卷入。
+    //   BUG-20260913-006：非看板路径若「预留前已脏且本单动过」（同码内容变，或码也变
+    //   但快照有预留前内容基线——整文件提交会连带预留前旧脏内容），不自动归因，列入
+    //   pendingManual 待人工核对，不再静默留脏。
     const groups = { doc: [], test: [], biz: [] };
     const excluded = [];
-    const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed]);
+    const pendingManual = [];
+    const preReservedDirty = (p) => Boolean(
+      run.treeSnapshot.trackedHashes && run.treeSnapshot.trackedHashes[p] != null,
+    );
+    const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
     for (const p of allDirty) {
       const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
       if (p.startsWith(boardPref) || inItem) {
@@ -239,20 +274,39 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
         groups.doc.push(p);
         continue;
       }
+      if (dirtyTouched.includes(p) || (changed.includes(p) && preReservedDirty(p))) {
+        pendingManual.push(p); // 预留前已脏且本单动过：无法安全归因 → 待人工
+        continue;
+      }
       if (!changed.includes(p)) continue; // 看板外路径只认快照差集
       if (p.startsWith(TEST_PATH_PREFIX)) groups.test.push(p);
       else groups.biz.push(p);
     }
 
     const bizType = itemId.startsWith('REQ') ? 'feat' : 'fix';
-    const plan = [
+    let plan = [
       ['doc', groups.doc, commitSubjectOf('doc', desc, itemId)],
       ['test', groups.test, commitSubjectOf('test', desc, itemId)],
       ['biz', groups.biz, commitSubjectOf(bizType, desc, itemId)],
     ].filter(([, paths]) => paths.length);
 
+    // BUG-20260913-006 历史自洽：存在待人工的非看板路径时，本单 test/业务组一并暂扣——
+    // 待人工路径可能正是被测实现（本 Bug 即 build.js），单独提交 test 会重演「测试已
+    // 提交、被测代码未提交」的矛盾历史。doc 组（看板数据，整目录归属本单）照常提交。
+    const heldGroups = pendingManual.length
+      ? { test: groups.test.slice(), biz: groups.biz.slice() }
+      : null;
+    if (pendingManual.length) plan = plan.filter(([kind]) => kind === 'doc');
+
     if (!plan.length) {
-      return { status: 'skipped', commits: [], reason: '变更均不归属本单（其他条目/账本文件），已保留在工作区' };
+      // 无可自动提交分组（可能仍有待人工路径）：明细如实落盘，不误报 committed
+      const reason = manualPendingReason(pendingManual, heldGroups);
+      if (pendingManual.length) {
+        writeAutoCommitLedger(dataDir, { run, itemId, title, commits: [], excluded, pendingManual, heldGroups });
+      }
+      return pendingManual.length
+        ? { status: 'skipped', commits: [], excluded, pendingManual, heldGroups, reason }
+        : { status: 'skipped', commits: [], reason: '变更均不归属本单（其他条目/账本文件），已保留在工作区' };
     }
 
     const commits = [];
@@ -264,20 +318,48 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     }
 
     // 账本登记（与人工批量 commit 的 committedItemIndex 同源 → 看板「已提交」徽标点亮）
-    writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded });
-    return { status: 'committed', commits, excluded, reason: null };
+    writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups });
+    return pendingManual.length
+      ? {
+        status: 'committed', // 部分提交（doc 组）；待人工路径与暂扣组显式携带，不表现为全量
+        commits,
+        excluded,
+        pendingManual,
+        heldGroups,
+        reason: manualPendingReason(pendingManual, heldGroups),
+      }
+      : { status: 'committed', commits, excluded, reason: null };
   } catch (e) {
     return { status: 'failed', commits: [], reason: String(e && e.message ? e.message : e).slice(0, 200) };
   }
 }
 
+// BUG-20260913-006 待人工路径的处理建议（落 auto-commit.json 明细）：
+// 不做 hunk 级 diff 归属拆分（无法可靠归因）；人工核对后整文件提交（消息带单号），
+// 再补提交暂扣的 test/业务路径。
+const PENDING_MANUAL_ADVICE =
+  '人工核对该路径中「预留前改动 / 本单改动」的归属后整文件提交（提交消息带单号），'
+  + '再补提交暂扣的 test/业务路径；自动提交不做猜测归属，也不会拆分 hunk。';
+
+// 待人工原因短句（≤200 字）：列路径与暂扣计数，供回执与账本引用。
+function manualPendingReason(pendingManual, heldGroups) {
+  const shown = pendingManual.slice(0, 5).join('、')
+    + (pendingManual.length > 5 ? ` 等 ${pendingManual.length} 个` : '');
+  const held = heldGroups ? heldGroups.test.length + heldGroups.biz.length : 0;
+  return `预留前已脏且本单运行期被修改、无法安全归因，待人工核对提交：${shown}`
+    + (held ? `；本单 test/业务 ${held} 个路径已一并暂扣待人工处理后补提交` : '');
+}
+
 // 自动提交账本：写入 commits/runs/（runId 采用 commit 账本形态），phase=committed 供
 // committedItemIndex 收录；完整明细另落 dispatch 运行目录 auto-commit.json。
-function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded }) {
+// BUG-20260913-006：仅有待人工路径、无实际提交时不写 commits/runs（徽标不误点亮），
+// 但明细仍落盘如实记录 pendingManual（路径 + 建议）与 heldGroups。
+function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups }) {
   const d = new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const rand = crypto.randomBytes(2).toString('hex');
   const runId = `run-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}-${rand}`;
+  const pending = Array.isArray(pendingManual) ? pendingManual : [];
   const record = {
     version: 1,
     runId,
@@ -289,18 +371,29 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded 
     createdAt: nowIso(),
     finishedAt: nowIso(),
     reason: null,
-    summary: '到待测试自动提交（批量开发回执核验通过）',
+    summary: pending.length
+      ? `到待测试自动提交（部分提交 ${commits.length} 组，${pending.length} 个路径待人工处理）`
+      : '到待测试自动提交（AI 开发回执核验通过）',
     commits,
     autoForRun: run.runId,
   };
-  const dir = path.join(dataDir, 'commits', 'runs', runId);
-  fs.mkdirSync(dir, { recursive: true });
-  writeJsonAtomic(path.join(dir, 'run.json'), record);
+  if (commits.length) {
+    const dir = path.join(dataDir, 'commits', 'runs', runId);
+    fs.mkdirSync(dir, { recursive: true });
+    writeJsonAtomic(path.join(dir, 'run.json'), record);
+  }
   // 明细（运行目录，dispatch/runs 已被 .gitignore 排除）
   try {
     const runDir = path.join(dataDir, 'dispatch', 'runs', run.runId);
     fs.mkdirSync(runDir, { recursive: true });
-    writeJsonAtomic(path.join(runDir, 'auto-commit.json'), { ...record, excluded: excluded || [] });
+    writeJsonAtomic(path.join(runDir, 'auto-commit.json'), {
+      ...record,
+      status: commits.length ? 'committed' : 'skipped',
+      excluded: excluded || [],
+      pendingManual: pending,
+      pendingManualAdvice: pending.length ? PENDING_MANUAL_ADVICE : undefined,
+      ...(heldGroups ? { heldGroups } : {}),
+    });
   } catch { /* 明细写失败不影响主流程 */ }
   return record;
 }

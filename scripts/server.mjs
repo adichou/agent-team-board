@@ -285,7 +285,8 @@ function corruptBatchIds(batchesDir) {
 }
 
 // 单项目聚合：开发批次 + 完善批次简报（均为只读 brief，不触发核对/结算/锁）。
-// queued = 非队首的 prepared 批次（前端「排队中」口径数据源）。
+// REQ-20260913-003：去批次概念——简报不再透出批次号，也不补「排队中」标记（存量排队账本
+// 仍逐条入列，前端按状态归「待启动」档展示；同一时间只有一轮执行）。
 // REQ-20260911-010：批量 Commit（CMT）批次简报随人工批量提交流程回退移除。
 function projectTaskRows(root) {
   const dataDir = core.dataDirFrom(root);
@@ -293,16 +294,8 @@ function projectTaskRows(root) {
   const devBatches = batch.unfinishedBatches(dataDir).filter((b) => !b.aborted);
   const rfBatches = refine.unfinishedRefineBatches(dataDir).filter((b) => !b.aborted);
   const rows = [];
-  devBatches.forEach((b, i) => {
-    const brief = batch.batchBrief(dataDir, b);
-    brief.queued = i > 0 && brief.status === 'prepared';
-    rows.push(brief);
-  });
-  rfBatches.forEach((b, i) => {
-    const brief = refine.refineBatchBrief(dataDir, b);
-    brief.queued = i > 0 && brief.status === 'prepared';
-    rows.push(brief);
-  });
+  devBatches.forEach((b) => rows.push(batch.batchBrief(dataDir, b)));
+  rfBatches.forEach((b) => rows.push(refine.refineBatchBrief(dataDir, b)));
   return rows;
 }
 
@@ -2018,13 +2011,17 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
 //   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
-//   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex）
+//   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
+//                                    BUG-20260913-001：仅已完成 done 条目进入候选）
 //   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
 //   GET  /api/build/branch-log        指定分支最近提交（≤50 条：hash/short/subject/author/date）
-//   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit）
+//   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
+//                                    BUG-20260913-001：非 done 条目拒绝纳入）
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
 //   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
+//   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
+//                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
 //   POST /api/build/fetch             同步远端（fetch --all --prune）
 //   POST /api/build/push              推送本地分支（未建立上游时首推 -u 建立跟踪）
 async function handleBuildApi(req, res, u, pathname, root, dataDir) {
@@ -2061,17 +2058,21 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/candidates') {
     const board = requireBoard();
     const idx = gitFlow.itemCommitStatusIndex(board, root);
-    const items = core.listItems(board).map((it) => {
-      const rec = idx.get(it.id);
-      return {
-        itemId: it.id,
-        title: it.title || '',
-        status: it.status,
-        type: it.type,
-        commits: rec ? [...rec.commits] : [],
-        lastCommittedAt: rec ? rec.lastCommittedAt : null,
-      };
-    });
+    // BUG-20260913-001：仅已完成（done）条目可纳入版本——候选在数据源头收窄，
+    // 「新建版本」与「添加条目」两面板共用本接口，口径保持一致。
+    const items = core.listItems(board)
+      .filter((it) => it.status === 'done')
+      .map((it) => {
+        const rec = idx.get(it.id);
+        return {
+          itemId: it.id,
+          title: it.title || '',
+          status: it.status,
+          type: it.type,
+          commits: rec ? [...rec.commits] : [],
+          lastCommittedAt: rec ? rec.lastCommittedAt : null,
+        };
+      });
     return sendJson(res, 200, { items });
   }
   if (req.method === 'GET' && pathname === '/api/build/branches') {
@@ -2085,12 +2086,18 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return runPost(async (body) => {
       const board = requireBoard();
       if (!buildGit.isGitRepo(root)) throw new core.AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再创建版本计划');
-      const known = new Set(core.listItems(board).map((it) => it.id));
+      const boardItems = new Map(core.listItems(board).map((it) => [it.id, it]));
       const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
       const items = Array.isArray(body.items) ? body.items : [];
       for (const it of items) {
-        if (!known.has(String(it?.itemId || ''))) {
-          throw new core.AtbError(`条目 ${it?.itemId || '（空）'} 不在本看板中，无法纳入版本`);
+        const id = String(it?.itemId || '');
+        const boardItem = boardItems.get(id);
+        if (!boardItem) {
+          throw new core.AtbError(`条目 ${id || '（空）'} 不在本看板中，无法纳入版本`);
+        }
+        // BUG-20260913-001：与候选口径一致，未完成（非 done）条目拒绝纳入版本（数据口径兜底）
+        if (boardItem.status !== 'done') {
+          throw new core.AtbError(`条目 ${id} 尚未完成（当前状态：${boardItem.status}）：仅已完成（done）的需求单 / Bug 单可纳入版本计划`);
         }
       }
       const version = buildStore.createVersion(board, {
@@ -2112,8 +2119,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (body.action === 'add') {
-        const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
+        const itemsAll = core.listItems(board);
+        const byId = new Map(itemsAll.map((it) => [it.id, it]));
+        const titles = new Map(itemsAll.map((it) => [it.id, it.title]));
         const items = (Array.isArray(body.items) ? body.items : []).map((it) => ({ ...it, title: titles.get(String(it?.itemId || '')) || v.items.find((x) => x.itemId === it?.itemId)?.title || '' }));
+        // BUG-20260913-001：「添加条目」与新建版本同口径——未完成（非 done）条目拒绝加入
+        for (const it of items) {
+          const boardItem = byId.get(String(it?.itemId || ''));
+          if (boardItem && boardItem.status !== 'done') {
+            throw new core.AtbError(`条目 ${it?.itemId} 尚未完成（当前状态：${boardItem.status}）：仅已完成（done）的需求单 / Bug 单可纳入版本计划`);
+          }
+        }
         return sendJson(res, 200, { version: buildStore.addItems(board, body.id, items) });
       }
       if (body.action === 'remove') {
@@ -2154,6 +2170,14 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         version.mergeWarnings = [String(e.message || e).slice(0, 300)];
       }
       return sendJson(res, 200, { version });
+    });
+  }
+  // REQ-20260913-004 删除版本：POST + JSON 范式（对齐 /api/batch/delete）。透传数据层结果与
+  // 错误（BuildConflictError → 409，经 runPost）；删除后的最新版本状态由前端统一刷新 /state。
+  if (req.method === 'POST' && pathname === '/api/build/version/delete') {
+    return runPost((body) => {
+      const board = requireBoard();
+      return sendJson(res, 200, buildStore.deleteVersion(board, String(body.id || '')));
     });
   }
   if (req.method === 'POST' && pathname === '/api/build/fetch') {
@@ -2396,18 +2420,19 @@ async function handleApi(req, res, u, pathname) {
     // REQ-20260909-011：提示词通用化（不再按执行 Agent 分叉）——body.agent 保留但忽略；
     // 子代理模型指令固定「跟随主调度会话」（手动覆盖入口已随设置精简移除，design.md 结论）
     // REQ-20260910-027：开发人员设置已移除——遗留同名入参忽略，响应不再含该字段
-    const { batch: b, created, queued, queuePosition } = batch.createBatch(dataDir, {
+    // REQ-20260913-003：去批次概念——响应不再透出批次号与排队字段；重复启动由核心层抛
+    // 「已有进行中的任务」→ 400 明确提示（不排队、不新建对象）。
+    const { batch: b, created } = batch.createBatch(dataDir, {
       ids: Array.isArray(body.ids) ? body.ids : null, // 显式指定候选（REQ-20260908-026 终态任务单条目重试；列表勾选范围已随 BUG-20260909-006 移除）
       projectRoot: root,
       modelSource: 'follow',
     });
     return sendJson(res, 200, {
       ok: true,
-      batchId: b.batchId,
       created,
-      ...(queued ? { queued, queuePosition } : {}),
       agent: b.agent,
-      counts: { candidates: b.candidates.length, blocked: batch.blockedCountAtCreate(dataDir, b) },
+      // 实时候选计数（建轮不冻结：账本 candidates 为空，按实时口径盘点）
+      counts: { candidates: batch.effectiveCandidates(dataDir, b).length, blocked: batch.blockedCountAtCreate(dataDir, b) },
       // BUG-20260910-001：存量批次幂等返回时按当前口径归一（与批量完善同口径；新建路径幂等无变化）
       prompt: taskSettings.normalizePromptForDisplay(b.prompt),
     });
@@ -2449,11 +2474,12 @@ async function handleApi(req, res, u, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/batch/prompt') {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
-    // 缺省解析队首（REQ-20260906-025）：排队批次不被最新批次顶掉；全结束回退最新
+    // 缺省解析队首（存量排队账本兼容）：全部结束回退最新（「已结束面板 / 启动新一轮」语义）
     const b = batch.queueHeadBatch(dataDir) || batch.latestBatch(dataDir);
-    if (!b) throw new core.AtbError('尚无批次：请先创建批次');
+    if (!b) throw new core.AtbError('尚无任务：请先启动');
     // BUG-20260910-001：存量批次提示词按当前口径归一（点名 codex exec 的旧跟随行等不再透出）
-    return sendJson(res, 200, { batchId: b.batchId, prompt: taskSettings.normalizePromptForDisplay(b.prompt) });
+    // REQ-20260913-003：不再透出批次号（提示词本身已去批次，核对入口不依赖批次标识）
+    return sendJson(res, 200, { prompt: taskSettings.normalizePromptForDisplay(b.prompt) });
   }
 
   if (req.method === 'GET' && pathname === '/api/batch/current') {
@@ -2477,20 +2503,10 @@ async function handleApi(req, res, u, pathname) {
       try { title = core.readStatus(core.resolveItemDir(dataDir, s.currentRun.itemId).dir).title; } catch {}
       current = { ...s.currentRun, title };
     }
-    // 批次队列（REQ-20260906-025）：升序未结束批次（含队首），不含 prompt 控制载荷
-    const queue = batch.unfinishedBatches(dataDir).map((qb, i) => ({
-      batchId: qb.batchId,
-      mode: qb.mode,
-      status: qb.status,
-      pauseRequested: qb.pauseRequested,
-      createdAt: qb.createdAt,
-      // REQ-20260910-027：不再透出开发人员字段（存量账本保留不迁移）
-      queuePosition: i + 1,
-      total: qb.candidates.length,
-    }));
+    // REQ-20260913-003：去批次概念——批次载荷不再透出批次号；排队批次列表（queue）整体移除
+    //（存量排队账本仍按队首解析展示，不再透出队列概念）；待处理队列（pending）实时读取。
     return sendJson(res, 200, {
       batch: {
-        batchId: s.batch.batchId,
         mode: s.batch.mode,
         status: s.batch.status,
         pauseRequested: s.batch.pauseRequested,
@@ -2504,7 +2520,6 @@ async function handleApi(req, res, u, pathname) {
         prompt: taskSettings.normalizePromptForDisplay(s.batch.prompt),
       },
       current,
-      queue,
       // blocked = 当前因依赖未满足而受阻的待处理项（面板口径）；blockedRuns = 已按 blocked 收尾的运行数
       counts: {
         total: s.counts.total,
@@ -2568,7 +2583,7 @@ async function handleApi(req, res, u, pathname) {
     const offset = Math.max(0, Number(u.searchParams.get('offset') || 0) || 0);
     const limit = Math.min(100, Math.max(1, Number(u.searchParams.get('limit') || 20) || 20));
     const r = batch.listRuns(dataDir, b.batchId, { offset, limit });
-    return sendJson(res, 200, { batchId: b.batchId, ...r });
+    return sendJson(res, 200, { ...r }); // REQ-20260913-003：不再透出批次号
   }
 
   // ---------- 需求完善（REQ-20260907-003）：待接受条目批量补文档（不进状态机、不占实施互斥） ----------
@@ -2591,19 +2606,19 @@ async function handleApi(req, res, u, pathname) {
     // 通用子代理模式创建，不再 400）；子代理模型指令固定「跟随主调度会话」（设置手动覆盖入口已移除）
     // REQ-20260910-027：开发人员设置已移除——遗留同名入参忽略，响应不再含该字段
     const ids = Array.isArray(body.ids) ? body.ids : null;
-    const { batch: b, created, queued, queuePosition } = refine.createRefineBatch(dataDir, {
+    // REQ-20260913-003：去批次概念——响应不再透出批次号与排队字段；重复启动由核心层抛
+    // 「已有进行中的完善任务」→ 400 明确提示（不排队、不新建对象）。
+    const { batch: b, created } = refine.createRefineBatch(dataDir, {
       ids, projectRoot: root,
       modelSource: 'follow',
     });
     return sendJson(res, 200, {
       ok: true,
-      batchId: b.batchId,
       created,
-      queued: queued || undefined,
-      queuePosition,
       mode: b.mode,
       agent: b.agent || b.mode,
-      counts: { candidates: b.candidates.length },
+      // 实时候选计数（建轮不冻结：账本 candidates 为空，按实时口径盘点）
+      counts: { candidates: refine.effectiveRefineCandidates(dataDir, b).length },
       // BUG-20260909-017：幂等返回存量批次时按当前口径归一（旧模型行不再透出；账本不回写）
       // BUG-20260910-001：归一升级为全量口径（执行端段/旧领取前缀一并归一）
       // BUG-20260910-008：按当前「完善完成后自动转入计划」开关分态（实时口径，账本不回写）
@@ -2652,7 +2667,7 @@ async function handleApi(req, res, u, pathname) {
     const offset = Math.max(0, Number(u.searchParams.get('offset') || 0) || 0);
     const limit = Math.min(100, Math.max(1, Number(u.searchParams.get('limit') || 20) || 20));
     const r = refine.listRefineRuns(dataDir, b.batchId, { offset, limit });
-    return sendJson(res, 200, { batchId: b.batchId, ...r });
+    return sendJson(res, 200, { ...r }); // REQ-20260913-003：不再透出批次号
   }
 
   if (req.method === 'POST' && pathname === '/api/refine/pause') {
@@ -2699,17 +2714,13 @@ async function handleApi(req, res, u, pathname) {
 
   if (req.method === 'GET' && pathname === '/api/board') {
     const data = core.boardData(root);
-    // BUG-20260908-020：batchEntry 仅对已计划（planned）条目附加（详情 notice「已入批次」消费）；
-    // REQ-20260907-012 曾对 accepted 附加以驱动「已入批次/未入批次」chip，该显示已删除，
-    // 已接受单不再下发该字段。
+    // REQ-20260913-003：去批次概念——「已入批次」（batchEntry）数据源下线，board 不再附加该字段。
     if (dataDir) {
-      const entryIndex = batch.batchEntryIndex(dataDir);
       // REQ-20260908-020：已接受条目附加完善三态（未完善/完善中/已完善），徽标随轮询刷新
       const rstates = refineStates.readRefineStates(dataDir);
       // REQ-20260911-007：活动待人工决策条目附加徽标数据（列表「⚠ 等人工决策」角标与聚合区共用）
       const holds = holdStates.readHolds(dataDir);
       for (const it of data.items) {
-        if (it.status === 'planned') it.batchEntry = entryIndex.get(it.id) || null;
         if (it.status === 'accepted') {
           const rec = rstates[it.id];
           it.refineState = rec ? rec.state : 'unrefined'; // 无记录按未完善展示
@@ -2945,10 +2956,7 @@ async function handleApi(req, res, u, pathname) {
     // REQ-20260906-024：条目存在未处理的模型待处理记录时打标（卡片/详情显示「模型配置待处理」）
     const openPending = dispatchStore.listModelPending(dataDir, { onlyOpen: true }).find((x) => x.itemId === id);
     if (openPending) detail.modelPending = { kind: openPending.kind, summary: openPending.summary, requestId: openPending.requestId };
-    // BUG-20260908-020：batchEntry 仅对已计划（planned）条目附加（与 /api/board 同口径；accepted 不再下发）
-    if (detail.status === 'planned') {
-      detail.batchEntry = batch.batchEntryIndex(dataDir).get(id) || null;
-    }
+    // REQ-20260913-003：去批次概念——「已入批次」（batchEntry）不再下发（与 /api/board 同口径）
     // REQ-20260908-020：已接受条目附加完善三态（详情页徽标 + 驳回按钮禁用判断）
     if (detail.status === 'accepted') {
       const rs = refineStates.refineStateOf(dataDir, id);

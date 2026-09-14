@@ -63,10 +63,10 @@ t('Z07 假 worker 连续处理 10 项：每项新 owner 只认领一单，check 
   const p = await mkProject(10);
   try {
     const created = await runAtbJson(['batch', 'create'], p.root);
-    assert.ok(created.batchId, 'create 应返回批次标识');
+    assert.ok(created.batchId, 'create 应返回批次标识（CLI 输出保留，HTTP 已去）');
     assert.ok(created.prompt.includes(p.root), '提示词应含项目真实路径');
-    assert.ok(created.prompt.includes(created.batchId), '提示词应含批次标识');
-    assert.ok(created.prompt.includes('batch check'), '提示词应含最小核对入口');
+    assert.ok(!created.prompt.includes(created.batchId), 'REQ-20260913-003：提示词不再含批次标识');
+    assert.ok(created.prompt.includes('batch check --dir'), '提示词应含最小核对入口（不依赖批次标识）');
     assert.ok(!created.prompt.includes(p.ids[5]), '提示词不得内嵌全部候选');
 
     const mainBytes = []; // 主会话可观测载荷：每轮 check 输出
@@ -167,13 +167,14 @@ t('Z06 创建幂等：重复 create 返回同批次不建新；prepared→runnin
     assert.match(`${lim.err}${lim.out}`, /已移除/, '应提示上限设置已移除');
 
     const c1 = await runAtbJson(['batch', 'create'], p.root);
-    const c2 = await runAtbJson(['batch', 'create'], p.root);
-    assert.equal(c1.batchId, c2.batchId, '重复创建应返回同一批次');
-    assert.equal(c2.created, false);
+    // REQ-20260913-003：不排队——重复创建被明确拒绝（不再幂等返回同批次）
+    const c2 = await runAtb(['batch', 'create'], p.root);
+    assert.notEqual(c2.code, 0, '重复创建应非零退出');
+    assert.match(`${c2.err}${c2.out}`, /已有进行中的任务/, '应提示重复启动被拒');
 
     let sum = await runAtbJson(['batch', 'summary'], p.root);
     assert.equal(sum.batch.status, 'prepared', '无运行登记时为待启动（prepared）');
-    assert.ok(sum.batch.prompt === c1.prompt, '摘要应能取回同一提示词（重复制不建新批次）');
+    assert.ok(sum.batch.prompt === c1.prompt, '摘要应能取回同一提示词（重复制不建新）');
 
     const next = await runAtbJson(['batch', 'next', '--by', 'w1'], p.root);
     sum = await runAtbJson(['batch', 'summary'], p.root);

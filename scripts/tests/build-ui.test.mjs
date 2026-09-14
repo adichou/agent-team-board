@@ -112,7 +112,9 @@ function candidatesPayload() {
   return {
     items: [
       { itemId: 'REQ-20260913-001', title: '演示需求', status: 'done', commits: [H1] },
-      { itemId: 'REQ-20260913-002', title: '无提交需求', status: 'accepted', commits: [] },
+      { itemId: 'REQ-20260913-002', title: '无提交需求', status: 'done', commits: [] },
+      // BUG-20260913-001：后端已收窄为仅 done；保留非 done 条目验证前端防御过滤
+      { itemId: 'REQ-20260913-003', title: '开发中需求', status: 'in-progress', commits: [H2] },
     ],
   };
 }
@@ -167,7 +169,7 @@ t('N7a build.js 挂载与 state 渲染：版本列表 + 状态 chip + 空态 + �
   assert.doesNotMatch(inner3, /id="bldNewBtn"/, '非 git 不出现创建入口');
 });
 
-t('N7b 创建面板：全选只纳入有 commit 候选的条目；无 commit 条目标注且不可选', async () => {
+t('N7b 创建面板：候选仅 done 条目（BUG-20260913-001）；全选只纳入有 commit 候选的条目；无 commit 条目标注且不可选', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
@@ -175,6 +177,7 @@ t('N7b 创建面板：全选只纳入有 commit 候选的条目；无 commit 条
   assert.match(inner, /新建版本/, '新建版本面板渲染');
   assert.match(inner, /无提交需求/, '无 commit 条目仍列出');
   assert.match(inner, /暂无关联提交/, '无 commit 明确提示');
+  assert.doesNotMatch(inner, /开发中需求/, '非 done 条目不渲染（前端防御过滤）');
   const selectable = h.run(`window.ATBBuild.selectableCandidates(window.ATBBuild.getCandidates())`);
   assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-001'], '全选口径=仅纳入有 commit 候选的条目');
 });
@@ -223,7 +226,170 @@ t('N7d 分支浏览渲染：当前/本地/远端分组与提交记录', async ()
   assert.match(inner2, new RegExp(H1.slice(0, 7)), '短 hash 渲染');
 });
 
-/* ---------- N8 i18n ---------- */
+/* ---------- N9 REQ-20260913-004 版本删除 ---------- */
+
+const ver = (id, name, status = 'draft') => ({
+  id, name, description: '', status, targetBranch: 'main',
+  items: [{ itemId: 'REQ-20260913-001', commit: H1, title: '演示需求', mergedAt: status === 'merged' ? '2026-09-13T03:00:00.000Z' : null, mergeError: null }],
+  createdAt: '2026-09-13T01:00:00.000Z', updatedAt: '2026-09-13T02:00:00.000Z', merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
+});
+
+t('N9a 版本卡片第三个操作键「删除」：quiet 弱化、位于合并键之后；merging 禁用 title；mergeBusy 全局禁用口径', async () => {
+  const h = setup({ state: statePayload({ versions: [
+    ver('BLD-20260913-001', 'v1.0', 'draft'),
+    ver('BLD-20260913-002', 'v2.0', 'merging'),
+    ver('BLD-20260913-003', 'v3.0', 'merged'),
+    ver('BLD-20260913-004', 'v4.0', 'failed'),
+  ] }) });
+  await h.run(`window.ATBBuild.enter('/p/a')`);
+  const inner = h.run(`document.querySelector('#buildView').innerHTML`);
+  for (const id of ['BLD-20260913-001', 'BLD-20260913-002', 'BLD-20260913-003', 'BLD-20260913-004']) {
+    assert.match(inner, new RegExp(`data-ver-delete="${id}"`), `${id} 卡片应有删除键`);
+    assert.match(inner, new RegExp(`aria-label="删除 ${id}"`), `${id} 删除键 aria-label 带版本号`);
+  }
+  // 顺序：AI 完善 → 合并入 main → 删除（同行 card-acts 末位，quiet 弱化不抢主操作）
+  const card1 = inner.slice(inner.indexOf('data-ver-id="BLD-20260913-001"'), inner.indexOf('data-ver-id="BLD-20260913-002"'));
+  const acts = card1.slice(card1.indexOf('card-acts'));
+  const iAnswer = acts.indexOf('data-ver-answer');
+  const iMerge = acts.indexOf('data-ver-merge');
+  const iDel = acts.indexOf('data-ver-delete');
+  assert.ok(iAnswer !== -1 && iMerge !== -1 && iDel !== -1 && iAnswer < iMerge && iMerge < iDel, '删除键应排在 AI 完善 / 合并入 main 之后');
+  const delBtnHtml = acts.slice(acts.lastIndexOf('<button', iDel), acts.indexOf('</button>', iDel));
+  assert.match(delBtnHtml, /btn small quiet/, '删除键为 quiet 弱化样式');
+  assert.match(inner, />删除<\/button>/, '删除键文案');
+  // 状态口径：merging 禁用；draft / merged / failed 可用
+  assert.match(inner, /data-ver-delete="BLD-20260913-002" disabled title="合并中，不可删除"/, 'merging 卡片删除键禁用并提示');
+  assert.match(inner, /data-ver-delete="BLD-20260913-001" aria-label/, 'draft 删除键可用');
+  assert.match(inner, /data-ver-delete="BLD-20260913-003" aria-label/, 'merged 删除键可用');
+  assert.match(inner, /data-ver-delete="BLD-20260913-004" aria-label/, 'failed 删除键可用');
+  // 静态契约：mergeBusy 全局禁用口径覆盖删除键；按 data-ver-delete 循环绑定
+  const listFn = buildJs.match(/function renderVersionList\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(listFn, '缺少 renderVersionList');
+  assert.ok(listFn[0].includes('data-ver-delete'), 'renderVersionList 应渲染删除键');
+  assert.ok(listFn[0].includes('state.mergeBusy'), 'mergeBusy 期间删除键应一并禁用');
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-delete\]'\)/, 'bindCommon 循环绑定 data-ver-delete');
+});
+
+t('N9b 删除确认弹窗：标题带版本号；正文列名称 / 状态 / 关联单数；状态差异化提示；弹窗打开期间不重复开其他删除', async () => {
+  const h = setup({ state: statePayload({ versions: [
+    ver('BLD-20260913-001', 'v1.0', 'draft'),
+    ver('BLD-20260913-002', 'v2.0', 'merging'),
+    ver('BLD-20260913-003', 'v3.0 已合并', 'merged'),
+    ver('BLD-20260913-004', 'v4.0', 'failed'),
+  ] }) });
+  await h.run(`window.ATBBuild.enter('/p/a')`);
+  // draft：不可恢复提示
+  h.run(`window.ATBBuild.openDeleteConfirm('BLD-20260913-001')`);
+  let inner = h.run(`document.querySelector('#buildView').innerHTML`);
+  assert.match(inner, /删除版本（BLD-20260913-001）/, '弹窗标题含版本编号');
+  assert.match(inner, /v1\.0/, '正文列版本名称');
+  assert.match(inner, /计划中/, '正文列状态');
+  assert.match(inner, /1 个关联单/, '正文列关联单数');
+  assert.match(inner, /删除后不可恢复/, 'draft 提示不可恢复');
+  assert.match(inner, /重新纳入其他版本/, 'draft 提示条目可重新纳入');
+  assert.doesNotMatch(inner, /仅删除看板版本记录/, 'draft 不出现 merged 专属提示');
+  assert.match(inner, /id="bldDeleteCancel"/, '取消键');
+  assert.match(inner, /id="bldDeleteGo"[^>]*class="btn danger"/, '确认删除为危险主样式');
+  // 弹窗打开期间不可再触发其他删除
+  h.run(`window.ATBBuild.openDeleteConfirm('BLD-20260913-003')`);
+  assert.match(h.run(`document.querySelector('#buildView').innerHTML`), /删除版本（BLD-20260913-001）/, '弹窗未换目标（打开期间锁其他删除）');
+  // merged：仅移除看板记录提示
+  const h2 = setup({ state: statePayload({ versions: [ver('BLD-20260913-003', 'v3.0 已合并', 'merged')] }) });
+  await h2.run(`window.ATBBuild.enter('/p/a')`);
+  h2.run(`window.ATBBuild.openDeleteConfirm()`);
+  const innerM = h2.run(`document.querySelector('#buildView').innerHTML`);
+  assert.match(innerM, /删除版本（BLD-20260913-003）/, 'merged 弹窗');
+  assert.match(innerM, /仅删除看板版本记录/, 'merged 提示仅删看板记录');
+  assert.match(innerM, /不影响已合并入 main/, 'merged 提示不影响已合并提交与代码');
+  assert.doesNotMatch(innerM, /条目可重新纳入/, 'merged 不出现 draft 专属提示');
+  // failed：与 draft 同口径（放弃计划）
+  const h3 = setup({ state: statePayload({ versions: [ver('BLD-20260913-004', 'v4.0', 'failed')] }) });
+  await h3.run(`window.ATBBuild.enter('/p/a')`);
+  h3.run(`window.ATBBuild.openDeleteConfirm()`);
+  const innerF = h3.run(`document.querySelector('#buildView').innerHTML`);
+  assert.match(innerF, /删除版本（BLD-20260913-004）/);
+  assert.match(innerF, /删除后不可恢复/, 'failed 同 draft 不可恢复提示');
+  // 不存在的版本号不弹窗
+  const h4 = setup();
+  await h4.run(`window.ATBBuild.enter('/p/a')`);
+  h4.run(`window.ATBBuild.openDeleteConfirm('BLD-NOPE')`);
+  assert.doesNotMatch(h4.run(`document.querySelector('#buildView').innerHTML`), /删除版本（/, '不存在的版本号不弹窗');
+});
+
+t('N9c 删除执行流：执行期间确认键禁用防重复；成功 toast + 列表移除 + 选中回落 / 空态；失败 toast + 版本保留可重试', async () => {
+  // 两版本：删最新选中项后回落另一版本；再删光验证空态
+  const st = {
+    initialized: true, isRepo: true, currentBranch: 'dev',
+    versions: [ver('BLD-20260913-002', 'v2.0', 'draft'), ver('BLD-20260913-001', 'v1.0', 'draft')],
+  };
+  const h = setup({ state: st });
+  const toasts = [];
+  h.sandbox.toast = (m, isErr) => toasts.push({ m, isErr });
+  const live = { versions: JSON.parse(JSON.stringify(st.versions)) };
+  const deleted = [];
+  let gate = null;
+  h.sandbox.fetch = async (url, opts) => {
+    const u = new URL(String(url), 'http://local');
+    if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: JSON.parse(JSON.stringify(live.versions)) }) };
+    if (u.pathname === '/api/build/version/delete') {
+      const body = JSON.parse(opts.body || '{}');
+      deleted.push(body);
+      if (gate) await gate;
+      live.versions = live.versions.filter((v) => v.id !== body.id);
+      return { ok: true, json: async () => ({ ok: true, id: body.id }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+  await h.run(`window.ATBBuild.enter('/p/a')`);
+  assert.match(h.run(`document.querySelector('#buildView').innerHTML`), /rel-card sel" data-ver-id="BLD-20260913-002"/, '初始选中最新 v2.0');
+  // 弹窗 → 确认删除（门闸暂停在途，验证执行中按钮禁用）
+  h.run(`window.ATBBuild.openDeleteConfirm('BLD-20260913-002')`);
+  let release;
+  gate = new Promise((res) => { release = res; });
+  const p = h.run(`window.ATBBuild.doDelete()`);
+  const busyInner = h.run(`document.querySelector('#buildView').innerHTML`);
+  assert.match(busyInner, /删除版本（BLD-20260913-002）/, '执行期间弹窗保持展示');
+  assert.match(busyInner, /id="bldDeleteGo" disabled/, '执行期间确认删除禁用');
+  assert.match(busyInner, /删除中…/, '确认键显示进行中状态');
+  release();
+  await p;
+  let inner = h.run(`document.querySelector('#buildView').innerHTML`);
+  assert.ok(toasts.some((x) => x.m === '✓ 已删除版本（BLD-20260913-002）'), '成功 toast：✓ 已删除版本（<id>）');
+  assert.doesNotMatch(inner, /删除版本（BLD-20260913-002）/, '成功后关闭弹窗');
+  assert.doesNotMatch(inner, /data-ver-id="BLD-20260913-002"/, '卡片从列表移除');
+  assert.match(inner, /rel-card sel" data-ver-id="BLD-20260913-001"/, '被删为选中版本时详情回落列表最新');
+  assert.deepEqual(deleted.map((b) => b.id), ['BLD-20260913-002'], '删除请求携带版本号且只发一次');
+  // 删最后一个版本 → 空态回落
+  h.run(`window.ATBBuild.openDeleteConfirm('BLD-20260913-001')`);
+  await h.run(`window.ATBBuild.doDelete()`);
+  inner = h.run(`document.querySelector('#buildView').innerHTML`);
+  assert.ok(toasts.some((x) => x.m === '✓ 已删除版本（BLD-20260913-001）'), '第二个删除成功 toast');
+  assert.match(inner, /暂无版本计划/, '列表为空显示既有空态文案');
+  assert.match(inner, /点击左侧版本查看详情/, '详情回落空态');
+  // 失败流：删除报错 → ✕ toast、弹窗关闭、版本保留、可重试
+  const hf = setup({ state: statePayload() });
+  const toastsF = [];
+  hf.sandbox.toast = (m, isErr) => toastsF.push({ m, isErr });
+  hf.sandbox.fetch = async (url) => {
+    const u = new URL(String(url), 'http://local');
+    if (u.pathname === '/api/build/version/delete') {
+      return { ok: false, status: 409, json: async () => ({ error: '版本合并中，不可删除，请等合并结束后再删' }) };
+    }
+    if (u.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(statePayload())) };
+    return { ok: true, json: async () => ({}) };
+  };
+  await hf.run(`window.ATBBuild.enter('/p/a')`);
+  hf.run(`window.ATBBuild.openDeleteConfirm('BLD-20260913-001')`);
+  await hf.run(`window.ATBBuild.doDelete()`);
+  const innerF = hf.run(`document.querySelector('#buildView').innerHTML`);
+  assert.ok(toastsF.some((x) => x.isErr === true && x.m.includes('✕ 删除失败：') && x.m.includes('版本合并中')), `失败 toast 应为 ✕ 删除失败：<原因>：${JSON.stringify(toastsF)}`);
+  assert.doesNotMatch(innerF, /删除版本（BLD-20260913-001）/, '失败后关闭弹窗');
+  assert.match(innerF, /data-ver-id="BLD-20260913-001"/, '失败后版本仍留在列表');
+  hf.run(`window.ATBBuild.openDeleteConfirm('BLD-20260913-001')`);
+  assert.match(hf.run(`document.querySelector('#buildView').innerHTML`), /删除版本（BLD-20260913-001）/, '失败后可重试（再次打开弹窗）');
+});
+
+
 
 t('N8 i18n 词典：构建页签与模块副标题等新增键入 EN 词典', async () => {
   await import('../web/i18n.js');
@@ -233,6 +399,24 @@ t('N8 i18n 词典：构建页签与模块副标题等新增键入 EN 词典', as
   assert.equal(EN['构建'], 'Build');
   assert.ok(EN['版本计划与分支，集中在这里'], '模块副标题词条');
   assert.ok(EN['搜版本 / 单号 / 分支…'], '搜索占位符词条');
+});
+
+t('N9d i18n 词典：版本删除相关新文案入 EN / EN_DYNAMIC（值无中文、无重复值）', async () => {
+  await import('../web/i18n.js');
+  const I = globalThis.ATBI18N;
+  const { EN, EN_DYNAMIC } = I._dict;
+  for (const k of ['删除', '确认删除', '合并中，不可删除']) {
+    assert.ok(EN[k], `EN 应含「${k}」`);
+    assert.ok(!/[\u4e00-\u9fff]/.test(EN[k]), `EN 值不含中文：${k}`);
+  }
+  for (const k of ['删除版本（◇）', '✓ 已删除版本（◇）', '✕ 删除失败：◇']) {
+    assert.ok(EN_DYNAMIC[k], `EN_DYNAMIC 应含「${k}」`);
+    assert.ok(!/[\u4e00-\u9fff]/.test(EN_DYNAMIC[k]), `EN_DYNAMIC 值不含中文：${k}`);
+  }
+  const values = Object.values(EN);
+  for (const k of ['删除', '确认删除', '合并中，不可删除']) {
+    assert.equal(values.filter((v) => v === EN[k]).length, 1, `EN 值唯一（无重复）：${k}`);
+  }
 });
 
 let failed = 0;

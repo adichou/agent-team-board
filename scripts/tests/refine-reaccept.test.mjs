@@ -137,7 +137,8 @@ t('V5 创建后被人工编辑不跳过：领取时基线重冻结正常领取�
   const b = core.createItem(dataDir, { type: 'requirement', title: '状态变化项' });
   accept(dataDir, a.id);
   accept(dataDir, b.id);
-  const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
+  // ids 种子落账（状态变化项须在账本候选中才产生出局记账；缺省建轮不冻结，REQ-20260913-003）
+  const { batch } = refine.createRefineBatch(dataDir, { ids: [a.id, b.id], mode: 'zcode', projectRoot: root });
   fs.writeFileSync(path.join(core.resolveItemDir(dataDir, a.id).dir, 'README.md'),
     '# a\n人工已自行补全一版说明，内容足够长。\n');
   core.setStatus(dataDir, b.id, 'planned', { by: 'human' });

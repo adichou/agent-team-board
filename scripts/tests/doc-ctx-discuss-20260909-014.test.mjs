@@ -232,7 +232,7 @@ t('T5 contextmenu 文档级委托绑定；仅 #docView 内且条件满足才 pre
   assert.match(js, /document\.addEventListener\('contextmenu', onDocCtxMenu\)/, '应文档级委托绑定一次');
   const h = fnSrc('onDocCtxMenu');
   assert.match(h, /view\.contains\(e\.target\)/, '应校验落点在 #docView 内');
-  assert.match(h, /state\.drawer\.item\?\.type !== 'requirement'/, '仅需求详情抽屉启用（README 默认口径）');
+  assert.match(h, /dtype !== 'requirement' && dtype !== 'bug'\) return/, '需求与 Bug 详情抽屉启用（BUG-20260913-003 放开 Bug 单）');
   assert.match(h, /closest\('a, img'\)/, '链接/图片右键应放行原生菜单');
   assert.match(h, /state\.drawer\.tab !== name/, '加载中/未创建/失败态（doc 与页签不一致）不弹菜单');
   assert.match(h, /e\.preventDefault\(\)/, '拦截原生菜单应发生在全部前置校验之后');

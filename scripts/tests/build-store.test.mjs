@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// REQ-20260913-001 构建模块（版本管理）—— 数据层测试 B1~B8。
-// 覆盖：编号/默认名、校验、条目增删锁、信息编辑、合并状态机、列表读取、重启恢复、逐条目合并结果。
+// REQ-20260913-001 构建模块（版本管理）—— 数据层测试 B1~B8 + REQ-20260913-004 版本删除 B9a~B9c。
+// 覆盖：编号/默认名、校验、条目增删锁、信息编辑、合并状态机、列表读取、重启恢复、逐条目合并结果、
+//       版本删除（成功 / 找不到 / merging 拒绝 / 状态矩阵）。
 // 用法：node scripts/tests/build-store.test.mjs
 
 import assert from 'node:assert/strict';
@@ -137,6 +138,58 @@ t('B8 合并结果逐条目落 mergedAt / mergeError', () => {
   assert.equal(badItem.mergedAt, null);
   assert.equal(badItem.mergeError, 'merge conflict');
 });
+
+// REQ-20260913-004 支持版本删除 —— 数据层 B9a~B9c
+t('B9a 删除 draft 版本：整目录移除、listVersions 不再返回、其余版本不受影响', () => {
+  const dataDir = core.dataDirFrom(mkData());
+  const a = buildStore.createVersion(dataDir, { name: 'A', items: [itemOf('REQ-20260913-001', H1)] });
+  const b = buildStore.createVersion(dataDir, { name: 'B', items: [itemOf('BUG-20260913-002', H2)] });
+  const r = buildStore.deleteVersion(dataDir, a.id);
+  assert.equal(r.ok, true);
+  assert.equal(r.id, a.id);
+  assert.equal(fs.existsSync(path.join(dataDir, 'builds', 'versions', a.id)), false, '版本目录应整目录移除');
+  assert.deepEqual(buildStore.listVersions(dataDir).map((v) => v.id), [b.id], '列表不再返回被删版本，其余不受影响');
+  assert.throws(() => buildStore.readVersion(dataDir, a.id), core.AtbError, '读取被删版本报错');
+});
+
+t('B9b 删除不存在的版本：报「找不到版本计划：<id>」', () => {
+  const dataDir = core.dataDirFrom(mkData());
+  try {
+    buildStore.deleteVersion(dataDir, 'BLD-20990101-999');
+    assert.fail('应抛错');
+  } catch (e) {
+    assert.ok(e instanceof core.AtbError);
+    assert.ok(e.message.includes('找不到版本计划'), `错误文案应含「找不到版本计划」：${e.message}`);
+    assert.ok(e.message.includes('BLD-20990101-999'), '错误文案应含版本号');
+  }
+});
+
+t('B9c merging 禁删（BuildConflictError、目录保留）；draft / failed / merged 均可删', () => {
+  const dataDir = core.dataDirFrom(mkData());
+  // draft 可删（B9a 已覆盖，此处补状态矩阵）
+  const d = buildStore.createVersion(dataDir, { name: 'D', items: [itemOf('REQ-20260913-001', H1)] });
+  assert.equal(buildStore.deleteVersion(dataDir, d.id).ok, true, 'draft 可删');
+  // merging 拒绝
+  const m = buildStore.createVersion(dataDir, { name: 'M', items: [itemOf('REQ-20260913-002', H2)] });
+  buildStore.beginMerge(dataDir, m.id, { baseBranch: 'dev' });
+  try {
+    buildStore.deleteVersion(dataDir, m.id);
+    assert.fail('merging 应拒绝删除');
+  } catch (e) {
+    assert.ok(e instanceof buildStore.BuildConflictError, '应为 BuildConflictError（HTTP 409）');
+    assert.match(e.message, /合并中不可删除|合并结束/);
+  }
+  assert.equal(fs.existsSync(path.join(dataDir, 'builds', 'versions', m.id)), true, '拒绝时目录不动');
+  buildStore.recoverMerging(dataDir); // merging → failed（服务重启口径）
+  assert.equal(buildStore.deleteVersion(dataDir, m.id).ok, true, 'failed 可删');
+  // merged 可删（仅移除看板记录）
+  const g = buildStore.createVersion(dataDir, { name: 'G', items: [itemOf('BUG-20260913-003', 'c'.repeat(40))] });
+  buildStore.beginMerge(dataDir, g.id, { baseBranch: 'dev' });
+  buildStore.finishMerge(dataDir, g.id, { results: [{ itemId: 'BUG-20260913-003', ok: true }] });
+  assert.equal(buildStore.deleteVersion(dataDir, g.id).ok, true, 'merged 可删');
+  assert.deepEqual(buildStore.listVersions(dataDir), [], '全部删除后列表为空');
+});
+
 
 let failed = 0;
 for (const [name, fn] of cases) {

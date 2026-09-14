@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260913-006",
+  "type": "requirement",
+  "title": "版本计划 AI 完善界面支持针对 AI 完善的标题和文本进行修改后再保存",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-5",
+  "createdAt": "2026-09-13T15:58:09.610Z",
+  "updatedAt": "2026-09-14T01:48:25.608Z",
+  "agentCompletedAt": "2026-09-14T01:48:25.608Z",
+  "lastReport": {
+    "at": "2026-09-14T01:48:25.608Z",
+    "coverage": 7,
+    "framework": "node:assert/strict + 前端 vm 行为测试",
+    "summary": "AI 完善弹窗回填可编辑：解析成功后预览区改编辑表单（名称输入/描述文本域预填解析值+muted 当前值对照），应用保存编辑后的值；名称空即时校验禁用应用且不发请求（数据层兜底），重新解析覆盖未保存修改，后台重渲染不丢编辑，进行中防重复，失败保留可重试；buildPrompt/parseAnswer/merging 口径零改动。新增 7 用例先红后绿，全仓 219 测试文件失败 0。",
+    "runId": "run-20260914-221"
+  },
+  "history": [
+    {
+      "at": "2026-09-13T15:58:09.610Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-13T15:58:09.611Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-13T16:08:32.013Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260913-235950-16e0）"
+    },
+    {
+      "at": "2026-09-14T01:24:04.087Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-5",
+      "note": "认领（zcode-batch-048-5）"
+    },
+    {
+      "at": "2026-09-14T01:48:25.608Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-5",
+      "note": "上报测试报告（覆盖率 7%），待人工确认完成"
+    }
+  ]
+}

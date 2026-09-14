@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as core from '../lib/core.mjs';
 import * as releaseStore from '../lib/release-store.mjs';
+import * as buildStore from '../lib/build-store.mjs';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -74,6 +75,10 @@ t('S1~S10 /api/build* 全链路', async () => {
   const dataDirA = core.dataDirFrom(projA);
   const reqA = core.createItem(dataDirA, { type: 'requirement', title: '演示需求一', by: 'test' });
   const reqB = core.createItem(dataDirA, { type: 'requirement', title: '演示需求二', by: 'test' });
+  // BUG-20260913-001 口径：仅已完成（done）条目可纳入版本 / 出现候选，先推到 done
+  for (const it of [reqA, reqB]) {
+    for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDirA, it.id, s, { by: 'test' });
+  }
   fs.writeFileSync(path.join(projA, 'f1.txt'), `feat ${reqA.id}\n`);
   git(projA, ['add', '-A']);
   git(projA, ['commit', '-m', `feat: 演示需求一 ${reqA.id}`]);
@@ -253,6 +258,43 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'GET', '/build.js');
     assert.equal(r.status, 200, '静态 build.js 应可获取');
     assert.match(r.text, /ATBBuild/, 'build.js 应挂载 ATBBuild');
+
+    // S11 REQ-20260913-004 版本删除：draft / merged 可删（整目录移除、state 列表移除）；
+    // 不存在 400；merging 409（conflict）目录保留，恢复 failed 后可删
+    r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: reqB.id, commit: commit2 }] });
+    assert.equal(r.status, 201, `创建删除用版本应成功：${r.text}`);
+    const vid3 = r.json.version.id;
+    const verDir = (id) => path.join(dataDirA, 'builds', 'versions', id);
+    r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: vid3 });
+    assert.equal(r.status, 200, `删除 draft 版本应成功：${r.text}`);
+    assert.equal(r.json.ok, true);
+    assert.equal(r.json.id, vid3);
+    assert.equal(fs.existsSync(verDir(vid3)), false, 'draft 版本目录应移除');
+    r = await req(port, 'GET', `/api/build/state${P}`);
+    assert.ok(!r.json.versions.some((v) => v.id === vid3), 'state 列表不再返回被删版本');
+    // merged 可删（仅移除看板记录）
+    assert.equal(fs.existsSync(verDir(vid2)), true, '前置：merged 版本 vid2 存在');
+    r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: vid2 });
+    assert.equal(r.status, 200, 'merged 版本可删（仅移除看板记录）');
+    assert.equal(fs.existsSync(verDir(vid2)), false, 'merged 版本目录移除');
+    for (const c of [commit1, commit2]) assert.match(git(projA, ['branch', '--contains', c]), /main/, '删除 merged 版本不动 git 历史');
+    // 不存在：400 找不到版本计划
+    r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: 'BLD-20990909-999' });
+    assert.equal(r.status, 400);
+    assert.match(r.json.error || '', /找不到版本计划/);
+    // merging：409 冲突且目录保留；恢复 failed 后可删
+    r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: reqB.id, commit: commit2 }] });
+    const vid4 = r.json.version.id;
+    buildStore.beginMerge(dataDirA, vid4, { baseBranch: 'dev' }); // 直接落 merging 态（服务端合并为同步链路）
+    r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: vid4 });
+    assert.equal(r.status, 409, 'merging 版本删除应 409');
+    assert.equal(r.json.conflict, true);
+    assert.match(r.json.error || '', /合并中/);
+    assert.equal(fs.existsSync(verDir(vid4)), true, 'merging 拒绝时目录不动');
+    buildStore.recoverMerging(dataDirA); // merging → failed
+    r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: vid4 });
+    assert.equal(r.status, 200, 'failed（重启恢复后）可删');
+    assert.equal(fs.existsSync(verDir(vid4)), false);
   } finally {
     server.kill('SIGTERM');
     await sleep(200);

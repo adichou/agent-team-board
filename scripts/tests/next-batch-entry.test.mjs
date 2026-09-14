@@ -16,10 +16,10 @@ const js = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'app.js'), 'u
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
 
-t('N1 运行视图入口：批次结束且待处理 0 时显示完成通知与「启动新一轮」按钮（REQ-20260908-026 文案）', () => {
+t('N1 运行视图入口：本轮结束且待处理 0 时显示完成通知与「启动新一轮」按钮（REQ-20260908-026 文案）', () => {
   assert.match(js, /id="batchNext"/, '运行视图应提供启动新一轮按钮');
   assert.match(js, /启动新一轮/, '按钮文案');
-  assert.match(js, /本批范围已处理完毕/, '完成通知文案（notice 缺省回退）');
+  assert.match(js, /本轮已处理完毕/, '完成通知文案（notice 缺省回退，REQ-20260913-003 去批次措辞）');
 });
 
 t('N2 未结束批次不显示：入口仅在 batchDone（finished 且 remaining=0）分支内', () => {
@@ -49,11 +49,13 @@ t('N3 复用创建流程：同一创建函数与接口，缺省不带 ids（候�
   assert.match(fn[0], /refreshBatch\(\)/, '创建后刷新切到新批次');
 });
 
-t('N4 幂等不误导：created=false 时如实提示「未新建批次」', () => {
-  const fn = js.match(/async function createBatchAndCopy[\s\S]{0,2200}/);
+t('N4 并发幂等不误导 + 重复启动如实报错：created=false 如实提示「未新建任务」；重复启动由服务端 400 toast', () => {
+  const fn = js.match(/async function createBatchAndCopy[\s\S]{0,2400}/);
   assert.ok(fn, '应有创建函数');
-  assert.match(fn[0], /res\.created === false/, '应区分幂等返回');
-  assert.match(fn[0], /未新建批次/, '幂等返回时不得宣称已创建');
+  assert.match(fn[0], /res\.created === false/, '应区分幂等返回（并发窗口）');
+  assert.match(fn[0], /未新建任务/, '幂等返回时不得宣称已创建（去批次措辞，REQ-20260913-003）');
+  // REQ-20260913-003：不排队——重复启动服务端 400，由 catch 分支 toast 原因，不宣称已创建
+  assert.match(fn[0], /toast\(e\.message, true\)/, '服务端拒绝应如实 toast 错误');
 });
 
 t('N5 创建函数不含上限（REQ-20260908-019）：不再读取/发送 limit，请求体仅 ids 与 developer', () => {

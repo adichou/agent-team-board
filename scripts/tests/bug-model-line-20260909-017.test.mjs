@@ -143,20 +143,15 @@ t('C1 数据层公开视图：refineBatchPublicView / refineSummary 归一旧口
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
 
-t('C2 CLI 回显：refine create 幂等返回（JSON 与文本回显）与 refine summary 均不透出旧行', () => {
+t('C2 CLI 回显：refine create 重复启动被拒（REQ-20260913-003）；refine summary 归一不透出旧行', () => {
   const p = mkProject('atb-b17-c2-');
   try {
-    mkAccepted(p.dataDir, '幂等回显');
+    mkAccepted(p.dataDir, '回显');
     const first = atbJson(['refine', 'create'], p.root);
     freezeLegacyPrompt(p.dataDir, first.batchId, p.root);
-    const again = atbJson(['refine', 'create'], p.root);
-    assert.equal(again.created, false, '在途批次幂等返回');
-    assert.ok(again.prompt.includes(FOLLOW_LINE), '幂等回显 prompt 归一为跟随口径');
-    assert.ok(!again.prompt.includes(OLD_SNIPPET) && !again.prompt.includes(OLD_SETTINGS), '幂等回显不含旧行');
-    const text = spawnSync(process.execPath, [ATB, 'refine', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(text.status, 0, '文本模式回显应成功');
-    assert.ok(!text.stdout.includes(OLD_SNIPPET) && !text.stdout.includes(OLD_SETTINGS), '文本回显不含旧行');
-    assert.ok(text.stdout.includes(FOLLOW_LINE), '文本回显含跟随指令行');
+    const again = spawnSync(process.execPath, [ATB, 'refine', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
+    assert.notEqual(again.status, 0, '未结束轮内重复创建应被拒');
+    assert.ok(!again.stdout.includes(OLD_SNIPPET) && !again.stdout.includes(OLD_SETTINGS), '拒绝输出不含旧行');
     const sum = atbJson(['refine', 'summary'], p.root);
     assert.ok(sum.batch.prompt.includes(FOLLOW_LINE) && !sum.batch.prompt.includes(OLD_SNIPPET), 'refine summary 公开视图同口径');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
@@ -194,12 +189,12 @@ t('C3 服务端：/api/refine/create 幂等返回与 /api/refine/current 面板�
     mkAccepted(dataDir, '服务端口径');
     const first = await req('POST', '/api/refine/create', {});
     assert.equal(first.status, 200);
-    freezeLegacyPrompt(dataDir, first.json.batchId, root);
+    assert.equal('batchId' in first.json, false, '创建响应不再透出批次号（REQ-20260913-003）');
+    const headId = refine.queueHeadRefineBatch(dataDir).batchId;
+    freezeLegacyPrompt(dataDir, headId, root);
     const again = await req('POST', '/api/refine/create', {});
-    assert.equal(again.status, 200);
-    assert.equal(again.json.created, false, '幂等返回在途批次');
-    assert.ok(again.json.prompt.includes(FOLLOW_LINE), '幂等返回 prompt 归一');
-    assert.ok(!again.json.prompt.includes(OLD_SNIPPET) && !again.json.prompt.includes(OLD_SETTINGS), '幂等返回不含旧行');
+    assert.equal(again.status, 400, '重复创建应被拒');
+    assert.match(String(again.json && again.json.error || ''), /已有进行中的完善任务/);
     const cur = await req('GET', '/api/refine/current');
     assert.equal(cur.status, 200);
     assert.ok(cur.json.batch.prompt.includes(FOLLOW_LINE), '面板数据（/api/refine/current → #refinePrompt 与重新复制源）归一');
@@ -240,7 +235,9 @@ t('D1 新建与流程：存量收尾后新建批次 prompt 正确落账（验收
     assert.ok(!second.prompt.includes(OLD_SNIPPET), '新建提示词不含旧行');
     const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'refine', 'batches', second.batchId, 'batch.json'), 'utf8'));
     assert.ok(raw.prompt.includes(FOLLOW_LINE) && !raw.prompt.includes(OLD_SNIPPET), '新账本文件落盘口径正确（验收 3）');
-    assert.ok(raw.candidates.some((c) => c.id === id2), '新候选入批');
+    // REQ-20260913-003：建轮不冻结——账本 candidates 为空，新候选经实时队列生效可领取
+    assert.equal(raw.candidates.length, 0, '新账本不再冻结候选快照');
+    assert.ok(refine.effectiveRefineCandidates(p.dataDir, raw).some((c) => c.id === id2), '新候选实时入列');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
 

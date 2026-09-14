@@ -84,26 +84,21 @@ t('Z01 混合 req/bug：最旧优先（纯创建时间序，REQ-20260908-010）�
 
 // ---------- Z02 批次冻结（REQ-20260908-019 起无上限设置） ----------
 
-t('Z02a 批次冻结候选：全量冻结、无 limit 字段；重复创建幂等；冻结后新增条目入下一批', () => {
+t('Z02a 建轮不冻结候选（REQ-20260913-003）：账本 candidates 为空；重复启动被拒；新增条目实时入列', () => {
   const p = mkProject();
   try {
-    for (let i = 1; i <= 3; i++) mkItem(p, 'requirement', `冻结前-${i}`, { backMs: (3 - i) * 1000 });
+    const ids = [1, 2, 3].map((i) => mkItem(p, 'requirement', `启动前-${i}`, { backMs: (3 - i) * 1000 }));
     const { batch: b, created } = batch.createBatch(p.dataDir, { projectRoot: p.root });
     assert.ok(created, '首次创建应 created=true');
-    assert.equal(b.candidates.length, 3, '无上限设置应全量冻结全部候选');
+    assert.deepEqual(b.candidates, [], '启动不得冻结候选快照（领取时实时读取）');
     assert.equal('limit' in b, false, '批次记录不应再写 limit 字段（REQ-20260908-019）');
+    assert.deepEqual(batch.effectiveCandidates(p.dataDir, b), ids, '生效候选实时等于已计划队列（最旧优先）');
 
-    const again = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.equal(again.created, false, '候选集合不变时重复创建应幂等返回同一批次');
-    assert.equal(again.batch.batchId, b.batchId);
-    assert.deepEqual(again.batch.candidates, b.candidates, '重复创建不得改动冻结候选');
+    assert.throws(() => batch.createBatch(p.dataDir, { projectRoot: p.root }), /已有进行中的任务/, '未结束轮内重复启动应被拒');
 
-    // 冻结后新增条目不进旧批次：再创建得到只含新条目的排队批次（此前会被上限截断遮蔽进幂等分支）
-    const fresh = mkItem(p, 'requirement', '冻结后新增');
-    const queued = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.equal(queued.created, true, '出现新候选时应新建批次入队（REQ-20260906-025）');
-    assert.equal(queued.queued, true, '新批次应排队');
-    assert.deepEqual(queued.batch.candidates, [fresh], '新批次只冻结新增条目，前序批次候选不重复入批');
+    // 启动后新增条目无需任何并入操作即入列（实时队列口径）
+    const fresh = mkItem(p, 'requirement', '启动后新增');
+    assert.deepEqual(batch.effectiveCandidates(p.dataDir, b), [...ids, fresh], '新增条目实时进入本轮队列队尾');
   } finally { cleanup(p); }
 });
 
@@ -123,7 +118,8 @@ t('Z02c 仅阻塞项：批次可建但 next 返回 stop=blocked，不派空 work
     const r = batch.setDependencies(p.dataDir, a, [b]);
     assert.equal(r.ok, true, JSON.stringify(r));
     const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.deepEqual(bt.candidates, [a], '候选只含 planned 的 a');
+    assert.deepEqual(bt.candidates, [], '建轮不冻结候选（REQ-20260913-003）');
+    assert.deepEqual(batch.effectiveCandidates(p.dataDir, bt), [a], '生效候选只含 planned 的 a');
     const next = batch.nextItem(p.dataDir, bt.batchId, { owner: W1 });
     assert.equal(next.stop, 'blocked', `仅余阻塞项应 stop=blocked，得到 ${JSON.stringify(next)}`);
     assert.ok(next.counts, 'stop 响应应带计数');
@@ -134,16 +130,15 @@ t('Z02d 上限设置已移除（REQ-20260908-019）：多余 limit 入参与存�
   const p = mkProject();
   try {
     for (let i = 1; i <= 2; i++) mkItem(p, 'requirement', `候选-${i}`);
-    // 存量项目 settings.json 残留 defaults.batchLimit：不再被读取，候选全量冻结
+    // 存量项目 settings.json 残留 defaults.batchLimit：不再被读取，候选实时全量生效
     const sp = path.join(p.dataDir, 'dispatch', 'settings.json');
     const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
     s.defaults = { ...(s.defaults || {}), batchLimit: 1 };
     fs.writeFileSync(sp, JSON.stringify(s));
     // 原越界值 0/101 不再校验：多余 limit 入参被忽略，照常创建
     const { batch: b } = batch.createBatch(p.dataDir, { limit: 101, projectRoot: p.root });
-    assert.equal(b.candidates.length, 2, 'limit 入参与残留 batchLimit 均不截断候选');
-    const again = batch.createBatch(p.dataDir, { limit: 0, projectRoot: p.root });
-    assert.equal(again.batch.batchId, b.batchId, '重复创建幂等，不受 limit 入参影响');
+    assert.equal(batch.effectiveCandidates(p.dataDir, b).length, 2, 'limit 入参与残留 batchLimit 均不截断实时候选');
+    assert.throws(() => batch.createBatch(p.dataDir, { limit: 0, projectRoot: p.root }), /已有进行中的任务/, '重复启动被拒（REQ-20260913-003），不受 limit 入参影响');
     // 常量随特性删除：新代码不得再引用
     assert.equal('BATCH_LIMIT_DEFAULT' in batch, false, 'BATCH_LIMIT_DEFAULT 常量应删除');
     assert.equal('BATCH_LIMIT_MAX' in batch, false, 'BATCH_LIMIT_MAX 常量应删除');
@@ -504,7 +499,7 @@ t('Z15 在途 run 未收尾：next 拒绝再派（不产生第二实施任务）
     const sum = batch.batchSummary(p.dataDir, bt.batchId);
     assert.equal(sum.batch.batchId, bt.batchId);
     assert.ok(sum.currentRun && sum.currentRun.runId === run.runId, '摘要应含当前执行');
-    assert.ok(sum.batch.prompt.includes(bt.batchId), '摘要应可取续接提示词');
+    assert.ok(sum.batch.prompt.includes('AI 开发调度员'), '摘要应可取续接提示词（去批次口径，REQ-20260913-003；REQ-20260913-005 改名）');
     assert.ok(Array.isArray(sum.records), '摘要应含执行记录');
     // 未收尾不得被续接抢占：模拟新主会话同样被拒
     assert.throws(() => batch.nextItem(p.dataDir, bt.batchId, { owner: 'zcode-new-main' }), /在途|核对|未收尾/);
@@ -591,7 +586,7 @@ t('BUG-20260906-001 全部依赖受阻：check 应 stop 并带准确受阻计数
     const b = mkItem(p, 'requirement', 'B', { plan: false }); // 前置：仅接受未计划（不进实时队列）且未 done
     assert.equal(batch.setDependencies(p.dataDir, a, [b]).ok, true);
     const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.deepEqual(bt.candidates, [a], '批次只冻结 A（B 未计划）');
+    assert.deepEqual(batch.effectiveCandidates(p.dataDir, bt), [a], '生效候选实时只含 A（B 未计划不入队列）');
 
     // 首次核对即无任何可派发候选：stop（主调度不得派 worker）
     const first = batch.checkBatch(p.dataDir, bt.batchId);
@@ -620,15 +615,15 @@ t('BUG-20260906-001 全部依赖受阻：check 应 stop 并带准确受阻计数
   } finally { cleanup(p); }
 });
 
-t('BUG-20260906-001b 剩余项冻结后被外部认领：check 同口径 stop，不派空 worker', () => {
+t('BUG-20260906-001b 剩余项被外部认领：check 同口径 stop，不派空 worker', () => {
   const p = mkProject();
   try {
     const a = mkItem(p, 'requirement', 'A');
     const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    forceClaim(p, a, W2); // 模拟他人绕过批次直接认领（冻结后流转出局）
+    forceClaim(p, a, W2); // 模拟他人绕过批次直接认领（实时队列下自然出局）
     const chk = batch.checkBatch(p.dataDir, bt.batchId);
-    assert.equal(chk.nextAction, 'stop', `冻结后流转应 stop（与 next 的 stop=blocked 口径一致），得到 ${JSON.stringify(chk)}`);
-    assert.equal(chk.counts.remaining, 1);
+    assert.equal(chk.nextAction, 'stop', `候选全部流转出局应 stop（与 next 的口径一致），得到 ${JSON.stringify(chk)}`);
+    assert.equal(chk.counts.remaining, 0, '实时队列下被认领条目不再计入待处理');
     assert.ok(!chk.counts.blockedPending, '非依赖受阻不得计入 blockedPending');
   } finally { cleanup(p); }
 });
@@ -862,16 +857,15 @@ t('R23-04 createBatch 集成：真实路径创建第 102 个批次后恰剩 100 
   } finally { cleanup(p); }
 });
 
-t('R23-05 幂等创建不触发清理；未超上限创建不删任何批次', () => {
+t('R23-05 重复启动被拒不触发清理；未超上限创建不删任何批次', () => {
   const p = mkProject();
   try {
     mkItem(p, 'requirement', 'A');
     const first = batch.createBatch(p.dataDir, { projectRoot: p.root });
     assert.ok(first.created);
     assert.deepEqual(first.pruned.removed, [], '未超上限不应删除');
-    const again = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    assert.equal(again.created, false, '未结束批次内重复创建应幂等返回');
-    assert.equal(again.pruned, undefined, '幂等返回不应携带清理结果（未触发）');
+    // REQ-20260913-003：不排队——未结束轮内重复启动直接拒绝（不再幂等返回）
+    assert.throws(() => batch.createBatch(p.dataDir, { projectRoot: p.root }), /已有进行中的任务/);
     assert.equal(batchDirNames(p).length, 1);
   } finally { cleanup(p); }
 });

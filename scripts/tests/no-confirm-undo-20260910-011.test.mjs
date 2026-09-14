@@ -200,8 +200,9 @@ t('N8 删除防回归：danger 确认显示单号与标题及不可恢复说明�
   assert.doesNotMatch(fnBlock('deleteItem'), /undoAction/, 'deleteItem 不得出现撤销逻辑');
 });
 
-t('N9 其余确认框零回归（静态）：删除批次 / 终止批量完善与开发 / 停止执行 / 项目面板确认入口保持', () => {
-  for (const name of ['deleteBatchById', 'abortRefineTask', 'abortDevTask']) {
+t('N9 其余确认框零回归（静态）：终止批量完善与开发 / 停止执行 / 项目面板确认入口保持', () => {
+  // REQ-20260913-003：deleteBatchById（删除未在执行轮次）随批次排队概念移除，不再有对应确认框
+  for (const name of ['abortRefineTask', 'abortDevTask']) {
     assert.match(fnBlock(name), /uiConfirm\(/, `${name} 的二次确认不得丢失`);
   }
   const stop = source.match(/const stop = drawer\.querySelector\('#cxStopCurrent'\)[\s\S]{0,800}?\n  \}\);/);

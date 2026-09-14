@@ -69,34 +69,38 @@ t('A1 通用完善提示词：单一版本——不传 agent 与传 zcode/codex 
   assert.doesNotMatch(plain, AGENT_WORDS, '通用提示词不得出现执行端字样');
 });
 
-t('A2 通用完善提示词调度要素保留：路径/批次/CLI 约定/通用领取前缀/回执/硬性约束/核对与 nextAction', () => {
+t('A2 通用完善提示词调度要素保留：路径/CLI 约定/通用领取前缀/回执/硬性约束/核对与 nextAction（REQ-20260913-003 去批次）', () => {
   const p = refine.buildRefinePrompt({ projectRoot: '/tmp/p', batchId: 'RFB-20260909-002', developer: '张三', modelSource: 'follow' });
   assert.ok(p.includes('/tmp/p'), '项目路径');
-  assert.ok(p.includes('RFB-20260909-002'), '批次标识');
+  // REQ-20260913-003：去批次概念——批次号与 --batch 核对入口不再出现在提示词
+  assert.ok(!p.includes('RFB-20260909-002'), '不得再透出批次标识');
   // REQ-20260910-027：开发人员设置已移除——传 developer 也不生成会话命名指令（参数忽略）
   assert.ok(!p.includes('请将当前会话名改为'), '开发人员会话命名指令已移除');
   assert.match(p, /CLI 约定：atb 指 node /, 'CLI 约定');
-  assert.ok(p.includes('atb refine next --by refine-<批次尾号>-<序号>'), '领取命令使用单一通用前缀');
+  assert.ok(p.includes('atb refine next --by refine-<序号>'), '领取命令使用单一通用前缀（去批次尾号）');
   assert.ok(!p.includes('zcode-refine') && !p.includes('codex-refine'), '不再出现按 Agent 差异化的领取前缀');
   assert.ok(p.includes('atb refine done'), '完成回执');
   assert.ok(p.includes('atb refine fail'), '失败回执');
   assert.ok(p.includes('保持 accepted'), '硬性约束：条目保持已接受');
-  assert.ok(p.includes('atb refine check --batch RFB-20260909-002'), '主会话核对入口');
+  assert.ok(p.includes('refine check --dir'), '主会话核对入口（不依赖批次标识）');
+  assert.ok(p.includes('实时取单'), '实时取单指令');
   assert.ok(p.includes('nextAction=continue'), 'nextAction 处置');
   assert.ok(p.includes('子代理'), '子代理口径描述词');
   assert.ok(p.includes('主调度会话'), '主调度会话描述词');
 });
 
-t('A3 通用开发提示词：单一版本（agent 参数忽略）；无执行端字样；调度要素与 nextBatch 接续保留', () => {
+t('A3 通用开发提示词：单一版本（agent 参数忽略）；无执行端字样；调度要素与实时取单保留', () => {
   const base = { projectRoot: '/tmp/p', batchId: 'batch-20260909-001', workerSpecPath: '/tmp/spec.md', modelSource: 'follow' };
   const plain = batch.generatePrompt(base);
   assert.equal(plain, batch.generatePrompt({ ...base, agent: 'zcode' }), 'agent=zcode 输出一致');
   assert.equal(plain, batch.generatePrompt({ ...base, agent: 'codex' }), 'agent=codex 输出一致');
   assert.doesNotMatch(plain, AGENT_WORDS, '通用提示词不得出现执行端字样');
   assert.ok(plain.includes('/tmp/spec.md'), '执行规范路径');
-  assert.ok(plain.includes('batch check --batch batch-20260909-001'), '批次摘要入口');
+  assert.ok(plain.includes('batch check --dir'), '调度核对入口（不依赖批次标识，REQ-20260913-003）');
+  assert.ok(!plain.includes('batch-20260909-001'), '不得再透出批次号');
   assert.ok(plain.includes('nextAction=continue'), 'nextAction 处置');
-  assert.ok(plain.includes('nextBatch'), '批次排队自动接续说明保留');
+  assert.ok(!plain.includes('nextBatch'), '批次排队接续说明已移除');
+  assert.ok(plain.includes('实时取单') && plain.includes('最旧优先'), '实时取单指令（最旧优先）');
   assert.ok(plain.includes('每轮新启动一个子代理'), '子代理派发口径');
   assert.ok(plain.includes('跟随主调度会话'), '跟随模型指令');
 });
@@ -118,7 +122,7 @@ t('B1 createRefineBatch 新账本：mode/agent 记 subagent、prompt 通用（�
     const { batch: b } = refine.createRefineBatch(p.dataDir, { projectRoot: p.root, modelSource: 'follow' });
     assert.equal(b.mode, 'subagent', 'mode 记子代理模式标识');
     assert.equal(b.agent, 'subagent', 'agent 记子代理模式标识');
-    assert.ok(b.prompt.includes('refine-<批次尾号>-<序号>'), '提示词使用通用领取前缀');
+    assert.ok(b.prompt.includes('refine-<序号>'), '提示词使用通用领取前缀（去批次尾号）');
     assert.ok(b.prompt.includes('跟随主调度会话'), '提示词含跟随模型指令');
     assert.doesNotMatch(b.prompt, AGENT_WORDS, '提示词无执行端字样');
     // 领取落账继承子代理模式标识
@@ -137,15 +141,17 @@ t('B1 createRefineBatch 新账本：mode/agent 记 subagent、prompt 通用（�
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
 
-t('B2 refine 幂等去 Agent 化：存在未结束通用批次时再次创建（显式 mode codex）幂等返回，不并行新建', () => {
+t('B2 refine 重复启动拒绝（REQ-20260913-003）：存在未结束轮时再次创建（显式 mode codex）被拒，不并行新建', () => {
   const p = mkProject('atb-ag-b2-');
   try {
-    mkAccepted(p.dataDir, '幂等候选');
+    mkAccepted(p.dataDir, '重复启动候选');
     const first = refine.createRefineBatch(p.dataDir, { projectRoot: p.root, modelSource: 'follow' });
     assert.equal(first.created, true);
-    const again = refine.createRefineBatch(p.dataDir, { mode: 'codex', projectRoot: p.root });
-    assert.equal(again.created, false, '再次创建幂等返回既有批次');
-    assert.equal(again.batch.batchId, first.batch.batchId, '返回同一批次（不再按 mode 分叉）');
+    assert.throws(
+      () => refine.createRefineBatch(p.dataDir, { mode: 'codex', projectRoot: p.root }),
+      /已有进行中的完善任务/,
+      '未结束轮内再次创建应被拒（不按 mode 分叉、不并行新建）',
+    );
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
 
@@ -175,11 +181,12 @@ t('C1 CLI refine create：默认与 --mode codex 均生成通用提示词；输�
   try {
     mkAccepted(p.dataDir, 'CLI 完善通用');
     const j = atbJson(['refine', 'create'], p.root);
-    assert.ok(j.prompt.includes('refine-<批次尾号>-<序号>'), '通用领取前缀');
+    assert.ok(j.prompt.includes('refine-<序号>'), '通用领取前缀（去批次尾号）');
     assert.ok(j.prompt.includes('跟随主调度会话'), '跟随模型指令');
     assert.doesNotMatch(j.prompt, AGENT_WORDS, '提示词无执行端字样');
+    // REQ-20260913-003：未结束轮内重复创建被拒（不再幂等返回）
     const r = spawnSync(process.execPath, [ATB, 'refine', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(r.status, 0, '幂等再次创建应成功');
+    assert.notEqual(r.status, 0, '重复创建应被拒');
     assert.ok(!r.stdout.includes('执行 Agent'), '输出行不再出现「执行 Agent」');
     // --mode 保留但忽略：同样生成通用提示词
     refine.abortRefineBatch(p.dataDir, j.batchId);
@@ -190,16 +197,18 @@ t('C1 CLI refine create：默认与 --mode codex 均生成通用提示词；输�
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
 
-t('C2 CLI batch create：生成通用提示词（跟随行 + nextBatch 接续）；复制指引文案不含 Zcode 字样', () => {
+t('C2 CLI batch create：生成通用提示词（跟随行 + 实时取单）；复制指引文案不含 Zcode 字样', () => {
   const p = mkProject('atb-ag-c2-');
   try {
     mkPlanned(p.dataDir, 'CLI 开发通用');
     const j = atbJson(['batch', 'create'], p.root);
     assert.ok(j.prompt.includes('跟随主调度会话'), '跟随模型指令');
-    assert.ok(j.prompt.includes('nextBatch'), '排队接续说明保留');
+    assert.ok(j.prompt.includes('实时取单'), '实时取单指令（REQ-20260913-003）');
+    assert.ok(!j.prompt.includes('nextBatch'), '排队接续说明已移除');
     assert.doesNotMatch(j.prompt, AGENT_WORDS, '提示词无执行端字样');
+    // REQ-20260913-003：未结束轮内重复创建被拒（不再幂等返回）
     const r = spawnSync(process.execPath, [ATB, 'batch', 'create', '--dir', p.root], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(r.status, 0, '幂等再次创建应成功');
+    assert.notEqual(r.status, 0, '重复创建应被拒');
     assert.ok(!r.stdout.includes('Zcode'), '复制指引文案不含 Zcode 字样');
     assert.ok(!r.stdout.includes('执行 Agent'), '输出行不再出现「执行 Agent」');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
@@ -249,12 +258,11 @@ t('D1 服务端 /api/batch/create：不带 agent 可创建（agent=subagent、�
     assert.equal(r.status, 200, `不带 agent 应成功（${JSON.stringify(r.json)}）`);
     assert.equal(r.json.agent, 'subagent', '返回 agent=subagent');
     assert.doesNotMatch(r.json.prompt, AGENT_WORDS, '提示词无执行端字样');
-    // 带 agent（旧客户端）：忽略不报错，仍为通用口径
+    // 带 agent（旧客户端）：入参被忽略；REQ-20260913-003：未结束轮内重复启动 400（不排队）
     mkPlanned(dataDir, '服务端忽略 agent');
     r = await req('POST', `/api/batch/create${P}`, { agent: 'codex' });
-    assert.equal(r.status, 200, '携带 agent 参数不报错（忽略）');
-    assert.equal(r.json.agent, 'subagent', 'agent 入参被忽略');
-    assert.doesNotMatch(r.json.prompt, AGENT_WORDS, '提示词仍为通用版');
+    assert.equal(r.status, 400, '重复启动应被拒（携带 agent 也不新建）');
+    assert.match(String(r.json && r.json.error || ''), /已有进行中的任务/);
   } finally {
     server.kill();
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -273,15 +281,14 @@ t('D2 服务端 /api/refine/create：不带 mode / 带 mode 均可创建，返�
     mkAccepted(dataDir, '服务端通用完善');
     let r = await req('POST', `/api/refine/create${P}`, {});
     assert.equal(r.status, 200, `不带 mode 应成功（${JSON.stringify(r.json)}）`);
-    assert.ok(r.json.prompt.includes('refine-<批次尾号>-<序号>'), '通用领取前缀');
+    assert.ok(r.json.prompt.includes('refine-<序号>'), '通用领取前缀（去批次尾号）');
     assert.doesNotMatch(r.json.prompt, AGENT_WORDS, '提示词无执行端字样');
-    mkAccepted(dataDir, '服务端忽略 mode');
+    // REQ-20260913-003：未结束轮内重复创建 400（mode / 非法 mode 均不新建）
     r = await req('POST', `/api/refine/create${P}`, { mode: 'codex' });
-    assert.equal(r.status, 200, '携带 mode 参数不报错（忽略）');
-    assert.doesNotMatch(r.json.prompt, AGENT_WORDS, '提示词仍为通用版');
-    // 非法 mode 值同样忽略（不再 400）
+    assert.equal(r.status, 400, '重复创建应被拒');
+    assert.match(String(r.json && r.json.error || ''), /已有进行中的完善任务/);
     r = await req('POST', `/api/refine/create${P}`, { mode: 'gpt' });
-    assert.equal(r.status, 200, '任意 mode 值均按通用子代理模式创建');
+    assert.equal(r.status, 400, '任意 mode 值重复创建同样被拒');
   } finally {
     server.kill();
     fs.rmSync(tmp, { recursive: true, force: true });
