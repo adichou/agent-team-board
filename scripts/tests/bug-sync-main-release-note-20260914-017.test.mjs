@@ -7,6 +7,10 @@
 //   U3/U4 同步成功 / 部分失败反馈携带「main 已跳过，请通过发布流程推送」（用 skipped 数据）；
 //   U5 仅 main 场景「没有可推送的开发分支；main 必须通过发布流程推送」（toast + 空态）；
 //   U6 skipped 不含 main 时不误报；W1 i18n 词条（静态 + 动态）与旧键清理；S1 不越界静态断言。
+// BUG-20260914-018（用户反馈：删掉 main 行「通过发布流程推送」文字）反向调整：
+//   U2 / U2b 改为 main 行（当前行 / 非当前行）无该标识、无悬停详释、无推送入口；
+//   W1 标识两条词条改为死词条清理断言；S1 增加 mainFlagHtml / .bld-main-flag 无残留断言。
+//   其余 U1 / U3–U6 / W2 与 S1 服务端断言不变（范围边界：仅删 main 行上的文字）。
 // 用法：node scripts/tests/bug-sync-main-release-note-20260914-017.test.mjs
 
 import assert from 'node:assert/strict';
@@ -27,6 +31,7 @@ const t = (name, fn) => cases.push([name, fn]);
 
 const SYNC_NOTE = '同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。';
 const MAIN_FLAG = '通过发布流程推送';
+const MAIN_FLAG_TITLE = 'main 由发布流程推送：不随「和远端同步」推送，也无单独推送按钮';
 const MAIN_SKIPPED_NOTE = 'main 已跳过，请通过发布流程推送';
 
 function element() {
@@ -120,16 +125,17 @@ t('U1b 非 git 仓库：整页引导空态，不渲染常驻说明（无同步�
   assert.ok(!inner.includes(SYNC_NOTE), '非 git 仓库不渲染同步范围说明');
 });
 
-/* ---------- U2：main 行标识 ---------- */
+/* ---------- U2：main 行标识（BUG-20260914-018 删除后口径） ---------- */
 
-t('U2 main 行标识（当前 dev）：main 行显示「通过发布流程推送」且无推送入口；非 main 行不受影响；行仍可点选查看提交', async () => {
+t('U2 main 行标识已删（当前 dev）：main 行无「通过发布流程推送」徽标、无悬停详释、无推送入口；非 main 行推送不受影响；行仍可点选查看提交', async () => {
   const h = setup({ branches: { isRepo: true, current: 'dev', local: ['dev', 'feat', 'main'], remote: [], remotes: ['origin'] } });
   const view = await openBranches(h);
   const inner = view.innerHTML;
   const mainRow = inner.match(/<div class="bld-branch" data-branch="main"[^>]*>[\s\S]*?<\/div>/);
   assert.ok(mainRow, 'main 行应保留（只读浏览语义不变）');
-  assert.ok(mainRow[0].includes(MAIN_FLAG), `main 行应显示「${MAIN_FLAG}」标识`);
-  assert.match(mainRow[0], /bld-main-flag/, '标识应有稳定样式钩子');
+  assert.ok(!mainRow[0].includes(MAIN_FLAG), `main 行不得再显示「${MAIN_FLAG}」标识（BUG-20260914-018 删除）`);
+  assert.doesNotMatch(mainRow[0], /bld-main-flag/, 'main 行不得残留标识样式钩子');
+  assert.ok(!mainRow[0].includes(MAIN_FLAG_TITLE), 'main 行不得残留悬停详释');
   assert.doesNotMatch(mainRow[0], /data-push/, 'main 行不得出现任何推送入口（不越界）');
   const featRow = inner.match(/<div class="bld-branch" data-branch="feat"[^>]*>[\s\S]*?<\/div>/);
   assert.ok(featRow, 'feat 行应渲染');
@@ -139,13 +145,15 @@ t('U2 main 行标识（当前 dev）：main 行显示「通过发布流程推送
   assert.match(buildJs, /querySelectorAll\('\[data-branch\]'\)/, '[data-branch] 点击委托绑定保持');
 });
 
-t('U2b main 为当前分支：以「当前」行渲染，同样带「通过发布流程推送」标识', async () => {
+t('U2b main 为当前分支：以「当前」行渲染，同样无「通过发布流程推送」标识（两处一并删除）', async () => {
   const h = setup({ branches: { isRepo: true, current: 'main', local: ['main', 'dev'], remote: [], remotes: ['origin'] } });
   const view = await openBranches(h);
   const inner = view.innerHTML;
   const curRow = inner.match(/<div class="bld-branch bld-cur" data-branch="main"[^>]*>[\s\S]*?<\/div>/);
   assert.ok(curRow, 'main 应以「当前」行渲染');
-  assert.ok(curRow[0].includes(MAIN_FLAG), `当前 main 行同样显示「${MAIN_FLAG}」标识`);
+  assert.ok(curRow[0].includes('当前'), '当前行仍保留「当前」徽标（仅删发布流程徽标）');
+  assert.ok(!curRow[0].includes(MAIN_FLAG), `当前 main 行不得再显示「${MAIN_FLAG}」标识`);
+  assert.ok(!curRow[0].includes(MAIN_FLAG_TITLE), '当前 main 行不得残留悬停详释');
   assert.doesNotMatch(curRow[0], /data-push/, '当前 main 行无推送入口');
 });
 
@@ -218,13 +226,15 @@ t('U6 skipped 不含 main（本地无 main）：成功 toast 维持两步汇总�
 
 /* ---------- W1：i18n 词典 ---------- */
 
-t('W1 静态词条收录（常驻说明 / main 行标识及其 title / 悬停提示 / 仅 main toast），中英往返', () => {
+t('W1 静态词条收录（常驻说明 / 悬停提示 / 仅 main toast），中英往返；main 行标识两条词条已随徽标删除清理', () => {
   const I = globalThis.ATBI18N;
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN } = I._dict;
   assert.ok(EN[SYNC_NOTE], '常驻说明应有词条');
   assert.match(EN[SYNC_NOTE], /release process/i, '常驻说明词条应含发布流程口径');
-  assert.ok(EN[MAIN_FLAG], 'main 行标识应有词条');
+  // BUG-20260914-018：徽标两条词条随界面删除清理，不留死词条
+  assert.ok(!(MAIN_FLAG in EN), `「${MAIN_FLAG}」词条应随徽标删除清理（避免死词条）`);
+  assert.ok(!(MAIN_FLAG_TITLE in EN), '徽标 title 详释词条应随徽标删除清理（避免死词条）');
   assert.ok(EN['fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致'],
     '按钮悬停提示应有词条（现状英文缺失一并修复）');
   assert.ok(EN['✓ 已同步远端：fetch 完成，没有可推送的开发分支；main 必须通过发布流程推送'], '仅 main toast 应有词条');
@@ -232,10 +242,8 @@ t('W1 静态词条收录（常驻说明 / main 行标识及其 title / 悬停提
     '旧空态键应随文案更新清理（避免死词条）');
   I.setLang('en');
   assert.equal(I.t(SYNC_NOTE), EN[SYNC_NOTE], '英文界面常驻说明正常翻译');
-  assert.equal(I.t(MAIN_FLAG), EN[MAIN_FLAG], '英文界面 main 行标识正常翻译');
   I.setLang('zh');
   assert.equal(I.t(EN[SYNC_NOTE]), SYNC_NOTE, '切回中文可还原（往返）');
-  assert.equal(I.t(EN[MAIN_FLAG]), MAIN_FLAG, '标识往返');
 });
 
 t('W2 动态词条收录（成功 / 部分失败 toast 的 main 注记与无注记形态），中英往返', () => {
@@ -263,8 +271,13 @@ t('W2 动态词条收录（成功 / 部分失败 toast 的 main 注记与无注�
 
 /* ---------- S1：不越界静态断言 ---------- */
 
-t('S1 不越界：main 行标识不含任何推送入口；syncRemote 排除 main 的服务端行为未被触碰', () => {
-  // 展示层：main 行只加说明标识，不渲染 data-push（行为断言见 U2，此处源码双保险）
+t('S1 不越界：徽标代码 / 样式无残留，main 行无任何推送入口；syncRemote 排除 main 的服务端行为未被触碰', () => {
+  // BUG-20260914-018：mainFlagHtml / .bld-main-flag 全量清理，不留死代码
+  assert.ok(!/mainFlagHtml/.test(buildJs), 'build.js 不得残留 mainFlagHtml（BUG-20260914-018 清理）');
+  assert.ok(!/bld-main-flag/.test(buildJs), 'build.js 不得残留 bld-main-flag 钩子');
+  const styleCss = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
+  assert.ok(!/bld-main-flag/.test(styleCss), 'style.css 不得残留 .bld-main-flag 样式（死代码清理）');
+  // 展示层：main 行不渲染 data-push（行为断言见 U2，此处源码双保险）
   const m = buildJs.match(/x === 'main' \? [\s\S]{0,400}? :/);
   assert.ok(m, 'main 行渲染分支应存在');
   assert.ok(!/data-push/.test(m[0]), 'main 行渲染分支不得包含推送入口');
