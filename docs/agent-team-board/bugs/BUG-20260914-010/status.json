@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-010",
+  "type": "bug",
+  "title": "批量开发暂扣待人工提交的改动缺少人工提醒通道",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-BUG-20260914-010",
+  "createdAt": "2026-09-14T04:52:10.537Z",
+  "updatedAt": "2026-09-14T06:20:47.782Z",
+  "agentCompletedAt": "2026-09-14T06:20:47.782Z",
+  "lastReport": {
+    "at": "2026-09-14T06:20:47.782Z",
+    "coverage": 8,
+    "framework": "node:assert/strict + 真实 git 临时仓库端到端 + 真实 server HTTP",
+    "summary": "暂扣待人工提交补齐三条提醒通道：batch check notice（continue/stop 均列暂扣单数+明细入口，≤2048B）；/api/holds 携带 pendingCommits + 看板「待人工提交」分组（明细/建议/2 秒轮询/提交后消失，判据为账本路径仍脏，共用 gitFlow.pendingManualRuns）；调度提示词补 pendingManual 立即报告指令。TDD 8 用例先红后绿，全量 227 文件 0 失败。归因 BUG-20260913-006。",
+    "runId": "run-20260914-232"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T04:52:10.537Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0914-e54f"
+    },
+    {
+      "at": "2026-09-14T04:53:44.573Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T05:05:19.731Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-130027-2d2a）"
+    },
+    {
+      "at": "2026-09-14T06:04:30.560Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-010",
+      "note": "认领（zcode-batch-048-BUG-20260914-010）"
+    },
+    {
+      "at": "2026-09-14T06:20:47.783Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-BUG-20260914-010",
+      "note": "上报测试报告（覆盖率 8%），待人工确认完成"
+    }
+  ]
+}
