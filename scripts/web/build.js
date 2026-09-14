@@ -8,7 +8,10 @@
 //   - 仅已完成（done）的需求单 / Bug 单可纳入版本（BUG-20260913-001）：新建版本 / 添加条目
 //     候选只列 done 条目（后端接口已收窄，前端再过滤一次防御旧数据）；无候选时给明确空态；
 //   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选（全选只纳入有 commit 候选的条目）；
-//   - 「提示词与回答回填」为同一弹窗两段式：上段复制提示词、下段粘贴回答解析回填，无需关闭再打开；
+//   - 「AI 完善」（原「提示词与回答回填」，BUG-20260913-004 更名）为同一弹窗两段式：上段复制提示词、
+//     下段粘贴回答解析回填，无需关闭再打开；解析成功后预览区为可编辑表单（REQ-20260913-006）——
+//     名称 / 描述预填解析值，可直接修改，「应用」保存编辑后的值（回答原文是唯一解析来源，
+//     重新解析以最新结果预填并覆盖未保存的手工修改）；
 //   - 合并入 main 前弹确认框（列 commit 清单），确认即授权；执行中禁用重复触发；
 //   - 删除版本（REQ-20260913-004）必经确认弹窗：按状态差异化提示（draft/failed 不可恢复，
 //     merged 仅移除看板记录；merging 禁删）；执行中确认键禁用防重复，成功后列表与详情同步回落；
@@ -35,7 +38,10 @@ const ATBBuild = (() => {
     edit: null,          // { id, field: 'name'|'desc' } 行内编辑态
     createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, busy, error }
     addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, busy, error }
-    answer: null,        // { verId, text, parsed, error, busy }  提示词与回答回填弹窗
+    // { verId, text, parsed, draft, error, busy, copied }  AI 完善弹窗（提示词与回答回填）
+    // parsed: parseAnswer 成功结果；draft: { name, description } 回填编辑表单当前值（REQ-20260913-006，
+    // 解析时以解析结果预填，编辑 / 后台重渲染前从输入框同步，应用保存该值而非解析原值）
+    answer: null,
     // BUG-20260913-005：弹窗「去新建 XX 会话」宿主探测——状态机与 app.js state.workspaceApps
     // 同款；模块级缓存且不随 enter(project) 重置（宿主安装是机器级事实，与项目无关）
     workspaceApps: { zcode: undefined, codex: undefined, loaded: false, probing: false, failed: false },
@@ -286,7 +292,7 @@ const ATBBuild = (() => {
       await refresh();
       return true;
     } catch (e) {
-      toast(`✕ 保存失败：${e.message}`);
+      toast(`✕ 保存失败：${e.message}`, true); // ✕ 前缀为失败口径：错误样式（REQ-20260913-006 与弹窗反馈一致）
       return false;
     }
   }
@@ -357,7 +363,7 @@ const ATBBuild = (() => {
   function openAnswerModal(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
-    state.answer = { verId: v.id, text: '', parsed: null, error: null, busy: false, copied: false };
+    state.answer = { verId: v.id, text: '', parsed: null, draft: null, error: null, busy: false, copied: false };
     render();
     refreshWorkspaceApps(); // BUG-20260913-005：入口探测（fire-and-forget；loaded / 进行中 / 已失败不重探）
   }
@@ -442,6 +448,8 @@ const ATBBuild = (() => {
   }
 
   // 探测结束重渲染前，把回答框当前值同步回 state.answer.text，避免丢用户已粘贴未解析的草稿；
+  // REQ-20260913-006：解析成功后同时同步回填编辑表单（名称 / 描述）当前值到 a.draft，
+  // 使任何后台重渲染（宿主探测刷新、复制提示词、应用失败重试等）都不冲掉未保存的编辑
   function syncAnswerDraft() {
     const a = state.answer;
     if (!a) return;
@@ -449,6 +457,32 @@ const ATBBuild = (() => {
     if (!view) return;
     const input = $('.bld-answer-input', view);
     if (input) a.text = input.value ?? a.text;
+    if (!a.parsed) return;
+    const nameEl = $('.bld-name-edit', view);
+    const descEl = $('.bld-desc-edit', view);
+    if (nameEl || descEl) {
+      a.draft = {
+        name: nameEl ? nameEl.value : (a.draft?.name ?? ''),
+        description: descEl ? descEl.value : (a.draft?.description ?? ''),
+      };
+    }
+  }
+
+  // REQ-20260913-006：回填编辑输入即时校验——名称空即刻显错并禁用「应用」（title 说明），
+  // 只改错误提示显隐与按钮态、不整页重渲染（保输入焦点）；数据层 saveInfo 校验兜底双保险
+  function onAnswerEditInput() {
+    const a = state.answer;
+    if (!a?.parsed) return;
+    syncAnswerDraft();
+    const nameEmpty = !String(a.draft?.name ?? '').trim();
+    const view = $('#buildView');
+    if (!view) return;
+    $('.bld-name-err', view)?.classList.toggle('hidden', !nameEmpty);
+    const applyBtn = $('#bldApplyBtn', view);
+    if (applyBtn) {
+      applyBtn.disabled = !!(a.busy || nameEmpty);
+      applyBtn.title = nameEmpty ? '版本名称不能为空' : '';
+    }
   }
 
   // BUG-20260913-005：弹窗上段「去新建 XX 会话」入口（参照任务面板 newSessionLinksHtml 口径，
@@ -490,30 +524,43 @@ const ATBBuild = (() => {
 
   function parseAnswerPreview() {
     const a = state.answer;
-    if (!a) return;
+    if (!a || a.busy) return;
     a.text = ($('.bld-answer-input', $('#buildView'))?.value) ?? a.text;
     const r = parseAnswer(a.text);
     if (!r.ok) {
       a.parsed = null;
+      a.draft = null;
       a.error = r.error; // 原文保留在输入框，可在弹窗内修改重试
     } else {
       a.parsed = r;
+      // REQ-20260913-006：以最新解析结果预填编辑表单，覆盖未保存的手工修改——
+      // 回答原文是唯一解析来源，避免两处编辑互相覆盖产生歧义
+      a.draft = { name: r.name, description: r.description };
       a.error = null;
     }
-    render();
+    // 解析结果即最新事实：跳过草稿回同步，防止旧 DOM 输入值覆盖刚解析的预填值
+    render(false);
   }
 
+  // REQ-20260913-006：「应用」保存编辑后的名称与描述（未修改时即解析原值）；名称空由前端
+  // 即时校验拦截不发请求，数据层 saveInfo「版本名称不能为空」校验兜底双保险
   async function applyParsed() {
     const a = state.answer;
-    if (!a?.parsed) return;
+    if (!a?.parsed || a.busy) return;
+    syncAnswerDraft(); // 以编辑框当前值为准（含测试直调等未触发 input 事件的路径）
+    const name = String(a.draft?.name ?? '');
+    if (!name.trim()) {
+      render(); // 显即时错误并禁用应用，不发保存请求
+      return;
+    }
     a.busy = true;
     render();
-    const ok = await saveInfo(a.verId, { name: a.parsed.name, description: a.parsed.description });
+    const ok = await saveInfo(a.verId, { name, description: String(a.draft?.description ?? '') });
     if (ok) {
       state.answer = null;
       toast('✓ 已应用回填：版本名称与描述已更新');
     } else {
-      a.busy = false;
+      a.busy = false; // 失败：弹窗与编辑内容保留，可修改后重试
     }
     render();
   }
@@ -803,6 +850,10 @@ const ATBBuild = (() => {
     const a = state.answer;
     if (!a) return '';
     const v = (state.data?.versions || []).find((x) => x.id === a.verId);
+    // REQ-20260913-006：解析成功后预览区为可编辑表单（名称单行 / 描述多行，预填解析值），
+    // label 内以 muted「当前：<旧值>」保留对照语境；名称空即时显错并禁用「应用」
+    const nameEmpty = !!a.parsed && !String(a.draft?.name ?? '').trim();
+    const applyDisabled = a.busy || !a.parsed || nameEmpty;
     return `
       <div class="rel-modal-wrap" id="bldAnswerWrap" role="dialog" aria-label="AI 完善">
         <div class="rel-modal">
@@ -819,16 +870,20 @@ const ATBBuild = (() => {
               <label class="field">Agent 回答（粘贴后点「解析并预览」）
                 <textarea class="bld-answer-input" rows="5" placeholder="版本名称：…&#10;版本描述：…">${esc(a.text)}</textarea></label>
               ${a.error ? `<p class="rel-form-err" role="alert">${esc(a.error)}</p>` : ''}
-              ${a.parsed ? `<div class="bld-preview">
-                <div><span class="muted small">名称</span>：${esc(v?.name || '（空）')} → <strong>${esc(a.parsed.name)}</strong></div>
-                <div><span class="muted small">描述</span>：${esc(v?.description || '（空）')} → <strong>${esc(a.parsed.description || '（空）')}</strong></div>
+              ${a.parsed ? `<div class="bld-preview bld-edit-form">
+                <p class="muted small">解析结果可直接修改，点「应用」保存修改后的值</p>
+                <label class="field">版本名称（当前：${esc(v?.name || '（空）')}）
+                  <input class="bld-name-edit" type="text" value="${esc(a.draft?.name ?? '')}"></label>
+                <p class="rel-form-err bld-name-err${nameEmpty ? '' : ' hidden'}" role="alert">版本名称不能为空</p>
+                <label class="field">版本描述（当前：${esc(v?.description || '（空）')}）
+                  <textarea class="bld-desc-edit" rows="4">${esc(a.draft?.description ?? '')}</textarea></label>
               </div>` : ''}
             </div>
           </div>
           <footer class="modal-foot">
             <button type="button" class="btn" id="bldAnswerClose">关闭</button>
             <button type="button" class="btn" id="bldParseBtn" ${a.busy ? 'disabled' : ''}>解析并预览</button>
-            <button type="button" class="btn primary" id="bldApplyBtn" ${a.busy || !a.parsed ? 'disabled' : ''}>应用</button>
+            <button type="button" class="btn primary" id="bldApplyBtn"${applyDisabled ? ' disabled' : ''}${nameEmpty && !a.busy ? ' title="版本名称不能为空"' : ''}>${a.busy ? '应用中…' : '应用'}</button>
           </footer>
         </div>
       </div>`;
@@ -955,9 +1010,13 @@ const ATBBuild = (() => {
       </div>`;
   }
 
-  function render() {
+  // syncModalDrafts=false 供 parseAnswerPreview 跳过草稿回同步（解析结果刚写入 state，
+  // 旧 DOM 输入值不应覆盖预填值）；其余调用方默认 true——重渲染前把弹窗内未保存的
+  // 回答草稿与回填编辑值写回 state，防止后台刷新冲掉用户输入（REQ-20260913-006）
+  function render(syncModalDrafts = true) {
     const view = $('#buildView');
     if (!view) return;
+    if (syncModalDrafts && state.rendered && state.answer) syncAnswerDraft();
     if (state.phase === 'loading') {
       view.innerHTML = '<div class="rel-loading muted">加载构建模块…</div>';
       state.rendered = true;
@@ -1063,6 +1122,9 @@ const ATBBuild = (() => {
     q('#bldCopyPrompt')?.addEventListener('click', copyPrompt);
     q('#bldParseBtn')?.addEventListener('click', parseAnswerPreview);
     q('#bldApplyBtn')?.addEventListener('click', applyParsed);
+    // REQ-20260913-006：回填编辑表单输入即时校验（名称空显错禁用应用；描述无即时校验）
+    q('.bld-name-edit')?.addEventListener('input', onAnswerEditInput);
+    q('.bld-desc-edit')?.addEventListener('input', onAnswerEditInput);
     q('#bldAnswerClose')?.addEventListener('click', () => { state.answer = null; render(); });
     // BUG-20260913-005：弹窗内「去新建 XX 会话」——守卫与点击口径同任务面板
     // （未选项目 / 未检测到 → 仅 toast 说明，不复制不导航；守卫通过后先复制本弹窗提示词后跳深链）。

@@ -3039,6 +3039,11 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
    样式与状态说明口径，弹窗内独立一行 flex-wrap，窄屏自动换行；深浅色沿用现有变量 */
 .bld-session-entry { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
 .bld-preview { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+/* REQ-20260913-006：AI 完善弹窗回填编辑表单——原只读预览区改可编辑（名称单行 / 描述多行），
+   控件复用 .field 既有输入样式，仅收紧表单内边距；窄屏随弹窗自然纵向堆叠 */
+.bld-edit-form { gap: 6px; }
+.bld-edit-form .field { margin: 4px 0; }
+.bld-edit-form textarea { resize: vertical; }
 /* 分支浏览 */
 .bld-branch-split { grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr); }
 .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 8px; }
