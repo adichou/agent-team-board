@@ -180,6 +180,10 @@ t('R7 提示词：启动（逐轮保存）/ 继续讨论 / 整理结论 内容�
     'atb.mjs" disc round',               // 统一追加入口命令
     'atb.mjs" disc minutes',             // 纪要更新入口命令
     'key',                               // 幂等重试约定
+    // REQ-20260914-003：按需更新与自动提交约定（启动提示词）
+    '按需更新与自动提交',                  // 新段落标题
+    '只 commit，不 push',                 // 只提交不推送
+    '不产生空提交',                        // 无文件更新不提交
   ]) {
     assert.ok(sp.includes(want), `启动提示词应包含 ${want}`);
   }
@@ -187,7 +191,7 @@ t('R7 提示词：启动（逐轮保存）/ 继续讨论 / 整理结论 内容�
   assert.ok(sp.includes('每轮') || sp.includes('逐轮'), '应说明逐轮保存规则');
 
   const cp = oncall.buildContinuePrompt(dataDir, d.id);
-  for (const want of [d.id, root, path.join(dir, 'rounds'), '纪要', '继续', 'atb.mjs" disc round']) {
+  for (const want of [d.id, root, path.join(dir, 'rounds'), '纪要', '继续', 'atb.mjs" disc round', '按需更新与自动提交', '只 commit，不 push']) {
     assert.ok(cp.includes(want), `继续讨论提示词应包含 ${want}`);
   }
   assert.ok(cp.includes(d.id) && cp.includes('轮次'), '续聊应说明轮次接续同一讨论');
