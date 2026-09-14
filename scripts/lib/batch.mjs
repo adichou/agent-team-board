@@ -86,7 +86,7 @@ export function ensureDispatch(dataDir) {
     try {
       fs.copyFileSync(WORKER_SPEC_SRC, specDst);
     } catch {
-      fs.writeFileSync(specDst, '# 批量开发执行规范\n\n（生成时插件规范文件缺失，请更新插件后重新启动任务。）\n');
+      fs.writeFileSync(specDst, '# AI 开发执行规范\n\n（生成时插件规范文件缺失，请更新插件后重新启动任务。）\n');
     }
   }
   // 运行账本不进版本控制；不得误排除既有需求文档
@@ -449,7 +449,7 @@ export function generatePrompt({ projectRoot, workerSpecPath, batchId = null, de
   void agent; // REQ-20260909-011：执行端无关，参数仅作兼容
   void developer; // REQ-20260910-027：开发人员已移除，参数仅作兼容
   const head = [
-    '你是当前项目的批量开发调度员，只负责派发与接收短回执。',
+    '你是当前项目的 AI 开发调度员，只负责派发与接收短回执。',
     `项目：${projectRoot}`,
   ];
   const modelLine = modelSource === 'follow' || modelSource === 'manual' || model || level

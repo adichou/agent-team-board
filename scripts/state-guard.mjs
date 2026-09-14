@@ -667,7 +667,7 @@ if (mode === 'bash') {
       if (boardDir) {
         deny(
           `流程外 git commit 已拦截（命令片段：${seg.trim()}）。提交通道：` +
-          '批量开发到待测试由系统自动提交（run receipt 核验通过后执行，不经 Agent）。' +
+          'AI 开发到待测试由系统自动提交（run receipt 核验通过后执行，不经 Agent）。' +
           '其余场景请人工在终端执行 git commit。'
         );
       }

@@ -1881,9 +1881,9 @@ function renderFilterBar() {
 
 // REQ-20260908-020：已接受单完善三态徽标（未完善/完善中/已完善）；点击跳任务模块「批量完善」面板
 const REFINE_BADGE = {
-  unrefined: { label: '未完善', cls: 'rf-unrefined', hint: '已接受未完善：可由批量完善任务补全文档；点击查看批量完善面板' },
-  refining: { label: '完善中', cls: 'rf-refining', hint: '子代理正在完善本文档；点击查看批量完善面板' },
-  refined: { label: '已完善', cls: 'rf-refined', hint: '文档已由批量完善补全；点击查看批量完善面板' },
+  unrefined: { label: '未完善', cls: 'rf-unrefined', hint: '已接受未完善：可由 AI 分析任务补全文档；点击查看 AI 分析面板' },
+  refining: { label: '完善中', cls: 'rf-refining', hint: '子代理正在完善本文档；点击查看 AI 分析面板' },
+  refined: { label: '已完善', cls: 'rf-refined', hint: '文档已由 AI 分析补全；点击查看 AI 分析面板' },
 };
 function refineBadgeHtml(it, { clickable = true } = {}) {
   if (it.status !== 'accepted') return '';
@@ -2417,9 +2417,9 @@ function syncAcceptance() {
   const quick = $('#laneQuickEntry');
   if (quick) {
     const conf = lane === 'accepted'
-      ? { label: '▶ 开始完善', title: '进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）' }
+      ? { label: '▶ 开始 AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' }
       : lane === 'planned'
-        ? { label: '▶ 开始开发', title: '进入任务模块批量开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' }
+        ? { label: '▶ 开始 AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' }
         : null;
     quick.classList.toggle('hidden', !conf);
     if (conf) {
@@ -2865,7 +2865,7 @@ function holdCardHtml(h) {
   const qs = h.questions.map((q) => `<li class="${q.answer ? 'answered' : 'open'}" title="${esc(q.answer ? `已答：${q.answer}` : '未答')}">${q.answer ? '✓' : '○'} ${esc(q.text)}</li>`).join('');
   const expanded = state.holds.expanded.has(h.itemId);
   const resumeDisabled = h.unanswered > 0 ? ' disabled' : '';
-  const resumeTitle = h.unanswered > 0 ? ` title="尚缺 ${h.unanswered} 项决策，补齐后可复工"` : ' title="决策已齐备：条目回已计划队列，可被批量开发重新取单"';
+  const resumeTitle = h.unanswered > 0 ? ` title="尚缺 ${h.unanswered} 项决策，补齐后可复工"` : ' title="决策已齐备：条目回已计划队列，可被 AI 开发重新取单"';
   return `<article class="hold-card" data-hold-id="${esc(h.itemId)}">
     <div class="card-top">
       ${itemIdHtml(h.itemId)}
@@ -3098,7 +3098,7 @@ async function resumeHoldItem(id, btn) {
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
-    toast(`已复工 ${id}：回到已计划队列，可被批量开发重新取单`);
+    toast(`已复工 ${id}：回到已计划队列，可被 AI 开发重新取单`);
     await refreshAfterTransition();
   } catch (e) {
     toast(`复工失败：${e.message}`, true);
@@ -3460,7 +3460,7 @@ function drawerActionsButtonHtml(it) {
       // REQ-20260908-020：完善中的单驳回入口禁用并提示（CLI atb status 同口径拦截）
       const refining = it.refineState === 'refining';
       return `<button class="btn" data-act="planned" data-label="移入计划">➤ 移入计划</button>
-        <button class="btn warn" data-act="submitted" data-label="驳回接受（退回待接受）"${refining ? ' disabled title="完善中，待本轮批量完善结束后再驳回"' : ''}>↩ 驳回接受</button>`;
+        <button class="btn warn" data-act="submitted" data-label="驳回接受（退回待接受）"${refining ? ' disabled title="完善中，待本轮 AI 分析结束后再驳回"' : ''}>↩ 驳回接受</button>`;
     }
     case 'planned':
       // REQ-20260908-010：移出计划退回已接受（免二次确认，可撤销=重新置计划）
@@ -4772,10 +4772,10 @@ const GLOBAL_STATUS_FILTERS = [
 // REQ-20260911-010：批量 Commit 类型档随 CMT 批次简报回退移除
 const GLOBAL_KIND_FILTERS = [
   { key: 'all', label: '全部类型' },
-  { key: 'develop', label: '批量开发' },
-  { key: 'refine', label: '批量完善' },
+  { key: 'develop', label: 'AI 开发' },
+  { key: 'refine', label: 'AI 分析' },
 ];
-const GLOBAL_KIND_LABEL = { develop: '批量开发', refine: '批量完善' };
+const GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析' };
 // BUG-20260911-007：kind 兜底前缀表——账本目录前缀与任务类型的固定对应（refine-store RFB- /
 // dispatch batch-）。前端实时读盘而看板服务为常驻进程（路由启动时固化，
 // BUG-20260907-017 同型机制），旧服务进程可能返回缺 kind / 未知 kind 的旧口径简报。
@@ -4995,7 +4995,7 @@ function renderGlobalView() {
       ${globalFilterChipsHtml()}
       ${hasTasks
         ? (groupsHtml || '<div class="notice">当前筛选与搜索下没有匹配的任务。</div>')
-        : '<div class="empty global-empty"><div class="empty-card"><h2>所有项目的批量任务均已收尾</h2><p>到各项目的任务模块（「任务」页签）可启动新的批量开发 / 批量完善任务；新任务登记运行后会自动出现在这里。</p></div></div>'}
+        : '<div class="empty global-empty"><div class="empty-card"><h2>所有项目的批量任务均已收尾</h2><p>到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析任务；新任务登记运行后会自动出现在这里。</p></div></div>'}
       <p class="muted small global-note">数据随看板轮询自动刷新（2 秒）；「暂停 / 终止 / 删除」等操作请点击任务进入对应项目的任务模块执行。</p>
     </div>`;
   bindGlobalView(view);
@@ -5175,8 +5175,8 @@ function renderBatchDrawer() {
   drawer.innerHTML = `
     <header class="drawer-head">
       <nav class="tabs batch-modes">
-        <button class="tab ${mode === 'refine' ? 'active' : ''}" data-bmode="refine">批量完善</button>
-        <button class="tab ${mode === 'develop' ? 'active' : ''}" data-bmode="develop">批量开发</button>
+        <button class="tab ${mode === 'refine' ? 'active' : ''}" data-bmode="refine">AI 分析</button>
+        <button class="tab ${mode === 'develop' ? 'active' : ''}" data-bmode="develop">AI 开发</button>
       </nav>
       <div class="ws-entry">${newSessionLinksHtml()}</div>
     </header>
@@ -6135,7 +6135,7 @@ function renderRefinePanel() {
     const cands = data.candidates || [];
     return `
       <section class="batch-create refine-create">
-        <p class="muted small" style="margin:0 0 6px">批量完善：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。</p>
+        <p class="muted small" style="margin:0 0 6px">AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。</p>
         <div class="batch-stats">候选：已接受未完善 <b>${cands.length}</b> 项（每轮实时读取，含本轮新接受的单）</div>
         ${cands.length ? `
         <div class="dep-toolbar">
@@ -6270,7 +6270,7 @@ async function abortRefineTask() {
   const b = state.refine.data?.batch;
   if (!b) return;
   const ok = await uiConfirm({
-    title: '终止批量完善任务？',
+    title: '终止 AI 分析任务？',
     message: '确认后停止派发后续项：账本剩余未领取项标记出局，在途项标记人工终止并释放占用；本轮全部处理记录保留。在途子代理需在对应 Agent 会话人工停止。终止后可立即「启动新一轮」。',
     confirmText: '终止任务',
     danger: true,
@@ -6295,7 +6295,7 @@ async function abortDevTask() {
   const b = state.batchData?.batch;
   if (!b) return;
   const ok = await uiConfirm({
-    title: '终止批量开发任务？',
+    title: '终止 AI 开发任务？',
     message: '确认后停止派发后续项：账本剩余未领取项标记出局，在途项标记人工终止并释放项目占用（已认领条目的业务状态不动，由人工后续处理）；本轮全部处理记录保留。在途子代理需在对应 Agent 会话人工停止。终止后可立即「启动新一轮」。',
     confirmText: '终止任务',
     danger: true,

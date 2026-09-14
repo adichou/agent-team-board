@@ -143,7 +143,7 @@
           <!-- REQ-20260908-018：批量移入计划（已接受 → 已计划，人工排期），逐条流转、单项失败不回滚 -->
           <button type="button" id="planAdd" class="btn primary hidden" disabled title="移入计划（排入开发计划）：勾选的已接受条目逐条置为已计划，开发启动后最旧优先处理">移入计划</button>
           <!-- REQ-20260908-027：批量驳回待接受（已接受 → 待接受），完善中的单被服务端拦截计入失败清单 -->
-          <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮批量完善结束后再驳回">驳回待接受</button>
+          <button type="button" id="planReject" class="btn warn hidden" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮 AI 分析结束后再驳回">驳回待接受</button>
           <!-- BUG-20260909-006：已计划列表的批量开发入口移除（批量开发入口唯一收敛任务模块，口径=已计划队列）；
                已计划档勾选仅为「移出计划」服务 -->
           <button type="button" id="planRemove" class="btn warn hidden" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
@@ -151,7 +151,7 @@
           <!-- REQ-20260909-007：档位快捷入口——已接受档「开始完善」/ 已计划档「开始开发」，空间足够时靠右、
                与勾选无关仅导航（初始隐藏，syncAcceptance 按当前档切换显隐与文案；任务创建仍由面板内「启动」承接）；
                REQ-20260910-026：与批量动作组同入 #captionActions 恒定同一行 -->
-          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始完善" title="进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ 开始完善</button>
+          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="开始 AI 分析" title="进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ 开始 AI 分析</button>
           </div>
         </div>
         <div id="acceptResult" class="accept-result hidden" role="status" aria-live="polite"></div>

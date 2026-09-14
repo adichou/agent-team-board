@@ -58,7 +58,7 @@ const USAGE = `atb —— 智能体团队看板 CLI
                                                --force 越过待人工决策未答项的确认完成拦截（显式二次确认后）
   atb report <ID> [--coverage N] [--framework 名称] [--summary 文本] [--by 会话] [--run RUN-ID]
                                                写 test-report.md，标记待人工确认完成（--run 关联批量执行）
-  atb batch create                           创建批量开发批次（有未结束批次时入队排队，结束后自动接续）
+  atb batch create                           创建 AI 开发批次（有未结束批次时入队排队，结束后自动接续）
   atb batch next [--batch ID] [--by 会话]      worker 领取本批一项（原子预留 + 项目实施互斥）
   atb batch check [--batch ID]                 主调度最小核对（当前项/计数/nextAction，≤2KiB）
   atb batch summary [--batch ID]               批次摘要（续接/看板用：当前执行、计数、最近记录、提示词）
@@ -236,7 +236,7 @@ async function main() {
     if (st.status === 'accepted') {
       console.log(`✓ 已创建 ${st.id}：${st.title}（已接受，「创建并接受」一步完成）`);
       console.log(`  目录：${core.resolveItemDir(dataDir, st.id).dir}`);
-      console.log('  已直接进入已接受（未完善），进入批量完善候选，无需再人工接受');
+      console.log('  已直接进入已接受（未完善），进入 AI 分析候选，无需再人工接受');
     } else {
       console.log(`✓ 已创建 ${st.id}：${st.title}（状态 submitted）`);
       console.log(`  目录：${core.resolveItemDir(dataDir, st.id).dir}`);
@@ -939,7 +939,7 @@ async function refineCmd(rest) {
     // REQ-20260909-010：done 回执在 JSON 前输出流转结果行（成功 / 未转及原因 / 警示），回执本身不因流转失败而失败
     if (receipt.result === 'done' && receipt.autoPlan) {
       if (receipt.autoPlan.transitioned) {
-        console.log(`  已自动转入计划：${receipt.itemId}（accepted → planned，进入批量开发候选）`);
+        console.log(`  已自动转入计划：${receipt.itemId}（accepted → planned，进入 AI 开发候选）`);
       } else if (receipt.autoPlan.reason === 'not-enabled') {
         console.log('  未开启自动转入计划：需人工移入计划（设置 → 批量任务 → 完善完成后自动转入计划）');
       } else {
@@ -1104,7 +1104,7 @@ const HOLD_USAGE = `用法：
   atb hold show <ID>                    单条详情（问题清单、作答进度、事件留痕）
   atb hold answer <ID> --q <问题号> --text <答复> [--note 补充说明] [--by 人工]
                                         人工作答（仅人工；支持部分作答草稿，缺项时复工保持禁用）
-  atb hold resume <ID> [--by 人工]      人工复工（决策齐备后条目回已计划队列，被批量开发重新取单）
+  atb hold resume <ID> [--by 人工]      人工复工（决策齐备后条目回已计划队列，被 AI 开发重新取单）
   atb hold cancel <ID> [--note 说明] [--by 人工]
                                         人工作废声明（条目状态不变，按其他方式处理）`;
 
@@ -1195,7 +1195,7 @@ async function holdCmd(rest) {
     if (!id) die('用法：atb hold resume <ID> [--by 人工]');
     const r = hold.resumeHold(dataDir, id, { by: opts.by || undefined });
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
-    console.log(`✓ 已复工 ${id}：条目回到已计划（planned）队列，可被批量开发重新取单；决策记录见条目目录 decisions.md`);
+    console.log(`✓ 已复工 ${id}：条目回到已计划（planned）队列，可被 AI 开发重新取单；决策记录见条目目录 decisions.md`);
     return;
   }
 

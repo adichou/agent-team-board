@@ -18,7 +18,7 @@ export const TASK_KINDS = ['refine', 'develop'];
 export const TASK_AGENTS = ['zcode', 'codex'];
 export const TASK_LEVELS = ['high', 'medium', 'low'];
 export const TASK_LEVEL_LABEL = { high: '高', medium: '中', low: '低' };
-export const TASK_KIND_LABEL = { refine: '批量完善', develop: '批量开发' };
+export const TASK_KIND_LABEL = { refine: 'AI 分析', develop: 'AI 开发' };
 export const TASK_AGENT_LABEL = { zcode: 'zcode', codex: 'codex' };
 // REQ-20260909-005：子代理模型来源（默认 follow——与主调度会话一致；manual——显式覆盖）
 export const TASK_MODEL_SOURCES = ['follow', 'manual'];
@@ -222,13 +222,16 @@ export function normalizePromptForDisplay(prompt, { autoPlan = null } = {}) {
   out = replaceLineSeq(out, [DEV_HEAD_LINE], [DEV_HEAD_NOW]);
   out = replaceLineSeq(out, [REFINE_HEAD_FULL], [REFINE_HEAD_NOW]);
   out = replaceLineSeq(out, [REFINE_HEAD_SPLIT, REFINE_NAME_WITH_BODY], [REFINE_HEAD_NOW]);
-  // REQ-20260913-003：措辞级收尾（旧头行归一后仍可能残留的批次量词）——「批次调度员」→
-  // 「批量开发调度员」、「批次计数」→「本轮计数」、「本批」→「本轮」（含 AUTO_PLAN 约束段的
-  // 「本批已开启」，与 REFINE_SCHEDULER_AUTO_PLAN_LINES 现行「本轮已开启」措辞对齐，使下方
+  // REQ-20260913-003：措辞级收尾（旧头行归一后仍可能残留的批次量词）——「批次调度员」与
+  // 存量冻结的「批量开发调度员 / 批量完善调度员」（REQ-20260913-005 改名前口径）统一归一为
+  // 「AI 开发调度员 / AI 分析调度员」、「批次计数」→「本轮计数」、「本批」→「本轮」（含 AUTO_PLAN
+  // 约束段的「本批已开启」，与 REFINE_SCHEDULER_AUTO_PLAN_LINES 现行「本轮已开启」措辞对齐，使下方
   // 开关分态整段替换仍可命中）。对新版生成输出幂等（新版不含这些措辞）。
   if (out.some((l) => l.includes('批'))) {
     out = out.join('\n')
-      .split('批次调度员').join('批量开发调度员')
+      .split('批次调度员').join('AI 开发调度员')
+      .split('批量开发调度员').join('AI 开发调度员')
+      .split('批量完善调度员').join('AI 分析调度员')
       .split('批次计数').join('本轮计数')
       .split('本批').join('本轮')
       .split('\n');

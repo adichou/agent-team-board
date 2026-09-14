@@ -419,7 +419,7 @@ export function buildRefinePrompt({ projectRoot, batchId = null, developer = nul
   const byPrefix = 'refine';
   const constraintLines = autoPlan ? REFINE_SCHEDULER_AUTO_PLAN_LINES : [REFINE_SCHEDULER_KEEP_ACCEPTED_LINE];
   return [
-    '你是当前项目的批量完善调度员，只负责派发与接收短回执。',
+    '你是当前项目的 AI 分析调度员，只负责派发与接收短回执。',
     `项目：${projectRoot}`,
     ...(modelLine ? [modelLine] : []),
     '',

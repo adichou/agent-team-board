@@ -289,7 +289,7 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded 
     createdAt: nowIso(),
     finishedAt: nowIso(),
     reason: null,
-    summary: '到待测试自动提交（批量开发回执核验通过）',
+    summary: '到待测试自动提交（AI 开发回执核验通过）',
     commits,
     autoForRun: run.runId,
   };

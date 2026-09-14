@@ -228,7 +228,7 @@ function implAttentionError(impl) {
   return new AtbError(
     `项目已暂停：批次 ${impl.batchId || '未知'} 的 ${impl.itemId || '条目'} 实施失败` +
     `${impl.attentionReason ? `（${impl.attentionReason}）` : ''}，无法确认工作区可继续；` +
-    '请先到 Status Board「批量开发」核对遗留改动，再通过 暂停→恢复 解除项目占用'
+    '请先到 Status Board「AI 开发」核对遗留改动，再通过 暂停→恢复 解除项目占用'
   );
 }
 
@@ -250,7 +250,7 @@ function assertNoImplConflict(dataDir, owner) {
     : impl.kind || '实施任务';
   throw new AtbError(
     `项目实施互斥中：${who}（owner ${impl.owner || '未知'}）正在实施 ${impl.itemId || '条目'}；` +
-    '请先到 Status Board「批量开发」核对执行状态，不要并行认领本项目条目'
+    '请先到 Status Board「AI 开发」核对执行状态，不要并行认领本项目条目'
   );
 }
 
@@ -803,7 +803,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
   }
   // REQ-20260908-020：完善中的已接受单不可驳回回待接受（CLI 与 UI 双侧同口径，防绕过）
   if (st.status === 'accepted' && to === 'submitted' && refineStateOf(dataDir, id) === 'refining') {
-    throw new AtbError(`${id} 完善中，待本轮批量完善结束后再驳回回待接受`);
+    throw new AtbError(`${id} 完善中，待本轮 AI 分析结束后再驳回回待接受`);
   }
   const from = st.status;
   const now = new Date().toISOString();
