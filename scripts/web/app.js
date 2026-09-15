@@ -2723,8 +2723,9 @@ function bindDeleteButtons(root) {
 }
 
 // 状态流转 POST 与刷新副作用（拖拽 / 详情页 / 撤销共用）
+// REQ-20260914-007：返回响应体（确认完成携带 mgtCommit 提交结果，供失败反馈）
 async function postTransition(id, to, opts = {}) {
-  await api(`/api/item/${encodeURIComponent(id)}/status`, {
+  return api(`/api/item/${encodeURIComponent(id)}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     // REQ-20260911-007：force 仅为确认完成越过未答决策的显式口径（服务端仍校验状态机）
@@ -2735,6 +2736,84 @@ async function postTransition(id, to, opts = {}) {
 async function refreshAfterTransition() {
   await poll();
   if (state.drawer.id) await refreshDrawer();
+}
+
+/* ---------- REQ-20260914-007 管理记录提交反馈（确认完成入口） ---------- */
+// 提交中（进度提示 + 禁用重复重试）/ 成功（提交短 SHA）/ 已同步（无新变化不制造空提交）/
+// 失败（业务操作已成功 + 原因 + 未提交文件 + 建议 + 重试提交；失败态来自服务端账本，
+// 刷新页面后仍可见，重试成功后清除）。串行协调：任一管理记录提交进行中禁用重试入口。
+let mgtSubmitting = null; // 提交中的条目 id（业务流转 + 管理提交同请求内完成）
+
+// 失败提示（与业务成功 toast 区分两种结果；详情抽屉内另有完整反馈块）
+function mgtFailureToast(resp) {
+  const mgt = resp && resp.mgtCommit;
+  if (mgt && mgt.status === 'failed') {
+    toast(`⚠ 操作已成功，管理记录提交失败：${mgt.reason || '未知原因'}`, true);
+  }
+}
+
+function mgtCommitBlockHtml(mgt, kind, id) {
+  if (!mgt) return '';
+  const cls = mgt.status === 'submitting' ? 'submitting'
+    : mgt.status === 'committed' || mgt.status === 'noop' ? 'success'
+      : mgt.status === 'failed' ? 'failed' : '';
+  let title = '';
+  let body = '';
+  if (mgt.status === 'submitting') {
+    title = '<span class="spin"></span> 管理记录提交：提交中…';
+    body = '正在提交本次操作更新的管理记录（路径限定提交，不使用全量 git add）…';
+  } else if (mgt.status === 'committed') {
+    const c = (mgt.commits || [])[0] || {};
+    const branches = (mgt.commits || []).map((x) => esc(x.branch || '')).filter(Boolean);
+    title = `✓ 管理记录提交：<span>已提交 · <code>${esc(c.short || '')}</code></span>`;
+    const paths = (mgt.files || []).map((f) => `<li>${esc(f.path)}</li>`).join('');
+    body = `提交说明：<code>${esc(mgt.subject || '')}</code>${branches.length > 1 ? `（${branches.length} 个分支：${branches.join('、')}）` : ''}${paths ? `<ul>${paths}</ul>` : ''}`;
+  } else if (mgt.status === 'noop') {
+    title = '✓ 管理记录提交：已同步 · 无新变化';
+    body = esc(mgt.reason || '本次操作没有新的管理变更，不制造空提交。');
+  } else if (mgt.status === 'skipped') {
+    title = '管理记录未自动提交';
+    body = esc(mgt.reason || '');
+  } else if (mgt.status === 'failed') {
+    const files = (mgt.pendingManual && mgt.pendingManual.length
+      ? mgt.pendingManual
+      : (mgt.files || []).map((f) => f.path));
+    title = '⚠ 操作已成功，管理记录提交失败';
+    body = `原因：${esc(mgt.reason || '未知')}`
+      + '<div class="mgt-files-label">未提交文件：</div>'
+      + `<ul>${files.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`
+      + (mgt.advice ? `<div class="mgt-advice">建议：${esc(mgt.advice)}</div>` : '')
+      + `<div class="row"><button type="button" class="btn primary small" data-mgt-retry data-mgt-kind="${esc(kind)}" data-mgt-id="${esc(id)}"${mgtSubmitting ? ' disabled' : ''}>重试提交</button>`
+      + '<span class="muted small">失败提示已持久化：刷新页面后仍可见，重试成功后清除。</span></div>';
+  }
+  return `<div class="mgt ${cls}" data-mgt-state="${esc(mgt.status)}" role="status">`
+    + `<div class="mgt-title">${title}</div><div class="mgt-body">${body}</div></div>`;
+}
+
+// 条目详情：完成状态附近渲染（含确认完成请求进行中的提交态）
+function drawerMgtBlockHtml(it) {
+  if (it.status !== 'done' && mgtSubmitting !== it.id) return '';
+  const mgt = mgtSubmitting === it.id ? { status: 'submitting' } : it.mgtCommit;
+  return mgtCommitBlockHtml(mgt, 'item', it.id);
+}
+
+// 重试提交：只补交管理记录（不重放确认完成），服务端与初次提交同锁串行
+async function retryMgtCommit(kind, id) {
+  if (mgtSubmitting) return;
+  mgtSubmitting = id;
+  if (kind === 'item' && state.drawer.id === id) renderDrawer();
+  try {
+    await api('/api/mgt-commit/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, id }),
+    }, state.project);
+  } catch (e) {
+    toast(`重试提交失败：${e.message}`, true);
+  } finally {
+    mgtSubmitting = null;
+    if (kind === 'item' && state.drawer.id === id) await refreshDrawer();
+  }
 }
 
 // 遗留路径（拖拽换列随 REQ-20260907-004 移除后已无调用方）：非 accepted 目标仍保留二次确认；
@@ -2753,7 +2832,8 @@ async function attemptTransition(id, to, label) {
       // REQ-20260911-007：确认完成再经待人工决策防呆（未答项二次确认 → force）
       const guard = await confirmDoneGuard(id);
       if (!guard.proceed) return;
-      await postTransition(id, to, { force: guard.force });
+      const resp = await postTransition(id, to, { force: guard.force });
+      mgtFailureToast(resp); // REQ-20260914-007：提交失败独立提示（反馈块见条目详情）
     } else {
       await postTransition(id, to);
     }
@@ -2806,8 +2886,9 @@ function undoActionFor(id, to) {
 async function drawerAction(id, to, label) {
   label = label || ACTION_LABEL[to] || to;
   try {
+    let resp = null;
     if (to === 'accepted') {
-      // accepted 目标有两种来源：待接受「接受」走批量接受；已计划「移出计划」走批量移入（REQ-20260908-010）
+      // accepted 目标有两种来源：待接受「接受」走批量接受；已计划「移出计划」走批量移入（REQ-20260910-011）
       // REQ-20260910-011：批量函数本身已免确认；single 让成功 toast 附「撤销」按钮
       const cur = (state.board?.items || []).find((x) => x.id === id) || state.drawer.item;
       if (cur && cur.status === 'planned') return await removeFromPlan([id], { single: true });
@@ -2816,11 +2897,19 @@ async function drawerAction(id, to, label) {
     if (to === 'done') {
       const guard = await confirmDoneGuard(id);
       if (!guard.proceed) return;
-      await postTransition(id, to, { force: guard.force });
+      // REQ-20260914-007：确认完成请求含管理记录提交——进行中先渲染提交态反馈块
+      mgtSubmitting = id;
+      if (state.drawer.id === id) renderDrawer();
+      try {
+        resp = await postTransition(id, to, { force: guard.force });
+      } finally {
+        mgtSubmitting = null;
+      }
     } else {
-      await postTransition(id, to);
+      resp = await postTransition(id, to);
     }
     toast(`✓ ${id} 已${label}`, false, undoActionFor(id, to));
+    mgtFailureToast(resp); // REQ-20260914-007：业务成功与提交失败两种结果独立反馈
     await refreshAfterTransition();
   } catch (e) {
     toast(e.message, true);
@@ -2971,8 +3060,9 @@ async function holdCardConfirmDone(id) {
   const guard = await confirmDoneGuard(id);
   if (!guard.proceed) return;
   try {
-    await postTransition(id, 'done', { force: guard.force });
+    const resp = await postTransition(id, 'done', { force: guard.force });
     toast(`✓ ${id} 已确认完成`);
+    mgtFailureToast(resp); // REQ-20260914-007：管理记录提交失败独立提示（反馈块见条目详情）
     await refreshAfterTransition();
   } catch (e) {
     toast(e.message, true);
@@ -3956,6 +4046,7 @@ function renderDrawer() {
         </div>
         ${drawerNavBtn('next', drawerNeighbors().next)}
       </div>
+      ${drawerMgtBlockHtml(it)}
       ${it.type === 'requirement' && it.bugs && it.bugs.length
         ? `<section>
             <h4 style="margin:4px 0 6px">下属 Bug（${it.bugCount}，未完成 ${it.openBugCount}）</h4>
@@ -4001,6 +4092,10 @@ function renderDrawer() {
   bindRenameButtons(drawer); // REQ-20260908-011：详情页待接受编辑标题/描述
   bindDeleteButtons(drawer); // REQ-20260908-003：详情页待接受删除
   bindCommitWidgets(drawer); // BUG-20260910-014：详情页提交号复制与提交状态重试
+  // REQ-20260914-007：管理记录提交失败的重试入口（只补交管理记录，不重放确认完成）
+  for (const b of drawer.querySelectorAll('[data-mgt-retry]')) {
+    b.addEventListener('click', () => retryMgtCommit(b.dataset.mgtKind, b.dataset.mgtId));
+  }
   for (const b of drawer.querySelectorAll('[data-act]')) {
     // REQ-20260906-014：详情页按钮免二次确认，改为事后撤销（drawerAction）
     b.addEventListener('click', () => drawerAction(it.id, b.dataset.act, b.dataset.label));

@@ -31,6 +31,8 @@ import * as refine from './lib/refine-store.mjs';
 import * as refineStates from './lib/refine-states.mjs';
 import * as holdStates from './lib/hold-states.mjs';
 import * as holdStore from './lib/hold-store.mjs';
+// REQ-20260914-007：管理记录自动提交（确认完成 / 版本合并两个人工闭环入口）
+import * as mgtCommit from './lib/mgt-commit.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as taskSettings from './lib/task-settings.mjs';
 import * as dispatch from './lib/dispatch.mjs';
@@ -2056,11 +2058,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     if (!dataDir) return sendJson(res, 200, { initialized: false });
     try { buildStore.recoverMerging(dataDir); } catch { /* 数据目录异常不阻塞读取 */ }
     const branches = buildGit.listBranches(root);
+    const mgtOf = (id) => {
+      // REQ-20260914-007：附版本管理记录提交状态（仅响应装配，不写 version.json；
+      // 失败提示持久化在账本，刷新 / 重启后仍可见）
+      const mgt = mgtCommit.readMgtState(dataDir, 'version', id);
+      return mgt ? { mgtCommit: mgt } : {};
+    };
     return sendJson(res, 200, {
       initialized: true,
       isRepo: branches.isRepo,
       currentBranch: branches.current,
-      versions: buildStore.listVersions(dataDir),
+      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, ...mgtOf(v.id) })),
       statusLabels: buildStore.VERSION_STATUS_LABEL,
     });
   }
@@ -2182,6 +2190,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       releaseStore.assertTargetFree(board, 'git', {});
       // 前置校验（只读，不改版本状态：工作区脏 / main 缺失 / 提交缺失在此明确报 400）
       buildGit.precheckMerge(root, v.items);
+      // REQ-20260914-007：合并开始前采集版本记录基线（合并成功后据此自动提交 version.json）
+      const mgtBaseline = mgtCommit.beforeBaseline(root, [mgtCommit.versionMgtFile(board, v.id)]);
       buildStore.beginMerge(board, v.id, { baseBranch: buildGit.listBranches(root).current });
       let version;
       try {
@@ -2196,7 +2206,16 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         });
         version.mergeWarnings = [String(e.message || e).slice(0, 300)];
       }
-      return sendJson(res, 200, { version });
+      // REQ-20260914-007：合并成功写入最终结果后，自动提交版本管理记录到持有最终版本数据的
+      // 分支（合并目标 main，不切当前分支、不推送）；提交失败不伪装成功、不回滚合并，
+      // 结果独立随响应返回（失败态持久化在账本，刷新 / 重启后仍可见且可重试）。
+      let mgtResult = null;
+      if (version.status === 'merged') {
+        mgtResult = mgtCommit.commitVersionMergeMgmt({
+          dataDir: board, projectRoot: root, versionId: version.id, baseline: mgtBaseline,
+        });
+      }
+      return sendJson(res, 200, mgtResult ? { version, mgtCommit: mgtResult } : { version });
     });
   }
   // REQ-20260913-004 删除版本：POST + JSON 范式（对齐 /api/batch/delete）。透传数据层结果与
@@ -2739,6 +2758,18 @@ async function handleApi(req, res, u, pathname) {
     }
     return sendJson(res, 200, { statuses });
   }
+  // REQ-20260914-007：管理记录提交重试——只补交管理记录（路径限定），不重放确认完成 / 版本合并；
+  // 与初次提交同锁串行；结果持久化在账本（成功 / 已同步后清除失败提示）。
+  if (req.method === 'POST' && pathname === '/api/mgt-commit/retry') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const kind = body.kind === 'version' ? 'version' : body.kind === 'item' ? 'item' : null;
+    const id = String(body.id || '').trim();
+    if (!kind || !/^(?:REQ|BUG)-\d{8}-\d{3,}$|^BLD-\d{8}-\d{3}$/.test(id) || (kind === 'version') !== /^BLD-/.test(id)) {
+      throw new core.AtbError('kind 必须是 item（REQ/BUG 单号）或 version（BLD 版本号），且与 id 匹配');
+    }
+    return sendJson(res, 200, { mgtCommit: mgtCommit.retryMgmt({ dataDir, projectRoot: root, kind, id }) });
+  }
 
   if (req.method === 'GET' && pathname === '/api/board') {
     const data = core.boardData(root);
@@ -3051,12 +3082,23 @@ async function handleApi(req, res, u, pathname) {
             : `网页端不允许 ${current.status} → ${body.to}`,
       });
     }
-    const { status: st } = core.setStatus(dataDir, id, body.to, {
+    // REQ-20260914-007：确认完成操作前采集目标管理文件基线（操作后据此归因自动提交范围）
+    const mgtBaseline = body.to === 'done'
+      ? mgtCommit.beforeBaseline(root, mgtCommit.itemMgtFiles(dataDir, id))
+      : null;
+    const { changed: stChanged, status: st } = core.setStatus(dataDir, id, body.to, {
       by: 'board',
       // REQ-20260911-007：确认完成遇待人工决策未答项拦截；force=true 仅为前端「二次确认」放行口径
       force: body.force === true,
     });
-    return sendJson(res, 200, st);
+    // REQ-20260914-007：确认完成成功后自动提交本次刷新的管理记录（status.json 与确有刷新的
+    // confirmations.md / decisions.md）。提交失败不伪装成功、不撤销业务操作：条目保持 done，
+    // 结果独立随响应返回；重复请求（changed=false）不重放。
+    let mgtResult = null;
+    if (mgtBaseline && stChanged) {
+      mgtResult = mgtCommit.commitItemDoneMgmt({ dataDir, projectRoot: root, itemId: id, baseline: mgtBaseline });
+    }
+    return sendJson(res, 200, mgtResult ? { ...st, mgtCommit: mgtResult } : st);
   }
 
   const itemMatch = pathname.match(/^\/api\/item\/([^/]+)$/);
@@ -3108,6 +3150,12 @@ async function handleApi(req, res, u, pathname) {
           reason: holdRec.reason || null,
         };
       }
+    }
+    // REQ-20260914-007：条目详情附管理记录提交状态（账本持久化：页面刷新 / 服务重启后
+    // 失败提示仍可见，前端「管理记录提交」反馈块与「重试提交」据此渲染）
+    {
+      const mgt = mgtCommit.readMgtState(dataDir, 'item', id);
+      if (mgt) detail.mgtCommit = mgt;
     }
     return sendJson(res, 200, detail);
   }

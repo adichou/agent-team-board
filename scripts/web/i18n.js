@@ -831,6 +831,20 @@ const EN = {
   '刚刚': 'just now',
   '（暂无事件）': '(no events yet)',
   '（条目已删除）': '(item deleted)',
+  // REQ-20260914-007 管理记录提交反馈块（确认完成 / 版本合并两入口同构）
+  '管理记录提交：提交中…': 'Management-record commit: in progress…',
+  '✓ 管理记录提交：': '✓ Management-record commit: ',
+  '✓ 管理记录提交：已同步 · 无新变化': '✓ Management-record commit: already synced · no changes',
+  '⚠ 操作已成功，管理记录提交失败': '⚠ Operation succeeded; management-record commit failed',
+  '管理记录未自动提交': 'Management records were not auto-committed',
+  '已提交 ·': 'committed · ',
+  '提交说明：': 'Commit subject: ',
+  '未提交文件：': 'Uncommitted files:',
+  '建议：': 'Advice: ',
+  '重试提交': 'Retry commit',
+  '本次操作没有新的管理变更，不制造空提交。': 'No new management changes from this operation; no empty commit is created.',
+  '正在提交本次操作更新的管理记录（路径限定提交，不使用全量 git add）…': 'Committing the management records updated by this operation (path-scoped commit, no blanket git add)…',
+  '失败提示已持久化：刷新页面后仍可见，重试成功后清除。': 'The failure notice is persisted: it stays visible after refresh and clears once a retry succeeds.',
 };
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
@@ -1141,6 +1155,12 @@ const EN_DYNAMIC = {
   '导入失败：◇': 'Import failed: $1',
   '旧结果（「◇」）': 'Previous result ("$1")',
   '活动 ◇': 'Active $1',
+  // REQ-20260914-007 管理记录提交反馈块（确认完成 / 版本合并两入口同构）
+  '⚠ 操作已成功，管理记录提交失败：◇': '⚠ Operation succeeded; management-record commit failed: $1',
+  '重试提交失败：◇': 'Retry commit failed: $1',
+  '原因：◇': 'Reason: $1',
+  '建议：◇': 'Advice: $1',
+  '（◇ 个分支：◇）': ' ($1 branch(es): $2)',
 };
 
 // ---------- 豁免清单（不翻译的源码中文片段：键 = 片段，值 = 豁免原因） ----------

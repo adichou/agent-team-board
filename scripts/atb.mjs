@@ -22,6 +22,7 @@ import * as hold from './lib/hold-store.mjs';
 import * as holdStates from './lib/hold-states.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as gitFlow from './lib/git-flow.mjs';
+import * as mgtCommit from './lib/mgt-commit.mjs';
 
 const args = process.argv.slice(2);
 
@@ -312,6 +313,10 @@ async function main() {
     if (core.HUMAN_ONLY_TO.has(to)) {
       console.log(`⚠ ${to} 是人工专属状态；请确认这是用户本人操作（Agent 侧会被钩子拦截）。`);
     }
+    // REQ-20260914-007：确认完成操作前采集目标管理文件基线（操作成功后自动提交管理记录）
+    const mgtBaseline = to === 'done'
+      ? mgtCommit.beforeBaseline(cwd, mgtCommit.itemMgtFiles(dataDir, id))
+      : null;
     const { changed, status: st } = core.setStatus(dataDir, id, to, {
       by: core.actor(),
       // REQ-20260911-007：--force 越过待人工决策未答项的确认完成拦截（仅人工终端；Agent 被 state-guard 拦）
@@ -319,7 +324,54 @@ async function main() {
     });
     if (changed) printStatusLine(st);
     else console.log(`= ${id} 已处于 ${to}，无变化`);
-    if (jsonOut) console.log(JSON.stringify(st, null, 2));
+    // REQ-20260914-007：确认完成成功后自动提交管理记录，CLI 返回可识别结果（不只写后台日志）；
+    // 提交失败不撤销业务操作——条目保持 done，失败提示与重试入口（atb mgt retry）如实输出。
+    let mgt = null;
+    if (mgtBaseline && changed) {
+      mgt = mgtCommit.commitItemDoneMgmt({ dataDir, projectRoot: cwd, itemId: id, baseline: mgtBaseline });
+      if (mgt.status === 'committed') {
+        const first = mgt.commits[0];
+        console.log(`✓ 管理记录已提交 · ${first.short}（${mgt.subject}${mgt.commits.length > 1 ? `，共 ${mgt.commits.length} 个分支提交` : ''}）`);
+      } else if (mgt.status === 'noop') {
+        console.log('= 管理记录已同步 · 无新变化');
+      } else if (mgt.status === 'skipped') {
+        console.log(`= 管理记录未自动提交：${mgt.reason}`);
+      } else {
+        console.log(`⚠ 操作已成功，管理记录提交失败：${mgt.reason}`);
+        if (mgt.pendingManual && mgt.pendingManual.length) console.log(`  未提交文件：${mgt.pendingManual.join('、')}`);
+        if (mgt.advice) console.log(`  建议：${mgt.advice}`);
+        console.log(`  重试：atb mgt retry item ${id}`);
+      }
+    }
+    if (jsonOut) console.log(JSON.stringify(mgt ? { ...st, mgtCommit: mgt } : st, null, 2));
+    return;
+  }
+
+  // ---------- 管理记录提交重试（REQ-20260914-007：只补交管理记录，不重放业务操作） ----------
+
+  if (cmd === 'mgt') {
+    const dataDir = core.requireDataDir(cwd);
+    const { pos } = parseOpts(rest, new Set());
+    const [sub, kind, id] = pos;
+    if (sub !== 'retry' || (kind !== 'item' && kind !== 'version') || !id) {
+      die('用法：atb mgt retry <item|version> <ID|版本号>');
+    }
+    const okId = kind === 'item' ? /^(?:REQ|BUG)-\d{8}-\d{3,}$/.test(id) : /^BLD-\d{8}-\d{3}$/.test(id);
+    if (!okId) die(kind === 'item' ? 'item 需要 REQ/BUG 单号' : 'version 需要 BLD 版本号');
+    const mgt = mgtCommit.retryMgmt({ dataDir, projectRoot: cwd, kind, id });
+    if (mgt.status === 'committed') {
+      const first = mgt.commits[0];
+      console.log(`✓ 管理记录已提交 · ${first.short}（${mgt.subject}${mgt.commits.length > 1 ? `，共 ${mgt.commits.length} 个分支提交` : ''}）`);
+    } else if (mgt.status === 'noop') {
+      console.log('= 管理记录已同步 · 无新变化');
+    } else if (mgt.status === 'skipped') {
+      console.log(`= 管理记录未自动提交：${mgt.reason}`);
+    } else {
+      console.log(`⚠ 管理记录提交失败：${mgt.reason}`);
+      if (mgt.pendingManual && mgt.pendingManual.length) console.log(`  未提交文件：${mgt.pendingManual.join('、')}`);
+      if (mgt.advice) console.log(`  建议：${mgt.advice}`);
+    }
+    if (jsonOut) console.log(JSON.stringify({ mgtCommit: mgt }, null, 2));
     return;
   }
 
