@@ -1,0 +1,32 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "移除 main 推送按钮及测试已补齐；沿用 011 更新过的同步测试。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/tests/bug-branch-main-no-push-20260914-012.test.mjs",
+      "commit": "a9fd6ea63a4e34bcb2affdc5023c33cc7dcabd39",
+      "blob": "adad681be22da24882e1e3b6d80fc7d80c66773e",
+      "note": "移除 main 推送按钮及测试已补齐；沿用 011 更新过的同步测试；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-remote-empty-explain-20260914-006.test.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "35823e1c7b48fbff75e678fdebab6321fd72f355",
+      "note": "移除 main 推送按钮及测试已补齐；沿用 011 更新过的同步测试；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-sync-fetch-push-20260914-011.test.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "2fbbdacd3e737b8832228b6cd1033de66b1be468",
+      "note": "移除 main 推送按钮及测试已补齐；沿用 011 更新过的同步测试；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "a9fd6ea63a4e34bcb2affdc5023c33cc7dcabd39",
+      "blob": "0ee1c278e904f64738a1ef7ba317ac22e4e69284",
+      "note": "移除 main 推送按钮及测试已补齐；沿用 011 更新过的同步测试；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "d0b6af9744bf71e7a8551c3fb8f3ab92d9f3e0c73cdbbb383adb050c4de84705"
+}

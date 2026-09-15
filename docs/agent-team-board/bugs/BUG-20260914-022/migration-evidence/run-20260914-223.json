@@ -1,0 +1,20 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "全选/全不选即时重渲染与测试已补齐。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/tests/bug-build-pick-all-render-20260914-002.test.mjs",
+      "commit": "baede007a1b2daf910ba1fd4687144ebc756bc91",
+      "blob": "f8374385c17620085b3904701bcbff8e46dc5b3f",
+      "note": "全选/全不选即时重渲染与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "baede007a1b2daf910ba1fd4687144ebc756bc91",
+      "blob": "2602ec3515d2ddb50591c9a4ce8d757a19794187",
+      "note": "全选/全不选即时重渲染与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "1f5341037ef8ddbb0d0a17f1678d69ae15b663e01666794d695f23121c7c4d1e"
+}

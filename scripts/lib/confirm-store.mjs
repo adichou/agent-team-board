@@ -19,6 +19,7 @@ import {
   AtbError, resolveItemDir, readStatus, actor,
 } from './core.mjs';
 import * as gitFlow from './git-flow.mjs';
+import { legacyPaths, legacyRecoveryStatus } from './legacy-recovery.mjs';
 import {
   readConfirms, confirmOf, activeConfirmOf, saveConfirmRecord, archiveConfirmRecord,
   renderConfirmDoc, unansweredRequired, answeredCount, questionsVersionOf,
@@ -600,9 +601,8 @@ export function confirmDetail(dataDir, itemId, { projectRoot = null } = {}) {
 
 // ---------- C14 历史部分提交账本恢复 ----------
 
-// 盘点 dispatch/runs/*/auto-commit.json 中带待人工路径的 reported 运行：无活动确认记录
-// 且待人工路径当前仍在工作区（问题仍真实存在）的，物化为 legacy 视图（服务恢复/重启后
-// 不得按普通成功处理；已补交的历史账本不再打扰）。
+// 盘点历史 reported 运行：有效的运行级处理证据优先，避免同路径新修改复活旧记录。
+// 无证据时展示仍脏的遗留/暂扣路径；证据失效时保持可见供重新核验，读取过程不写账本。
 export function legacyConfirmViews(dataDir, projectRoot) {
   const runsDir = path.join(dataDir, 'dispatch', 'runs');
   let names = [];
@@ -613,16 +613,19 @@ export function legacyConfirmViews(dataDir, projectRoot) {
     try {
       ac = JSON.parse(fs.readFileSync(path.join(runsDir, runId, 'auto-commit.json'), 'utf8'));
     } catch { continue; }
-    const pending = Array.isArray(ac.pendingManual) ? ac.pendingManual : [];
+    const pending = legacyPaths(ac);
     if (!pending.length || !ac.itemId) continue;
-    if (confirmOf(dataDir, ac.itemId)) continue; // 已有确认记录（任何状态）：以记录为准
+    if (confirmOf(dataDir, ac.itemId)?.runId === runId) continue; // 仅同一运行使用已有确认记录
     let run = null;
     try {
       run = JSON.parse(fs.readFileSync(path.join(runsDir, runId, 'run.json'), 'utf8'));
     } catch { continue; }
     if (run.phase !== 'reported') continue;
+    const recovery = legacyRecoveryStatus(dataDir, projectRoot, runId);
+    if (recovery.valid) continue;
     const states = gitFlow.pathStates(projectRoot, pending);
-    const stillDirty = pending.filter((p) => states[p] !== 'clean');
+    // 证据失效时即使当前文件干净也不能声称旧运行已处理。
+    const stillDirty = recovery.exists ? pending : pending.filter((p) => states[p] !== 'clean');
     if (!stillDirty.length) continue; // 历史待人工路径已全部入库：不误报
     let title = ac.itemTitle || '';
     try { title = readStatus(resolveItemDir(dataDir, ac.itemId).dir).title || title; } catch {}
@@ -640,13 +643,13 @@ export function legacyConfirmViews(dataDir, projectRoot) {
       declaredBy: 'ledger-recovery',
       runId,
       batchId: run.batchId || null,
-      reason: `历史部分提交（${runId}）：${pending.length} 个路径待人工，其中 ${stillDirty.length} 个仍未入库`,
+      reason: recovery.exists ? `历史处理证据需重新核验（${runId}）：${recovery.reason}` : `历史部分提交（${runId}）：${pending.length} 个路径待人工，其中 ${stillDirty.length} 个仍未入库`,
       legacy: true,
       keepNote: null,
       committedCount: (ac.commits || []).length,
       pendingCount: stillDirty.length,
       pendingManual: stillDirty,
-      heldGroups: null,
+      heldGroups: ac.heldGroups || null,
       supplementCommits: [],
       verify: null,
       fingerprint: { version: 1, files: gitFlow.pathStates(projectRoot, stillDirty) },

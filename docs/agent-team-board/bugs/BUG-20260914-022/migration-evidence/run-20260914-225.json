@@ -1,0 +1,44 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "跨版本占用校验、候选过滤、服务端及测试已补齐。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/lib/build-store.mjs",
+      "commit": "7dbcaa56893c3ef36e63840bb118a906d8860571",
+      "blob": "14b514590602d162b2a21bc68e3d42a612a05060",
+      "note": "跨版本占用校验、候选过滤、服务端及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/server.mjs",
+      "commit": "7dbcaa56893c3ef36e63840bb118a906d8860571",
+      "blob": "3b669c9a835a34e79df10348cdd5785db6d82146",
+      "note": "跨版本占用校验、候选过滤、服务端及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-build-candidate-occupied-20260914-004.test.mjs",
+      "commit": "7dbcaa56893c3ef36e63840bb118a906d8860571",
+      "blob": "021c419c5e62a0635ef8c1c9175c6b40ff07b7e5",
+      "note": "跨版本占用校验、候选过滤、服务端及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/build-serve.test.mjs",
+      "commit": "7dbcaa56893c3ef36e63840bb118a906d8860571",
+      "blob": "befd3617c2fbdd5c45e6f5e404888d9691ae539d",
+      "note": "跨版本占用校验、候选过滤、服务端及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/build-ui.test.mjs",
+      "commit": "7dbcaa56893c3ef36e63840bb118a906d8860571",
+      "blob": "facb95ce9f40c15037c2afd3b724a873206aea74",
+      "note": "跨版本占用校验、候选过滤、服务端及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "7dbcaa56893c3ef36e63840bb118a906d8860571",
+      "blob": "c207e68a3a7a29908889aa8d4435d4ca433fc04b",
+      "note": "跨版本占用校验、候选过滤、服务端及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "5b8a5e8c857bcf7a733062002ecc16639346c32e74788d8069729078f4343541"
+}

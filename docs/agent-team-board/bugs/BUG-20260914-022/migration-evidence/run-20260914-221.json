@@ -1,0 +1,26 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "名称描述编辑、草稿同步、空名称校验及样式/测试已补齐。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/tests/build-answer-edit-20260913-006.test.mjs",
+      "commit": "6aee373788463c36d989d69e221d4f4733031eb7",
+      "blob": "6afc4e942bb97206a8735fa4db05fe2bb02a9068",
+      "note": "名称描述编辑、草稿同步、空名称校验及样式/测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "6aee373788463c36d989d69e221d4f4733031eb7",
+      "blob": "684777d982b3c3848deb77baa90f1e41211ca38d",
+      "note": "名称描述编辑、草稿同步、空名称校验及样式/测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/style.css",
+      "commit": "6aee373788463c36d989d69e221d4f4733031eb7",
+      "blob": "b5429231a2d88a8a91dd44787784ecb20069496b",
+      "note": "名称描述编辑、草稿同步、空名称校验及样式/测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "15a5a36e4a5a457bf03d1c4311b862cd2f92ee83f9150bdb88f053147dda3598"
+}

@@ -4,6 +4,7 @@
 // 说明：accepted / planned / done 三个人工专属状态在 Agent 的 Bash 工具里会被
 //       hooks/state-guard.mjs 拦截；本 CLI 面向用户终端与 Status Board。
 
+import { recordLegacyRecovery } from './lib/legacy-recovery.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -1249,7 +1250,8 @@ async function holdCmd(rest) {
 
 const CONFIRM_USAGE = `用法：
   atb confirm list [--all]        挂起确认清单（缺省仅活动项：待确认/已确认续跑）
-  atb confirm show <ID>           单条详情（文件与差异入口 / 问题与作答 / 核验结果）`;
+  atb confirm show <ID>           单条详情（文件与差异入口 / 问题与作答 / 核验结果）
+  atb confirm record-recovery <RUN-ID> --evidence <JSON文件>  登记已审阅的历史处理证据（不确认当前挂起）`;
 
 async function confirmCmd(rest) {
   const [sub, ...subRest] = rest;
@@ -1259,6 +1261,15 @@ async function confirmCmd(rest) {
     return;
   }
   const projectRoot = path.resolve(dataDir, '..', '..');
+
+  if (sub === 'record-recovery') {
+    const { pos, opts } = parseOpts(subRest, new Set(['evidence']));
+    if (!pos[0] || !opts.evidence) die('用法：atb confirm record-recovery <RUN-ID> --evidence <JSON文件>');
+    const evidence = JSON.parse(fs.readFileSync(path.resolve(cwd, opts.evidence), 'utf8'));
+    const rec = recordLegacyRecovery(dataDir, projectRoot, pos[0], evidence);
+    console.log(`✓ 历史处理证据已登记：${rec.runId} · ${rec.itemId} · ${rec.type} · ${rec.paths.length} 路径`);
+    return;
+  }
 
   if (sub === 'list') {
     const { opts } = parseOpts(subRest, new Set(['all']));
