@@ -4197,6 +4197,10 @@ async function openDrawer(id, keepScope = false) {
   drawer.innerHTML = '<div class="drawer-empty muted">加载中…</div>';
   $('#mask').classList.toggle('hidden', !drawerOverlayMode());
   state.listSig = ''; // 重算行选中态
+  // BUG-20260915-011：打开/切换详情的瞬间同步重算左侧行选中态（picked 跟随 state.drawer），
+  // 不等 2 秒轮询——数据稳态下轮询不触发 renderBoard，高亮会长期滞留旧条目。
+  // 对齐 closeDrawer 的显式重算口径；须在 refreshDrawer 之前（同步完成，不等详情请求返回）。
+  if (state.board?.initialized) renderBoard();
   await refreshDrawer();
   saveViewSnapshot(); // REQ-20260910-001：抽屉条目进入快照（加载失败被关闭时按关闭态落盘）
 }
