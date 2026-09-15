@@ -2,11 +2,11 @@
   "id": "BUG-20260915-007",
   "type": "bug",
   "title": "atb report（无 run 场景）缺系统收口提交，手动 /dev 与批量 run 的提交行为不一致",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-037",
   "createdAt": "2026-09-15T01:21:50.241Z",
-  "updatedAt": "2026-09-15T04:31:56.072Z",
+  "updatedAt": "2026-09-15T05:54:45.923Z",
   "agentCompletedAt": "2026-09-15T04:31:56.072Z",
   "lastReport": {
     "at": "2026-09-15T04:31:56.072Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-037",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:45.923Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
