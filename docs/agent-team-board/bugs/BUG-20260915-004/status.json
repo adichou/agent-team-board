@@ -2,11 +2,11 @@
   "id": "BUG-20260915-004",
   "type": "bug",
   "title": "挂起确认面板错误提示透传截断的原始 git 报错，缺少可读原因与处理指引",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-035",
   "createdAt": "2026-09-15T00:28:10.087Z",
-  "updatedAt": "2026-09-15T03:38:49.459Z",
+  "updatedAt": "2026-09-15T05:54:23.156Z",
   "agentCompletedAt": "2026-09-15T03:38:49.459Z",
   "lastReport": {
     "at": "2026-09-15T03:38:49.459Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-035",
       "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:23.157Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
