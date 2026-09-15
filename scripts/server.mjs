@@ -2911,6 +2911,9 @@ async function handleApi(req, res, u, pathname) {
         fingerprint: body.fingerprint && typeof body.fingerprint === 'object' ? body.fingerprint : null,
         note: body.note || '',
         by: 'board',
+        // BUG-20260915-003：归属待确认路径的显式选择（计入本次补交的路径清单；缺省兼容
+        // 旧闭环=只并入已声明路径，全局文件不静默并入）
+        include: Array.isArray(body.include) ? body.include : null,
       });
       if (r.ok && r.batchId) {
         try {
@@ -2928,7 +2931,14 @@ async function handleApi(req, res, u, pathname) {
     const p = String(u.searchParams.get('path') || '');
     if (!p) return sendJson(res, 400, { error: '缺少 path 查询参数' });
     const diff = gitFlow.fileDiffText(root, p);
-    return sendJson(res, 200, { itemId: id, path: p, diff: diff == null ? '' : diff });
+    // BUG-20260915-003：读取失败（null）明确报错并可重试——不冒充「无差异」（空字符串）
+    // 只表示工作区与 Git 基线一致（如已补交入库）。
+    if (diff == null) {
+      return sendJson(res, 500, {
+        error: `差异读取失败：无法读取 ${p} 与 Git 基线的差异（非 git 仓库 / 文件不可读 / git 执行失败），请重试`,
+      });
+    }
+    return sendJson(res, 200, { itemId: id, path: p, diff });
   }
 
   const confirmMatch = pathname.match(/^\/api\/confirms\/([^/]+)$/);

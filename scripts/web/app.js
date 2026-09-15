@@ -3230,6 +3230,17 @@ function confirmKindChip(c) {
   return `<span class="chip confirm-kind k-${esc(c.kind)}" title="${esc(c.kindLabel)}阻塞">${esc(c.kindLabel)}</span>`;
 }
 
+// BUG-20260915-003 待提交范围文案（卡片/面板共用）：计数与文件表/最近核验同源；
+// 无法扫描显示「待核对」，不显示误导性 0。
+function confirmScopeText(c) {
+  if (c.scopeUnknown || c.pendingCount == null) {
+    return '待提交：待核对（无法扫描工作区，不显示误导性 0）';
+  }
+  const base = `待提交：${c.pendingCount} 个路径`;
+  if (c.attributedCount == null || c.uncertainCount == null) return base;
+  return `${base}（本单可归属 ${c.attributedCount} · 归属待确认 ${c.uncertainCount}）`;
+}
+
 function confirmCardHtml(c) {
   const busy = state.confirms.busyId === c.itemId;
   const isDev = c.kind === 'develop';
@@ -3238,7 +3249,7 @@ function confirmCardHtml(c) {
     : '';
   let bodyLine = '';
   if (isDev) {
-    bodyLine = `已提交：${c.committedCount} 组 · 待人工：${c.pendingCount} 路径${c.legacy ? ' · 历史账本恢复' : ''}`;
+    bodyLine = `已提交：${c.committedCount} 组（补交 ${(c.supplementCommits || []).length} 组）· ${confirmScopeText(c)}${c.legacy ? ' · 历史账本恢复' : ''}`;
   } else {
     const miss = Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0;
     bodyLine = `${c.total} 项问题（必答未答 ${miss}）${c.state === 'confirmed' ? ' · 已确认，续跑中' : ''}`;
@@ -3287,7 +3298,7 @@ function renderConfirmArea() {
     area.replaceChildren();
     return;
   }
-  const sig = JSON.stringify([items.map((c) => [c.itemId, c.state, c.reason, c.verify?.lastCheckAt || '', c.keepNote || '', c.committedCount ?? c.answered ?? 0, c.pendingCount ?? (Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0)]), state.confirms.busyId]);
+  const sig = JSON.stringify([items.map((c) => [c.itemId, c.state, c.reason, c.verify?.lastCheckAt || '', c.keepNote || '', c.committedCount ?? c.answered ?? 0, c.pendingCount ?? (Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0), c.attributedCount ?? null, c.uncertainCount ?? null, c.scopeUnknown ?? null]), state.confirms.busyId]);
   if (sig === state.confirms.sig && area.dataset.rendered === '1') return;
   state.confirms.sig = sig;
   area.dataset.rendered = '1';
@@ -3323,6 +3334,8 @@ async function verifyConfirmItem(id, btn) {
     });
     if (r.ok) toast(`✓ ${id} 核验通过：提交完整${r.test && !r.test.skipped ? '，测试通过' : ''}`);
     else toast(`核验未通过：${(r.reasons || [])[0] || '见卡片与面板明细'}`, true);
+    // 重新核验 = 人工重新核对最新差异：内容/范围变化的拦截解除，确认绑定最新所见
+    confirmSide.needsReverify = false;
     await refreshConfirms(true);
     if (confirmSide.open && confirmSide.id === id) await loadConfirmDetail(true);
   } catch (e) {
@@ -3335,7 +3348,11 @@ async function verifyConfirmItem(id, btn) {
 
 /* ---------- 挂起确认侧拉面板（统一入口：提交核验 / 分析表单按阻塞类型分形态） ---------- */
 
-const confirmSide = { open: false, busy: false, id: null, seq: 0, detail: null };
+// BUG-20260915-003：attr = 归属待确认路径 → 'include'|'exclude' 的显式选择（须逐项选择
+// 才能确认）；needsReverify = 内容/范围变化被拦截后，确认键停用直至「重新核验」。
+const confirmSide = { open: false, busy: false, id: null, seq: 0, detail: null, attr: new Map(), needsReverify: false };
+
+const confirmAttrOf = (p) => (confirmSide.attr instanceof Map ? confirmSide.attr.get(p) || null : null);
 
 function confirmPanelOpen() {
   const p = $('#confirmPanel');
@@ -3360,6 +3377,8 @@ async function openConfirmPanel(id, opener) {
   confirmSide.open = true;
   confirmSide.id = id;
   confirmSide.seq += 1;
+  confirmSide.attr = new Map();
+  confirmSide.needsReverify = false;
   confirmSide.opener = opener || document.activeElement || null;
   $('#confirmPanel').classList.remove('hidden');
   confirmPanelMsg('');
@@ -3401,13 +3420,51 @@ function renderConfirmForm(d) {
   const busy = confirmSide.busy || state.confirms.busyId === d.itemId;
   const resolved = d.state !== 'waiting';
   if (d.kind === 'develop') {
-    const files = (d.files || []).map((f) => `
+    // BUG-20260915-003：计数与文件表 / 最近核验同源；按归属分组展示候选文件（本单可归属 /
+    // 归属待确认），归属待确认行须显式选择「计入本次补交 / 排除」；失败现场展示完整 Git 错误。
+    const files = (d.files || []).map((f) => ({ ...f, group: f.group || 'own', kind: f.kind || '修改' }));
+    const own = files.filter((f) => f.group !== 'undetermined');
+    const undet = files.filter((f) => f.group === 'undetermined');
+    const kindCls = (k) => (k === '新增' ? 'k-add' : k === '删除' ? 'k-del' : 'k-mod');
+    const fileRow = (f, withAttr) => `
       <tr>
-        <td title="${esc(f.path)}">${esc(f.path)}</td>
-        <td>${f.state === '已入库' ? '已入库' : '未提交'}</td>
-        <td><button type="button" class="btn small" data-confirm-diff="${esc(f.path)}">查看差异</button></td>
-      </tr>`).join('');
-    const heldCount = d.pendingCount || 0;
+        <td class="cfile-path" title="${esc(f.path)}">${esc(f.path)}</td>
+        <td><span class="chg ${kindCls(f.kind)}">${esc(f.kind)}</span></td>
+        <td class="${f.state === '已入库' ? 'st-in' : 'st-out'}">${f.state === '已入库' ? '已入库' : '未提交'}</td>
+        <td>${f.state === '已入库' ? '<span class="muted small">—</span>' : `<button type="button" class="btn small" data-confirm-diff="${esc(f.path)}">查看差异</button>`}</td>
+        ${withAttr ? `<td><select class="attr-select" data-confirm-attr="${esc(f.path)}" aria-label="归属选择"${resolved || busy ? ' disabled' : ''}>
+          <option value="">待选择（归属待确认）</option>
+          <option value="include"${confirmAttrOf(f.path) === 'include' ? ' selected' : ''}>计入本次补交</option>
+          <option value="exclude"${confirmAttrOf(f.path) === 'exclude' ? ' selected' : ''}>排除（保持工作区）</option>
+        </select></td>` : ''}
+      </tr>`;
+    const unresolvedCount = () => undet.filter((f) => !confirmAttrOf(f.path)).length;
+    let filesHtml = '';
+    if (d.scopeUnknown || d.pendingCount == null) {
+      filesHtml = '<p class="muted small confirm-empty">待核对：无法扫描工作区确定候选范围（非 git 仓库 / 缺少预留快照 / 运行记录缺失）——请人工核对后确认，不显示误导性 0。</p>';
+    } else if (!files.length) {
+      filesHtml = '<p class="muted small confirm-empty">无待提交文件：全部路径已入库。核验口径与计数一致。</p>';
+    } else {
+      const ownTable = own.length ? `
+        <div class="confirm-group-head">本单可归属（${own.length}）</div>
+        <table class="confirm-files"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th></tr></thead><tbody>${own.map((f) => fileRow(f, false)).join('')}</tbody></table>` : '';
+      const undetTable = undet.length ? `
+        <div class="confirm-group-head">归属待确认（${undet.length}）——全局 / 来源不明，不得静默归为本单</div>
+        <table class="confirm-files"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th><th>归属处理</th></tr></thead><tbody>${undet.map((f) => fileRow(f, true)).join('')}</tbody></table>` : '';
+      filesHtml = ownTable + undetTable;
+    }
+    // Git 失败错误区：摘要 + 可折叠全文 + 复制；历史截断错误（无全文）明确说明信息不足。
+    const errBlock = d.error ? `
+      <div class="confirm-err-block" role="alert">
+        <p class="confirm-err-summary">Git 失败摘要：${esc(d.error.summary || '（无摘要）')}</p>
+        ${d.error.full ? `
+          <details class="confirm-err-full"><summary>完整错误（点击展开 · 原始输出保留用于诊断）</summary><pre>${esc(d.error.full)}</pre></details>
+          <div class="confirm-err-actions"><button type="button" class="btn small" id="confirmCopyErrBtn">复制完整错误</button><span class="muted small">摘要可折叠，全文可展开 / 复制</span></div>`
+  : '<p class="muted small">该错误在登记前已被截断且无原始日志可回溯：信息不足，不据此推断具体原因（不编造原因）。</p>'}
+      </div>` : '';
+    const countsLine = `已提交：${d.committedCount} 组（补交 ${(d.supplementCommits || []).length} 组）· ${confirmScopeText(d)}`
+      + (d.scopeUnknown || d.pendingCount == null ? '' : ' <span class="muted small">｜口径：与文件表 / 最近核验同源</span>');
+    const needReverify = confirmSide.needsReverify === true;
     const verifyRows = d.verify && d.verify.lastCheckAt
       ? `<p class="confirm-verify ${d.verify.ok ? 'ok' : 'bad'}">最近核验（${fmtTime(d.verify.lastCheckAt)}）：${d.verify.ok ? '通过' : '未通过'}</p>
         ${(d.verify.reasons || []).map((r) => `<p class="confirm-verify-reason">· ${esc(r)}</p>`).join('')}
@@ -3415,20 +3472,24 @@ function renderConfirmForm(d) {
       : '<p class="muted small">尚未核验：确认时将自动重新核验并运行测试</p>';
     form.innerHTML = `
       <p class="confirm-reason">${esc(d.reason || '')}${d.legacy ? '（历史账本恢复）' : ''}</p>
-      <p class="confirm-counts">已提交：${d.committedCount} 组（补交 ${(d.supplementCommits || []).length} 组）· 待人工：${heldCount} 路径</p>
-      ${files ? `<table class="confirm-files"><thead><tr><th>文件</th><th>状态</th><th>差异</th></tr></thead><tbody>${files}</tbody></table>` : ''}
+      <p class="confirm-counts">${countsLine}</p>
+      ${errBlock}
+      ${filesHtml}
+      <p class="confirm-unresolved hidden" id="confirmUnresolved"></p>
       <div id="confirmDiffBox" class="confirm-diff-box"></div>
       ${verifyRows}
       <label class="field">处理说明（保持挂起时记录；确认时可留空）
         <textarea id="confirmNote" rows="2" placeholder="如：已核对归属，整文件归本单">${esc(d.keepNote || '')}</textarea>
       </label>
       <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+      <p class="confirm-scope-summary" id="confirmScopeSummary"></p>
       <footer class="modal-foot">
         <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
-        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''}>保持挂起</button>
-        <button type="button" class="btn" id="confirmVerifyBtn"${busy || resolved ? ' disabled' : ''}>${busy ? '正在核验提交与测试…' : '重新核验'}</button>
-        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved ? ' disabled' : ''}>${resolved ? '已确认恢复' : '确认并继续'}</button>
+        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''} title="保持挂起：记录处理说明，现场与队列暂停保留">保持挂起</button>
+        <button type="button" class="btn" id="confirmVerifyBtn"${busy || resolved ? ' disabled' : ''} title="重新核验：只检查不改现场（重算候选路径并运行测试）">${busy ? '正在核验提交与测试…' : '重新核验'}</button>
+        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved || needReverify ? ' disabled' : ''} title="${needReverify ? '内容或候选范围已变化：先「重新核验」核对最新差异' : '确认并继续：将补交选中文件、运行测试，通过后恢复队列'}">${resolved ? '已确认恢复' : '确认并继续'}</button>
       </footer>`;
+    updateConfirmScopeSummary(d);
     bindConfirmFormActions(d);
   } else {
     const qs = (d.questions || []).map((q) => {
@@ -3463,7 +3524,33 @@ function renderConfirmForm(d) {
   }
 }
 
-// 面板动作绑定（差异查看 / 保持挂起 / 重新核验 / 保存草稿 / 确认并继续）
+// 确认范围摘要（提交前展示实际将提交的文件）：本单可归属 N + 归属待确认已计入 M；
+// 归属待确认逐项选择后即时更新，未处理完提示须补选。
+function updateConfirmScopeSummary(d) {
+  const el = $('#confirmForm #confirmScopeSummary');
+  if (!el || d.kind !== 'develop') return;
+  if (d.scopeUnknown || d.pendingCount == null) {
+    el.textContent = '确认范围：待核对（无法扫描工作区确定候选范围，确认前请人工核对）';
+    return;
+  }
+  const files = (d.files || []).map((f) => ({ ...f, group: f.group || 'own' }));
+  const undet = files.filter((f) => f.group === 'undetermined' && f.state !== '已入库');
+  const ownCount = files.filter((f) => f.group !== 'undetermined' && f.state !== '已入库').length;
+  const inc = undet.filter((f) => confirmAttrOf(f.path) === 'include').length;
+  const exc = undet.filter((f) => confirmAttrOf(f.path) === 'exclude').length;
+  const unresolved = undet.length - inc - exc;
+  let text = `确认范围（提交前展示实际将提交的文件）：本单可归属 ${ownCount} 个 + 归属待确认已计入 ${inc} 个 = 将补交 ${ownCount + inc} 个路径`;
+  if (exc) text += `（排除 ${exc} 个）`;
+  if (unresolved > 0) text += `；${unresolved} 个归属待确认未处理（须逐项选择计入 / 排除才能确认）`;
+  el.textContent = text;
+  const hint = $('#confirmForm #confirmUnresolved');
+  if (hint) {
+    hint.textContent = unresolved > 0 ? `待核对：${unresolved} 个归属待确认路径尚未选择计入 / 排除。` : '';
+    hint.classList.toggle('hidden', unresolved === 0);
+  }
+}
+
+// 面板动作绑定（归属选择 / 差异查看与重试 / 错误复制 / 保持挂起 / 重新核验 / 保存草稿 / 确认并继续）
 function bindConfirmFormActions(d) {
   const form = $('#confirmForm');
   form.querySelector('#confirmPanelCancel')?.addEventListener('click', () => { if (!confirmSide.busy) closeConfirmPanel(); });
@@ -3471,19 +3558,49 @@ function bindConfirmFormActions(d) {
   form.querySelector('#confirmVerifyBtn')?.addEventListener('click', () => verifyConfirmItem(d.itemId, null).then(() => {}));
   form.querySelector('#confirmDraftBtn')?.addEventListener('click', () => confirmDraftAction(d));
   form.querySelector('#confirmContinueBtn')?.addEventListener('click', () => confirmContinueAction(d));
-  for (const btn of form.querySelectorAll('[data-confirm-diff]')) {
-    btn.addEventListener('click', async () => {
-      const p = btn.dataset.confirmDiff;
-      const box = form.querySelector('#confirmDiffBox');
-      if (!box) return;
-      box.innerHTML = '<p class="muted small">正在读取差异…</p>';
-      try {
-        const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/diff?path=${encodeURIComponent(p)}`);
-        box.innerHTML = `<details open class="confirm-diff"><summary>${esc(p)}</summary><pre>${esc(r.diff || '（与 HEAD 一致：无差异——可能已补交入库）')}</pre></details>`;
-      } catch (e) {
-        box.innerHTML = `<p class="edit-error-text">差异读取失败：${esc(e.message)}</p>`;
+  form.querySelector('#confirmCopyErrBtn')?.addEventListener('click', async () => {
+    const text = d.error && d.error.full;
+    if (!text) return;
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
       }
+      toast('已复制完整 Git 错误（原始输出保留用于诊断）');
+    } catch {
+      toast('复制失败：浏览器未授予剪贴板权限（可手动选中展开区复制）', true);
+    }
+  });
+  // 归属待确认：计入 / 排除显式选择（不整页重渲染，处理说明等输入保留）
+  for (const sel of form.querySelectorAll('[data-confirm-attr]')) {
+    sel.addEventListener('change', () => {
+      if (sel.value) confirmSide.attr.set(sel.dataset.confirmAttr, sel.value);
+      else confirmSide.attr.delete(sel.dataset.confirmAttr);
+      updateConfirmScopeSummary(d);
     });
+  }
+  for (const btn of form.querySelectorAll('[data-confirm-diff]')) {
+    btn.addEventListener('click', () => loadConfirmDiff(d.itemId, btn.dataset.confirmDiff));
+  }
+}
+
+// 差异查看（BUG-20260915-003）：读取失败显示明确错误 + 重试，不冒充无差异；
+// 空差异只表示工作区与 Git 基线一致（如已补交入库）。
+async function loadConfirmDiff(itemId, p) {
+  const box = $('#confirmForm #confirmDiffBox');
+  if (!box) return;
+  box.innerHTML = '<p class="muted small">正在读取差异…</p>';
+  try {
+    const r = await api(`/api/confirms/${encodeURIComponent(itemId)}/diff?path=${encodeURIComponent(p)}`);
+    box.innerHTML = `<details open class="confirm-diff"><summary>${esc(p)}（工作区 vs Git 基线）</summary><pre>${esc(r.diff || '（与 HEAD 一致：无差异——可能已补交入库）')}</pre></details>`;
+  } catch (e) {
+    box.innerHTML = `<p class="edit-error-text">差异读取失败：${esc(e.message)}（读取失败不冒充无差异）</p><button type="button" class="btn small" id="confirmDiffRetry">重试</button>`;
+    box.querySelector('#confirmDiffRetry')?.addEventListener('click', () => loadConfirmDiff(itemId, p));
   }
 }
 
@@ -3554,6 +3671,7 @@ async function confirmDraftAction(d) {
 async function confirmContinueAction(d) {
   if (confirmSide.busy) return;
   const isDev = d.kind === 'develop';
+  let include = null;
   // 必答校验（就地提示，禁用继续）：推荐选项不自动视为已答
   if (!isDev) {
     const answers = collectAnalysisAnswers();
@@ -3583,6 +3701,15 @@ async function confirmContinueAction(d) {
       return;
     }
   } else {
+    // BUG-20260915-003：归属待确认逐项显式选择后才能确认——全局文件不得静默整批归为本单；
+    // include 携带「计入本次补交」的路径（排除项保留在工作区）。
+    const undet = (d.files || []).filter((f) => (f.group || 'own') === 'undetermined' && f.state !== '已入库');
+    const unresolved = undet.filter((f) => !confirmAttrOf(f.path));
+    if (unresolved.length) {
+      confirmPanelMsg(`确认被拦截：归属待确认项未处理（${unresolved.map((f) => f.path).join('、')}）——每个路径须显式选择「计入本次补交 / 排除」，全局文件不得静默整批归为本单`, true);
+      return;
+    }
+    include = undet.filter((f) => confirmAttrOf(f.path) === 'include').map((f) => f.path);
     confirmSide.busy = true;
     setConfirmButtonsDisabled(true);
   }
@@ -3591,7 +3718,11 @@ async function confirmContinueAction(d) {
   if (btn) { btn.disabled = true; btn.textContent = isDev ? '正在核验提交与测试…' : '确认中…'; }
   try {
     const body = isDev
-      ? { fingerprint: d.fingerprint, note: $('#confirmForm #confirmNote')?.value?.trim() || '' }
+      ? {
+        fingerprint: d.fingerprint,
+        note: $('#confirmForm #confirmNote')?.value?.trim() || '',
+        include,
+      }
       : { version: d.questionsVersion };
     const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/continue`, {
       method: 'POST',
@@ -3611,6 +3742,10 @@ async function confirmContinueAction(d) {
       await loadConfirmDetail(true);
       await poll();
     } else {
+      // BUG-20260915-003：内容或候选范围变化 → 确认键停用直至「重新核验」重新核对
+      if ((r.reasons || []).some((x) => /内容已变|重新核验|内容指纹/.test(String(x)))) {
+        confirmSide.needsReverify = true;
+      }
       confirmPanelMsg(`确认未通过，保持挂起：\n· ${(r.reasons || ['未知原因']).join('\n· ')}`, true);
       await refreshConfirms(true);
       await loadConfirmDetail(true);
@@ -3620,7 +3755,10 @@ async function confirmContinueAction(d) {
   } finally {
     confirmSide.busy = false;
     setConfirmButtonsDisabled(false);
-    if (btn) { btn.disabled = false; btn.textContent = prev || '确认并继续'; }
+    if (btn) {
+      btn.disabled = confirmSide.needsReverify === true;
+      btn.textContent = prev || '确认并继续';
+    }
   }
 }
 

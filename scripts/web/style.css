@@ -3253,6 +3253,62 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .confirm-rec { font-style: normal; color: var(--primary); margin-left: 4px; font-size: 11px; }
 .confirm-q { margin-bottom: 8px; }
 
+/* ---------- BUG-20260915-003 挂起确认面板：归属分组文件表 / Git 错误块 / 确认范围摘要 ---------- */
+.confirm-group-head {
+  margin: 10px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.confirm-files .cfile-path { font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; max-width: 230px; }
+.confirm-files .chg.k-add { color: var(--accent, #2f9e44); }
+.confirm-files .chg.k-del { color: var(--danger, #d9480f); }
+.confirm-files .chg.k-mod { color: var(--primary); }
+.confirm-files .st-in { color: var(--muted); }
+.confirm-files .st-out { color: var(--warn); font-weight: 600; }
+.confirm-files .attr-select {
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 2px 4px;
+}
+.confirm-empty { margin: 6px 0; }
+.confirm-unresolved { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
+.confirm-err-block {
+  border: 1px solid var(--danger, #d9480f);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: color-mix(in srgb, var(--danger, #d9480f) 7%, var(--panel));
+}
+.confirm-err-summary { margin: 0; font-size: 12.5px; font-weight: 600; }
+.confirm-err-full { margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-inset, rgba(127, 127, 127, 0.12)); }
+.confirm-err-full summary { padding: 4px 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+.confirm-err-full pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.confirm-err-actions { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.confirm-scope-summary {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ---------- REQ-20260914-007 管理记录提交反馈块（确认完成 / 版本合并两入口同构） ---------- */
 /* 状态语义：submitting 提交中（进度 + 禁用重试）/ success 已提交或已同步 / failed 失败
    （原因 + 未提交文件 + 建议 + 重试，账本持久化，重试成功后清除）；沿用现有主题变量。 */

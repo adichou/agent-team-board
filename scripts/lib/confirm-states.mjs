@@ -202,6 +202,13 @@ function commitFilesSection(rec) {
     for (const r of rec.verify.reasons || []) lines.push(`  - ${r}`);
   }
   if (rec.keepNote) lines.push(`- 保持挂起说明：${rec.keepNote}`);
+  // BUG-20260915-003：失败现场保留完整原始错误（截断的历史错误如实说明信息不足）
+  if (rec.error) {
+    lines.push(`- Git 失败摘要：${rec.error.summary || '（无摘要）'}`);
+    lines.push(rec.error.full
+      ? `- Git 失败完整错误（保留原始输出用于诊断）：${rec.error.full}`
+      : '- Git 失败完整错误：登记前已被截断且无原始日志可回溯（信息不足，不据此推断原因）');
+  }
   return lines;
 }
 
