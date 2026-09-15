@@ -23,9 +23,7 @@ skills: agent-team-board
    写入 Bug design.md「引入来源（源单）」节，并在 Bug README 开头头部元信息区补写 `- 引入来源：…` 行
    （「创建」行之前、有「归属需求」行则其后，打开第一屏即见，样式见 BUG-20260907-017；末尾「关联」节仅作可选补充关联）；
    定位不到写「未定位（排查过程：…）」，禁止编造。
-5. **提交与待测试**：读取并执行插件根目录 `skills/agent-team-board/dev-closeout.md`（相对本命令为
-   [收尾规则](../skills/agent-team-board/dev-closeout.md)）：测试通过 → report → 仅提交本单代码/测试/文档及报告状态 → 核验提交 hash 与本轮待测试状态。
-   不得只留工作区修改或手写测试报告就宣称完成；失败时说明已完成与未完成项。用户授权例外开发的状态收尾也按该规则执行。
+5. **提交与待测试**：执行 [收尾规则](../skills/agent-team-board/dev-closeout.md)：测试通过 → report → 本单 Git 提交 → 核验 hash 与本轮待测试状态。规则也覆盖例外授权与失败收尾，不得只留工作区修改或手写报告就宣称完成。
 6. **交付**：汇报提交 hash、测试结果和待测试状态，请用户测试后到 Status Board 点「确认完成」。不自动置 done，不自动 push。
 
 ## 循环模式（`/dev loop`）
