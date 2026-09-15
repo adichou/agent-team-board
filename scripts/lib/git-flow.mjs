@@ -23,7 +23,6 @@ import {
   readStatus,
 } from './core.mjs';
 import {
-  DESC_MAX_CHARS,
   TEST_PATH_PREFIX,
   validateCommitSubject,
   itemCommittedInGit,
@@ -276,7 +275,9 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
 
     const itemDir = resolveItemDir(dataDir, itemId).dir;
     const title = readStatus(itemDir).title || itemId;
-    const desc = [...String(title)].slice(0, DESC_MAX_CHARS).join('');
+    // BUG-20260914-021：描述完整保留条目标题，不再截断——核验上限（DESC_MAX_CHARS=120）
+    // 已与条目标题上限对齐，标题合规则消息必然过核验；超限（遗留脏数据）走显式报错。
+    const desc = String(title);
     const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
     const itemRel = path.relative(repoTop, itemDir);
     const boardRel = path.relative(repoTop, dataDir);
@@ -531,7 +532,8 @@ export function supplementCommitForRun({ dataDir, projectRoot, run }) {
     ensureLedgerIgnore(dataDir);
     const itemDir = resolveItemDir(dataDir, itemId).dir;
     const title = readStatus(itemDir).title || itemId;
-    const desc = [...String(title)].slice(0, DESC_MAX_CHARS).join('');
+    // BUG-20260914-021：与 autoCommitForRun 同口径——描述完整保留标题，不截断。
+    const desc = String(title);
     let plan = [
       ['doc', scan.groups.doc, commitSubjectOf('doc', desc, itemId)],
       ['fix', scan.groups.fix, commitSubjectOf('fix', '人工确认补交', itemId)],

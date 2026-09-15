@@ -14,9 +14,11 @@ import { spawnSync } from 'node:child_process';
 
 export const REASON_MAX_CHARS = 200;   // 失败原因 / 摘要上限（与批次回执口径一致）
 export const RECEIPT_MAX_BYTES = 2048; // 回执/check 协议载荷上限
-// 提交消息规范（README §3/§4）：类型五选一前缀 + 描述 ≤20 字（不含单号）+ 消息含单号
+// 提交消息规范：类型五选一前缀 + 描述（不含单号）非空且 ≤120 字 + 消息含单号。
+// BUG-20260914-021：上限 20 → 120，与 core.mjs 条目标题上限（≤120 字）对齐——自动提交
+// 描述即条目标题，标题合规则消息必然过核验；拼装端不再截断，超上限走显式报错。
 export const COMMIT_TYPES = ['feat', 'fix', 'chore', 'doc', 'test'];
-export const DESC_MAX_CHARS = 20;
+export const DESC_MAX_CHARS = 120;
 // 测试代码路径前缀（README：本项目测试代码集中在 scripts/tests/*.test.mjs）
 export const TEST_PATH_PREFIX = 'scripts/tests/';
 
@@ -63,7 +65,7 @@ export function itemCommittedInGit(projectRoot, itemId, logText = null) {
 
 const SUBJECT_RE = new RegExp(`^(${COMMIT_TYPES.join('|')}):\\s*(.+)$`);
 
-// 主题行核验：五类前缀 + 含单号 + 描述（去前缀与单号）非空且 ≤20 字
+// 主题行核验：五类前缀 + 含单号 + 描述（去前缀与单号）非空且 ≤120 字（BUG-20260914-021 口径）
 export function validateCommitSubject(subject, itemId) {
   const subj = String(subject || '').trim();
   const m = SUBJECT_RE.exec(subj);
