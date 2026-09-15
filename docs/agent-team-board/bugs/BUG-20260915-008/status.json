@@ -2,11 +2,11 @@
   "id": "BUG-20260915-008",
   "type": "bug",
   "title": "确认与核验流程同步跑测试阻塞看板服务数分钟，面板整体冻结且无进度提示",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-039",
   "createdAt": "2026-09-15T01:31:53.862Z",
-  "updatedAt": "2026-09-15T05:06:31.965Z",
+  "updatedAt": "2026-09-15T05:54:49.106Z",
   "agentCompletedAt": "2026-09-15T05:06:31.965Z",
   "lastReport": {
     "at": "2026-09-15T05:06:31.965Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-039",
       "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:49.106Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
