@@ -2999,8 +2999,10 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   padding: 14px 18px 18px;
   overflow: auto;
 }
-.bld-toolbar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+/* REQ-20260915-003：「＋ 新建版本」上移至页签工具行右端（取消单独占行的 bld-toolbar）；
+   工具容器 margin-left:auto 推到行尾，窄屏随 rel-tabs 的 flex-wrap 一并换行不遮挡 */
 .bld-tabs { margin: 0 0 12px; }
+.bld-tabs-tools { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 /* 版本详情：名称 / 描述行内编辑 */
 .bld-name, .bld-desc { cursor: pointer; border-radius: 6px; padding: 1px 4px; }
 .bld-name:hover, .bld-desc:hover { background: var(--bg); }
@@ -3011,9 +3013,15 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text);
 }
 .bld-desc-block { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
-/* 关联条目与 commit 区 */
+/* 关联条目与 commit 区（REQ-20260915-003：头部行加搜索控件并允许换行；全量过滤后分页） */
 .bld-items { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
-.bld-items-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bld-items-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.bld-items-head > strong { flex: none; }
+.bld-items-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 200px; min-width: 0; }
+.bld-items-search input[type="search"] { flex: 1 1 160px; min-width: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.bld-items-count { color: var(--muted); margin: 2px 0; }
+.bld-items-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.bld-items-pageinfo { color: var(--muted); font-size: 12.5px; }
 .bld-item-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bld-item-row + .bld-item-row { border-top: 1px dashed var(--border); padding-top: 6px; }
 .bld-item-id { font-weight: 600; white-space: nowrap; }
@@ -3395,5 +3403,5 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px dashed var(--border, #d0d7de); border-radius: 8px; }
 .rel-prod-config.rel-empty-mini { display: block; }
 .rel-prod-config code { word-break: break-all; }
-.bld-release-block { margin-top: 10px; }
-.bld-release-block .card-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+/* REQ-20260915-003：构建模块详情底部产品发布操作区（bld-release-block）已迁入左侧版本
+   卡片按钮区（.rel-card .card-acts 自带 flex-wrap，容纳五键空间不足自动换行），样式随之移除 */

@@ -31,6 +31,9 @@ const ATBBuild = (() => {
   const STATUS_CLS = { draft: 'st-mute', merging: 'st-run', merged: 'st-ok', failed: 'st-fail' };
   const TABS = [['versions', '版本计划'], ['branches', '分支浏览']];
   const HASH_RE = /^[0-9a-f]{40}$/i;
+  // REQ-20260915-003：关联条目联合列表每页条数——产品参数待确认（条目 README「待确认」：
+  // 演示用 5 条不代表产品默认值），先取 10（版本关联单通常个位到十位数，10 条平衡翻页与扫视）
+  const ITEMS_PAGE_SIZE = 10;
 
   const state = {
     project: null,
@@ -40,6 +43,12 @@ const ATBBuild = (() => {
     tab: 'versions',
     query: '',
     selVerId: null,
+    // REQ-20260915-003：关联条目联合列表搜索与分页——itemsQuery 为已生效关键词（空 = 全量），
+    // itemsQueryInput 为输入框草稿（重渲染回填防丢字），itemsPage 当前页（1 起）；
+    // 切换版本清空搜索并回第一页，数据减少导致页码越界时回落最后有效页（渲染时校正回写）
+    itemsQuery: '',
+    itemsQueryInput: '',
+    itemsPage: 1,
     edit: null,          // { id, field: 'name'|'desc' } 行内编辑态
     createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, totalDone, busy, error }
     addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, totalDone, busy, error }
@@ -130,6 +139,29 @@ const ATBBuild = (() => {
     return (items || []).filter((x) => Array.isArray(x.commits) && x.commits.length > 0);
   }
 
+  // REQ-20260915-003：关联条目联合行过滤（纯函数，渲染与测试共用）——一条关联单及其所选
+  // commit 为一个联合行；关键词覆盖条目 ID、标题与完整/短 commit 哈希（短哈希是完整哈希的
+  // 前缀，包含匹配天然覆盖）；忽略英文大小写、去首尾空白、按包含关系匹配、保持原顺序。
+  // 字段间以 \t 分隔，避免标题结尾与哈希开头在拼接边界串出假词误命中。
+  function filterVersionItems(items, q) {
+    const list = items || [];
+    const kw = String(q || '').trim().toLowerCase();
+    if (!kw) return list;
+    return list.filter((it) => `${it.itemId}\t${it.title || ''}\t${it.commit || ''}`.toLowerCase().includes(kw));
+  }
+
+  // REQ-20260915-003：关联列表分页（纯函数）——页码从 1 起；页码越界回落最后有效页
+  // （数据减少导致当前页失效时回退）；零结果 total=0 / pages=0（不产生可翻页的虚假页数）。
+  function paginateItems(list, page, size) {
+    const src = list || [];
+    const total = src.length;
+    const n = Math.max(1, Math.floor(Number(size)) || 1);
+    const pages = total ? Math.ceil(total / n) : 0;
+    const p = Math.max(1, Math.min(pages || 1, Math.floor(Number(page)) || 1));
+    const start = (p - 1) * n;
+    return { total, pages, page: p, size: n, start, rows: src.slice(start, start + n) };
+  }
+
   // BUG-20260914-009：提交记录分页条（纯函数，渲染与测试共用）——上一页 / 页码（首末 + 当前±1，
   // 中间折叠 …）/ 下一页 + 每页条数下拉（20/50/100）+「第 x–y 条 / 共 N 条」进度。
   function logPagerHtml(page, pages, size, total) {
@@ -201,6 +233,7 @@ const ATBBuild = (() => {
   /* ---------- 数据 ---------- */
 
   async function refresh() {
+    const prevSel = state.selVerId;
     try {
       const r = await api('/state');
       const data = await r.json();
@@ -217,7 +250,25 @@ const ATBBuild = (() => {
       state.phase = state.data ? 'ready' : 'error';
       state.error = e.message;
     }
+    // REQ-20260915-003：选中版本变化（回落 / 删除后失效）时按切换版本口径重置关联列表；
+    // 同版本刷新（移出条目等数据操作后）保留搜索条件，仅由渲染层校正越界页码
+    if (state.selVerId !== prevSel) resetItemsList();
     render();
+  }
+
+  // REQ-20260915-003：切换选中版本——清空关联列表搜索（关键词与草稿）并回第一页
+  //（口径同分支浏览切分支重置搜索）；同时清行内编辑态，与原卡片点击行为一致。
+  function selectVersion(id) {
+    state.selVerId = id;
+    state.edit = null;
+    resetItemsList();
+  }
+
+  // REQ-20260915-003：重置关联列表搜索与分页状态（切换版本 / 切换项目 / 恢复快照时）
+  function resetItemsList() {
+    state.itemsQuery = '';
+    state.itemsQueryInput = '';
+    state.itemsPage = 1;
   }
 
   async function enter(project) {
@@ -226,6 +277,7 @@ const ATBBuild = (() => {
       Object.assign(state, {
         project: project ?? null, phase: 'loading', error: null, data: null, tab: 'versions',
         selVerId: null, edit: null, createPanel: null, addPanel: null, answer: null,
+        itemsQuery: '', itemsQueryInput: '', itemsPage: 1, // REQ-20260915-003：关联列表搜索分页随项目切换重置
         mergeConfirm: null, pushConfirm: null, mergeBusy: false, mgtSubmitting: null,
         deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
@@ -351,6 +403,44 @@ const ATBBuild = (() => {
     if (n === state.logPageSize && !state.logError) return;
     state.logPageSize = n;
     if (state.logBranch) loadLog(1); // 换每页条数回第一页
+  }
+
+  /* ---------- REQ-20260915-003 关联条目联合列表：搜索与分页（纯客户端） ---------- */
+
+  // 关联列表数据快照：当前选中版本 → 全量过滤 → 分页；渲染层把越界页码校正回写
+  // state.itemsPage（数据减少导致当前页失效时回落最后有效页）。无选中版本返回 null。
+  function itemsPageView() {
+    const v = selVersion();
+    if (!v) return null;
+    const pg = paginateItems(filterVersionItems(v.items, state.itemsQuery), state.itemsPage, ITEMS_PAGE_SIZE);
+    state.itemsPage = pg.page;
+    return pg;
+  }
+
+  // 提交搜索：输入框草稿去首尾空白后生效（空白等同清除），关键词变化回第一页。
+  // 数据为当前版本全量关联行（客户端过滤），不涉及请求。
+  function submitItemsSearch() {
+    state.itemsQuery = String(state.itemsQueryInput || '').trim();
+    state.itemsPage = 1;
+    render();
+  }
+
+  // 清空搜索：关键词与草稿清空，回全量列表第一页。
+  function clearItemsSearch() {
+    state.itemsQuery = '';
+    state.itemsQueryInput = '';
+    state.itemsPage = 1;
+    render();
+  }
+
+  // 翻页：页码经 paginateItems 收口（越界回落），相同页不重渲染。
+  function gotoItemsPage(page) {
+    const v = selVersion();
+    if (!v) return;
+    const pg = paginateItems(filterVersionItems(v.items, state.itemsQuery), page, ITEMS_PAGE_SIZE);
+    if (pg.page === state.itemsPage) return;
+    state.itemsPage = pg.page;
+    render();
   }
 
   /* ---------- 版本计划：创建 / 编辑 / 条目 ---------- */
@@ -1042,6 +1132,7 @@ const ATBBuild = (() => {
     if (TABS.some(([k]) => k === snap.tab)) state.tab = snap.tab;
     const known = (state.data?.versions || []).some((v) => v.id === snap.selVerId);
     state.selVerId = known ? snap.selVerId : null;
+    resetItemsList(); // REQ-20260915-003：恢复浏览位置视为重新选中版本，清空关联列表搜索回第一页
     state.logBranch = typeof snap.logBranch === 'string' ? snap.logBranch : null;
     state.pendingRestore = null;
     if (state.tab === 'branches' && !state.branches) loadBranches();
@@ -1076,6 +1167,13 @@ const ATBBuild = (() => {
       const answerLocked = v.status === 'merging' || v.status === 'merged';
       const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${v.status === 'merged' ? '已合并入 main，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
       const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? ` disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
+      // REQ-20260915-003：产品发布操作迁入版本卡片按钮区（与 AI 完善 / 合并 / 删除集中展示），
+      // 右侧详情不再重复显示发布操作区。创建发布仅 merged 可用；draft / merging / failed 禁用并
+      // 可见说明「请先完成合并入 main」；沿用 openReleaseConfirm 既有发布校验与核对弹层，
+      // 按所在卡片版本绑定（data-ver-release 带卡片 id），不依赖右侧选中态。
+      const releaseLocked = v.status !== 'merged';
+      const releaseBtn = `<button type="button" class="btn small primary bld-ver-release" data-ver-release="${esc(v.id)}"${releaseLocked ? ` disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"` : ` title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"`} aria-label="创建发布 ${esc(v.id)}">创建发布</button>`;
+      const releaseViewBtn = `<button type="button" class="btn small bld-ver-release-view" data-ver-release-view="${esc(v.id)}" title="打开发布模块的产品发布页签查看运行记录" aria-label="查看发布记录 ${esc(v.id)}">查看发布记录</button>`;
       // REQ-20260913-004 删除键：排在两键之后、quiet 危险弱化样式（不抢主操作）；
       // merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（与合并键一并禁用）。
       const delDisabled = v.status === 'merging' || state.mergeBusy;
@@ -1084,7 +1182,7 @@ const ATBBuild = (() => {
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><strong>${esc(v.name || v.id)}</strong> ${statusChip(v.status)}</div>
         <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
-        <div class="card-acts">${answerBtn}${mergeBtn}${delBtn}</div>
+        <div class="card-acts">${answerBtn}${mergeBtn}${releaseBtn}${releaseViewBtn}${delBtn}</div>
       </div>`;
     }).join('');
   }
@@ -1148,7 +1246,11 @@ const ATBBuild = (() => {
     const descCell = editing?.field === 'desc'
       ? `<div class="bld-edit-row"><textarea class="bld-desc-input" rows="3">${esc(v.description)}</textarea><button type="button" class="btn small primary" id="bldSaveDesc">保存</button><button type="button" class="btn small" id="bldCancelEdit">取消</button></div>`
       : `<span class="bld-desc" title="点击编辑描述" role="button" tabindex="0">${v.description ? esc(v.description) : '<span class="muted">（无描述，点击补充）</span>'}</span>`;
-    const itemRows = v.items.map((it) => `
+    // REQ-20260915-003：关联条目联合列表——先对当前版本全量关联行按关键词过滤（覆盖所有页），
+    // 再分页（每页 ITEMS_PAGE_SIZE）；渲染时把越界页码校正回写（数据减少回落最后有效页）。
+    const searching = !!state.itemsQuery;
+    const pg = itemsPageView() || paginateItems([], 1, ITEMS_PAGE_SIZE);
+    const itemRows = pg.rows.map((it) => `
       <div class="bld-item-row" data-row-item="${esc(it.itemId)}">
         <span class="bld-item-id">${esc(it.itemId)}</span>
         <span class="bld-item-title" title="${esc(it.title || '')}">${esc(it.title || '')}</span>
@@ -1158,6 +1260,24 @@ const ATBBuild = (() => {
         ${it.mergedAt ? `<span class="st st-ok" title="已合并入 main">✓</span>` : it.mergeError ? `<span class="st st-fail" title="${esc(it.mergeError)}">✕</span>` : ''}
         <button type="button" class="btn small quiet bld-item-remove" data-remove-item="${esc(it.itemId)}" ${lockItems ? 'disabled title="合并中/已合并状态锁定条目增删"' : 'title="移出该条目（连同 commit 关联）"'}>移出</button>
       </div>`).join('');
+    // 计数行：搜索态显示「匹配 X / 共 Y 条」（零结果显示 0 条，不伪装成空数据），默认显示总数
+    const countBar = searching || pg.total
+      ? `<div class="bld-items-count small" role="status">${searching ? `匹配 ${pg.total} / 共 ${v.items.length} 条` : `共 ${pg.total} 条`}</div>`
+      : '';
+    // 分页条：仅在有数据时出现（零结果 / 零关联不出可翻页的虚假页数）；首末页禁用对应按钮
+    const pager = pg.total ? `
+          <div class="bld-items-pager" role="navigation" aria-label="关联条目分页">
+            <button type="button" data-items-pg="prev"${pg.page <= 1 ? ' disabled' : ''}>上一页</button>
+            <span class="bld-items-pageinfo">第 ${pg.page} / ${pg.pages} 页</span>
+            <button type="button" data-items-pg="next"${pg.page >= pg.pages ? ' disabled' : ''}>下一页</button>
+          </div>` : '';
+    // 空态区分：零关联给添加引导；有数据但无匹配给关键词与清空入口（两种空态互斥）
+    const listBody = !v.items.length
+      ? '<p class="muted small">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'
+      : !pg.total
+        ? `<p class="muted small">没有匹配的关联条目（关键词：${esc(state.itemsQuery)}）</p>
+          <p><button type="button" class="btn small quiet" data-items-search-clear>清空</button></p>`
+        : itemRows;
     const mergeState = v.status === 'merging'
       ? '<p class="muted small bld-merge-note">合并中，请稍候……（执行中已禁用重复触发与条目编辑）</p>'
       : v.status === 'failed' && v.merge?.error
@@ -1169,10 +1289,6 @@ const ATBBuild = (() => {
       ? { status: 'submitting' }
       : (v.mgtCommit || null);
     const mgtBlock = v.status === 'merged' || mgt ? mgtBlockHtml(mgt, v.id) : '';
-    // REQ-20260915-002 产品发布操作区：仅 merged 可创建（未合并禁用并说明前置条件）；查看发布记录跳发布模块产品页签
-    const releaseLocked = v.status !== 'merged';
-    const releaseBtn = `<button type="button" class="btn small primary bld-ver-release" data-ver-release="${esc(v.id)}"${releaseLocked ? ` disabled title="仅已合并（merged）的版本计划可创建发布：请先完成「合并入 main」"` : ` title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"`} aria-label="创建发布 ${esc(v.id)}">创建发布</button>`;
-    const releaseViewBtn = `<button type="button" class="btn small bld-ver-release-view" data-ver-release-view="${esc(v.id)}" title="打开发布模块的产品发布页签查看运行记录">查看发布记录</button>`;
     return `
       <div class="rel-detail">
         <header class="rel-detail-head">
@@ -1184,18 +1300,20 @@ const ATBBuild = (() => {
         <div class="bld-desc-block"><span class="muted small">描述</span>${descCell}</div>
         <div class="bld-items">
           <div class="bld-items-head"><strong>关联条目与 commit</strong>
+            <div class="bld-items-search" role="search">
+              <input type="search" id="bldItemsSearchInput" placeholder="搜单号 / 标题 / commit…" value="${esc(state.itemsQueryInput)}" aria-label="搜索关联条目与 commit">
+              <button type="button" class="btn small" id="bldItemsSearchGo">搜索</button>
+              ${state.itemsQuery ? '<button type="button" class="btn small quiet" data-items-search-clear>清空</button>' : ''}
+            </div>
             <button type="button" class="btn small" id="bldAddItem" ${lockItems ? 'disabled title="合并中/已合并状态锁定条目增删"' : ''}>＋ 添加条目</button>
           </div>
-          ${itemRows || '<p class="muted small">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}
+          ${countBar}
+          ${listBody}
+          ${pager}
         </div>
         ${mergeState}
         ${mgtBlock}
-        <div class="bld-items bld-release-block">
-          <div class="bld-items-head"><strong>产品发布</strong></div>
-          <p class="muted small">从已合并版本发起跨仓库产品发布：Web App + 官网与文档两个必备目标，源码 main/dev 双分支同步为必经前置。</p>
-          <div class="card-acts">${releaseBtn}${releaseViewBtn}</div>
-        </div>
-      </div>`; // BUG-20260913-004：原 footer.rel-acts（AI 完善 / 合并入 main）已迁入左侧版本卡片，详情不再重复渲染
+      </div>`; // REQ-20260915-003：产品发布操作区（原 bld-release-block）已迁入左侧版本卡片，详情不再重复渲染
   }
 
   function renderAnswerModal() {
@@ -1468,9 +1586,6 @@ const ATBBuild = (() => {
         <p class="muted">构建模块基于 git（版本计划合并入 main、分支浏览与同步）：可在终端执行 git init，或经 <code>atb init</code> 初始化项目（设置模块「Git 工作流」亦有初始化入口）。</p></div>`;
     } else if (state.tab === 'versions') {
       body = `
-        <div class="bld-toolbar">
-          <button type="button" class="btn primary" id="bldNewBtn">＋ 新建版本</button>
-        </div>
         <div class="rel-split">
           <div class="rel-list" aria-label="版本列表">${renderVersionList()}</div>
           ${renderDetail(selVersion())}
@@ -1478,8 +1593,13 @@ const ATBBuild = (() => {
     } else {
       body = renderBranchesPane();
     }
+    // REQ-20260915-003：「＋ 新建版本」上移至页签工具行右端（取消单独占一行的工具栏容器）；
+    // 仅版本计划页提供入口（分支浏览页维持既有可用范围），非 git 仓库不可用。
+    const newBtn = state.tab === 'versions' && d?.isRepo
+      ? '<button type="button" class="btn primary" id="bldNewBtn">＋ 新建版本</button>'
+      : '';
     view.innerHTML = `
-      <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}</nav>
+      <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}<span class="bld-tabs-tools">${newBtn}</span></nav>
       ${body}
       ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
       ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已纳入版本的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
@@ -1505,8 +1625,8 @@ const ATBBuild = (() => {
       if (e.target?.closest?.('button')) return;
       const card = e.target?.closest?.('[data-ver-id]');
       if (card?.dataset?.verId) {
-        state.edit = null;
-        state.selVerId = card.dataset.verId;
+        // REQ-20260915-003：切换版本清空关联列表搜索并回第一页（selectVersion 统一口径）
+        selectVersion(card.dataset.verId);
         render();
         window.dispatchEvent?.(new CustomEvent('atb:build-state'));
       }
@@ -1518,13 +1638,30 @@ const ATBBuild = (() => {
     q('#bldSaveName')?.addEventListener('click', () => { const v = selVersion(); const val = q('.bld-name-input')?.value; if (v && val != null) { state.edit = null; saveInfo(v.id, { name: val }); } });
     q('#bldSaveDesc')?.addEventListener('click', () => { const v = selVersion(); const val = q('.bld-desc-input')?.value; if (v && val != null) { state.edit = null; saveInfo(v.id, { description: val }); } });
     q('#bldCancelEdit')?.addEventListener('click', () => { state.edit = null; render(); });
-    // 条目增删与 commit 换选
+    // 条目增删与 commit 换选（REQ-20260915-003：行来自过滤分页后的当前页，data-* 均绑定真实条目 ID）
     q('#bldAddItem')?.addEventListener('click', openAddPanel);
     for (const el of view.querySelectorAll('[data-remove-item]')) {
       el.addEventListener('click', () => itemAction('remove', { itemIds: [el.dataset.removeItem] }));
     }
     for (const el of view.querySelectorAll('[data-commit-item]')) {
       el.addEventListener('change', () => itemAction('commit', { itemId: el.dataset.commitItem, commit: el.value }));
+    }
+    // REQ-20260915-003：关联条目联合列表搜索与分页——草稿随输入回写（防重渲染丢字）、
+    // 回车 / 按钮提交、一键清除（头部行与无匹配空态共用 data-items-search-clear 口径）、翻页
+    const itemsSearchInput = q('#bldItemsSearchInput');
+    itemsSearchInput?.addEventListener('input', () => { state.itemsQueryInput = itemsSearchInput.value; });
+    itemsSearchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitItemsSearch(); });
+    q('#bldItemsSearchGo')?.addEventListener('click', submitItemsSearch);
+    for (const el of view.querySelectorAll('[data-items-search-clear]')) {
+      el.addEventListener('click', clearItemsSearch);
+    }
+    for (const el of view.querySelectorAll('[data-items-pg]')) {
+      el.addEventListener('click', () => {
+        const a = el.dataset.itemsPg;
+        if (a === 'prev') gotoItemsPage(state.itemsPage - 1);
+        else if (a === 'next') gotoItemsPage(state.itemsPage + 1);
+        else gotoItemsPage(Number(a));
+      });
     }
     // 卡片行内操作（BUG-20260913-004：按钮迁入版本卡片，按所在卡片版本绑定；
     // .rel-list 点击处理已忽略 button 点击，点按钮不会改变选中态）
@@ -1650,7 +1787,8 @@ const ATBBuild = (() => {
     }
     q('#bldPushCancel')?.addEventListener('click', () => { state.pushConfirm = null; render(); });
     q('#bldPushGo')?.addEventListener('click', doPush);
-    // REQ-20260915-002 产品发布入口：merged 版本详情「创建发布 / 查看发布记录」
+    // REQ-20260915-002 产品发布入口（REQ-20260915-003 迁入版本卡片按钮区）：
+    // merged 卡片「创建发布」打开核对弹层（按所在卡片版本绑定）；「查看发布记录」跳发布模块产品页签
     for (const el of view.querySelectorAll('[data-ver-release]')) {
       el.addEventListener('click', () => openReleaseConfirm(el.dataset.verRelease));
     }
@@ -1685,9 +1823,13 @@ const ATBBuild = (() => {
     submitLogSearch, clearLogSearch, markMatch,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
+    // REQ-20260915-003：关联条目联合列表搜索 / 分页纯函数与行为接缝（测试与交互）
+    filterVersionItems, paginateItems, submitItemsSearch, clearItemsSearch, gotoItemsPage,
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
     // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
     openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,
+    // REQ-20260915-003：切换选中版本（清空关联列表搜索并回第一页）
+    selectVersion,
     // REQ-20260915-002：产品发布入口行为接缝（测试与跨模块跳转）
     openReleaseConfirm, doCreateRelease, gotoProductRelease,
     getCandidates: () => state.createPanel?.candidates || [],

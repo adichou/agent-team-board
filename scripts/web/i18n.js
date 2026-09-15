@@ -68,6 +68,22 @@ const EN = {
   '搜索': 'Search',
   '清除': 'Clear',
   '搜索中…': 'Searching commits…',
+  // REQ-20260915-003 构建模块：产品发布入口迁入版本卡片 + 关联条目联合列表搜索分页 +
+  // 新建版本上移页签工具行（计数 / 页码 / 无匹配空态动态拼接见 EN_DYNAMIC；
+  // 「清空」值不用 Clear/Clear search——与「清除」「清除搜索」的受检唯一值口径错开）
+  '清空': 'Reset',
+  '上一页': 'Previous page',
+  '下一页': 'Next page',
+  '关联条目与 commit': 'Linked items & commits',
+  '搜索关联条目与 commit': 'Search linked items & commits',
+  '搜单号 / 标题 / commit…': 'Search item id / title / commit…',
+  '关联条目分页': 'Linked items pagination',
+  '创建发布': 'Create release',
+  '查看发布记录': 'View release records',
+  '请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）': 'Merge into main first — only merged version plans can start a release',
+  '从本版本创建产品发布草稿（自动带入条目与冻结信息）': 'Create a product release draft from this version (items and frozen info included automatically)',
+  '打开发布模块的产品发布页签查看运行记录': 'Open the Product releases tab of the Release module to view run records',
+  '暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单': 'No linked items yet: click "＋ Add items" to include requirement or bug items',
   // REQ-20260911-009 设置页「Git 工作流」分区（dev 分支初始化）
   'Git 工作流': 'Git workflow',
   '正在获取 Git 状态…': 'Loading Git status…',
@@ -910,6 +926,10 @@ const EN_DYNAMIC = {
   '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
   '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',
   '已到末尾 · 共 ◇ 条匹配': 'End of results · $1 matches in total',
+  // REQ-20260915-003 构建模块关联条目联合列表：搜索计数 / 页码 / 无匹配空态（动态拼接）
+  '匹配 ◇ / 共 ◇ 条': '$1 of $2 matched',
+  '第 ◇ / ◇ 页': 'Page $1 of $2',
+  '没有匹配的关联条目（关键词：◇）': 'No matching linked items (keyword: $1)',
   // BUG-20260914-017：分支同步 toast 拼接句（成功 / 部分失败 × 有无 main 跳过注记四种形态；
   // main 注记按服务端 skipped 数据拼接，本地无 main 时不带注记维持原口径）
   '✓ 已同步远端：fetch 完成，已推送 ◇ → ◇；main 已跳过，请通过发布流程推送': '✓ Remote synced: fetch done, pushed $1 → $2; main skipped — push it through the release process',
