@@ -883,6 +883,19 @@ const EN = {
   '本次操作没有新的管理变更，不制造空提交。': 'No new management changes from this operation; no empty commit is created.',
   '正在提交本次操作更新的管理记录（路径限定提交，不使用全量 git add）…': 'Committing the management records updated by this operation (path-scoped commit, no blanket git add)…',
   '失败提示已持久化：刷新页面后仍可见，重试成功后清除。': 'The failure notice is persisted: it stays visible after refresh and clears once a retry succeeds.',
+  // BUG-20260915-008 核验/确认异步任务进度（卡片与侧拉面板：阶段进度条 + 运行时长/超时上限）
+  '核验': 'verify',
+  '补交': 'supplement',
+  '测试': 'test',
+  '恢复队列': 'resume queue',
+  '正在核验': 'Verifying',
+  '正在补交': 'Committing supplement',
+  '测试运行中': 'tests running',
+  '正在恢复队列': 'resuming queue',
+  '服务重启': 'server restart',
+  '未知错误': 'unknown error',
+  '任务完成但未返回结论': 'Task finished without a conclusion',
+  '确认任务仍在运行：进度见任务页卡片，完成后结论自动回填（本面板稍后自动刷新）': 'The confirmation task is still running: see the progress on the tasks-page card; the conclusion is filled in automatically when it finishes (this panel refreshes shortly)',
 };
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
@@ -1011,6 +1024,11 @@ const EN_DYNAMIC = {
   '◇◇ 次尝试 · ◇◇': '$1$2 attempts · $3$4',
   '◇。看板服务版本过旧：请在终端运行 atb serve 自动重启过旧服务，然后刷新页面': '$1. The board service is outdated: run "atb serve" in a terminal to restart it, then reload this page',
   '◇。看板服务版本过旧：请在终端运行 atb serve 自动重启过旧服务，然后重试': '$1. The board service is outdated: run "atb serve" in a terminal to restart it, then retry',
+  // BUG-20260915-008 核验/确认异步任务进度与终态反馈（动态拼接）
+  '⟳ ◇ · 已运行 ◇ 秒 / 超时上限 ◇ 秒': '⟳ $1 · running $2 s / timeout limit $3 s',
+  '核验未启动：◇': 'Verification not started: $1',
+  '核验已中断：◇，请重新核验': 'Verification interrupted: $1 — please verify again',
+  '确认已中断：◇，请重新确认': 'Confirmation interrupted: $1 — please confirm again',
   '◇已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。': '$1 is planned; development processes the oldest first automatically. Before it starts, "Remove from plan" reverts it to accepted.',
   '◇详情打开中（右侧抽屉正展示此条目）': '$1 detail open (this item is shown in the right drawer)',
   '◇（续跑/重试计入）': '$1 (resumes/retries included)',

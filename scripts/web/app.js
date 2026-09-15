@@ -3283,8 +3283,42 @@ function confirmReasonLayeredHtml(c) {
   </div>`;
 }
 
+// BUG-20260915-008 核验/确认任务运行态文案与阶段进度（卡片 / 侧拉面板共用）：
+// 阶段口径 = 核验 → 补交 → 测试 → 恢复队列（重新核验只走 核验 → 测试），
+// 时长实时由 startedAt 计算（随 2 秒轮询重渲染刷新），不额外发请求。
+const CONFIRM_TASK_STAGES = {
+  continue: [['verify', '核验'], ['supplement', '补交'], ['test', '测试'], ['restore', '恢复队列']],
+  verify: [['verify', '核验'], ['test', '测试']],
+};
+const CONFIRM_TASK_STAGE_TEXT = { verify: '正在核验', supplement: '正在补交', test: '测试运行中', restore: '正在恢复队列' };
+
+function confirmTaskElapsedText(task) {
+  const startedMs = Date.parse(task.startedAt || '');
+  if (!Number.isFinite(startedMs)) return '—';
+  return String(Math.max(0, Math.floor((Date.now() - startedMs) / 1000)));
+}
+
+function confirmTaskHtml(task) {
+  if (!task || task.status !== 'running') return '';
+  const defs = CONFIRM_TASK_STAGES[task.action] || CONFIRM_TASK_STAGES.verify;
+  const idx = defs.findIndex(([k]) => k === task.stage);
+  const stages = defs.map(([k, label], i) => {
+    const mark = i < idx ? '✓' : (i === idx ? '●' : '○');
+    const cls = i === idx ? 'cur' : (i < idx ? 'done' : 'todo');
+    return `<span class="task-stage ${cls}">${label}${mark}</span>`;
+  }).join('');
+  const stageText = CONFIRM_TASK_STAGE_TEXT[task.stage] || '处理中';
+  const elapsed = confirmTaskElapsedText(task);
+  const limitSec = String(Math.round((task.timeoutMs || 600_000) / 1000));
+  return `<div class="confirm-task" role="status">
+    <span class="task-stages">${stages}</span>
+    <span class="task-elapsed">⟳ ${stageText} · 已运行 ${elapsed} 秒 / 超时上限 ${limitSec} 秒</span>
+  </div>`;
+}
+
 function confirmCardHtml(c) {
-  const busy = state.confirms.busyId === c.itemId;
+  const taskRunning = !!(c.task && c.task.status === 'running');
+  const busy = state.confirms.busyId === c.itemId || taskRunning;
   const isDev = c.kind === 'develop';
   const badge = c.partialBadge && isDev
     ? '<span class="flag confirm-flag" title="部分提交，开发未完成——文档或部分文件提交不构成完成">部分提交，开发未完成</span>'
@@ -3318,6 +3352,7 @@ function confirmCardHtml(c) {
     ${reasonHtml}
     <p class="confirm-counts">${esc(bodyLine)}</p>
     ${verifyLine}
+    ${confirmTaskHtml(c.task)}
     ${c.keepNote ? `<p class="confirm-keep-note muted small">保持挂起说明：${esc(c.keepNote)}</p>` : ''}
     <div class="confirm-acts">
       <button type="button" class="btn small" data-confirm-panel="${esc(c.itemId)}" title="${isDev ? '打开侧拉面板：核对文件、差异与核验结论后处理' : '打开侧拉面板：查看问题并逐项作答后确认'}">查看并确认</button>
@@ -3345,7 +3380,9 @@ function renderConfirmArea() {
     area.replaceChildren();
     return;
   }
-  const sig = JSON.stringify([items.map((c) => [c.itemId, c.state, c.reason, c.verify?.lastCheckAt || '', c.keepNote || '', c.committedCount ?? c.answered ?? 0, c.pendingCount ?? (Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0), c.attributedCount ?? null, c.uncertainCount ?? null, c.scopeUnknown ?? null]), state.confirms.busyId]);
+  const sig = JSON.stringify([items.map((c) => [c.itemId, c.state, c.reason, c.verify?.lastCheckAt || '', c.keepNote || '', c.committedCount ?? c.answered ?? 0, c.pendingCount ?? (Array.isArray(c.unansweredRequired) ? c.unansweredRequired.length : 0), c.attributedCount ?? null, c.uncertainCount ?? null, c.scopeUnknown ?? null,
+    // BUG-20260915-008：任务运行态（阶段/状态/已运行秒数）进签名——进度随轮询重渲染
+    c.task && c.task.status === 'running' ? [c.task.status, c.task.action, c.task.stage, confirmTaskElapsedText(c.task)] : null]), state.confirms.busyId]);
   if (sig === state.confirms.sig && area.dataset.rendered === '1') return;
   state.confirms.sig = sig;
   area.dataset.rendered = '1';
@@ -3371,29 +3408,68 @@ function confirmQueueBannerHtml(kind) {
   return `<div class="notice warn confirm-queue-banner">${esc(c.kindLabel)}队列：已暂停 · 阻塞于 <span class="cid" data-goto-item="${esc(c.itemId)}" role="button">${esc(c.itemId)}</span> · ${esc(c.blockTypeLabel)}${reasonPart}</div>`;
 }
 
-// 卡片「重新核验」：服务端重算剩余路径 + 跑测试；期间按钮禁用防重复
+// BUG-20260915-008 卡片「重新核验」改异步任务流：POST 立即返回任务句柄，服务端异步
+// 跑核验与测试（事件循环保持响应，面板轮询与其他操作不被冻结）；此处轮询任务到终态
+// 后回填结论。期间按钮由卡片运行态禁用（互斥防重复触发），进度条随主轮询刷新。
 async function verifyConfirmItem(id, btn) {
   if (btn?.disabled || state.confirms.busyId) return;
-  state.confirms.busyId = id;
-  renderConfirmArea();
+  let r;
   try {
-    const r = await api(`/api/confirms/${encodeURIComponent(id)}/verify`, {
+    r = await api(`/api/confirms/${encodeURIComponent(id)}/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
-    if (r.ok) toast(`✓ ${id} 核验通过：提交完整${r.test && !r.test.skipped ? '，测试通过' : ''}`);
-    else toast(`核验未通过：${(r.reasons || [])[0] || '见卡片与面板明细'}`, true);
-    // 重新核验 = 人工重新核对最新差异：内容/范围变化的拦截解除，确认绑定最新所见
-    confirmSide.needsReverify = false;
-    await refreshConfirms(true);
-    if (confirmSide.open && confirmSide.id === id) await loadConfirmDetail(true);
   } catch (e) {
-    toast(`核验失败：${e.message}`, true);
-  } finally {
-    state.confirms.busyId = null;
-    renderConfirmArea();
+    toast(`核验未启动：${e.message}`, true);
+    return;
   }
+  if (!r.accepted) {
+    toast(`核验未启动：${r.error || '未知原因'}`, true);
+    await refreshConfirms(true);
+    return;
+  }
+  await refreshConfirms(true); // 立即渲染运行中进度条
+  if (confirmSide.open && confirmSide.id === id) await loadConfirmDetail(true); // 面板同步进入运行态
+  const task = await watchConfirmTask(id);
+  if (!task) return; // 观察超时：进度条与结论由主轮询自然回填，不再叠 toast
+  if (task.status === 'failed') {
+    toast(`核验失败：${task.error || '未知错误'}`, true);
+  } else if (task.status === 'interrupted') {
+    toast(`核验已中断：${task.reason || '服务重启'}，请重新核验`, true);
+  } else {
+    const res = task.result || {};
+    if (res.ok) toast(`✓ ${id} 核验通过：提交完整${res.test && !res.test.skipped ? '，测试通过' : ''}`);
+    else toast(`核验未通过：${(res.reasons || [])[0] || '见卡片与面板明细'}`, true);
+  }
+  // 重新核验 = 人工重新核对最新差异：内容/范围变化的拦截解除，确认绑定最新所见
+  confirmSide.needsReverify = false;
+  await refreshConfirms(true);
+  if (confirmSide.open && confirmSide.id === id) await loadConfirmDetail(true);
+}
+
+// 轮询核验/确认任务至终态（done / failed / interrupted）；服务瞬断继续重试，
+// 观察窗口 = 任务超时上限 + 余量。返回 null 表示仍在运行（由主轮询接管呈现）。
+async function watchConfirmTask(id, timeoutMs = 620_000) {
+  const deadline = Date.now() + timeoutMs;
+  let missingSince = 0;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    let task = null;
+    try {
+      const r = await api(`/api/confirms/${encodeURIComponent(id)}/task`);
+      task = r.task || null;
+    } catch { task = null; }
+    if (!task) {
+      // 任务句柄尚未落账（刚触发）或服务瞬断：10 秒内容忍轮询，之后放弃观察
+      if (!missingSince) missingSince = Date.now();
+      else if (Date.now() - missingSince > 10_000) return null;
+      continue;
+    }
+    missingSince = 0;
+    if (task.status !== 'running') return task;
+  }
+  return null;
 }
 
 /* ---------- 挂起确认侧拉面板（统一入口：提交核验 / 分析表单按阻塞类型分形态） ---------- */
@@ -3467,7 +3543,9 @@ function renderConfirmForm(d) {
     ? '核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列'
     : '逐项作答后确认：答案回传当前条目继续分析，未决问题清零才处理下一条';
   const form = $('#confirmForm');
-  const busy = confirmSide.busy || state.confirms.busyId === d.itemId;
+  // BUG-20260915-008：开发侧任务运行中面板同样进入忙态（服务端互斥 + 按钮防重复）
+  const busy = confirmSide.busy || state.confirms.busyId === d.itemId
+    || (d.kind === 'develop' && d.task && d.task.status === 'running');
   const resolved = d.state !== 'waiting';
   if (d.kind === 'develop') {
     // BUG-20260915-003：计数与文件表 / 最近核验同源；按归属分组展示候选文件（本单可归属 /
@@ -3534,6 +3612,7 @@ function renderConfirmForm(d) {
       </label>
       <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
       <p class="confirm-scope-summary" id="confirmScopeSummary"></p>
+      ${d.task ? confirmTaskHtml(d.task) : ''}
       ${resolved ? '' : '<p class="muted small confirm-btn-guide">保持挂起＝暂不处理，说明留档，现场与队列暂停保留 · 重新核验＝只检查不改现场，重核提交状态并跑测试，刷新「最近核验」结论 · 确认并继续＝授权补交剩余路径＋复验测试＋恢复队列</p>'}
       <footer class="modal-foot">
         <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
@@ -3777,11 +3856,34 @@ async function confirmContinueAction(d) {
         include,
       }
       : { version: d.questionsVersion };
-    const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/continue`, {
+    // BUG-20260915-008：开发侧确认改异步任务——POST 立即返回任务句柄（补交后的测试复验
+    // 不再冻结面板），此处轮询至终态后按结果回填；分析侧维持同步确认。
+    let r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/continue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (isDev && r.accepted) {
+      await refreshConfirms(true); // 卡片/面板立即显示运行中进度
+      const task = await watchConfirmTask(d.itemId);
+      if (!task) {
+        confirmPanelMsg('确认任务仍在运行：进度见任务页卡片，完成后结论自动回填（本面板稍后自动刷新）');
+        return;
+      }
+      if (task.status === 'failed') {
+        confirmPanelMsg(`确认失败：${task.error || '未知错误'}（可重试）`, true);
+        await refreshConfirms(true);
+        await loadConfirmDetail(true);
+        return;
+      }
+      if (task.status === 'interrupted') {
+        confirmPanelMsg(`确认已中断：${task.reason || '服务重启'}，请重新确认`, true);
+        await refreshConfirms(true);
+        await loadConfirmDetail(true);
+        return;
+      }
+      r = task.result || { ok: false, reasons: ['任务完成但未返回结论'] };
+    }
     if (r.ok) {
       if (isDev) {
         const n = (r.supplementCommits || []).length;

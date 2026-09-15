@@ -166,6 +166,40 @@ export function archivedRounds(dataDir, itemId) {
   return (readConfirms(dataDir).archived[itemId] || []).length;
 }
 
+// ---------- BUG-20260915-008 核验/确认异步任务账本（服务进程运行态持久化） ----------
+// <dataDir>/confirms/tasks.json → { version, tasks: { [itemId]: task } }（每条目仅最近一次任务）。
+// 背景：verify/continue 的测试复验原先用 spawnSync 同步执行，测试期间整个服务事件循环
+// 停摆（面板冻结数分钟）。改异步后任务运行态落此账本：前端 2 秒轮询读进度（阶段/开始
+// 时间/超时上限）；同条目互斥以本账本 running 状态为准；服务重启时遗留 running 任务由
+// 恢复逻辑标记 interrupted——不出现「测试跑完但确认没落账」的中间态（挂起保持 waiting）。
+function confirmTasksFile(dataDir) {
+  return path.join(dataDir, 'confirms', 'tasks.json');
+}
+
+export function readConfirmTasks(dataDir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(confirmTasksFile(dataDir), 'utf8'));
+    if (j && typeof j === 'object' && j.tasks && typeof j.tasks === 'object') {
+      return { version: 1, tasks: j.tasks };
+    }
+  } catch { /* 缺失/损坏：视为无任务 */ }
+  return { version: 1, tasks: {} };
+}
+
+// 保存/覆盖单条任务（整体替换该条目任务记录；调用方保证结构合法）
+export function saveConfirmTask(dataDir, task) {
+  const ledger = readConfirmTasks(dataDir);
+  ledger.tasks[task.itemId] = task;
+  ensureLedger(dataDir);
+  writeJsonAtomic(confirmTasksFile(dataDir), ledger);
+  return ledger.tasks[task.itemId];
+}
+
+// 条目最近一次任务（running / done / failed / interrupted）；无任务返回 null
+export function confirmTaskOf(dataDir, itemId) {
+  return readConfirmTasks(dataDir).tasks[itemId] || null;
+}
+
 // ---------- 分析问题口径 ----------
 
 export function unansweredRequired(rec) {

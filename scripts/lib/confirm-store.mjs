@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   AtbError, resolveItemDir, readStatus, actor,
 } from './core.mjs';
@@ -151,6 +151,7 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
 
 // 项目测试运行（补交后验证「测试验证的是提交后的完整内容」）：package.json 有 scripts.test
 // 才运行；无测试脚本按纯文档/无测试口径跳过（不凭空要求）。
+// 同步版：CLI / 直连调用方语义（服务端 HTTP 路径已改用异步版，见 runProjectTestsAsync）。
 export function runProjectTests(projectRoot, timeoutMs = 600_000) {
   let pkg = null;
   try {
@@ -172,6 +173,70 @@ export function runProjectTests(projectRoot, timeoutMs = 600_000) {
     timedOut: r.error && r.error.code === 'ETIMEDOUT' ? true : undefined,
     tail: tail || null,
   };
+}
+
+// BUG-20260915-008 异步版：spawn 不阻塞事件循环（同步版会把整个服务冻结到测试结束，
+// 本项目全量约 4 分钟，面板轮询/操作全部停摆）。结果口径与同步版完全一致；
+// onSpawn(child) 供调用方持有子进程（优雅关停时终止，防孤儿测试进程）。
+export function runProjectTestsAsync(projectRoot, { timeoutMs = 600_000, onSpawn } = {}) {
+  let pkg = null;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+  } catch {
+    return Promise.resolve({ skipped: true, reason: '项目无 package.json，无测试脚本可运行' });
+  }
+  const cmd = pkg && pkg.scripts && pkg.scripts.test;
+  if (!cmd) return Promise.resolve({ skipped: true, reason: '项目未配置测试脚本（npm test），按声明的文件范围核验' });
+  return new Promise((resolve) => {
+    // detached + 进程组：npm 会再派生测试执行器（孙进程），超时须整组终止——只杀 npm
+    // 会留下孤儿测试进程占着 stdio 管道，close 事件等到测试自身结束才触发（假超时）。
+    const child = spawn('npm', ['test', '--silent'], {
+      cwd: projectRoot,
+      env: { ...process.env, npm_config_progress: 'false', npm_config_loglevel: 'silent' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    });
+    if (typeof onSpawn === 'function') {
+      try { onSpawn(child); } catch { /* 回调失败不影响测试执行 */ }
+    }
+    const killGroup = () => {
+      try {
+        if (process.platform === 'win32') child.kill('SIGKILL');
+        else process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        try { child.kill('SIGKILL'); } catch { /* 已退出 */ }
+      }
+    };
+    let out = '';
+    let errOut = '';
+    let timedOut = false;
+    let timer = null;
+    const tail = () => `${out}\n${errOut}`.trim().split('\n').slice(-15).join('\n').slice(0, 2000);
+    if (Number(timeoutMs) > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        killGroup();
+      }, timeoutMs);
+      if (typeof timer.unref === 'function') timer.unref();
+    }
+    child.stdout.on('data', (c) => { out += c; });
+    child.stderr.on('data', (c) => { errOut += c; });
+    child.on('error', (e) => {
+      if (timer) clearTimeout(timer);
+      resolve({ cmd: 'npm test', exitCode: null, ok: false, error: String(e.message || e), tail: tail() || null });
+    });
+    // exit（非 close）：进程退出即结算，不被孤儿孙进程持有的 stdio 管道拖住
+    child.on('exit', (code) => {
+      if (timer) clearTimeout(timer);
+      resolve({
+        cmd: 'npm test',
+        exitCode: code,
+        ok: code === 0 && !timedOut,
+        timedOut: timedOut ? true : undefined,
+        tail: tail() || null,
+      });
+    });
+  });
 }
 
 // BUG-20260915-003 统一候选范围（清单计数 / 文件表 / 核验 / 确认补交同源）：
@@ -216,7 +281,12 @@ function scopeReasons(scope) {
 // 「人工已在终端补交」在此被识别：剩余路径为空且 git 历史含本单号提交即核验通过方向。
 // BUG-20260915-003：重新核验 = 人工重新核对——指纹基线刷新为当前候选内容，其后的确认
 // 绑定最新所见（内容变化 → 确认拦截 → 重新核验 → 确认 的闭环入口）。
-export function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTests = false, by = 'human' } = {}) {
+// BUG-20260915-008：改为 async（测试复验用异步执行器，服务进程事件循环保持响应）；
+// onStage 回调上报阶段（'verify' → 'test'），testRunner 可注入替身（测试/直连调用），
+// 缺省用 runProjectTestsAsync；结果与账本口径与同步版完全一致。
+export async function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTests = false, by = 'human', onStage = null, testRunner = null } = {}) {
+  const emit = (stage) => { if (typeof onStage === 'function') { try { onStage(stage); } catch { /* 进度回调失败不影响核验 */ } } };
+  emit('verify');
   const rec = requireDevelopWaiting(dataDir, itemId);
   const run = requireRun(dataDir, rec);
   const root = projectRoot || rec.projectRoot;
@@ -226,7 +296,8 @@ export function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTests = f
     : ['无法归因核验（非 git 仓库 / 缺少预留时工作区快照）：请人工在终端核对提交后重试'];
   let test = null;
   if (scope && !paths.length && runTests) {
-    test = runProjectTests(root);
+    emit('test');
+    test = await (testRunner ? testRunner(root) : runProjectTestsAsync(root));
     if (!test.skipped && !test.ok) {
       reasons.push(`测试未通过（${test.cmd} 退出码 ${test.exitCode}）：提交后内容验证失败`);
     }
@@ -278,11 +349,16 @@ export function keepConfirm(dataDir, itemId, { note = '', by = 'human' } = {}) {
 // 4) 完整性 + 测试复验：确认范围内路径清零且（有测试脚本时）npm test 通过才放行；
 // 5) 全过 → 记录 resolved（补交 hash 落账），返回 batchId 供调用方恢复队列。
 // 任一失败：保持挂起并逐项说明原因（可重新核验 / 修正后重试）。幂等：已 resolved 直接成功返回。
-export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fingerprint = null, note = '', by = 'human', runTests = true, include = null } = {}) {
+// BUG-20260915-008：改为 async（测试复验用异步执行器）+ onStage 阶段回调
+// （'verify' → 'supplement' → 'test' → 'restore'，未走到的阶段不上报）；
+// testRunner 可注入替身，缺省用 runProjectTestsAsync；结果与账本口径与同步版完全一致。
+export async function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fingerprint = null, note = '', by = 'human', runTests = true, include = null, onStage = null, testRunner = null } = {}) {
+  const emit = (stage) => { if (typeof onStage === 'function') { try { onStage(stage); } catch { /* 进度回调失败不影响确认 */ } } };
   const rec = requireDevelopWaiting(dataDir, itemId);
   if (rec.state === 'resolved') {
     return { ok: true, idempotent: true, itemId, batchId: rec.batchId };
   }
+  emit('verify');
   const root = projectRoot || rec.projectRoot;
   if (!root) throw new AtbError('确认补交需要项目根目录（projectRoot）参数');
   const run = requireRun(dataDir, rec);
@@ -328,6 +404,7 @@ export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fin
   // 授权补交（无指纹硬错误时也尝试补交剩余路径——人工已明确确认归属）
   let supplement = null;
   if (!reasons.length && scope != null) {
+    emit('supplement');
     supplement = gitFlow.supplementCommitForRun({ dataDir, projectRoot: root, run, include: [...includeSet] });
     if (supplement.status === 'failed') {
       reasons.push(`补交失败：${supplement.reason}`);
@@ -345,7 +422,8 @@ export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fin
       const shown = left.slice(0, 5).map((x) => x.path).join('、');
       reasons.push(`仍有 ${left.length} 个确认范围内路径未入库：${shown}${left.length > 5 ? ` 等 ${left.length} 个` : ''}`);
     } else if (runTests) {
-      test = runProjectTests(root);
+      emit('test');
+      test = await (testRunner ? testRunner(root) : runProjectTestsAsync(root));
       if (!test.skipped && !test.ok) {
         reasons.push(`测试未通过（${test.cmd} 退出码 ${test.exitCode}）：提交后内容验证失败`);
       }
@@ -364,6 +442,7 @@ export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fin
     return { ok: false, itemId, reasons };
   }
   const nowIso = new Date().toISOString();
+  emit('restore');
   if (supplement && Array.isArray(supplement.commits) && supplement.commits.length) {
     rec.supplement = { commits: supplement.commits, at: nowIso, by };
   } else if (!rec.supplement) {
@@ -412,6 +491,18 @@ function requireRun(dataDir, rec) {
     throw new AtbError(`找不到挂起关联的运行记录：${rec.runId}（dispatch/runs/）`);
   }
   return run;
+}
+
+// BUG-20260915-008 运行中任务中断留痕（服务重启恢复时调用）：任务账本已标记 interrupted，
+// 确认记录同步留痕事件——挂起保持 waiting、结果未落账的状态明确可辨（人工可重新核验/确认），
+// 不出现「测试跑完但确认没落账」的中间态。无确认记录（已闭环后遗留）返回 false 不动作。
+export function noteConfirmTaskInterrupted(dataDir, itemId, note) {
+  const rec = confirmOf(dataDir, itemId);
+  if (!rec) return false;
+  rec.events.push(event('task-interrupted', 'system', cleanText(note).slice(0, 120) || '服务重启，运行中的核验/确认任务已中断'));
+  saveConfirmRecord(dataDir, itemId, rec);
+  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  return true;
 }
 
 // ---------- 分析侧：声明 / 作答 / 确认 ----------

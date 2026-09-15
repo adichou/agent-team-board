@@ -3228,6 +3228,20 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .confirm-verify.bad { color: var(--warn); }
 .confirm-verify-reason { margin: 2px 0 0 14px; font-size: 12px; color: var(--warn); }
 .confirm-keep-note { margin: 0; }
+/* BUG-20260915-008 核验/确认异步任务进度（阶段进度条 + 运行时长） */
+.confirm-task {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  margin: 0; padding: 4px 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  font-size: 12px;
+}
+.confirm-task .task-stages { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.confirm-task .task-stage { white-space: nowrap; }
+.confirm-task .task-stage.done { color: var(--muted); }
+.confirm-task .task-stage.cur { color: var(--primary); font-weight: 600; }
+.confirm-task .task-stage.todo { color: var(--muted); opacity: 0.7; }
+.confirm-task .task-elapsed { color: var(--primary); white-space: nowrap; }
 .confirm-acts { display: flex; gap: 6px; flex-wrap: wrap; }
 .confirm-queue-banner { margin-bottom: 6px; }
 .flag.confirm-flag {
