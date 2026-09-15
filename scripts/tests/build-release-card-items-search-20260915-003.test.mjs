@@ -142,12 +142,16 @@ t('R2 状态口径逐卡 + 按卡片版本绑定：draft/merging/failed 创建�
   assert.match(rcInner, /创建产品发布（BLD-MERGED）/, 'merged 打开既有核对弹层（目标为所在卡片版本）');
   assert.doesNotMatch(rcInner, /创建产品发布（BLD-DRAFT）/, '不误用右侧选中版本');
   assert.match(rcInner, /rel-card sel" data-ver-id="BLD-DRAFT"/, '选中态保持不变');
-  // 查看发布记录：派发 atb:goto-view（view=release, product=true）
-  let fired = null;
-  h.sandbox.window.dispatchEvent = (e) => { fired = e; };
-  h.run(`window.ATBBuild.gotoProductRelease()`);
-  assert.ok(fired && fired.type === 'atb:goto-view' && fired.detail.view === 'release' && fired.detail.product === true,
-    '查看发布记录派发跳转产品发布页签事件');
+  // BUG-20260915-014：查看发布记录不再派发 atb:goto-view（旧跳转命中 HIDDEN_VIEWS 回落，
+  // 即缺陷根因）——改为就地激活所在卡片版本的详情发布页签
+  const fired = [];
+  h.sandbox.window.dispatchEvent = (e) => { fired.push(e); };
+  h.run(`window.ATBBuild.openReleaseTab('BLD-MERGED')`);
+  const relInner = h.inner();
+  assert.ok(!fired.some((e) => e.type === 'atb:goto-view'), '不再派发跨模块跳转事件');
+  assert.match(relInner, /rel-card sel" data-ver-id="BLD-MERGED"/, '查看发布记录切换到所在卡片版本');
+  assert.match(relInner, /data-detail-tab="release"[^>]*aria-selected="true"/, '就地激活发布页签');
+  assert.match(relInner, /bld-rel-pane/, '发布区就地渲染');
   // 卡片按钮静态契约：bindCommon 循环绑定 data-ver-release / data-ver-release-view
   assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release\]'\)/, 'bindCommon 循环绑定 data-ver-release');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release-view\]'\)/, 'bindCommon 循环绑定 data-ver-release-view');
