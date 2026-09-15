@@ -157,7 +157,7 @@ export function createVersion(dataDir, { name, items, by = 'board' } = {}) {
     items: normalized,
     createdAt: nowIso(),
     updatedAt: nowIso(),
-    merge: { startedAt: null, finishedAt: null, error: null, baseBranch: null },
+    merge: { startedAt: null, finishedAt: null, error: null, baseBranch: null, mainSha: null },
     by,
   };
   return writeVersion(dataDir, v);
@@ -240,7 +240,9 @@ export function beginMerge(dataDir, id, { baseBranch = null, by = 'board' } = {}
 }
 
 // 逐条目结果落盘：全成功 → merged；任一失败 → failed（成功条目保持已合并，重试只补未合并）。
-export function finishMerge(dataDir, id, { results = [], by = 'board' } = {}) {
+// REQ-20260915-002：可选 mainSha 记录合并完成后的 main 分支头（新计划作为冻结证据；
+// 旧计划无此字段时按「候选 + 额外提交」口径展示，不用时间戳或登记时 tip 代替冻结证据）。
+export function finishMerge(dataDir, id, { results = [], mainSha = null, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status !== 'merging') throw new BuildConflictError('版本不在合并中，无法写入合并结果');
   const byItem = new Map(results.map((r) => [String(r.itemId), r]));
@@ -258,6 +260,7 @@ export function finishMerge(dataDir, id, { results = [], by = 'board' } = {}) {
   const allOk = v.items.every((x) => x.mergedAt);
   v.status = allOk ? 'merged' : 'failed';
   v.merge.finishedAt = nowIso();
+  if (allOk && mainSha && /^[0-9a-f]{40}$/i.test(String(mainSha))) v.merge.mainSha = String(mainSha).toLowerCase();
   const failedItems = v.items.filter((x) => x.mergeError);
   v.merge.error = allOk ? null : failedItems.map((x) => `${x.itemId}：${x.mergeError}`).join('；').slice(0, 400);
   v.by = by;

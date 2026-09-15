@@ -8130,6 +8130,18 @@ window.addEventListener('atb:open-item', (e) => {
   }
 });
 
+// REQ-20260915-002：跨模块跳转到指定视图（构建模块「查看发布记录」→ 发布模块产品发布页签）。
+// detail.view 为目标视图；detail.product 为 true 时发布模块切到「产品发布」二级页签。
+window.addEventListener('atb:goto-view', (e) => {
+  const view = e.detail && e.detail.view;
+  if (!view || !VIEWS.includes(view) || view === state.view) {
+    if (view && view === state.view && e.detail && e.detail.product) window.ATBRelease?.showProduct?.();
+    return;
+  }
+  setView(view);
+  if (e.detail && e.detail.product) window.ATBRelease?.showProduct?.();
+});
+
 boot();
 
 // REQ-20260907-008：讨论模块头部新建按钮删除后，window.ATBApp.openNewModal 接缝无消费者，已移除；

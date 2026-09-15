@@ -3386,3 +3386,14 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border-top-color: transparent; border-radius: 50%; animation: mgt-spin 0.8s linear infinite; vertical-align: -2px; }
 @keyframes mgt-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .mgt .spin { animation: none; } }
+
+/* ===== REQ-20260915-002 产品发布（PREL）：目标卡 / 官网配置条 / 构建模块发布入口 ===== */
+.rel-targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+.rel-target-card { border: 1px solid var(--border, #d0d7de); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.rel-target-card .meta.small a { word-break: break-all; }
+.rel-prod-config { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; padding: 8px 10px;
+  border: 1px dashed var(--border, #d0d7de); border-radius: 8px; }
+.rel-prod-config.rel-empty-mini { display: block; }
+.rel-prod-config code { word-break: break-all; }
+.bld-release-block { margin-top: 10px; }
+.bld-release-block .card-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }

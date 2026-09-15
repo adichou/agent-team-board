@@ -58,6 +58,8 @@ const ATBBuild = (() => {
     mgtSubmitting: null, // REQ-20260914-007：管理记录提交进行中的版本 id（合并请求尾段 / 重试提交）
     deleteConfirm: null, // { verId } REQ-20260913-004 删除确认弹窗
     deleteBusy: false,
+    // REQ-20260915-002 产品发布：从已合并版本创建发布（弹层仅核对发行版本号，其余自动带入）
+    releaseConfirm: null, // { verId, version, busy, error }
     branches: null,      // /api/build/branches 响应
     branchesPhase: 'idle', // idle | loading | error
     branchesError: null,
@@ -858,6 +860,87 @@ const ATBBuild = (() => {
     }
   }
 
+  /* ---------- REQ-20260915-002 产品发布入口 ---------- */
+
+  // 从已合并版本创建发布：弹层仅核对发行版本号（BLD 信息 / 条目 / 冻结事实由服务端自动带入）
+  function openReleaseConfirm(verId) {
+    const v = verId ? findVersion(verId) : selVersion();
+    if (!v) return;
+    if (v.status !== 'merged') {
+      toast('仅已合并（merged）的版本计划可创建发布：请先完成「合并入 main」', true);
+      return;
+    }
+    state.releaseConfirm = { verId: v.id, version: '', busy: false, error: null };
+    render();
+  }
+
+  function gotoProductRelease() {
+    window.dispatchEvent?.(new CustomEvent('atb:goto-view', { detail: { view: 'release', product: true } }));
+  }
+
+  async function doCreateRelease() {
+    const rc = state.releaseConfirm;
+    const view = $('#buildView');
+    const v = findVersion(rc?.verId);
+    if (!v || rc.busy) return;
+    const version = (view?.querySelector('#bldRelVersion')?.value || rc.version || '').trim();
+    if (!version) {
+      state.releaseConfirm.error = '请填写发行版本号（如 1.2.0）';
+      render();
+      return;
+    }
+    rc.version = version;
+    rc.busy = true;
+    rc.error = null;
+    render();
+    try {
+      const sep = state.project ? `?project=${encodeURIComponent(state.project)}` : '';
+      const r = await fetch(`/api/product-release/from-build${sep}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bldId: v.id, version }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `创建失败（${r.status}）`);
+      state.releaseConfirm = null;
+      toast(`✓ 已创建产品发布 ${data.run?.id || ''}（草稿）：请到发布模块「产品发布」预检并启动`);
+      gotoProductRelease();
+    } catch (e) {
+      rc.busy = false;
+      rc.error = e.message;
+      render();
+    }
+  }
+
+  function renderReleaseConfirm() {
+    const rc = state.releaseConfirm;
+    if (!rc) return '';
+    const v = findVersion(rc.verId);
+    if (!v) { state.releaseConfirm = null; return ''; }
+    return `
+      <div class="rel-modal-wrap" id="bldReleaseWrap" role="dialog" aria-label="创建产品发布">
+        <div class="rel-modal">
+          <h3>创建产品发布（${esc(v.id)}）</h3>
+          <div class="rel-modal-body">
+            <p>版本「<strong>${esc(v.name || v.id)}</strong>」已合并 main，将创建产品发布草稿：</p>
+            <ul>
+              <li>自动带入：产品、${esc(v.id)}、版本名称与描述、${v.items.length} 个关联条目与 commit、合并证据</li>
+              <li>发布目标：Web App 与官网/用户文档（两个必备目标）；源码 main/dev 双分支原子推送为必经前置</li>
+              <li>构建命令、产物目录与本机部署环境自动识别配置，无需填写</li>
+            </ul>
+            <label class="field">发行版本号（与版本显示名分开）
+              <input id="bldRelVersion" value="${esc(rc.version)}" placeholder="1.2.0（实际对外发行号）"></label>
+            ${rc.error ? `<p class="rel-form-err" role="alert">${esc(rc.error)}</p>` : ''}
+            <p class="muted small">创建即冻结 main/dev 分支头与远端目标；预检通过并预览计划后才启动执行。</p>
+          </div>
+          <footer class="modal-foot">
+            <button type="button" class="btn" id="bldRelCancel"${rc.busy ? ' disabled' : ''}>取消</button>
+            <button type="button" class="btn primary" id="bldRelGo"${rc.busy ? ' disabled' : ''}>${rc.busy ? '创建中…' : '创建发布草稿'}</button>
+          </footer>
+        </div>
+      </div>`;
+  }
+
   /* ---------- 分支浏览与同步 ---------- */
 
   // BUG-20260914-011：与远端同步 = 先 fetch 再推送除 main 外的本地分支（服务端 syncRemote
@@ -1086,6 +1169,10 @@ const ATBBuild = (() => {
       ? { status: 'submitting' }
       : (v.mgtCommit || null);
     const mgtBlock = v.status === 'merged' || mgt ? mgtBlockHtml(mgt, v.id) : '';
+    // REQ-20260915-002 产品发布操作区：仅 merged 可创建（未合并禁用并说明前置条件）；查看发布记录跳发布模块产品页签
+    const releaseLocked = v.status !== 'merged';
+    const releaseBtn = `<button type="button" class="btn small primary bld-ver-release" data-ver-release="${esc(v.id)}"${releaseLocked ? ` disabled title="仅已合并（merged）的版本计划可创建发布：请先完成「合并入 main」"` : ` title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"`} aria-label="创建发布 ${esc(v.id)}">创建发布</button>`;
+    const releaseViewBtn = `<button type="button" class="btn small bld-ver-release-view" data-ver-release-view="${esc(v.id)}" title="打开发布模块的产品发布页签查看运行记录">查看发布记录</button>`;
     return `
       <div class="rel-detail">
         <header class="rel-detail-head">
@@ -1103,6 +1190,11 @@ const ATBBuild = (() => {
         </div>
         ${mergeState}
         ${mgtBlock}
+        <div class="bld-items bld-release-block">
+          <div class="bld-items-head"><strong>产品发布</strong></div>
+          <p class="muted small">从已合并版本发起跨仓库产品发布：Web App + 官网与文档两个必备目标，源码 main/dev 双分支同步为必经前置。</p>
+          <div class="card-acts">${releaseBtn}${releaseViewBtn}</div>
+        </div>
       </div>`; // BUG-20260913-004：原 footer.rel-acts（AI 完善 / 合并入 main）已迁入左侧版本卡片，详情不再重复渲染
   }
 
@@ -1394,7 +1486,8 @@ const ATBBuild = (() => {
       ${renderAnswerModal()}
       ${renderMergeConfirm()}
       ${renderPushConfirm()}
-      ${renderDeleteConfirm()}`;
+      ${renderDeleteConfirm()}
+      ${renderReleaseConfirm()}`;
     bindCommon(view);
     state.rendered = true;
   }
@@ -1557,12 +1650,25 @@ const ATBBuild = (() => {
     }
     q('#bldPushCancel')?.addEventListener('click', () => { state.pushConfirm = null; render(); });
     q('#bldPushGo')?.addEventListener('click', doPush);
+    // REQ-20260915-002 产品发布入口：merged 版本详情「创建发布 / 查看发布记录」
+    for (const el of view.querySelectorAll('[data-ver-release]')) {
+      el.addEventListener('click', () => openReleaseConfirm(el.dataset.verRelease));
+    }
+    for (const el of view.querySelectorAll('[data-ver-release-view]')) {
+      el.addEventListener('click', gotoProductRelease);
+    }
+    q('#bldRelCancel')?.addEventListener('click', () => { state.releaseConfirm = null; render(); });
+    q('#bldRelGo')?.addEventListener('click', doCreateRelease);
+    q('#bldReleaseWrap')?.addEventListener('click', (e) => {
+      if (e.target?.id === 'bldReleaseWrap' && !state.releaseConfirm?.busy) { state.releaseConfirm = null; render(); }
+    });
   }
 
   document.addEventListener?.('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (state.pushConfirm) { state.pushConfirm = null; render(); return; }
     if (state.deleteConfirm) { if (!state.deleteBusy) { state.deleteConfirm = null; render(); } return; }
+    if (state.releaseConfirm) { if (!state.releaseConfirm.busy) { state.releaseConfirm = null; render(); } return; }
     if (state.mergeConfirm) { state.mergeConfirm = null; render(); return; }
     if (state.answer) { state.answer = null; render(); return; }
     if (state.createPanel || state.addPanel) { state.createPanel = null; state.addPanel = null; render(); }
@@ -1582,6 +1688,8 @@ const ATBBuild = (() => {
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
     // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
     openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,
+    // REQ-20260915-002：产品发布入口行为接缝（测试与跨模块跳转）
+    openReleaseConfirm, doCreateRelease, gotoProductRelease,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };
