@@ -246,13 +246,13 @@ t('D8 失败不阻断回执：提交失败回执仍 reported、改动保留；RE
   assert.ok(rec, '失败应已声明挂起确认记录');
   // BUG-20260915-003：挂起期间又创建了后续单（config.json 计数器等全局文件内容变化）——
   // 归属待确认路径内容已变，确认被拦截并要求先「重新核验」绑定最新所见，再确认成功。
-  const r0 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r0 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.equal(r0.ok, false, '全局文件在确认前内容已变：过期确认应被拒');
   assert.ok(r0.reasons.some((x) => x.includes('内容已变')), `应说明内容已变：${r0.reasons.join('；')}`);
-  confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: confirmStates.confirmOf(dataDir, item.id).fingerprint,
   });
   assert.ok(r.ok, `重新核验后人工确认应成功：${JSON.stringify(r.reasons || [])}`);
@@ -358,7 +358,7 @@ t('D14 BUG-20260914-021 长标题：提交失败挂起 → 人工确认补交（
   const confirmStore = await import('../lib/confirm-store.mjs');
   const rec = confirmStates.confirmOf(dataDir, item.id);
   assert.ok(rec, '失败挂起应已声明待人工确认记录');
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.ok(r.ok, `人工确认补交应成功：${JSON.stringify(r.reasons || [])}`);

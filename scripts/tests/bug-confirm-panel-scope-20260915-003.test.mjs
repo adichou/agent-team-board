@@ -95,7 +95,7 @@ const subjectsOf = (root, itemId, p) =>
 
 // ---------- P1：git add 失败现场的统一口径与完整错误 ----------
 
-t('P1 git add 失败：完整错误保留（不截断、0 组失败也落明细）；计数/文件表/核验同源；空 pendingManual 也展示候选并区分归属', () => {
+t('P1 git add 失败：完整错误保留（不截断、0 组失败也落明细）；计数/文件表/核验同源；空 pendingManual 也展示候选并区分归属', async () => {
   const root = mkProject();
   const { dataDir, item, runId, receipt } = mkAddFailureSuspension(root, 'add 失败单');
 
@@ -136,7 +136,7 @@ t('P1 git add 失败：完整错误保留（不截断、0 组失败也落明细�
   assert.ok(d.files.every((f) => ['修改', '新增', '删除'].includes(f.kind)), '每个候选文件必须带变更类型');
 
   // 核验与计数同源：原因引用同一数字
-  const v = confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const v = await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
   assert.equal(v.ok, false);
   assert.ok(v.reasons.some((r) => r.includes('未入库')), `核验应说明未入库路径：${v.reasons.join('；')}`);
   assert.ok(v.reasons.some((r) => r.includes(`本单可归属 ${d.files.filter((f) => f.group === 'own').length}`)
@@ -147,13 +147,13 @@ t('P1 git add 失败：完整错误保留（不截断、0 组失败也落明细�
 
 // ---------- P2：归属待确认显式选择（全局文件不静默整批并入） ----------
 
-t('P2a 全局文件默认排除：未显式计入的归属待确认路径不随补交静默提交，本单可归属照常补交', () => {
+t('P2a 全局文件默认排除：未显式计入的归属待确认路径不随补交静默提交，本单可归属照常补交', async () => {
   const root = mkProject();
   const { dataDir, item } = mkAddFailureSuspension(root, '默认排除单');
   fs.rmSync(path.join(root, '.git', 'index.lock')); // 解除故障
 
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, { projectRoot: root, fingerprint: rec.fingerprint });
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, { projectRoot: root, fingerprint: rec.fingerprint });
   assert.ok(r.ok, `确认应成功：${JSON.stringify(r.reasons || [])}`);
 
   // 本单可归属已入库；全局文件保留在工作区（未被静默并入）
@@ -165,13 +165,13 @@ t('P2a 全局文件默认排除：未显式计入的归属待确认路径不随�
   assert.equal(confirmStates.confirmOf(dataDir, item.id).state, 'resolved');
 });
 
-t('P2b 显式计入：include 携带的归属待确认路径随补交入库', () => {
+t('P2b 显式计入：include 携带的归属待确认路径随补交入库', async () => {
   const root = mkProject();
   const { dataDir, item } = mkAddFailureSuspension(root, '显式计入单');
   fs.rmSync(path.join(root, '.git', 'index.lock'));
 
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint, include: ['docs/agent-team-board/config.json'],
   });
   assert.ok(r.ok, `显式计入后确认应成功：${JSON.stringify(r.reasons || [])}`);
@@ -182,23 +182,23 @@ t('P2b 显式计入：include 携带的归属待确认路径随补交入库', ()
 
 // ---------- P3：内容变化拦截 → 重新核验刷新基线 → 确认 ----------
 
-t('P3 内容变化：确认被指纹拦截 → 重新核验（刷新基线）后确认成功', () => {
+t('P3 内容变化：确认被指纹拦截 → 重新核验（刷新基线）后确认成功', async () => {
   const root = mkProject();
   const { dataDir, item } = mkAddFailureSuspension(root, '内容变化单');
   fs.rmSync(path.join(root, '.git', 'index.lock'));
   // 人工在确认前又改了候选路径内容（脏→脏内容变）
   fs.appendFileSync(path.join(root, 'scripts', 'lib', 'impl.mjs'), '人工再改动（未确认）\n');
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r1 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r1 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.equal(r1.ok, false, '过期确认应被拒');
   assert.ok(r1.reasons.some((x) => x.includes('内容已变') || x.includes('不一致')), `应说明内容已变：${r1.reasons.join('；')}`);
   assert.equal(confirmStates.confirmOf(dataDir, item.id).state, 'waiting', '应保持挂起');
   // 重新核验 = 人工重新核对：刷新指纹基线后确认绑定最新所见
-  const v = confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const v = await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
   assert.equal(v.ok, false, '路径仍未入库：核验未通过');
-  const r2 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r2 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: confirmStates.confirmOf(dataDir, item.id).fingerprint,
   });
   assert.ok(r2.ok, `重新核验后确认应成功：${JSON.stringify(r2.reasons || [])}`);
@@ -206,20 +206,20 @@ t('P3 内容变化：确认被指纹拦截 → 重新核验（刷新基线）后
 
 // ---------- P4：声明后新增归属待确认路径 → 拦截要求先重新核验 ----------
 
-t('P4 新增归属待确认路径：确认被拦截并要求先重新核验；核验后按显式范围确认', () => {
+t('P4 新增归属待确认路径：确认被拦截并要求先重新核验；核验后按显式范围确认', async () => {
   const root = mkProject();
   const { dataDir, item } = mkAddFailureSuspension(root, '新增待确认单');
   fs.rmSync(path.join(root, '.git', 'index.lock'));
   // 声明/上次核对之后出现的全局改动（归属待确认）
   fs.writeFileSync(path.join(core.dataDirFrom(root), 'extra-uncertain.json'), '{"note":"他单/系统写入"}\n');
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r1 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r1 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.equal(r1.ok, false, '存在未核对的新归属待确认路径时确认应被拦截');
   assert.ok(r1.reasons.some((x) => x.includes('归属待确认') && x.includes('重新核验')), `应要求先重新核验：${r1.reasons.join('；')}`);
-  confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
-  const r2 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const r2 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: confirmStates.confirmOf(dataDir, item.id).fingerprint,
   });
   assert.ok(r2.ok, `重新核验后（未计入新路径）确认应成功：${JSON.stringify(r2.reasons || [])}`);
