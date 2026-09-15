@@ -32,6 +32,8 @@ const EN = {
   '删除该版本计划（需确认，删除后不可恢复）': 'Delete this version plan (confirmation required; cannot be undone)',
   '删除后不可恢复，关联条目与 commit 关联一并移除；条目本身可重新纳入其他版本。': 'This cannot be undone: linked items and their commit associations are removed; the items themselves can be added to another version later.',
   '仅删除看板版本记录，不影响已合并入 main 的提交与代码。': 'Only the board record is removed; commits and code already merged into main are untouched.',
+  // BUG-20260914-020：merged 版本卡片「AI 完善」禁用 title（口径参照同行合并键「已合并入 main」）
+  '已合并入 main，不允许再 AI 完善': 'Already merged into main — AI refine disabled',
   '此操作不可撤销，请确认后再继续。': 'This action is irreversible — please confirm to continue.',
   // BUG-20260913-005：版本回填弹窗「去新建 XX 会话」入口——既有复制 toast 一并补齐词条
   '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方': '✓ Prompt copied — paste it into the Agent, run it, then paste the answer back below',

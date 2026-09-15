@@ -511,9 +511,12 @@ const ATBBuild = (() => {
 
   // BUG-20260913-004：入口迁入版本卡片后按 verId 打开（对按钮所在卡片生效）；
   // 不带参时回落当前选中版本（向后兼容），带参但版本已不存在时不弹窗。
+  // BUG-20260914-020：merged 版本不允许再 AI 完善——卡片按钮已禁用，此处对带参直调与
+  // 无参回落两条路径兜底校验状态（merging 与按钮禁用口径同步收口），锁定态一律不弹窗。
   function openAnswerModal(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
+    if (v.status === 'merging' || v.status === 'merged') return;
     state.answer = { verId: v.id, text: '', parsed: null, draft: null, error: null, busy: false, copied: false };
     render();
     refreshWorkspaceApps(); // BUG-20260913-005：入口探测（fire-and-forget；loaded / 进行中 / 已失败不重探）
@@ -910,7 +913,10 @@ const ATBBuild = (() => {
     // 状态禁用/文案规则逐卡继承原详情底部逻辑；mergeBusy 为全局口径（执行中禁所有卡片的合并键）。
     return versions.map((v) => {
       const mergeLabel = v.status === 'failed' ? '重试合并入 main' : '合并入 main';
-      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${v.status === 'merging' ? ` disabled title="合并中，请稍候……"` : ''} aria-label="AI 完善 ${esc(v.id)}"${v.status === 'merging' ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
+      // BUG-20260914-020：AI 完善禁用口径与同卡合并键对齐——merged 同样禁用（title 说明已合并不可再完善），
+      // merging 维持「合并中，请稍候……」；draft / failed 仍可用。
+      const answerLocked = v.status === 'merging' || v.status === 'merged';
+      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${v.status === 'merged' ? '已合并入 main，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
       const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? ` disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
       // REQ-20260913-004 删除键：排在两键之后、quiet 危险弱化样式（不抢主操作）；
       // merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（与合并键一并禁用）。
