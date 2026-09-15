@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260915-005 界面演示 — 挂起确认面板三按钮场景说明</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #e2e4e9; --text: #1f2328;
+    --muted: #6b7280; --accent: #4f46e5; --accent-text: #ffffff;
+    --ok: #1a7f37; --ok-bg: #eaf6ec; --bad: #cf222e; --bad-bg: #fdefef;
+    --warn-bg: #fff8e1; --warn-border: #f0c36d; --warn-text: #7a5c00;
+    --chip-dev-bg: #e8effc; --chip-dev-text: #235a9f;
+    --chip-type-bg: #fdf0e3; --chip-type-text: #9a5b00;
+    --flag-bg: #fdefef; --flag-text: #cf222e;
+    --shadow: 0 8px 24px rgba(15, 23, 42, .12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --panel: #171a21; --border: #2a2f3a; --text: #e6e8ec;
+      --muted: #9aa1ad; --accent: #6366f1; --accent-text: #ffffff;
+      --ok: #4cc38a; --ok-bg: #12261c; --bad: #ff8089; --bad-bg: #2d1417;
+      --warn-bg: #2b2410; --warn-border: #8a6d1d; --warn-text: #ffd884;
+      --chip-dev-bg: #14243a; --chip-dev-text: #8ab4f0;
+      --chip-type-bg: #33260e; --chip-type-text: #f2c078;
+      --flag-bg: #2d1417; --flag-text: #ff8089;
+      --shadow: 0 8px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
+
+  .demo-head h1 { font-size: 18px; margin: 0 0 4px; }
+  .demo-controls {
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; margin: 14px 0;
+  }
+  .seg label { margin-right: 14px; cursor: pointer; }
+  .switch { cursor: pointer; }
+  .hint { margin: 0 0 12px; }
+
+  .notice { border: 1px solid var(--warn-border); background: var(--warn-bg); color: var(--warn-text); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; cursor: pointer; text-decoration: underline dotted; }
+
+  .hold-area-head { font-weight: 600; margin: 2px 0 10px; }
+  .confirm-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .confirm-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; vertical-align: middle; }
+  .chip.k-develop { background: var(--chip-dev-bg); color: var(--chip-dev-text); }
+  .chip.t-block { background: var(--chip-type-bg); color: var(--chip-type-text); }
+  .flag { display: inline-block; border-radius: 6px; padding: 0 7px; font-size: 12px; background: var(--flag-bg); color: var(--flag-text); }
+  .confirm-title { font-weight: 600; }
+  .confirm-reason { margin: 8px 0 4px; }
+  .confirm-counts { margin: 4px 0; }
+  .confirm-verify { margin: 6px 0 2px; font-size: 13px; }
+  .confirm-verify.ok { color: var(--ok); }
+  .confirm-verify.bad { color: var(--bad); }
+  .confirm-verify-reason { margin: 2px 0 2px 14px; font-size: 12px; color: var(--muted); }
+  .confirm-keep-note { margin: 6px 0 2px; }
+  .confirm-acts { display: flex; gap: 8px; margin-top: 10px; }
+
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 5px 14px; font-size: 13px; cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); color: var(--accent-text); }
+  .btn.small { padding: 2px 10px; font-size: 12px; }
+  .icon-btn { appearance: none; border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px 8px; }
+  .icon-btn:hover { color: var(--text); }
+
+  /* 侧拉面板 */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.32); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .side-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 94vw);
+    background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow);
+    transform: translateX(102%); transition: transform .22s ease; z-index: 50;
+    display: flex; flex-direction: column; padding: 16px 18px; overflow-y: auto;
+  }
+  .side-panel.open { transform: translateX(0); }
+  .side-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; }
+  .side-panel-head h3 { margin: 0 0 4px; font-size: 15px; }
+  .side-panel-scope { margin: 0; font-size: 13px; }
+  .edit-loading { color: var(--muted); }
+  .edit-error { border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 8px; padding: 12px; }
+  .edit-error-text { margin: 0 0 10px; color: var(--bad); }
+  .edit-error .row { display: flex; gap: 8px; }
+
+  .confirm-files { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  .confirm-files th, .confirm-files td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .confirm-files td[title] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .field { display: block; font-size: 13px; margin: 10px 0 6px; }
+  .field textarea {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
+    font: inherit; padding: 6px 8px; resize: vertical;
+  }
+  .edit-msg { min-height: 20px; margin: 8px 0 4px; font-size: 13px; white-space: pre-line; }
+  .edit-msg.err { color: var(--bad); }
+
+  /* 修复后期望：按钮区上方一行紧凑对照说明（muted small，不依赖悬停） */
+  .btn-guide { margin: 10px 0 2px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+
+  .modal-foot { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; }
+
+  details.confirm-test-tail { margin: 4px 0 6px 14px; font-size: 12px; }
+  details.confirm-test-tail pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; overflow-x: auto; font-size: 11px;
+  }
+
+  .empty-note { border: 1px dashed var(--border); border-radius: 10px; padding: 14px; color: var(--muted); }
+
+  .toast-wrap { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 99; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--ok);
+    border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow); font-size: 13px; max-width: 360px;
+  }
+  .toast.err { border-left-color: var(--bad); }
+
+  .demo-foot { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 10px; }
+  code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>BUG-20260915-005 · 挂起确认面板「保持挂起 / 重新核验 / 确认并继续」缺少场景说明</h1>
+    <p class="muted small hint">模拟 Status Board 任务页「待人工确认」区与侧拉挂起确认面板（develop 侧）。单文件演示、无外网依赖；数据为模拟，行为对照 <code>scripts/web/app.js</code> <code>renderConfirmForm</code> / <code>confirmCardHtml</code> 现状实现。</p>
+    <div class="demo-controls">
+      <span class="seg" role="radiogroup" aria-label="模式切换">
+        <label><input type="radio" name="mode" value="bug" checked> Bug 现状（无提示）</label>
+        <label><input type="radio" name="mode" value="fixed"> 修复后期望（title + 对照说明）</label>
+      </span>
+      <label class="switch"><input type="checkbox" id="failSwitch"> 模拟失败（读取 / 核验 / 确认走失败分支）</label>
+      <button type="button" class="btn small" id="emptyBtn">模拟：清空待确认（空态）</button>
+      <button type="button" class="btn small" id="resetBtn">重置演示</button>
+    </div>
+    <p class="muted small" id="modeHint"></p>
+  </header>
+
+  <main>
+    <div class="notice" id="queueBanner">开发队列：已暂停 · 阻塞于 <span class="cid" role="button">BUG-20260914-020</span> · 提交挂起（部分文件提交，剩余路径待人工确认）</div>
+
+    <section id="confirmArea">
+      <header class="hold-area-head">⚠ 待人工确认（1）——阻塞队列，确认后才继续</header>
+      <article class="confirm-card" id="confirmCard">
+        <header class="confirm-card-head">
+          <div>
+            <span class="chip k-develop">开发</span>
+            <span class="chip t-block">提交挂起</span>
+            <span class="cid" role="button">BUG-20260914-020</span>
+            <span class="confirm-title">已合并的版本计划不允许再使用 AI 完善按钮了</span>
+            <span class="flag" title="部分提交，开发未完成——文档或部分文件提交不构成完成">部分提交，开发未完成</span>
+          </div>
+          <span class="muted small" id="elapsed">已等待 —</span>
+        </header>
+        <p class="confirm-reason">部分提交：2 组已入库，剩余路径（文档 / 测试）待人工确认归属与是否补交。</p>
+        <p class="confirm-counts">已提交：2 组 · 待人工：2 路径</p>
+        <p class="confirm-verify" id="cardVerify" hidden></p>
+        <p class="confirm-keep-note muted small" id="cardKeepNote" hidden></p>
+        <div class="confirm-acts">
+          <button type="button" class="btn small" id="cardPanelBtn">查看并确认</button>
+          <button type="button" class="btn small" id="cardVerifyBtn">重新核验</button>
+        </div>
+      </article>
+    </section>
+
+    <div class="empty-note" id="emptyNote" hidden>
+      （空态演示）无待人工确认条目时，「待人工确认」区与队列暂停横幅整体隐藏（<code>hidden</code>），队列正常派发——此处仅为说明文字。点击「重置演示」恢复。
+    </div>
+  </main>
+
+  <footer class="demo-foot muted small">
+    <p>分析侧（hold 问题）面板「保持挂起 / 保存草稿 / 确认并继续」为同口径统一项，本演示聚焦 develop 侧三按钮；文案修复后须进 <code>scripts/web/i18n.js</code> 双语表。</p>
+  </footer>
+</div>
+
+<div class="overlay" id="overlay"></div>
+
+<aside class="side-panel" id="panel" role="dialog" aria-label="挂起确认" aria-hidden="true">
+  <div class="side-panel-head">
+    <div>
+      <h3 id="panelTitle">提交挂起 · BUG-20260914-020</h3>
+      <p class="side-panel-scope" id="panelScope">核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列</p>
+    </div>
+    <button type="button" class="icon-btn" id="panelClose" aria-label="关闭挂起确认面板" title="关闭（Esc）">✕</button>
+  </div>
+
+  <p class="edit-loading" id="viewLoading">正在读取挂起详情…</p>
+
+  <div class="edit-error" id="viewError" role="alert" hidden>
+    <p class="edit-error-text" id="errorText">挂起详情读取失败：模拟网络错误</p>
+    <div class="row">
+      <button type="button" class="btn" id="errClose">关闭</button>
+      <button type="button" class="btn primary" id="errRetry">重试</button>
+    </div>
+  </div>
+
+  <div id="viewForm" hidden>
+    <p class="confirm-reason">部分提交：2 组已入库，剩余路径（文档 / 测试）待人工确认归属与是否补交。</p>
+    <p class="confirm-counts">已提交：2 组（补交 0 组）· 待人工：2 路径</p>
+    <table class="confirm-files">
+      <thead><tr><th>文件</th><th>状态</th><th>差异</th></tr></thead>
+      <tbody>
+        <tr><td title="scripts/web/build.js">scripts/web/build.js</td><td>已入库</td><td><button type="button" class="btn small" data-diff="scripts/web/build.js">查看差异</button></td></tr>
+        <tr><td title="docs/…/BUG-20260914-020/README.md">docs/…/BUG-20260914-020/README.md</td><td>未提交</td><td><button type="button" class="btn small" data-diff="docs/…/BUG-20260914-020/README.md">查看差异</button></td></tr>
+        <tr><td title="scripts/tests/bug-build-ver-card.test.mjs">scripts/tests/bug-build-ver-card.test.mjs</td><td>未提交</td><td><button type="button" class="btn small" data-diff="scripts/tests/bug-build-ver-card.test.mjs">查看差异</button></td></tr>
+      </tbody>
+    </table>
+    <div id="verifyBox"></div>
+    <label class="field">处理说明（保持挂起时记录；确认时可留空）
+      <textarea id="noteInput" rows="2" placeholder="如：已核对归属，整文件归本单"></textarea>
+    </label>
+    <div id="guideBox"></div>
+    <p class="edit-msg" id="panelMsg" role="status" aria-live="polite"></p>
+    <footer class="modal-foot" id="footBox"></footer>
+  </div>
+</aside>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TITLES = {
+    keep: '暂不处理，维持挂起与队列暂停，处理说明留档，稍后再来',
+    verify: '只重查不提交：重新核验本单提交状态并跑测试，刷新「最近核验」结论；终端已自行补交后或怀疑状态已变化时用',
+    cont: '授权服务端补交剩余路径 + 复验测试 + 恢复批量队列，一步闭环'
+  };
+  var GUIDE = '<p class="btn-guide">保持挂起＝暂不处理，维持挂起与队列暂停，说明留档 · 重新核验＝只重查不提交，重核提交状态并跑测试，刷新结论 · 确认并继续＝授权补交剩余路径＋复验＋恢复队列</p>';
+
+  var failReasons = ['剩余 2 路径未提交：docs/…/BUG-20260914-020/README.md、scripts/tests/bug-build-ver-card.test.mjs', '测试未通过：1 failing'];
+  var testTail = 'not ok 1 - merged 版本 AI 完善按钮应禁用\n  ---\n    expected: disabled\n    actual: enabled\n  ...\n# tests 12\n# pass 11\n# fail 1';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = {
+    mode: 'bug', fail: false, open: false, view: 'form',
+    busy: false, resolved: false, verify: null, keepNote: '', empty: false,
+    waitFrom: Date.now() - 26 * 60000
+  };
+
+  function mode() { return state.mode; }
+  function failOn() { return $('failSwitch').checked; }
+  function now() { return new Date(); }
+  function fmtTime(d) {
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  function toast(text, isErr) {
+    var el = document.createElement('div');
+    el.className = 'toast' + (isErr ? ' err' : '');
+    el.textContent = text;
+    $('toasts').appendChild(el);
+    setTimeout(function () { el.remove(); }, 3400);
+  }
+
+  function setView(v) {
+    state.view = v;
+    $('viewLoading').hidden = v !== 'loading';
+    $('viewError').hidden = v !== 'error';
+    $('viewForm').hidden = v !== 'form';
+  }
+
+  function panelMsg(text, isErr) {
+    var el = $('panelMsg');
+    el.textContent = text || '';
+    el.classList.toggle('err', !!isErr);
+  }
+
+  function renderVerifyBox() {
+    var box = $('verifyBox');
+    if (!state.verify) {
+      box.innerHTML = '<p class="muted small">尚未核验：确认时将自动重新核验并运行测试</p>';
+      return;
+    }
+    var v = state.verify;
+    var html = '<p class="confirm-verify ' + (v.ok ? 'ok' : 'bad') + '">最近核验（' + v.at + '）：' + (v.ok ? '通过' : '未通过') + '</p>';
+    if (!v.ok) {
+      html += failReasons.map(function (r) { return '<p class="confirm-verify-reason">· ' + r + '</p>'; }).join('');
+      html += '<details class="confirm-test-tail"><summary>测试输出（npm test 退出码 1）</summary><pre>' + testTail + '</pre></details>';
+    } else {
+      html += '<p class="confirm-verify-reason">· 提交完整，测试通过（12/12）</p>';
+    }
+    box.innerHTML = html;
+  }
+
+  function renderCardVerify() {
+    var p = $('cardVerify');
+    var btn = $('cardVerifyBtn');
+    if (!state.verify) { p.hidden = true; p.textContent = ''; return; }
+    p.hidden = false;
+    p.className = 'confirm-verify ' + (state.verify.ok ? 'ok' : 'bad');
+    p.textContent = '最近核验（' + state.verify.at + '）：' + (state.verify.ok ? '通过' : '未通过——' + failReasons[0]);
+  }
+
+  function renderKeepNote() {
+    var p = $('cardKeepNote');
+    if (!state.keepNote) { p.hidden = true; p.textContent = ''; return; }
+    p.hidden = false;
+    p.textContent = '保持挂起说明：' + state.keepNote;
+  }
+
+  // 底部按钮区：Bug 现状 = 无 title/aria-label/对照说明；修复后期望 = 三者齐备
+  function renderFoot() {
+    var fixed = mode() === 'fixed';
+    var busy = state.busy, resolved = state.resolved;
+    var dis = busy || resolved ? ' disabled' : '';
+    $('guideBox').innerHTML = fixed && !resolved ? GUIDE : '';
+    $('footBox').innerHTML =
+      '<button type="button" class="btn" id="btnClose">关闭</button>' +
+      '<button type="button" class="btn" id="btnKeep"' + dis + (fixed ? ' title="' + TITLES.keep + '" aria-label="' + TITLES.keep + '"' : '') + '>保持挂起</button>' +
+      '<button type="button" class="btn" id="btnVerify"' + dis + (fixed ? ' title="' + TITLES.verify + '" aria-label="' + TITLES.verify + '"' : '') + '>' + (busy ? '正在核验提交与测试…' : '重新核验') + '</button>' +
+      '<button type="button" class="btn primary" id="btnCont"' + dis + (fixed ? ' title="' + TITLES.cont + '" aria-label="' + TITLES.cont + '"' : '') + '>' + (resolved ? '已确认恢复' : '确认并继续') + '</button>';
+    $('btnClose').addEventListener('click', closePanel);
+    if (!$('btnKeep').disabled) {
+      $('btnKeep').addEventListener('click', actKeep);
+      $('btnVerify').addEventListener('click', actVerify);
+      $('btnCont').addEventListener('click', actContinue);
+    }
+    // 卡片上的「重新核验」同口径
+    $('cardVerifyBtn').disabled = busy || resolved;
+    $('cardVerifyBtn').textContent = busy ? '正在核验提交与测试…' : '重新核验';
+    if (fixed) {
+      $('cardVerifyBtn').title = TITLES.verify;
+      $('cardVerifyBtn').setAttribute('aria-label', TITLES.verify);
+      $('cardPanelBtn').title = '打开侧拉面板：核对文件、差异、核验结论后处理';
+    } else {
+      $('cardVerifyBtn').removeAttribute('title');
+      $('cardVerifyBtn').removeAttribute('aria-label');
+      $('cardPanelBtn').removeAttribute('title');
+    }
+    $('cardPanelBtn').disabled = busy;
+  }
+
+  function renderModeHint() {
+    $('modeHint').textContent = mode() === 'bug'
+      ? '当前为 Bug 现状：三按钮无 title / aria-label，面板内无按钮级说明，仅顶部一句泛化文案——悬停按钮试试，什么都没有。'
+      : '当前为修复后期望：悬停任一按钮可见其场景与后果（原生 title）；按钮区上方有一行 muted small 对照说明，触屏 / 键盘 / 不悬停也能看懂。';
+  }
+
+  function renderAll() {
+    renderFoot();
+    renderVerifyBox();
+    renderCardVerify();
+    renderKeepNote();
+    renderModeHint();
+    renderBanner();
+  }
+
+  function renderBanner() {
+    var waiting = !state.resolved && !state.empty;
+    $('queueBanner').hidden = !waiting;
+  }
+
+  function renderEmpty() {
+    $('confirmArea').hidden = state.empty;
+    $('emptyNote').hidden = !state.empty;
+    renderBanner();
+  }
+
+  function renderElapsed() {
+    var m = Math.max(1, Math.round((Date.now() - state.waitFrom) / 60000));
+    $('elapsed').textContent = '已等待 ' + m + ' 分钟';
+  }
+
+  /* ---------- 面板开合 ---------- */
+
+  function openPanel() {
+    if (state.empty) { toast('当前为空态：无待人工确认条目', true); return; }
+    state.open = true;
+    $('panel').classList.add('open');
+    $('panel').setAttribute('aria-hidden', 'false');
+    $('overlay').classList.add('show');
+    panelMsg('');
+    setView('loading');
+    setTimeout(function () {
+      if (!state.open) return;
+      if (failOn()) {
+        $('errorText').textContent = '挂起详情读取失败：模拟网络错误';
+        setView('error');
+        return;
+      }
+      setView('form');
+      renderAll();
+    }, 700);
+  }
+
+  function closePanel() {
+    state.open = false;
+    state.busy = false;
+    $('panel').classList.remove('open');
+    $('panel').setAttribute('aria-hidden', 'true');
+    $('overlay').classList.remove('show');
+    renderAll();
+  }
+
+  /* ---------- 三按钮行为 ---------- */
+
+  function actKeep() {
+    var note = $('noteInput').value.trim();
+    if (failOn()) {
+      panelMsg('保持挂起失败：模拟服务端错误', true);
+      toast('保持挂起失败：模拟服务端错误', true);
+      return;
+    }
+    state.keepNote = note || '（未填写）';
+    panelMsg('已保持挂起：现场与队列暂停保留（取消队列须显式终止任务或恢复领取）');
+    toast('已保持挂起 BUG-20260914-020');
+    renderKeepNote();
+  }
+
+  function actVerify() {
+    if (state.busy) return;
+    state.busy = true;
+    panelMsg('');
+    renderAll();
+    setTimeout(function () {
+      state.busy = false;
+      if (failOn()) {
+        state.verify = { ok: false, at: fmtTime(now()) };
+        toast('核验未通过：' + failReasons[0], true);
+      } else {
+        state.verify = { ok: true, at: fmtTime(now()) };
+        toast('✓ BUG-20260914-020 核验通过：提交完整，测试通过');
+      }
+      renderAll();
+    }, 1200);
+  }
+
+  function actContinue() {
+    if (state.busy || state.resolved) return;
+    state.busy = true;
+    panelMsg('');
+    renderAll();
+    setTimeout(function () {
+      state.busy = false;
+      if (failOn()) {
+        state.verify = { ok: false, at: fmtTime(now()) };
+        panelMsg('确认未通过，保持挂起：\n· ' + failReasons.join('\n· '), true);
+        toast('确认未通过，已保持挂起', true);
+      } else {
+        state.resolved = true;
+        state.verify = { ok: true, at: fmtTime(now()) };
+        panelMsg('确认通过：服务端补交剩余路径并复验测试，队列已恢复');
+        toast('✓ BUG-20260914-020 已确认恢复，队列继续');
+      }
+      renderAll();
+    }, 1400);
+  }
+
+  /* ---------- 事件绑定 ---------- */
+
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.mode = r.value; renderAll(); });
+  });
+  $('cardPanelBtn').addEventListener('click', openPanel);
+  $('cardVerifyBtn').addEventListener('click', actVerify);
+  $('panelClose').addEventListener('click', closePanel);
+  $('overlay').addEventListener('click', closePanel);
+  $('errClose').addEventListener('click', closePanel);
+  $('errRetry').addEventListener('click', openPanel);
+  $('emptyBtn').addEventListener('click', function () {
+    state.empty = true;
+    closePanel();
+    renderEmpty();
+    toast('已切换到空态：待人工确认区隐藏');
+  });
+  $('resetBtn').addEventListener('click', function () {
+    state.busy = false; state.resolved = false; state.verify = null;
+    state.keepNote = ''; state.empty = false; state.waitFrom = Date.now() - 26 * 60000;
+    $('noteInput').value = '';
+    panelMsg('');
+    closePanel();
+    renderEmpty();
+    renderAll();
+    renderElapsed();
+    toast('演示已重置');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && state.open) closePanel();
+  });
+  document.querySelectorAll('[data-diff]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      toast('查看差异：' + b.dataset.diff + '（本演示不展开内容）');
+    });
+  });
+
+  renderEmpty();
+  renderAll();
+  renderElapsed();
+  setInterval(renderElapsed, 30000);
+})();
+</script>
+</body>
+</html>
