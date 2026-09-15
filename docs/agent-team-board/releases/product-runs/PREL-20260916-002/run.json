@@ -1,5 +1,5 @@
 {
-  "id": "PREL-20260915-001",
+  "id": "PREL-20260916-002",
   "schemaVersion": 1,
   "productId": "agent-team-board",
   "bldId": "BLD-20260914-001",
@@ -10,7 +10,7 @@
   "frozen": {
     "version": "1.0.0",
     "mainSha": "4d044f149e38292b62cbb21deadfc0bf0f25ef48",
-    "devSha": "ae698d5b6a137557df69130890406d5d55e4a960",
+    "devSha": "f7ad43794f108d9bdfed50a97885a0c6b50d584a",
     "remote": "origin",
     "remoteUrl": "https://github.com/adichou/agent-team-board.git",
     "extraCommits": [],
@@ -1531,105 +1531,17 @@
       "port": null
     }
   },
-  "precheck": {
-    "ranAt": "2026-09-15T16:08:25.657Z",
-    "ok": false,
-    "checks": [
-      {
-        "key": "product-mapping",
-        "label": "产品映射与子目录",
-        "ok": false,
-        "detail": "项目名「agent-team-board」越出官网仓库目录：不允许路径越界"
-      },
-      {
-        "key": "source-remote",
-        "label": "源码远端解析",
-        "ok": true,
-        "detail": "origin → https://github.com/adichou/agent-team-board.git"
-      },
-      {
-        "key": "branches",
-        "label": "本地双分支",
-        "ok": true,
-        "detail": "main 4d044f14 · dev f7ad4379"
-      },
-      {
-        "key": "worktree-clean",
-        "label": "工作区干净",
-        "ok": false,
-        "detail": "工作区有未提交修改（scripts/tests/bug-copy-newline-boundary-20260915-012.test.mjs）：不自动提交/暂存，请先完成提交"
-      },
-      {
-        "key": "remote-push",
-        "label": "远端可达与原子推送预演",
-        "ok": false,
-        "detail": "分支头与冻结不一致：main 4d044f14/4d044f14 · dev f7ad4379/ae698d5b（main 前进可重新冻结）"
-      },
-      {
-        "key": "items-contained",
-        "label": "计划条目包含性",
-        "ok": true,
-        "detail": "288 个条目均在冻结 main 历史内"
-      },
-      {
-        "key": "homepage-config",
-        "label": "官网仓库配置",
-        "ok": false,
-        "detail": "官网仓库根目录未设置（首次使用请先在设置中配置，保存后返回继续）"
-      },
-      {
-        "key": "webapp-profile",
-        "label": "Web App 自动识别",
-        "ok": false,
-        "detail": "无法从冻结源码自动识别构建方式（package.json 存在但框架或构建脚本缺失）；诊断：package.json 未声明已知前端框架依赖（vite / next / astro / nuxt / vue-cli / react-scripts / svelte）；package.json 缺少 scripts.build（无法自动生成构建命令）"
-      },
-      {
-        "key": "version-conflict",
-        "label": "版本冲突",
-        "ok": true,
-        "detail": "版本 1.0.0 无冲突"
-      }
-    ],
-    "inputs": {
-      "version": "1.0.0",
-      "mainSha": "4d044f149e38292b62cbb21deadfc0bf0f25ef48",
-      "devSha": "f7ad43794f108d9bdfed50a97885a0c6b50d584a",
-      "remote": "origin",
-      "homepage": {
-        "repoRoot": "",
-        "branch": "main",
-        "contentDir": null
-      },
-      "materialsFingerprint": null
-    },
-    "fingerprint": "127ffda8f37527950e087600592a432d"
-  },
+  "precheck": null,
   "webapp": null,
   "evidence": [],
   "history": [
     {
-      "at": "2026-09-15T13:42:33.707Z",
+      "at": "2026-09-15T16:08:42.987Z",
       "action": "create",
       "by": "board",
-      "note": "从 BLD-20260914-001 创建产品发布草稿（冻结 main 4d044f14 / dev ae698d5b）"
-    },
-    {
-      "at": "2026-09-15T16:08:23.821Z",
-      "action": "precheck:start",
-      "by": "board"
-    },
-    {
-      "at": "2026-09-15T16:08:25.657Z",
-      "action": "precheck",
-      "by": "board",
-      "note": "预检未通过（存在阻塞项）"
-    },
-    {
-      "at": "2026-09-15T16:08:25.657Z",
-      "action": "precheck:done",
-      "by": "board"
+      "note": "从 BLD-20260914-001 创建产品发布草稿（冻结 main 4d044f14 / dev f7ad4379）"
     }
   ],
-  "createdAt": "2026-09-15T13:42:33.707Z",
-  "updatedAt": "2026-09-15T16:08:25.657Z"
+  "createdAt": "2026-09-15T16:08:42.987Z",
+  "updatedAt": "2026-09-15T16:08:42.987Z"
 }
