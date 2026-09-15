@@ -404,7 +404,7 @@ t('C10 保持挂起保留现场与队列；人工恢复领取（显式）也不�
 
 // ---------- C11：卡片与账本计数一致 ----------
 
-t('C11 清单/详情计数一致：已提交组、待人工路径、部分提交徽标与账本同源', () => {
+t('C11 清单/详情/核验计数一致：与候选范围扫描同源（BUG-20260915-003 统一口径），文件表带归属分组', () => {
   const root = mkProject();
   seedPreDirtySource(root);
   const dataDir = core.dataDirFrom(root);
@@ -415,13 +415,22 @@ t('C11 清单/详情计数一致：已提交组、待人工路径、部分提交
   const view = lst.items[0];
   assert.equal(view.itemId, item.id);
   assert.equal(view.committedCount, 1, '已提交组 = doc 1 组');
-  const held = (view.pendingManual || []).length
-    + (view.heldGroups ? view.heldGroups.test.length + view.heldGroups.biz.length : 0);
-  assert.equal(view.pendingCount, held, '待人工计数 = pendingManual + 暂扣组');
-  assert.equal(view.partialBadge, true, '部分提交显示不完整徽标');
   const d = confirmStore.confirmDetail(dataDir, item.id, { projectRoot: root });
-  assert.equal(d.files.length, held, '详情文件表覆盖全部待人工路径');
-  assert.ok(d.files.every((f) => f.state === '未提交' || f.state === '已入库'));
+  assert.notEqual(view.pendingCount, null, '可扫描时计数不得为 null（待核对）');
+  assert.equal(view.scopeUnknown, false);
+  assert.equal(view.pendingCount, d.files.length, '卡片计数与详情文件表同源');
+  assert.equal(view.pendingCount, view.attributedCount + view.uncertainCount, '计数 = 本单可归属 + 归属待确认');
+  assert.ok(view.pendingCount >= 3, `候选应含 build.js 与暂扣组：${view.pendingCount}`);
+  // 声明的待人工路径在文件表内可见（带归属分组与变更类型）
+  const byPath = new Map(d.files.map((f) => [f.path, f]));
+  assert.ok(byPath.get('scripts/web/build.js'), '文件表应含声明的待人工路径');
+  assert.equal(byPath.get('scripts/web/build.js').group, 'undetermined', '预留前已脏路径归「归属待确认」');
+  assert.equal(byPath.get('scripts/lib/impl.mjs').group, 'own', '快照差集实现路径归「本单可归属」');
+  assert.ok(d.files.every((f) => ['own', 'undetermined'].includes(f.group) && ['修改', '新增', '删除'].includes(f.kind)));
+  assert.equal(view.partialBadge, true, '部分提交显示不完整徽标');
+  // 核验剩余与文件表同源（同一数字）
+  const v = confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  assert.equal(v.remaining.length, d.files.length, '核验剩余与文件表同源');
 });
 
 // ---------- C14：历史部分提交账本恢复 ----------
