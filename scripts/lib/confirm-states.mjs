@@ -38,6 +38,20 @@ export const REASON_MAX_CHARS = 200; // 挂起原因短句上限（与批次回�
 export const CONFIRM_TEXT_MAX_CHARS = 400; // 问题 / 背景 / 处理说明共用短文本上限
 export const CONFIRM_MAX_QUESTIONS = 20;
 
+// BUG-20260915-004 挂起原因保头保尾截断：超限时保留头段（现象开头：命令与路径前缀）与
+// 尾段（结论段，如 index.lock': File exists / 已提交 N 组），中段以省略号衔接——不再
+// slice 拦腰截断把报错中段整段丢掉；完整原文由 errorFull / 运行明细另存，展示层折叠查看。
+export function clipReasonKeepEnds(text, maxChars) {
+  const s = String(text ?? '');
+  const chars = [...s];
+  const max = Math.max(20, Math.floor(Number(maxChars) || 0));
+  if (chars.length <= max) return s;
+  const mark = '……';
+  const tailLen = Math.max(8, Math.floor((max - mark.length) * 0.4));
+  const headLen = max - mark.length - tailLen;
+  return `${chars.slice(0, headLen).join('')}${mark}${chars.slice(chars.length - tailLen).join('')}`;
+}
+
 function confirmsFile(dataDir) {
   return path.join(dataDir, 'confirms', 'confirms.json');
 }

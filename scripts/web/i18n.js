@@ -467,6 +467,11 @@ const EN = {
   '内容或候选范围已变化：先「重新核验」核对最新差异': 'Content or candidate scope changed: "Re-verify" the latest diffs first',
   '确认范围：待核对（无法扫描工作区确定候选范围，确认前请人工核对）': 'Confirm scope: to be determined (worktree not scannable; review manually before confirming)',
   '｜口径：与文件表 / 最近核验同源': ' | basis: same source as the file table / latest verification',
+  // BUG-20260915-004 挂起原因归类：琥珀结论条（默认人话结论 + 处理指引；未知错误如实兜底）
+  'git 索引被并发进程占用（瞬时冲突，可重试）': 'Git index is held by another git process (transient conflict, retryable)',
+  '「重新核验」或「确认并继续」即可重试补交': '"Re-verify" or "Confirm & continue" retries the supplement commit',
+  '原因未知（未匹配已知失败归类）': 'Cause unknown (no known failure class matched)',
+  '展开完整原始输出结合现场判断，再选择重新核验 / 确认并继续 / 保持挂起': 'Expand the full raw output and judge by the scene, then Re-verify / Confirm & continue / Keep suspended',
   'AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。': 'AI analysis: completes documents of accepted items in bulk — READMEs for requirements (description + acceptance criteria; UI items need an interface demo) and symptoms/repro/expected behavior/acceptance for bugs (UI bugs also need an interactive ui-demo.html). Subagents only touch documents: items stay accepted, business source is untouched, unknown facts are marked "to confirm".',
   'AI 开发': 'AI development',
   '批量操作': 'Batch actions',
@@ -941,6 +946,8 @@ const EN_DYNAMIC = {
   'Git 失败摘要：◇': 'Git failure summary: $1',
   '差异读取失败：◇（读取失败不冒充无差异）': 'Failed to load diff: $1 (a read failure is never presented as "no diff")',
   '◇（工作区 vs Git 基线）': '$1 (worktree vs Git baseline)',
+  // BUG-20260915-004 挂起原因分层折叠入口（动态拼接）
+  '完整原始输出（◇ 字符，不截断）': 'Full raw output ($1 chars, untruncated)',
   '确认被拦截：归属待确认项未处理（◇）——每个路径须显式选择「计入本次补交 / 排除」，全局文件不得静默整批归为本单': 'Confirmation blocked: unresolved ownership ($1) — each path needs an explicit "include/exclude" choice; global files are never silently batched into this item',
   // REQ-20260914-001 补充：卡片 / 面板 / 反馈动态片段
   '◇队列：已暂停 · 阻塞于': '$1 queue: paused · blocked on',

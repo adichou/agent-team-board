@@ -3309,6 +3309,45 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   color: var(--muted);
 }
 
+/* ---------- BUG-20260915-004 挂起原因分层：归类结论条（琥珀）+ 折叠完整原始输出 ---------- */
+.confirm-reason-layered { display: grid; gap: 4px; margin: 0; }
+.confirm-classify {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--inprogress);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--inprogress) 10%, var(--panel));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+.confirm-classify .cls-mark { color: var(--inprogress); font-weight: 700; }
+.confirm-classify .cls-cause { color: var(--inprogress); font-weight: 600; }
+.confirm-classify .cls-hint { flex-basis: 100%; color: var(--text); }
+.confirm-classify.k-unknown { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); }
+.confirm-classify.k-unknown .cls-mark,
+.confirm-classify.k-unknown .cls-cause { color: var(--warn); }
+.confirm-reason-full {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset, rgba(127, 127, 127, 0.12));
+}
+.confirm-reason-full summary { padding: 4px 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+.confirm-reason-full pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.confirm-queue-banner .confirm-classify { margin-top: 4px; }
+
 /* ---------- REQ-20260914-007 管理记录提交反馈块（确认完成 / 版本合并两入口同构） ---------- */
 /* 状态语义：submitting 提交中（进度 + 禁用重试）/ success 已提交或已同步 / failed 失败
    （原因 + 未提交文件 + 建议 + 重试，账本持久化，重试成功后清除）；沿用现有主题变量。 */

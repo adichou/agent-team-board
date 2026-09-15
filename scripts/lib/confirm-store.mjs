@@ -24,7 +24,7 @@ import {
   readConfirms, confirmOf, activeConfirmOf, saveConfirmRecord, archiveConfirmRecord,
   renderConfirmDoc, unansweredRequired, answeredCount, questionsVersionOf,
   REASON_MAX_CHARS, CONFIRM_TEXT_MAX_CHARS, CONFIRM_MAX_QUESTIONS,
-  BLOCK_TYPE_LABEL, KIND_LABEL, CONFIRM_STATE_LABEL,
+  BLOCK_TYPE_LABEL, KIND_LABEL, CONFIRM_STATE_LABEL, clipReasonKeepEnds,
 } from './confirm-states.mjs';
 
 // 原语再导出（server / CLI 直接引用；保持调用方单一 import 源）
@@ -43,17 +43,24 @@ function event(kind, by, note = '') {
 // 完整跳过（不挂起）：git 历史已含单号（幂等）、本单无待提交改动（可验证原因已落账）、非 git 项目。
 // 挂起：failed（含部分组失败）/ pendingManual（归属不明）/ heldGroups（暂扣）/ 其余 skipped
 // （无快照无法归因、变更不归属本单、状态不可读等——无法证明完整即挂起，不得放行队列）。
+// BUG-20260915-004：失败原因不再 slice(0, 80) 拦腰截断（原缺陷把 index.lock': File exists
+// 关键段整段截掉，只剩现象开头）；改为保头保尾，长度仍受 REASON_MAX_CHARS 约束，
+// 完整原文由 errorFull 落运行明细与确认记录 error 字段（BUG-20260915-003），展示层折叠查看。
 export function commitIncompleteReason(autoCommit) {
   if (!autoCommit || typeof autoCommit !== 'object') return null;
   if ((Array.isArray(autoCommit.pendingManual) && autoCommit.pendingManual.length)
     || autoCommit.heldGroups) {
     return '自动提交不完整：存在归属不明或暂扣待人工路径';
   }
-  if (autoCommit.status === 'failed') return `自动提交失败：${String(autoCommit.reason || '').slice(0, 80)}`;
+  if (autoCommit.status === 'failed') {
+    const prefix = '自动提交失败：';
+    return `${prefix}${clipReasonKeepEnds(autoCommit.reason, REASON_MAX_CHARS - [...prefix].length)}`;
+  }
   if (autoCommit.status === 'skipped') {
     const reason = String(autoCommit.reason || '');
     if (/幂等跳过|无待提交改动|不是 git 仓库/.test(reason)) return null;
-    return `提交完整性无法确认：${reason.slice(0, 80)}`;
+    const prefix = '提交完整性无法确认：';
+    return `${prefix}${clipReasonKeepEnds(reason, REASON_MAX_CHARS - [...prefix].length)}`;
   }
   return null;
 }

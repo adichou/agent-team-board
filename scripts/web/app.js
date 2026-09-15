@@ -3241,6 +3241,48 @@ function confirmScopeText(c) {
   return `${base}（本单可归属 ${c.attributedCount} · 归属待确认 ${c.uncertainCount}）`;
 }
 
+// BUG-20260915-004 挂起原因归类：把（历史上可能被截断过的）git 机器输出翻译成
+// 「人话结论 + 处理指引」。只做建议，不自动重试、不代替人工确认；未知错误如实归
+// 「原因未知，附原始输出」，不编造原因。覆盖实测的 index.lock 并发冲突一类。
+function classifySuspendReason(text) {
+  const raw = String(text || '');
+  if (/index\.lock/i.test(raw)) {
+    return {
+      kind: 'index-lock',
+      cause: 'git 索引被并发进程占用（瞬时冲突，可重试）',
+      hint: '「重新核验」或「确认并继续」即可重试补交',
+    };
+  }
+  return {
+    kind: 'unknown',
+    cause: '原因未知（未匹配已知失败归类）',
+    hint: '展开完整原始输出结合现场判断，再选择重新核验 / 确认并继续 / 保持挂起',
+  };
+}
+
+// BUG-20260915-004 归类结论条（琥珀条，默认展示层）：归类输入优先 error.full（完整原始
+// stderr）→ error.summary → reason；侧拉面板的完整输出折叠区由 Git 失败错误块提供，不重复。
+function confirmClassifyBarHtml(c) {
+  const src = String((c.error && (c.error.full || c.error.summary)) || c.reason || '');
+  if (!src) return '';
+  const cls = classifySuspendReason(src);
+  return `<p class="confirm-classify k-${esc(cls.kind)}"><span class="cls-mark" aria-hidden="true">⚠ </span><span class="cls-cause">${esc(cls.cause)}</span><span class="cls-hint">${esc(cls.hint)}</span></p>`;
+}
+
+// BUG-20260915-004 挂起原因分层块（任务页卡片 / 队列横幅共用）：默认一行归类结论 +
+// <details> 折叠完整原始输出（不截断不丢段；reason 现象句与原始 stderr 一并保留）。
+function confirmReasonLayeredHtml(c) {
+  const reason = String(c.reason || '');
+  const full = String((c.error && c.error.full) || '').trim();
+  const body = reason && full && reason !== full ? `${reason}\n${full}` : (full || reason);
+  if (!body) return '';
+  const n = [...body].length;
+  return `<div class="confirm-reason-layered">
+    ${confirmClassifyBarHtml(c)}
+    <details class="confirm-reason-full"><summary>完整原始输出（${n} 字符，不截断）</summary><pre>${esc(body)}</pre></details>
+  </div>`;
+}
+
 function confirmCardHtml(c) {
   const busy = state.confirms.busyId === c.itemId;
   const isDev = c.kind === 'develop';
@@ -3257,6 +3299,11 @@ function confirmCardHtml(c) {
   const verifyLine = isDev && c.verify && c.verify.lastCheckAt
     ? `<p class="confirm-verify ${c.verify.ok ? 'ok' : 'bad'}">最近核验（${fmtTime(c.verify.lastCheckAt)}）：${c.verify.ok ? '通过' : `未通过——${(c.verify.reasons || [])[0] || '见面板明细'}`}</p>`
     : '';
+  // BUG-20260915-004：git 失败现场（error 存在）改分层呈现——归类结论条 + 折叠完整原始输出，
+  // 不再裸透传（历史上被拦腰截断的）机器报错；其余挂起原因已是人话，维持原段落。
+  const reasonHtml = isDev && c.error
+    ? confirmReasonLayeredHtml(c)
+    : `<p class="confirm-reason">${esc(c.reason || '')}</p>`;
   return `<article class="confirm-card" data-confirm-card="${esc(c.itemId)}">
     <header class="confirm-card-head">
       <div>
@@ -3268,7 +3315,7 @@ function confirmCardHtml(c) {
       </div>
       <span class="muted small">已等待 ${fmtElapsed(c.declaredAt)}</span>
     </header>
-    <p class="confirm-reason">${esc(c.reason || '')}</p>
+    ${reasonHtml}
     <p class="confirm-counts">${esc(bodyLine)}</p>
     ${verifyLine}
     ${c.keepNote ? `<p class="confirm-keep-note muted small">保持挂起说明：${esc(c.keepNote)}</p>` : ''}
@@ -3318,7 +3365,10 @@ function confirmQueueBannerHtml(kind) {
   const items = (state.confirms.data?.items || []).filter((c) => c.kind === kind && c.state === 'waiting');
   if (!items.length) return '';
   const c = items[0];
-  return `<div class="notice warn confirm-queue-banner">${esc(c.kindLabel)}队列：已暂停 · 阻塞于 <span class="cid" data-goto-item="${esc(c.itemId)}" role="button">${esc(c.itemId)}</span> · ${esc(c.blockTypeLabel)}（${esc(c.reason || '')}）</div>`;
+  // BUG-20260915-004：git 失败现场与卡片同款分层（归类结论条 + 折叠完整原始输出），
+  // 不再裸透传截断串；无 error 的挂起原因维持括号短句。
+  const reasonPart = c.error ? confirmReasonLayeredHtml(c) : `（${esc(c.reason || '')}）`;
+  return `<div class="notice warn confirm-queue-banner">${esc(c.kindLabel)}队列：已暂停 · 阻塞于 <span class="cid" data-goto-item="${esc(c.itemId)}" role="button">${esc(c.itemId)}</span> · ${esc(c.blockTypeLabel)}${reasonPart}</div>`;
 }
 
 // 卡片「重新核验」：服务端重算剩余路径 + 跑测试；期间按钮禁用防重复
@@ -3471,6 +3521,7 @@ function renderConfirmForm(d) {
         ${d.verify.test && d.verify.test.tail ? `<details class="confirm-test-tail"><summary>测试输出（${esc(d.verify.test.cmd || 'npm test')} 退出码 ${d.verify.test.exitCode ?? '—'}）</summary><pre>${esc(d.verify.test.tail)}</pre></details>` : ''}`
       : '<p class="muted small">尚未核验：确认时将自动重新核验并运行测试</p>';
     form.innerHTML = `
+      ${d.error ? confirmClassifyBarHtml(d) : ''}
       <p class="confirm-reason">${esc(d.reason || '')}${d.legacy ? '（历史账本恢复）' : ''}</p>
       <p class="confirm-counts">${countsLine}</p>
       ${errBlock}
