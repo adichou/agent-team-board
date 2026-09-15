@@ -3031,6 +3031,20 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text);
 }
 .bld-merge-note { margin: 6px 0 0; }
+/* BUG-20260915-014：版本详情「概况 / 发布」页签与发布页签布局（复用 .rel-tabs/.rel-tab 既有样式，
+   详情页签行紧凑化）；发布区左运行列表 + 右运行详情分栏，窄屏纵向堆叠 */
+.bld-detail-tabs { margin: 8px 0 10px; padding-bottom: 6px; }
+.bld-rel-pane { display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+.bld-rel-split { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 2fr); gap: 12px; align-items: start; }
+.bld-rel-list { display: flex; flex-direction: column; gap: 6px; }
+.bld-rel-detail { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+.bld-rel-detail.muted { border: none; padding: 0; }
+.bld-rel-targets { display: flex; gap: 8px; flex-wrap: wrap; }
+.bld-rel-target { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bld-rel-stages ul { margin: 4px 0 0; padding-left: 18px; }
+.bld-rel-stages li { margin: 2px 0; }
+.bld-rel-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+@media (max-width: 900px) { .bld-rel-split { grid-template-columns: minmax(0, 1fr); } }
 /* 面板内条目选择（全选 / 全不选） */
 .bld-pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bld-cand { display: flex; align-items: center; gap: 8px; font-size: 13px; }
