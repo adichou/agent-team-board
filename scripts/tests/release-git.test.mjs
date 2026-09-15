@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as core from '../lib/core.mjs';
 import * as store from '../lib/release-store.mjs';
+import { worktreeDirtyFiles } from '../lib/product-release-git.mjs';
 import { runGitPipeline, realExec } from '../lib/release-git.mjs';
 
 const cases = [];
@@ -89,6 +90,66 @@ t('G2 未提交修改 → 本地预检阻塞并引导回提交功能；远端未
   assert.equal(remoteOid(env), before, '预检失败不推送');
 });
 
+// BUG-20260915-013：用真实状态输出验证首行空格、目录豁免与失败路径。
+for (const scenario of [
+  { name: '空状态输出', board: [], outside: null },
+  { name: '单条看板修改', board: ['repro.md'], outside: null },
+  { name: '多条看板修改', board: ['a.md', 'b.md'], outside: null },
+  { name: '首行普通修改', board: [], outside: 'modified' },
+  { name: '混合修改', board: ['repro.md'], outside: 'modified' },
+  { name: '暂存修改', board: [], outside: 'staged' },
+  { name: '未跟踪文件', board: [], outside: 'untracked' },
+]) {
+  t(`G2 回归 ${scenario.name}`, async () => {
+    const env = mkEnv();
+    try {
+      fs.mkdirSync(path.join(env.work, 'src'));
+      fs.writeFileSync(path.join(env.work, 'src/.keep'), '');
+      const tracked = [...scenario.board.map((p) => `docs/agent-team-board/${p}`)];
+      if (scenario.outside && scenario.outside !== 'untracked') tracked.push('src/repro.txt');
+      for (const file of tracked) fs.writeFileSync(path.join(env.work, file), 'before\n');
+      git(env.work, ['add', '-A']);
+      git(env.work, ['commit', '-m', 'prepare tracked files']);
+      const beforeHead = env.oid();
+      for (const file of tracked) fs.appendFileSync(path.join(env.work, file), 'after\n');
+      if (scenario.outside === 'untracked') fs.writeFileSync(path.join(env.work, 'src/repro.txt'), 'new\n');
+      if (scenario.outside === 'staged') git(env.work, ['add', 'src/repro.txt']);
+      const raw = spawnSync('git', ['status', '--porcelain'], { cwd: env.work, encoding: 'utf8', env: GIT_ENV }).stdout;
+      if (scenario.board.length || scenario.outside === 'modified') assert.ok(raw.startsWith(' M '), JSON.stringify(raw));
+      if (scenario.board.length || scenario.outside) assert.ok(raw.endsWith('\n'), '真实 porcelain 保留末尾换行');
+      else assert.equal(raw, '', '干净仓库输出为空');
+      const index = git(env.work, ['diff', '--cached']);
+      const run = newRun(env, {});
+      const base = realExec({ timeoutMs: 30000 });
+      const mutations = [];
+      const exec = async (cmd, args, opts) => {
+        if (['push', 'add', 'commit', 'stash', 'reset', 'checkout'].includes(args[0])) mutations.push(args);
+        return base(cmd, args, opts);
+      };
+      const beforeRemote = remoteOid(env);
+      const out = await full(env, run.id, { through: 'local-precheck', exec });
+      const pre = out.stages.find((s) => s.key === 'local-precheck');
+      if (scenario.outside) {
+        assert.equal(pre.status, 'failed');
+        assert.equal(pre.error.kind, 'dirty');
+        assert.match(pre.error.message, /src\/repro\.txt/, '错误提示保留完整路径');
+        assert.deepEqual(pre.result.files, ['src/repro.txt'], '结果仅包含完整的看板外路径');
+        assert.ok(!pre.error.message.includes('ocs/agent-team-board'), '不包含被截断的看板路径');
+      } else {
+        assert.equal(pre.status, 'done', JSON.stringify(pre.error));
+        assert.deepEqual(await worktreeDirtyFiles(env.work, base), [], '产品发布与 REL 一致豁免看板修改');
+      }
+      assert.deepEqual(mutations, [], '预检不调用推送或自动处理工作区');
+      assert.equal(remoteOid(env), beforeRemote, '远端引用不变');
+      assert.equal(env.oid(), beforeHead, '没有自动提交');
+      assert.equal(git(env.work, ['diff', '--cached']), index, '暂存区不变');
+      for (const file of tracked) assert.equal(fs.readFileSync(path.join(env.work, file), 'utf8'), 'before\nafter\n', file);
+    } finally {
+      fs.rmSync(env.tmp, { recursive: true, force: true });
+    }
+  });
+}
+
 t('G3 无 remote → 冻结阶段明确阻塞；detached HEAD → 预检阻塞', async () => {
   const env = mkEnv();
   env.commit('second');
@@ -109,6 +170,24 @@ t('G3 无 remote → 冻结阶段明确阻塞；detached HEAD → 预检阻塞',
   assert.equal(pre.status, 'failed');
   assert.match(pre.error.message, /detached|游离/);
 });
+
+for (const marker of ['MERGE_HEAD', 'rebase-merge', 'rebase-apply']) {
+  t(`G3 未完成 ${marker} 继续阻塞`, async () => {
+    const env = mkEnv();
+    try {
+      if (marker === 'MERGE_HEAD') fs.writeFileSync(path.join(env.work, '.git', marker), `${env.oid()}\n`);
+      else fs.mkdirSync(path.join(env.work, '.git', marker));
+      const run = newRun(env, {});
+      const out = await full(env, run.id);
+      const pre = out.stages.find((s) => s.key === 'local-precheck');
+      assert.equal(pre.status, 'failed');
+      assert.equal(pre.error.kind, 'in-progress');
+      assert.equal(remoteOid(env), null, '未完成合并或变基时远端不变');
+    } finally {
+      fs.rmSync(env.tmp, { recursive: true, force: true });
+    }
+  });
+}
 
 t('G4 落后 / 分叉分别阻塞且文案区分（不自动改写历史）', async () => {
   // 落后：远端领先，本地未动
