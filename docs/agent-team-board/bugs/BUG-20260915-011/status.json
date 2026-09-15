@@ -2,11 +2,11 @@
   "id": "BUG-20260915-011",
   "type": "bug",
   "title": "需求模块的当前选择条目和右侧的条目没有同步，请修复",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-001",
   "createdAt": "2026-09-15T07:33:13.767Z",
-  "updatedAt": "2026-09-15T08:12:16.871Z",
+  "updatedAt": "2026-09-15T08:12:58.021Z",
   "agentCompletedAt": "2026-09-15T08:12:16.871Z",
   "lastReport": {
     "at": "2026-09-15T08:12:16.871Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-001",
       "note": "上报测试报告（覆盖率 6%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T08:12:58.021Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
