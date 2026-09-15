@@ -3320,8 +3320,8 @@ function confirmCardHtml(c) {
     ${verifyLine}
     ${c.keepNote ? `<p class="confirm-keep-note muted small">保持挂起说明：${esc(c.keepNote)}</p>` : ''}
     <div class="confirm-acts">
-      <button type="button" class="btn small" data-confirm-panel="${esc(c.itemId)}">查看并确认</button>
-      ${isDev ? `<button type="button" class="btn small" data-confirm-verify="${esc(c.itemId)}"${busy ? ' disabled' : ''}>${busy ? '正在核验提交与测试…' : '重新核验'}</button>` : ''}
+      <button type="button" class="btn small" data-confirm-panel="${esc(c.itemId)}" title="${isDev ? '打开侧拉面板：核对文件、差异与核验结论后处理' : '打开侧拉面板：查看问题并逐项作答后确认'}">查看并确认</button>
+      ${isDev ? `<button type="button" class="btn small" data-confirm-verify="${esc(c.itemId)}"${busy ? ' disabled' : ''} title="重新核验：只检查不改现场（重算候选路径并运行测试）；终端已自行补交后或怀疑状态已变化时，用它刷新「最近核验」结论" aria-label="重新核验：只检查不改现场（重算候选路径并运行测试）；终端已自行补交后或怀疑状态已变化时，用它刷新「最近核验」结论">${busy ? '正在核验提交与测试…' : '重新核验'}</button>` : ''}
     </div>
   </article>`;
 }
@@ -3534,11 +3534,12 @@ function renderConfirmForm(d) {
       </label>
       <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
       <p class="confirm-scope-summary" id="confirmScopeSummary"></p>
+      ${resolved ? '' : '<p class="muted small confirm-btn-guide">保持挂起＝暂不处理，说明留档，现场与队列暂停保留 · 重新核验＝只检查不改现场，重核提交状态并跑测试，刷新「最近核验」结论 · 确认并继续＝授权补交剩余路径＋复验测试＋恢复队列</p>'}
       <footer class="modal-foot">
         <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
-        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''} title="保持挂起：记录处理说明，现场与队列暂停保留">保持挂起</button>
-        <button type="button" class="btn" id="confirmVerifyBtn"${busy || resolved ? ' disabled' : ''} title="重新核验：只检查不改现场（重算候选路径并运行测试）">${busy ? '正在核验提交与测试…' : '重新核验'}</button>
-        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved || needReverify ? ' disabled' : ''} title="${needReverify ? '内容或候选范围已变化：先「重新核验」核对最新差异' : '确认并继续：将补交选中文件、运行测试，通过后恢复队列'}">${resolved ? '已确认恢复' : '确认并继续'}</button>
+        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''} title="保持挂起：暂不处理，处理说明留档，现场与队列暂停保留，稍后再来" aria-label="保持挂起：暂不处理，处理说明留档，现场与队列暂停保留，稍后再来">保持挂起</button>
+        <button type="button" class="btn" id="confirmVerifyBtn"${busy || resolved ? ' disabled' : ''} title="重新核验：只检查不改现场（重算候选路径并运行测试）；终端已自行补交后或怀疑状态已变化时，用它刷新「最近核验」结论" aria-label="重新核验：只检查不改现场（重算候选路径并运行测试）；终端已自行补交后或怀疑状态已变化时，用它刷新「最近核验」结论">${busy ? '正在核验提交与测试…' : '重新核验'}</button>
+        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved || needReverify ? ' disabled' : ''} title="${needReverify ? '内容或候选范围已变化：先「重新核验」核对最新差异' : '确认并继续：授权补交选中文件、复验测试，通过后恢复队列，一步闭环'}" aria-label="${needReverify ? '内容或候选范围已变化：先「重新核验」核对最新差异' : '确认并继续：授权补交选中文件、复验测试，通过后恢复队列，一步闭环'}">${resolved ? '已确认恢复' : '确认并继续'}</button>
       </footer>`;
     updateConfirmScopeSummary(d);
     bindConfirmFormActions(d);
@@ -3565,11 +3566,12 @@ function renderConfirmForm(d) {
         <textarea id="confirmNote" rows="2" placeholder="可留空">${esc(d.keepNote || '')}</textarea>
       </label>
       <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+      ${resolved ? '' : '<p class="muted small confirm-btn-guide">保持挂起＝暂不处理，说明留档，队列保持暂停 · 保存草稿＝暂存作答，不确认不续跑 · 确认并继续＝答案回传当前条目继续分析，未决问题清零才处理下一条</p>'}
       <footer class="modal-foot">
         <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
-        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''}>保持挂起</button>
-        <button type="button" class="btn" id="confirmDraftBtn"${busy || resolved ? ' disabled' : ''}>保存草稿</button>
-        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved ? ' disabled' : ''}>${resolved ? '已确认续跑' : '确认并继续'}</button>
+        <button type="button" class="btn" id="confirmKeepBtn"${busy || resolved ? ' disabled' : ''} title="保持挂起：暂不处理，处理说明留档，现场与队列暂停保留，稍后再来" aria-label="保持挂起：暂不处理，处理说明留档，现场与队列暂停保留，稍后再来">保持挂起</button>
+        <button type="button" class="btn" id="confirmDraftBtn"${busy || resolved ? ' disabled' : ''} title="保存草稿：暂存当前作答，不确认不续跑，稍后可继续作答" aria-label="保存草稿：暂存当前作答，不确认不续跑，稍后可继续作答">保存草稿</button>
+        <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved ? ' disabled' : ''} title="确认并继续：答案回传当前条目继续分析；必答项全部作答才能确认" aria-label="确认并继续：答案回传当前条目继续分析；必答项全部作答才能确认">${resolved ? '已确认续跑' : '确认并继续'}</button>
       </footer>`;
     bindConfirmFormActions(d);
   }

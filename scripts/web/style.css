@@ -3308,6 +3308,8 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   font-size: 12px;
   color: var(--muted);
 }
+/* BUG-20260915-005 按钮区上方三按钮对照说明（muted small；窄面板自动换行不破版） */
+.confirm-btn-guide { margin: 10px 0 0; text-align: left; line-height: 1.6; overflow-wrap: anywhere; }
 
 /* ---------- BUG-20260915-004 挂起原因分层：归类结论条（琥珀）+ 折叠完整原始输出 ---------- */
 .confirm-reason-layered { display: grid; gap: 4px; margin: 0; }

@@ -461,10 +461,18 @@ const EN = {
   '无待提交文件：全部路径已入库。核验口径与计数一致。': 'No files to commit: all paths are in the repository. Verification and counts share the same basis.',
   '待提交：待核对（无法扫描工作区，不显示误导性 0）': 'To commit: to be determined (worktree not scannable; no misleading 0 shown)',
   '待核对：无法扫描工作区确定候选范围（非 git 仓库 / 缺少预留快照 / 运行记录缺失）——请人工核对后确认，不显示误导性 0。': 'To be determined: candidate scope cannot be scanned (not a git repo / no reservation snapshot / run record missing) — review manually before confirming; no misleading 0 is shown.',
-  '保持挂起：记录处理说明，现场与队列暂停保留': 'Keep suspended: record the handling note; the scene and queue pause remain',
-  '重新核验：只检查不改现场（重算候选路径并运行测试）': 'Re-verify: check only, no side effects (recompute candidate paths and run tests)',
-  '确认并继续：将补交选中文件、运行测试，通过后恢复队列': 'Confirm & continue: supplements the selected files, runs tests, then resumes the queue',
+  // BUG-20260915-005：挂起确认面板三按钮使用场景说明（title 悬停 + aria-label 读屏 +
+  // 按钮区上方对照行），develop / 分析侧同口径；旧 title 三条随措辞扩展一并更新。
+  '保持挂起：暂不处理，处理说明留档，现场与队列暂停保留，稍后再来': 'Keep suspended: not handling it now — the handling note is archived, the scene and the queue pause remain; come back later',
+  '重新核验：只检查不改现场（重算候选路径并运行测试）；终端已自行补交后或怀疑状态已变化时，用它刷新「最近核验」结论': 'Re-verify: check only, no side effects (recompute candidate paths and run tests); use it to refresh the "latest verification" after committing manually in the terminal, or when the state may have changed',
+  '确认并继续：授权补交选中文件、复验测试，通过后恢复队列，一步闭环': 'Confirm & continue: authorize supplementing the selected files and re-running the tests; once they pass the queue resumes — a closed loop in one step',
   '内容或候选范围已变化：先「重新核验」核对最新差异': 'Content or candidate scope changed: "Re-verify" the latest diffs first',
+  '保持挂起＝暂不处理，说明留档，现场与队列暂停保留 · 重新核验＝只检查不改现场，重核提交状态并跑测试，刷新「最近核验」结论 · 确认并继续＝授权补交剩余路径＋复验测试＋恢复队列': 'Keep suspended = not now; note archived, scene and queue pause remain · Re-verify = check only, re-check commit state and run tests, refresh the conclusion · Confirm & continue = authorize supplementing remaining paths + re-verify + resume the queue',
+  '保存草稿：暂存当前作答，不确认不续跑，稍后可继续作答': 'Save draft: store the current answers without confirming or resuming; continue later',
+  '确认并继续：答案回传当前条目继续分析；必答项全部作答才能确认': 'Confirm & continue: answers are sent back to the item to continue analysis; all required questions must be answered before confirming',
+  '保持挂起＝暂不处理，说明留档，队列保持暂停 · 保存草稿＝暂存作答，不确认不续跑 · 确认并继续＝答案回传当前条目继续分析，未决问题清零才处理下一条': 'Keep suspended = not now; note archived, queue stays paused · Save draft = store answers without confirming or resuming · Confirm & continue = answers return to the item to continue analysis; open questions must reach zero before the next item',
+  '打开侧拉面板：核对文件、差异与核验结论后处理': 'Open the side panel: review files, diffs and the verification conclusion, then act',
+  '打开侧拉面板：查看问题并逐项作答后确认': 'Open the side panel: review the questions, answer them one by one, then confirm',
   '确认范围：待核对（无法扫描工作区确定候选范围，确认前请人工核对）': 'Confirm scope: to be determined (worktree not scannable; review manually before confirming)',
   '｜口径：与文件表 / 最近核验同源': ' | basis: same source as the file table / latest verification',
   // BUG-20260915-004 挂起原因归类：琥珀结论条（默认人话结论 + 处理指引；未知错误如实兜底）
