@@ -7,7 +7,7 @@
 - 声明：2026-09-14T15:42:59.357Z（auto-commit） · 运行 run-20260914-250
 - 原因：自动提交失败：git add失败：fatal: Unable to create '/Users/adichou/Documents/src/agent-team-board
 
-- 最近核验：2026-09-15 00:26:20 未通过
+- 最近核验：2026-09-15 00:30:59 未通过
   - 测试未通过（npm test 退出码 1）：提交后内容验证失败
 
 事件留痕：
@@ -19,3 +19,4 @@
 - 2026-09-15 00:04:19 verified（board）：核验未通过（1 项）
 - 2026-09-15 00:19:20 verified（board）：核验未通过（1 项）
 - 2026-09-15 00:26:20 confirm-rejected（board）：测试未通过（npm test 退出码 1）：提交后内容验证失败
+- 2026-09-15 00:30:59 confirm-rejected（board）：测试未通过（npm test 退出码 1）：提交后内容验证失败
