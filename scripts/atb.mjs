@@ -23,6 +23,8 @@ import * as holdStates from './lib/hold-states.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as gitFlow from './lib/git-flow.mjs';
 import * as mgtCommit from './lib/mgt-commit.mjs';
+// BUG-20260915-007：无 run 手动 report 的系统收口提交编排（复用批量 autoCommitForRun 内核）。
+import * as manualCloseout from './lib/manual-closeout.mjs';
 
 const args = process.argv.slice(2);
 
@@ -389,7 +391,24 @@ async function main() {
     const cov = st.lastReport?.coverage;
     console.log(`✓ 已写入测试报告：${core.resolveItemDir(dataDir, st.id).dir}/test-report.md`);
     console.log(`  ${st.id} 标记为「待人工确认完成」${cov != null ? `（覆盖率 ${cov}%）` : ''}${opts.run ? ` · 关联运行 ${opts.run}` : ''}`);
-    if (jsonOut) console.log(JSON.stringify(st, null, 2));
+    // BUG-20260915-007：无 run 的手动上报在 report 成功后走系统收口提交——与批量 run
+    // receipt 同口径（认领时快照归因、doc/test/业务分组、消息带单号、只 commit 不 push、
+    // 失败/归属不明挂起待人工确认）；上报本身不受收口结果影响，条目已进入待测试。
+    let closeout = null;
+    if (!opts.run) {
+      closeout = manualCloseout.closeoutManualReport({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: st.id });
+      const ac = closeout.autoCommit;
+      if (ac.status === 'committed') {
+        console.log(`✓ 系统收口提交 ${ac.commits.length} 组（只 commit 不 push，atb commit log ${st.id} 可查）：`);
+        for (const c of ac.commits) console.log(`  · ${c.hash.slice(0, 10)} ${c.subject}`);
+      } else if (closeout.suspended) {
+        console.log(`⚠ 收口提交不完整：${closeout.suspended.reason}`);
+        console.log('  已挂起待人工确认：请到 Status Board 任务页「待人工确认」核对差异并确认后继续（上报已完成，条目进入待测试；确认闭环内完成补交）');
+      } else {
+        console.log(`= 收口提交：${ac.reason || '本单无待提交改动'}`);
+      }
+    }
+    if (jsonOut) console.log(JSON.stringify(closeout ? { ...st, closeout } : st, null, 2));
     return;
   }
 

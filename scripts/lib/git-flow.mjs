@@ -193,17 +193,95 @@ export function changedPathsSince(root, snapshot) {
   return [...diff.changed, ...diff.dirtyTouched];
 }
 
-// 数据账本 .gitignore 补齐：自动提交账本目录（commits/runs、commits/batches）不进版本控制。
-// 返回是否发生修改（看板共享文件由 doc 组整体收纳，保持工作区干净）。
+// 数据账本 .gitignore 补齐：自动提交账本目录（commits/runs、commits/batches、dispatch/runs）
+// 不进版本控制。返回是否发生修改（看板共享文件由 doc 组整体收纳，保持工作区干净）。
+// BUG-20260915-007：dispatch/runs/ 由手动收口 run 记录（manual-<itemId>）使用——core.claim
+// 无法引用 batch.ensureDispatch（循环依赖），此处幂等补行保持单一目录口径。
 function ensureLedgerIgnore(dataDir) {
   const gi = path.join(dataDir, '.gitignore');
-  const wanted = ['commits/runs/', 'commits/batches/'];
+  const wanted = ['commits/runs/', 'commits/batches/', 'dispatch/runs/'];
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
   const add = wanted.filter((l) => !cur.split('\n').includes(l));
   if (!add.length) return false;
   fs.writeFileSync(gi, cur.replace(/\n*$/, '\n') + add.join('\n') + '\n');
   return true;
+}
+
+// ---------- 2b. BUG-20260915-007 手动 /dev 收口 run 记录 ----------
+// 无 run 的手动开发（/dev claim → report）与批量 run 同口径系统收口提交：归因基线是
+// 认领（或例外 status → in-progress，dev-closeout 例外授权分支）时捕获的工作区快照。
+// 记录落 dispatch/runs/manual-<itemId>/run.json：executor='manual'、batchId=null——与
+// 批量（batchRuns 按 batchId 过滤）/Codex（myRuns 按 executor 过滤）同目录互不误读；
+// 每个条目一条，新一轮认领周期覆盖。目录由 ensureLedgerIgnore 排除在版本控制外。
+
+export function manualRunIdOf(itemId) {
+  return `manual-${itemId}`;
+}
+
+function manualRunPath(dataDir, itemId) {
+  return path.join(dataDir, 'dispatch', 'runs', manualRunIdOf(itemId), 'run.json');
+}
+
+const readJsonFile = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+};
+
+export function readManualRun(dataDir, itemId) {
+  const rec = readJsonFile(manualRunPath(dataDir, itemId));
+  return rec && rec.itemId === itemId && rec.executor === 'manual' ? rec : null;
+}
+
+// 认领 / 例外进入开发时捕获归因快照（幂等）：
+//   同一认领周期（phase='reserved'）重复调用保留最早快照——认领锁过期重认等场景不丢
+//   前段改动的归因连续性；上一周期已收口（phase='reported'）则刷新快照开启新周期。
+// 非 git 项目 treeSnapshot=null（report 收口按「非 git」既有跳过口径处理）。
+export function captureManualTreeSnapshot({ dataDir, projectRoot, itemId, owner = null, note = null }) {
+  const cur = readManualRun(dataDir, itemId);
+  if (cur && cur.phase === 'reserved') return cur;
+  ensureLedgerIgnore(dataDir);
+  const now = nowIso();
+  const rec = {
+    version: 1,
+    runId: manualRunIdOf(itemId),
+    batchId: null,
+    itemId,
+    executor: 'manual',
+    owner: owner || null,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: null,
+    finishedAt: null,
+    phase: 'reserved',
+    reason: null,
+    reportRef: null,
+    ...(note ? { snapshotNote: String(note) } : {}),
+    treeSnapshot: workingTreeSnapshot(projectRoot),
+    autoCommit: null,
+  };
+  fs.mkdirSync(path.dirname(manualRunPath(dataDir, itemId)), { recursive: true });
+  writeJsonAtomic(manualRunPath(dataDir, itemId), rec);
+  return rec;
+}
+
+// report 收口结果落账：phase='reported'（本轮上报已完成系统收口尝试），autoCommit 供
+// 重复上报的幂等判定与失败续传读取（autoCommitForRun 的 prevFailed 口径）。
+export function saveManualRunResult(dataDir, itemId, autoCommit) {
+  const cur = readManualRun(dataDir, itemId);
+  if (!cur) return null;
+  const next = {
+    ...cur,
+    phase: 'reported',
+    finishedAt: nowIso(),
+    updatedAt: nowIso(),
+    autoCommit,
+  };
+  writeJsonAtomic(manualRunPath(dataDir, itemId), next);
+  return next;
 }
 
 // ---------- 3. 到待测试自动提交 ----------
