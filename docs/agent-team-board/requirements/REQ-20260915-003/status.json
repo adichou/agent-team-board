@@ -2,11 +2,11 @@
   "id": "REQ-20260915-003",
   "type": "requirement",
   "title": "构建模块的产品发布区域需要移到左侧列表的按钮区域。关联条目支持分页和搜索",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-20260915-003",
   "createdAt": "2026-09-15T13:40:51.471Z",
-  "updatedAt": "2026-09-15T15:27:28.739Z",
+  "updatedAt": "2026-09-15T16:12:53.808Z",
   "agentCompletedAt": "2026-09-15T15:27:28.739Z",
   "lastReport": {
     "at": "2026-09-15T15:27:28.739Z",
@@ -56,6 +56,13 @@
       "to": "in-progress",
       "by": "zcode-batch-20260915-003",
       "note": "上报测试报告（覆盖率 88%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T16:12:53.808Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
