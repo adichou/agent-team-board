@@ -2,11 +2,11 @@
   "id": "BUG-20260915-005",
   "type": "bug",
   "title": "挂起确认面板「保持挂起/重新核验/确认并继续」按钮缺少使用场景说明",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-036",
   "createdAt": "2026-09-15T00:28:12.652Z",
-  "updatedAt": "2026-09-15T03:55:23.209Z",
+  "updatedAt": "2026-09-15T05:54:19.775Z",
   "agentCompletedAt": "2026-09-15T03:55:23.209Z",
   "lastReport": {
     "at": "2026-09-15T03:55:23.209Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-036",
       "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:19.775Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
