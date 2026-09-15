@@ -2,11 +2,11 @@
   "id": "BUG-20260915-006",
   "type": "bug",
   "title": "default-port 测试以 800ms HTTP 探活判定端口占用不可靠，面板触发核验时必现假失败",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": null,
   "createdAt": "2026-09-15T00:39:41.577Z",
-  "updatedAt": "2026-09-15T00:57:39.405Z",
+  "updatedAt": "2026-09-15T05:54:13.956Z",
   "agentCompletedAt": "2026-09-15T00:57:39.405Z",
   "lastReport": {
     "at": "2026-09-15T00:57:39.405Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-port-bind",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:13.957Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
