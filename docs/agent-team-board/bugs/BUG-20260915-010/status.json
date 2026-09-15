@@ -2,11 +2,11 @@
   "id": "BUG-20260915-010",
   "type": "bug",
   "title": "需求或 bug 详情中的说明文档的讨论按钮生成的提示词最后没有换行",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-w1",
   "createdAt": "2026-09-15T07:29:46.678Z",
-  "updatedAt": "2026-09-15T08:02:33.000Z",
+  "updatedAt": "2026-09-15T08:13:01.979Z",
   "agentCompletedAt": "2026-09-15T08:02:33.000Z",
   "lastReport": {
     "at": "2026-09-15T08:02:33.000Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-w1",
       "note": "上报测试报告（覆盖率 2%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T08:13:01.980Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
