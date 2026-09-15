@@ -2,11 +2,11 @@
   "id": "REQ-20260914-007",
   "type": "requirement",
   "title": "人工确认完成和版本合并成功后自动提交管理文件，失败时明确提示并支持重试",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-032",
   "createdAt": "2026-09-14T15:39:19.803Z",
-  "updatedAt": "2026-09-15T02:23:51.997Z",
+  "updatedAt": "2026-09-15T05:54:34.607Z",
   "agentCompletedAt": "2026-09-15T02:23:51.997Z",
   "lastReport": {
     "at": "2026-09-15T02:23:51.997Z",
@@ -63,6 +63,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-032",
       "note": "上报测试报告（覆盖率 60%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:34.607Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
