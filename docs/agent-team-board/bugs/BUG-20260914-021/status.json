@@ -2,11 +2,11 @@
   "id": "BUG-20260914-021",
   "type": "bug",
   "title": "commit 消息对条目标题有截断，请修复",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-033",
   "createdAt": "2026-09-14T15:52:11.646Z",
-  "updatedAt": "2026-09-15T02:35:28.653Z",
+  "updatedAt": "2026-09-15T05:54:30.857Z",
   "agentCompletedAt": "2026-09-15T02:35:28.653Z",
   "lastReport": {
     "at": "2026-09-15T02:35:28.653Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-033",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:30.857Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
