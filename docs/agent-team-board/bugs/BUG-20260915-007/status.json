@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260915-007",
+  "type": "bug",
+  "title": "atb report（无 run 场景）缺系统收口提交，手动 /dev 与批量 run 的提交行为不一致",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-037",
+  "createdAt": "2026-09-15T01:21:50.241Z",
+  "updatedAt": "2026-09-15T04:31:56.072Z",
+  "agentCompletedAt": "2026-09-15T04:31:56.072Z",
+  "lastReport": {
+    "at": "2026-09-15T04:31:56.072Z",
+    "coverage": null,
+    "framework": "node:test",
+    "summary": "无 run 手动 report 接入系统收口提交（引入来源 REQ-20260911-009，经 atb list 核验；关联 BUG-20260915-002）：claim/status→in-progress 拍工作区快照落 dispatch/runs/manual-<ID>，report 成功后经 manual-closeout 复用 autoCommitForRun 同口径提交（doc/test/业务、带单号、只 commit 不 push、幂等补交），失败/归属不明走 confirm-store 挂起待人工确认且不阻断上报；例外分支与非 git 跳过同覆盖。新增回归测试 5 场景全绿，全量 245 个测试文件 0 失败。",
+    "runId": "run-20260915-257"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T01:21:50.241Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-053c"
+    },
+    {
+      "at": "2026-09-15T01:30:27.429Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T01:55:56.502Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-095237-1d08）"
+    },
+    {
+      "at": "2026-09-15T03:56:09.463Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-037",
+      "note": "认领（zcode-batch-048-037）"
+    },
+    {
+      "at": "2026-09-15T04:31:56.072Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-037",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}
