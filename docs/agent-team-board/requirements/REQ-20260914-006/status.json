@@ -2,11 +2,11 @@
   "id": "REQ-20260914-006",
   "type": "requirement",
   "title": "构建合并策略结论纪要：不采用 rebase，保留逐条 --no-ff 合并，main 观感用 --first-parent 解决",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-031",
   "createdAt": "2026-09-14T15:30:50.304Z",
-  "updatedAt": "2026-09-15T01:37:11.070Z",
+  "updatedAt": "2026-09-15T05:54:36.645Z",
   "agentCompletedAt": "2026-09-15T01:37:11.070Z",
   "lastReport": {
     "at": "2026-09-15T01:37:11.070Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-031",
       "note": "上报测试报告（覆盖率 0%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:36.645Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
