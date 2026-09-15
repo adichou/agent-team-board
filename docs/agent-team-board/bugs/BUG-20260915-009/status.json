@@ -2,11 +2,11 @@
   "id": "BUG-20260915-009",
   "type": "bug",
   "title": "需求模块的 AI 开发和 AI 分析按钮，点击后要分别精准跳到任务模块中的 AI 开发和 AI 分析的页面",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-038",
   "createdAt": "2026-09-15T01:33:45.664Z",
-  "updatedAt": "2026-09-15T04:44:01.053Z",
+  "updatedAt": "2026-09-15T05:53:47.497Z",
   "agentCompletedAt": "2026-09-15T04:44:01.053Z",
   "lastReport": {
     "at": "2026-09-15T04:44:01.053Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-038",
       "note": "上报测试报告（覆盖率 5%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:53:47.497Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
