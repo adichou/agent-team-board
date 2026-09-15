@@ -5412,6 +5412,11 @@ async function retryRunFromRecord(runId, kind) {
 async function gotoRuns(mode) {
   if (mode) state.batch.mode = mode;
   if (state.batch.mode === 'zcode') state.batch.mode = 'develop';
+  // BUG-20260915-009：进入任务模块必须立刻呈现目标子面板——离开模块时 setView 仅隐藏 #runsView，
+  // #batchDrawer 保留最后一次渲染的另一子面板 HTML；若目标面板数据签名无变化，refreshRefine /
+  // refreshBatch 的签名剪枝会跳过重渲染，落地就停留在残留面板。进入时按当前 mode 无条件渲染一次
+  // （无缓存数据时面板自身呈现「加载中…」），数据刷新仍走既有轮询与签名剪枝（不打断面板内输入）。
+  renderBatchDrawer();
   setView('runs'); // 激活视图（state.batch.open = true）并拉取面板数据
   await refreshBatch();
 }
