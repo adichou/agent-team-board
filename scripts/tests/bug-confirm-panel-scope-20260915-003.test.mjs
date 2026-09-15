@@ -262,6 +262,10 @@ function runRenderFragment(detail) {
   const start = appSource.indexOf('function renderConfirmForm(');
   const end = appSource.indexOf('function bindConfirmFormActions(');
   assert.ok(start > 0 && end > start, 'app.js 应包含 renderConfirmForm 片段');
+  // BUG-20260915-004：renderConfirmForm 引用归类结论条助手（同文件先定义），一并载入真实片段
+  const clsStart = appSource.indexOf('function classifySuspendReason(');
+  const clsEnd = appSource.indexOf('function confirmCardHtml(');
+  if (clsStart > 0 && clsEnd > clsStart) vm.runInContext(appSource.slice(clsStart, clsEnd), context);
   vm.runInContext(appSource.slice(start, end), context);
   vm.runInContext(`renderConfirmForm(${JSON.stringify(detail)})`, context);
   return { html: nodes.get('#confirmForm').innerHTML, nodes };
