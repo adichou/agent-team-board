@@ -912,7 +912,8 @@ export function buildStartPrompt(dataDir, id) {
     `- 需要更新时整理新纪要写入临时 md 文件，执行 node ${atb} disc minutes ${meta.id} --file <纪要文件> --base-version <当前版本> --dir ${projectRoot}`,
     '- 分节：讨论背景 / 已确认共识 / 建议与取舍 / 未决问题 / 后续行动，逐条注明支撑轮次（如 R0003）；',
     '- 版本冲突（他人已更新）时命令会报错：重新读取最新纪要与全部轮次后再整理；纪要更新失败不影响已保存的轮次。',
-  ].join('\n');
+    // BUG-20260915-010：启动提示词末尾恰追加一个换行（与 buildDocRef 口径一致），粘贴后光标落在新行
+  ].join('\n') + '\n';
 }
 
 function readQuestionSafe(dataDir, id) {
@@ -944,7 +945,7 @@ export function buildFinishPrompt(dataDir, id) {
     `3. 最后写发布标记 ${path.join(dir, DISC_PUBLISH_FILE)}：{ "discussionId": "${meta.id}", "publishedAt": "<ISO 时间>" }。`,
     '',
     '看板只认发布标记与成套文件；不要直接修改需求/Bug 条目、不要改变看板状态。',
-  ].join('\n');
+  ].join('\n') + '\n';
 }
 
 // 继续讨论提示词（REQ-20260910-018）：任意能访问本项目文档的新会话接续同一讨论——
@@ -976,7 +977,7 @@ export function buildContinuePrompt(dataDir, id) {
     ...fileUpdateCommitLines(meta.id, [
       '- 「只写入本讨论目录」约束的是轮次与纪要；按需文件更新可写讨论明确支撑的本项目内文件，仍不串其他项目或讨论。',
     ]),
-  ].join('\n');
+  ].join('\n') + '\n';
 }
 
 // 整理结论提示词（REQ-20260910-018，替代原「讨论完毕」定位）：重新汇总已保存轮次重整纪要 +
@@ -997,7 +998,7 @@ export function buildOrganizePrompt(dataDir, id) {
     `   - 发布标记（最后写）${path.join(dir, DISC_PUBLISH_FILE)}：{"discussionId":"${meta.id}","publishedAt":"<ISO 时间>"}；`,
     '   只有讨论明确支撑的结论才进入 items；可以只有结论不生成条目（items 为空数组）；不自动创建或接受条目。',
     '4. 整理结论不终止讨论，也不是交流保存的前提；之后仍可继续逐轮交流与更新纪要。',
-  ].join('\n');
+  ].join('\n') + '\n';
 }
 
 // 讨论完毕（兼容保留，REQ-20260910-018 起 UI 改为「整理结论」，不再提供本入口）：
