@@ -128,6 +128,23 @@ t('D2 提示词：启动/收尾含同一标识、文档入口与落盘三件套�
   assert.match(start2, /2\s*轮|第 2 轮|第 2 轮/, '提示词应带本轮标识');
 });
 
+/* ---------- D2b：BUG-20260915-010 提示词末尾恰一个换行 ---------- */
+
+t('D2b BUG-20260915-010 启动/收尾提示词末尾恰一个换行：endsWith("\\n") 且不以 "\\n\\n" 结尾，其余内容不变', () => {
+  const { dataDir } = mkProject();
+  const req = mkReq(dataDir);
+  const d = disc.createDiscussion(dataDir, { reqId: req.id, by: 'board' });
+  const start = disc.buildStartPrompt(dataDir, d.id);
+  const finish = disc.buildFinishPrompt(dataDir, d.id);
+  for (const [name, p] of [['启动', start], ['收尾', finish]]) {
+    assert.ok(p.endsWith('\n'), `${name}提示词应以换行符结尾，粘贴后光标落在新行`);
+    assert.ok(!p.endsWith('\n\n'), `${name}提示词末尾只追加一个换行，不得产生多余空行`);
+    assert.ok(!p.startsWith('\n'), `${name}提示词开头不得追加换行`);
+  }
+  assert.ok(start.endsWith('半成品不会被读取。\n'), '启动提示词末行内容应保持不变，换行紧随其后');
+  assert.ok(finish.endsWith('不要改变需求状态。\n'), '收尾提示词末行内容应保持不变，换行紧随其后');
+});
+
 /* ---------- D3：readOutcome 四态 ---------- */
 
 t('D3 读取：waiting / error（缺文件、非法 JSON、绑定不符）/ published', () => {
