@@ -2,11 +2,11 @@
   "id": "BUG-20260916-001",
   "type": "bug",
   "title": "发布能力不要复用原来的发布模块，请在构建模块中重新设计。另外设置模块中没有官网仓库目录的设置，请添加",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-0916-02",
   "createdAt": "2026-09-15T16:11:55.609Z",
-  "updatedAt": "2026-09-16T02:23:29.774Z",
+  "updatedAt": "2026-09-16T05:46:03.662Z",
   "agentCompletedAt": "2026-09-16T02:23:29.774Z",
   "lastReport": {
     "at": "2026-09-16T02:23:29.774Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-dev-build-publish",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-16T05:46:03.662Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
