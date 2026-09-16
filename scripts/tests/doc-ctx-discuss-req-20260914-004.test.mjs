@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // REQ-20260914-004 右键「讨论」提示词追加「讨论要求」 —— vm 纯函数 + 静态契约测试
 // 用法：node scripts/tests/doc-ctx-discuss-req-20260914-004.test.mjs
-// 覆盖 test-cases.md 的 T1–T8（菜单浮层/深浅色/Electron 目检不在自动化范围）。
+// 覆盖 test-cases.md 的 T1–T8（菜单浮层/深浅色/Electron 目检不在自动化范围）；
+// BUG-20260914-019 追加 T9：提示词末尾恰一个换行（粘贴后用户问题与提示词明确分行）。
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -131,6 +132,21 @@ t('T8 纯前端：buildDocRef 无 api()/fetch() 后端调用、无文件写入',
   const b = fnSrc('buildDocRef');
   assert.doesNotMatch(b, /\bapi\(|\bfetch\(/, '不应有后端请求');
   assert.doesNotMatch(b, /writeFile|localStorage|sessionStorage/, '不应有文件 / 存储写入');
+});
+
+// ---------- T9 BUG-20260914-019 提示词末尾恰一个换行 ----------
+
+t('T9 buildDocRef 末尾换行：有/无选中均以单个 \\n 结尾（endsWith("\\n") 且不以 "\\n\\n" 结尾），内容不因修复改变', () => {
+  const sb = loadFns(['docRefPath', 'buildDocRef']);
+  const p = sb.docRefPath('/Users/x/proj', 'REQ-1', 'design.md');
+  const ref = sb.buildDocRef({ id: 'REQ-1', name: 'design.md', path: p, start: 3, end: 4, text: '原文片段' });
+  assert.ok(ref.endsWith('\n'), '有选中：提示词应以换行符结尾，粘贴后光标落在新行');
+  assert.ok(!ref.endsWith('\n\n'), '有选中：末尾只追加一个换行，不得产生多余空行');
+  assert.ok(ref.endsWith('（短哈希即可）。\n'), '末行内容应保持不变，换行紧随其后');
+  const ref2 = sb.buildDocRef({ id: 'BUG-2', name: 'README.md', path: p, start: 42, end: 42, text: null });
+  assert.ok(ref2.endsWith('\n'), '无选中：同样以换行符结尾');
+  assert.ok(!ref2.endsWith('\n\n'), '无选中：末尾同样只一个换行');
+  assert.ok(!ref2.startsWith('\n'), '开头不得追加换行');
 });
 
 let failed = 0;

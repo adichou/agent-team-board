@@ -4386,7 +4386,8 @@ function docRefPath(projectRoot, itemId, name, parent = null) {
 
 // 组装剪贴板文本：自包含（分区标记+单号+文档名+行范围+路径[+原文]），Agent 不打开看板也能定位；
 // REQ-20260914-004 追加「讨论要求」：改文件同轮同步 commit、message 含单号+问题摘要+回答摘要、
-// 回显本轮 commit log 与 commit 号（约定层面，看板不校验执行结果）
+// 回显本轮 commit log 与 commit 号（约定层面，看板不校验执行结果）；
+// BUG-20260914-019 末尾恰追加一个换行：用户粘贴后光标已在新行，随后输入的问题与提示词明确分行
 function buildDocRef({ id, name, path, start, end, text }) {
   const lines = [
     '【文档讨论引用】',
@@ -4402,7 +4403,7 @@ function buildDocRef({ id, name, path, start, end, text }) {
     `3. commit message 须包含：条目单号（如 ${id}）、本轮用户问题摘要、本轮回答（改动）摘要。`,
     '4. 每轮回答回显本轮 commit log 与 commit 号（短哈希即可）。',
   );
-  return lines.join('\n');
+  return lines.join('\n') + '\n';
 }
 
 let docCtxMenuEl = null;      // 菜单浮层单例
