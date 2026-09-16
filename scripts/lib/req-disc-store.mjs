@@ -199,7 +199,8 @@ export function buildStartPrompt(dataDir, id) {
     `- 说明修改草稿：${path.join(rd, 'readme-draft.json')}`,
     `- 发布标记（最后写）：${path.join(rd, 'PUBLISH.json')}`,
     '三件都完整写完才算发布；看板检测到发布标记后才会读取展示，半成品不会被读取。',
-  ].join('\n');
+    // BUG-20260915-010：提示词末尾恰追加一个换行（与 buildDocRef 口径一致），粘贴后光标落在新行
+  ].join('\n') + '\n';
 }
 
 export function buildFinishPrompt(dataDir, id) {
@@ -220,7 +221,7 @@ export function buildFinishPrompt(dataDir, id) {
     `3. 最后写发布标记 ${path.join(rd, 'PUBLISH.json')}：{ "discussionId": "${meta.id}", "reqId": "${meta.reqId}", "round": ${round.no}, "publishedAt": "<ISO 时间>" }。`,
     '',
     '看板只认发布标记与成套文件；不要直接修改 README.md、不要覆盖已归档纪要、不要改变需求状态。',
-  ].join('\n');
+  ].join('\n') + '\n';
 }
 
 function safeReqTitle(dataDir, meta) {

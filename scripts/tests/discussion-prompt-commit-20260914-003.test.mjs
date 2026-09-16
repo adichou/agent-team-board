@@ -142,6 +142,27 @@ t('P7 看板侧生成不受影响：full 视图提示词即带新约定；无截
   assert.ok(!full.startPrompt.includes('attachments'), '无截图讨论的启动提示词不带截图位置行');
 });
 
+/* ================= BUG-20260915-010：讨论提示词末尾恰一个换行 ================= */
+
+t('P8 BUG-20260915-010 启动/继续/整理/收尾提示词末尾恰一个换行（endsWith("\\n") 且不以 "\\n\\n" 结尾），既有内容不变', () => {
+  const { dataDir } = mkProject();
+  const d = oncall.createDiscussion(dataDir, { title: '末尾换行', background: '背景', by: 'board' });
+  for (const [name, p] of [
+    ['启动', oncall.buildStartPrompt(dataDir, d.id)],
+    ['继续', oncall.buildContinuePrompt(dataDir, d.id)],
+    ['整理结论', oncall.buildOrganizePrompt(dataDir, d.id)],
+    ['收尾', oncall.buildFinishPrompt(dataDir, d.id)],
+  ]) {
+    assert.ok(p.endsWith('\n'), `${name}提示词应以换行符结尾，粘贴后光标落在新行`);
+    assert.ok(!p.endsWith('\n\n'), `${name}提示词末尾只追加一个换行，不得产生多余空行`);
+    assert.ok(!p.startsWith('\n'), `${name}提示词开头不得追加换行`);
+  }
+  const full = oncall.discussionFull(dataDir, d.id);
+  for (const [name, p] of [['启动（full 视图）', full.startPrompt], ['继续（full 视图）', full.continuePrompt]]) {
+    assert.ok(p.endsWith('\n') && !p.endsWith('\n\n'), `${name}提示词复制入口同样末尾恰一个换行`);
+  }
+});
+
 let failed = 0;
 for (const [name, fn] of cases) {
   try {

@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260915-012",
+  "type": "bug",
+  "title": "BUG-20260915-010 这个单测试效果是在 zcode 可换行，但是在 codex 还是没换行，在其他 app 也是可以换行的，估计是 codex 的问题，请定位",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-codex-paste-newline",
+  "createdAt": "2026-09-15T08:08:03.755Z",
+  "updatedAt": "2026-09-15T08:22:58.714Z",
+  "agentCompletedAt": "2026-09-15T08:20:10.743Z",
+  "lastReport": {
+    "at": "2026-09-15T08:20:10.743Z",
+    "coverage": 0,
+    "framework": "node:assert/strict + vm（诊断回归，未采集覆盖率）",
+    "summary": "定位报告：当前生成和复制主/降级路径保留单个 LF，4 个相关测试文件全部通过。只读检查 Codex 26.901.51231，主要怀疑 Markdown 粘贴解析/插入丢失末尾换行，尚未现场确认；CUA 禁止控制 Codex。无业务修复，无红绿周期；coverage 0 表示未采集而非实际覆盖率。引入来源未定位，排查过程见 README/design。外部问题未宣称修复，待人工复核定位结论。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-15T08:08:03.755Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-15T08:08:03.760Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-15T08:12:55.553Z",
+      "from": "accepted",
+      "to": "in-progress",
+      "by": "zcode-codex-paste-newline",
+      "note": "认领（zcode-codex-paste-newline）"
+    },
+    {
+      "at": "2026-09-15T08:20:10.743Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0915-28f7",
+      "note": "上报测试报告（覆盖率 0%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T08:22:58.714Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

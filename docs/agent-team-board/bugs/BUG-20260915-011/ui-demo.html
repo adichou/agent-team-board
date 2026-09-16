@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260915-011 界面演示 · 需求模块当前选择与右侧详情不同步</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1f2328; --muted: #6a737d;
+    --border: #d8dee4; --accent: #0969da; --ok: #1a7f37; --err: #cf222e;
+    --chip-bg: #eceff2; --hover: #f0f3f6; --bar: #1f2328;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --accent: #4493f8; --ok: #3fb950; --err: #f85149;
+    --chip-bg: #21262d; --hover: #1c2129; --bar: #e6edf3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+         background: var(--bg); color: var(--text); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* ---- 演示控制条 ---- */
+  .demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+              padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .demo-bar h1 { font-size: 15px; margin: 0 8px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); padding: 5px 12px; }
+  .seg button.on { background: var(--bar); color: var(--bg); font-weight: 600; }
+  .demo-bar .btn { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 5px 10px; }
+  .demo-bar .btn:hover { background: var(--hover); }
+  .demo-note { color: var(--muted); font-size: 12px; }
+  label.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+
+  /* ---- 左右分栏 ---- */
+  .req-split { display: flex; gap: 14px; padding: 14px 16px; align-items: flex-start; }
+  .list-wrap { flex: 1 1 46%; min-width: 320px; background: var(--panel); border: 1px solid var(--border);
+               border-radius: 10px; overflow: hidden; }
+  .drawer-wrap { flex: 1 1 54%; min-width: 340px; background: var(--panel); border: 1px solid var(--border);
+                 border-radius: 10px; min-height: 420px; display: flex; flex-direction: column; }
+
+  /* ---- 筛选条 + 列表头 ---- */
+  .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; }
+  .filter-chip { border: 1px solid var(--border); background: var(--chip-bg); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+  .filter-chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .filter-chip .n { color: var(--muted); font-weight: 400; }
+  .caption { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .caption .hint { color: var(--muted); font-size: 12px; }
+  .caption .ico { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+
+  /* ---- 条目行 ---- */
+  .req-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 14px; }
+  .req-row { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 8px;
+             padding: 8px 10px; background: var(--panel); text-align: left; width: 100%; }
+  .req-row:hover { background: var(--hover); }
+  .req-row.picked { border-color: var(--bar); box-shadow: inset 3px 0 var(--bar); }
+  .req-row .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .req-row .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); }
+  .req-row .ttl { font-weight: 600; margin-top: 2px; }
+  .req-row .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .state { font-size: 12px; border-radius: 999px; padding: 1px 8px; background: var(--chip-bg); }
+  .req-empty { color: var(--muted); padding: 18px 6px; text-align: center; }
+
+  /* ---- 详情抽屉 ---- */
+  .drawer-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .drawer-head .cid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--accent); }
+  .drawer-head .ttl { font-weight: 600; }
+  .sync { font-size: 12px; border-radius: 999px; padding: 1px 10px; margin-left: auto; }
+  .sync.ok { color: var(--ok); border: 1px solid var(--ok); }
+  .sync.err { color: var(--err); border: 1px solid var(--err); }
+  .tabs { display: flex; gap: 2px; padding: 8px 14px 0; border-bottom: 1px solid var(--border); }
+  .tabs button { border: 0; background: none; padding: 4px 10px; border-bottom: 2px solid transparent; color: var(--muted); }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .drawer-body { padding: 12px 14px; flex: 1; }
+  .notice { border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--chip-bg);
+            border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
+  .kv { display: grid; grid-template-columns: 84px 1fr; gap: 4px 10px; }
+  .kv .k { color: var(--muted); }
+  .drawer-nav { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+  .drawer-nav button { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 4px 12px; }
+  .drawer-nav button[disabled] { opacity: .45; cursor: not-allowed; }
+  .drawer-empty { color: var(--muted); padding: 40px 14px; text-align: center; }
+  .muted { color: var(--muted); }
+  .desync-note { border: 1px solid var(--err); color: var(--err); border-radius: 8px; padding: 6px 10px;
+                 font-size: 12px; margin: 0 0 10px; }
+
+  /* ---- 事件流 / toast ---- */
+  .log-wrap { margin: 0 16px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  .log-wrap h2 { font-size: 13px; margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .log { list-style: none; margin: 0; padding: 6px 12px 10px; max-height: 160px; overflow: auto;
+         font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .log li { padding: 2px 0; border-bottom: 1px dashed var(--border); }
+  .log .ok { color: var(--ok); } .log .err { color: var(--err); } .log .dim { color: var(--muted); }
+  #toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+           background: var(--bar); color: var(--bg); border-radius: 8px; padding: 8px 16px;
+           font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; max-width: 80vw; }
+  #toast.show { opacity: .96; }
+  #toast.err { background: var(--err); color: #fff; }
+  @media (max-width: 900px) { .req-split { flex-direction: column; } .drawer-wrap { min-height: 300px; } }
+</style>
+</head>
+<body>
+  <div class="demo-bar">
+    <h1>BUG-20260915-011 演示</h1>
+    <div class="seg" role="group" aria-label="演示模式">
+      <button id="modeDefect" class="on" title="还原当前线上行为：切换详情后左侧高亮滞留">缺陷（当前）</button>
+      <button id="modeFixed" title="还原修复后行为：高亮随切换即时同步">修复后（期望）</button>
+    </div>
+    <button class="btn" id="btnPoll" title="模拟任一条目数据发生变化：下一次 2 秒轮询会重绘列表并顺带纠正高亮">⚡ 模拟一次数据变化</button>
+    <label class="switch" title="勾选后，下一次打开详情模拟 /api/item 请求失败">
+      <input type="checkbox" id="failNext"> 下一次打开模拟加载失败
+    </label>
+    <button class="btn" id="btnTheme" title="切换深浅色">🌙 深浅色</button>
+    <button class="btn" id="btnReset" title="恢复演示初始状态">↺ 重置</button>
+    <span class="demo-note">点左侧条目行 / 抽屉「上一条·下一条」/ 键盘 ←→ 切换详情；Esc 关闭抽屉</span>
+  </div>
+
+  <main class="req-split">
+    <section class="list-wrap" aria-label="需求列表">
+      <div class="filter-bar" id="filterBar"></div>
+      <div class="caption">
+        <button class="ico" id="selAll" title="全选当前档（演示占位，不改变数据）">☑ 全选</button>
+        <button class="ico" id="selNone" title="全不选（演示占位）">☐ 全不选</button>
+        <span class="hint" id="countHint"></span>
+      </div>
+      <div class="req-list" id="reqList"></div>
+    </section>
+
+    <section class="drawer-wrap" aria-label="条目详情抽屉">
+      <div id="drawer"></div>
+    </section>
+  </main>
+
+  <div class="log-wrap">
+    <h2>事件流（模式 · 动作 · 右侧抽屉 · 左侧高亮 · 是否同步）</h2>
+    <ul class="log" id="log"></ul>
+  </div>
+
+  <div id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ---- 演示数据（仅还原界面结构与状态流转，非真实看板数据） ---- */
+const ITEMS = [
+  { id: 'REQ-20260915-012', title: '任务模块支持按认领者筛选', status: 'submitted', owner: '', up: '09-15 14:02' },
+  { id: 'BUG-20260915-013', title: '列表排序键切换后计数不刷新', status: 'submitted', owner: '', up: '09-15 13:40' },
+  { id: 'REQ-20260915-010', title: '需求列表支持批量导出 Markdown', status: 'accepted', owner: 'refine-102', up: '09-15 11:20' },
+  { id: 'BUG-20260915-008', title: '确认与核验流程阻塞看板服务数分钟', status: 'accepted', owner: 'dev-201', up: '09-15 10:05' },
+  { id: 'REQ-20260914-007', title: '人工确认完成后自动提交管理', status: 'planned', owner: 'dev-180', up: '09-14 18:33' },
+];
+const LANES = [
+  { key: 'submitted', label: '待接受' },
+  { key: 'accepted', label: '已接受' },
+  { key: 'planned', label: '已计划' },
+  { key: 'done', label: '已完成' }, // 演示空档：0 条 → 列表空态
+];
+const LANE_LABEL = { submitted: '待接受', accepted: '已接受', planned: '已计划', 'in-progress': '开发中', done: '已完成' };
+const NOTICE = {
+  submitted: '待人工接受：可接受进入已接受档，或编辑标题与描述。',
+  accepted: '未入计划。可点「移入计划」排入开发计划，或由 AI 分析补全文档。',
+  planned: '已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。',
+};
+
+/* ---- 演示状态：pickedId = 左侧列表当前高亮；drawerId = 右侧抽屉实际展示 ---- */
+let mode = 'defect';            // defect = 当前缺陷行为；fixed = 修复后期望行为
+let lane = 'submitted';
+let pickedId = null;            // 左侧 picked（仅 renderBoard 重绘时才重算 —— 还原真实机制）
+let drawerId = null;            // 右侧抽屉条目
+let navIds = null;              // 打开详情时冻结的同档导航范围（还原 keepScope）
+let loadingTimer = null;
+let failNext = false;
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const laneItems = (k) => ITEMS.filter((it) => it.status === k);
+const byId = (id) => ITEMS.find((it) => it.id === id);
+
+function toast(msg, err) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.className = ''; }, 2600);
+}
+function log(action, cls) {
+  const li = document.createElement('li');
+  const synced = drawerId === null ? true : pickedId === drawerId;
+  li.innerHTML = `<span class="dim">[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}]</span> `
+    + `${mode === 'defect' ? '缺陷' : '修复'} · ${esc(action)} · 抽屉=${esc(drawerId || '—')} · 高亮=${esc(pickedId || '—')} `
+    + `<span class="${synced ? 'ok' : 'err'}">${drawerId ? (synced ? '已同步' : '未同步') : '—'}</span>`
+    + (cls ? ` <span class="dim">${esc(cls)}</span>` : '');
+  $('#log').prepend(li);
+}
+
+/* ---- 列表渲染（对应真实 renderBoard：只在被调用时才重算 picked） ---- */
+function renderBoard() {
+  pickedId = drawerId; // 签名含 drawer.id：重绘即把高亮对齐右侧（真实代码 reqRowEl 的 picked 判定）
+  const bar = $('#filterBar');
+  bar.innerHTML = LANES.map(({ key, label }) => {
+    const n = laneItems(key).length;
+    return `<button class="filter-chip${key === lane ? ' on' : ''}" data-lane="${key}">${label} <span class="n">${n}</span></button>`;
+  }).join('');
+  const items = laneItems(lane);
+  $('#countHint').textContent = items.length ? `当前档 ${items.length} 项` : '';
+  const list = $('#reqList');
+  if (!items.length) {
+    list.innerHTML = '<div class="req-empty">当前筛选与搜索下没有条目。</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const it of items) {
+    const picked = pickedId === it.id;
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'req-row' + (picked ? ' picked' : '');
+    el.title = picked ? `${LANE_LABEL[it.status]}；详情打开中（右侧抽屉正展示此条目）` : LANE_LABEL[it.status];
+    el.innerHTML = `
+      <div class="top">
+        <span class="cid">${esc(it.id)}</span>
+        <span class="state">${LANE_LABEL[it.status]}</span>
+      </div>
+      <div class="ttl">${esc(it.title)}</div>
+      <div class="meta">${it.owner ? '👤 ' + esc(it.owner) + ' · ' : ''}更新 ${esc(it.up)}</div>`;
+    el.addEventListener('click', () => openDrawer(it.id));
+    list.appendChild(el);
+  }
+}
+
+/* ---- 抽屉（对应真实 openDrawer / refreshDrawer / closeDrawer） ---- */
+function syncBadgeHtml() {
+  if (!drawerId) return '';
+  const ok = pickedId === drawerId;
+  return ok
+    ? '<span class="sync ok" title="左侧高亮与右侧抽屉指向同一条目">已同步</span>'
+    : '<span class="sync err" title="openDrawer 未触发列表重渲染，且稳态数据下轮询不重绘">未同步</span>';
+}
+function renderDrawerLoading() {
+  $('#drawer').innerHTML = '<div class="drawer-empty">加载中…</div>';
+}
+function renderDrawerEmpty() {
+  $('#drawer').innerHTML = '<div class="drawer-empty">选择左侧列表中的条目查看详情</div>';
+}
+function renderDrawer() {
+  const it = byId(drawerId);
+  if (!it) return renderDrawerEmpty();
+  const ids = navIds || [];
+  const idx = ids.indexOf(it.id);
+  const prev = idx > 0 ? byId(ids[idx - 1]) : null;
+  const next = idx >= 0 && idx < ids.length - 1 ? byId(ids[idx + 1]) : null;
+  const desync = mode === 'defect' && pickedId !== drawerId;
+  $('#drawer').innerHTML = `
+    <div class="drawer-head">
+      <span class="cid">${esc(it.id)}</span>
+      <span class="ttl">${esc(it.title)}</span>
+      <span class="state">${LANE_LABEL[it.status]}</span>
+      ${syncBadgeHtml()}
+    </div>
+    ${desync ? '<div class="desync-note" style="margin:10px 14px 0">左侧高亮仍停留在「'
+      + esc(pickedId ? byId(pickedId)?.id || '上一条目' : '（无）') + '」——缺陷机制：openDrawer 只渲染右侧、未调用列表重绘，'
+      + '稳态数据下轮询（2s）不触发重绘。点顶部「模拟一次数据变化」可看到轮询顺带纠正。</div>' : ''}
+    <div class="tabs">
+      <button class="on">基本信息</button><button>README</button><button>design.md</button><button>test-cases</button>
+    </div>
+    <div class="drawer-body">
+      <div class="notice">${esc(NOTICE[it.status] || '')}</div>
+      <div class="kv">
+        <span class="k">单号</span><span class="cid">${esc(it.id)}</span>
+        <span class="k">状态</span><span>${LANE_LABEL[it.status]}</span>
+        <span class="k">认领者</span><span>${it.owner ? esc(it.owner) : '—'}</span>
+        <span class="k">更新时间</span><span>${esc(it.up)}</span>
+        <span class="k">导航范围</span><span class="muted">打开时冻结的同档 ${ids.length} 条（还原 navIds / keepScope）</span>
+      </div>
+    </div>
+    <div class="drawer-nav">
+      <button id="navPrev" ${prev ? '' : 'disabled'} title="${prev ? esc(prev.id) : '已是第一条'}（快捷键 ←）">← 上一条</button>
+      <button id="navNext" ${next ? '' : 'disabled'} title="${next ? esc(next.id) : '已是最后一条'}（快捷键 →）">下一条 →</button>
+      <button id="navClose" style="margin-left:auto" title="关闭抽屉（Esc）">✕ 关闭</button>
+    </div>`;
+  $('#navPrev')?.addEventListener('click', () => navDrawer('prev'));
+  $('#navNext')?.addEventListener('click', () => navDrawer('next'));
+  $('#navClose')?.addEventListener('click', closeDrawer);
+}
+function openDrawer(id) {
+  drawerId = id;
+  navIds = laneItems(byId(id).status).map((it) => it.id); // 点行：按新条目重算范围
+  renderDrawerLoading();
+  clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(() => {
+    if (drawerId !== id) return; // 异步竞态：已切看其他条目，丢弃过期响应
+    if (failNext) {
+      failNext = false;
+      $('#failNext').checked = false;
+      toast('加载详情失败：模拟 /api/item 请求错误（真实路径：toast + 自动关闭抽屉）', true);
+      log('打开 ' + id + ' 失败（模拟）', '失败态');
+      closeDrawer(true);
+      return;
+    }
+    if (mode === 'fixed') renderBoard(); // ★ 修复后：切换即重算左侧行选中态（对齐 closeDrawer 的做法）
+    renderDrawer();
+    log('打开 ' + id);
+  }, 380);
+}
+function navDrawer(dir) {
+  const ids = navIds || [];
+  const idx = ids.indexOf(drawerId);
+  const t = dir === 'prev' ? (idx > 0 ? ids[idx - 1] : null) : (idx >= 0 && idx < ids.length - 1 ? ids[idx + 1] : null);
+  if (t) openDrawerKeepScope(t);
+}
+function openDrawerKeepScope(id) { // 抽屉上一条/下一条：沿用冻结范围（还原 keepScope=true）
+  drawerId = id;
+  renderDrawerLoading();
+  clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(() => {
+    if (mode === 'fixed') renderBoard();
+    renderDrawer();
+    log('切换 ' + id);
+  }, 300);
+}
+function closeDrawer(silent) {
+  drawerId = null;
+  navIds = null;
+  renderDrawerEmpty();
+  renderBoard(); // 真实 closeDrawer 本就显式重算行选中态 —— 关闭路径无此缺陷
+  if (!silent) log('关闭抽屉', '关闭即重绘（现状正确）');
+}
+
+/* ---- 控制条 ---- */
+function setMode(m) {
+  mode = m;
+  $('#modeDefect').classList.toggle('on', m === 'defect');
+  $('#modeFixed').classList.toggle('on', m === 'fixed');
+  // 切到修复模式：高亮立即对齐右侧（体现修复效果）；切回缺陷模式：保留当前高亮，
+  // 下一次打开/切换详情重新出现滞留
+  renderBoard();
+  renderDrawer();
+  log('切到' + (m === 'defect' ? '缺陷' : '修复') + '模式', m === 'fixed' && drawerId ? '高亮立即对齐' : '');
+}
+$('#modeDefect').addEventListener('click', () => setMode('defect'));
+$('#modeFixed').addEventListener('click', () => setMode('fixed'));
+$('#btnPoll').addEventListener('click', () => { // 模拟数据变化 → 下一次轮询重绘列表
+  renderBoard();
+  if (drawerId) { renderDrawer(); log('数据变化 → 轮询重绘', '高亮被顺带纠正（有时自己好了的原因）'); }
+  else log('数据变化 → 轮询重绘', '无详情打开，仅列表刷新');
+});
+$('#failNext').addEventListener('change', (e) => { failNext = e.target.checked; });
+$('#btnTheme').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = cur;
+});
+$('#btnReset').addEventListener('click', () => {
+  mode = 'defect'; lane = 'submitted'; pickedId = null; drawerId = null; navIds = null;
+  failNext = false; $('#failNext').checked = false; clearTimeout(loadingTimer);
+  $('#modeDefect').classList.add('on'); $('#modeFixed').classList.remove('on');
+  $('#log').innerHTML = ''; renderBoard(); renderDrawerEmpty();
+});
+$('#selAll').addEventListener('click', () => toast('演示占位：全选不改变数据'));
+$('#selNone').addEventListener('click', () => toast('演示占位：全不选不改变数据'));
+$('#filterBar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lane]');
+  if (!b) return;
+  lane = b.dataset.lane;
+  renderBoard(); // 切档重绘（高亮仅在可见行上呈现，与真实一致）
+  log('切换筛选档：' + LANE_LABEL[lane]);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.repeat || e.isComposing) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+  if (e.key === 'Escape' && drawerId) { e.preventDefault(); closeDrawer(); return; }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && drawerId) {
+    e.preventDefault();
+    navDrawer(e.key === 'ArrowLeft' ? 'prev' : 'next');
+  }
+});
+
+/* ---- 初始化：默认浅色跟随系统 ---- */
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.dataset.theme = 'dark';
+}
+renderBoard();
+renderDrawerEmpty();
+log('演示就绪（缺陷模式）', '点左侧条目行开始');
+</script>
+</body>
+</html>
