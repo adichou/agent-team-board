@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260916-001",
+  "type": "bug",
+  "title": "发布能力不要复用原来的发布模块，请在构建模块中重新设计。另外设置模块中没有官网仓库目录的设置，请添加",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-0916-02",
+  "createdAt": "2026-09-15T16:11:55.609Z",
+  "updatedAt": "2026-09-16T02:23:29.774Z",
+  "agentCompletedAt": "2026-09-16T02:23:29.774Z",
+  "lastReport": {
+    "at": "2026-09-16T02:23:29.774Z",
+    "coverage": null,
+    "framework": "node:test（node:assert/strict 自研脚本 + 临时真实 Git 仓库）",
+    "summary": "构建发布全链路独立：新存储 build-publish-store.mjs（全局官网配置+按项目隔离运行BPUB-*）、执行器 build-publish.mjs（五阶段/计划token确认/原子推送/本机回验/Finder注入式打开）、API build-publish-api.mjs+/api/build-publish/*路由；build.js发布页签迁移新API并常驻发布主按钮+发布目录区+Finder按钮；app.js设置新增全局官网仓库区（前往设置/返回发布保上下文）；修复clean误判（untracked折叠）；i18n补10词条；迁移5个回归套件断言。测试5/5通过+npm test全量260文件零失败。引入来源REQ-20260915-002（ae698d5首次把/api/product-release/*接入build.js，详见design.md）",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-15T16:11:55.609Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-15T16:11:55.611Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-15T16:25:09.319Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260916-002206-efef）"
+    },
+    {
+      "at": "2026-09-15T17:01:52.244Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-0916-02",
+      "note": "认领（zcode-batch-0916-02）"
+    },
+    {
+      "at": "2026-09-16T02:23:29.774Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-dev-build-publish",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}
