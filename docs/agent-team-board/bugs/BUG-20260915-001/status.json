@@ -2,11 +2,11 @@
   "id": "BUG-20260915-001",
   "type": "bug",
   "title": "挂起确认面板首次打开因消息节点尚未创建而一直显示正在读取详情",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": null,
   "createdAt": "2026-09-14T16:20:26.131Z",
-  "updatedAt": "2026-09-14T23:13:10.902Z",
+  "updatedAt": "2026-09-15T00:03:47.231Z",
   "agentCompletedAt": "2026-09-14T23:13:10.902Z",
   "lastReport": {
     "at": "2026-09-14T23:13:10.902Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "codex-confirm-panel",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T00:03:47.231Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
