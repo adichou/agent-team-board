@@ -134,7 +134,9 @@ t('H1 build.js：merged 版本详情提供「创建发布 / 查看发布记录�
   // 未 merged 的禁用与前置条件说明（disabled + title 文案含「合并」）
   const m = buildJs.match(/data-ver-release="[^"]*"[\s\S]{0,300}/g) || [];
   assert.ok(m.some((x) => /disabled/.test(x) && /合并/.test(x)), '未合并版本禁用创建发布并说明前置条件');
-  assert.ok(/\/api\/product-release\/from-build/.test(buildJs), '创建发布调用 from-build 接口');
+  // BUG-20260916-001：构建内创建发布改走独立 /api/build-publish/from-build（不再复用产品发布模块）
+  assert.ok(/\/api\/build-publish\/from-build/.test(buildJs), '创建发布调用独立 from-build 接口');
+  assert.ok(!/\/api\/product-release/.test(buildJs), 'build.js 不再调用旧产品发布 API');
 });
 
 t('H2 release.js：产品发布页签 + 两必备目标卡 + 冻结 SHA 与额外提交提示 + 操作按钮', async () => {

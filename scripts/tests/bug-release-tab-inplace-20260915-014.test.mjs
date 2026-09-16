@@ -76,7 +76,7 @@ function prelDetail(summary = prelRun(), o = {}) {
       evidence: [], history: [],
       ...o,
     },
-    logs: {},
+    logs: [],
   };
 }
 
@@ -103,13 +103,14 @@ function setup({ versions = [ver('BLD-A', 'v1.0', 'merged'), ver('BLD-B', 'v2.0'
       if (gates[u.pathname]) { await gates[u.pathname](); } // 手动挂起
       if (u.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(state())) };
       if (u.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
-      if (u.pathname === '/api/product-release/state') return { ok: true, json: async () => ({ initialized: true, runs: JSON.parse(JSON.stringify(live.prel)), config: {}, env: {} }) };
-      if (u.pathname === '/api/product-release/from-build') {
-        const id = `PREL-NEW-${calls.filter((c) => c.path === '/api/product-release/from-build').length}`;
+      // BUG-20260916-001：构建发布改走独立 /api/build-publish/*（不再复用产品发布模块）
+      if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: JSON.parse(JSON.stringify(live.prel)), config: {} }) };
+      if (u.pathname === '/api/build-publish/from-build') {
+        const id = `PREL-NEW-${calls.filter((c) => c.path === '/api/build-publish/from-build').length}`;
         live.prel.push(prelRun({ id, bldId: opts.body ? JSON.parse(opts.body).bldId : 'BLD-A', version: opts.body ? JSON.parse(opts.body).version : '9.9.9', status: 'draft' }));
         return { ok: true, status: 201, json: async () => ({ run: prelRun({ id, bldId: 'BLD-A', version: '9.9.9' }) }) };
       }
-      const m = u.pathname.match(/^\/api\/product-release\/run\/([^/]+)\/?([a-z]*)$/);
+      const m = u.pathname.match(/^\/api\/build-publish\/run\/([^/]+)\/?([a-z]*)$/);
       if (m) {
         const [, id, action] = m;
         if (action === 'plan') return { ok: true, json: async () => ({ plan: { steps: ['步骤一：冻结核对', '步骤二：推送 main/dev'], warning: 'main 已前进' } }) };
@@ -228,7 +229,7 @@ t('R3b 创建失败：弹层保留、错误可见、不切页签；创建中重�
     const u = new URL(String(url), 'http://local');
     h.calls.push({ path: u.pathname, method: (opts.method || 'GET').toUpperCase(), body: null });
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-    if (u.pathname === '/api/product-release/from-build') return { ok: false, status: 409, json: async () => ({ error: '已有进行中的产品发布（PREL-20260915-001）' }) };
+    if (u.pathname === '/api/build-publish/from-build') return { ok: false, status: 409, json: async () => ({ error: '已有进行中的产品发布（PREL-20260915-001）' }) };
     return { ok: true, json: async () => ({}) };
   };
   await h.run(`window.ATBBuild.doCreateRelease()`);
@@ -241,14 +242,14 @@ t('R3b 创建失败：弹层保留、错误可见、不切页签；创建中重�
   let release;
   h.sandbox.fetch = async (url, opts = {}) => {
     const u = new URL(String(url), 'http://local');
-    if (u.pathname === '/api/product-release/from-build') return new Promise((res) => { release = () => res({ ok: true, status: 201, json: async () => ({ run: prelRun({ id: 'PREL-NEW-X', version: '2.0.0' }) }) }); });
+    if (u.pathname === '/api/build-publish/from-build') return new Promise((res) => { release = () => res({ ok: true, status: 201, json: async () => ({ run: prelRun({ id: 'PREL-NEW-X', version: '2.0.0' }) }) }); });
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
     return { ok: true, json: async () => ({}) };
   };
   h.el('#bldRelVersion').value = '2.0.0';
   const p = h.run(`window.ATBBuild.doCreateRelease()`);
   await h.run(`window.ATBBuild.doCreateRelease()`); // busy 中重复触发
-  assert.equal(h.calls.filter((c) => c.path === '/api/product-release/from-build').length, 1, '创建中重复确认不发出第二个请求');
+  assert.equal(h.calls.filter((c) => c.path === '/api/build-publish/from-build').length, 1, '创建中重复确认不发出第二个请求');
   release();
   await p;
 });
@@ -306,9 +307,9 @@ t('R4d 旧运行详情慢返回不覆盖新选择（detailSeq 防串）', async 
   h.sandbox.fetch = async (url, opts = {}) => {
     const u = new URL(String(url), 'http://local');
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-    if (u.pathname === '/api/product-release/state') return { ok: true, json: async () => ({ initialized: true, runs: h.live.prel }) };
-    if (u.pathname === '/api/product-release/run/PREL-A1') return new Promise((res) => { slow.A1 = () => res({ ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-A1', bldId: 'BLD-A', version: '1.0.0' })) }); });
-    if (u.pathname === '/api/product-release/run/PREL-A2') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-A2', bldId: 'BLD-A', version: '2.0.0' })) };
+    if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: h.live.prel, config: {} }) };
+    if (u.pathname === '/api/build-publish/run/PREL-A1') return new Promise((res) => { slow.A1 = () => res({ ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-A1', bldId: 'BLD-A', version: '1.0.0' })) }); });
+    if (u.pathname === '/api/build-publish/run/PREL-A2') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-A2', bldId: 'BLD-A', version: '2.0.0' })) };
     return { ok: true, json: async () => ({}) };
   };
   await h.enter();
@@ -331,7 +332,7 @@ t('R4d 旧运行详情慢返回不覆盖新选择（detailSeq 防串）', async 
 t('R5a 加载：发布区显示加载提示；页签与版本列表仍可用（不以旧记录顶替）', async () => {
   const h = setup({ prelRuns: [prelRun({ id: 'PREL-A1', bldId: 'BLD-B' })] });
   let release;
-  h.gates['/api/product-release/state'] = () => new Promise((r) => { release = r; });
+  h.gates['/api/build-publish/state'] = () => new Promise((r) => { release = r; });
   await h.enter();
   h.run(`window.ATBBuild.openReleaseTab('BLD-A')`);
   const inner = h.inner();
@@ -350,11 +351,11 @@ t('R5b 读取失败：显示「发布记录读取失败」与只读重试；重�
     const u = new URL(String(url), 'http://local');
     h.calls.push({ path: u.pathname, method: (opts.method || 'GET').toUpperCase() });
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-    if (u.pathname === '/api/product-release/state') {
+    if (u.pathname === '/api/build-publish/state') {
       if (fail) return { ok: false, status: 500, json: async () => ({ error: '数据库锁定' }) };
-      return { ok: true, json: async () => ({ initialized: true, runs: h.live.prel }) };
+      return { ok: true, json: async () => ({ runs: h.live.prel, config: {} }) };
     }
-    if (/^\/api\/product-release\/run\//.test(u.pathname)) return { ok: true, json: async () => prelDetail() };
+    if (/^\/api\/build-publish\/run\//.test(u.pathname)) return { ok: true, json: async () => prelDetail() };
     return { ok: true, json: async () => ({}) };
   };
   await h.enter();
@@ -375,7 +376,7 @@ t('R5b 读取失败：显示「发布记录读取失败」与只读重试；重�
   h.el('#bldRelRetry').listeners.click();
   await h.tick();
   assert.match(h.inner(), /data-rel-run="PREL-20260915-001"/, '重试成功恢复列表');
-  assert.ok(h.calls.filter((c) => c.path === '/api/product-release/state').length >= 3, '重试重发了 state 读取');
+  assert.ok(h.calls.filter((c) => c.path === '/api/build-publish/state').length >= 3, '重试重发了 state 读取');
 });
 
 t('R5c 空态：无记录显示「当前版本暂无发布记录」；未合并创建禁用并提示先合并，已合并可用', async () => {
@@ -406,8 +407,8 @@ t('R5d 详情字段：运行 ID、发行版本号、状态、阶段、Web App / 
   h.sandbox.fetch = async (url, opts = {}) => {
     const u = new URL(String(url), 'http://local');
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-    if (u.pathname === '/api/product-release/state') return { ok: true, json: async () => ({ initialized: true, runs: h.live.prel }) };
-    if (u.pathname === '/api/product-release/run/PREL-FAIL') {
+    if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: h.live.prel, config: {} }) };
+    if (u.pathname === '/api/build-publish/run/PREL-FAIL') {
       return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-FAIL', bldId: 'BLD-A', version: '1.4.0', status: 'failed' }), {
         targets: { webapp: { status: 'done', localUrl: 'http://127.0.0.1:8801' }, site: { status: 'failed' } },
         stages: [
@@ -440,8 +441,8 @@ t('R6a 按状态展示动作：draft 预检/重新冻结/预览发布计划（�
   h.sandbox.fetch = async (url, opts = {}) => {
     const u = new URL(String(url), 'http://local');
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-    if (u.pathname === '/api/product-release/state') return { ok: true, json: async () => ({ initialized: true, runs: h.live.prel }) };
-    if (u.pathname === '/api/product-release/run/PREL-D') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-D', bldId: 'BLD-A', status: 'draft' })) };
+    if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: h.live.prel, config: {} }) };
+    if (u.pathname === '/api/build-publish/run/PREL-D') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-D', bldId: 'BLD-A', status: 'draft' })) };
     return { ok: true, json: async () => ({}) };
   };
   await h.enter();
@@ -462,8 +463,8 @@ t('R6a 按状态展示动作：draft 预检/重新冻结/预览发布计划（�
     h.sandbox.fetch = async (url) => {
       const u = new URL(String(url), 'http://local');
       if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-      if (u.pathname === '/api/product-release/state') return { ok: true, json: async () => ({ initialized: true, runs: h.live.prel }) };
-      if (u.pathname === '/api/product-release/run/PREL-D') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-D', bldId: 'BLD-A', status })) };
+      if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: h.live.prel, config: {} }) };
+      if (u.pathname === '/api/build-publish/run/PREL-D') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-D', bldId: 'BLD-A', status })) };
       return { ok: true, json: async () => ({}) };
     };
   };
@@ -471,7 +472,9 @@ t('R6a 按状态展示动作：draft 预检/重新冻结/预览发布计划（�
   h.run(`window.ATBBuild.refreshReleasePane()`);
   await h.tick(4);
   inner = h.inner();
-  assert.match(inner, /data-rel-act="retry"/, 'failed 提供重试失败阶段');
+  // BUG-20260916-001：重试失败阶段改经「计划确认」入口（data-rel-act=plan），不再直发 retry
+  assert.match(inner, /重试失败阶段/, 'failed 提供重试失败阶段入口');
+  assert.doesNotMatch(inner, /data-rel-act="retry"/, 'failed 重试不再绕过计划确认');
   assert.match(inner, /data-rel-act="refreeze"/, 'failed 提供重新冻结');
   mk('running');
   h.run(`window.ATBBuild.refreshReleasePane()`);
@@ -489,7 +492,7 @@ t('R6b 计划确认：预览走 GET plan 弹确认窗；确认才 POST start，�
   const inner = h.inner();
   assert.match(inner, /发布计划确认/, '计划确认弹窗');
   assert.match(inner, /步骤一：冻结核对/, '计划步骤展示');
-  assert.match(inner, /确认启动发布/, '确认启动按钮');
+  assert.match(inner, /确认发布/, '确认发布按钮');
   assert.equal(h.calls.filter((c) => c.path.includes('/plan')).length, 1, '预览走 GET plan');
   // 取消：不发 start
   h.el('#bldRelPlanCancel').listeners.click();
@@ -508,9 +511,9 @@ t('R6c 动作执行中禁用防重复；完成只刷新（GET state + GET run）
     const u = new URL(String(url), 'http://local');
     h.calls.push({ path: u.pathname, method: (opts.method || 'GET').toUpperCase(), body: null });
     if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: h.live.versions }) };
-    if (u.pathname === '/api/product-release/state') return { ok: true, json: async () => ({ initialized: true, runs: h.live.prel }) };
-    if (u.pathname === '/api/product-release/run/PREL-D') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-D', bldId: 'BLD-A', status: 'draft' })) };
-    if (u.pathname === '/api/product-release/run/PREL-D/precheck') return new Promise((res) => { release = () => res({ ok: true, json: async () => ({ run: prelRun({ id: 'PREL-D' }) }) }); });
+    if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: h.live.prel, config: {} }) };
+    if (u.pathname === '/api/build-publish/run/PREL-D') return { ok: true, json: async () => prelDetail(prelRun({ id: 'PREL-D', bldId: 'BLD-A', status: 'draft' })) };
+    if (u.pathname === '/api/build-publish/run/PREL-D/precheck') return new Promise((res) => { release = () => res({ ok: true, json: async () => ({ run: prelRun({ id: 'PREL-D' }) }) }); });
     return { ok: true, json: async () => ({}) };
   };
   await h.enter();
@@ -524,7 +527,7 @@ t('R6c 动作执行中禁用防重复；完成只刷新（GET state + GET run）
   await p;
   await h.tick();
   assert.equal(h.calls.filter((c) => c.path.endsWith('/precheck')).length, 1, '不重复执行动作');
-  assert.ok(h.calls.filter((c) => c.path === '/api/product-release/state').length >= 2, '完成后刷新列表');
+  assert.ok(h.calls.filter((c) => c.path === '/api/build-publish/state').length >= 2, '完成后刷新列表');
 });
 
 /* ---------- R7 i18n ---------- */
