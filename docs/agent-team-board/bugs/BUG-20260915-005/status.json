@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260915-005",
+  "type": "bug",
+  "title": "挂起确认面板「保持挂起/重新核验/确认并继续」按钮缺少使用场景说明",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-048-036",
+  "createdAt": "2026-09-15T00:28:12.652Z",
+  "updatedAt": "2026-09-15T05:54:19.775Z",
+  "agentCompletedAt": "2026-09-15T03:55:23.209Z",
+  "lastReport": {
+    "at": "2026-09-15T03:55:23.209Z",
+    "coverage": 9,
+    "framework": "node:assert（自研 runner，vm 片段）",
+    "summary": "三按钮补 title+aria-label（场景+后果），按钮区上方加 muted small 对照行（不依赖悬停），分析侧与卡片入口同口径统一，文案全进 i18n 双语并清理旧词条；新增 7 例 TDD 用例先红后绿，npm test 244 文件全绿",
+    "runId": "run-20260915-256"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T00:28:12.652Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-8c1a"
+    },
+    {
+      "at": "2026-09-15T00:59:29.207Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T01:52:10.961Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-094743-4c89）"
+    },
+    {
+      "at": "2026-09-15T03:39:40.958Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-036",
+      "note": "认领（zcode-batch-048-036）"
+    },
+    {
+      "at": "2026-09-15T03:55:23.210Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-036",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:19.775Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

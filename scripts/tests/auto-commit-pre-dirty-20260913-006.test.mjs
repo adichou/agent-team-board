@@ -120,9 +120,9 @@ t('P2 差集三态：未动不计入；同码但内容变 → dirtyTouched；码
 
 // 核心复现场景（README 复现步骤 1–6）：build.js 预留前已脏（上一单遗留），本单运行期
 // 再改 build.js（状态码不变）+ 新增干净的 test/biz 改动 + 本单条目文档补充。
-function runPreDirtyFlow(root) {
+function runPreDirtyFlow(root, title = '预留前脏路径自动提交单') {
   const dataDir = core.dataDirFrom(root);
-  const item = mkPlannedItem(dataDir, '预留前脏路径自动提交单');
+  const item = mkPlannedItem(dataDir, title);
   fs.mkdirSync(path.join(root, 'scripts', 'web'), { recursive: true });
   fs.mkdirSync(path.join(root, 'scripts', 'lib'), { recursive: true });
   fs.writeFileSync(path.join(root, 'scripts', 'web', 'build.js'), 'base\n');
@@ -263,6 +263,19 @@ t('P6 幂等：待人工回执重复收尾幂等返回；挂起后 autocommit �
   assert.equal(ac.status, 'skipped');
   assert.match(ac.reason, /待人工确认/, '应指向人工确认闭环');
   assert.equal(logSubjectsOf(root, item.id).length, 1, '不得产生重复提交');
+});
+
+t('P7 BUG-20260914-021 长标题：doc 组暂扣场景（待人工挂起）提交消息完整保留标题，不再截断到 20 字', () => {
+  const root = mkProject();
+  const title = '分支浏览页面中的 main 分支通过发布流程推送的文字删掉'; // 29 字，历史实例
+  const { item, receipt } = runPreDirtyFlow(root, title);
+
+  const ac = receipt.autoCommit;
+  assert.equal(ac.status, 'committed', 'doc 组照常提交（待人工挂起场景不回归）');
+  const subjects = logSubjectsOf(root, item.id);
+  assert.equal(subjects.length, 1, '只应有 doc 提交');
+  assert.equal(subjects[0], `doc: ${title} ${item.id}`, 'doc 组消息应完整保留长标题（不截断）');
+  assert.equal(commitStore.validateCommitSubject(subjects[0], item.id), null, '长标题消息须过规范核验');
 });
 
 let failed = 0;

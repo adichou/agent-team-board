@@ -121,9 +121,9 @@ t('D3 空仓库（无任何提交）：init 落 dev 不报错，首个提交落�
 // ---------- D5–D9 到待测试自动提交（快照归因） ----------
 
 // 端到端：建批 → 预置无关脏改动 → 领取（快照）→ 认领实施 → 上报 → 回执
-function runReportedFlow(root, { preDirty = true, hookFail = false } = {}) {
+function runReportedFlow(root, { preDirty = true, hookFail = false, title = '自动提交流程单' } = {}) {
   const dataDir = core.dataDirFrom(root);
-  const item = mkPlannedItem(dataDir, '自动提交流程单');
+  const item = mkPlannedItem(dataDir, title);
   // 其他单保持 accepted（不入开发批次候选），仅用于验证其目录改动不被卷入
   const other = core.createItem(dataDir, { type: 'requirement', title: '其他单不该动' });
   core.setStatus(dataDir, other.id, 'accepted', { by: 'human' });
@@ -244,10 +244,18 @@ t('D8 失败不阻断回执：提交失败回执仍 reported、改动保留；RE
   const confirmStates = await import('../lib/confirm-states.mjs');
   const rec = confirmStates.confirmOf(dataDir, item.id);
   assert.ok(rec, '失败应已声明挂起确认记录');
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  // BUG-20260915-003：挂起期间又创建了后续单（config.json 计数器等全局文件内容变化）——
+  // 归属待确认路径内容已变，确认被拦截并要求先「重新核验」绑定最新所见，再确认成功。
+  const r0 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
-  assert.ok(r.ok, `人工确认应成功：${JSON.stringify(r.reasons || [])}`);
+  assert.equal(r0.ok, false, '全局文件在确认前内容已变：过期确认应被拒');
+  assert.ok(r0.reasons.some((x) => x.includes('内容已变')), `应说明内容已变：${r0.reasons.join('；')}`);
+  await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
+    projectRoot: root, fingerprint: confirmStates.confirmOf(dataDir, item.id).fingerprint,
+  });
+  assert.ok(r.ok, `重新核验后人工确认应成功：${JSON.stringify(r.reasons || [])}`);
   batch.resumeAfterConfirm(dataDir, batchId);
   const nx2 = batch.nextItem(dataDir, batchId, { owner: 'w2' });
   assert.equal(nx2.itemId, item2.id, '确认恢复后批次继续派发下一项');
@@ -303,6 +311,64 @@ t('D5b Bug 单业务提交类型为 fix；快照哈希能探测未跟踪文件�
   const { receipt } = batch.finishRun(dataDir, nx.runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.equal(receipt.autoCommit.status, 'committed');
   assert.ok(logSubjects(root).some((s) => s.startsWith('fix: ') && s.includes(bug.id)), 'Bug 业务提交应为 fix');
+});
+
+// ---------- BUG-20260914-021 长标题不截断 ----------
+
+// 历史实例标题（29 字）：超过旧 DESC_MAX_CHARS=20，修复后提交消息须完整保留
+const LONG_TITLE = '分支浏览页面中的 main 分支通过发布流程推送的文字删掉';
+
+t('D13 BUG-20260914-021 长标题：三组提交消息完整保留标题且过规范核验；核验上限与标题上限（120 字）对齐', () => {
+  const root = mkProject();
+  const { item } = runReportedFlow(root, { title: LONG_TITLE });
+
+  const subjects = logSubjects(root).slice(0, 3);
+  assert.equal(subjects.length, 3, '应产生 doc/test/业务三组提交');
+  for (const s of subjects) {
+    assert.ok(s.includes(LONG_TITLE), `提交消息须含完整标题（不截断）：${s}`);
+    assert.equal(commitStore.validateCommitSubject(s, item.id), null, `长标题消息须过规范核验：${s}`);
+  }
+  assert.ok(subjects.some((s) => s === `doc: ${LONG_TITLE} ${item.id}`), 'doc 组消息应为完整标题拼装');
+
+  // atb commit log 展示完整标题（分支浏览列表同源渲染 c.subject）
+  const log = atb(['commit', 'log', item.id, '--json'], root);
+  assert.equal(log.code, 0, `commit log 应成功（${log.err}）`);
+  for (const row of jsonOf(log)) {
+    assert.ok(row.subject.includes(LONG_TITLE), `commit log 消息应含完整标题：${row.subject}`);
+  }
+
+  // 拼装与核验口径一致：描述上限放宽到与条目标题上限（core.mjs ≤120 字）对齐
+  const id = 'REQ-20260915-099';
+  assert.equal(
+    commitStore.validateCommitSubject(`feat: ${'字'.repeat(120)} ${id}`, id),
+    null,
+    '120 字描述（标题上限内）应通过核验',
+  );
+  const err = commitStore.validateCommitSubject(`feat: ${'字'.repeat(121)} ${id}`, id);
+  assert.match(String(err), /超过 120 字/, '超上限应显式报错（而非提交时静默截断）');
+});
+
+t('D14 BUG-20260914-021 长标题：提交失败挂起 → 人工确认补交（supplementCommitForRun）doc 组消息同样不截断', async () => {
+  const root = mkProject();
+  const { dataDir, item } = runReportedFlow(root, { hookFail: true, title: LONG_TITLE });
+
+  assert.equal(logSubjects(root).filter((s) => s.includes(item.id)).length, 0, '失败时不应产生任何提交');
+  fs.rmSync(path.join(root, '.git', 'hooks', 'pre-commit')); // 移除故障钩子后人工确认
+  const confirmStates = await import('../lib/confirm-states.mjs');
+  const confirmStore = await import('../lib/confirm-store.mjs');
+  const rec = confirmStates.confirmOf(dataDir, item.id);
+  assert.ok(rec, '失败挂起应已声明待人工确认记录');
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
+    projectRoot: root, fingerprint: rec.fingerprint,
+  });
+  assert.ok(r.ok, `人工确认补交应成功：${JSON.stringify(r.reasons || [])}`);
+
+  const subjects = logSubjects(root).filter((s) => s.includes(item.id));
+  assert.ok(subjects.includes(`doc: ${LONG_TITLE} ${item.id}`),
+    `补交 doc 组消息应完整保留标题：${subjects.join(' | ')}`);
+  for (const s of subjects) {
+    assert.equal(commitStore.validateCommitSubject(s, item.id), null, `补交消息须过规范核验：${s}`);
+  }
 });
 
 // ---------- D10 hook：流程外 git commit 拦截与豁免 ----------

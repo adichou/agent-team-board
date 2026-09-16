@@ -2,11 +2,11 @@
   "id": "BUG-20260914-020",
   "type": "bug",
   "title": "已合并的版本计划不允许再使用 AI 完善按钮了。",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-23",
   "createdAt": "2026-09-14T15:21:36.716Z",
-  "updatedAt": "2026-09-14T15:42:55.742Z",
+  "updatedAt": "2026-09-15T05:54:09.777Z",
   "agentCompletedAt": "2026-09-14T15:42:55.742Z",
   "lastReport": {
     "at": "2026-09-14T15:42:55.742Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-23",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:09.778Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

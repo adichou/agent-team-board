@@ -8,7 +8,8 @@ import path from 'node:path';
 import { refineStateOf, setRefineItemState } from './refine-states.mjs';
 // REQ-20260911-009 dev 分支工作流（initData 自动 git init + 切 dev）。模块间为调用期
 // 依赖（互不在此处取值），ESM 循环导入可安全加载。
-import { ensureDevWorkflow } from './git-flow.mjs';
+// BUG-20260915-007：手动 /dev 收口同样以认领时快照为归因基线（report 无 run 分支收口提交）。
+import { ensureDevWorkflow, captureManualTreeSnapshot } from './git-flow.mjs';
 // REQ-20260911-007 待人工决策账本（执行层索引，不写 status.json）——claim / 确认完成防呆钩子
 import {
   activeHoldOf, unansweredCount, saveHoldRecord, renderDecisionsDoc, HOLD_STATE_LABEL,
@@ -851,6 +852,13 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
   }
   pushHistory(st, from, to, by || actor(), note);
   writeStatus(dir, st);
+  // BUG-20260915-007：例外进入开发（认领受阻例外授权 status → in-progress，及驳回重开）
+  // 捕获工作区快照，作为 report 无 run 收口提交的归因基线兜底（已 claim 的同周期保留最早快照）。
+  if (to === 'in-progress') {
+    try {
+      captureManualTreeSnapshot({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: id, owner: by || actor(), note: 'status → in-progress（例外授权/驳回重开）' });
+    } catch { /* 快照失败不阻断状态流转，report 收口按缺失快照口径处理 */ }
+  }
   // REQ-20260908-020：任何单进入 accepted（含驳回后再接受、移出计划回已接受）一律置「未完善」，
   // 直到下一轮批量完善任务处理；三态只落执行账本索引（refine/states.json），不写 status.json。
   if (to === 'accepted') {
@@ -926,6 +934,11 @@ export function claim(dataDir, id, owner) {
     st.updatedAt = now;
     pushHistory(st, from, 'in-progress', owner, `认领（${owner}）`);
     writeStatus(dir, st);
+    // BUG-20260915-007：认领即拍工作区快照（与批量预留 nextItem 同构）——report 无 run
+    // 收口提交以此为归因基线。快照失败不阻断认领（收口按缺失快照口径处理）。
+    try {
+      captureManualTreeSnapshot({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: id, owner });
+    } catch { /* 同上：不阻断认领 */ }
     return st;
   }
   if (st.status === 'pending-alignment' || st.status === 'in-progress') {
@@ -934,6 +947,10 @@ export function claim(dataDir, id, owner) {
     acquireLockOrOwned(path.join(dataDir, '.locks', `${id}.lock`), CLAIM_LOCK_STALE_MS, owner);
     if (!st.owner) st.owner = owner;
     writeStatus(dir, st);
+    // 续认同属同一认领周期：captureManualTreeSnapshot 幂等保留最早快照（上一周期已收口则刷新）
+    try {
+      captureManualTreeSnapshot({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: id, owner, note: '续认（同周期保留原快照）' });
+    } catch { /* 快照失败不阻断续认 */ }
     return st;
   }
   throw new AtbError(`${id} 当前状态 ${st.status} 不能认领`);

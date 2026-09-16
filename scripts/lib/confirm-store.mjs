@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   AtbError, resolveItemDir, readStatus, actor,
 } from './core.mjs';
@@ -24,7 +24,7 @@ import {
   readConfirms, confirmOf, activeConfirmOf, saveConfirmRecord, archiveConfirmRecord,
   renderConfirmDoc, unansweredRequired, answeredCount, questionsVersionOf,
   REASON_MAX_CHARS, CONFIRM_TEXT_MAX_CHARS, CONFIRM_MAX_QUESTIONS,
-  BLOCK_TYPE_LABEL, KIND_LABEL, CONFIRM_STATE_LABEL,
+  BLOCK_TYPE_LABEL, KIND_LABEL, CONFIRM_STATE_LABEL, clipReasonKeepEnds,
 } from './confirm-states.mjs';
 
 // 原语再导出（server / CLI 直接引用；保持调用方单一 import 源）
@@ -43,17 +43,24 @@ function event(kind, by, note = '') {
 // 完整跳过（不挂起）：git 历史已含单号（幂等）、本单无待提交改动（可验证原因已落账）、非 git 项目。
 // 挂起：failed（含部分组失败）/ pendingManual（归属不明）/ heldGroups（暂扣）/ 其余 skipped
 // （无快照无法归因、变更不归属本单、状态不可读等——无法证明完整即挂起，不得放行队列）。
+// BUG-20260915-004：失败原因不再 slice(0, 80) 拦腰截断（原缺陷把 index.lock': File exists
+// 关键段整段截掉，只剩现象开头）；改为保头保尾，长度仍受 REASON_MAX_CHARS 约束，
+// 完整原文由 errorFull 落运行明细与确认记录 error 字段（BUG-20260915-003），展示层折叠查看。
 export function commitIncompleteReason(autoCommit) {
   if (!autoCommit || typeof autoCommit !== 'object') return null;
   if ((Array.isArray(autoCommit.pendingManual) && autoCommit.pendingManual.length)
     || autoCommit.heldGroups) {
     return '自动提交不完整：存在归属不明或暂扣待人工路径';
   }
-  if (autoCommit.status === 'failed') return `自动提交失败：${String(autoCommit.reason || '').slice(0, 80)}`;
+  if (autoCommit.status === 'failed') {
+    const prefix = '自动提交失败：';
+    return `${prefix}${clipReasonKeepEnds(autoCommit.reason, REASON_MAX_CHARS - [...prefix].length)}`;
+  }
   if (autoCommit.status === 'skipped') {
     const reason = String(autoCommit.reason || '');
     if (/幂等跳过|无待提交改动|不是 git 仓库/.test(reason)) return null;
-    return `提交完整性无法确认：${reason.slice(0, 80)}`;
+    const prefix = '提交完整性无法确认：';
+    return `${prefix}${clipReasonKeepEnds(reason, REASON_MAX_CHARS - [...prefix].length)}`;
   }
   return null;
 }
@@ -83,8 +90,21 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
   const heldPaths = autoCommit.heldGroups
     ? [...(autoCommit.heldGroups.test || []), ...(autoCommit.heldGroups.biz || [])]
     : [];
-  const fpPaths = [...new Set([...pendingManual, ...heldPaths])];
+  // BUG-20260915-003：指纹覆盖全部候选（声明扫描）——不只声明账面字段；git add 阶段失败
+  // 未生成 pendingManual 时，实际候选（实现/测试/全局文件）同样绑定内容指纹，
+  // 确认时内容变化一律拦截（不再漏检账面之外的候选）。基线在账本/留痕写入之后取：
+  // 声明自身会写 .gitignore（补 confirms/）与 confirmations.md，先取基线会让首次确认
+  // 必被误判「内容已变」；候选集也以留痕后的现场为准（confirmations.md 纳入基线）。
   const now = new Date().toISOString();
+  // BUG-20260915-003：失败现场保留完整原始错误（summary 短句 + full 全文，full 缺失 =
+  // 历史截断无原日志，如实标记信息不足，不编造原因）。
+  let error = null;
+  if (autoCommit && autoCommit.status === 'failed') {
+    error = {
+      summary: String(autoCommit.reason || '').slice(0, 160),
+      full: autoCommit.errorFull ? String(autoCommit.errorFull).slice(0, 4000) : null,
+    };
+  }
   const rec = {
     state: 'waiting',
     round: rounds.length + 1,
@@ -100,7 +120,7 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
     reason: reason.slice(0, REASON_MAX_CHARS),
     legacy: Boolean(legacy),
     projectRoot: projectRoot || null, // 确认/核验时重算指纹与补交的工作目录
-    fingerprint: commitFingerprint(projectRoot, fpPaths),
+    fingerprint: { version: 1, files: {} }, // 落账后按留痕后的现场补全（见下）
     committedGroups: (autoCommit.commits || []).map((c) => ({
       kind: 'auto', hash: c.hash, subject: c.subject, paths: [],
     })),
@@ -108,6 +128,7 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
     heldGroups: autoCommit.heldGroups
       ? { test: [...(autoCommit.heldGroups.test || [])], biz: [...(autoCommit.heldGroups.biz || [])] }
       : null,
+    ...(error ? { error } : {}),
     supplement: null,
     verify: null,
     keepNote: null,
@@ -116,6 +137,13 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
   };
   saveConfirmRecord(dataDir, itemId, rec);
   renderConfirmDoc(dataDir, itemId, dir, st.title);
+  let scope = null;
+  try {
+    scope = gitFlow.confirmScopeForRun({ dataDir, projectRoot, run });
+  } catch { scope = null; }
+  const scopePathsNow = scope ? [...scope.attributed, ...scope.uncertain].map((x) => x.path) : [];
+  const fpPaths = [...new Set([...pendingManual, ...heldPaths, ...scopePathsNow])];
+  rec.fingerprint = commitFingerprint(projectRoot, fpPaths);
   return saveConfirmRecord(dataDir, itemId, rec);
 }
 
@@ -123,6 +151,7 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
 
 // 项目测试运行（补交后验证「测试验证的是提交后的完整内容」）：package.json 有 scripts.test
 // 才运行；无测试脚本按纯文档/无测试口径跳过（不凭空要求）。
+// 同步版：CLI / 直连调用方语义（服务端 HTTP 路径已改用异步版，见 runProjectTestsAsync）。
 export function runProjectTests(projectRoot, timeoutMs = 600_000) {
   let pkg = null;
   try {
@@ -146,33 +175,129 @@ export function runProjectTests(projectRoot, timeoutMs = 600_000) {
   };
 }
 
-// 重算当前待补交/待核对路径（核验与确认共用口径）：归因扫描仍留在工作区的可归因路径。
-function remainingOf(dataDir, projectRoot, run) {
-  const scan = gitFlow.attributablePathsForRun({ dataDir, projectRoot, run });
-  if (scan == null) {
-    return {
-      scan: null,
-      paths: [],
-      reasons: ['无法归因核验（非 git 仓库 / 缺少预留时工作区快照）：请人工在终端核对提交后重试'],
-    };
+// BUG-20260915-008 异步版：spawn 不阻塞事件循环（同步版会把整个服务冻结到测试结束，
+// 本项目全量约 4 分钟，面板轮询/操作全部停摆）。结果口径与同步版完全一致；
+// onSpawn(child) 供调用方持有子进程（优雅关停时终止，防孤儿测试进程）。
+export function runProjectTestsAsync(projectRoot, { timeoutMs = 600_000, onSpawn } = {}) {
+  let pkg = null;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+  } catch {
+    return Promise.resolve({ skipped: true, reason: '项目无 package.json，无测试脚本可运行' });
   }
-  const paths = [...scan.groups.doc, ...scan.groups.fix];
-  const reasons = paths.length
-    ? [`仍有 ${paths.length} 个本单路径未入库：${paths.slice(0, 5).join('、')}${paths.length > 5 ? ` 等 ${paths.length} 个` : ''}`]
-    : [];
-  return { scan, paths, reasons };
+  const cmd = pkg && pkg.scripts && pkg.scripts.test;
+  if (!cmd) return Promise.resolve({ skipped: true, reason: '项目未配置测试脚本（npm test），按声明的文件范围核验' });
+  return new Promise((resolve) => {
+    // detached + 进程组：npm 会再派生测试执行器（孙进程），超时须整组终止——只杀 npm
+    // 会留下孤儿测试进程占着 stdio 管道，close 事件等到测试自身结束才触发（假超时）。
+    const child = spawn('npm', ['test', '--silent'], {
+      cwd: projectRoot,
+      env: { ...process.env, npm_config_progress: 'false', npm_config_loglevel: 'silent' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    });
+    if (typeof onSpawn === 'function') {
+      try { onSpawn(child); } catch { /* 回调失败不影响测试执行 */ }
+    }
+    const killGroup = () => {
+      try {
+        if (process.platform === 'win32') child.kill('SIGKILL');
+        else process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        try { child.kill('SIGKILL'); } catch { /* 已退出 */ }
+      }
+    };
+    let out = '';
+    let errOut = '';
+    let timedOut = false;
+    let timer = null;
+    const tail = () => `${out}\n${errOut}`.trim().split('\n').slice(-15).join('\n').slice(0, 2000);
+    if (Number(timeoutMs) > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        killGroup();
+      }, timeoutMs);
+      if (typeof timer.unref === 'function') timer.unref();
+    }
+    child.stdout.on('data', (c) => { out += c; });
+    child.stderr.on('data', (c) => { errOut += c; });
+    child.on('error', (e) => {
+      if (timer) clearTimeout(timer);
+      resolve({ cmd: 'npm test', exitCode: null, ok: false, error: String(e.message || e), tail: tail() || null });
+    });
+    // exit（非 close）：进程退出即结算，不被孤儿孙进程持有的 stdio 管道拖住
+    child.on('exit', (code) => {
+      if (timer) clearTimeout(timer);
+      resolve({
+        cmd: 'npm test',
+        exitCode: code,
+        ok: code === 0 && !timedOut,
+        timedOut: timedOut ? true : undefined,
+        tail: tail() || null,
+      });
+    });
+  });
 }
 
-// 重新核验（人工入口，幂等可重试）：重算剩余路径 + 可选跑测试；结果落账本与卡片。
+// BUG-20260915-003 统一候选范围（清单计数 / 文件表 / 核验 / 确认补交同源）：
+// confirmScopeForRun 是唯一口径；本层按记录读取 run 并容错（run 缺失 / 非 git / 无快照
+// 返回 null——呈现「待核对」，不显示误导性 0）。
+function scopeOfRec(dataDir, projectRoot, rec) {
+  const root = projectRoot || rec.projectRoot;
+  if (!root || !rec.runId) return null;
+  let run = null;
+  try {
+    run = JSON.parse(fs.readFileSync(path.join(dataDir, 'dispatch', 'runs', rec.runId, 'run.json'), 'utf8'));
+  } catch { return null; }
+  try {
+    return gitFlow.confirmScopeForRun({ dataDir, projectRoot: root, run });
+  } catch { return null; }
+}
+
+const scopePaths = (scope) => (scope ? [...scope.attributed, ...scope.uncertain] : []);
+
+// 已加载 run 的直接扫描（verify / continue 用；异常吞掉按无法扫描处理）
+function scopeOfRun(dataDir, run, root) {
+  try {
+    return gitFlow.confirmScopeForRun({ dataDir, projectRoot: root, run });
+  } catch { return null; }
+}
+
+// 核验原因（与面板分组计数同源）：先说总数与分组，再说归属待确认的处理要求。
+function scopeReasons(scope) {
+  const a = scope.attributed.length;
+  const u = scope.uncertain.length;
+  if (!a && !u) return [];
+  const all = scopePaths(scope);
+  const shown = all.slice(0, 5).map((x) => x.path).join('、');
+  const reasons = [
+    `仍有 ${a + u} 个候选路径未入库（本单可归属 ${a} · 归属待确认 ${u}）：${shown}${all.length > 5 ? ` 等 ${all.length} 个` : ''}——与面板计数同源`,
+  ];
+  if (u) reasons.push(`归属待确认 ${u} 个路径需人工选择「计入本次补交 / 排除」后才能确认补交范围（看板面板逐项选择）`);
+  return reasons;
+}
+
+// 重新核验（人工入口，幂等可重试）：重算候选范围 + 可选跑测试；结果落账本与卡片。
 // 「人工已在终端补交」在此被识别：剩余路径为空且 git 历史含本单号提交即核验通过方向。
-export function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTests = false, by = 'human' } = {}) {
+// BUG-20260915-003：重新核验 = 人工重新核对——指纹基线刷新为当前候选内容，其后的确认
+// 绑定最新所见（内容变化 → 确认拦截 → 重新核验 → 确认 的闭环入口）。
+// BUG-20260915-008：改为 async（测试复验用异步执行器，服务进程事件循环保持响应）；
+// onStage 回调上报阶段（'verify' → 'test'），testRunner 可注入替身（测试/直连调用），
+// 缺省用 runProjectTestsAsync；结果与账本口径与同步版完全一致。
+export async function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTests = false, by = 'human', onStage = null, testRunner = null } = {}) {
+  const emit = (stage) => { if (typeof onStage === 'function') { try { onStage(stage); } catch { /* 进度回调失败不影响核验 */ } } };
+  emit('verify');
   const rec = requireDevelopWaiting(dataDir, itemId);
   const run = requireRun(dataDir, rec);
-  const remain = remainingOf(dataDir, projectRoot, run);
-  const reasons = [...remain.reasons];
+  const root = projectRoot || rec.projectRoot;
+  const scope = root ? scopeOfRun(dataDir, run, root) : null;
+  const paths = scopePaths(scope);
+  const reasons = scope ? scopeReasons(scope)
+    : ['无法归因核验（非 git 仓库 / 缺少预留时工作区快照）：请人工在终端核对提交后重试'];
   let test = null;
-  if (!remain.paths.length && runTests) {
-    test = runProjectTests(projectRoot);
+  if (scope && !paths.length && runTests) {
+    emit('test');
+    test = await (testRunner ? testRunner(root) : runProjectTestsAsync(root));
     if (!test.skipped && !test.ok) {
       reasons.push(`测试未通过（${test.cmd} 退出码 ${test.exitCode}）：提交后内容验证失败`);
     }
@@ -182,13 +307,24 @@ export function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTests = f
     lastCheckAt: new Date().toISOString(),
     ok,
     reasons,
-    remaining: remain.paths,
+    remaining: paths.map((x) => x.path),
     test: test || undefined,
   };
-  rec.events.push(event('verified', by, ok ? '核验通过' : `核验未通过（${reasons.length} 项）`));
+  if (scope) {
+    rec.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
+  }
+  rec.events.push(event('verified', by, ok
+    ? '核验通过（指纹基线刷新为当前内容）'
+    : `核验未通过（${reasons.length} 项；指纹基线刷新为当前内容）`));
   saveConfirmRecord(dataDir, itemId, rec);
   renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
-  return { ok, reasons, remaining: remain.paths, test };
+  if (scope) {
+    // 指纹基线在留痕写入之后刷新：verify 事件写 confirmations.md，先刷新会被自身
+    // 留痕污染成「内容已变」，导致重新核验后的确认被误拦截。
+    rec.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
+    saveConfirmRecord(dataDir, itemId, rec);
+  }
+  return { ok, reasons, remaining: paths.map((x) => x.path), test };
 }
 
 // 保持挂起（人工专属）：保留现场与队列暂停，记录处理说明；取消队列须另走显式终止/恢复。
@@ -203,17 +339,26 @@ export function keepConfirm(dataDir, itemId, { note = '', by = 'human' } = {}) {
   return { ok: true, itemId, state: rec.state };
 }
 
-// 确认并继续（人工专属，C05–C08）：
-// 1) 指纹绑定核验：确认携带声明时指纹；脏→脏内容变 → 过期保持挂起；脏→clean（终端已补交）放行；
-// 2) 授权补交：supplementCommitForRun 整文件提交剩余可归因路径（幂等，不重复提交）；
-// 3) 完整性 + 测试复验：剩余路径清零且（有测试脚本时）npm test 通过才放行；
-// 4) 全过 → 记录 resolved（补交 hash 落账），返回 batchId 供调用方恢复队列。
+// 确认并继续（人工专属，C05–C08；BUG-20260915-003 范围收口）：
+// 1) 指纹绑定核验：确认携带声明/上次核验时指纹；脏→脏内容变 → 过期保持挂起；脏→clean
+//    （终端已补交）放行；
+// 2) 候选范围与归属选择（与核验/面板同源）：include 显式携带归属待确认中「计入」的路径；
+//    未携带（CLI / 旧入口）默认只计入已声明 pendingManual/暂扣路径——全局文件不静默并入；
+//    声明/上次核对后新增的归属待确认路径未经核对 → 拦截要求先重新核验（不遗漏文件）；
+// 3) 授权补交：本单可归属 + 已计入的归属待确认路径整文件提交（幂等，不重复提交）；
+// 4) 完整性 + 测试复验：确认范围内路径清零且（有测试脚本时）npm test 通过才放行；
+// 5) 全过 → 记录 resolved（补交 hash 落账），返回 batchId 供调用方恢复队列。
 // 任一失败：保持挂起并逐项说明原因（可重新核验 / 修正后重试）。幂等：已 resolved 直接成功返回。
-export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fingerprint = null, note = '', by = 'human', runTests = true } = {}) {
+// BUG-20260915-008：改为 async（测试复验用异步执行器）+ onStage 阶段回调
+// （'verify' → 'supplement' → 'test' → 'restore'，未走到的阶段不上报）；
+// testRunner 可注入替身，缺省用 runProjectTestsAsync；结果与账本口径与同步版完全一致。
+export async function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fingerprint = null, note = '', by = 'human', runTests = true, include = null, onStage = null, testRunner = null } = {}) {
+  const emit = (stage) => { if (typeof onStage === 'function') { try { onStage(stage); } catch { /* 进度回调失败不影响确认 */ } } };
   const rec = requireDevelopWaiting(dataDir, itemId);
   if (rec.state === 'resolved') {
     return { ok: true, idempotent: true, itemId, batchId: rec.batchId };
   }
+  emit('verify');
   const root = projectRoot || rec.projectRoot;
   if (!root) throw new AtbError('确认补交需要项目根目录（projectRoot）参数');
   const run = requireRun(dataDir, rec);
@@ -237,21 +382,48 @@ export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fin
       rec.events.push(event('terminal-supplement', by, `人工已在终端补交：${terminalSupplement.slice(0, 5).join('、')}`));
     }
   }
+  // BUG-20260915-003：候选范围与归属选择（本单可归属 + 归属待确认中计入的路径）
+  const scope = scopeOfRun(dataDir, run, root);
+  const declared = new Set([
+    ...(rec.pendingManual || []),
+    ...(rec.heldGroups ? [...(rec.heldGroups.test || []), ...(rec.heldGroups.biz || [])] : []),
+  ]);
+  const explicit = Array.isArray(include);
+  const includeSet = new Set((explicit ? include : [...declared]).filter(Boolean));
+  if (scope == null) {
+    reasons.push('无法归因确认补交（非 git 仓库 / 缺少预留时工作区快照 / 状态不可读）：请人工在终端核对提交后重试');
+  } else {
+    // 声明/上次核对后新增的归属待确认路径：未经人工核对不得确认（防静默遗漏）
+    const fpFiles = (rec.fingerprint && rec.fingerprint.files) || {};
+    for (const x of scope.uncertain) {
+      if (!(x.path in fpFiles)) {
+        reasons.push(`路径 ${x.path} 为新的归属待确认改动（确认前未核对）：请先「重新核验」核对最新差异后再确认`);
+      }
+    }
+  }
   // 授权补交（无指纹硬错误时也尝试补交剩余路径——人工已明确确认归属）
   let supplement = null;
-  if (!reasons.length) {
-    supplement = gitFlow.supplementCommitForRun({ dataDir, projectRoot: root, run });
+  if (!reasons.length && scope != null) {
+    emit('supplement');
+    supplement = gitFlow.supplementCommitForRun({ dataDir, projectRoot: root, run, include: [...includeSet] });
     if (supplement.status === 'failed') {
       reasons.push(`补交失败：${supplement.reason}`);
     }
   }
-  // 完整性 + 测试复验
+  // 完整性 + 测试复验（只按确认范围：本单可归属 + 已计入；排除项保留工作区不算未入库）
   let test = null;
-  if (!reasons.length) {
-    const remain = remainingOf(dataDir, root, run);
-    reasons.push(...remain.reasons);
-    if (!remain.paths.length && runTests) {
-      test = runProjectTests(root);
+  if (!reasons.length && scope != null) {
+    const after = scopeOfRun(dataDir, run, root);
+    const left = after ? [
+      ...after.attributed,
+      ...after.uncertain.filter((x) => includeSet.has(x.path)),
+    ] : [];
+    if (left.length) {
+      const shown = left.slice(0, 5).map((x) => x.path).join('、');
+      reasons.push(`仍有 ${left.length} 个确认范围内路径未入库：${shown}${left.length > 5 ? ` 等 ${left.length} 个` : ''}`);
+    } else if (runTests) {
+      emit('test');
+      test = await (testRunner ? testRunner(root) : runProjectTestsAsync(root));
       if (!test.skipped && !test.ok) {
         reasons.push(`测试未通过（${test.cmd} 退出码 ${test.exitCode}）：提交后内容验证失败`);
       }
@@ -270,6 +442,7 @@ export function confirmCommitContinue(dataDir, itemId, { projectRoot = null, fin
     return { ok: false, itemId, reasons };
   }
   const nowIso = new Date().toISOString();
+  emit('restore');
   if (supplement && Array.isArray(supplement.commits) && supplement.commits.length) {
     rec.supplement = { commits: supplement.commits, at: nowIso, by };
   } else if (!rec.supplement) {
@@ -318,6 +491,18 @@ function requireRun(dataDir, rec) {
     throw new AtbError(`找不到挂起关联的运行记录：${rec.runId}（dispatch/runs/）`);
   }
   return run;
+}
+
+// BUG-20260915-008 运行中任务中断留痕（服务重启恢复时调用）：任务账本已标记 interrupted，
+// 确认记录同步留痕事件——挂起保持 waiting、结果未落账的状态明确可辨（人工可重新核验/确认），
+// 不出现「测试跑完但确认没落账」的中间态。无确认记录（已闭环后遗留）返回 false 不动作。
+export function noteConfirmTaskInterrupted(dataDir, itemId, note) {
+  const rec = confirmOf(dataDir, itemId);
+  if (!rec) return false;
+  rec.events.push(event('task-interrupted', 'system', cleanText(note).slice(0, 120) || '服务重启，运行中的核验/确认任务已中断'));
+  saveConfirmRecord(dataDir, itemId, rec);
+  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  return true;
 }
 
 // ---------- 分析侧：声明 / 作答 / 确认 ----------
@@ -532,10 +717,21 @@ function viewRecord(dataDir, rec, { projectRoot = null } = {}) {
       ? [...(rec.heldGroups.test || []), ...(rec.heldGroups.biz || [])]
       : [];
     const supplementHashes = (rec.supplement && rec.supplement.commits || []).map((c) => c.hash);
+    // BUG-20260915-003：待人工计数与文件表/核验同源（候选范围实时扫描，含 git add 失败
+    // 未生成 pendingManual 的现场）；无法扫描 → pendingCount:null（呈现「待核对」，
+    // 不显示误导性 0）。
+    const scope = scopeOfRec(dataDir, projectRoot, rec);
+    const scopeKnown = scope != null;
+    const pendingList = scopeKnown
+      ? scopePaths(scope).map((x) => x.path)
+      : [...(rec.pendingManual || []), ...heldPaths];
     return {
       ...base,
       committedCount: (rec.committedGroups || []).length + supplementHashes.length,
-      pendingCount: (rec.pendingManual || []).length + heldPaths.length,
+      pendingCount: scopeKnown ? pendingList.length : null,
+      attributedCount: scopeKnown ? scope.attributed.length : null,
+      uncertainCount: scopeKnown ? scope.uncertain.length : null,
+      scopeUnknown: !scopeKnown,
       pendingManual: [...(rec.pendingManual || [])],
       heldGroups: rec.heldGroups
         ? { test: [...(rec.heldGroups.test || [])], biz: [...(rec.heldGroups.biz || [])] }
@@ -543,6 +739,9 @@ function viewRecord(dataDir, rec, { projectRoot = null } = {}) {
       supplementCommits: supplementHashes,
       verify: rec.verify || null,
       fingerprint: rec.fingerprint || null,
+      error: rec.error
+        ? { summary: rec.error.summary || null, full: rec.error.full || null }
+        : null,
       partialBadge: Boolean((rec.pendingManual || []).length || heldPaths.length
         || /不完整|失败/.test(String(rec.reason || ''))),
     };
@@ -583,18 +782,37 @@ export function confirmDetail(dataDir, itemId, { projectRoot = null } = {}) {
   const view = viewRecord(dataDir, rec, { projectRoot });
   view.events = (rec.events || []).slice();
   view.archivedRounds = (readConfirms(dataDir).archived[itemId] || []).length;
-  if (rec.kind === 'develop' && projectRoot) {
-    // 当前逐文件状态（卡片展开「文件 / 归属 / 已有 commit / 状态」数据源）
-    const paths = [
-      ...(rec.pendingManual || []),
-      ...(rec.heldGroups ? [...(rec.heldGroups.test || []), ...(rec.heldGroups.biz || [])] : []),
-    ];
-    const now = gitFlow.pathStates(projectRoot, paths);
-    view.files = paths.map((p) => ({
-      path: p,
-      state: now[p] === 'clean' ? '已入库' : '未提交',
-      atDeclare: (rec.fingerprint && rec.fingerprint.files[p]) || null,
-    }));
+  if (rec.kind === 'develop') {
+    // BUG-20260915-003：文件表与计数/核验同源（候选范围实时扫描 + 归属分组 + 变更类型 +
+    // 逐文件当前状态）；无法扫描回退声明字段口径并标记 scopeUnknown（「待核对」）。
+    const scope = scopeOfRec(dataDir, projectRoot, rec);
+    const root = projectRoot || rec.projectRoot;
+    if (scope && root) {
+      const paths = scopePaths(scope).map((x) => x.path);
+      const states = gitFlow.pathStates(root, paths);
+      view.files = scopePaths(scope).map((x) => ({
+        path: x.path,
+        group: scope.attributed.includes(x) ? 'own' : 'undetermined',
+        kind: x.kind,
+        why: x.why || null,
+        state: states[x.path] === 'clean' ? '已入库' : '未提交',
+        atDeclare: (rec.fingerprint && rec.fingerprint.files[x.path]) || null,
+      }));
+    } else {
+      const paths = [
+        ...(rec.pendingManual || []),
+        ...(rec.heldGroups ? [...(rec.heldGroups.test || []), ...(rec.heldGroups.biz || [])] : []),
+      ];
+      const states = root ? gitFlow.pathStates(root, paths) : {};
+      view.files = paths.map((p) => ({
+        path: p,
+        group: (rec.pendingManual || []).includes(p) ? 'undetermined' : 'own',
+        kind: '修改',
+        why: null,
+        state: states[p] === 'clean' ? '已入库' : '未提交',
+        atDeclare: (rec.fingerprint && rec.fingerprint.files[p]) || null,
+      }));
+    }
   }
   return view;
 }

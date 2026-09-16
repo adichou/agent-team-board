@@ -61,6 +61,9 @@ $ATB list [--type req|bug] [--status accepted]   # 总览（--json 供程序读�
 $ATB show <ID>                                   # 详情 + 历史
 $ATB claim <ID> [--by <会话标识>]                # 认领（accepted/planned → in-progress；批次开发中被拒）
 $ATB report <ID> --coverage 87 --framework "…" --summary "…" [--by 会话] [--run RUN-ID]
+                                                 # 写测试报告并标记待测试；不带 --run（手动 /dev）时
+                                                 # report 成功后系统自动收口提交本单改动到 dev
+                                                 # （BUG-20260915-007：认领时快照归因，与批量同口径）
 $ATB status <ID> <状态>                          # 仅人工终端用；Agent 会被拦
 $ATB move <BUG-ID> --req <REQ-ID> | --standalone # 整理存量 Bug 归属（新建一律独立，不再归属）
 $ATB batch create                                 # 批量开发：创建批次并输出主调度提示词（幂等，冻结全部可实施候选）
@@ -115,7 +118,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 2. **读文档**：条目 `README.md`、`design.md`、`test-cases.md`（Bug 读 README 与 design 的引入来源节）。信息不足先澄清或补文档（直接编辑 markdown，允许）；实施要点写入 design.md 作为实施记录。
 3. `$ATB claim <ID> --by <会话名>`（accepted/planned → in-progress）。失败说明被其他会话认领或状态不对，如实转告用户。
 4. **TDD**：test-cases.md 补用例并**写测试跑红** → 实现代码**跑绿** → 重构。新问题按 `/bug` 登记（登记时不填引入来源）。**修复 Bug 必须归因**：根因分析与 test-report 写明引入来源（design.md「引入来源（源单）」节已有则引用，缺失则排查补充并写入，三选一 REQ-/BUG-（`atb list` 核验存在）/未定位（附排查过程），禁止编造），并在 Bug README 开头头部补写 `- 引入来源：…` 行（第一屏可见，样式见 BUG-20260907-017）。**开源选型（REQ-20260909-015）**：方案优先复用成熟开源库，以依赖方式引入（npm / SPM / CocoaPods），禁止复制开源库源码进项目仓库（仅 vendor 例外且须标注复制范围与原因）；仅用开源友好许可（MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / ISC / 0BSD / Unlicense），GPL / LGPL / AGPL / SSPL 及 License 不明禁止引入；引入开源库须在条目目录维护 `licenses.md`（库名 / 版本 / 引入方式 / License / 仓库地址），未使用不创建；自研须写三选一理由（引用了哪些库 / 无合适库的原因 / 引入成本高于自研的原因）。
-5. **提交与待测试**：必须读取并执行 [dev 收尾规则](dev-closeout.md)：真实测试通过 → report → 仅提交本单代码/测试/文档及报告状态 → 核验提交 hash 和本轮待测试状态。用户明确授权例外开发也须按该规则收尾；提交/上报失败时明确报告未完成项，不宣称完整交付。不自动 push，不代替人工验收。
+5. **提交与待测试**：必须读取并执行 [dev 收尾规则](dev-closeout.md)：真实测试通过 → report（系统随后自动收口提交本单代码/测试/文档及报告状态，BUG-20260915-007；Agent 不再手工执行 git 提交）→ 核验提交 hash 和本轮待测试状态。用户明确授权例外开发也须按该规则收尾；收口/上报失败时明确报告未完成项，不宣称完整交付。不自动 push，不代替人工验收。
 6. **实施中需人工决策**（范围/口径确认、方案取舍、账号或真机操作、排除项批准等，REQ-20260911-007）：
    `$ATB hold declare <ID> (--question "决策问题")… [--reason "…"] --by <会话名>` 声明后告知用户到
    Status Board「待人工确认」区作答并复工；不得代替人工作答或复工（`hold answer/resume` 为人工专属）。

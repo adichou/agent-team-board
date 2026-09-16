@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260915-009",
+  "type": "bug",
+  "title": "需求模块的 AI 开发和 AI 分析按钮，点击后要分别精准跳到任务模块中的 AI 开发和 AI 分析的页面",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-048-038",
+  "createdAt": "2026-09-15T01:33:45.664Z",
+  "updatedAt": "2026-09-15T05:53:47.497Z",
+  "agentCompletedAt": "2026-09-15T04:44:01.053Z",
+  "lastReport": {
+    "at": "2026-09-15T04:44:01.053Z",
+    "coverage": 5,
+    "framework": "node:assert + vm",
+    "summary": "gotoRuns 进入任务模块前按目标 mode 无条件 renderBatchDrawer（无缓存时加载态），数据刷新仍走签名剪枝；新增 5 用例（数据稳态双向精准落地/加载态/纯导航口径/剪枝不回退）全绿，全量 246 测试文件 0 失败；归因 REQ-20260909-007（组合缺陷，见 design.md）",
+    "runId": "run-20260915-258"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T01:33:45.664Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-15T01:33:45.665Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-15T02:10:59.077Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-095622-3df8）"
+    },
+    {
+      "at": "2026-09-15T04:32:38.090Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-038",
+      "note": "认领（zcode-batch-048-038）"
+    },
+    {
+      "at": "2026-09-15T04:44:01.054Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-038",
+      "note": "上报测试报告（覆盖率 5%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:53:47.497Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

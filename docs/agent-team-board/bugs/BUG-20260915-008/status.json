@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260915-008",
+  "type": "bug",
+  "title": "确认与核验流程同步跑测试阻塞看板服务数分钟，面板整体冻结且无进度提示",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-048-039",
+  "createdAt": "2026-09-15T01:31:53.862Z",
+  "updatedAt": "2026-09-15T05:54:49.106Z",
+  "agentCompletedAt": "2026-09-15T05:06:31.965Z",
+  "lastReport": {
+    "at": "2026-09-15T05:06:31.965Z",
+    "coverage": 9,
+    "framework": "node:assert/strict + 真实 server HTTP + vm 模拟 DOM",
+    "summary": "核验/确认测试复验改异步任务：POST 立即返回任务句柄（spawnSync 阻塞事件循环缺陷移除），进度（阶段/时长/超时上限）落 confirms/tasks.json 随 2 秒轮询渲染，同条目互斥 409，服务重启遗留 running 标记 interrupted 并留痕；账本与队列恢复口径不变；新增 9 例 + 既有 4 文件适配，npm test 247 文件全绿",
+    "runId": "run-20260915-259"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T01:31:53.862Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-0135"
+    },
+    {
+      "at": "2026-09-15T04:32:48.006Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T04:42:00.506Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-123352-e41a）"
+    },
+    {
+      "at": "2026-09-15T04:44:36.982Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-039",
+      "note": "认领（zcode-batch-048-039）"
+    },
+    {
+      "at": "2026-09-15T05:06:31.965Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-039",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:49.106Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

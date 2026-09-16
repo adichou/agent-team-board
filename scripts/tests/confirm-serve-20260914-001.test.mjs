@@ -57,6 +57,17 @@ function git(root, args) {
   return r;
 }
 
+// BUG-20260915-008：核验/确认为异步任务——轮询任务至终态（done/failed/interrupted）
+async function waitConfirmTask(port, P, itemId, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const r = await req(port, 'GET', `/api/confirms/${encodeURIComponent(itemId)}/task${P}`);
+    if (r.json && r.json.task && r.json.task.status !== 'running') return r.json.task;
+    if (Date.now() > deadline) throw new Error(`核验任务超时未完成：${JSON.stringify(r.json)}`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
 function mkProject() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atb-confirm-sv-')));
   git(root, ['init', '-q', '-b', 'main']);
@@ -178,18 +189,25 @@ t('S1 开发侧：清单/详情/差异/保持挂起/重新核验/确认并继续
     assert.equal(r.status, 200);
     assert.equal(confirmStates.confirmOf(dataDir, item.id).keepNote, '服务端保持');
 
-    // 重新核验（未通过，逐项说明）
+    // 重新核验（未通过，逐项说明）—— BUG-20260915-008 起为异步任务：POST 立即返回
+    // 任务句柄（不阻塞服务），轮询任务终态取核验结论
     r = await req(port, 'POST', `/api/confirms/${item.id}/verify${P}`, {});
     assert.equal(r.status, 200);
-    assert.equal(r.json.ok, false);
-    assert.ok(r.json.reasons.length >= 1, '核验应逐项说明未入库路径');
+    assert.equal(r.json.accepted, true, `应立即返回任务句柄：${JSON.stringify(r.json)}`);
+    const vTask = await waitConfirmTask(port, P, item.id);
+    assert.equal(vTask.status, 'done');
+    assert.equal(vTask.result.ok, false);
+    assert.ok(vTask.result.reasons.length >= 1, '核验应逐项说明未入库路径');
 
-    // 确认并继续：指纹取自详情（人工所见版本）；服务端编排补交 + 恢复队列
+    // 确认并继续：指纹取自详情（人工所见版本）；服务端编排补交 + 恢复队列（异步任务）
     const detail = await req(port, 'GET', `/api/confirms/${item.id}${P}`);
     r = await req(port, 'POST', `/api/confirms/${item.id}/continue${P}`, { fingerprint: detail.json.fingerprint });
     assert.equal(r.status, 200);
-    assert.ok(r.json.ok, `确认应成功：${JSON.stringify(r.json)}`);
-    assert.ok((r.json.supplementCommits || []).length >= 1, '应有补交提交');
+    assert.equal(r.json.accepted, true, `确认应转为异步任务：${JSON.stringify(r.json)}`);
+    const cTask = await waitConfirmTask(port, P, item.id);
+    assert.equal(cTask.status, 'done');
+    assert.ok(cTask.result.ok, `确认应成功：${JSON.stringify(cTask.result)}`);
+    assert.ok((cTask.result.supplementCommits || []).length >= 1, '应有补交提交');
     // 队列已恢复：batch/current 不再暂停
     const cur = await req(port, 'GET', `/api/batch/current${P}`);
     assert.equal(cur.json.batch.pauseRequested, false, '确认后队列应恢复领取');

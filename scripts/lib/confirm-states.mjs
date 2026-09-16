@@ -38,6 +38,20 @@ export const REASON_MAX_CHARS = 200; // 挂起原因短句上限（与批次回�
 export const CONFIRM_TEXT_MAX_CHARS = 400; // 问题 / 背景 / 处理说明共用短文本上限
 export const CONFIRM_MAX_QUESTIONS = 20;
 
+// BUG-20260915-004 挂起原因保头保尾截断：超限时保留头段（现象开头：命令与路径前缀）与
+// 尾段（结论段，如 index.lock': File exists / 已提交 N 组），中段以省略号衔接——不再
+// slice 拦腰截断把报错中段整段丢掉；完整原文由 errorFull / 运行明细另存，展示层折叠查看。
+export function clipReasonKeepEnds(text, maxChars) {
+  const s = String(text ?? '');
+  const chars = [...s];
+  const max = Math.max(20, Math.floor(Number(maxChars) || 0));
+  if (chars.length <= max) return s;
+  const mark = '……';
+  const tailLen = Math.max(8, Math.floor((max - mark.length) * 0.4));
+  const headLen = max - mark.length - tailLen;
+  return `${chars.slice(0, headLen).join('')}${mark}${chars.slice(chars.length - tailLen).join('')}`;
+}
+
 function confirmsFile(dataDir) {
   return path.join(dataDir, 'confirms', 'confirms.json');
 }
@@ -152,6 +166,40 @@ export function archivedRounds(dataDir, itemId) {
   return (readConfirms(dataDir).archived[itemId] || []).length;
 }
 
+// ---------- BUG-20260915-008 核验/确认异步任务账本（服务进程运行态持久化） ----------
+// <dataDir>/confirms/tasks.json → { version, tasks: { [itemId]: task } }（每条目仅最近一次任务）。
+// 背景：verify/continue 的测试复验原先用 spawnSync 同步执行，测试期间整个服务事件循环
+// 停摆（面板冻结数分钟）。改异步后任务运行态落此账本：前端 2 秒轮询读进度（阶段/开始
+// 时间/超时上限）；同条目互斥以本账本 running 状态为准；服务重启时遗留 running 任务由
+// 恢复逻辑标记 interrupted——不出现「测试跑完但确认没落账」的中间态（挂起保持 waiting）。
+function confirmTasksFile(dataDir) {
+  return path.join(dataDir, 'confirms', 'tasks.json');
+}
+
+export function readConfirmTasks(dataDir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(confirmTasksFile(dataDir), 'utf8'));
+    if (j && typeof j === 'object' && j.tasks && typeof j.tasks === 'object') {
+      return { version: 1, tasks: j.tasks };
+    }
+  } catch { /* 缺失/损坏：视为无任务 */ }
+  return { version: 1, tasks: {} };
+}
+
+// 保存/覆盖单条任务（整体替换该条目任务记录；调用方保证结构合法）
+export function saveConfirmTask(dataDir, task) {
+  const ledger = readConfirmTasks(dataDir);
+  ledger.tasks[task.itemId] = task;
+  ensureLedger(dataDir);
+  writeJsonAtomic(confirmTasksFile(dataDir), ledger);
+  return ledger.tasks[task.itemId];
+}
+
+// 条目最近一次任务（running / done / failed / interrupted）；无任务返回 null
+export function confirmTaskOf(dataDir, itemId) {
+  return readConfirmTasks(dataDir).tasks[itemId] || null;
+}
+
 // ---------- 分析问题口径 ----------
 
 export function unansweredRequired(rec) {
@@ -202,6 +250,13 @@ function commitFilesSection(rec) {
     for (const r of rec.verify.reasons || []) lines.push(`  - ${r}`);
   }
   if (rec.keepNote) lines.push(`- 保持挂起说明：${rec.keepNote}`);
+  // BUG-20260915-003：失败现场保留完整原始错误（截断的历史错误如实说明信息不足）
+  if (rec.error) {
+    lines.push(`- Git 失败摘要：${rec.error.summary || '（无摘要）'}`);
+    lines.push(rec.error.full
+      ? `- Git 失败完整错误（保留原始输出用于诊断）：${rec.error.full}`
+      : '- Git 失败完整错误：登记前已被截断且无原始日志可回溯（信息不足，不据此推断原因）');
+  }
   return lines;
 }
 

@@ -24,7 +24,7 @@ import {
 import { FOLLOW_SESSION_PROMPT_LINE } from './task-settings.mjs';
 import * as gitFlow from './git-flow.mjs';
 import * as confirmStore from './confirm-store.mjs';
-import { waitingDevelopConfirm } from './confirm-states.mjs';
+import { waitingDevelopConfirm, clipReasonKeepEnds } from './confirm-states.mjs';
 
 // REQ-20260908-019：批次上限设置已移除（BATCH_LIMIT_* 常量随之删除）——
 // 上限原本只截断创建时点的初始快照，REQ-20260908-010 实时队列后已无实际约束意义。
@@ -914,7 +914,9 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
     // 提交成功不得视为开发完成，后续项不得继续执行。
     suspendReason = confirmStore.commitIncompleteReason(autoCommit);
     if (suspendReason) {
-      receipt.suspended = { itemId: run.itemId, blockType: 'commit', reason: suspendReason.slice(0, 120) };
+      // BUG-20260915-004：回执挂起原因不再 slice(0, 120) 拦腰截断（会把报错中段关键结论
+      // 整段截掉）；保头保尾 + 提高上限至 REASON_MAX_CHARS，超长时中段以省略号衔接。
+      receipt.suspended = { itemId: run.itemId, blockType: 'commit', reason: clipReasonKeepEnds(suspendReason, REASON_MAX_CHARS) };
     }
   }
 
@@ -947,7 +949,8 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
       });
     } catch (e) {
       // 声明失败（如已有活动记录）不阻断回执落账，如实带入 notice 供人工核对
-      suspendReason = `${suspendReason.slice(0, 80)}；挂起登记失败：${String(e.message || e).slice(0, 60)}`;
+      // BUG-20260915-004：原因同样保头保尾，不再拦腰截断丢关键段
+      suspendReason = `${clipReasonKeepEnds(suspendReason, 120)}；挂起登记失败：${String(e.message || e).slice(0, 60)}`;
     }
     batch.pauseRequested = true;
     batch.status = 'paused';

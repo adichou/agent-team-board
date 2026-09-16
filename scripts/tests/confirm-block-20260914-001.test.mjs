@@ -193,13 +193,13 @@ t('C05 人工核对确认：指纹核验 → 授权补交 → 测试复验通过
   const head = batch.queueHeadBatch(dataDir).batchId;
 
   // C13：当前单的核验入口在挂起占用下仍可执行（不发生执行权死锁）
-  const v0 = confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const v0 = await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
   assert.equal(v0.ok, false, '待人工路径仍在工作区：核验应未通过');
   assert.ok(v0.reasons.some((r) => r.includes('未入库')), `核验应列出未入库路径：${v0.reasons.join('；')}`);
 
   // 确认并继续：携带声明时指纹（人工所见内容版本）
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r1 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r1 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.ok(r1.ok, `确认应成功：${JSON.stringify(r1.reasons || [])}`);
@@ -226,7 +226,7 @@ t('C05 人工核对确认：指纹核验 → 授权补交 → 测试复验通过
 
   // C07 幂等：重复确认直接成功且不产生新提交
   const before = logSubjectsOf(root, item.id).length;
-  const r2 = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r2 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: confirmStates.confirmOf(dataDir, item.id).fingerprint,
   });
   assert.equal(r2.ok, true);
@@ -238,7 +238,7 @@ t('C05 人工核对确认：指纹核验 → 授权补交 → 测试复验通过
 
 // ---------- C06：内容已变 / 指纹过期 / 测试失败保持挂起 ----------
 
-t('C06a 内容已变（脏→脏内容变）：过期确认被拒，保持挂起并说明，可重新核验', () => {
+t('C06a 内容已变（脏→脏内容变）：过期确认被拒，保持挂起并说明，可重新核验', async () => {
   const root = mkProject();
   seedPreDirtySource(root);
   const dataDir = core.dataDirFrom(root);
@@ -247,24 +247,24 @@ t('C06a 内容已变（脏→脏内容变）：过期确认被拒，保持挂起
   // 人工在确认前又改了待人工路径内容（脏→脏但内容变）
   fs.appendFileSync(path.join(root, 'scripts', 'web', 'build.js'), '人工再改动（未确认）\n');
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.equal(r.ok, false, '过期确认应被拒');
   assert.ok(r.reasons.some((x) => x.includes('内容已变') || x.includes('不一致')), `应说明内容已变：${r.reasons.join('；')}`);
   assert.equal(confirmStates.confirmOf(dataDir, item.id).state, 'waiting', '应保持挂起');
-  const v = confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  const v = await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
   assert.equal(v.ok, false, '可重新核验（仍列出未入库路径）');
 });
 
-t('C06b 补交后测试失败：保持挂起并逐项说明（测试验证的是提交后的完整内容）', () => {
+t('C06b 补交后测试失败：保持挂起并逐项说明（测试验证的是提交后的完整内容）', async () => {
   const root = mkProject({ failingTest: true });
   seedPreDirtySource(root);
   const dataDir = core.dataDirFrom(root);
   const item = mkPlannedItem(dataDir, '测试失败单');
   runHeldFlow(root, item, 'C06b');
   const rec = confirmStates.confirmOf(dataDir, item.id);
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.equal(r.ok, false, '测试失败应保持挂起');
@@ -281,7 +281,7 @@ t('C06b 补交后测试失败：保持挂起并逐项说明（测试验证的是
 
 // ---------- C08：人工已在终端补交 ----------
 
-t('C08 人工已在终端补交：脏→clean 允许方向；不凭任意带单号 commit 直接通过（需路径全部入库）', () => {
+t('C08 人工已在终端补交：脏→clean 允许方向；不凭任意带单号 commit 直接通过（需路径全部入库）', async () => {
   const root = mkProject();
   seedPreDirtySource(root);
   const dataDir = core.dataDirFrom(root);
@@ -292,7 +292,7 @@ t('C08 人工已在终端补交：脏→clean 允许方向；不凭任意带单�
   git(root, ['commit', '-q', '--only', '-m', `fix: 人工终端补交 ${item.id}`, '--', 'scripts/web/build.js']);
   const rec = confirmStates.confirmOf(dataDir, item.id);
   // 只带一个无关紧要的带单号提交不直接通过：仍应补交暂扣组
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.ok(r.ok, `确认应成功（终端补交 + 授权补交暂扣组）：${JSON.stringify(r.reasons || [])}`);
@@ -305,7 +305,7 @@ t('C08 人工已在终端补交：脏→clean 允许方向；不凭任意带单�
 
 // ---------- C02：分组提交失败保留 hash ----------
 
-t('C02 分组提交失败：保留已成功提交 hash，不重复提交，仍挂起阻止后续领取', () => {
+t('C02 分组提交失败：保留已成功提交 hash，不重复提交，仍挂起阻止后续领取', async () => {
   const root = mkProject();
   // 干净源（无预留前脏路径 → 不走 pendingManual 分支）：doc 提交成功后 test/fix 被钩子拦下
   fs.mkdirSync(path.join(root, 'scripts', 'lib'), { recursive: true });
@@ -339,7 +339,7 @@ t('C02 分组提交失败：保留已成功提交 hash，不重复提交，仍�
   assert.equal(batch.nextItem(dataDir, head, { owner: 'w2' }).stop, 'paused');
   // 人工确认（移除故障钩子后）：补交恰一次，doc 不重复
   fs.rmSync(path.join(root, '.git', 'hooks', 'pre-commit'));
-  const r = confirmStore.confirmCommitContinue(dataDir, item.id, {
+  const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.ok(r.ok, `修复故障后确认应成功：${JSON.stringify(r.reasons || [])}`);
@@ -404,7 +404,7 @@ t('C10 保持挂起保留现场与队列；人工恢复领取（显式）也不�
 
 // ---------- C11：卡片与账本计数一致 ----------
 
-t('C11 清单/详情计数一致：已提交组、待人工路径、部分提交徽标与账本同源', () => {
+t('C11 清单/详情/核验计数一致：与候选范围扫描同源（BUG-20260915-003 统一口径），文件表带归属分组', async () => {
   const root = mkProject();
   seedPreDirtySource(root);
   const dataDir = core.dataDirFrom(root);
@@ -415,13 +415,22 @@ t('C11 清单/详情计数一致：已提交组、待人工路径、部分提交
   const view = lst.items[0];
   assert.equal(view.itemId, item.id);
   assert.equal(view.committedCount, 1, '已提交组 = doc 1 组');
-  const held = (view.pendingManual || []).length
-    + (view.heldGroups ? view.heldGroups.test.length + view.heldGroups.biz.length : 0);
-  assert.equal(view.pendingCount, held, '待人工计数 = pendingManual + 暂扣组');
-  assert.equal(view.partialBadge, true, '部分提交显示不完整徽标');
   const d = confirmStore.confirmDetail(dataDir, item.id, { projectRoot: root });
-  assert.equal(d.files.length, held, '详情文件表覆盖全部待人工路径');
-  assert.ok(d.files.every((f) => f.state === '未提交' || f.state === '已入库'));
+  assert.notEqual(view.pendingCount, null, '可扫描时计数不得为 null（待核对）');
+  assert.equal(view.scopeUnknown, false);
+  assert.equal(view.pendingCount, d.files.length, '卡片计数与详情文件表同源');
+  assert.equal(view.pendingCount, view.attributedCount + view.uncertainCount, '计数 = 本单可归属 + 归属待确认');
+  assert.ok(view.pendingCount >= 3, `候选应含 build.js 与暂扣组：${view.pendingCount}`);
+  // 声明的待人工路径在文件表内可见（带归属分组与变更类型）
+  const byPath = new Map(d.files.map((f) => [f.path, f]));
+  assert.ok(byPath.get('scripts/web/build.js'), '文件表应含声明的待人工路径');
+  assert.equal(byPath.get('scripts/web/build.js').group, 'undetermined', '预留前已脏路径归「归属待确认」');
+  assert.equal(byPath.get('scripts/lib/impl.mjs').group, 'own', '快照差集实现路径归「本单可归属」');
+  assert.ok(d.files.every((f) => ['own', 'undetermined'].includes(f.group) && ['修改', '新增', '删除'].includes(f.kind)));
+  assert.equal(view.partialBadge, true, '部分提交显示不完整徽标');
+  // 核验剩余与文件表同源（同一数字）
+  const v = await confirmStore.verifyCommitConfirm(dataDir, item.id, { projectRoot: root, runTests: false });
+  assert.equal(v.remaining.length, d.files.length, '核验剩余与文件表同源');
 });
 
 // ---------- C14：历史部分提交账本恢复 ----------

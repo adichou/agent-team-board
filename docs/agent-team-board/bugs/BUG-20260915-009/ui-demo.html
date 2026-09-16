@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260915-009 · 需求模块快捷入口精准跳转任务子面板演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #dce0e6; --text: #24292f;
+    --muted: #6a737d; --accent: #0969da; --accent-contrast: #ffffff;
+    --ok: #1a7f37; --ok-bg: #dafbe1; --err: #cf222e; --err-bg: #ffebe9;
+    --warn: #9a6700; --warn-bg: #fff8c5; --run-bg: #ddf4ff; --run-fg: #0969da;
+    --chip-bg: #f0f2f5; --hover: #f3f4f6; --code-bg: #f6f8fa; --dim: .45;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --shadow: 0 8px 24px rgba(20, 30, 50, .10);
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181f; --panel: #1c2129; --border: #333a45; --text: #e2e6eb;
+    --muted: #9aa4b1; --accent: #4493f8; --accent-contrast: #0d1117;
+    --ok: #3fb950; --ok-bg: #12261c; --err: #f85149; --err-bg: #331216;
+    --warn: #d29922; --warn-bg: #2a2410; --run-bg: #122a44; --run-fg: #4493f8;
+    --chip-bg: #2a303a; --hover: #262c36; --code-bg: #161b22; --dim: .5;
+    --shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    padding: 20px clamp(12px, 4vw, 40px) 60px;
+  }
+
+  /* ---------- 顶部：标题 + 模式开关 ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .demo-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tag { background: var(--accent); color: var(--accent-contrast); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  h1 { font-size: 17px; margin: 0; }
+  .demo-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .mode-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .mode-btn { border: 0; background: transparent; color: var(--text); padding: 7px 14px; cursor: pointer; font-size: 13px; }
+  .mode-btn.active { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+  .mode-btn:not(.active):hover { background: var(--hover); }
+  .ghost-btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .ghost-btn:hover { background: var(--hover); }
+
+  .demo-hint { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+  .demo-hint b { color: var(--text); }
+
+  /* ---------- 演示控制器 ---------- */
+  .demo-panel { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .check input { accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; vertical-align: middle; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .seg button.active { background: var(--run-bg); color: var(--run-fg); font-weight: 600; }
+  .ctrl-label { color: var(--muted); }
+
+  /* ---------- 双栏模块 ---------- */
+  .modules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 920px) { .modules { grid-template-columns: 1fr; } }
+  .module { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; transition: opacity .2s; }
+  .module.inactive { opacity: var(--dim); }
+  .module-head { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .module-head .who { font-weight: 600; font-size: 13.5px; }
+  .live-chip { font-size: 11px; border-radius: 10px; padding: 1px 8px; background: var(--run-bg); color: var(--run-fg); font-weight: 600; white-space: nowrap; }
+
+  /* 导航页签（演示用） */
+  .view-tabs { display: flex; gap: 4px; padding: 8px 12px 0; }
+  .view-tab { border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted); border-radius: 8px 8px 0 0; padding: 5px 14px; cursor: pointer; font-size: 13px; }
+  .view-tab.active { background: var(--panel); border-color: var(--border); color: var(--text); font-weight: 600; position: relative; top: 1px; }
+  .view-tab:disabled { cursor: not-allowed; opacity: .55; }
+
+  /* 需求模块内部 */
+  .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 4px; }
+  .filter-chip { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 14px; padding: 2px 10px; cursor: pointer; font-size: 12.5px; }
+  .filter-chip.active { background: var(--run-bg); border-color: var(--accent); color: var(--run-fg); font-weight: 600; }
+  .filter-chip .cnt { color: var(--muted); font-size: 11.5px; }
+  .req-caption { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  .req-caption .sort { font-size: 12.5px; color: var(--muted); }
+  .quick-entry { margin-left: auto; border: 0; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12.5px; background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+  .quick-entry:hover { filter: brightness(1.06); }
+  .no-quick { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .req-list { padding: 4px 0 10px; }
+  .req-row { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; cursor: default; }
+  .req-row:last-child { border-bottom: 0; }
+  .req-row .cid { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .req-row .ttl { font-size: 13px; }
+  .req-row .mtime { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .refine-badge { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text); border-radius: 10px; padding: 0 8px; font-size: 11.5px; cursor: pointer; }
+  .refine-badge.rf-unrefined { border-color: var(--warn); color: var(--warn); }
+  .refine-badge.rf-refined { border-color: var(--ok); color: var(--ok); }
+  .empty-note { padding: 14px; color: var(--muted); font-size: 13px; }
+
+  /* 任务模块内部 */
+  .batch-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .tabs { display: inline-flex; gap: 4px; }
+  .tab { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 4px 14px; cursor: pointer; font-size: 13px; }
+  .tab.active { background: var(--run-bg); border-color: var(--accent); color: var(--run-fg); font-weight: 600; }
+  .status-line { padding: 8px 14px 0; font-size: 12.5px; }
+  .status-ok { color: var(--ok); }
+  .status-bad { color: var(--err); font-weight: 600; }
+  .drawer-body { padding: 12px 14px 16px; min-height: 220px; }
+  .panel-desc { color: var(--muted); font-size: 12.5px; margin: 0 0 8px; }
+  .batch-stats { font-size: 13px; margin-bottom: 8px; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+  .queue-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; margin-top: 6px; font-size: 12.5px; }
+  .queue-row .cid { font-family: var(--mono); color: var(--accent); font-size: 12px; }
+  .queue-row .why { color: var(--muted); font-size: 12px; }
+  .notice { border: 1px solid var(--border); background: var(--code-bg); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; margin-top: 8px; }
+  .notice.warn { border-color: var(--warn); background: var(--warn-bg); }
+  .notice.bad { border-color: var(--err); background: var(--err-bg); color: var(--err); }
+  .notice.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+  .loading { color: var(--muted); display: flex; gap: 8px; align-items: center; padding: 24px 0; justify-content: center; }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; display: inline-block; animation: rot .8s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .stale-banner { border: 1px dashed var(--err); background: var(--err-bg); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; color: var(--err); margin-bottom: 10px; }
+
+  /* ---------- 事件流 ---------- */
+  .eventlog { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-top: 16px; overflow: hidden; }
+  .eventlog-head { padding: 8px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--border); background: var(--bg); display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .eventlog-body { font-family: var(--mono); font-size: 12px; padding: 8px 14px 12px; max-height: 200px; overflow: auto; }
+  .ev { padding: 2px 0; border-bottom: 1px dashed var(--border); color: var(--muted); }
+  .ev:first-child { color: var(--text); }
+  .ev .t { color: var(--accent); margin-right: 8px; }
+  .ev.bad { color: var(--err); }
+  .ev.ok { color: var(--ok); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<div class="demo-top">
+  <div class="demo-title">
+    <span class="tag">BUG-20260915-009</span>
+    <h1>需求模块「AI 开发 / AI 分析」快捷按钮精准跳转任务子面板 · 可交互演示</h1>
+  </div>
+  <div class="demo-controls">
+    <div class="mode-switch" role="group" aria-label="缺陷/修复模式">
+      <button type="button" class="mode-btn active" data-defect="1">缺陷（当前）</button>
+      <button type="button" class="mode-btn" data-defect="0">修复后</button>
+    </div>
+    <button type="button" class="ghost-btn" id="themeBtn">深浅色</button>
+    <button type="button" class="ghost-btn" id="resetBtn">重置现场</button>
+  </div>
+</div>
+
+<p class="demo-hint">
+  <b>怎么玩：</b>左侧需求模块按档位出现「▶ AI 分析 / ▶ AI 开发」快捷按钮，点击后右侧进入任务模块。
+  缺陷模式下，若目标子面板<b>数据无变化</b>且本会话渲染过另一子面板，落地会停留在旧面板（红色标注，需手动点页签）；
+  打开「数据有变化」或切到「修复后」即可对比正常表现。下方事件流记录每次跳转的内部判定。
+</p>
+
+<div class="demo-panel">
+  <label class="ctrl-label">目标面板数据：
+    <span class="seg" role="group">
+      <button type="button" class="active" data-data="same">无变化（稳态）</button>
+      <button type="button" data-data="changed">有变化</button>
+    </span>
+  </label>
+  <label class="check"><input type="checkbox" id="fetchFail"> 模拟面板数据拉取失败（离线）</label>
+  <label class="ctrl-label">AI 分析候选：
+    <span class="seg" role="group">
+      <button type="button" class="active" data-cand="2">2 项</button>
+      <button type="button" data-cand="0">0 项（空态）</button>
+    </span>
+  </label>
+  <span class="ctrl-label small">已接受行「未完善」徽标与快捷按钮共用同一跳转链路，可点。</span>
+</div>
+
+<div class="modules">
+  <!-- 需求模块 -->
+  <section class="module" id="reqModule">
+    <div class="module-head">
+      <span class="who">需求模块（列表头常驻快捷入口 #laneQuickEntry）</span>
+      <span class="live-chip" id="reqLive">当前模块</span>
+    </div>
+    <div class="view-tabs">
+      <button type="button" class="view-tab active" data-nav="req">需求</button>
+      <button type="button" class="view-tab" data-nav="runs">任务</button>
+      <button type="button" class="view-tab" disabled title="演示聚焦需求 / 任务两模块">构建</button>
+      <button type="button" class="view-tab" disabled title="演示聚焦需求 / 任务两模块">设置</button>
+    </div>
+    <div class="filter-bar" id="filterBar"></div>
+    <div class="req-caption">
+      <span class="sort">排序：最新更新 ▾</span>
+      <span id="quickSlot"></span>
+    </div>
+    <div class="req-list" id="reqList"></div>
+  </section>
+
+  <!-- 任务模块 -->
+  <section class="module" id="runsModule">
+    <div class="module-head">
+      <span class="who">任务模块（一级页签 AI 分析 / AI 开发 + 子面板 #batchDrawer）</span>
+      <span class="live-chip" id="runsLive">未进入</span>
+    </div>
+    <div class="batch-head">
+      <span class="tabs" id="taskTabs"></span>
+    </div>
+    <div class="status-line" id="statusLine"></div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </section>
+</div>
+
+<section class="eventlog">
+  <div class="eventlog-head"><span>事件流（最新在上）</span><span class="muted small">mode = 目标子面板 · 渲染 = #batchDrawer 实际内容</span></div>
+  <div class="eventlog-body" id="eventLog"></div>
+</section>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- 演示数据 ----------
+  const LANES = [
+    { key: 'submitted', label: '待接受', cnt: 2 },
+    { key: 'accepted', label: '已接受', cnt: 3 },
+    { key: 'planned', label: '已计划', cnt: 2 },
+    { key: 'developing', label: '开发中', cnt: 1 },
+    { key: 'confirming', label: '待测试', cnt: 1 },
+    { key: 'done', label: '已完成', cnt: 1 },
+  ];
+  const ROWS = {
+    submitted: [
+      { id: 'REQ-20990915-106', ttl: '快捷键帮助面板', t: '3 分钟前' },
+      { id: 'REQ-20990915-107', ttl: '导出 CSV 编码选项', t: '1 小时前' },
+    ],
+    accepted: [
+      { id: 'REQ-20990915-101', ttl: '批量导出报表', t: '10 分钟前', badge: 'unrefined' },
+      { id: 'REQ-20990915-102', ttl: '通知渠道扩展', t: '2 小时前', badge: 'unrefined' },
+      { id: 'REQ-20990915-103', ttl: '帮助中心改版', t: '昨天', badge: 'refined' },
+    ],
+    planned: [
+      { id: 'REQ-20990915-104', ttl: '搜索结果高亮', t: '5 小时前' },
+      { id: 'REQ-20990915-105', ttl: '看板导出 PDF', t: '昨天' },
+    ],
+    developing: [{ id: 'REQ-20990915-108', ttl: '列表虚拟滚动', t: '30 分钟前' }],
+    confirming: [{ id: 'REQ-20990915-109', ttl: '深色模式对比度', t: '2 天前' }],
+    done: [{ id: 'REQ-20990915-110', ttl: '单号复制按钮', t: '3 天前' }],
+  };
+  const BADGE = { unrefined: '未完善', refined: '已完善' };
+  const LBL = { refine: 'AI 分析', develop: 'AI 开发' };
+
+  // ---------- 模拟状态（对应真实前端的关键量） ----------
+  // mode ↔ state.batch.mode（目标子面板）；rendered ↔ #batchDrawer 当前渲染的子面板；
+  // cache[panel] ↔ 该面板是否已有缓存数据（签名初值为空，首次必渲染）。
+  const S = {
+    view: 'req', lane: 'accepted',
+    mode: 'refine', rendered: null, loading: null, error: false,
+    cache: { refine: false, develop: false },
+    defect: true, dataChanged: false, fetchFail: false, cands: 2,
+    log: [],
+  };
+
+  const $ = (s) => document.querySelector(s);
+  const now = () => new Date().toTimeString().slice(0, 8);
+  function ev(text, cls) { S.log.unshift({ t: now(), text, cls }); }
+
+  // ---------- 面板 HTML ----------
+  function refinePanelHtml() {
+    const queue = `
+      <div class="queue-row"><span class="cid">REQ-20990915-101</span><span>批量导出报表</span><span class="why">缺描述、缺验收标准、涉及 UI 需界面展示</span></div>
+      <div class="queue-row"><span class="cid">REQ-20990915-102</span><span>通知渠道扩展</span><span class="why">缺验收标准</span></div>`;
+    if (S.cands === 0) {
+      return `
+        <p class="panel-desc">AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示）……</p>
+        <div class="notice">暂无可完善候选：已接受条目均已完善（或尚无已接受条目）。</div>`;
+    }
+    return `
+      <p class="panel-desc">AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示）……</p>
+      <div class="batch-stats">候选：已接受未完善 <b>2</b> 项（每轮实时读取，含本轮新接受的单）</div>
+      <button type="button" class="btn primary" data-act="start">启动</button>
+      <p class="panel-desc" style="margin-top:8px">启动 = 创建任务并复制主调度提示词；条目保持 accepted，不占实施互斥。</p>
+      ${queue}`;
+  }
+  function developPanelHtml() {
+    return `
+      <p class="panel-desc">AI 开发：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务。</p>
+      <div class="batch-stats">已计划队列：<b>2</b> 项（最旧优先）</div>
+      <button type="button" class="btn primary" data-act="start">启动</button>
+      <div class="queue-row"><span class="cid">REQ-20990915-105</span><span>看板导出 PDF</span><span class="why">队列第 1 位（最旧优先）</span></div>
+      <div class="queue-row"><span class="cid">REQ-20990915-104</span><span>搜索结果高亮</span><span class="why">队列第 2 位</span></div>`;
+  }
+
+  // ---------- 跳转链路（还原 gotoRuns 的定向与签名剪枝） ----------
+  function gotoRuns(target, viaLabel) {
+    S.mode = target;
+    S.view = 'runs';
+    S.error = false;
+    ev(`${viaLabel} → 定向 ${LBL[target]}（mode=${target}），切任务模块`);
+    if (S.fetchFail) {
+      // 拉取失败：保留当前渲染（真实代码 catch 后仅 toast，不重渲染）
+      if (S.cache[target] && !S.defect) {
+        S.rendered = target;
+        ev(`面板数据拉取失败（离线）：修复模式用缓存呈现目标面板，并提示后台刷新失败`, 'bad');
+      } else {
+        ev(`面板数据拉取失败（离线）：保留当前渲染内容，仅提示错误（真实行为）`, 'bad');
+      }
+    } else if (!S.cache[target]) {
+      // 无缓存（签名初值空 ≠ 数据签名）：加载态 → 渲染
+      S.loading = target;
+      ev(`无缓存数据：先渲染 ${LBL[target]} 面板加载态…`);
+      setTimeout(() => {
+        S.loading = null;
+        S.cache[target] = true;
+        S.rendered = target;
+        ev(`加载完成：渲染 ${LBL[target]} 面板（缓存就位，签名记录）`, 'ok');
+        render();
+      }, 800);
+    } else if (S.dataChanged) {
+      S.rendered = target;
+      ev(`目标面板数据有变化 → 签名不同 → 重渲染 ${LBL[target]} 面板`, 'ok');
+    } else if (S.defect && S.rendered !== target) {
+      ev(`签名剪枝命中：${LBL[target]} 数据无变化 → 不重渲染，#batchDrawer 残留 ${S.rendered ? LBL[S.rendered] : '空'} 面板（缺陷现场）`, 'bad');
+    } else {
+      S.rendered = target;
+      ev(S.defect ? `签名剪枝命中，但当前已渲染目标面板（无可见异常）` : `修复模式：进入任务模块即呈现目标 ${LBL[target]} 面板`, 'ok');
+    }
+    render();
+  }
+
+  // ---------- 渲染 ----------
+  function render() {
+    // 模块激活态
+    $('#reqModule').classList.toggle('inactive', S.view !== 'req');
+    $('#runsModule').classList.toggle('inactive', S.view !== 'runs');
+    $('#reqLive').textContent = S.view === 'req' ? '当前模块' : '未进入';
+    $('#runsLive').textContent = S.view === 'runs' ? '当前模块' : '未进入';
+    document.querySelectorAll('.view-tab[data-nav]').forEach((b) => b.classList.toggle('active', b.dataset.nav === S.view));
+
+    // 筛选档 chips
+    $('#filterBar').innerHTML = LANES.map((l) =>
+      `<button type="button" class="filter-chip${S.lane === l.key ? ' active' : ''}" data-lane="${l.key}">${l.label} <span class="cnt">${l.cnt}</span></button>`).join('');
+
+    // 列表头快捷入口（按档显隐与文案）
+    const quick = S.lane === 'accepted'
+      ? `<button type="button" class="quick-entry" data-quick="refine" title="进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ AI 分析</button>`
+      : S.lane === 'planned'
+        ? `<button type="button" class="quick-entry" data-quick="develop" title="进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务">▶ AI 开发</button>`
+        : `<span class="no-quick">（${LANES.find((l) => l.key === S.lane).label}档无快捷入口）</span>`;
+    $('#quickSlot').innerHTML = quick;
+
+    // 条目行
+    const rows = ROWS[S.lane] || [];
+    $('#reqList').innerHTML = rows.length ? rows.map((r) => `
+      <div class="req-row">
+        <span class="cid">${r.id}</span>
+        <span class="ttl">${r.ttl}</span>
+        ${r.badge ? `<button type="button" class="refine-badge rf-${r.badge}" data-badge="refine" title="点击查看 AI 分析面板">${BADGE[r.badge]}</button>` : ''}
+        <span class="mtime">${r.t}</span>
+      </div>`).join('') : '<div class="empty-note">（本档暂无条目）</div>';
+
+    // 任务页签 + 状态行
+    $('#taskTabs').innerHTML = ['refine', 'develop'].map((m) =>
+      `<button type="button" class="tab${S.mode === m ? ' active' : ''}" data-tab="${m}">${LBL[m]}</button>`).join('');
+    const line = $('#statusLine');
+    if (S.view !== 'runs') {
+      line.innerHTML = '<span class="muted">（未进入任务模块；离开时面板 DOM 不清理，仅隐藏）</span>';
+    } else if (S.rendered === null && !S.loading) {
+      line.innerHTML = '<span class="muted">（尚未渲染过任何子面板）</span>';
+    } else if (S.loading) {
+      line.innerHTML = `<span class="muted">正在加载 ${LBL[S.loading]} 面板…</span>`;
+    } else if (S.rendered === S.mode) {
+      line.innerHTML = `<span class="status-ok">✓ 精准：点击目标 = 落地面板 = ${LBL[S.mode]}</span>`;
+    } else {
+      line.innerHTML = `<span class="status-bad">✗ 偏差：点击目标是「${LBL[S.mode]}」，落地却停留在「${LBL[S.rendered]}」——需手动点页签切换</span>`;
+    }
+
+    // 面板主体
+    const body = $('#drawerBody');
+    if (S.loading) {
+      body.innerHTML = `<div class="loading"><span class="spin"></span> 加载中…（拉取 ${LBL[S.loading]} 面板数据）</div>`;
+    } else if (S.error) {
+      body.innerHTML = `<div class="notice bad">面板数据刷新失败：服务离线（演示）——已保留上次渲染内容。</div>
+        <div style="margin-top:8px"><button type="button" class="btn" data-act="retry">重试</button></div>`;
+    } else if (S.rendered === null) {
+      body.innerHTML = '<p class="panel-desc">（空：#batchDrawer 尚未渲染过任何子面板）</p>';
+    } else {
+      const stale = S.rendered !== S.mode;
+      body.innerHTML = `
+        ${stale ? `<div class="stale-banner">缺陷现场：这是上次渲染残留的「${LBL[S.rendered]}」子面板（数据签名无变化 → 未触发重渲染）。请手动点上方「${LBL[S.mode]}」页签，或切到「修复后」模式对比。</div>` : ''}
+        ${S.fetchFail && S.cache[S.rendered] && !S.defect ? '<div class="notice warn">后台刷新失败（离线，演示）：当前为目标面板的缓存内容。</div>' : ''}
+        ${S.rendered === 'refine' ? refinePanelHtml() : developPanelHtml()}`;
+    }
+
+    // 事件流
+    $('#eventLog').innerHTML = S.log.length
+      ? S.log.slice(0, 30).map((e) => `<div class="ev ${e.cls || ''}"><span class="t">${e.t}</span>${e.text}</div>`).join('')
+      : '<div class="ev">（暂无事件：点左侧快捷按钮开始）</div>';
+  }
+
+  // ---------- 事件（委托绑定一次） ----------
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-defect],[data-data],[data-cand],[data-nav],[data-lane],[data-quick],[data-badge],[data-tab],[data-act]');
+    if (!t) return;
+    if (t.dataset.defect !== undefined) {
+      S.defect = t.dataset.defect === '1';
+      document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === t));
+      ev(`切换到「${S.defect ? '缺陷（当前）' : '修复后'}」模式`);
+    } else if (t.dataset.data !== undefined) {
+      S.dataChanged = t.dataset.data === 'changed';
+      t.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === t));
+      ev(`目标面板数据设为「${S.dataChanged ? '有变化（签名不同 → 必重渲染）' : '无变化（稳态，签名剪枝可命中）'}」`);
+    } else if (t.dataset.cand !== undefined) {
+      S.cands = Number(t.dataset.cand);
+      t.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === t));
+      if (S.rendered === 'refine' && !S.loading) { S.rendered = 'refine'; ev(`AI 分析候选改为 ${S.cands} 项：数据有变化 → 重渲染 AI 分析面板`, 'ok'); }
+    } else if (t.dataset.nav === 'req') {
+      S.view = 'req';
+      ev('返回需求模块（任务面板 DOM 不清理，仅隐藏——缺陷温床）');
+    } else if (t.dataset.nav === 'runs') {
+      S.view = 'runs';
+      ev('经导航「任务」页签进入：不定向子面板，停留上次渲染的面板（设计如此，非本 Bug）');
+    } else if (t.dataset.lane) {
+      S.lane = t.dataset.lane;
+      ev(`切到「${LANES.find((l) => l.key === S.lane).label}」筛选档`);
+    } else if (t.dataset.quick) {
+      gotoRuns(t.dataset.quick, `点「▶ ${LBL[t.dataset.quick]}」快捷按钮`);
+    } else if (t.dataset.badge) {
+      gotoRuns('refine', '点已接受行「未完善」徽标（同一跳转链路）');
+    } else if (t.dataset.tab) {
+      S.mode = t.dataset.tab;
+      S.rendered = t.dataset.tab;
+      S.error = false;
+      ev(`手动切换页签 → ${LBL[t.dataset.tab]}：无条件重渲染（这也是缺陷模式的补救通道）`, 'ok');
+    } else if (t.dataset.act === 'retry') {
+      S.error = false;
+      ev('重试面板数据拉取…');
+      S.fetchFail = false;
+      document.getElementById('fetchFail').checked = false;
+      gotoRuns(S.mode, '重试后重新进入');
+    } else if (t.dataset.act === 'start') {
+      ev('点「启动」：创建任务并复制主调度提示词（真实功能，演示不展开）');
+    }
+    render();
+  });
+  document.getElementById('fetchFail').addEventListener('change', (e) => {
+    S.fetchFail = e.target.checked;
+    ev(`模拟面板数据拉取失败（离线）${S.fetchFail ? '开启' : '关闭'}`);
+    render();
+  });
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    Object.assign(S, {
+      view: 'req', lane: 'accepted', mode: 'refine', rendered: null,
+      loading: null, error: false, cache: { refine: false, develop: false }, log: [],
+    });
+    ev('重置现场：清空面板缓存与签名（回到「首次进入必渲染」状态）');
+    render();
+  });
+
+  ev('演示就绪：建议先在任务页签间手动切换一次（让两个子面板都有缓存），再回需求模块点快捷按钮');
+  render();
+})();
+</script>
+</body>
+</html>

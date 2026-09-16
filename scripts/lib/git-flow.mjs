@@ -23,7 +23,6 @@ import {
   readStatus,
 } from './core.mjs';
 import {
-  DESC_MAX_CHARS,
   TEST_PATH_PREFIX,
   validateCommitSubject,
   itemCommittedInGit,
@@ -194,17 +193,95 @@ export function changedPathsSince(root, snapshot) {
   return [...diff.changed, ...diff.dirtyTouched];
 }
 
-// 数据账本 .gitignore 补齐：自动提交账本目录（commits/runs、commits/batches）不进版本控制。
-// 返回是否发生修改（看板共享文件由 doc 组整体收纳，保持工作区干净）。
+// 数据账本 .gitignore 补齐：自动提交账本目录（commits/runs、commits/batches、dispatch/runs）
+// 不进版本控制。返回是否发生修改（看板共享文件由 doc 组整体收纳，保持工作区干净）。
+// BUG-20260915-007：dispatch/runs/ 由手动收口 run 记录（manual-<itemId>）使用——core.claim
+// 无法引用 batch.ensureDispatch（循环依赖），此处幂等补行保持单一目录口径。
 function ensureLedgerIgnore(dataDir) {
   const gi = path.join(dataDir, '.gitignore');
-  const wanted = ['commits/runs/', 'commits/batches/'];
+  const wanted = ['commits/runs/', 'commits/batches/', 'dispatch/runs/'];
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
   const add = wanted.filter((l) => !cur.split('\n').includes(l));
   if (!add.length) return false;
   fs.writeFileSync(gi, cur.replace(/\n*$/, '\n') + add.join('\n') + '\n');
   return true;
+}
+
+// ---------- 2b. BUG-20260915-007 手动 /dev 收口 run 记录 ----------
+// 无 run 的手动开发（/dev claim → report）与批量 run 同口径系统收口提交：归因基线是
+// 认领（或例外 status → in-progress，dev-closeout 例外授权分支）时捕获的工作区快照。
+// 记录落 dispatch/runs/manual-<itemId>/run.json：executor='manual'、batchId=null——与
+// 批量（batchRuns 按 batchId 过滤）/Codex（myRuns 按 executor 过滤）同目录互不误读；
+// 每个条目一条，新一轮认领周期覆盖。目录由 ensureLedgerIgnore 排除在版本控制外。
+
+export function manualRunIdOf(itemId) {
+  return `manual-${itemId}`;
+}
+
+function manualRunPath(dataDir, itemId) {
+  return path.join(dataDir, 'dispatch', 'runs', manualRunIdOf(itemId), 'run.json');
+}
+
+const readJsonFile = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+};
+
+export function readManualRun(dataDir, itemId) {
+  const rec = readJsonFile(manualRunPath(dataDir, itemId));
+  return rec && rec.itemId === itemId && rec.executor === 'manual' ? rec : null;
+}
+
+// 认领 / 例外进入开发时捕获归因快照（幂等）：
+//   同一认领周期（phase='reserved'）重复调用保留最早快照——认领锁过期重认等场景不丢
+//   前段改动的归因连续性；上一周期已收口（phase='reported'）则刷新快照开启新周期。
+// 非 git 项目 treeSnapshot=null（report 收口按「非 git」既有跳过口径处理）。
+export function captureManualTreeSnapshot({ dataDir, projectRoot, itemId, owner = null, note = null }) {
+  const cur = readManualRun(dataDir, itemId);
+  if (cur && cur.phase === 'reserved') return cur;
+  ensureLedgerIgnore(dataDir);
+  const now = nowIso();
+  const rec = {
+    version: 1,
+    runId: manualRunIdOf(itemId),
+    batchId: null,
+    itemId,
+    executor: 'manual',
+    owner: owner || null,
+    createdAt: now,
+    updatedAt: now,
+    startedAt: null,
+    finishedAt: null,
+    phase: 'reserved',
+    reason: null,
+    reportRef: null,
+    ...(note ? { snapshotNote: String(note) } : {}),
+    treeSnapshot: workingTreeSnapshot(projectRoot),
+    autoCommit: null,
+  };
+  fs.mkdirSync(path.dirname(manualRunPath(dataDir, itemId)), { recursive: true });
+  writeJsonAtomic(manualRunPath(dataDir, itemId), rec);
+  return rec;
+}
+
+// report 收口结果落账：phase='reported'（本轮上报已完成系统收口尝试），autoCommit 供
+// 重复上报的幂等判定与失败续传读取（autoCommitForRun 的 prevFailed 口径）。
+export function saveManualRunResult(dataDir, itemId, autoCommit) {
+  const cur = readManualRun(dataDir, itemId);
+  if (!cur) return null;
+  const next = {
+    ...cur,
+    phase: 'reported',
+    finishedAt: nowIso(),
+    updatedAt: nowIso(),
+    autoCommit,
+  };
+  writeJsonAtomic(manualRunPath(dataDir, itemId), next);
+  return next;
 }
 
 // ---------- 3. 到待测试自动提交 ----------
@@ -276,7 +353,9 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
 
     const itemDir = resolveItemDir(dataDir, itemId).dir;
     const title = readStatus(itemDir).title || itemId;
-    const desc = [...String(title)].slice(0, DESC_MAX_CHARS).join('');
+    // BUG-20260914-021：描述完整保留条目标题，不再截断——核验上限（DESC_MAX_CHARS=120）
+    // 已与条目标题上限对齐，标题合规则消息必然过核验；超限（遗留脏数据）走显式报错。
+    const desc = String(title);
     const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
     const itemRel = path.relative(repoTop, itemDir);
     const boardRel = path.relative(repoTop, dataDir);
@@ -351,13 +430,21 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     } catch (e) {
       // REQ-20260914-001 C02：分组提交失败时保留已成功提交的 hash（不丢账）——失败结果
       // 携带 partial commits，人工确认补交时据此不重复提交（已提交路径已退出脏集合）。
-      if (commits.length) {
-        writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual: [], heldGroups: null });
-      }
+      // BUG-20260915-003：失败明细必须落盘（含 0 组提交失败），errorFull 保留完整原始错误
+      // （回执 reason 截断 160 字会把仓库路径后的关键信息截掉）；已归因的 pendingManual /
+      // heldGroups 随结果显式上抛（否则挂起面板误显示「待人工 0 路径」）。
+      const errorFull = String(e && e.message ? e.message : e);
+      writeAutoCommitLedger(dataDir, {
+        run, itemId, title, commits, excluded, pendingManual, heldGroups,
+        statusOverride: 'failed', errorFull,
+      });
       return {
         status: 'failed',
         commits,
-        reason: `${String(e && e.message ? e.message : e).slice(0, 160)}（已成功提交 ${commits.length} 组，hash 已保留，不重复提交）`,
+        pendingManual,
+        heldGroups,
+        reason: `${errorFull.slice(0, 160)}（已成功提交 ${commits.length} 组，hash 已保留，不重复提交）`,
+        errorFull: errorFull.slice(0, 4000),
       };
     }
 
@@ -374,7 +461,21 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
       }
       : { status: 'committed', commits, excluded, reason: null };
   } catch (e) {
-    return { status: 'failed', commits: [], reason: String(e && e.message ? e.message : e).slice(0, 200) };
+    // BUG-20260915-003：归因阶段意外失败同样保留完整错误并落明细账（status=failed），
+    // 不再只留截断 reason——现场可诊断、面板可展示。
+    const errorFull = String(e && e.message ? e.message : e);
+    let title = itemId;
+    try { title = readStatus(resolveItemDir(dataDir, itemId).dir).title || itemId; } catch { /* 条目不可读 */ }
+    try {
+      writeAutoCommitLedger(dataDir, {
+        run, itemId, title, commits: [], excluded: [], pendingManual: [], heldGroups: null,
+        statusOverride: 'failed', errorFull,
+      });
+    } catch { /* 明细写失败不影响返回 */ }
+    return {
+      status: 'failed', commits: [], pendingManual: [], heldGroups: null,
+      reason: errorFull.slice(0, 200), errorFull: errorFull.slice(0, 4000),
+    };
   }
 }
 
@@ -398,7 +499,7 @@ function manualPendingReason(pendingManual, heldGroups) {
 // committedItemIndex 收录；完整明细另落 dispatch 运行目录 auto-commit.json。
 // BUG-20260913-006：仅有待人工路径、无实际提交时不写 commits/runs（徽标不误点亮），
 // 但明细仍落盘如实记录 pendingManual（路径 + 建议）与 heldGroups。
-function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups, summaryNote = null }) {
+function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups, summaryNote = null, statusOverride = null, errorFull = null }) {
   const d = new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const rand = crypto.randomBytes(2).toString('hex');
@@ -427,16 +528,19 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
     writeJsonAtomic(path.join(dir, 'run.json'), record);
   }
   // 明细（运行目录，dispatch/runs 已被 .gitignore 排除）
+  // BUG-20260915-003：提交失败也必须落明细（含 0 组提交失败）——status 如实标记 failed，
+  // errorFull 保留完整原始错误供挂起确认面板展示与诊断（回执 reason 短句不再是无处可查的唯一线索）。
   try {
     const runDir = path.join(dataDir, 'dispatch', 'runs', run.runId);
     fs.mkdirSync(runDir, { recursive: true });
     writeJsonAtomic(path.join(runDir, 'auto-commit.json'), {
       ...record,
-      status: commits.length ? 'committed' : 'skipped',
+      status: statusOverride || (commits.length ? 'committed' : 'skipped'),
       excluded: excluded || [],
       pendingManual: pending,
       pendingManualAdvice: pending.length ? PENDING_MANUAL_ADVICE : undefined,
       ...(heldGroups ? { heldGroups } : {}),
+      ...(errorFull ? { errorFull: String(errorFull).slice(0, 4000) } : {}),
     });
   } catch { /* 明细写失败不影响主流程 */ }
   return record;
@@ -481,12 +585,25 @@ export function fileDiffText(root, p) {
   return `（新文件，未纳入版本控制）\n${'='.repeat(60)}\n${content}`;
 }
 
-// 归因扫描（只读，REQ-20260914-001 核验与补交共用）：以「预留快照 → 现在」差集盘点本单
-// 仍留在工作区、可归因本条目的路径。doc 组 = 条目目录与看板共享文件；fix 组 = 其余全部
-// 变化路径（含预留前已脏混合路径——是否整文件提交由调用方决定：核验只报告，补交在人工
-// 确认授权后整文件提交）。其他条目目录一律排除（不越权收纳他人单据）。
-// 返回 null 表示无法归因（非 git / 无快照 / 状态不可读）。
-export function attributablePathsForRun({ dataDir, projectRoot, run }) {
+// 候选路径的变更类型（porcelain XY 码）：?? 新增、含 D 删除、其余修改。
+function changeKindOf(code) {
+  if (code === '??') return '新增';
+  if (code && code.includes('D')) return '删除';
+  return '修改';
+}
+
+// BUG-20260915-003 挂起确认候选范围（唯一口径：清单计数 / 文件表 / 核验 / 补交共用）。
+// 以「预留快照 → 现在」差集 + 当前 porcelain 把仍留在工作区、可归因本条目的候选路径分为：
+//   attributed（本单可归属）—— 条目目录内路径（本单条目文档整体归属）；非看板路径中快照
+//     差集确定性归因（状态码变化 / 未跟踪内容哈希变化）且预留前未脏的路径（即自动提交
+//     test/业务组的归因口径）；
+//   uncertain（归属待确认）—— 看板共享/全局文件（看板前缀且非本条目目录：文件级差异可能
+//     混有系统计数器、其他任务写入，不得只因出现在工作区差集中就归为本单）；非看板
+//     「预留前已脏且本单动过」路径（原 pendingManual 口径，无法安全区分归属）；
+//   excluded —— 其他条目目录路径（不越权收纳他人单据）。
+// 预留前已脏且运行期未动的非看板路径与本单无关，不计入。返回 null 表示无法扫描
+// （非 git / 无快照 / 状态不可读）——呈现层显示「待核对」，不得显示误导性 0。
+export function confirmScopeForRun({ dataDir, projectRoot, run }) {
   if (!isGitRepo(projectRoot)) return null;
   if (!run.treeSnapshot || !run.treeSnapshot.entries) return null;
   const nowSnap = workingTreeSnapshot(projectRoot);
@@ -494,50 +611,69 @@ export function attributablePathsForRun({ dataDir, projectRoot, run }) {
   const diff = diffWorkingTree(projectRoot, run.treeSnapshot);
   const changed = diff ? diff.changed : [];
   const dirtyTouched = diff ? diff.dirtyTouched : [];
-  const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
+  const preReservedDirty = (p) => Boolean(
+    run.treeSnapshot.trackedHashes && run.treeSnapshot.trackedHashes[p] != null,
+  );
   const itemDir = resolveItemDir(dataDir, run.itemId).dir;
   const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
   const itemRel = path.relative(repoTop, itemDir);
   const boardRel = path.relative(repoTop, dataDir);
   const boardPref = boardRel + '/';
-  const groups = { doc: [], fix: [] };
+  const attributed = [];
+  const uncertain = [];
   const excluded = [];
-  for (const p of allDirty) {
+  const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
+  for (const p of [...allDirty].sort()) {
+    const kind = changeKindOf(nowSnap.entries[p]);
     const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
     if (p.startsWith(boardPref) || inItem) {
       const owner = owningItemIdOf(boardRel, p);
       if (owner && owner !== run.itemId && !inItem) { excluded.push(p); continue; }
-      groups.doc.push(p);
+      if (inItem) attributed.push({ path: p, kind });
+      else uncertain.push({ path: p, kind, why: '看板共享/全局文件：可能混有其他任务或系统写入，不能只因出现在差集中就归为本单' });
       continue;
     }
-    if (!changed.includes(p) && !dirtyTouched.includes(p)) continue;
-    groups.fix.push(p);
+    if (changed.includes(p) && !preReservedDirty(p)) attributed.push({ path: p, kind });
+    else if (changed.includes(p) || dirtyTouched.includes(p)) {
+      uncertain.push({ path: p, kind, why: '预留前已脏且本单动过：无法安全区分预留前与本单改动' });
+    }
   }
-  groups.doc.sort(); groups.fix.sort(); excluded.sort();
-  return { groups, excluded };
+  return { attributed, uncertain, excluded };
 }
 
-// 人工确认后的授权补交（REQ-20260914-001 C05/C08）：人工已核对差异并确认归属，
-// 把本单仍留在工作区的全部可归因改动整文件提交——预留前已脏混合路径（pendingManual）
-// 与暂扣 test/业务组一并收纳；不做 hunk 拆分。doc 组照常 doc 前缀，其余统一 fix 前缀
-// 「fix: 人工确认补交 <单号>」。幂等：无可归因脏路径时不产生提交。
-export function supplementCommitForRun({ dataDir, projectRoot, run }) {
+// 人工确认后的授权补交（REQ-20260914-001 C05/C08；BUG-20260915-003 范围收口）：
+// 人工已核对差异并确认归属后，把「本单可归属 + 归属待确认中显式计入」的路径整文件提交
+// （预留前已脏混合路径与暂扣 test/业务组按确认范围收纳）；不做 hunk 拆分。归属待确认中
+// 未计入的路径保留在工作区（全局文件不得静默整批并入）。doc 组照常 doc 前缀，其余统一
+// fix 前缀「fix: 人工确认补交 <单号>」。幂等：无可归因脏路径时不产生提交。
+export function supplementCommitForRun({ dataDir, projectRoot, run, include = [] }) {
   const itemId = run.itemId;
   try {
-    const scan = attributablePathsForRun({ dataDir, projectRoot, run });
-    if (scan == null) {
+    const scope = confirmScopeForRun({ dataDir, projectRoot, run });
+    if (scope == null) {
       return { status: 'skipped', commits: [], reason: '无法归因补交（非 git 仓库 / 缺少预留快照 / 状态不可读）；请人工在终端提交' };
     }
     ensureLedgerIgnore(dataDir);
     const itemDir = resolveItemDir(dataDir, itemId).dir;
     const title = readStatus(itemDir).title || itemId;
-    const desc = [...String(title)].slice(0, DESC_MAX_CHARS).join('');
+    // BUG-20260914-021：与 autoCommitForRun 同口径——描述完整保留标题，不截断。
+    const desc = String(title);
+    const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
+    const boardPref = path.relative(repoTop, dataDir) + '/';
+    const includeSet = new Set((Array.isArray(include) ? include : []).filter(Boolean));
+    const docPaths = [];
+    const fixPaths = [];
+    for (const f of scope.attributed) (f.path.startsWith(boardPref) ? docPaths : fixPaths).push(f.path);
+    for (const p of includeSet) {
+      if (!scope.uncertain.some((x) => x.path === p)) continue; // 现场已变（如已入库）：忽略
+      (p.startsWith(boardPref) ? docPaths : fixPaths).push(p);
+    }
     let plan = [
-      ['doc', scan.groups.doc, commitSubjectOf('doc', desc, itemId)],
-      ['fix', scan.groups.fix, commitSubjectOf('fix', '人工确认补交', itemId)],
+      ['doc', docPaths, commitSubjectOf('doc', desc, itemId)],
+      ['fix', fixPaths, commitSubjectOf('fix', '人工确认补交', itemId)],
     ].filter(([, paths]) => paths.length);
     if (!plan.length) {
-      return { status: 'skipped', commits: [], excluded: scan.excluded, reason: '无可归因待补交路径（可能已全部入库）' };
+      return { status: 'skipped', commits: [], excluded: scope.excluded, reason: '无可归因待补交路径（可能已全部入库）' };
     }
     const commits = [];
     for (const [kind, paths, subject] of plan) {
@@ -547,12 +683,13 @@ export function supplementCommitForRun({ dataDir, projectRoot, run }) {
       commits.push(c);
     }
     writeAutoCommitLedger(dataDir, {
-      run, itemId, title, commits, excluded: scan.excluded, pendingManual: [], heldGroups: null,
-      summaryNote: '人工确认补交（REQ-20260914-001：确认归属后授权整文件提交）',
+      run, itemId, title, commits, excluded: scope.excluded, pendingManual: [], heldGroups: null,
+      summaryNote: '人工确认补交（REQ-20260914-001：确认归属后授权整文件提交；BUG-20260915-003：按显式归属范围）',
     });
-    return { status: 'committed', commits, excluded: scan.excluded, reason: null };
+    return { status: 'committed', commits, excluded: scope.excluded, reason: null };
   } catch (e) {
-    return { status: 'failed', commits: [], reason: String(e && e.message ? e.message : e).slice(0, 200) };
+    const errorFull = String(e && e.message ? e.message : e);
+    return { status: 'failed', commits: [], reason: errorFull.slice(0, 200), errorFull: errorFull.slice(0, 4000) };
   }
 }
 

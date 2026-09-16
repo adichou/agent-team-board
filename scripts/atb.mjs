@@ -23,6 +23,8 @@ import * as holdStates from './lib/hold-states.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as gitFlow from './lib/git-flow.mjs';
 import * as mgtCommit from './lib/mgt-commit.mjs';
+// BUG-20260915-007：无 run 手动 report 的系统收口提交编排（复用批量 autoCommitForRun 内核）。
+import * as manualCloseout from './lib/manual-closeout.mjs';
 
 const args = process.argv.slice(2);
 
@@ -389,7 +391,24 @@ async function main() {
     const cov = st.lastReport?.coverage;
     console.log(`✓ 已写入测试报告：${core.resolveItemDir(dataDir, st.id).dir}/test-report.md`);
     console.log(`  ${st.id} 标记为「待人工确认完成」${cov != null ? `（覆盖率 ${cov}%）` : ''}${opts.run ? ` · 关联运行 ${opts.run}` : ''}`);
-    if (jsonOut) console.log(JSON.stringify(st, null, 2));
+    // BUG-20260915-007：无 run 的手动上报在 report 成功后走系统收口提交——与批量 run
+    // receipt 同口径（认领时快照归因、doc/test/业务分组、消息带单号、只 commit 不 push、
+    // 失败/归属不明挂起待人工确认）；上报本身不受收口结果影响，条目已进入待测试。
+    let closeout = null;
+    if (!opts.run) {
+      closeout = manualCloseout.closeoutManualReport({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: st.id });
+      const ac = closeout.autoCommit;
+      if (ac.status === 'committed') {
+        console.log(`✓ 系统收口提交 ${ac.commits.length} 组（只 commit 不 push，atb commit log ${st.id} 可查）：`);
+        for (const c of ac.commits) console.log(`  · ${c.hash.slice(0, 10)} ${c.subject}`);
+      } else if (closeout.suspended) {
+        console.log(`⚠ 收口提交不完整：${closeout.suspended.reason}`);
+        console.log('  已挂起待人工确认：请到 Status Board 任务页「待人工确认」核对差异并确认后继续（上报已完成，条目进入待测试；确认闭环内完成补交）');
+      } else {
+        console.log(`= 收口提交：${ac.reason || '本单无待提交改动'}`);
+      }
+    }
+    if (jsonOut) console.log(JSON.stringify(closeout ? { ...st, closeout } : st, null, 2));
     return;
   }
 
@@ -1339,7 +1358,11 @@ async function confirmCmd(rest) {
     for (const it of [...r.items, ...legacy]) {
       console.log(`  ⚠ ${it.itemId}  ${truncate(it.title, 28)}  [${it.kindLabel} · ${it.blockTypeLabel} · ${it.stateLabel}]  已等待 ${confirmStore.waitingText(it.declaredAt)}${it.legacy ? '  (历史账本恢复)' : ''}`);
       if (it.kind === 'develop') {
-        console.log(`    已提交 ${it.committedCount} 组 · 待人工 ${it.pendingCount} 路径${it.reason ? ` · ${truncate(it.reason, 44)}` : ''}`);
+        // BUG-20260915-003：与面板/核验同源——待人工计数取候选范围扫描，无法扫描显示「待核对」
+        const pending = it.pendingCount == null ? '待核对' : `${it.pendingCount} 路径`;
+        const parts = it.attributedCount != null && it.uncertainCount != null
+          ? `（本单可归属 ${it.attributedCount} · 归属待确认 ${it.uncertainCount}）` : '';
+        console.log(`    已提交 ${it.committedCount} 组 · 待人工 ${pending}${parts}${it.reason ? ` · ${truncate(it.reason, 44)}` : ''}`);
       } else {
         const miss = Array.isArray(it.unansweredRequired) ? it.unansweredRequired.length : 0;
         console.log(`    必答未答 ${miss}/${it.total}${it.reason ? ` · ${truncate(it.reason, 44)}` : ''}`);
@@ -1357,8 +1380,21 @@ async function confirmCmd(rest) {
     console.log(`  声明：${d.declaredAt}（${d.declaredBy}）${d.runId ? ` · 运行 ${d.runId}` : ''} · 已等待 ${confirmStore.waitingText(d.declaredAt)}`);
     if (d.reason) console.log(`  原因：${d.reason}`);
     if (d.kind === 'develop') {
-      if (d.committedCount != null) console.log(`  已提交 ${d.committedCount} 组 · 待人工 ${d.pendingCount} 路径（补交 ${d.supplementCommits.length} 组）`);
-      for (const f of d.files || []) console.log(`    - ${f.path}  ${f.state}`);
+      if (d.committedCount != null) {
+        const pending = d.pendingCount == null ? '待核对' : `${d.pendingCount} 路径`;
+        const parts = d.attributedCount != null && d.uncertainCount != null
+          ? `（本单可归属 ${d.attributedCount} · 归属待确认 ${d.uncertainCount}）` : '';
+        console.log(`  已提交 ${d.committedCount} 组 · 待人工 ${pending}${parts}（补交 ${d.supplementCommits.length} 组）`);
+      }
+      for (const f of d.files || []) {
+        const group = f.group === 'undetermined' ? '归属待确认' : '本单可归属';
+        console.log(`    - ${f.path}  ${group} · ${f.kind || '修改'} · ${f.state}`);
+      }
+      if (d.error) {
+        console.log(`  Git 失败摘要：${truncate(d.error.summary || '', 80)}`);
+        if (d.error.full) console.log(`  完整错误（原始输出保留用于诊断）：\n    ${d.error.full.split('\n').join('\n    ')}`);
+        else console.log('  完整错误：登记前已被截断且无原始日志可回溯（信息不足，不据此推断原因）');
+      }
       if (d.verify && d.verify.lastCheckAt) {
         console.log(`  最近核验：${d.verify.ok ? '通过' : '未通过'}`);
         for (const rsn of d.verify.reasons || []) console.log(`    - ${rsn}`);

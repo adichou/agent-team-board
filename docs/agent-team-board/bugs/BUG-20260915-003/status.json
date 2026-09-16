@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260915-003",
+  "type": "bug",
+  "title": "提交确认面板计数与核验不一致、缺少待提交差异且 Git 错误被截断",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-048-034",
+  "createdAt": "2026-09-15T00:14:52.108Z",
+  "updatedAt": "2026-09-15T05:54:27.398Z",
+  "agentCompletedAt": "2026-09-15T03:16:40.926Z",
+  "lastReport": {
+    "at": "2026-09-15T03:16:40.926Z",
+    "coverage": 9,
+    "framework": "Node assert + 真实临时 Git 端到端 + vm 渲染 + server HTTP（run-all 自研 harness）",
+    "summary": "统一挂起确认计数/文件表/核验/补交为同一候选范围口径（本单可归属/归属待确认），git add 失败空 pendingManual 也展示候选或待核对不显示 0；全局文件归属待确认须显式计入/排除、默认不静默并入；自动提交失败保留完整错误 errorFull（0 组也落明细）并在面板摘要+全文+复制展示；差异读取失败明确报错可重试；指纹覆盖全候选、重新核验刷新基线拦截内容变化。引入来源 REQ-20260914-001。新增 9 用例先红后绿，全量 242 测试文件 0 失败",
+    "runId": "run-20260915-254"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T00:14:52.108Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-3132"
+    },
+    {
+      "at": "2026-09-15T00:59:29.244Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T01:40:50.182Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-093327-9b9f）"
+    },
+    {
+      "at": "2026-09-15T02:36:32.337Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-034",
+      "note": "认领（zcode-batch-048-034）"
+    },
+    {
+      "at": "2026-09-15T03:16:40.927Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-034",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:27.399Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

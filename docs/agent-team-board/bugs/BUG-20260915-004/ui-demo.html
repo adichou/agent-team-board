@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260915-004 界面演示 · 挂起确认面板错误提示透传截断报错，缺归类与指引</title>
+<style>
+  /* 配色取自 scripts/web/style.css（--bg/--panel/--text/--muted/--border/--primary/--warn 等），
+     深浅色按 data-theme 切换（默认跟随系统），与看板一致。 */
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --primary: #2563eb; --primary-soft: rgba(37,99,235,.12);
+    --warn: #dc2626; --warn-soft: rgba(220,38,38,.1);
+    --ok: #16a34a; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --warn-bg: #fef2f2; --warn-text: #b91c1c;
+    --amber: #d97706; --amber-bg: #fffbeb; --amber-text: #b45309;
+    --chip-mute: #64748b; --mask: rgba(20,30,50,.45);
+    --code-bg: #f1f5f9; --code-text: #334155;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    --primary: #60a5fa; --primary-soft: rgba(96,165,250,.15);
+    --warn: #f87171; --warn-soft: rgba(248,113,113,.12);
+    --ok: #4ade80; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+    --info-bg: #0b1d3a; --info-text: #93c5fd; --warn-bg: #3b1214; --warn-text: #fca5a5;
+    --amber: #fbbf24; --amber-bg: #2b2110; --amber-text: #fcd34d;
+    --chip-mute: #94a3b8; --mask: rgba(4,8,14,.6);
+    --code-bg: #0b111a; --code-text: #c3cedd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; color: inherit; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .btn { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .btn.small { padding: 4px 10px; font-size: 12.5px; border-radius: 7px; }
+  .chip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .chip.mute { color: var(--chip-mute); border-color: var(--chip-mute); }
+  .chip.kind { color: var(--primary); border-color: var(--primary); }
+  .chip.type { background: var(--warn); border-color: var(--warn); color: #fff; }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+  /* ---------- 演示控制台（真实界面没有，仅为驱动本演示） ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 50; }
+  .demo-top h1 { font-size: 14px; margin: 0 8px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; padding: 5px 12px; cursor: pointer; color: var(--muted); }
+  .seg button.on { background: var(--primary); color: #fff; font-weight: 600; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .demo-top .group { display: inline-flex; align-items: center; gap: 6px; }
+  .demo-top .group > .lbl { color: var(--muted); font-size: 12.5px; }
+  .demo-top .right { margin-left: auto; display: flex; gap: 8px; }
+  .seg.bug button.on { background: var(--warn); }
+
+  /* ---------- 任务页（还原 tasks 视图顶部：队列横幅 + 待人工确认区） ---------- */
+  .board { max-width: 980px; margin: 0 auto; padding: 14px 18px 46px; }
+  .board-title { display: flex; align-items: baseline; gap: 10px; margin: 2px 2px 10px; flex-wrap: wrap; }
+  .board-title h2 { font-size: 15px; margin: 0; }
+  .notice { border-radius: 10px; padding: 9px 12px; font-size: 13px; border: 1px solid var(--border); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-text); }
+  .notice code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+  .confirm-area { margin: 12px 0 0; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+  .confirm-area[hidden] { display: none; }
+  .hold-area-head { padding: 9px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13.5px; }
+
+  /* 既有 .confirm-card 结构（scripts/web/style.css 同名类） */
+  .confirm-card { border: 1px solid var(--border); border-left: 3px solid var(--warn);
+    border-radius: 8px; padding: 8px 10px; background: var(--panel); display: grid; gap: 4px; margin: 10px 14px 12px; }
+  .confirm-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .confirm-card-head > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .confirm-title { font-weight: 600; }
+  .flag.confirm-flag { background: var(--warn); color: #fff; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .confirm-reason { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+  .confirm-counts { margin: 0; color: var(--muted); font-size: 12px; }
+  .confirm-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* 缺陷形态：截断串样式（现状 = 原样透传 <p class="confirm-reason">） */
+  .reason-raw { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .reason-raw .cut-mark { color: var(--warn); font-weight: 700; }
+  .trunc-note { margin: 2px 0 0; font-size: 11.5px; color: var(--warn); }
+
+  /* 修复形态：分层呈现——归类结论条 + 折叠完整原文 */
+  .reason-layer { display: grid; gap: 6px; }
+  .reason-classified { border: 1px solid var(--amber); background: var(--amber-bg); color: var(--amber-text);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  .reason-classified.retryable { border-color: var(--amber); }
+  .reason-classified .rc-title { font-weight: 700; }
+  .reason-classified .rc-guide { margin-top: 2px; }
+  .reason-classified .rc-guide .btn-inline { border: 1px solid currentColor; border-radius: 6px;
+    padding: 0 6px; font-size: 12px; background: transparent; cursor: pointer; }
+  .reason-unknown { border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  details.reason-full { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+  details.reason-full > summary { cursor: pointer; padding: 6px 10px; font-size: 12.5px; color: var(--muted);
+    user-select: none; }
+  details.reason-full > summary:hover { color: var(--text); }
+  details.reason-full > pre { margin: 0 8px 8px; padding: 8px 10px; border-radius: 6px;
+    background: var(--code-bg); color: var(--code-text); font-size: 11.5px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow: auto; }
+  details.reason-full pre .kw { color: var(--warn); font-weight: 700; }
+
+  /* 加载 / 失败 / 空状态 */
+  .area-loading { display: flex; gap: 10px; align-items: center; padding: 16px; color: var(--muted); }
+  .area-error { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin: 10px 14px 12px; padding: 10px 12px; border-radius: 8px;
+    background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-text); }
+  .area-empty { padding: 16px; color: var(--muted); }
+  .spinner { width: 15px; height: 15px; border-radius: 50%; border: 2px solid currentColor;
+    border-top-color: transparent; animation: spin .8s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 挂起确认侧拉面板（统一确认入口 · develop/commit 形态） ---------- */
+  .side-mask { position: fixed; inset: 0; background: var(--mask); display: none; z-index: 90; }
+  .side-mask.show { display: block; }
+  .side-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw);
+    background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow);
+    z-index: 100; display: none; flex-direction: column; }
+  .side-panel.show { display: flex; }
+  .sp-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .sp-head h3 { font-size: 14px; margin: 0; flex: 1; }
+  .sp-body { flex: 1; overflow: auto; padding: 12px 16px 16px; }
+  .sp-foot { border-top: 1px solid var(--border); padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sp-scope { margin: 0 0 8px; color: var(--muted); font-size: 12.5px; }
+  .confirm-files { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+  .confirm-files th, .confirm-files td { border: 1px solid var(--border); padding: 4px 7px; text-align: left; word-break: break-all; }
+  .confirm-files th { color: var(--muted); font-weight: 600; background: var(--bg); }
+  .confirm-files td.path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .confirm-verify { margin: 8px 0 0; font-size: 12px; }
+  .confirm-verify.ok { color: var(--ok); }
+  .confirm-verify.bad { color: var(--warn); }
+  .confirm-verify-reason { margin: 2px 0 0 14px; font-size: 12px; color: var(--warn); }
+  .confirm-test-tail { margin-top: 6px; }
+  .confirm-test-tail > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .confirm-test-tail pre { max-height: 180px; overflow: auto; background: var(--code-bg); color: var(--code-text);
+    border-radius: 6px; padding: 8px; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+  .field { display: block; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+  .field textarea { width: 100%; min-height: 52px; resize: vertical; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); padding: 7px 10px; font: inherit; margin-top: 4px; }
+  .field textarea:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+  .panel-msg { margin: 10px 0 0; font-size: 12.5px; white-space: pre-wrap; min-height: 18px; }
+  .panel-msg.err { color: var(--warn); }
+  .panel-msg.ok { color: var(--ok); }
+  .panel-loading { display: flex; gap: 10px; align-items: center; padding: 18px 4px; color: var(--muted); }
+  .panel-error { padding: 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-text);
+    border: 1px solid var(--warn-text); display: grid; gap: 8px; }
+
+  /* toast（还原看板 toast） */
+  #toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 22px; z-index: 200;
+    display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--ok);
+    border-radius: 9px; box-shadow: var(--shadow); padding: 8px 14px; font-size: 13px; max-width: 88vw; }
+  .toast.err { border-left-color: var(--warn); }
+
+  .legend { margin-top: 18px; padding: 10px 14px; border: 1px dashed var(--border); border-radius: 10px;
+    color: var(--muted); font-size: 12.5px; }
+  .legend code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header class="demo-top">
+  <h1>BUG-20260915-004 演示</h1>
+  <span class="group"><span class="lbl">形态</span>
+    <span class="seg bug" id="segMode">
+      <button data-mode="bug" class="on">缺陷（现状）</button>
+      <button data-mode="fixed">修复后（期望）</button>
+    </span>
+  </span>
+  <span class="group"><span class="lbl">挂起原因</span>
+    <span class="seg" id="segScene">
+      <button data-scene="lock" class="on">index.lock 瞬时冲突</button>
+      <button data-scene="unknown">未知错误（兜底）</button>
+    </span>
+  </span>
+  <span class="right">
+    <button class="btn small" id="btnState" title="依次演示：正常 → 加载 → 失败 → 空状态">切换清单状态</button>
+    <button class="btn small" id="btnTheme">深浅色</button>
+    <button class="btn small" id="btnReset">重置演示</button>
+  </span>
+</header>
+
+<main class="board">
+  <div class="board-title">
+    <h2>任务页（Status Board · tasks 视图顶部）</h2>
+    <span class="muted small">数据取自真实现场 <code>dispatch/runs/run-20260914-250/receipt.json</code></span>
+  </div>
+
+  <!-- 队列暂停横幅：confirmQueueBannerHtml（app.js:3220）——reason 同样原样透传 -->
+  <div id="queueBanner" class="notice warn"></div>
+
+  <!-- 待人工确认区：renderConfirmArea（app.js:3182） -->
+  <section class="confirm-area" id="confirmArea" aria-live="polite"></section>
+
+  <div class="legend">
+    对照要点：<b>缺陷（现状）</b>＝采集侧双重截断——<code>confirm-store.mjs:51</code> 拼 reason 时先
+    <code>slice(0, 80)</code>（实际砍中并丢掉 <code>index.lock': File exists</code> 关键段），
+    <code>batch.mjs:917</code> 再 <code>slice(0, 120)</code> 上限；面板侧 <code>app.js</code>
+    （卡片 3170 / 横幅 3220 / 面板 3327）把截断串原样透传，无原因归类、无处理指引。<br>
+    <b>修复后（期望）</b>＝分层呈现：默认一行归类结论（可重试 → 建议操作）＋ <code>&lt;details&gt;</code> 折叠完整原始输出（不截断）；
+    未知错误归「原因未知，附原始输出」。点卡片「查看并确认」打开侧拉面板体验同样对照。
+  </div>
+</main>
+
+<!-- 侧拉面板 -->
+<div class="side-mask" id="sideMask"></div>
+<aside class="side-panel" id="sidePanel" role="dialog" aria-label="挂起确认面板">
+  <header class="sp-head">
+    <h3 id="spTitle">提交 · BUG-20260914-020</h3>
+    <button class="btn small" id="spClose">关闭</button>
+  </header>
+  <div class="sp-body" id="spBody"></div>
+  <footer class="sp-foot" id="spFoot"></footer>
+</aside>
+
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+/* ============ 真实数据（docs/agent-team-board/dispatch/runs/run-20260914-250/receipt.json） ============ */
+const GIT_REASON_LOCK = "git add失败：fatal: Unable to create '/Users/adichou/Documents/src/agent-team-board/.git/index.lock': File exists.；Another git process seems to be running in this （已成功提交 0 组，hash 已保留，不重复提交）";
+const RAW_REASON_LOCK = `自动提交失败：${GIT_REASON_LOCK}`;
+/* 缺陷形态的截断串：还原生产同款双重截断——
+   confirm-store.mjs:51 先 `自动提交失败：${reason.slice(0, 80)}`（实际拦腰截断的一刀），
+   batch.mjs:917 再 slice(0, 120)（此时长度 87，第二刀未砍中但上限仍在）。 */
+const TRUNCATED_LOCK = `自动提交失败：${GIT_REASON_LOCK.slice(0, 80)}`;
+
+/* 未知错误场景（示意数据，覆盖验收标准第 3 条的兜底分支） */
+const GIT_REASON_UNKNOWN = "git push失败：remote: Internal Server Error（500）＋本地输出尾段若干，无法匹配任何已知归类规则";
+const RAW_REASON_UNKNOWN = `自动提交失败：${GIT_REASON_UNKNOWN}`;
+const TRUNCATED_UNKNOWN = `自动提交失败：${GIT_REASON_UNKNOWN.slice(0, 80)}`;
+
+const DATA = {
+  lock: {
+    itemId: 'BUG-20260914-020',
+    title: '已合并的版本计划不允许再使用 AI 完善按钮了。',
+    raw: RAW_REASON_LOCK,
+    trunc: TRUNCATED_LOCK,
+    classify: {
+      cls: 'retryable',
+      title: 'git 索引被并发进程占用（瞬时冲突，可重试）',
+      guide: '非数据损坏：点「重新核验」或「确认并继续」即可重试补交，无需手工清理即自愈；多次失败再检查 .git/index.lock 残留。'
+    }
+  },
+  unknown: {
+    itemId: 'BUG-20260914-020',
+    title: '已合并的版本计划不允许再使用 AI 完善按钮了。',
+    raw: RAW_REASON_UNKNOWN,
+    trunc: TRUNCATED_UNKNOWN,
+    classify: {
+      cls: 'unknown',
+      title: '原因未知（未匹配已知失败类型）',
+      guide: '请展开完整原始输出定位；可先「保持挂起」留处理说明，再人工排查。'
+    }
+  }
+};
+
+const state = {
+  mode: 'bug',        // bug=缺陷（现状） | fixed=修复后（期望）
+  scene: 'lock',      // 挂起原因场景
+  areaState: 'ok',    // ok=正常 | loading=加载清单 | error=清单加载失败 | empty=空
+  panel: null,        // null | 'loading' | 'error' | 'form'
+  busyVerify: false,  // 重新核验进行中
+  verified: false,    // 核验已通过（演示终态）
+  resolved: false     // 确认并继续完成
+};
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* 主题：默认跟随系统，可手动切换 */
+const prefer = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+document.documentElement.dataset.theme = prefer;
+let themeManual = false;
+$('#btnTheme').addEventListener('click', () => {
+  themeManual = true;
+  const cur = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+});
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+  if (!themeManual) document.documentElement.dataset.theme = e.matches ? 'light' : 'dark';
+});
+
+/* ============ toast ============ */
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('#toasts').replaceChildren(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+/* ============ reason 渲染：缺陷 / 修复后两种形态 ============ */
+function reasonHtml(kind) { // kind: 'card' | 'panel'
+  const d = DATA[state.scene];
+  if (state.mode === 'bug') {
+    // 缺陷：截断串原样透传（卡片 confirm-reason / 横幅 / 面板同款）
+    return `<p class="confirm-reason reason-raw">${esc(d.trunc)}<span class="cut-mark">▌</span></p>
+      <p class="trunc-note">（↑ 现状：confirm-store.mjs 登记 reason 时 slice(0, 80) 拦腰截断，batch.mjs 再上限 120——关键段「/.git/index.lock': File exists…」整段丢失，界面无归类无指引）</p>`;
+  }
+  // 修复后：归类结论 + 折叠完整原文
+  const c = d.classify;
+  const head = c.cls === 'retryable'
+    ? `<div class="reason-classified retryable"><div class="rc-title">⚠ ${esc(c.title)}</div>
+        <div class="rc-guide">${esc(c.guide)}</div></div>`
+    : `<div class="reason-unknown"><div class="rc-title">？ ${esc(c.title)}</div>
+        <div class="rc-guide">${esc(c.guide)}</div></div>`;
+  return `<div class="reason-layer">
+    ${head}
+    <details class="reason-full">
+      <summary>完整原始输出（${d.raw.length} 字符，不再截断）</summary>
+      <pre>${esc(d.raw).replace(/(index\.lock|File exists)/g, '<span class="kw">$1</span>')}</pre>
+    </details>
+  </div>`;
+}
+
+/* ============ 队列暂停横幅 ============ */
+function renderBanner() {
+  const d = DATA[state.scene];
+  const brief = state.mode === 'bug' ? esc(TRUNCATED_LOCK) : esc(d.classify.title);
+  $('#queueBanner').innerHTML =
+    `开发队列：已暂停 · 阻塞于 <span class="cid">${esc(d.itemId)}</span> · 提交（${brief}${state.mode === 'bug' ? '▌' : ''}）`;
+}
+
+/* ============ 待人工确认区（正常 / 加载 / 失败 / 空） ============ */
+function renderArea() {
+  const area = $('#confirmArea');
+  if (state.areaState === 'empty' || state.resolved) {
+    area.hidden = true; area.innerHTML = '';
+    return;
+  }
+  area.hidden = false;
+  if (state.areaState === 'loading') {
+    area.innerHTML = `<div class="hold-area-head muted">⚠ 待人工确认（?）</div>
+      <div class="area-loading"><span class="spinner"></span>正在加载待确认清单…</div>`;
+    return;
+  }
+  if (state.areaState === 'error') {
+    area.innerHTML = `<div class="hold-area-head">⚠ 待人工确认</div>
+      <div class="area-error" role="alert"><span>挂起确认清单加载失败：网络中断（示意）</span>
+      <button class="btn small" id="areaRetry">重试</button></div>`;
+    $('#areaRetry').addEventListener('click', () => {
+      state.areaState = 'loading'; renderArea();
+      setTimeout(() => { state.areaState = 'ok'; renderArea(); toast('✓ 清单已重新加载'); }, 900);
+    });
+    return;
+  }
+  const d = DATA[state.scene];
+  const busy = state.busyVerify;
+  area.innerHTML = `
+    <div class="hold-area-head">⚠ 待人工确认（1）——阻塞队列，确认后才继续</div>
+    <article class="confirm-card">
+      <header class="confirm-card-head">
+        <div>
+          <span class="chip kind">开发</span><span class="chip type">提交</span>
+          <span class="cid">${esc(d.itemId)}</span>
+          <span class="confirm-title">${esc(d.title)}</span>
+          <span class="flag confirm-flag" title="部分提交，开发未完成">部分提交，开发未完成</span>
+        </div>
+        <span class="muted small">已等待 1 小时 12 分（示意）</span>
+      </header>
+      ${reasonHtml('card')}
+      <p class="confirm-counts">已提交：0 组 · 待人工：4 路径（示意，以该单 auto-commit 明细为准）</p>
+      <div class="confirm-acts">
+        <button class="btn small" id="cardPanel">查看并确认</button>
+        <button class="btn small" id="cardVerify"${busy ? ' disabled' : ''}>${busy ? '正在核验提交与测试…' : '重新核验'}</button>
+      </div>
+    </article>`;
+  $('#cardPanel').addEventListener('click', () => openPanel());
+  $('#cardVerify').addEventListener('click', () => doVerify());
+}
+
+/* ============ 侧拉面板（develop/commit 形态） ============ */
+function openPanel() {
+  $('#sidePanel').classList.add('show');
+  $('#sideMask').classList.add('show');
+  state.panel = 'loading'; renderPanel();
+  setTimeout(() => { state.panel = 'form'; renderPanel(); }, 700); // 模拟详情加载
+}
+function closePanel() {
+  $('#sidePanel').classList.remove('show');
+  $('#sideMask').classList.remove('show');
+  state.panel = null;
+}
+$('#spClose').addEventListener('click', closePanel);
+$('#sideMask').addEventListener('click', closePanel);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.panel) closePanel(); });
+
+function renderPanel() {
+  const body = $('#spBody'), foot = $('#spFoot');
+  if (state.panel === 'loading') {
+    body.innerHTML = `<div class="panel-loading"><span class="spinner"></span>正在读取挂起详情…</div>`;
+    foot.innerHTML = '';
+    return;
+  }
+  if (state.panel === 'error') {
+    body.innerHTML = `<div class="panel-error"><span>挂起详情读取失败：404（示意）</span>
+      <button class="btn small" id="panelRetry">重试</button></div>`;
+    foot.innerHTML = '';
+    $('#panelRetry').addEventListener('click', () => {
+      state.panel = 'loading'; renderPanel();
+      setTimeout(() => { state.panel = 'form'; renderPanel(); }, 700);
+    });
+    return;
+  }
+  const d = DATA[state.scene];
+  const busy = state.busyVerify;
+  const files = [
+    ['docs/agent-team-board/bugs/BUG-20260914-020/README.md', '未提交'],
+    ['docs/agent-team-board/bugs/BUG-20260914-020/design.md', '未提交'],
+    ['docs/agent-team-board/bugs/BUG-20260914-020/test-cases.md', '未提交'],
+    ['docs/agent-team-board/bugs/BUG-20260914-020/status.json', '未提交']
+  ];
+  const verifyLine = state.verified
+    ? `<p class="confirm-verify ok">最近核验（刚刚）：通过——补交后提交完整</p>
+       <details class="confirm-test-tail"><summary>测试输出（npm test 退出码 0）</summary>
+       <pre>&gt; npm test
+✓ scripts/tests/*.test.mjs 全部通过（示意：确认时服务端重跑测试）</pre></details>`
+    : '<p class="muted small" style="margin:6px 0 0">尚未核验：确认时将自动重新核验并运行测试</p>';
+  body.innerHTML = `
+    <p class="sp-scope">核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列</p>
+    ${reasonHtml('panel')}
+    <p class="confirm-counts" style="margin:8px 0 0">已提交：0 组 · 待人工：4 路径（示意）</p>
+    <table class="confirm-files">
+      <thead><tr><th>文件</th><th>状态</th></tr></thead>
+      <tbody>${files.map((f) => `<tr><td class="path">${esc(f[0])}</td><td>${f[1]}</td></tr>`).join('')}</tbody>
+    </table>
+    ${verifyLine}
+    <label class="field">处理说明（保持挂起时记录；确认时可留空）
+      <textarea id="confirmNote" rows="2" placeholder="如：已核对归属，整文件归本单"></textarea>
+    </label>
+    <p class="panel-msg" id="panelMsg"></p>`;
+  foot.innerHTML = `
+    <span class="muted small" style="flex:1">补交后写入账本（现场：b0fd8a5 人工确认补交成功）</span>
+    <button class="btn" id="pKeep"${busy || state.resolved ? ' disabled' : ''}>保持挂起</button>
+    <button class="btn" id="pVerify"${busy || state.resolved ? ' disabled' : ''}>${busy ? '正在核验提交与测试…' : '重新核验'}</button>
+    <button class="btn primary" id="pGo"${busy || state.resolved ? ' disabled' : ''}>${state.resolved ? '已确认恢复' : '确认并继续'}</button>`;
+  $('#pKeep').addEventListener('click', () => {
+    const note = $('#confirmNote').value.trim();
+    panelMsg(note ? `已保持挂起并记录处理说明：${note}` : '已保持挂起（未记录说明）');
+    toast('已保持挂起，队列仍暂停');
+  });
+  $('#pVerify').addEventListener('click', () => doVerify());
+  $('#pGo').addEventListener('click', () => {
+    state.busyVerify = true; renderPanel(); renderArea();
+    setTimeout(() => {
+      state.busyVerify = false; state.verified = true; state.resolved = true;
+      toast('✓ 已确认并继续：服务端补交 b0fd8a5 并恢复队列');
+      renderPanel(); renderArea(); renderBanner();
+      setTimeout(closePanel, 1600);
+    }, 1200);
+  });
+}
+function panelMsg(text, isErr) {
+  const el = $('#panelMsg');
+  if (el) { el.textContent = text; el.className = 'panel-msg ' + (isErr ? 'err' : 'ok'); }
+}
+
+/* ============ 重新核验：按钮禁用 + 文案变化 + 迟到结果 ============ */
+function doVerify() {
+  if (state.busyVerify) return;
+  state.busyVerify = true; renderArea();
+  if (state.panel === 'form') renderPanel();
+  setTimeout(() => {
+    state.busyVerify = false;
+    const d = DATA[state.scene];
+    if (state.scene === 'lock') {
+      // index.lock 瞬时冲突：重试即自愈（这正是修复后指引传达的信息）
+      state.verified = true;
+      toast(`✓ ${d.itemId} 核验通过：git 索引占用已消失，补交提交完整`);
+    } else {
+      state.verified = false;
+      toast('核验未通过：原因未知，建议保持挂起并人工排查', true);
+    }
+    renderArea();
+    if (state.panel === 'form') renderPanel();
+  }, 1400);
+}
+
+/* ============ 演示控制台 ============ */
+$('#segMode').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]'); if (!b) return;
+  state.mode = b.dataset.mode;
+  for (const x of $('#segMode').children) x.classList.toggle('on', x === b);
+  renderAll();
+});
+$('#segScene').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-scene]'); if (!b) return;
+  state.scene = b.dataset.scene;
+  state.verified = false; state.resolved = false; state.busyVerify = false;
+  for (const x of $('#segScene').children) x.classList.toggle('on', x === b);
+  renderAll();
+});
+$('#btnState').addEventListener('click', () => {
+  const order = ['ok', 'loading', 'error', 'empty'];
+  const next = order[(order.indexOf(state.areaState) + 1) % order.length];
+  state.areaState = next;
+  if (next === 'loading') setTimeout(() => { if (state.areaState === 'loading') { state.areaState = 'ok'; renderArea(); } }, 1100);
+  renderArea();
+});
+$('#btnReset').addEventListener('click', () => {
+  Object.assign(state, { mode: 'bug', scene: 'lock', areaState: 'ok', panel: null, busyVerify: false, verified: false, resolved: false });
+  for (const x of $('#segMode').children) x.classList.toggle('on', x.dataset.mode === 'bug');
+  for (const x of $('#segScene').children) x.classList.toggle('on', x.dataset.scene === 'lock');
+  closePanel(); renderAll(); toast('演示已重置（缺陷形态 · index.lock 场景）');
+});
+
+function renderAll() { renderBanner(); renderArea(); if (state.panel) renderPanel(); }
+renderAll();
+</script>
+</body>
+</html>

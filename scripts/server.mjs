@@ -34,6 +34,7 @@ import * as holdStore from './lib/hold-store.mjs';
 // REQ-20260914-007：管理记录自动提交（确认完成 / 版本合并两个人工闭环入口）
 import * as mgtCommit from './lib/mgt-commit.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
+import * as confirmStates from './lib/confirm-states.mjs';
 import * as taskSettings from './lib/task-settings.mjs';
 import * as dispatch from './lib/dispatch.mjs';
 import { createScheduler, createHub, detectCli, probeCliVersion, resolveModelForItem } from './lib/scheduler.mjs';
@@ -2236,6 +2237,118 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   return notFound();
 }
 
+// ---------- BUG-20260915-008 核验/确认测试复验异步任务（防同步阻塞冻结面板） ----------
+// 原缺陷：verify/continue 在 HTTP 处理路径同步 spawnSync('npm test')（上限 600 秒），
+// Node 单进程模型下整个事件循环停摆——面板轮询停摆、其他操作排队丢弃、无进度提示。
+// 修复：POST 立即返回任务句柄，测试异步执行；进度（阶段/开始时间/超时上限）落
+// confirms/tasks.json 供前端 2 秒轮询渲染；同条目互斥（跨条目不互斥）；服务重启时
+// 遗留 running 任务标记 interrupted 并在确认记录留痕（挂起保持 waiting，可重新触发）。
+const confirmTaskChildren = new Set(); // 运行中测试子进程（优雅关停时终止，防孤儿）
+
+function confirmTaskView(task) {
+  if (!task) return null;
+  const startedMs = Date.parse(task.startedAt);
+  return {
+    taskId: task.taskId,
+    itemId: task.itemId,
+    action: task.action, // verify（重新核验）| continue（确认并继续）
+    status: task.status, // running | done | failed | interrupted
+    stage: task.stage || null, // verify | supplement | test | restore | done | null
+    startedAt: task.startedAt,
+    updatedAt: task.updatedAt || null,
+    finishedAt: task.finishedAt || null,
+    timeoutMs: task.timeoutMs,
+    by: task.by || 'board',
+    result: task.result ?? null,
+    error: task.error || null,
+    reason: task.reason || null,
+    elapsedMs: Number.isFinite(startedMs) ? Math.max(0, Date.now() - startedMs) : null,
+  };
+}
+
+const CONFIRM_TASK_ACTION_LABEL = { verify: '重新核验', continue: '确认并继续' };
+
+// 启动核验/确认任务：互斥冲突返回 { conflict, task }；成功落账本并立即返回（不等待完成）
+function startConfirmTask({ dataDir, root, itemId, action, params }) {
+  const cur = confirmStates.confirmTaskOf(dataDir, itemId);
+  if (cur && cur.status === 'running') return { conflict: true, task: cur };
+  const task = {
+    taskId: `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    itemId,
+    action,
+    status: 'running',
+    stage: 'verify',
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    timeoutMs: 600_000,
+    by: 'board',
+    result: null,
+    error: null,
+    reason: null,
+  };
+  confirmStates.saveConfirmTask(dataDir, task);
+  const touch = (patch) => {
+    Object.assign(task, patch, { updatedAt: new Date().toISOString() });
+    confirmStates.saveConfirmTask(dataDir, task);
+  };
+  // 异步执行（不 await）：结果 / 异常 / 阶段推进全部落任务账本，前端轮询回填
+  void (async () => {
+    try {
+      const testRunner = (projectRoot) => confirmStore.runProjectTestsAsync(projectRoot, {
+        timeoutMs: task.timeoutMs,
+        onSpawn: (child) => {
+          confirmTaskChildren.add(child);
+          child.on('exit', () => confirmTaskChildren.delete(child));
+        },
+      });
+      const onStage = (stage) => touch({ stage });
+      let r;
+      if (action === 'verify') {
+        r = await confirmStore.verifyCommitConfirm(dataDir, itemId, {
+          projectRoot: root, runTests: params.runTests !== false, by: 'board', onStage, testRunner,
+        });
+      } else {
+        r = await confirmStore.confirmCommitContinue(dataDir, itemId, {
+          projectRoot: root,
+          fingerprint: params.fingerprint && typeof params.fingerprint === 'object' ? params.fingerprint : null,
+          note: params.note || '',
+          by: 'board',
+          include: Array.isArray(params.include) ? params.include : null,
+          onStage,
+          testRunner,
+        });
+        if (r.ok && r.batchId) {
+          try {
+            batch.resumeAfterConfirm(dataDir, r.batchId);
+          } catch { /* 批次已删除/终止：占用已在终止时释放，队列无需恢复 */ }
+        }
+      }
+      touch({ status: 'done', stage: 'done', finishedAt: new Date().toISOString(), result: r });
+    } catch (e) {
+      touch({ status: 'failed', stage: null, finishedAt: new Date().toISOString(), error: String(e.message || e).slice(0, 400) });
+    }
+  })();
+  return { conflict: false, task };
+}
+
+// 服务重启恢复：账本遗留 running = 上一进程中断（任务结果不可能再落账），明确标记
+// interrupted 并在确认记录留痕；挂起保持 waiting，人工可重新核验/确认（互斥不残留）。
+function recoverConfirmTasks(dataDir) {
+  const ledger = confirmStates.readConfirmTasks(dataDir);
+  let recovered = 0;
+  for (const seeded of Object.values(ledger.tasks)) {
+    if (!seeded || seeded.status !== 'running') continue;
+    const finishedAt = new Date().toISOString();
+    const task = { ...seeded, status: 'interrupted', reason: '服务重启，运行中的核验/确认任务已中断：结果未落账，请重新核验或确认', finishedAt, updatedAt: finishedAt };
+    confirmStates.saveConfirmTask(dataDir, task);
+    try {
+      confirmStore.noteConfirmTaskInterrupted(dataDir, task.itemId, task.reason);
+    } catch { /* 确认记录缺失（已闭环后遗留）：任务账本已标记，无需留痕 */ }
+    recovered++;
+  }
+  return recovered;
+}
+
 async function handleApi(req, res, u, pathname) {
   // ---- 与项目无关 ----
   if (req.method === 'GET' && pathname === '/api/health') {
@@ -2854,7 +2967,20 @@ async function handleApi(req, res, u, pathname) {
     const all = u.searchParams.get('all') === '1';
     const r = confirmStore.listConfirms(dataDir, { all, projectRoot: root });
     const legacy = all ? [] : confirmStore.legacyConfirmViews(dataDir, root);
-    return sendJson(res, 200, { count: r.count + legacy.length, items: [...r.items, ...legacy] });
+    // BUG-20260915-008：开发侧条目附带最近一次核验/确认任务运行态（卡片进度数据源，
+    // 随面板 2 秒轮询刷新：阶段 / 已运行时长 / 超时上限）；分析侧不涉及。
+    const items = [...r.items, ...legacy].map((it) => (it.kind === 'develop'
+      ? { ...it, task: confirmTaskView(confirmStates.confirmTaskOf(dataDir, it.itemId)) }
+      : it));
+    return sendJson(res, 200, { count: r.count + legacy.length, items });
+  }
+
+  // BUG-20260915-008：单条目核验/确认任务运行态（前端轮询回填结论与进度）
+  const confirmTaskMatch = pathname.match(/^\/api\/confirms\/([^/]+)\/task$/);
+  if (confirmTaskMatch && req.method === 'GET') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const id = decodeURIComponent(confirmTaskMatch[1]);
+    return sendJson(res, 200, { itemId: id, task: confirmTaskView(confirmStates.confirmTaskOf(dataDir, id)) });
   }
 
   const confirmActMatch = pathname.match(/^\/api\/confirms\/([^/]+)\/(answer|verify|keep|continue)$/);
@@ -2870,9 +2996,17 @@ async function handleApi(req, res, u, pathname) {
         by: 'board',
       });
     } else if (act === 'verify') {
-      r = confirmStore.verifyCommitConfirm(dataDir, id, {
-        projectRoot: root, runTests: body.runTests !== false, by: 'board',
-      });
+      // BUG-20260915-008：重新核验改异步任务——立即返回任务句柄，测试运行期间面板可正常
+      // 轮询与操作其他条目；同条目运行中重复触发被互斥拒绝（409）。
+      const started = startConfirmTask({ dataDir, root, itemId: id, action: 'verify', params: { runTests: body.runTests !== false } });
+      if (started.conflict) {
+        return sendJson(res, 409, {
+          ok: false,
+          error: `${id} 核验任务运行中（${CONFIRM_TASK_ACTION_LABEL[started.task.action] || started.task.action}，开始于 ${String(started.task.startedAt || '').slice(11, 19)}）：完成后才能再次触发，进度见卡片`,
+          task: confirmTaskView(started.task),
+        });
+      }
+      return sendJson(res, 200, { ok: true, accepted: true, itemId: id, task: confirmTaskView(started.task) });
     } else if (act === 'keep') {
       r = confirmStore.keepConfirm(dataDir, id, { note: body.note || '', by: 'board' });
     } else if (confirmStore.confirmOf(dataDir, id) && confirmStore.confirmOf(dataDir, id).kind === 'analyze') {
@@ -2906,17 +3040,20 @@ async function handleApi(req, res, u, pathname) {
         }
       }
       void rec;
-      r = confirmStore.confirmCommitContinue(dataDir, id, {
-        projectRoot: root,
-        fingerprint: body.fingerprint && typeof body.fingerprint === 'object' ? body.fingerprint : null,
-        note: body.note || '',
-        by: 'board',
+      // BUG-20260915-008：确认并继续同样改异步任务（补交后的测试复验不再冻结面板）；
+      // 同条目与重新核验共用互斥（一个条目同一时刻只有一个核验/确认任务）。
+      const started = startConfirmTask({
+        dataDir, root, itemId: id, action: 'continue',
+        params: { fingerprint: body.fingerprint, note: body.note || '', include: body.include },
       });
-      if (r.ok && r.batchId) {
-        try {
-          batch.resumeAfterConfirm(dataDir, r.batchId);
-        } catch { /* 批次已删除/终止：占用已在终止时释放，队列无需恢复 */ }
+      if (started.conflict) {
+        return sendJson(res, 409, {
+          ok: false,
+          error: `${id} 确认任务运行中（${CONFIRM_TASK_ACTION_LABEL[started.task.action] || started.task.action}，开始于 ${String(started.task.startedAt || '').slice(11, 19)}）：完成后才能再次触发，进度见卡片`,
+          task: confirmTaskView(started.task),
+        });
       }
+      return sendJson(res, 200, { ok: true, accepted: true, itemId: id, task: confirmTaskView(started.task) });
     }
     return sendJson(res, 200, r);
   }
@@ -2928,14 +3065,24 @@ async function handleApi(req, res, u, pathname) {
     const p = String(u.searchParams.get('path') || '');
     if (!p) return sendJson(res, 400, { error: '缺少 path 查询参数' });
     const diff = gitFlow.fileDiffText(root, p);
-    return sendJson(res, 200, { itemId: id, path: p, diff: diff == null ? '' : diff });
+    // BUG-20260915-003：读取失败（null）明确报错并可重试——不冒充「无差异」（空字符串）
+    // 只表示工作区与 Git 基线一致（如已补交入库）。
+    if (diff == null) {
+      return sendJson(res, 500, {
+        error: `差异读取失败：无法读取 ${p} 与 Git 基线的差异（非 git 仓库 / 文件不可读 / git 执行失败），请重试`,
+      });
+    }
+    return sendJson(res, 200, { itemId: id, path: p, diff });
   }
 
   const confirmMatch = pathname.match(/^\/api\/confirms\/([^/]+)$/);
   if (confirmMatch && req.method === 'GET') {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
     const id = decodeURIComponent(confirmMatch[1]);
-    return sendJson(res, 200, confirmStore.confirmDetail(dataDir, id, { projectRoot: root }));
+    const d = confirmStore.confirmDetail(dataDir, id, { projectRoot: root });
+    // BUG-20260915-008：详情附带核验/确认任务运行态（侧拉面板进度数据源）
+    if (d.kind === 'develop') d.task = confirmTaskView(confirmStates.confirmTaskOf(dataDir, id));
+    return sendJson(res, 200, d);
   }
 
   // REQ-20260909-003 需求文档引用讨论（独立 DISC 序列）：提示词/引用/归档/应用
@@ -3261,6 +3408,14 @@ function onListening() {
   // 服务重启恢复：对注册表各项目核对 Codex 自动派发账本/锁/进程/上报（不自动重派，默认等待人工）
   for (const p of loadRegistry().projects) {
     try { schedulerFor(p); } catch (e) { console.error(`  派发恢复核对失败（${p}）：${e.message}`); }
+    // BUG-20260915-008：核验/确认异步任务的恢复核对——遗留 running 标记 interrupted 并留痕
+    try {
+      const dd = core.dataDirFrom(p);
+      if (dd) {
+        const n = recoverConfirmTasks(dd);
+        if (n) console.log(`  已标记 ${n} 个运行中断的核验/确认任务（${p}）：请重新核验或确认`);
+      }
+    } catch (e) { console.error(`  核验任务恢复核对失败（${p}）：${e.message}`); }
   }
 }
 
@@ -3284,6 +3439,16 @@ server.listen(PORT, HOST, onListening);
 const shutdownForceMs = Number(process.env.ATB_SHUTDOWN_FORCE_MS) > 0 ? Number(process.env.ATB_SHUTDOWN_FORCE_MS) : 20_000;
 async function shutdownServer() {
   setTimeout(() => process.exit(0), shutdownForceMs).unref();
+  // BUG-20260915-008：终止运行中的核验/确认测试子进程（整组终止防孤儿测试执行器；
+  // 账本遗留 running 由下次启动的恢复核对标记 interrupted，不出现「测试跑完但确认没落账」的中间态）
+  for (const child of confirmTaskChildren) {
+    try {
+      if (process.platform === 'win32') child.kill('SIGKILL');
+      else process.kill(-child.pid, 'SIGKILL');
+    } catch {
+      try { child.kill('SIGKILL'); } catch { /* 已退出 */ }
+    }
+  }
   const waitMs = Math.max(0, shutdownForceMs - 2_000); // 给 server.close 留余量，不被 scheduler 等待挤占
   await Promise.race([
     Promise.all([...schedulers.values()].map((s) => s.shutdown({ cancelCurrent: true }).catch(() => {}))),

@@ -3228,6 +3228,20 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .confirm-verify.bad { color: var(--warn); }
 .confirm-verify-reason { margin: 2px 0 0 14px; font-size: 12px; color: var(--warn); }
 .confirm-keep-note { margin: 0; }
+/* BUG-20260915-008 核验/确认异步任务进度（阶段进度条 + 运行时长） */
+.confirm-task {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  margin: 0; padding: 4px 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  font-size: 12px;
+}
+.confirm-task .task-stages { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.confirm-task .task-stage { white-space: nowrap; }
+.confirm-task .task-stage.done { color: var(--muted); }
+.confirm-task .task-stage.cur { color: var(--primary); font-weight: 600; }
+.confirm-task .task-stage.todo { color: var(--muted); opacity: 0.7; }
+.confirm-task .task-elapsed { color: var(--primary); white-space: nowrap; }
 .confirm-acts { display: flex; gap: 6px; flex-wrap: wrap; }
 .confirm-queue-banner { margin-bottom: 6px; }
 .flag.confirm-flag {
@@ -3252,6 +3266,103 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .confirm-option small { flex: 1; }
 .confirm-rec { font-style: normal; color: var(--primary); margin-left: 4px; font-size: 11px; }
 .confirm-q { margin-bottom: 8px; }
+
+/* ---------- BUG-20260915-003 挂起确认面板：归属分组文件表 / Git 错误块 / 确认范围摘要 ---------- */
+.confirm-group-head {
+  margin: 10px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.confirm-files .cfile-path { font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; max-width: 230px; }
+.confirm-files .chg.k-add { color: var(--accent, #2f9e44); }
+.confirm-files .chg.k-del { color: var(--danger, #d9480f); }
+.confirm-files .chg.k-mod { color: var(--primary); }
+.confirm-files .st-in { color: var(--muted); }
+.confirm-files .st-out { color: var(--warn); font-weight: 600; }
+.confirm-files .attr-select {
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 2px 4px;
+}
+.confirm-empty { margin: 6px 0; }
+.confirm-unresolved { margin: 4px 0 0; font-size: 12px; color: var(--warn); }
+.confirm-err-block {
+  border: 1px solid var(--danger, #d9480f);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: color-mix(in srgb, var(--danger, #d9480f) 7%, var(--panel));
+}
+.confirm-err-summary { margin: 0; font-size: 12.5px; font-weight: 600; }
+.confirm-err-full { margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-inset, rgba(127, 127, 127, 0.12)); }
+.confirm-err-full summary { padding: 4px 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+.confirm-err-full pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.confirm-err-actions { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.confirm-scope-summary {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* BUG-20260915-005 按钮区上方三按钮对照说明（muted small；窄面板自动换行不破版） */
+.confirm-btn-guide { margin: 10px 0 0; text-align: left; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* ---------- BUG-20260915-004 挂起原因分层：归类结论条（琥珀）+ 折叠完整原始输出 ---------- */
+.confirm-reason-layered { display: grid; gap: 4px; margin: 0; }
+.confirm-classify {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--inprogress);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--inprogress) 10%, var(--panel));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+.confirm-classify .cls-mark { color: var(--inprogress); font-weight: 700; }
+.confirm-classify .cls-cause { color: var(--inprogress); font-weight: 600; }
+.confirm-classify .cls-hint { flex-basis: 100%; color: var(--text); }
+.confirm-classify.k-unknown { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); }
+.confirm-classify.k-unknown .cls-mark,
+.confirm-classify.k-unknown .cls-cause { color: var(--warn); }
+.confirm-reason-full {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset, rgba(127, 127, 127, 0.12));
+}
+.confirm-reason-full summary { padding: 4px 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+.confirm-reason-full pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  padding: 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.confirm-queue-banner .confirm-classify { margin-top: 4px; }
 
 /* ---------- REQ-20260914-007 管理记录提交反馈块（确认完成 / 版本合并两入口同构） ---------- */
 /* 状态语义：submitting 提交中（进度 + 禁用重试）/ success 已提交或已同步 / failed 失败

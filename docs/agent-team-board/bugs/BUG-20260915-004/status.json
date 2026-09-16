@@ -1,0 +1,61 @@
+{
+  "id": "BUG-20260915-004",
+  "type": "bug",
+  "title": "挂起确认面板错误提示透传截断的原始 git 报错，缺少可读原因与处理指引",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-048-035",
+  "createdAt": "2026-09-15T00:28:10.087Z",
+  "updatedAt": "2026-09-15T05:54:23.156Z",
+  "agentCompletedAt": "2026-09-15T03:38:49.459Z",
+  "lastReport": {
+    "at": "2026-09-15T03:38:49.459Z",
+    "coverage": 9,
+    "framework": "node:assert（自研 runner）",
+    "summary": "采集侧保头保尾不再拦腰截断（confirm-states clipReasonKeepEnds + confirm-store/batch 上限 200）；展示侧三处统一「琥珀归类结论条+折叠完整原始输出」：classifySuspendReason 覆盖 index.lock 瞬时冲突可重试与未知兜底，i18n 双语；新增 9 例 TDD 用例，npm test 243 文件全绿",
+    "runId": "run-20260915-255"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T00:28:10.087Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-9399"
+    },
+    {
+      "at": "2026-09-15T00:59:29.232Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T01:47:11.332Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-094119-6a28）"
+    },
+    {
+      "at": "2026-09-15T03:17:23.423Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-035",
+      "note": "认领（zcode-batch-048-035）"
+    },
+    {
+      "at": "2026-09-15T03:38:49.459Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-035",
+      "note": "上报测试报告（覆盖率 9%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T05:54:23.157Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}
