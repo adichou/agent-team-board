@@ -107,6 +107,9 @@ t('B2 状态口径逐卡继承：merging 两键禁用；merged 合并键禁用 t
   assert.match(inner, /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging 的 AI 完善禁用并提示');
   assert.match(inner, /data-ver-merge="BLD-MERGING" disabled title="合并中，请勿重复触发"/, 'merging 的合并键禁用并提示');
   assert.match(inner, /data-ver-merge="BLD-MERGED" disabled title="已合并入 main"/, 'merged 的合并键禁用且 title 提示已合并');
+  // BUG-20260914-020：merged 的 AI 完善同样禁用，title 说明已合并不可再 AI 完善（与合并键口径一致）
+  assert.match(inner, /data-ver-answer="BLD-MERGED" disabled title="已合并入 main，不允许再 AI 完善"/, 'merged 的 AI 完善禁用且 title 提示已合并');
+  assert.doesNotMatch(inner, /data-ver-answer="BLD-MERGED"[^>]*title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'merged 的 AI 完善不再带可用 title');
   assert.match(inner, /data-ver-merge="BLD-FAILED" aria-label="重试合并入 main BLD-FAILED"/, 'failed 的合并键 aria 口径');
   assert.match(inner, />重试合并入 main<\/button>/, 'failed 的合并键文案');
   // 回归：merging 详情提示保留
@@ -147,6 +150,36 @@ t('B5 无参调用兼容：无参对应当前选中版本；带参但版本不�
   assert.match(h.inner(), /AI 完善（BLD-A）/, '无参时对应当前选中版本');
   h.run(`window.ATBBuild.openAnswerModal('BLD-NOPE')`);
   assert.doesNotMatch(h.inner(), /AI 完善（BLD-NOPE）/, '不存在的版本号不弹窗');
+});
+
+t('B7 BUG-20260914-020：merged 不允许再 AI 完善——直调/无参回落均不弹窗，merging 同口径兜底，draft/failed 零回归，i18n 词条同步', async () => {
+  const h = await setup({ versions: [
+    ver('BLD-DRAFT', 'd1', 'draft'),
+    ver('BLD-MERGING', 'd2', 'merging'),
+    ver('BLD-MERGED', 'd3', 'merged'),
+    ver('BLD-FAILED', 'd4', 'failed'),
+  ] });
+  await h.enter(); // selVerId 自动选中首个 BLD-DRAFT
+  // merged：带参直调不弹窗
+  h.run(`window.ATBBuild.openAnswerModal('BLD-MERGED')`);
+  assert.doesNotMatch(h.inner(), /AI 完善（BLD-MERGED）/, '直调 merged 不弹窗');
+  // merged：选中后无参回落也不弹窗（防御路径）
+  h.run(`window.ATBBuild.restoreView({ tab: 'versions', selVerId: 'BLD-MERGED' })`);
+  await h.run(`window.ATBBuild.refresh()`);
+  h.run(`window.ATBBuild.openAnswerModal()`);
+  assert.doesNotMatch(h.inner(), /AI 完善（BLD-MERGED）/, '无参回落 merged 不弹窗');
+  // merging：卡片按钮本就禁用，直调路径同样兜底不弹窗（锁定口径一致）
+  h.run(`window.ATBBuild.openAnswerModal('BLD-MERGING')`);
+  assert.doesNotMatch(h.inner(), /AI 完善（BLD-MERGING）/, '直调 merging 不弹窗');
+  // 零回归：draft / failed 仍可打开 AI 完善弹窗
+  h.run(`window.ATBBuild.openAnswerModal('BLD-FAILED')`);
+  assert.match(h.inner(), /AI 完善（BLD-FAILED）/, 'failed 仍可打开 AI 完善');
+  h.run(`window.ATBBuild.openAnswerModal('BLD-DRAFT')`);
+  assert.match(h.inner(), /AI 完善（BLD-DRAFT）/, 'draft 仍可打开 AI 完善');
+  // i18n：新 title 词条同步（title 属性走全文精确翻译）
+  await import('../web/i18n.js');
+  const { EN } = globalThis.ATBI18N._dict;
+  assert.equal(EN['已合并入 main，不允许再 AI 完善'], 'Already merged into main — AI refine disabled', 'EN 新词条已同步');
 });
 
 /* ---------- 静态契约 ---------- */

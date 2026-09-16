@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260914-006",
+  "type": "requirement",
+  "title": "构建合并策略结论纪要：不采用 rebase，保留逐条 --no-ff 合并，main 观感用 --first-parent 解决",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-031",
+  "createdAt": "2026-09-14T15:30:50.304Z",
+  "updatedAt": "2026-09-15T01:37:11.070Z",
+  "agentCompletedAt": "2026-09-15T01:37:11.070Z",
+  "lastReport": {
+    "at": "2026-09-15T01:37:11.070Z",
+    "coverage": 0,
+    "framework": "none",
+    "summary": "决策归档纪要，无代码改动：已核实 README 全部事实依据——mergeCommitsIntoMain 逐条 --no-ff 合并及消息模板（build-git.mjs:224）、BLD-20260914-001 共 288 条目其中 250 条指向提交 6f2ead6、main 上 28 个 build: 合并提交、git log --first-parent main 压平阶梯。结论维持不改代码，验收标准 1/2 满足，标准 3 为归档引用待人工确认。",
+    "runId": "run-20260915-251"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T15:30:50.304Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0914-04eb"
+    },
+    {
+      "at": "2026-09-14T15:45:50.123Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T15:49:17.762Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-234739-7aac）"
+    },
+    {
+      "at": "2026-09-15T01:36:10.628Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-031",
+      "note": "认领（zcode-batch-048-031）"
+    },
+    {
+      "at": "2026-09-15T01:37:11.070Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-031",
+      "note": "上报测试报告（覆盖率 0%），待人工确认完成"
+    }
+  ]
+}

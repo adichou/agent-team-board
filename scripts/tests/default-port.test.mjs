@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
+import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,6 +25,18 @@ function portBusy(port, host = '127.0.0.1') {
     rq.on('error', () => resolve(false));
     rq.on('timeout', () => { rq.destroy(); resolve(false); });
     rq.end();
+  });
+}
+
+// 端口占用判定：真实 bind 探测（EADDRINUSE=占用；bind 成功即空闲，随即关闭）。
+// 不依赖占用者的 HTTP 响应速度——占用者阻塞/响应慢时 HTTP 探活会误判空闲（BUG-20260915-006）。
+// portBusy 仅保留给 waitHealth 作「服务已可应答」的健康等待语义。
+function portOccupied(port, host = '127.0.0.1') {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once('error', (e) => resolve(e.code === 'EADDRINUSE'));
+    srv.once('listening', () => srv.close(() => resolve(false)));
+    srv.listen(port, host);
   });
 }
 
@@ -111,7 +124,7 @@ t('V5 traceability 测试断言与新端口同步', () => {
 });
 
 t('V6 集成：未设 ATB_PORT 时 /api/health 返回 port=8888', async () => {
-  if (await portBusy(8888)) {
+  if (await portOccupied(8888)) {
     console.log('  ⚠ 8888 已被占用，跳过默认端口集成用例（不影响其余用例）');
     return;
   }
@@ -130,8 +143,8 @@ t('V6 集成：未设 ATB_PORT 时 /api/health 返回 port=8888', async () => {
 
 t('V7 集成：ATB_PORT=7737 覆盖仍生效', async () => {
   // 8888 被外部进程占用（如运行中的看板）时跳过该断言，与 V6 的跳过策略一致
-  const port8888Busy = await portBusy(8888);
-  if (await portBusy(7737)) {
+  const port8888Busy = await portOccupied(8888);
+  if (await portOccupied(7737)) {
     console.log('  ⚠ 7737 已被占用，跳过覆盖用例');
     return;
   }
@@ -144,7 +157,7 @@ t('V7 集成：ATB_PORT=7737 覆盖仍生效', async () => {
     if (port8888Busy) {
       console.log('  ⚠ 8888 已被占用，跳过「不再占 8888」断言（不影响本用例其余断言）');
     } else {
-      assert.equal(await portBusy(8888), false, '未设默认端口时不应再占 8888');
+      assert.equal(await portOccupied(8888), false, '未设默认端口时不应再占 8888');
     }
   } finally {
     server.kill();
@@ -157,7 +170,19 @@ t('V8 npm test 入口存在且指向测试聚合脚本', () => {
   const pkg = JSON.parse(read('package.json'));
   assert.match(pkg.scripts.test, /run-all/, 'package.json 应注册 test script');
   const runner = read('scripts', 'tests', 'run-all.mjs');
-  assert.match(runner, /\.test\.mjs/, 'run-all 应枚举 *.test.mjs');
+  assert.match(runner, /\.test\.mjs/, 'run-all 应枚举 *.test\.mjs');
+});
+
+t('V9 占用判定 portOccupied（bind 探测）：占用/空闲两分支自证（BUG-20260915-006）', async () => {
+  const dummy = http.createServer((rq, rs) => { rs.end('{}'); });
+  await new Promise((r) => dummy.listen(0, '127.0.0.1', r));
+  const port = dummy.address().port;
+  try {
+    assert.equal(await portOccupied(port), true, '已被监听的端口应判定为占用');
+  } finally {
+    await new Promise((r) => dummy.close(r));
+  }
+  assert.equal(await portOccupied(port), false, '释放后的端口应判定为空闲');
 });
 
 let failed = 0;
