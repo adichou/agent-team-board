@@ -22,7 +22,23 @@ export function validateRepo(value){
 }
 export function saveConfig(value){
  const homepageRepoRoot=validateRepo(value), old=readConfig();
- const cfg={homepageRepoRoot,revision:old.revision+(old.homepageRepoRoot===homepageRepoRoot?0:1)};
+ // REQ-20260916-004：保留 productIds 映射，官网仓库根变更才递增修订。
+ const cfg={...old,homepageRepoRoot,revision:old.revision+(old.homepageRepoRoot===homepageRepoRoot?0:1)};
+ fs.mkdirSync(path.dirname(configFile()),{recursive:true});writeJsonAtomic(configFile(),cfg);return cfg;
+}
+// REQ-20260916-004：官网产品 id 默认取项目目录名，按项目覆盖映射（全局共享配置内）。
+export function resolveProductId(config,projectName){
+ const id=(config.productIds||{})[projectName];
+ return typeof id==='string'&&id?id:projectName;
+}
+export function saveProductId(projectName,productId){
+ const id=String(productId||'').trim(),old=readConfig(),map={...(old.productIds||{})};
+ if(!id||id===projectName)delete map[projectName];
+ else{
+  if(!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id))throw new AtbError('官网产品 id 非法：仅允许字母、数字与 . _ -，且以字母或数字开头');
+  map[projectName]=id;
+ }
+ const cfg={...old,productIds:map};
  fs.mkdirSync(path.dirname(configFile()),{recursive:true});writeJsonAtomic(configFile(),cfg);return cfg;
 }
 export const runsRoot=dataDir=>path.join(dataDir,'builds','publish-runs');
@@ -32,7 +48,7 @@ export function listRuns(dataDir,bldId){
  if(!fs.existsSync(runsRoot(dataDir)))return [];
  return fs.readdirSync(runsRoot(dataDir)).filter(id=>/^BPUB-/.test(id)).map(id=>readRun(dataDir,id)).filter(r=>!bldId||r.bldId===bldId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
-export const steps=[['sync-source','源码 main/dev 原子推送'],['webapp-build','冻结源码构建'],['webapp-verify','Web App 本机回验'],['site-deploy','官网材料与本机部署'],['site-verify','官网双语回验']];
+export const steps=[['sync-source','源码 main/dev 原子推送'],['webapp-build','冻结源码构建'],['webapp-verify','Web App 本机回验'],['site-deploy','官网构建与部署'],['site-verify','官网本机回验']];
 export function createRun(dataDir,input){
  if(!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$/.test(input.version||''))throw new AtbError('发行版本号非法');
  const runs=listRuns(dataDir);

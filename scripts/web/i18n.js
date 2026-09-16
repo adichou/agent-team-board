@@ -947,7 +947,10 @@ const EN = {
   '所有项目全局共享。修改会影响所有项目后续预检，旧预检失效；历史运行目录快照保持原值。': 'Shared globally across all projects. Changes affect subsequent prechecks in every project and invalidate old ones; directory snapshots of past runs keep their original values.',
   '官网仓库根目录': 'Website repository root directory',
   '完整绝对路径': 'full absolute path',
-  '产品子目录自动取项目名；仓库须可访问并具有 main 分支。': 'The product subdirectory is derived from the project name automatically; the repository must be accessible and have a main branch.',
+  // REQ-20260916-004 设置页「官网仓库」新架构文案（替代旧「产品子目录自动取项目名」）
+  '官网产品 id 映射（当前项目）': 'Website product id mapping (current project)',
+  '留空＝默认取项目目录名': 'Leave empty to default to the project directory name',
+  '站点为 Vite + Vue：产品需注册于官网仓库 src/data/apps.js，内容位于 content/&lt;产品id&gt;/ 中英成对；仓库须可访问并具有 main 分支。': 'The site is Vite + Vue: the product must be registered in the website repository’s src/data/apps.js, with paired zh/en content under content/&lt;product-id&gt;/; the repository must be accessible and have a main branch.',
   '正在读取官网配置…': 'Loading website configuration…',
   '重新读取': 'Reload',
   '返回发布': 'Back to release',

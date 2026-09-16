@@ -1,12 +1,23 @@
 // BUG-20260916-001：新构建发布路由，不依赖旧发布模块初始化。
+// REQ-20260916-004：config 接口支持按项目覆盖官网产品 id 映射（productIds）。
+import path from 'node:path';
 import * as store from './build-publish-store.mjs';
 import * as publish from './build-publish.mjs';
 import { readVersion } from './build-store.mjs';
 import { AtbError } from './core.mjs';
 export async function buildPublishApi({method,pathname,body={},root,dataDir}){
  if(pathname==='/api/build-publish/config'){
-  if(method==='GET')return {config:store.readConfig()};
-  if(method==='POST')return {config:store.saveConfig(body.homepageRepoRoot)};
+  const current=store.readConfig();
+  if(method==='GET')return {config:current,projectProductId:store.resolveProductId(current,path.basename(root||''))};
+  if(method==='POST'){
+   let next=current;
+   if(body.homepageRepoRoot!==undefined)next=store.saveConfig(body.homepageRepoRoot);
+   if(typeof body.productId==='string'){
+    if(!root)throw new AtbError('缺少项目上下文，无法设置官网产品 id 映射');
+    next=store.saveProductId(path.basename(root),body.productId);
+   }
+   return {config:next,projectProductId:store.resolveProductId(next,path.basename(root||''))};
+  }
  }
  if(!dataDir)throw new AtbError('请先初始化项目看板');
  if(method==='GET'&&pathname==='/api/build-publish/state'){
