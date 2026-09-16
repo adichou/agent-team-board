@@ -2,11 +2,11 @@
   "id": "BUG-20260915-014",
   "type": "bug",
   "title": "点击发布按钮后提示发布模块已被隐藏，需修复",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-6",
   "createdAt": "2026-09-15T13:44:33.998Z",
-  "updatedAt": "2026-09-15T15:49:17.449Z",
+  "updatedAt": "2026-09-16T05:45:58.621Z",
   "agentCompletedAt": "2026-09-15T15:49:17.449Z",
   "lastReport": {
     "at": "2026-09-15T15:49:17.449Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-6",
       "note": "上报测试报告（覆盖率 19%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-16T05:45:58.622Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
