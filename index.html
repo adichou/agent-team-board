@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Agent Team Board 智能体团队看板 —— ZCode 插件：需求/Bug 文件化管理 + Agent TDD 开发流程 + 本地网页状态板">
+  <title>Agent Team Board 智能体团队看板 · v1.0.0</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f9;
+      --bg-card: #ffffff;
+      --bg-code: #0f172a;
+      --fg-code: #e2e8f0;
+      --fg: #1c2330;
+      --fg-muted: #5b6472;
+      --border: #dde2ea;
+      --accent: #2563eb;
+      --accent-soft: #e8efff;
+      --badge-bg: #12305f;
+      --badge-fg: #cfe0ff;
+      --tip-bg: #1f2937;
+      --tip-fg: #f9fafb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --bg-card: #151b24;
+        --fg: #e6eaf0;
+        --fg-muted: #9aa4b2;
+        --border: #2a323d;
+        --accent: #6ea1ff;
+        --accent-soft: #1a2740;
+        --badge-bg: #1a2740;
+        --badge-fg: #a9c6ff;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+    header.top {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+    }
+    header.top .wrap {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding-top: 14px; padding-bottom: 14px;
+    }
+    .brand { font-size: 1.15rem; font-weight: 700; }
+    .brand .sub { font-weight: 500; color: var(--fg-muted); margin-left: 6px; font-size: 1rem; }
+    .version-badge {
+      display: inline-block; padding: 1px 10px; border-radius: 999px;
+      background: var(--badge-bg); color: var(--badge-fg);
+      font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em;
+    }
+    .nav-en {
+      margin-left: auto;
+      color: var(--accent); text-decoration: none; font-weight: 600; font-size: 0.95rem;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--bg);
+    }
+    .nav-en:hover { border-color: var(--accent); }
+    main { padding-bottom: 48px; }
+    section { padding-top: 36px; }
+    h2 {
+      font-size: 1.35rem; margin: 0 0 12px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    h2::before {
+      content: ""; width: 6px; height: 22px; border-radius: 3px;
+      background: var(--accent); display: inline-block;
+    }
+    .lead { font-size: 1.05rem; margin: 0 0 14px; }
+    .muted { color: var(--fg-muted); }
+    .pillars {
+      display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0 0;
+    }
+    .pillar {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 16px;
+      font-weight: 600; font-size: 0.95rem;
+    }
+    .pillar small { display: block; font-weight: 400; color: var(--fg-muted); }
+    .cards {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px; margin-top: 16px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 18px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 1.02rem; }
+    .card p { margin: 0; color: var(--fg-muted); font-size: 0.93rem; }
+    .code-card {
+      position: relative;
+      background: var(--bg-code); color: var(--fg-code);
+      border-radius: 12px; padding: 14px 96px 14px 16px;
+      margin: 10px 0 6px; overflow-x: auto;
+    }
+    .code-card code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88rem; white-space: pre;
+    }
+    .copy-btn {
+      position: absolute; top: 8px; right: 8px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.08); color: var(--fg-code);
+      border-radius: 8px; padding: 3px 12px;
+      font-size: 0.8rem; cursor: pointer;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.18); }
+    .copy-btn.done { border-color: #34d399; color: #34d399; }
+    .copy-hint { min-height: 1.4em; font-size: 0.85rem; color: var(--fg-muted); margin: 0 0 4px; }
+    ol.steps { margin: 12px 0 0; padding-left: 22px; }
+    ol.steps li { margin-bottom: 14px; }
+    .en-note {
+      background: var(--accent-soft); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; margin-top: 14px;
+    }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 22px 0 34px; text-align: center;
+      color: var(--fg-muted); font-size: 0.9rem;
+    }
+    footer .dot { margin: 0 8px; }
+    @media (max-width: 640px) {
+      .cards { grid-template-columns: 1fr; }
+      .brand .sub { display: block; margin: 2px 0 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <span class="brand">Agent Team Board<span class="sub">智能体团队看板</span></span>
+      <span class="version-badge">v1.0.0</span>
+      <a class="nav-en" href="#english-summary">English</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="intro">
+      <h2>产品介绍</h2>
+      <p class="lead">
+        Agent Team Board（智能体团队看板）是一个 <strong>ZCode 插件</strong>：把需求与 Bug 做成
+        <strong>文件化管理</strong>，配合 <strong>Agent TDD 开发流程</strong>与<strong>本地网页状态板</strong>，
+        让人与智能体在同一份事实源上协作开发。
+      </p>
+      <div class="pillars">
+        <div class="pillar">Project Board<small>需求 / Bug 条目与验收标准</small></div>
+        <div class="pillar">Discussion Board<small>设计与澄清的讨论留痕</small></div>
+        <div class="pillar">Status Board<small>本地网页实时看板</small></div>
+      </div>
+    </section>
+
+    <section id="capabilities">
+      <h2>核心能力</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>文件化事实源</h3>
+          <p>看板数据全部落在 docs/agent-team-board 目录，随 git 一起提交、评审与回溯。</p>
+        </div>
+        <div class="card">
+          <h3>单向状态机人机分工</h3>
+          <p>状态只能沿单向流转；「接受条目」「确认完成」仅人工可操作，PreToolUse 钩子拦截越权写入。</p>
+        </div>
+        <div class="card">
+          <h3>认领即实施的 TDD 两阶段流程</h3>
+          <p>Agent 认领条目即开始实施：先补用例「测试跑红」，再实现「跑绿」，最后 report 等待测试与人工确认。</p>
+        </div>
+        <div class="card">
+          <h3>批量开发 / 批量完善</h3>
+          <p>把队列里的条目批量派发给子代理逐项实施，互斥锁保证同一时间只有一个实施任务。</p>
+        </div>
+        <div class="card">
+          <h3>构建 → 版本计划 → 发布流水线</h3>
+          <p>从构建产物到版本计划再到发布执行与回验，一条流水线走完本地发布闭环。</p>
+        </div>
+        <div class="card">
+          <h3>待人工决策（hold）闭环</h3>
+          <p>智能体遇到分歧可把条目置为 hold 并说明原因，人工决策后继续流转，全程留痕。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <h2>快速启动 · Status Board 服务</h2>
+      <ol class="steps">
+        <li>
+          <div>初始化看板（在目标项目根执行）：</div>
+          <div class="code-card">
+            <code>node &lt;插件&gt;/scripts/atb.mjs init</code>
+            <button class="copy-btn" type="button">复制</button>
+          </div>
+        </li>
+        <li>
+          <div>启动本地状态板服务，然后浏览器打开 <code>http://127.0.0.1:8888</code>：</div>
+          <div class="code-card">
+            <code>node &lt;插件&gt;/scripts/server.mjs</code>
+            <button class="copy-btn" type="button">复制</button>
+          </div>
+          <p class="copy-hint" aria-live="polite"></p>
+        </li>
+        <li>
+          <div>可选：安装终端命令，之后可直接用 <code>atb</code>：</div>
+          <div class="code-card">
+            <code>node &lt;插件&gt;/scripts/atb.mjs cli install</code>
+            <button class="copy-btn" type="button">复制</button>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="electron">
+      <h2>Electron 桌面 App</h2>
+      <p class="muted">在仓库根安装依赖后即可运行桌面版；打包分发支持 mac dmg 与 win nsis。</p>
+      <div class="code-card">
+        <code>npm install
+npm run app</code>
+        <button class="copy-btn" type="button">复制</button>
+      </div>
+      <p class="muted">打包分发：</p>
+      <div class="code-card">
+        <code>npm run dist</code>
+        <button class="copy-btn" type="button">复制</button>
+      </div>
+      <p class="copy-hint" aria-live="polite"></p>
+    </section>
+
+    <section id="english-summary" lang="en">
+      <h2>English Summary</h2>
+      <div class="en-note">
+        <p><strong>What.</strong> Agent Team Board is a ZCode plugin that manages requirements and bugs as
+        versioned files, drives an agent TDD workflow, and renders a local web status board with three
+        pillars: Project Board, Discussion Board, and Status Board.</p>
+        <p><strong>Capabilities.</strong> File-based single source of truth (committed with git); a
+        one-way state machine where accepting items and confirming completion are human-only actions
+        (enforced by PreToolUse hooks); claim-and-implement TDD (tests red, then green, then report);
+        batch development and batch refinement; a build → version plan → release pipeline; and a
+        hold loop that defers disputed decisions to humans.</p>
+        <p><strong>Run.</strong> Initialize with <code>node &lt;plugin&gt;/scripts/atb.mjs init</code>,
+        serve the status board via <code>node &lt;plugin&gt;/scripts/server.mjs</code> and open
+        <code>http://127.0.0.1:8888</code>. For the desktop app, run <code>npm install</code> then
+        <code>npm run app</code>; package with <code>npm run dist</code> (mac dmg / win nsis).</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      Agent Team Board<span class="dot">·</span>版本 1.0.0<span class="dot">·</span>本地优先<span class="dot">·</span>无外部依赖
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+      var restoreTimer = null;
+      function fallbackCopy(el) {
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+        return ok;
+      }
+      function nearestHint(btn) {
+        var section = btn.closest('section');
+        return section ? section.querySelector('.copy-hint') : null;
+      }
+      function tip(btn, msg) {
+        var hint = nearestHint(btn);
+        if (hint) hint.textContent = msg;
+      }
+      document.querySelectorAll('.copy-btn').forEach(function (btn) {
+        var label = btn.textContent;
+        btn.addEventListener('click', function () {
+          var card = btn.closest('.code-card');
+          var code = card ? card.querySelector('code') : null;
+          if (!code) return;
+          var text = code.innerText;
+          var done = function () {
+            btn.textContent = '已复制';
+            btn.classList.add('done');
+            tip(btn, '');
+            if (restoreTimer) clearTimeout(restoreTimer);
+            restoreTimer = setTimeout(function () {
+              btn.textContent = label;
+              btn.classList.remove('done');
+            }, 1500);
+          };
+          var fail = function () {
+            fallbackCopy(code); /* 降级：自动选中文本，引导手动复制 */
+            tip(btn, '剪贴板不可用，已选中文本，请按 ⌘C / Ctrl+C 手动复制');
+          };
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done, fail);
+          } else if (fallbackCopy(code)) {
+            done();
+          } else {
+            fail();
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
