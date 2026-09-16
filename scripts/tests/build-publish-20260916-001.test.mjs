@@ -49,29 +49,52 @@ test('真实临时 Git 双目标执行、计划确认、防重复、全局改动
  git(project,'add','.');git(project,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','web');
  git(project,'branch','dev');
  const remote=path.join(root,'remote.git');git(root,'init','--bare',remote);git(project,'remote','add','origin',remote);
- for(const lang of ['zh','en']){
-  const dir=path.join(repo,'demo',lang);fs.mkdirSync(dir,{recursive:true});
-  for(const page of ['index','usage','guide','changelog'])fs.writeFileSync(path.join(dir,page+'.html'),`<html>1.0 <a href="../${lang==='zh'?'en':'zh'}/index.html">language</a></html>`);
+ // REQ-20260916-004：官网侧为新架构（Vite + Vue）夹具——src/data/apps.js 注册、content 中英成对、
+ // build 脚本产出模拟 dist（壳引用 base 前缀 assets，assets 内联 content 路径串与注册串）。
+ fs.writeFileSync(path.join(repo,'package.json'),JSON.stringify({name:'site',private:true,scripts:{build:'node build.mjs'}}));
+ fs.writeFileSync(path.join(repo,'vite.config.js'),"export default { base: '/app-homepage-repo/' }\n");
+ fs.mkdirSync(path.join(repo,'src','data'),{recursive:true});
+ fs.writeFileSync(path.join(repo,'src','data','apps.js'),"export const apps = [{ id: 'demo' }]\n");
+ for(const v of ['1.0','1.1'])for(const lang of ['zh','en']){
+  fs.mkdirSync(path.join(repo,'content','demo','changelog'),{recursive:true});
+  fs.mkdirSync(path.join(repo,'content','demo','docs'),{recursive:true});
+  fs.writeFileSync(path.join(repo,'content','demo','changelog',`v${v}.${lang}.md`),`---\nversion: ${v}\n---\n`);
+  fs.writeFileSync(path.join(repo,'content','demo','docs',`quick-start.${lang}.md`),'docs');
  }
+ for(const lang of ['zh','en']){
+  fs.writeFileSync(path.join(repo,'content','demo',`faq.${lang}.md`),'faq');
+  fs.writeFileSync(path.join(repo,'content','demo',`support.${lang}.md`),'support');
+ }
+ const bundle=['id:"demo"'];
+ for(const v of ['1.0','1.1'])for(const lang of ['zh','en'])bundle.push(`/content/demo/changelog/v${v}.${lang}.md`,`/content/demo/docs/quick-start.${lang}.md`);
+ fs.writeFileSync(path.join(repo,'build.mjs'),[
+  "import fs from 'node:fs';",
+  "fs.mkdirSync('dist/assets',{recursive:true});",
+  `fs.writeFileSync('dist/index.html','<!doctype html><html lang="zh-CN"><head><link rel="icon" href="/app-homepage-repo/favicon.svg"><script type="module" src="/app-homepage-repo/assets/app.js"></script></head><body><div id="app"></div><a href="https://github.com/example/demo">external</a></body></html>');`,
+  `fs.writeFileSync('dist/assets/app.js',${JSON.stringify(bundle.join(';'))});`,
+  "fs.writeFileSync('dist/favicon.svg','<svg xmlns=\\'http://www.w3.org/2000/svg\\'/>');",
+ ].join('\n'));
+ git(repo,'add','.');git(repo,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','site');
  const db=path.join(project,'docs','agent-team-board');const bld={id:'BLD-X',name:'test',status:'merged',items:[{itemId:'REQ-test',commit:git(project,'rev-parse','HEAD')}]};
  const run=await publish.create(db,project,bld,'1.0');
  await assert.rejects(()=>publish.start(db,project,run.id,'invented'),/预检/);
  const checked=await publish.precheck(db,project,run.id);assert.equal(checked.precheck.ok,true,JSON.stringify(checked.precheck.checks));
  const p=await publish.plan(db,project,run.id);
+ assert.match(p.steps[2],/dist/);
  await assert.rejects(()=>publish.start(db,project,run.id,'wrong'),/确认/);
  const result=await publish.start(db,project,run.id,p.token);
  await assert.rejects(()=>publish.start(db,project,run.id,p.token),/活动|状态/);
  await result.completion;
  const done=store.readRun(db,run.id);assert.equal(done.status,'succeeded',JSON.stringify(done));
  assert.equal(done.targets.webapp.status,'done');assert.equal(done.targets.site.status,'done');
- assert.equal(store.directoryInfo(done,'site').path,path.join(fs.realpathSync(repo),'demo'));
+ assert.equal(store.directoryInfo(done,'site').path,path.join(fs.realpathSync(repo),'dist'));
  assert.equal(git(remote,'rev-parse','main'),run.frozen.mainSha);
  await assert.rejects(()=>publish.create(db,project,bld,'1.0'),/已发布/);
  const next=await publish.create(db,project,bld,'1.1');await publish.precheck(db,project,next.id);
  const other=path.join(root,'site2');fs.mkdirSync(other);git(other,'init','-b','main');git(other,'-c','user.name=Test','-c','user.email=test@example.com','commit','--allow-empty','-m','site2');
  store.saveConfig(other);
  await assert.rejects(()=>publish.plan(db,project,next.id),/失效/);
- assert.equal(store.directoryInfo(store.readRun(db,run.id),'site').path,path.join(fs.realpathSync(repo),'demo'));
+ assert.equal(store.directoryInfo(store.readRun(db,run.id),'site').path,path.join(fs.realpathSync(repo),'dist'));
  publish.stopServers();
 });
 
