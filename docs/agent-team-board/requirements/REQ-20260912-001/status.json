@@ -2,11 +2,11 @@
   "id": "REQ-20260912-001",
   "type": "requirement",
   "title": "设置中的 git 工作流的描述需要更详细",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-041-1",
   "createdAt": "2026-09-11T17:10:01.910Z",
-  "updatedAt": "2026-09-11T18:33:12.468Z",
+  "updatedAt": "2026-09-12T02:13:21.098Z",
   "agentCompletedAt": "2026-09-11T18:33:12.468Z",
   "lastReport": {
     "at": "2026-09-11T18:33:12.468Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-041-1",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-12T02:13:21.098Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

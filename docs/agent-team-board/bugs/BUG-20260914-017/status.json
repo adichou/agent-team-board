@@ -2,11 +2,11 @@
   "id": "BUG-20260914-017",
   "type": "bug",
   "title": "分支同步界面缺少 main 必须经过发布流程推送的规则说明",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-BUG-20260914-017",
   "createdAt": "2026-09-14T12:10:13.166Z",
-  "updatedAt": "2026-09-14T14:01:19.964Z",
+  "updatedAt": "2026-09-14T14:21:52.215Z",
   "agentCompletedAt": "2026-09-14T14:01:19.964Z",
   "lastReport": {
     "at": "2026-09-14T14:01:19.964Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-BUG-20260914-017",
       "note": "上报测试报告（覆盖率 11%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T14:21:52.215Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

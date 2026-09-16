@@ -1,0 +1,32 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "补建 main 与缺 main 提示、样式及测试已补齐。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/lib/git-flow.mjs",
+      "commit": "06c5c3491288fab825e5e4aaa644abde757b773c",
+      "blob": "00aac605b81d75644222c0b1d66d1231b4d84e1b",
+      "note": "补建 main 与缺 main 提示、样式及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-branch-main-missing-20260914-003.test.mjs",
+      "commit": "06c5c3491288fab825e5e4aaa644abde757b773c",
+      "blob": "883da245f1c6ba47be06df2d2c749ed443662721",
+      "note": "补建 main 与缺 main 提示、样式及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "06c5c3491288fab825e5e4aaa644abde757b773c",
+      "blob": "e0419023719a883d9c5ca887a097163e1a0ecbe2",
+      "note": "补建 main 与缺 main 提示、样式及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/style.css",
+      "commit": "06c5c3491288fab825e5e4aaa644abde757b773c",
+      "blob": "ccf5ce642bad97e9245f81255b37760cce0aaa5f",
+      "note": "补建 main 与缺 main 提示、样式及测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "b71edf3062c13b1930629e4fb762bdd27bcd9cfd9a863b2ffe9a6f33480bdf6b"
+}

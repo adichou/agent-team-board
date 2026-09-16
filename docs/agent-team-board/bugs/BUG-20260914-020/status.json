@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-020",
+  "type": "bug",
+  "title": "已合并的版本计划不允许再使用 AI 完善按钮了。",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-23",
+  "createdAt": "2026-09-14T15:21:36.716Z",
+  "updatedAt": "2026-09-14T15:42:55.742Z",
+  "agentCompletedAt": "2026-09-14T15:42:55.742Z",
+  "lastReport": {
+    "at": "2026-09-14T15:42:55.742Z",
+    "coverage": 100,
+    "framework": "node:test(vm 行为 + 静态契约)",
+    "summary": "merged 版本卡片「AI 完善」禁用（title 已合并入 main，不允许再 AI 完善）；openAnswerModal 对 merging/merged 直调与无参回落一律不弹窗；i18n EN 新增词条；B2 补断言 + 新增 B7 防御路径用例，红→绿；run-all 237 文件 0 失败；数据层与手动编辑口径不动",
+    "runId": "run-20260914-250"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T15:21:36.716Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T15:21:36.716Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T15:31:24.067Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-232537-1dee）"
+    },
+    {
+      "at": "2026-09-14T15:36:11.096Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-23",
+      "note": "认领（zcode-batch-048-23）"
+    },
+    {
+      "at": "2026-09-14T15:42:55.743Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-23",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

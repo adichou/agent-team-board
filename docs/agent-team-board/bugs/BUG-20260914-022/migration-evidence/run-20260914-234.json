@@ -1,0 +1,56 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "fetch 后 push、部分失败反馈、API 与测试已补齐。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/lib/build-git.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "289fa4be82d802496cc31e76490f3c1e51b9505c",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/server.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "f639eb3e2333a6153baba6f47d51b676d25430ac",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-remote-empty-explain-20260914-006.test.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "35823e1c7b48fbff75e678fdebab6321fd72f355",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-sync-btn-wording-20260914-005.test.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "311ec172b60d0761115cb306868f46274a133cee",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-sync-fetch-push-20260914-011.test.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "2fbbdacd3e737b8832228b6cd1033de66b1be468",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/build-serve.test.mjs",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "882f22e5b744449a57083874a8bb031b2f6dfeb7",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "f594d8031b92b1804f7c76e7b1e427a06e79a135",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/i18n.js",
+      "commit": "d2f32d620c282f66e5d37a5dec33d1129d73d8d7",
+      "blob": "597a0743af55a17b23d6a20cbb5398ad8ac04049",
+      "note": "fetch 后 push、部分失败反馈、API 与测试已补齐；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "d8c4a2b5e37044b048f3badf8fd4b2a3e0fc1a41cc8229d4cb4a47b1eb910dcc"
+}

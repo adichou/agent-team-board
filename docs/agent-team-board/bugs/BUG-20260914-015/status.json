@@ -2,11 +2,11 @@
   "id": "BUG-20260914-015",
   "type": "bug",
   "title": "AI 分析或 AI 开发中时，开始 AI 分析和开始 AI 开发按钮需要改变状态，不能点击，文本改为 AI 分析中和 AI 开发中",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-21",
   "createdAt": "2026-09-14T08:20:14.235Z",
-  "updatedAt": "2026-09-14T10:57:07.690Z",
+  "updatedAt": "2026-09-14T13:50:52.130Z",
   "agentCompletedAt": "2026-09-14T10:57:07.690Z",
   "lastReport": {
     "at": "2026-09-14T10:57:07.690Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-21",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:50:52.134Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

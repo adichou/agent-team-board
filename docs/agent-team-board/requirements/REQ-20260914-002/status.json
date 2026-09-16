@@ -2,11 +2,11 @@
   "id": "REQ-20260914-002",
   "type": "requirement",
   "title": "分支浏览中支持在当前分支中搜索提交记录",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-20",
   "createdAt": "2026-09-14T08:16:20.941Z",
-  "updatedAt": "2026-09-14T10:40:39.712Z",
+  "updatedAt": "2026-09-14T13:18:01.441Z",
   "agentCompletedAt": "2026-09-14T10:40:39.712Z",
   "lastReport": {
     "at": "2026-09-14T10:40:39.712Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-20",
       "note": "上报测试报告（覆盖率 16%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:18:01.442Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

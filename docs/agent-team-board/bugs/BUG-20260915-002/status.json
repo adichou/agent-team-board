@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260915-002",
+  "type": "bug",
+  "title": "dev 命令收尾缺少 Git 提交与待测试状态闭环",
+  "status": "in-progress",
+  "parent": null,
+  "owner": null,
+  "createdAt": "2026-09-14T23:13:10.964Z",
+  "updatedAt": "2026-09-14T23:36:28.113Z",
+  "agentCompletedAt": "2026-09-14T23:36:28.113Z",
+  "lastReport": {
+    "at": "2026-09-14T23:36:28.113Z",
+    "coverage": null,
+    "framework": "Node assert + 真实临时 Git/CLI；技能验证器；指令场景审查",
+    "summary": "补齐 dev/next/loop 的本单 Git 提交、report、同轮待测试核验和异常收尾，主命令与技能共用 dev-closeout.md。明确单项例外授权的状态收尾及提交失败停止边界，不自动 push/done。引入来源未定位：Git 仅追溯到 6f2ead6 聚合提交，无法归因单一源单。新增真实 Git/CLI 收尾测试通过；skill-desc、oss-reuse、dev-flow 三个相关测试文件通过，quick_validate 通过，git diff --check 通过。未执行全量测试，覆盖率未统计。用户明确授权本单例外开发，未解除 BUG-020 挂起。",
+    "runId": null
+  },
+  "history": [
+    {
+      "at": "2026-09-14T23:13:10.964Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-7bf3"
+    },
+    {
+      "at": "2026-09-14T23:16:46.013Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T23:16:53.293Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "board",
+      "note": "人工置为已计划"
+    },
+    {
+      "at": "2026-09-14T23:36:06.101Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "atb-0915-8427",
+      "note": ""
+    },
+    {
+      "at": "2026-09-14T23:36:28.114Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "codex-dev-closeout",
+      "note": "上报测试报告，待人工确认完成"
+    }
+  ]
+}

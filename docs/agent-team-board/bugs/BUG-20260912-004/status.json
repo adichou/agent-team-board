@@ -2,11 +2,11 @@
   "id": "BUG-20260912-004",
   "type": "bug",
   "title": "操作提示出现多个已，请定位",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "BUG-20260912-004",
   "createdAt": "2026-09-12T02:11:47.601Z",
-  "updatedAt": "2026-09-12T06:43:42.195Z",
+  "updatedAt": "2026-09-12T07:35:09.126Z",
   "agentCompletedAt": "2026-09-12T06:43:42.195Z",
   "lastReport": {
     "at": "2026-09-12T06:43:42.195Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "BUG-20260912-004",
       "note": "上报测试报告（覆盖率 90%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-12T07:35:09.127Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

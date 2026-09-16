@@ -323,12 +323,6 @@ const state = {
   // REQ-20260908-020 批量任务设置；REQ-20260909-001 界面仅剩隐藏开关（模型/档位底层存储保留），
   // loading/error 供设置视图渲染「正在加载任务设置 / 加载失败重试」
   tasks: { settings: null, sig: '', loading: false, error: null },
-  taskRun: {     // BUG-20260914-015：当前项目两类批量任务运行态（/api/tasks/state 快照，
-    //          随主轮询刷新、按项目隔离重置）——看板列表头快捷入口按钮执行中态数据源
-    refine: null,  // refine 任务批次状态（'running' = AI 分析执行中；null = 无任务）
-    develop: null, // develop 任务批次状态（'running' = AI 开发执行中；null = 无任务）
-    sig: '',       // 变更签名（轮询剪枝：状态无变化不重触发按钮同步）
-  },
 };
 
 function esc(s) {
@@ -616,7 +610,6 @@ async function switchProject(p) {
   state.plan = { selected: new Set(), pending: false, message: '', failures: [] }; // REQ-20260908-018：按项目隔离
   state.reject = { pending: false, message: '', failures: [] }; // REQ-20260908-027：批量驳回态按项目隔离
   state.refine = { mode: 'zcode', data: null, sig: '' }; // 完善面板按项目隔离
-  state.taskRun = { refine: null, develop: null, sig: '' }; // BUG-20260914-015：任务运行态按项目隔离，切换后随首轮 poll 重新拉取
   state.commitStatus = { map: {}, sig: '', loading: false, error: null }; // 提交状态随项目切换重置，不串项目数据
   state.board = null;
   state.banner = newBannerState(); // 文件横幅按项目隔离，切换后重进文件视图重新加载
@@ -1839,9 +1832,6 @@ async function poll() {
     }
     // 批量开发抽屉随主轮询刷新（签名无变化不重渲染）
     if (state.batch.open) await refreshBatch();
-    // BUG-20260914-015：快捷入口按钮执行中态随主轮询刷新（独立轻量请求，不依赖任务面板打开；
-    // 内部签名剪枝，状态变化才同步按钮；失败保留最后已知状态不误报）
-    await refreshTaskRunState();
     // REQ-20260911-007：待人工确认聚合区随主轮询刷新（独立请求；失败保留上次数据并显示错误条 + 重试）
     if (b?.initialized) await refreshHolds();
     // BUG-20260910-014（REQ-20260911-010 换源保留）：已完成条目提交状态随主轮询刷新
@@ -1867,24 +1857,6 @@ async function poll() {
     $('#pollState').title = '服务离线：数据停止刷新';
     $('#pollState').classList.add('off');
   }
-}
-
-// BUG-20260914-015：当前项目两类批量任务运行态（refine/develop）——看板列表头快捷入口按钮的数据源。
-// 独立轻量请求随主轮询拉取（不依赖任务面板打开）；签名剪枝：状态无变化不重复触发按钮同步
-// （/api/board 无变化时 renderBoard 不执行，任务态变化须经此处显式 syncAcceptance）；
-// 失败静默保留最后已知状态（服务离线时按钮不误报，连接状况由 #pollState「○」既有指示承担）。
-async function refreshTaskRunState() {
-  try {
-    const data = await api('/api/tasks/state');
-    const refine = data.refine ?? null;
-    const develop = data.develop ?? null;
-    const sig = `${refine}|${develop}`;
-    if (sig === state.taskRun.sig) return;
-    state.taskRun.sig = sig;
-    state.taskRun.refine = refine;
-    state.taskRun.develop = develop;
-    syncAcceptance();
-  } catch { /* 保留最后已知状态，下一轮轮询自动重试 */ }
 }
 
 // REQ-20260907-004 需求列表：列表行 + 选择工具条（替代原五列看板）；
@@ -2457,23 +2429,10 @@ function syncAcceptance() {
   // 其余档不显示。随本函数每轮同步（切档即时、轮询只改控件态不重建容器，无闪烁）。
   const quick = $('#laneQuickEntry');
   if (quick) {
-    // BUG-20260914-015：本项目对应任务「执行中」（批次 status==='running'，与任务面板徽章同源；
-    // 复制成功 ≠ 执行中，待启动/已暂停/待核对保持可点原文案——与面板徽章一致不矛盾，且入口可点
-    // 正是人工进面板处理暂停/核对的通道）时按钮禁用、文案改「AI 分析中 / AI 开发中」并说明原因
-    // （原生 disabled 挡点击不跳转，视觉弱化复用 .btn:disabled）；跨任务不联动（各档各看各的）。
-    const running = lane === 'accepted'
-      ? state.taskRun.refine === 'running'
-      : lane === 'planned'
-        ? state.taskRun.develop === 'running'
-        : false;
     const conf = lane === 'accepted'
-      ? (running
-        ? { label: 'AI 分析中', title: 'AI 分析任务执行中：子代理正在批量补全文档，收尾后自动恢复入口' }
-        : { label: '▶ 开始 AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' })
+      ? { label: '▶ AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' }
       : lane === 'planned'
-        ? (running
-          ? { label: 'AI 开发中', title: 'AI 开发任务执行中：子代理正在按已计划队列实施，收尾后自动恢复入口' }
-          : { label: '▶ 开始 AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' })
+        ? { label: '▶ AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' }
         : null;
     quick.classList.toggle('hidden', !conf);
     if (conf) {
@@ -2481,7 +2440,7 @@ function syncAcceptance() {
       if (quick.title !== conf.title) quick.title = conf.title;
       quick.setAttribute('aria-label', conf.label);
     }
-    quick.disabled = running; // 仅任务执行中禁用；批量操作进行中仍不禁用（REQ-20260909-007 既有口径）
+    quick.disabled = false; // 仅导航：批量操作进行中也不禁用，任务创建由面板内「启动」承接
   }
   // REQ-20260908-027：成对全选 / 全不选入口，均只作用于当前筛选档（叠搜索范围）；批量进行中防误触。
   // REQ-20260910-008：单行工具栏下按控件粒度显隐（#selectRow 第二行已随两行结构取消）——
@@ -3301,6 +3260,8 @@ function setConfirmPanelView(mode) {
 
 function confirmPanelMsg(text, isErr = false) {
   const el = $('#confirmPanelMsg');
+  // 首次打开时表单尚未渲染，消息节点不存在，不应阻断详情加载。
+  if (!el) return;
   el.textContent = text;
   el.classList.toggle('err', isErr);
 }

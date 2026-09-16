@@ -277,8 +277,8 @@ t('R8 已完成档快捷入口回退：无「▶ 开始 Commit」；done 档入�
   assert.ok(bind, '应保留快捷入口点击绑定');
   assert.match(bind[0], /accepted/, '绑定含 accepted 分支');
   assert.doesNotMatch(bind[0], /commit/, '绑定不得再有 commit 分支');
-  assert.match(appJs, /开始 AI 分析/, 'accepted 文案保留（REQ-20260913-005 改名）');
-  assert.match(appJs, /开始 AI 开发/, 'planned 文案保留（REQ-20260913-005 改名）');
+  assert.match(appJs, /label: '▶ AI 分析'/, 'accepted 文案保留（REQ-20260914-005 去「开始」）');
+  assert.match(appJs, /label: '▶ AI 开发'/, 'planned 文案保留（REQ-20260914-005 去「开始」）');
 });
 
 t('R9 全局看板回退：类型档/标签/前缀兜底/计数分支无 commit；空态文案无批量 Commit；服务端不再聚合 CMT', () => {

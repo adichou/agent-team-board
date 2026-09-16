@@ -2,11 +2,11 @@
   "id": "BUG-20260912-001",
   "type": "bug",
   "title": "中英文国际化要求在批量开发提示词中添加要求，确保每次开发都要确保中英资源正确",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-041-1",
   "createdAt": "2026-09-11T17:12:08.231Z",
-  "updatedAt": "2026-09-11T18:52:20.269Z",
+  "updatedAt": "2026-09-12T02:13:17.885Z",
   "agentCompletedAt": "2026-09-11T18:52:20.269Z",
   "lastReport": {
     "at": "2026-09-11T18:52:20.269Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-041-1",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-12T02:13:17.886Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

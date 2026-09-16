@@ -2,11 +2,11 @@
   "id": "BUG-20260914-012",
   "type": "bug",
   "title": "main 分支的推送按钮不需要，请去掉",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-BUG-20260914-012",
   "createdAt": "2026-09-14T05:24:04.771Z",
-  "updatedAt": "2026-09-14T06:56:11.094Z",
+  "updatedAt": "2026-09-14T13:18:21.241Z",
   "agentCompletedAt": "2026-09-14T06:56:11.094Z",
   "lastReport": {
     "at": "2026-09-14T06:56:11.094Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-BUG-20260914-012",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T13:18:21.242Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

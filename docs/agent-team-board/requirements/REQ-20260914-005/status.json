@@ -2,11 +2,11 @@
   "id": "REQ-20260914-005",
   "type": "requirement",
   "title": "回退 BUG-20260914-015，并把 开始 AI 开发和开始 AI 分析两个按钮改成 AI 开发和 AI 分析就行",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-22",
   "createdAt": "2026-09-14T13:51:05.168Z",
-  "updatedAt": "2026-09-14T15:07:29.220Z",
+  "updatedAt": "2026-09-14T15:19:48.078Z",
   "agentCompletedAt": "2026-09-14T15:07:29.220Z",
   "lastReport": {
     "at": "2026-09-14T15:07:29.220Z",
@@ -84,6 +84,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-22",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T15:19:48.079Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

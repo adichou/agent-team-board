@@ -2,11 +2,11 @@
   "id": "BUG-20260913-003",
   "type": "bug",
   "title": "bug 单的文档也要支持讨论菜单，参考需求的文档",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-20260913-045-1",
   "createdAt": "2026-09-13T11:21:24.183Z",
-  "updatedAt": "2026-09-13T12:09:36.679Z",
+  "updatedAt": "2026-09-14T02:44:34.115Z",
   "agentCompletedAt": "2026-09-13T12:09:36.679Z",
   "lastReport": {
     "at": "2026-09-13T12:09:36.679Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-20260913-045-1",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:34.116Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

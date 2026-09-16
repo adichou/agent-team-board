@@ -2,11 +2,11 @@
   "id": "BUG-20260914-001",
   "type": "bug",
   "title": "AI 分析任务中重复显示了“本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）”，请修复",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "BUG-20260914-001",
   "createdAt": "2026-09-14T02:00:17.003Z",
-  "updatedAt": "2026-09-14T02:29:53.807Z",
+  "updatedAt": "2026-09-14T02:44:14.082Z",
   "agentCompletedAt": "2026-09-14T02:29:53.807Z",
   "lastReport": {
     "at": "2026-09-14T02:29:53.807Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "BUG-20260914-001",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T02:44:14.083Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

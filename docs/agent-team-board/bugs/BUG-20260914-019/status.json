@@ -2,11 +2,11 @@
   "id": "BUG-20260914-019",
   "type": "bug",
   "title": "REQ-20260914-004 这个需求对生成的提示词追加一个换行符，用户的问题和提示词可以有明确的换行分隔",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-048-BUG-20260914-019",
   "createdAt": "2026-09-14T14:23:46.030Z",
-  "updatedAt": "2026-09-14T14:50:02.857Z",
+  "updatedAt": "2026-09-14T14:52:20.545Z",
   "agentCompletedAt": "2026-09-14T14:50:02.857Z",
   "lastReport": {
     "at": "2026-09-14T14:50:02.857Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-048-BUG-20260914-019",
       "note": "上报测试报告（覆盖率 1%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-14T14:52:20.545Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

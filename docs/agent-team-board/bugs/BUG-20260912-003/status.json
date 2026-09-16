@@ -2,11 +2,11 @@
   "id": "BUG-20260912-003",
   "type": "bug",
   "title": "提交号显示优化",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "batch-20260912-041",
   "createdAt": "2026-09-11T18:24:59.992Z",
-  "updatedAt": "2026-09-11T19:16:23.490Z",
+  "updatedAt": "2026-09-12T02:11:02.688Z",
   "agentCompletedAt": "2026-09-11T19:16:23.490Z",
   "lastReport": {
     "at": "2026-09-11T19:16:23.490Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "batch-20260912-041",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-12T02:11:02.689Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }

@@ -1,0 +1,50 @@
+{
+  "type": "committed",
+  "reviewedBy": "codex-legacy-recovery",
+  "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线。用户授权 BUG-20260914-022 历史账本迁移；依据原补交报告、逐路径 Git 内容与当前回归测试核验，不以消息命中判定。",
+  "paths": [
+    {
+      "path": "scripts/lib/build-git.mjs",
+      "commit": "349ee90d38fff63ffd893a54e5e7d455ceb5e854",
+      "blob": "eaa1eefaa7b919bf37d7764a253d3e9845d39c3a",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-branch-main-missing-20260914-003.test.mjs",
+      "commit": "06c5c3491288fab825e5e4aaa644abde757b773c",
+      "blob": "883da245f1c6ba47be06df2d2c749ed443662721",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-remote-empty-explain-20260914-006.test.mjs",
+      "commit": "349ee90d38fff63ffd893a54e5e7d455ceb5e854",
+      "blob": "1e794d3bd2fb50be7ac49ae5686ece3669f9c5d9",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/tests/bug-sync-btn-wording-20260914-005.test.mjs",
+      "commit": "329e2231a92f1e6b49bd1e26946aa254db71b398",
+      "blob": "c4888a65899da9624e4f42ae8bdc84c276caa3e5",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/build.js",
+      "commit": "349ee90d38fff63ffd893a54e5e7d455ceb5e854",
+      "blob": "14762cd0da13d467b16fd3d8124cd6f6f029d202",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/i18n.js",
+      "commit": "349ee90d38fff63ffd893a54e5e7d455ceb5e854",
+      "blob": "fff93afb4880912609d1901b83fd4456e238f2ba",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    },
+    {
+      "path": "scripts/web/style.css",
+      "commit": "349ee90d38fff63ffd893a54e5e7d455ceb5e854",
+      "blob": "fb0ee7b75db6d89862743f999f11aeff7da53416",
+      "note": "空远端解释、配置返回、样式及测试已补齐；复用前置 003/005 测试的已提交基线；已核对原账本路径、该补交阶段的实际差异与测试覆盖。"
+    }
+  ],
+  "ledgerDigest": "e5562d52d8313299983b1219e593c1d6ad9d19e3f43a94d291bab76d6227037a"
+}
