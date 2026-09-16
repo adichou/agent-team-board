@@ -2,11 +2,11 @@
   "id": "REQ-20260916-004",
   "type": "requirement",
   "title": "构建发布官网目标适配 app-homepage-repo 新站点架构（Vite + Vue）",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-site-vite-adapt",
   "createdAt": "2026-09-16T03:17:52.033Z",
-  "updatedAt": "2026-09-16T04:04:07.859Z",
+  "updatedAt": "2026-09-16T05:46:06.502Z",
   "agentCompletedAt": "2026-09-16T04:04:07.859Z",
   "lastReport": {
     "at": "2026-09-16T04:04:07.859Z",
@@ -42,6 +42,13 @@
       "to": "in-progress",
       "by": "zcode-site-vite-adapt",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-16T05:46:06.502Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
