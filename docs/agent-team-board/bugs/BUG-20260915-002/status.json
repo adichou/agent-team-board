@@ -2,11 +2,11 @@
   "id": "BUG-20260915-002",
   "type": "bug",
   "title": "dev 命令收尾缺少 Git 提交与待测试状态闭环",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": null,
   "createdAt": "2026-09-14T23:13:10.964Z",
-  "updatedAt": "2026-09-14T23:36:28.113Z",
+  "updatedAt": "2026-09-15T00:03:42.914Z",
   "agentCompletedAt": "2026-09-14T23:36:28.113Z",
   "lastReport": {
     "at": "2026-09-14T23:36:28.113Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "codex-dev-closeout",
       "note": "上报测试报告，待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T00:03:42.914Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
