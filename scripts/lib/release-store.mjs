@@ -148,7 +148,25 @@ export function readModuleConfig(dataDir) {
   return {
     protectedBranches: Array.isArray(cfg.protectedBranches) ? cfg.protectedBranches.filter((x) => typeof x === 'string') : [],
     appleRepoPaths: cfg.appleRepoPaths && typeof cfg.appleRepoPaths === 'object' ? cfg.appleRepoPaths : {},
+    // REQ-20260915-002：官网仓库根目录（设置模块一次配置，供产品发布复用；不硬编码目录名）
+    homepageRepoRoot: typeof cfg.homepageRepoRoot === 'string' ? cfg.homepageRepoRoot : '',
   };
+}
+
+// REQ-20260915-002：保存官网仓库根目录（一次配置；变更使旧预检失效——由冻结输入指纹口径保证）
+export function saveHomepageRepoRoot(dataDir, repoRoot) {
+  const val = String(repoRoot || '').trim();
+  if (!val || !path.isAbsolute(val)) throw new AtbError('官网仓库根目录必须是绝对路径');
+  if (!fs.existsSync(val)) throw new AtbError(`官网仓库目录不存在：${val}`);
+  if (!fs.existsSync(path.join(val, '.git'))) throw new AtbError(`配置的目录不是 git 仓库：${val}`);
+  const cfg = readModuleConfig(dataDir);
+  fs.mkdirSync(releasesDir(dataDir), { recursive: true });
+  writeJsonAtomic(path.join(releasesDir(dataDir), 'config.json'), {
+    ...cfg,
+    homepageRepoRoot: val,
+    homepageUpdatedAt: new Date().toISOString(),
+  });
+  return { ok: true, homepageRepoRoot: val };
 }
 
 /* ---------- SKU 映射（Apple 首次收集后持久化复用，S5/A1） ---------- */

@@ -68,6 +68,52 @@ const EN = {
   '搜索': 'Search',
   '清除': 'Clear',
   '搜索中…': 'Searching commits…',
+  // REQ-20260915-003 构建模块：产品发布入口迁入版本卡片 + 关联条目联合列表搜索分页 +
+  // 新建版本上移页签工具行（计数 / 页码 / 无匹配空态动态拼接见 EN_DYNAMIC；
+  // 「清空」值不用 Clear/Clear search——与「清除」「清除搜索」的受检唯一值口径错开）
+  '清空': 'Reset',
+  '上一页': 'Previous page',
+  '下一页': 'Next page',
+  '关联条目与 commit': 'Linked items & commits',
+  '搜索关联条目与 commit': 'Search linked items & commits',
+  '搜单号 / 标题 / commit…': 'Search item id / title / commit…',
+  '关联条目分页': 'Linked items pagination',
+  '创建发布': 'Create release',
+  '查看发布记录': 'View release records',
+  '请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）': 'Merge into main first — only merged version plans can start a release',
+  '从本版本创建产品发布草稿（自动带入条目与冻结信息）': 'Create a product release draft from this version (items and frozen info included automatically)',
+  '暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单': 'No linked items yet: click "＋ Add items" to include requirement or bug items',
+  // BUG-20260915-014 构建模块版本详情「概况 / 发布」页签（发布记录按当前版本就地展示；
+  // 读取失败 / 详情失败 / 计划确认等动态拼接见 EN_DYNAMIC）
+  '在当前版本详情的「发布」页签查看本版本的发布记录': 'View this version\'s release records in the "Release" tab of its detail pane',
+  '正在加载发布记录…': 'Loading release records…',
+  '当前版本暂无发布记录': 'No release records for this version yet',
+  '请先完成合并入 main': 'Merge into main first',
+  '重试只重新读取记录，不执行任何发布操作。': 'Retry only re-reads the records; it never executes a release.',
+  '版本详情页签': 'Version detail tabs',
+  '发布记录': 'Release records',
+  '运行详情': 'Run details',
+  '点击左侧运行查看详情': 'Select a run on the left to view its details',
+  '加载运行详情…': 'Loading run details…',
+  '运行 ID': 'Run ID',
+  '发行版本号': 'Release version number',
+  '官网与文档': 'Website & docs',
+  '未提供': 'Not provided',
+  '草稿': 'Draft',
+  '预检': 'Precheck',
+  '等待人工': 'Waiting for manual step',
+  '已发布': 'Published',
+  '已取消': 'Canceled',
+  '预览发布计划': 'Preview release plan',
+  '重新冻结': 'Refreeze',
+  'main 已前进时按当前 main 重新冻结（旧预检失效后须重新预检）': 'Refreeze from the current main when it has moved (a stale precheck must be re-run)',
+  '请先预检（预检不推送 / 不部署）': 'Run the precheck first (it pushes / deploys nothing)',
+  '重试失败阶段': 'Retry failed stage',
+  '取消后续阶段': 'Cancel remaining stages',
+  '刷新状态': 'Refresh status',
+  '确认启动发布': 'Confirm & start release',
+  '发布计划确认（产品发布）': 'Release plan confirmation (product release)',
+  '用户启动即授权以上明确操作；预检不推送、不上传、不部署。取消不会发出任何执行请求。': 'Starting authorizes exactly the operations above; precheck pushes nothing, uploads nothing, deploys nothing. Cancel sends no execution request.',
   // REQ-20260911-009 设置页「Git 工作流」分区（dev 分支初始化）
   'Git 工作流': 'Git workflow',
   '正在获取 Git 状态…': 'Loading Git status…',
@@ -896,6 +942,19 @@ const EN = {
   '未知错误': 'unknown error',
   '任务完成但未返回结论': 'Task finished without a conclusion',
   '确认任务仍在运行：进度见任务页卡片，完成后结论自动回填（本面板稍后自动刷新）': 'The confirmation task is still running: see the progress on the tasks-page card; the conclusion is filled in automatically when it finishes (this panel refreshes shortly)',
+  // BUG-20260916-001 设置页「官网仓库」全局共享配置区（静态文案）
+  '官网仓库': 'Website repository',
+  '所有项目全局共享。修改会影响所有项目后续预检，旧预检失效；历史运行目录快照保持原值。': 'Shared globally across all projects. Changes affect subsequent prechecks in every project and invalidate old ones; directory snapshots of past runs keep their original values.',
+  '官网仓库根目录': 'Website repository root directory',
+  '完整绝对路径': 'full absolute path',
+  // REQ-20260916-004 设置页「官网仓库」新架构文案（替代旧「产品子目录自动取项目名」）
+  '官网产品 id 映射（当前项目）': 'Website product id mapping (current project)',
+  '留空＝默认取项目目录名': 'Leave empty to default to the project directory name',
+  '站点为 Vite + Vue：产品需注册于官网仓库 src/data/apps.js，内容位于 content/&lt;产品id&gt;/ 中英成对；仓库须可访问并具有 main 分支。': 'The site is Vite + Vue: the product must be registered in the website repository’s src/data/apps.js, with paired zh/en content under content/&lt;product-id&gt;/; the repository must be accessible and have a main branch.',
+  '正在读取官网配置…': 'Loading website configuration…',
+  '重新读取': 'Reload',
+  '返回发布': 'Back to release',
+  '已保存。旧预检已失效，请返回发布重新预检。': 'Saved. Previous prechecks are now stale — go back to the release tab and precheck again.',
 };
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
@@ -910,6 +969,22 @@ const EN_DYNAMIC = {
   '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
   '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',
   '已到末尾 · 共 ◇ 条匹配': 'End of results · $1 matches in total',
+  // REQ-20260915-003 构建模块关联条目联合列表：搜索计数 / 页码 / 无匹配空态（动态拼接）
+  '匹配 ◇ / 共 ◇ 条': '$1 of $2 matched',
+  '第 ◇ / ◇ 页': 'Page $1 of $2',
+  '没有匹配的关联条目（关键词：◇）': 'No matching linked items (keyword: $1)',
+  // BUG-20260915-014 构建模块版本详情发布页签：读取失败 / 详情失败 / 创建与动作反馈（动态拼接）
+  '发布记录读取失败：◇': 'Failed to load release records: $1',
+  '详情读取失败：◇': 'Failed to load run details: $1',
+  '✓ 已创建产品发布 ◇（草稿）：请在本页签预检并启动': '✓ Product release $1 created (draft): precheck and start it in this tab',
+  '✓ 已提交发布操作（◇）：状态刷新后查看结果': '✓ Release action submitted ($1): check the result after the status refresh',
+  '✕ 发布操作失败：◇': '✕ Release action failed: $1',
+  '✕ 发布计划读取失败：◇': '✕ Failed to load the release plan: $1',
+  '失败阶段：◇': 'Failed stage: $1',
+  '失败阶段：◇：◇': 'Failed stage: $1: $2',
+  // BUG-20260916-001 设置页官网配置读取/保存失败反馈（动态拼接）
+  '官网配置读取失败：◇': 'Failed to load the website configuration: $1',
+  '保存失败：◇': 'Save failed: $1',
   // BUG-20260914-017：分支同步 toast 拼接句（成功 / 部分失败 × 有无 main 跳过注记四种形态；
   // main 注记按服务端 skipped 数据拼接，本地无 main 时不带注记维持原口径）
   '✓ 已同步远端：fetch 完成，已推送 ◇ → ◇；main 已跳过，请通过发布流程推送': '✓ Remote synced: fetch done, pushed $1 → $2; main skipped — push it through the release process',

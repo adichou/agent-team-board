@@ -1,0 +1,20 @@
+{
+  "id": "BUG-20260916-002",
+  "type": "bug",
+  "title": "任务记录重新执行无法续接已认领后 blocked 的条目",
+  "status": "submitted",
+  "parent": null,
+  "owner": null,
+  "createdAt": "2026-09-16T01:47:43.508Z",
+  "updatedAt": "2026-09-16T01:47:43.508Z",
+  "agentCompletedAt": null,
+  "lastReport": null,
+  "history": [
+    {
+      "at": "2026-09-16T01:47:43.508Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0916-cf83"
+    }
+  ]
+}

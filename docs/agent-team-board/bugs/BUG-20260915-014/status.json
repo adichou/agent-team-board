@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260915-014",
+  "type": "bug",
+  "title": "点击发布按钮后提示发布模块已被隐藏，需修复",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-6",
+  "createdAt": "2026-09-15T13:44:33.998Z",
+  "updatedAt": "2026-09-15T15:49:17.449Z",
+  "agentCompletedAt": "2026-09-15T15:49:17.449Z",
+  "lastReport": {
+    "at": "2026-09-15T15:49:17.449Z",
+    "coverage": 19,
+    "framework": "node:assert + vm 假 DOM",
+    "summary": "右侧版本详情新增概况/发布页签：发布记录按项目+版本(bldId)就地展示（加载/空/读失败重试/详情/预检/计划确认/重试/取消/刷新沿用既有流程）；查看发布记录与创建成功落点改为就地切页签，移除 gotoProductRelease 跨模块跳转（根因：REQ-20260915-002 入口命中 REQ-20260911-002 隐藏回落）；切版本/切项目重置数据，seq 防串；i18n 词典同步；新增 19 例测试，全量 259 个测试文件 0 失败",
+    "runId": "run-20260915-264"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T13:44:33.998Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-15T13:44:34.000Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-15T14:03:48.521Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-215938-7b57）"
+    },
+    {
+      "at": "2026-09-15T15:29:04.747Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-6",
+      "note": "认领（zcode-batch-048-6）"
+    },
+    {
+      "at": "2026-09-15T15:49:17.449Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-6",
+      "note": "上报测试报告（覆盖率 19%），待人工确认完成"
+    }
+  ]
+}

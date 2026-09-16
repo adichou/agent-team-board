@@ -77,14 +77,14 @@ const head = (s, n = 8) => String(s || '').trim().split('\n').filter(Boolean).sl
 
 /* ---------- 单阶段实现 ---------- */
 
-async function gitCmd(ctx, args, label) {
+async function gitCmd(ctx, args, label, { raw = false } = {}) {
   const { exec, projectRoot } = ctx;
   const r = await exec('git', args, { cwd: projectRoot });
   if (label) ctx.log(`${label}：git ${args[0]} → exit ${r.code}${r.stderr ? `\n${head(r.stderr, 4)}` : ''}`);
   if (r.code !== 0) {
     throw new GitStageError(`${label || 'git 命令'}失败：${head(scrubSecrets(r.stderr || r.stdout), 3)}`, 'git-error');
   }
-  return r.stdout.trim();
+  return raw ? r.stdout : r.stdout.trim();
 }
 
 async function tryGit(ctx, args) {
@@ -145,7 +145,8 @@ async function stageLocalPrecheck(ctx) {
   if (mergeHead || fs.existsSync(path.join(gitDir, 'rebase-merge')) || fs.existsSync(path.join(gitDir, 'rebase-apply'))) {
     throw new GitStageError('存在未完成的 merge / rebase：请先完成或中止后再发布', 'in-progress');
   }
-  const status = await gitCmd(ctx, ['status', '--porcelain'], '检查工作区');
+  // porcelain 的前两列是状态；保留首行空格，避免固定列路径解析错位。
+  const status = await gitCmd(ctx, ['status', '--porcelain'], '检查工作区', { raw: true });
   // 看板数据目录（docs/agent-team-board/）是看板自身写入（运行记录 / 阶段日志），
   // 不属于发布内容、也不应自阻塞流水线；其余任何脏路径（含暂存区）均阻塞。
   const BOARD_DIR = 'docs/agent-team-board/';

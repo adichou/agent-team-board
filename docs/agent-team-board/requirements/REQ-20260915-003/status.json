@@ -1,0 +1,68 @@
+{
+  "id": "REQ-20260915-003",
+  "type": "requirement",
+  "title": "构建模块的产品发布区域需要移到左侧列表的按钮区域。关联条目支持分页和搜索",
+  "status": "done",
+  "parent": null,
+  "owner": "zcode-batch-20260915-003",
+  "createdAt": "2026-09-15T13:40:51.471Z",
+  "updatedAt": "2026-09-15T16:12:53.808Z",
+  "agentCompletedAt": "2026-09-15T15:27:28.739Z",
+  "lastReport": {
+    "at": "2026-09-15T15:27:28.739Z",
+    "coverage": 88,
+    "framework": "node:assert/strict + vm 模拟 DOM（scripts/tests/run-all.mjs 聚合）",
+    "summary": "构建模块布局调整：产品发布「创建发布/查看发布记录」迁入左侧版本卡片按钮区（draft/merging/failed 禁用并提示请先完成合并入 main，merged 可用，按所在卡片版本绑定；详情不再重复渲染发布操作区）；「关联条目与 commit」联合列表支持搜索（条目 ID/标题/完整与短 commit，大小写与空白不敏感，全量过滤保持原顺序）与分页（每页 10 条为待确认产品参数；首末页禁用、零结果不出虚假页数、数据减少越界回落、切换版本清空搜索回第一页）；「＋ 新建版本」上移至页签工具行右端（分支浏览页无入口）。新增 11 用例全绿，npm test 258 个测试文件 0 失败。",
+    "runId": "run-20260915-263"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T13:40:51.471Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-15T13:41:40.320Z",
+      "from": "submitted",
+      "to": "submitted",
+      "by": "board",
+      "note": "描述修改（README「## 描述」节整体替换）"
+    },
+    {
+      "at": "2026-09-15T13:44:36.204Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T13:54:40.165Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260915-215004-d942）"
+    },
+    {
+      "at": "2026-09-15T14:58:23.678Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-20260915-003",
+      "note": "认领（zcode-batch-20260915-003）"
+    },
+    {
+      "at": "2026-09-15T15:27:28.740Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-20260915-003",
+      "note": "上报测试报告（覆盖率 88%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-15T16:12:53.808Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
+    }
+  ]
+}

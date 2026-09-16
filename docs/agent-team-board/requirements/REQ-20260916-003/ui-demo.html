@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260916-003 界面演示 · Status Board 看板</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2329; --ink-2: #57606a; --line: #d8dee4;
+    --accent: #0969da; --accent-soft: #ddf4ff; --ok: #1a7f37; --ok-soft: #dafbe1;
+    --warn: #9a6700; --warn-soft: #fff8c5; --bad: #cf222e; --bad-soft: #ffebe9;
+    --chip: #eaeef2; --skeleton: #e7ebef; --drawer-bg: #ffffff; --shadow: 0 8px 24px rgba(140,150,160,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --ink-2: #9ea7b3; --line: #30363d;
+      --accent: #58a6ff; --accent-soft: #12263a; --ok: #3fb950; --ok-soft: #12261a;
+      --warn: #d29922; --warn-soft: #2d2308; --bad: #f85149; --bad-soft: #3a1214;
+      --chip: #21262d; --skeleton: #21262d; --drawer-bg: #161b22; --shadow: 0 8px 24px rgba(0,0,0,.5);
+    }
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --ink-2: #9ea7b3; --line: #30363d;
+    --accent: #58a6ff; --accent-soft: #12263a; --ok: #3fb950; --ok-soft: #12261a;
+    --warn: #d29922; --warn-soft: #2d2308; --bad: #f85149; --bad-soft: #3a1214;
+    --chip: #21262d; --skeleton: #21262d; --drawer-bg: #161b22; --shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif; }
+  .demo-note { max-width: 1080px; margin: 12px auto 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--accent-soft); color: var(--ink); }
+  .demo-note b { color: var(--accent); }
+  .demo-controls { max-width: 1080px; margin: 8px auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .demo-controls .lbl { color: var(--ink-2); font-size: 12px; }
+  .shell { max-width: 1080px; margin: 0 auto 48px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  /* 顶栏 */
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .brand { font-weight: 700; }
+  .brand small { display: block; font-weight: 400; color: var(--ink-2); font-size: 11px; }
+  .poll { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+  .poll .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .poll .dot.beat { animation: beat .5s ease; }
+  @keyframes beat { 50% { transform: scale(1.8); opacity: .4; } }
+  .spacer { flex: 1; }
+  .topbtn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+  .topbtn:hover { border-color: var(--accent); color: var(--accent); }
+  /* 页签 */
+  .tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .tab { border: none; background: none; padding: 9px 14px; cursor: pointer; color: var(--ink-2); font-size: 14px; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .deeplinks { display: flex; align-items: center; gap: 6px; padding: 6px 16px; font-size: 12px; color: var(--ink-2); border-bottom: 1px solid var(--line); background: var(--bg); flex-wrap: wrap; }
+  .deeplink { border: 1px dashed var(--line); background: none; color: var(--ink-2); border-radius: 999px; padding: 1px 10px; cursor: pointer; font-size: 12px; }
+  .deeplink:hover { color: var(--accent); border-color: var(--accent); }
+  /* 主体 */
+  .main { display: flex; min-height: 420px; }
+  .content { flex: 1; padding: 14px 16px; min-width: 0; }
+  .lanes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .lane { border: 1px solid var(--line); background: var(--panel); color: var(--ink-2); border-radius: 999px; padding: 3px 12px; cursor: pointer; font-size: 13px; }
+  .lane.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .lane .n { opacity: .75; font-size: 12px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; cursor: pointer; flex-wrap: wrap; }
+  .item:hover { border-color: var(--accent); }
+  .item .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--accent); font-weight: 600; min-width: 150px; }
+  .item .title { flex: 1; min-width: 180px; }
+  .badge { font-size: 11px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .badge.submitted { background: var(--chip); color: var(--ink-2); }
+  .badge.accepted { background: var(--accent-soft); color: var(--accent); }
+  .badge.planned { background: var(--warn-soft); color: var(--warn); }
+  .badge.in-progress { background: var(--accent-soft); color: var(--accent); }
+  .badge.confirming { background: var(--warn-soft); color: var(--warn); }
+  .badge.done { background: var(--ok-soft); color: var(--ok); }
+  .badge.reported { background: var(--bad-soft); color: var(--bad); }
+  .badge.hold { background: var(--bad-soft); color: var(--bad); }
+  .empty { text-align: center; color: var(--ink-2); padding: 56px 0; }
+  .empty .icon { font-size: 30px; color: var(--line); }
+  /* 骨架屏 */
+  .sk { height: 44px; border-radius: 8px; background: var(--skeleton); margin-bottom: 8px; position: relative; overflow: hidden; }
+  .sk::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); animation: shine 1.2s infinite; }
+  @keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  /* 错误条 */
+  .errorbar { display: flex; align-items: center; gap: 10px; background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
+  .errorbar button { border: 1px solid var(--bad); background: none; color: var(--bad); border-radius: 6px; padding: 2px 12px; cursor: pointer; }
+  /* 抽屉 */
+  .drawer-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; z-index: 40; }
+  .drawer { position: fixed; top: 0; right: -420px; width: 400px; max-width: 92vw; height: 100%; background: var(--drawer-bg); border-left: 1px solid var(--line); box-shadow: var(--shadow); z-index: 50; transition: right .22s ease; display: flex; flex-direction: column; }
+  .drawer.open { right: 0; }
+  .drawer-mask.show { display: block; }
+  .drawer header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .drawer header .close { margin-left: auto; border: none; background: none; color: var(--ink-2); font-size: 18px; cursor: pointer; }
+  .drawer .body { padding: 14px 16px; overflow: auto; flex: 1; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; margin-bottom: 14px; font-size: 13px; }
+  .kv .k { color: var(--ink-2); }
+  .sec-title { font-size: 12px; color: var(--ink-2); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
+  .btn.agent { border-style: dashed; }
+  .btn:hover { filter: brightness(.97); }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .hintbox { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+  /* 占位视图 */
+  .placeholder { text-align: center; color: var(--ink-2); padding: 80px 20px; }
+  /* 提示条 */
+  .toasts { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 99; display: flex; flex-direction: column; gap: 8px; width: min(560px, 92vw); }
+  .toast { border-radius: 8px; padding: 9px 14px; font-size: 13px; box-shadow: var(--shadow); border: 1px solid var(--line); background: var(--panel); animation: drop .18s ease; }
+  .toast.ok { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+  .toast.blocked { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+  .toast.info { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  @keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
+  details.wire { max-width: 1080px; margin: 0 auto 16px; color: var(--ink-2); font-size: 12px; }
+  details.wire pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; }
+  .loadingtip { color: var(--ink-2); font-size: 12px; text-align: center; padding: 6px 0 2px; }
+</style>
+</head>
+<body>
+
+<div class="demo-note">
+  <b>REQ-20260916-003 配套界面演示</b>：本单重写根 README.md 并新建根 AGENTS.md，README 须如实描述的界面即 Status Board 看板。
+  本页按 README 拟稿口径固化看板的<b>界面布局 / 交互行为 / 状态反馈</b>，供评审对照；示例条目均为演示数据，非真实看板条目；本单不改动看板代码。
+</div>
+
+<div class="demo-controls">
+  <span class="lbl">状态反馈演示（正常 / 空 / 加载中 / 失败）：</span>
+  <button class="topbtn" data-mode="normal">正常</button>
+  <button class="topbtn" data-mode="empty">空数据</button>
+  <button class="topbtn" data-mode="loading">加载中</button>
+  <button class="topbtn" data-mode="error">加载失败</button>
+  <span class="lbl" style="margin-left:8px">深浅色：</span>
+  <button class="topbtn" id="themeBtn">主题：自动</button>
+</div>
+
+<details class="wire">
+  <summary>ASCII 线框（可选补充）</summary>
+  <pre>
+┌──────────────────────────────────────────────────────────┐
+│ 智能体团队看板 · Status Board     ● 每2秒轮询   中/EN 主题 │
+│ 页签: [需求] [构建] [任务] [设置]                          │
+│ 深链视图(默认隐藏): 发布 · 营销 · 讨论 · 文件 (?view=…)    │
+├──────────────────────────────────────────────────────────┤
+│ 档位: (待接受)(已接受)(已计划)(开发中)(待测试)(已完成)      │
+│ ┌ REQ-…-001 标题……… [状态徽标][待测试角标] ┐ 点击开抽屉   │
+│ └ …                                                      │
+│ 空档 → 「该档暂无条目」；失败 → 红色错误条 + [重试]         │
+└──────────────────────────────────────────────────────────┘
+  </pre>
+</details>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">智能体团队看板<small>Status Board · 示例项目</small></div>
+    <span class="poll"><span class="dot" id="pollDot"></span><span id="pollText">每 2 秒轮询 /api/board</span></span>
+    <span class="spacer"></span>
+    <button class="topbtn" id="langBtn">EN</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="deeplinks">
+    <span data-i18n="深链视图（默认隐藏，?view=… 进入）：">深链视图（默认隐藏，?view=… 进入）：</span>
+    <span id="deeplinkBtns"></span>
+  </div>
+  <div class="main">
+    <div class="content" id="content"></div>
+    <div class="drawer" id="drawer">
+      <header><b id="drawerTitle">详情</b><button class="close" id="drawerClose">×</button></header>
+      <div class="body" id="drawerBody"></div>
+    </div>
+    <div class="drawer-mask" id="drawerMask"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+"use strict";
+// ---------- 数据（演示数据，非真实条目） ----------
+var LANES = [
+  { key: "submitted",   zh: "待接受", en: "Pending accept" },
+  { key: "accepted",    zh: "已接受", en: "Accepted" },
+  { key: "planned",     zh: "已计划", en: "Planned" },
+  { key: "in-progress", zh: "开发中", en: "In progress" },
+  { key: "confirming",  zh: "待测试", en: "Awaiting test" },
+  { key: "done",        zh: "已完成", en: "Done" }
+];
+var STATE_LABEL = { submitted: "待接受", accepted: "已接受", planned: "已计划", "in-progress": "开发中", confirming: "待测试", done: "已完成" };
+var STATE_EN = { submitted: "Pending accept", accepted: "Accepted", planned: "Planned", "in-progress": "In progress", confirming: "Awaiting test", done: "Done" };
+var TABS = [
+  { key: "status",   zh: "需求", en: "Requirements" },
+  { key: "build",    zh: "构建", en: "Builds" },
+  { key: "runs",     zh: "任务", en: "Runs" },
+  { key: "settings", zh: "设置", en: "Settings" }
+];
+var DEEPLINKS = ["release", "marketing", "oncall", "files"];
+var items = [
+  { id: "REQ-20260916-010", type: "REQ", title: "示例：官网部署后回填 README 入口链接", state: "submitted", reported: false, hold: false,
+    desc: "演示数据。新登记条目，等待人工在看板点「接受」（submitted → accepted 仅限人工）。" },
+  { id: "REQ-20260916-008", type: "REQ", title: "示例：用户文档 FAQ 首批条目", state: "accepted", reported: false, hold: false,
+    desc: "演示数据。已接受，可在详情抽屉「移入计划」排入开发计划，或批量驳回退回待接受。" },
+  { id: "BUG-20260916-004", type: "BUG", title: "示例：构建页版本列表排序不稳定", state: "planned", reported: false, hold: false,
+    desc: "演示数据。已计划，可由 Agent 执行 atb claim 认领（原子认领锁）进入开发中；人工可移出计划。" },
+  { id: "REQ-20260916-002", type: "REQ", title: "示例：营销页材料预览", state: "in-progress", reported: false, hold: false,
+    desc: "演示数据。Agent 已认领开发中；完成后 atb report 上报，条目呈「待测试」。" },
+  { id: "BUG-20260915-012", type: "BUG", title: "示例：发布页日志换行错误", state: "confirming", reported: true, hold: false,
+    desc: "演示数据。Agent 已上报（待测试），等待人工测试：确认完成或驳回完成（退回开发中）。" },
+  { id: "REQ-20260915-006", type: "REQ", title: "示例：桌面壳窗口记忆尺寸", state: "done", reported: false, hold: false,
+    desc: "演示数据。人工确认完成；如测试发现回归可驳回完成（done → 开发中）。" }
+];
+// ---------- 视图状态 ----------
+var view = "status";        // 当前页签（本演示聚焦需求视图）
+var lane = "submitted";     // 六档筛选，默认第一档「待接受」
+var mode = "normal";        // normal | empty | loading | error
+var lang = "zh";            // zh | en（界面文案中文原文为键）
+var themeIdx = 0;           // 0 自动 1 浅色 2 深色
+var pollCount = 0;
+var openId = null;          // 抽屉打开的条目
+var loadingTimer = null;
+// ---------- i18n（演示版集中词典，机制对应 scripts/web/i18n.js：中文原文为键） ----------
+var DICT = {
+  "需求": "Requirements", "构建": "Builds", "任务": "Runs", "设置": "Settings",
+  "深链视图（默认隐藏，?view=… 进入）：": "Deep-link views (hidden by default, ?view=…):",
+  "该档暂无条目": "No items in this lane",
+  "正在加载 /api/board …": "Loading /api/board …",
+  "加载失败：无法连接 Status Board 服务（本机 8888）": "Load failed: cannot reach Status Board service (localhost 8888)",
+  "重试": "Retry",
+  "详情": "Detail",
+  "状态": "State", "类型": "Type", "上报记录": "Report", "说明": "Notes",
+  "人工操作": "Human actions", "Agent 演示操作": "Agent demo actions",
+  "接受": "Accept", "移入计划": "Plan", "移出计划": "Unplan", "确认完成": "Confirm done",
+  "驳回完成": "Reject done", "驳回接受": "Reject accept",
+  "认领 claim": "Claim", "上报 report": "Report", "声明待人工决策": "Declare hold",
+  "越权置 done（演示拦截）": "Force done as agent (blocked demo)",
+  "人工作答并复工": "Answer and resume",
+  "Agent 已上报（待人工测试）": "Reported by agent (awaiting human test)",
+  "—": "—",
+  "已接受": "Accepted", "已移入计划": "Planned", "已移出计划（回退已接受）": "Unplanned (back to accepted)",
+  "已认领，进入开发中": "Claimed, now in progress",
+  "已上报，呈「待测试」": "Reported, now awaiting test",
+  "已确认完成": "Confirmed done", "已驳回完成（退回开发中）": "Done rejected (back to in progress)",
+  "已驳回接受（退回待接受）": "Accept rejected (back to submitted)",
+  "已声明待人工决策（条目保持开发中）": "Hold declared (item stays in progress)",
+  "已作答并复工，继续开发": "Answered and resumed",
+  "⛔ 钩子拦截：accepted / planned / done 仅限人工（scripts/state-guard.mjs）": "Blocked by hook: accepted / planned / done are human-only (scripts/state-guard.mjs)",
+  "⛔ 认领前提是「已计划」（state-guard.mjs 源码守卫）": "Claim requires planned state (state-guard.mjs)",
+  "深链视图默认隐藏（HIDDEN_VIEWS），演示不展开": "Deep-link views are hidden by default (HIDDEN_VIEWS); not expanded in demo",
+  "构建 / 任务 / 设置视图在真实看板中提供；本演示聚焦需求视图": "Builds / Runs / Settings views exist in the real board; this demo focuses on Requirements",
+  "轮询返回 200 OK（无变化不重渲染）": "Poll 200 OK (no change, no re-render)",
+  "每 2 秒轮询 /api/board": "Polling /api/board every 2s",
+  "待测试角标": "Awaiting-test badge", "待人工决策": "Hold: awaiting human"
+};
+function t(s) { return lang === "en" ? (DICT[s] || s) : s; }
+function laneLabel(l) { return lang === "en" ? l.en : l.zh; }
+function stateLabel(s) { return lang === "en" ? STATE_EN[s] : STATE_LABEL[s]; }
+// ---------- 工具 ----------
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function toast(type, msg) {
+  var box = document.getElementById("toasts");
+  var el = document.createElement("div");
+  el.className = "toast " + type;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(function () { el.remove(); }, 3200);
+}
+function findItem(id) { for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i]; return null; }
+function visibleItems() {
+  if (mode === "empty") return [];
+  return items.filter(function (it) { return it.state === lane; });
+}
+// ---------- 渲染 ----------
+function renderTabs() {
+  var box = document.getElementById("tabs");
+  box.innerHTML = "";
+  TABS.forEach(function (tb) {
+    var b = document.createElement("button");
+    b.className = "tab" + (view === tb.key ? " active" : "");
+    b.textContent = t(tb.zh);
+    b.onclick = function () {
+      view = tb.key;
+      render();
+      if (tb.key !== "status") toast("info", t("构建 / 任务 / 设置视图在真实看板中提供；本演示聚焦需求视图"));
+    };
+    box.appendChild(b);
+  });
+}
+function renderDeeplinks() {
+  var box = document.getElementById("deeplinkBtns");
+  box.innerHTML = "";
+  DEEPLINKS.forEach(function (k) {
+    var b = document.createElement("button");
+    b.className = "deeplink";
+    b.textContent = k;
+    b.title = "?view=" + k;
+    b.onclick = function () { toast("info", t("深链视图默认隐藏（HIDDEN_VIEWS），演示不展开")); };
+    box.appendChild(b);
+    box.appendChild(document.createTextNode(" "));
+  });
+}
+function laneCount(key) {
+  if (mode === "empty") return 0;
+  return items.filter(function (it) { return it.state === key; }).length;
+}
+function renderLanes() {
+  var html = LANES.map(function (l) {
+    var act = l.key === lane ? " active" : "";
+    return '<button class="lane' + act + '" data-lane="' + l.key + '">' + esc(laneLabel(l)) + ' <span class="n">' + laneCount(l.key) + '</span></button>';
+  }).join("");
+  return '<div class="lanes">' + html + "</div>";
+}
+function renderItem(it) {
+  var badges = '<span class="badge ' + it.state + '">' + esc(stateLabel(it.state)) + "</span>";
+  if (it.state === "confirming" && it.reported) badges += ' <span class="badge reported">' + esc(t("待测试角标")) + "</span>";
+  if (it.hold) badges += ' <span class="badge hold">' + esc(t("待人工决策")) + "</span>";
+  return '<div class="item" data-id="' + it.id + '">' +
+    '<span class="id">' + esc(it.id) + '</span>' +
+    '<span class="title">' + esc(it.title) + "</span>" + badges + "</div>";
+}
+function renderList() {
+  if (mode === "loading") {
+    var sks = "";
+    for (var i = 0; i < 4; i++) sks += '<div class="sk"></div>';
+    return sks + '<div class="loadingtip">' + esc(t("正在加载 /api/board …")) + "</div>";
+  }
+  if (mode === "error") {
+    return '<div class="errorbar"><span>' + esc(t("加载失败：无法连接 Status Board 服务（本机 8888）")) +
+      '</span><button id="retryBtn">' + esc(t("重试")) + "</button></div>";
+  }
+  var list = visibleItems();
+  if (!list.length) {
+    return '<div class="empty"><div class="icon">▭</div>' + esc(t("该档暂无条目")) + "</div>";
+  }
+  return list.map(renderItem).join("");
+}
+function renderContent() {
+  var el = document.getElementById("content");
+  if (view !== "status") {
+    el.innerHTML = '<div class="placeholder">' + esc(t("构建 / 任务 / 设置视图在真实看板中提供；本演示聚焦需求视图")) + "</div>";
+    return;
+  }
+  el.innerHTML = renderLanes() + renderList();
+  var lanes = el.querySelectorAll(".lane");
+  for (var i = 0; i < lanes.length; i++) {
+    lanes[i].onclick = function () { lane = this.getAttribute("data-lane"); render(); };
+  }
+  var rows = el.querySelectorAll(".item");
+  for (var j = 0; j < rows.length; j++) {
+    rows[j].onclick = function () { openDrawer(this.getAttribute("data-id")); };
+  }
+  var retry = document.getElementById("retryBtn");
+  if (retry) retry.onclick = retryLoad;
+}
+function actionButtons(it) {
+  var human = "", agent = "";
+  function b(cls, label, act) { return '<button class="btn ' + cls + '" data-act="' + act + '">' + esc(t(label)) + "</button>"; }
+  if (it.state === "submitted") human += b("primary", "接受", "accept");
+  if (it.state === "accepted") { human += b("primary", "移入计划", "plan"); human += b("danger", "驳回接受", "reject-accept"); }
+  if (it.state === "planned") human += b("", "移出计划", "unplan");
+  if (it.state === "confirming") { human += b("primary", "确认完成", "confirm-done"); human += b("danger", "驳回完成", "reject-done"); }
+  if (it.state === "done") human += b("danger", "驳回完成", "reject-done");
+  if (it.state === "planned") agent += b("agent", "认领 claim", "claim");
+  if (it.state === "in-progress" && !it.reported && !it.hold) {
+    agent += b("agent", "上报 report", "report");
+    agent += b("agent", "声明待人工决策", "hold");
+  }
+  if (it.hold) human += b("primary", "人工作答并复工", "resume");
+  agent += b("agent", "越权置 done（演示拦截）", "force-done");
+  var holdBox = it.hold ? '<div class="hintbox">' + esc(t("已声明待人工决策（条目保持开发中）")) + "：等待人工在看板「待人工确认」作答。</div>" : "";
+  return holdBox +
+    (human ? '<div class="sec-title">' + esc(t("人工操作")) + '</div><div class="btnrow">' + human + "</div>" : "") +
+    '<div class="sec-title">' + esc(t("Agent 演示操作")) + '</div><div class="btnrow">' + agent + "</div>";
+}
+function renderDrawer() {
+  var d = document.getElementById("drawer");
+  if (!openId) { d.classList.remove("open"); document.getElementById("drawerMask").classList.remove("show"); return; }
+  var it = findItem(openId);
+  if (!it) { openId = null; d.classList.remove("open"); return; }
+  document.getElementById("drawerTitle").textContent = it.id;
+  document.getElementById("drawerBody").innerHTML =
+    '<div class="kv">' +
+    '<span class="k">' + esc(t("状态")) + '</span><span><span class="badge ' + it.state + '">' + esc(stateLabel(it.state)) + "</span></span>" +
+    '<span class="k">' + esc(t("类型")) + "</span><span>" + it.type + "</span>" +
+    '<span class="k">' + esc(t("上报记录")) + "</span><span>" + esc(it.reported ? t("Agent 已上报（待人工测试）") : t("—")) + "</span>" +
+    '<span class="k">' + esc(t("说明")) + "</span><span>" + esc(it.desc) + "</span>" +
+    "</div>" + actionButtons(it);
+  var btns = document.querySelectorAll("#drawerBody [data-act]");
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].onclick = function () { doAction(it, this.getAttribute("data-act")); };
+  }
+  d.classList.add("open");
+  document.getElementById("drawerMask").classList.add("show");
+}
+function render() {
+  renderTabs();
+  renderDeeplinks();
+  renderContent();
+  renderDrawer();
+  document.getElementById("langBtn").textContent = lang === "zh" ? "EN" : "中文";
+  var deepLabel = document.querySelector(".deeplinks [data-i18n]");
+  if (deepLabel) deepLabel.textContent = t("深链视图（默认隐藏，?view=… 进入）：");
+}
+// ---------- 交互（状态机与人机分工） ----------
+function doAction(it, act) {
+  switch (act) {
+    case "accept": it.state = "accepted"; toast("ok", t("已接受")); break;
+    case "plan": it.state = "planned"; toast("ok", t("已移入计划")); break;
+    case "unplan": it.state = "accepted"; toast("ok", t("已移出计划（回退已接受）")); break;
+    case "reject-accept": it.state = "submitted"; toast("ok", t("已驳回接受（退回待接受）")); break;
+    case "confirm-done": it.state = "done"; it.reported = false; toast("ok", t("已确认完成")); break;
+    case "reject-done": it.state = "in-progress"; it.reported = false; toast("ok", t("已驳回完成（退回开发中）")); break;
+    case "claim":
+      it.state = "in-progress"; toast("ok", t("已认领，进入开发中")); break;
+    case "report":
+      it.state = "confirming"; it.reported = true; toast("ok", t("已上报，呈「待测试」")); break;
+    case "hold":
+      it.hold = true; toast("info", t("已声明待人工决策（条目保持开发中）")); break;
+    case "resume":
+      it.hold = false; toast("ok", t("已作答并复工，继续开发")); break;
+    case "force-done":
+      toast("blocked", t("⛔ 钩子拦截：accepted / planned / done 仅限人工（scripts/state-guard.mjs）"));
+      return; // 状态不变：演示 PreToolUse 确定性拦截
+  }
+  render();
+}
+function openDrawer(id) { openId = id; renderDrawer(); }
+function setMode(m) {
+  mode = m;
+  if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+  if (m === "loading") {
+    loadingTimer = setTimeout(function () {
+      mode = "normal";
+      toast("info", t("轮询返回 200 OK（无变化不重渲染）"));
+      render();
+    }, 2000);
+  }
+  render();
+}
+function retryLoad() { setMode("loading"); }
+// ---------- 轮询模拟（2 秒） ----------
+setInterval(function () {
+  pollCount++;
+  var dot = document.getElementById("pollDot");
+  dot.classList.remove("beat");
+  void dot.offsetWidth;
+  dot.classList.add("beat");
+  document.getElementById("pollText").textContent =
+    (lang === "en" ? "Polling /api/board every 2s" : "每 2 秒轮询 /api/board") + " · #" + pollCount;
+}, 2000);
+// ---------- 顶栏按钮 ----------
+document.getElementById("drawerClose").onclick = function () { openId = null; renderDrawer(); };
+document.getElementById("drawerMask").onclick = function () { openId = null; renderDrawer(); };
+document.getElementById("langBtn").onclick = function () { lang = lang === "zh" ? "en" : "zh"; render(); };
+document.getElementById("themeBtn").onclick = function () {
+  themeIdx = (themeIdx + 1) % 3;
+  var names = ["自动", "浅色", "深色"], vals = [null, "light", "dark"];
+  if (vals[themeIdx]) document.documentElement.setAttribute("data-theme", vals[themeIdx]);
+  else document.documentElement.removeAttribute("data-theme");
+  this.textContent = "主题：" + names[themeIdx];
+};
+var modeBtns = document.querySelectorAll("[data-mode]");
+for (var i = 0; i < modeBtns.length; i++) {
+  modeBtns[i].onclick = function () { setMode(this.getAttribute("data-mode")); };
+}
+// ---------- 启动 ----------
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260915-013",
+  "type": "bug",
+  "title": "REL Git 发布 local-precheck 误判看板目录内已跟踪文件为脏（porcelain 首行前导空格被 trim 吃掉）",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-worker-01",
+  "createdAt": "2026-09-15T12:24:11.464Z",
+  "updatedAt": "2026-09-15T16:58:47.788Z",
+  "agentCompletedAt": "2026-09-15T16:58:47.788Z",
+  "lastReport": {
+    "at": "2026-09-15T16:58:47.788Z",
+    "coverage": 100,
+    "framework": "node:assert 真实 Git 集成测试（用例通过率，非代码行覆盖率）",
+    "summary": "引入来源 REQ-20260910-029（已 show 核验）；gitCmd 增加 raw 选项，local-precheck 保留 porcelain 首行状态列。TDD 旧实现 4 个回归失败，修复后 REL 20/20、产品发布 Git 7/7 通过；覆盖空输出、单条/多条看板修改、普通/混合/暂存/未跟踪修改、merge/rebase 阻塞，并核对完整 files、HEAD、暂存区、文件内容及远端不变；git diff --check 与语法检查通过。日志见 dispatch/runs/run-20260916-265/{red,green,product-green}.log。100% 表示执行用例通过率，未测量代码行覆盖率。",
+    "runId": "run-20260916-265"
+  },
+  "history": [
+    {
+      "at": "2026-09-15T12:24:11.464Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0915-e69f"
+    },
+    {
+      "at": "2026-09-15T15:14:41.498Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-15T16:19:10.252Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260916-001631-73a3）"
+    },
+    {
+      "at": "2026-09-15T16:55:15.621Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-worker-01",
+      "note": "认领（zcode-batch-worker-01）"
+    },
+    {
+      "at": "2026-09-15T16:58:47.788Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-worker-01",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

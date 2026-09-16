@@ -1,0 +1,54 @@
+{
+  "id": "REQ-20260916-002",
+  "type": "requirement",
+  "title": "补充发布流水线可识别的 Web App 静态入口（仓库根 index.html 产品落地页）",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-46",
+  "createdAt": "2026-09-16T03:11:50.197Z",
+  "updatedAt": "2026-09-16T04:38:38.074Z",
+  "agentCompletedAt": "2026-09-16T04:38:38.074Z",
+  "lastReport": {
+    "at": "2026-09-16T04:38:38.074Z",
+    "coverage": 100,
+    "framework": "node:assert 文件断言（run-all.mjs 自动发现）",
+    "summary": "按TDD新增scripts/tests/root-index-webapp-entry-20260916-002.test.mjs（T01-T07）先跑红后跑绿；新增仓库根index.html自包含落地页：产品介绍+核心能力+Status Board启动（server.mjs/:8888）+Electron（npm run app/dist）+English摘要+版本1.0.0，内联CSS/JS零外链零网络请求；未改package.json与现有模块；全量npm test 262文件通过",
+    "runId": "run-20260916-267"
+  },
+  "history": [
+    {
+      "at": "2026-09-16T03:11:50.197Z",
+      "from": null,
+      "to": "submitted",
+      "by": "atb-0916-7b5b"
+    },
+    {
+      "at": "2026-09-16T03:23:51.310Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": ""
+    },
+    {
+      "at": "2026-09-16T03:41:05.220Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260916-113216-ac67）"
+    },
+    {
+      "at": "2026-09-16T04:27:52.240Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-46",
+      "note": "认领（zcode-batch-048-46）"
+    },
+    {
+      "at": "2026-09-16T04:38:38.075Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-46",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

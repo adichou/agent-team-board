@@ -239,7 +239,7 @@ function setupUi() {
   return { sandbox, document, state, run, seed, posted };
 }
 
-t('E1 设置页回退：就绪态为「批量任务 + Git 工作流」两个分区（无批量 Commit 分区/目录复选框/恢复默认/空范围警示）；保存载荷仅含 refine', async () => {
+t('E1 设置页回退：就绪态为「官网仓库 + 批量任务 + Git 工作流」三个分区（无批量 Commit 分区/目录复选框/恢复默认/空范围警示）；保存载荷仅含 refine', async () => {
   const h = setupUi();
   const view = element();
   view.nodes.set('#tsStatus', element());
@@ -254,7 +254,9 @@ t('E1 设置页回退：就绪态为「批量任务 + Git 工作流」两个分�
   const out = view.innerHTML;
   assert.match(out, /<h4>批量任务<\/h4>/, '「批量任务」分区保留');
   assert.match(out, /<h4>Git 工作流<\/h4>/, '「Git 工作流」分区保留（REQ-20260911-009）');
-  assert.ok((out.match(/<section/g) || []).length === 2, `就绪态应恰有两个分区（当前 ${out.match(/<section/g)?.length} 个）`);
+  // BUG-20260916-001：设置页新增全局共享的「官网仓库」分区（构建发布独立配置），分区数 2 → 3
+  assert.match(out, /<h4>官网仓库<\/h4>/, '「官网仓库」分区保留（BUG-20260916-001）');
+  assert.ok((out.match(/<section/g) || []).length === 3, `就绪态应恰有三个分区（当前 ${out.match(/<section/g)?.length} 个）`);
   assert.ok(!out.includes('批量 Commit'), '不再渲染「批量 Commit」分区');
   assert.ok(!out.includes('dir-group') && !out.includes('dir-list'), '无目录清单控件');
   assert.ok(!out.includes('恢复默认'), '无恢复默认按钮');

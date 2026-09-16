@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { buildPublishApi } from './lib/build-publish-api.mjs';
 // Status Board 本地服务 —— 零依赖 Node http，默认端口 8888。
 // 单服务多项目：所有数据 API 支持 ?project=<项目根绝对路径>，
 // 未传时用默认项目（注册表第一项，首启以启动目录播种）。
@@ -20,6 +21,10 @@ import * as marketing from './lib/marketing-store.mjs';
 import * as releaseStore from './lib/release-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
 import * as buildGit from './lib/build-git.mjs';
+import * as prelStore from './lib/product-release-store.mjs';
+import * as prelGit from './lib/product-release-git.mjs';
+import * as prelMaterials from './lib/site-materials.mjs';
+import { runProductPrecheck, runProductPipeline, refreezeProductRun, collectCurrentInputs } from './lib/product-release-pipeline.mjs';
 import { runGitPipeline, realExec as realGitExec } from './lib/release-git.mjs';
 import { runApplePipeline, createRealAdapter as createRealAppleAdapter } from './lib/release-apple.mjs';
 import { runElectronPipeline, readElectronProject } from './lib/release-electron.mjs';
@@ -2013,6 +2018,217 @@ async function handleReleaseApi(req, res, u, pathname, root, dataDir) {
 }
 
 
+// REQ-20260915-002 产品发布模块接口（从已合并版本计划发起跨仓库产品发布；绑定 ?project=）：
+//   GET  /api/product-release/state          配置 + 运行列表 + 环境（isRepo/remotes/双分支/官网配置）
+//   POST /api/product-release/config         保存官网仓库根目录（一次配置；变更使旧预检失效）
+//   POST /api/product-release/from-build     { bldId, version } 从 merged BLD 创建并冻结（未合并 400）
+//   POST /api/product-release/run/:id/precheck    只读预检并落指纹（不推送/不部署/不构建）
+//   POST /api/product-release/run/:id/refreeze    main 前进后按当前 main 重新冻结（旧预检失效）
+//   GET  /api/product-release/run/:id/plan        发布计划预览（冻结输入 + 步骤 + 目标 + 材料）
+//   POST /api/product-release/run/:id/start       预检新鲜才启动（异步推进，逐阶段持久化）
+//   POST /api/product-release/run/:id/retry       重试失败阶段（只补未完成操作）
+//   POST /api/product-release/run/:id/cancel      取消后续阶段（已上线目标保留）
+//   GET  /api/product-release/run/:id             运行详情（含阶段、目标卡、日志、证据、历史）
+const productActive = new Map(); // 本进程内正在执行的产品发布运行（重启恢复时跳过）
+
+function kickProductRun(dataDir, root, runId) {
+  productActive.set(runId, { at: Date.now() });
+  const exec = realGitExec();
+  runProductPipeline({ dataDir, projectRoot: root, runId, exec })
+    .catch(() => { /* 驱动内部已按阶段落盘；此处兜底防未处理拒绝 */ })
+    .finally(() => productActive.delete(runId));
+}
+
+async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
+  const notFound = () => sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
+  const runPost = async (fn) => {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    try {
+      return await fn(body);
+    } catch (e) {
+      if (e instanceof prelStore.ProductReleaseConflictError) {
+        return sendJson(res, 409, { error: e.message, conflict: true, activeRunId: e.activeRunId });
+      }
+      if (e instanceof core.AtbError && /找不到产品发布运行/.test(e.message)) {
+        return sendJson(res, 404, { error: e.message });
+      }
+      throw e; // AtbError → 外层统一 400；其余 → 500
+    }
+  };
+  const requireBoard = () => {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    return dataDir;
+  };
+  const realExec = realGitExec();
+
+  if (req.method === 'GET' && pathname === '/api/product-release/state') {
+    if (!dataDir) return sendJson(res, 200, { initialized: false });
+    try { prelStore.recoverInterruptedProductRuns(dataDir, { skipIds: [...productActive.keys()] }); } catch { /* 数据目录异常不阻塞读取 */ }
+    const cfg = releaseStore.readModuleConfig(dataDir);
+    const env = gitEnvSummary(root);
+    let branches = [];
+    if (env.repo) {
+      const x = spawnSync('git', ['branch', '--format=%(refname:short)'], { cwd: root, encoding: 'utf8', timeout: 15000 });
+      if (x.status === 0) branches = x.stdout.trim().split('\n').filter(Boolean);
+    }
+    let homepageConfigured = false;
+    if (cfg.homepageRepoRoot && fs.existsSync(path.join(cfg.homepageRepoRoot, '.git'))) homepageConfigured = true;
+    return sendJson(res, 200, {
+      initialized: true,
+      runs: prelStore.listProductRuns(dataDir).map(prelStore.summarizeProductRun),
+      config: { homepageRepoRoot: cfg.homepageRepoRoot || '' },
+      env: {
+        repo: env.repo, remotes: env.remotes || [], currentBranch: env.currentBranch,
+        branches, homepageConfigured,
+      },
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/product-release/config') {
+    return runPost((body) => {
+      const board = requireBoard();
+      // 官网仓库根目录校验：目录存在 / 是 git 仓库 / 目标分支（默认 main）有效
+      const repoRoot = String(body.homepageRepoRoot || '').trim();
+      const br = spawnSync('git', ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], { cwd: repoRoot, encoding: 'utf8', timeout: 15000 });
+      if (repoRoot && br.status !== 0) {
+        throw new core.AtbError(`官网仓库缺少 main 分支（目标分支默认 main）：${repoRoot}`);
+      }
+      return sendJson(res, 200, releaseStore.saveHomepageRepoRoot(board, repoRoot));
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/product-release/from-build') {
+    return runPost(async (body) => {
+      const board = requireBoard();
+      const bld = buildStore.readVersion(board, String(body.bldId || ''));
+      // 冻结事实收集（真实 git 只读；不冒充、不用时间戳代替冻结证据）
+      const remoteInfo = await prelGit.resolveSourceRemote(root, realExec);
+      const mainSha = await prelGit.branchHead(root, realExec, 'main');
+      const devSha = await prelGit.branchHead(root, realExec, 'dev');
+      if (!mainSha) throw new core.AtbError('main 分支缺失：无法冻结（发布必须冻结 main 分支头）');
+      if (!devSha) throw new core.AtbError('dev 分支缺失：main/dev 双分支推送前置，无法冻结');
+      const items = bld.items.map((x) => ({ itemId: x.itemId, commit: x.commit }));
+      const contain = await prelGit.verifyItemsOnMain(root, realExec, items, mainSha);
+      if (!contain.ok) throw new core.AtbError(`计划条目不在 main 历史内：${contain.missing.join('、')}（请确认版本已完整合并）`);
+      const extraCommits = await prelGit.collectExtraCommits(root, realExec, { mainSha, itemCommits: items.map((x) => x.commit), bldId: bld.id });
+      const cfg = releaseStore.readModuleConfig(board);
+      let homepage = { repoRoot: cfg.homepageRepoRoot || '', branch: 'main', contentDir: '' };
+      if (cfg.homepageRepoRoot) {
+        try {
+          homepage.contentDir = prelMaterials.safeContentDir(cfg.homepageRepoRoot, path.basename(root));
+        } catch { /* 项目名不安全：预检给诊断，创建不阻塞 */ }
+      }
+      const run = prelStore.createProductRun(board, {
+        productId: path.basename(root),
+        bld,
+        freeze: { mainSha, devSha, remote: remoteInfo.remote, remoteUrl: remoteInfo.sanitizedUrl, extraCommits, homepage },
+        version: body.version,
+        versionName: body.versionName || bld.name,
+        by: 'board',
+      });
+      return sendJson(res, 201, { run });
+    });
+  }
+
+  const runMatch = pathname.match(/^\/api\/product-release\/run\/(PREL-\d{8}-\d{3})(?:\/([a-z]+))?$/);
+  if (runMatch) {
+    const runId = runMatch[1];
+    const action = runMatch[2] || null;
+    if (req.method === 'GET' && !action) {
+      return runPost(async () => {
+        const board = requireBoard();
+        try { prelStore.recoverInterruptedProductRuns(board, { skipIds: [...productActive.keys()] }); } catch { /* 忽略 */ }
+        const run = prelStore.readProductRun(board, runId);
+        return sendJson(res, 200, { run, logs: prelStore.readProductRunLogs(board, run.id) });
+      });
+    }
+    if (req.method === 'GET' && action === 'plan') {
+      return runPost(async () => {
+        const board = requireBoard();
+        const run = prelStore.readProductRun(board, runId);
+        // 计划预览：冻结输入 + 将执行步骤 + 将更新的仓库/分支 + 目标与材料状态（只读装配）
+        const steps = [
+          `源码工作目录切换到 main（核对 HEAD = ${String(run.frozen.mainSha).slice(0, 8)}）`,
+          `一次原子推送 main（${String(run.frozen.mainSha).slice(0, 8)}）与 dev（${String(run.frozen.devSha).slice(0, 8)}）到源码远端 ${run.frozen.remote}，推送后核验两分支远端 SHA`,
+          `Web App：从冻结 main 源码自动构建并本机部署回验（版本 ${run.frozen.version}）`,
+          `官网与文档：中英文材料核验 + 本机部署回验（内容目录 ${run.frozen.homepage?.contentDir || '（未配置）'}）`,
+        ];
+        return sendJson(res, 200, {
+          plan: {
+            frozen: run.frozen,
+            steps,
+            targets: run.targets,
+            extraCommits: run.frozen.extraCommits || [],
+            precheck: run.precheck,
+            warning: (run.frozen.extraCommits || []).length
+              ? `main 相比计划条目另有 ${(run.frozen.extraCommits).length} 个额外提交（含基线与计划外提交），发布范围以冻结 main 为准，不隐去额外变更`
+              : null,
+          },
+        });
+      });
+    }
+    if (req.method === 'POST' && action === 'precheck') {
+      return runPost(async () => {
+        const board = requireBoard();
+        const run = prelStore.readProductRun(board, runId);
+        if (!['draft', 'failed'].includes(run.status)) {
+          throw new core.AtbError(`当前状态（${prelStore.PREL_STATUS_LABEL[run.status] || run.status}）不可预检`);
+        }
+        prelStore.assertProductFree(board, { exceptId: run.id });
+        return sendJson(res, 200, { run: await runProductPrecheck({ dataDir: board, projectRoot: root, runId, exec: realExec }) });
+      });
+    }
+    if (req.method === 'POST' && action === 'refreeze') {
+      return runPost(async () => {
+        const board = requireBoard();
+        return sendJson(res, 200, { run: await refreezeProductRun({ dataDir: board, projectRoot: root, runId, exec: realExec }) });
+      });
+    }
+    if (req.method === 'POST' && action === 'start') {
+      return runPost(async () => {
+        const board = requireBoard();
+        const run = prelStore.readProductRun(board, runId);
+        if (!['draft', 'failed'].includes(run.status)) {
+          throw new core.AtbError(`当前状态（${prelStore.PREL_STATUS_LABEL[run.status] || run.status}）不可启动`);
+        }
+        prelStore.assertProductFree(board, { exceptId: run.id });
+        // 预检新鲜度：无预检 / 未通过 / 冻结输入变化（版本号 / main·dev 前进 / 远端 / 官网配置 / 材料）→ 400
+        const current = await collectCurrentInputs({ dataDir: board, projectRoot: root, run, exec: realExec });
+        prelStore.assertPrecheckFresh(run, current);
+        if (run.status === 'failed') {
+          prelStore.mutateProductRun(board, run.id, (r) => prelStore.resetForRetry(r), { by: 'board', action: 'retry' });
+        }
+        kickProductRun(board, root, run.id);
+        return sendJson(res, 200, { run: prelStore.readProductRun(board, run.id) });
+      });
+    }
+    if (req.method === 'POST' && action === 'retry') {
+      return runPost(() => {
+        const board = requireBoard();
+        const run = prelStore.readProductRun(board, runId);
+        if (run.status !== 'failed') {
+          throw new core.AtbError(`仅失败运行可重试（当前 ${prelStore.PREL_STATUS_LABEL[run.status] || run.status}）`);
+        }
+        prelStore.assertProductFree(board, { exceptId: run.id });
+        prelStore.mutateProductRun(board, run.id, (r) => prelStore.resetForRetry(r), { by: 'board', action: 'retry' });
+        kickProductRun(board, root, run.id);
+        return sendJson(res, 200, { run: prelStore.readProductRun(board, run.id) });
+      });
+    }
+    if (req.method === 'POST' && action === 'cancel') {
+      return runPost(() => {
+        const board = requireBoard();
+        const run = prelStore.readProductRun(board, runId);
+        if (['succeeded', 'canceled'].includes(run.status)) {
+          return sendJson(res, 200, { run }); // 幂等：已取消/已成功不再变化
+        }
+        const canceled = prelStore.mutateProductRun(board, run.id, (r) => prelStore.cancelRemaining(r), { by: 'board', action: 'cancel' });
+        return sendJson(res, 200, { run: canceled });
+      });
+    }
+  }
+  return notFound();
+}
+
+
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
 //   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
 //   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
@@ -2197,7 +2413,15 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       let version;
       try {
         const r = buildGit.mergeCommitsIntoMain(root, { versionId: v.id, versionName: v.name, items: v.items });
-        version = buildStore.finishMerge(board, v.id, { results: r.results });
+        // REQ-20260915-002：全量合并成功时记录最终 main 分支头（作为发布冻结证据；
+        // 旧计划无 merge.mainSha 时按「候选 + 额外提交」口径展示）
+        const allMerged = v.items.every((it) => (r.results || []).some((x) => x.itemId === it.itemId && x.ok));
+        let mainSha = null;
+        if (allMerged) {
+          const sha = spawnSync('git', ['rev-parse', 'refs/heads/main'], { cwd: root, encoding: 'utf8', timeout: 15000 });
+          if (sha.status === 0) mainSha = sha.stdout.trim();
+        }
+        version = buildStore.finishMerge(board, v.id, { results: r.results, mainSha });
         version.mergeWarnings = r.warnings || [];
       } catch (e) {
         // 合并执行中异常（如切分支失败）：未覆盖的条目按失败落盘，版本置 failed 可重试
@@ -3113,6 +3337,14 @@ async function handleApi(req, res, u, pathname) {
     return sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
   }
 
+  // REQ-20260915-002 产品发布模块：从已合并版本计划发起跨仓库产品发布（注册先于 /api/release，
+  // 防前缀误吞；不进 REQ/BUG 状态机）
+  if (pathname.startsWith('/api/product-release')) {
+    const r = await handleProductReleaseApi(req, res, u, pathname, root, dataDir);
+    if (r !== null) return r;
+    return sendJson(res, 404, { error: `未知接口：${req.method} ${pathname}` });
+  }
+
   // REQ-20260910-029 发布模块：Git 远端 / Apple App Store 发布流水线（不进 REQ/BUG 状态机）
   if (pathname.startsWith('/api/release')) {
     const r = await handleReleaseApi(req, res, u, pathname, root, dataDir);
@@ -3121,6 +3353,11 @@ async function handleApi(req, res, u, pathname) {
   }
 
   // REQ-20260913-001 构建模块：版本计划（合并入 main）与分支浏览同步（不进 REQ/BUG 状态机）
+  if (pathname.startsWith('/api/build-publish')) {
+    const body = req.method === 'POST' ? JSON.parse((await readBody(req)) || '{}') : {};
+    return sendJson(res, 200, await buildPublishApi({ method: req.method, pathname, body, root, dataDir }));
+  }
+
   if (pathname.startsWith('/api/build')) {
     const r = await handleBuildApi(req, res, u, pathname, root, dataDir);
     if (r !== null) return r;
