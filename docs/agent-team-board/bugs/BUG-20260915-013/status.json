@@ -2,11 +2,11 @@
   "id": "BUG-20260915-013",
   "type": "bug",
   "title": "REL Git 发布 local-precheck 误判看板目录内已跟踪文件为脏（porcelain 首行前导空格被 trim 吃掉）",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "zcode-batch-worker-01",
   "createdAt": "2026-09-15T12:24:11.464Z",
-  "updatedAt": "2026-09-15T16:58:47.788Z",
+  "updatedAt": "2026-09-16T05:46:01.587Z",
   "agentCompletedAt": "2026-09-15T16:58:47.788Z",
   "lastReport": {
     "at": "2026-09-15T16:58:47.788Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "zcode-batch-worker-01",
       "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-16T05:46:01.587Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
