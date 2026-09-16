@@ -55,6 +55,7 @@ const ATBBuild = (() => {
     mergeConfirm: null,  // { verId }
     pushConfirm: null,   // { branch }
     mergeBusy: false,
+    mgtSubmitting: null, // REQ-20260914-007：管理记录提交进行中的版本 id（合并请求尾段 / 重试提交）
     deleteConfirm: null, // { verId } REQ-20260913-004 删除确认弹窗
     deleteBusy: false,
     branches: null,      // /api/build/branches 响应
@@ -223,7 +224,7 @@ const ATBBuild = (() => {
       Object.assign(state, {
         project: project ?? null, phase: 'loading', error: null, data: null, tab: 'versions',
         selVerId: null, edit: null, createPanel: null, addPanel: null, answer: null,
-        mergeConfirm: null, pushConfirm: null, mergeBusy: false,
+        mergeConfirm: null, pushConfirm: null, mergeBusy: false, mgtSubmitting: null,
         deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
         logBranch: null, branchLog: null, logPhase: 'idle', logError: null,
@@ -733,6 +734,7 @@ const ATBBuild = (() => {
     if (!v || state.mergeBusy) return;
     state.mergeConfirm = null;
     state.mergeBusy = true;
+    state.mgtSubmitting = v.id; // REQ-20260914-007：合并请求含管理记录提交——进行中渲染提交态反馈
     render();
     try {
       const r = await post('/version/merge', { id: v.id });
@@ -741,10 +743,83 @@ const ATBBuild = (() => {
       if (data.version?.status === 'merged') toast(`✓ 已合并入 main（${v.id}）`);
       else toast(`✕ 合并失败：${data.version?.merge?.error || '详见版本详情'}`);
       if (data.version?.mergeWarnings?.length) toast(`⚠ ${data.version.mergeWarnings[0]}`);
+      // REQ-20260914-007：业务成功与提交失败两种结果独立反馈（版本保持已合并）
+      const mgt = data.mgtCommit;
+      if (mgt && mgt.status === 'failed') {
+        toast(`⚠ 操作已成功，管理记录提交失败：${mgt.reason || '未知原因'}`, true);
+      }
     } catch (e) {
       toast(`✕ 合并失败：${e.message}`);
     } finally {
       state.mergeBusy = false;
+      state.mgtSubmitting = null;
+      await refresh();
+    }
+  }
+
+  /* ---------- REQ-20260914-007 管理记录提交反馈（版本详情合并结果区） ---------- */
+
+  // 提交中（进度 + 禁用重试）/ 成功（短 SHA，main 为主）/ 已同步 / 失败（原因 + 未提交文件 +
+  // 建议 + 重试提交；失败态来自服务端账本，刷新后仍可见，重试成功后清除）。
+  function mgtBlockHtml(mgt, verId) {
+    if (!mgt) return '';
+    const cls = mgt.status === 'submitting' ? 'submitting'
+      : mgt.status === 'committed' || mgt.status === 'noop' ? 'success'
+        : mgt.status === 'failed' ? 'failed' : '';
+    let title = '';
+    let body = '';
+    if (mgt.status === 'submitting') {
+      title = '<span class="spin"></span> 管理记录提交：提交中…';
+      body = '合并成功后正在提交版本管理记录（version.json → main，不切当前分支、不推送）…';
+    } else if (mgt.status === 'committed') {
+      const main = (mgt.commits || []).find((x) => x.branch === 'main') || (mgt.commits || [])[0] || {};
+      title = `✓ 管理记录提交：<span>已提交 · <code>${esc(main.short || '')}</code></span>`;
+      const paths = (mgt.files || []).map((f) => `<li>${esc(f.path)}</li>`).join('');
+      body = `提交说明：<code>${esc(mgt.subject || '')}</code>（分支：${esc(main.branch || 'main')}）${paths ? `<ul>${paths}</ul>` : ''}`;
+    } else if (mgt.status === 'noop') {
+      title = '✓ 管理记录提交：已同步 · 无新变化';
+      body = esc(mgt.reason || '版本记录无新变化，不制造空提交。');
+    } else if (mgt.status === 'skipped') {
+      title = '管理记录未自动提交';
+      body = esc(mgt.reason || '');
+    } else if (mgt.status === 'failed') {
+      const files = (mgt.pendingManual && mgt.pendingManual.length
+        ? mgt.pendingManual
+        : (mgt.files || []).map((f) => f.path));
+      title = '⚠ 操作已成功，管理记录提交失败';
+      body = `原因：${esc(mgt.reason || '未知')}`
+        + '<div class="mgt-files-label">未提交文件：</div>'
+        + `<ul>${files.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`
+        + (mgt.advice ? `<div class="mgt-advice">建议：${esc(mgt.advice)}</div>` : '')
+        + `<div class="row"><button type="button" class="btn primary small" data-ver-mgt-retry="${esc(verId)}"${state.mgtSubmitting || state.mergeBusy ? ' disabled' : ''}>重试提交</button>`
+        + '<span class="muted small">重试只补交管理记录，不重复合并；失败提示刷新后仍可见。</span></div>';
+    }
+    return `<div class="mgt ${cls}" data-mgt-state="${esc(mgt.status)}" role="status">`
+      + `<div class="mgt-title">${title}</div><div class="mgt-body">${body}</div></div>`;
+  }
+
+  // 重试提交：只补交管理记录（不重复合并），服务端与初次提交同锁串行。
+  // 注意：重试接口挂在 /api/mgt-commit（全局），不带本模块 /api/build 前缀。
+  async function retryMgt(verId) {
+    if (state.mgtSubmitting || state.mergeBusy) return;
+    state.mgtSubmitting = verId;
+    render();
+    try {
+      const sep = state.project ? '?' : '';
+      const project = state.project ? `${sep}project=${encodeURIComponent(state.project)}` : '';
+      const r = await fetch(`/api/mgt-commit/retry${project}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'version', id: verId }),
+      });
+      if (!r.ok) throw new Error(await errOf(r, '重试失败'));
+      const data = await r.json();
+      if (data.mgtCommit?.status === 'committed') toast(`✓ 管理记录已提交 · ${data.mgtCommit.commits?.[0]?.short || ''}`);
+      else if (data.mgtCommit?.status === 'failed') toast(`⚠ 管理记录提交失败：${data.mgtCommit.reason || ''}`, true);
+    } catch (e) {
+      toast(`重试提交失败：${e.message}`, true);
+    } finally {
+      state.mgtSubmitting = null;
       await refresh();
     }
   }
@@ -1005,6 +1080,12 @@ const ATBBuild = (() => {
       : v.status === 'failed' && v.merge?.error
         ? `<p class="rel-form-err bld-merge-note" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>`
         : '';
+    // REQ-20260914-007：合并结果区下方的「管理记录提交」反馈块（version.json 自动提交状态；
+    // 失败态来自服务端账本——刷新 / 重启后仍可见，重试只补交管理记录不重复合并）
+    const mgt = state.mgtSubmitting === v.id
+      ? { status: 'submitting' }
+      : (v.mgtCommit || null);
+    const mgtBlock = v.status === 'merged' || mgt ? mgtBlockHtml(mgt, v.id) : '';
     return `
       <div class="rel-detail">
         <header class="rel-detail-head">
@@ -1021,6 +1102,7 @@ const ATBBuild = (() => {
           ${itemRows || '<p class="muted small">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}
         </div>
         ${mergeState}
+        ${mgtBlock}
       </div>`; // BUG-20260913-004：原 footer.rel-acts（AI 完善 / 合并入 main）已迁入左侧版本卡片，详情不再重复渲染
   }
 
@@ -1358,6 +1440,10 @@ const ATBBuild = (() => {
     }
     for (const el of view.querySelectorAll('[data-ver-merge]')) {
       el.addEventListener('click', () => openMergeConfirm(el.dataset.verMerge));
+    }
+    // REQ-20260914-007：版本管理记录提交失败的重试入口（只补交管理记录，不重复合并）
+    for (const el of view.querySelectorAll('[data-ver-mgt-retry]')) {
+      el.addEventListener('click', () => retryMgt(el.dataset.verMgtRetry));
     }
     // REQ-20260913-004 删除确认（按所在卡片版本打开；遮罩点击关闭，执行中不关防误触）
     for (const el of view.querySelectorAll('[data-ver-delete]')) {

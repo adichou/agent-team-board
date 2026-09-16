@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260914-021",
+  "type": "bug",
+  "title": "commit 消息对条目标题有截断，请修复",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "zcode-batch-048-033",
+  "createdAt": "2026-09-14T15:52:11.646Z",
+  "updatedAt": "2026-09-15T02:35:28.653Z",
+  "agentCompletedAt": "2026-09-15T02:35:28.653Z",
+  "lastReport": {
+    "at": "2026-09-15T02:35:28.653Z",
+    "coverage": 100,
+    "framework": "node:assert 自研 run-all（241 文件全过）",
+    "summary": "git-flow 两处去掉 slice(0,DESC_MAX_CHARS) 截断，DESC_MAX_CHARS 20→120 与标题上限对齐，validateCommitSubject 口径同步；新增 D13/D14/P7 长标题用例（autoCommitForRun 三组、supplementCommitForRun doc 组、待人工挂起 doc 组均完整保留标题且过核验），run-all 241 文件 0 失败",
+    "runId": "run-20260915-253"
+  },
+  "history": [
+    {
+      "at": "2026-09-14T15:52:11.646Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-14T15:52:11.649Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-14T16:01:53.973Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260914-235617-c522）"
+    },
+    {
+      "at": "2026-09-15T02:24:48.758Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "zcode-batch-048-033",
+      "note": "认领（zcode-batch-048-033）"
+    },
+    {
+      "at": "2026-09-15T02:35:28.653Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "zcode-batch-048-033",
+      "note": "上报测试报告（覆盖率 100%），待人工确认完成"
+    }
+  ]
+}

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-021 界面演示 — commit 消息标题截断（修复前 / 修复后对照）</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --info-bg: #eff6ff; --info-text: #1d4ed8;
+    --danger: #dc2626; --danger-bg: #fef2f2; --ok: #16a34a; --ok-bg: #f0fdf4;
+    --warn-bg: #fffbeb; --warn-text: #92400e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --primary: #3b82f6; --info-bg: #0b1d3a; --info-text: #93c5fd;
+      --danger: #f87171; --danger-bg: #2a1215; --ok: #4ade80; --ok-bg: #0a2114;
+      --warn-bg: #2a2110; --warn-text: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  header.demo-head { margin-bottom: 14px; }
+  header.demo-head h1 { font-size: 17px; margin: 0 0 4px; }
+  header.demo-head p { margin: 0; color: var(--muted); font-size: 13px; }
+  .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--primary); color: #fff; }
+  label.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .toolbar .hint { color: var(--muted); font-size: 12px; }
+  .layout { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; min-width: 0; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; }
+  .bld-branch-group { margin-bottom: 12px; }
+  .bld-group-head { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .branch-btn { display: block; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 7px; padding: 6px 10px; margin-bottom: 6px; cursor: pointer; font-size: 13px; overflow-wrap: anywhere; }
+  .branch-btn:hover { background: var(--info-bg); }
+  .branch-btn.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .card h2 { font-size: 14px; margin: 0 0 8px; }
+  .cmp-row { padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+  .cmp-row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .cmp-row .code-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info-text); background: var(--info-bg); border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
+  .cmp-title { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+  .cut { color: var(--danger); text-decoration: line-through; text-decoration-thickness: 2px; }
+  .kept-ok { color: var(--ok); text-decoration: underline; text-decoration-style: dotted; }
+  .badge { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px; white-space: nowrap; }
+  .badge.bad { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok); }
+  .badge.info { background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-text); }
+  .rootcause { font-size: 12px; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+  .bld-log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .bld-log-head > strong { flex: none; }
+  .bld-log-search { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .bld-log-search input { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 7px; padding: 5px 9px; font-size: 13px; width: 200px; max-width: 100%; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 7px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .btn:hover:not(:disabled) { background: var(--info-bg); }
+  .btn.small { padding: 3px 9px; font-size: 12px; }
+  .btn.quiet { background: transparent; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .bld-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .bld-log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
+  .bld-log code { font-size: 12px; color: var(--info-text); }
+  .bld-log li .meta { margin-left: auto; }
+  mark { background: transparent; color: var(--primary); font-weight: 700; border-bottom: 2px solid var(--primary); }
+  .bld-log-count, .bld-log-eof { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .rel-form-err { color: var(--danger); font-size: 13px; margin: 0 0 8px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .rel-detail { font-size: 13px; }
+  .bld-log-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .bld-log-pager button { min-width: 30px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+  .bld-log-pager button:hover:not(:disabled):not(.on) { background: var(--info-bg); }
+  .bld-log-pager button.on { background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; }
+  .bld-log-pager button:disabled { opacity: .5; cursor: not-allowed; }
+  footer.demo-foot { margin-top: 14px; color: var(--muted); font-size: 12px; }
+  .state-tag { font-size: 11px; color: var(--muted); border: 1px dashed var(--border); border-radius: 999px; padding: 1px 8px; margin-left: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>BUG-20260914-021 界面演示 — commit 消息对条目标题有截断</h1>
+    <p>复现看板「分支浏览」页面提交记录列表的展示效果。切换「修复前 / 修复后」对照缺陷现象与期望状态；提交数据取自仓库实存记录（hash 与消息真实）。</p>
+  </header>
+
+  <div class="toolbar" role="group" aria-label="演示控制">
+    <div class="seg" id="modeSeg" role="radiogroup" aria-label="修复状态切换">
+      <button type="button" data-mode="before" class="on" role="radio" aria-checked="true">修复前（缺陷现状）</button>
+      <button type="button" data-mode="after" role="radio" aria-checked="false">修复后（期望状态）</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="failSwitch"> 模拟读取失败（演示失败 + 重试反馈）</label>
+    <span class="hint">点击左侧分支加载提交记录；搜索框支持提交说明 / 作者 / hash</span>
+  </div>
+
+  <div class="layout">
+    <aside class="panel" aria-label="分支列表">
+      <h2>分支</h2>
+      <div class="bld-branch-group">
+        <div class="bld-group-head">本地</div>
+        <div id="localBranches"></div>
+      </div>
+      <div class="bld-branch-group">
+        <div class="bld-group-head">远端</div>
+        <div id="remoteBranches"></div>
+      </div>
+    </aside>
+
+    <main>
+      <section class="card" aria-label="条目标题与提交消息对照">
+        <h2>条目标题 ↔ 提交消息对照<span class="state-tag" id="cmpTag">截断于第 20 字</span></h2>
+        <div id="cmpBody"></div>
+        <p class="rootcause">根因：<code>scripts/lib/git-flow.mjs</code> 两处 <code>[...String(title)].slice(0, DESC_MAX_CHARS)</code>（DESC_MAX_CHARS=20，见 <code>scripts/lib/commit-store.mjs</code>）——标题超过 20 字的部分被静默丢弃，用于通过 ≤20 字的提交消息核验。</p>
+      </section>
+
+      <section class="panel" aria-label="提交记录">
+        <div class="bld-log-head"><strong id="logBranchName">提交记录</strong>
+          <div class="bld-log-search" role="search">
+            <input type="search" id="logSearchInput" placeholder="搜提交说明 / 作者 / hash…" aria-label="搜索提交记录" disabled>
+            <button type="button" class="btn small" id="logSearchGo" disabled>搜索</button>
+            <button type="button" class="btn small quiet" id="logSearchClear" hidden>清除</button>
+          </div>
+        </div>
+        <div id="logBody" aria-live="polite"><div class="rel-detail muted">点击左侧分支查看提交记录</div></div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="demo-foot">
+    状态反馈覆盖：加载中 / 正常列表 / 空分支 / 搜索无命中 / 读取失败（行内报错 + 重试）/ 分页；深浅色跟随系统。仅演示用，数据静态内置，无网络请求。
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- 演示数据（hash 与提交消息均取自仓库真实 git 记录）----
+  var ITEMS = {
+    'BUG-20260914-018': '分支浏览页面中的 main 分支通过发布流程推送的文字删掉',
+    'REQ-20260914-004': '优化需求说明、设计文档中右键讨论菜单生成的提示词'
+  };
+  var PREFIX = { fix: 'fix', test: 'test', doc: 'doc', feat: 'feat' };
+
+  // derived: true = 消息由「类型: 标题前20字 单号」拼装（受截断影响）
+  var COMMITS = [
+    { short: '4d66ce5', type: 'fix',  item: 'BUG-20260914-018', author: 'atb',  date: '2026-09-14 22:47', derived: true },
+    { short: '815e30c', type: 'test', item: 'BUG-20260914-018', author: 'atb',  date: '2026-09-14 22:41', derived: true },
+    { short: '883f0a3', type: 'doc',  item: 'BUG-20260914-018', author: 'atb',  date: '2026-09-14 22:38', derived: true },
+    { short: '8196d60', type: 'feat', item: 'REQ-20260914-004', author: 'atb',  date: '2026-09-14 21:52', derived: true },
+    { short: 'b8f2905', type: 'test', item: 'REQ-20260914-004', author: 'atb',  date: '2026-09-14 21:46', derived: true },
+    { short: 'd4c44bd', type: 'build', author: 'atb', date: '2026-09-14 23:05', derived: false,
+      subject: 'build: 多智能体协作平台成型版——多项目需求和构建管理，AI 需求完善和开发、项目基本管理 合并 BUG-20260914-018（BLD-20260914-001）',
+      note: '版本合并消息（非自动提交拼装，不受 20 字截断影响，可作对照）' }
+  ];
+
+  var BRANCHES = {
+    'main': { group: 'local', label: 'main', commits: COMMITS },
+    'feature/board-ui': { group: 'local', label: 'feature/board-ui', commits: COMMITS.filter(function (c) { return c.item === 'BUG-20260914-018'; }) },
+    'feature/proto': { group: 'local', label: 'feature/proto（空分支演示）', commits: [] },
+    'origin/main': { group: 'remote', label: 'origin/main', commits: COMMITS }
+  };
+
+  var DESC_MAX = 20;
+  var PAGE_SIZE = 4;
+
+  var state = {
+    mode: 'before',            // before = 修复前（截断），after = 修复后（完整）
+    branch: null,              // 当前选中分支名
+    phase: 'idle',             // idle | loading | list | empty | error
+    query: '',                 // 已生效的搜索关键词
+    queryInput: '',
+    page: 1,
+    failSwitch: false
+  };
+
+  function chars(s) { return Array.from(String(s)); }
+  function truncDesc(title) { return chars(title).slice(0, DESC_MAX).join(''); }
+  function fullSubject(c) {
+    return c.derived ? PREFIX[c.type] + ': ' + ITEMS[c.item] + ' ' + c.item : c.subject;
+  }
+  function beforeSubject(c) {
+    return c.derived ? PREFIX[c.type] + ': ' + truncDesc(ITEMS[c.item]) + ' ' + c.item : c.subject;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+  // 命中词高亮（口径同看板 REQ-20260914-002 的 markMatch）
+  function mark(text, q) {
+    if (!q) return esc(text);
+    var idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx < 0) return esc(text);
+    return esc(text.slice(0, idx)) + '<mark>' + esc(text.slice(idx, idx + q.length)) + '</mark>' + esc(text.slice(idx + q.length));
+  }
+
+  // ---- 左侧分支列表 ----
+  function renderBranches() {
+    var local = '', remote = '';
+    Object.keys(BRANCHES).forEach(function (name) {
+      var b = BRANCHES[name];
+      var btn = '<button type="button" class="branch-btn' + (state.branch === name ? ' on' : '') + '" data-branch="' + esc(name) + '">' + esc(b.label) + '</button>';
+      if (b.group === 'local') local += btn; else remote += btn;
+    });
+    document.getElementById('localBranches').innerHTML = local || '<p class="muted small">（无其他本地分支）</p>';
+    document.getElementById('remoteBranches').innerHTML = remote;
+  }
+
+  // ---- 对照卡：条目标题在第 20 字处被截断 ----
+  function renderCompare() {
+    var after = state.mode === 'after';
+    var html = '';
+    Object.keys(ITEMS).forEach(function (id) {
+      var title = ITEMS[id];
+      var head = truncDesc(title);
+      var rest = chars(title).slice(DESC_MAX).join('');
+      var titleHtml = after
+        ? esc(head) + '<span class="kept-ok">' + esc(rest) + '</span>'
+        : esc(head) + '<span class="cut">' + esc(rest) + '</span>';
+      var badge = after
+        ? '<span class="badge ok">完整 ' + chars(title).length + ' 字进消息</span>'
+        : '<span class="badge bad">截去 ' + chars(rest).length + ' 字</span>';
+      html += '<div class="cmp-row"><span class="code-chip">' + esc(id) + '</span>标题（' + chars(title).length + ' 字）：' + badge +
+        '<span class="cmp-title">' + titleHtml + '</span></div>';
+    });
+    document.getElementById('cmpBody').innerHTML = html;
+    document.getElementById('cmpTag').textContent = after ? '标题完整进入提交消息' : '截断于第 20 字';
+  }
+
+  // ---- 提交列表 ----
+  function commitRow(c) {
+    var subj;
+    if (!c.derived) {
+      subj = mark(c.subject, state.query) + '<span class="badge info">' + esc(c.note) + '</span>';
+    } else if (state.mode === 'after') {
+      var title = ITEMS[c.item];
+      var head = truncDesc(title), rest = chars(title).slice(DESC_MAX).join('');
+      subj = esc(PREFIX[c.type]) + ': ' + mark(head, state.query) +
+        '<span class="kept-ok">' + mark(rest, state.query) + '</span> ' + mark(c.item, state.query) +
+        '<span class="badge ok">完整标题</span>';
+    } else {
+      var restLen = chars(ITEMS[c.item]).length - DESC_MAX;
+      subj = esc(PREFIX[c.type]) + ': ' + mark(truncDesc(ITEMS[c.item]), state.query) + ' ' + mark(c.item, state.query) +
+        '<span class="badge bad" title="完整标题：' + esc(ITEMS[c.item]) + '">已截断 ' + restLen + ' 字</span>';
+    }
+    var meta = mark(c.author, state.query) + ' · ' + esc(c.date);
+    return '<li><code>' + mark(c.short, state.query) + '</code><span>' + subj + '</span><span class="meta muted small">' + meta + '</span></li>';
+  }
+
+  function filteredCommits() {
+    var list = BRANCHES[state.branch] ? BRANCHES[state.branch].commits : [];
+    if (!state.query) return list;
+    var q = state.query.toLowerCase();
+    return list.filter(function (c) {
+      return (beforeSubject(c) + ' ' + fullSubject(c) + ' ' + c.short + ' ' + c.author).toLowerCase().includes(q);
+    });
+  }
+
+  function renderLog(immediate) {
+    var body = document.getElementById('logBody');
+    var input = document.getElementById('logSearchInput');
+    var go = document.getElementById('logSearchGo');
+    var clearBtn = document.getElementById('logSearchClear');
+    document.getElementById('logBranchName').textContent = state.branch || '提交记录';
+
+    var setControls = function (on) {
+      input.disabled = !on; go.disabled = !on;
+      input.value = state.queryInput;
+      clearBtn.hidden = !state.query;
+    };
+
+    if (state.phase === 'idle') {
+      body.innerHTML = '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
+      setControls(false); return;
+    }
+    if (state.phase === 'loading') {
+      body.innerHTML = '<p class="muted">' + (state.queryInput ? '搜索中…' : '加载提交记录中…') + '</p>';
+      go.textContent = '搜索中…'; input.disabled = true; go.disabled = true; clearBtn.hidden = !state.query;
+      return;
+    }
+    go.textContent = '搜索'; setControls(true);
+
+    if (state.phase === 'error') {
+      body.innerHTML = '<p class="rel-form-err" role="alert">提交记录读取失败：无法访问 git 仓库（演示用模拟错误） <button type="button" class="btn small" id="logRetry">重试</button></p>';
+      return;
+    }
+
+    var commits = filteredCommits();
+    if (state.query && !commits.length) { // 搜索无命中空态
+      body.innerHTML = '<p class="muted small">没有匹配的提交（关键词：' + esc(state.query) + '）</p>' +
+        '<p><button type="button" class="btn small quiet" data-log-search-clear>清除</button></p>';
+      return;
+    }
+    if (!commits.length) { body.innerHTML = '<p class="muted small">该分支暂无提交</p>'; return; }
+
+    // 简单分页（口径参考看板 BUG-20260914-009：分页展示全部提交）
+    var total = commits.length;
+    var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    state.page = Math.min(Math.max(1, state.page), pages);
+    var start = (state.page - 1) * PAGE_SIZE;
+    var slice = commits.slice(start, start + PAGE_SIZE);
+
+    var countBar = state.query ? '<div class="bld-log-count" role="status">共 ' + total + ' 条匹配（关键词：' + esc(state.query) + '）</div>' : '';
+    var eof = state.page === pages
+      ? '<div class="bld-log-eof" role="note">已到末尾 · 共 ' + total + (state.query ? ' 条匹配' : ' 条提交') + '</div>'
+      : '';
+    var pager = pages > 1 ? '<div class="bld-log-pager">' +
+      '<button type="button" data-page="prev"' + (state.page === 1 ? ' disabled' : '') + '>‹</button>' +
+      Array.from({ length: pages }, function (_, i) {
+        return '<button type="button" data-page="' + (i + 1) + '"' + (state.page === i + 1 ? ' class="on"' : '') + '>' + (i + 1) + '</button>';
+      }).join('') +
+      '<button type="button" data-page="next"' + (state.page === pages ? ' disabled' : '') + '>›</button></div>' : '';
+
+    body.innerHTML = countBar + '<ul class="bld-log">' + slice.map(commitRow).join('') + '</ul>' + eof + pager;
+  }
+
+  // 加载流程：loading → (error | 列表)，模拟异步
+  function loadBranch(name, keepQuery) {
+    state.branch = name;
+    state.phase = 'loading';
+    if (!keepQuery) { state.query = ''; state.queryInput = ''; state.page = 1; }
+    renderBranches(); renderLog();
+    setTimeout(function () {
+      state.phase = state.failSwitch ? 'error' : 'list';
+      renderLog();
+    }, 500);
+  }
+
+  // ---- 事件绑定 ----
+  document.getElementById('modeSeg').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-mode]');
+    if (!btn) return;
+    state.mode = btn.dataset.mode;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (b) {
+      var on = b === btn;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    renderCompare(); renderLog();
+  });
+
+  document.getElementById('failSwitch').addEventListener('change', function () {
+    state.failSwitch = this.checked;
+  });
+
+  document.body.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-branch]');
+    if (b) { loadBranch(b.dataset.branch, false); return; }
+    if (e.target.closest('#logRetry')) { loadBranch(state.branch, true); return; }
+    var pg = e.target.closest('[data-page]');
+    if (pg) {
+      var commits = filteredCommits();
+      var pages = Math.max(1, Math.ceil(commits.length / PAGE_SIZE));
+      var v = pg.dataset.page;
+      if (v === 'prev') state.page = Math.max(1, state.page - 1);
+      else if (v === 'next') state.page = Math.min(pages, state.page + 1);
+      else state.page = Number(v);
+      renderLog(); return;
+    }
+    if (e.target.closest('#logSearchGo')) {
+      if (!state.branch || state.phase === 'loading') return;
+      var q = document.getElementById('logSearchInput').value.trim();
+      state.queryInput = q; state.phase = 'loading'; state.page = 1; renderLog();
+      setTimeout(function () { state.query = q; state.phase = 'list'; renderLog(); }, 400);
+      return;
+    }
+    if (e.target.closest('#logSearchClear') || e.target.closest('[data-log-search-clear]')) {
+      state.query = ''; state.queryInput = ''; state.page = 1; renderLog();
+    }
+  });
+
+  document.getElementById('logSearchInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') document.getElementById('logSearchGo').click();
+  });
+
+  renderBranches(); renderCompare(); renderLog();
+})();
+</script>
+</body>
+</html>

@@ -3252,3 +3252,26 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .confirm-option small { flex: 1; }
 .confirm-rec { font-style: normal; color: var(--primary); margin-left: 4px; font-size: 11px; }
 .confirm-q { margin-bottom: 8px; }
+
+/* ---------- REQ-20260914-007 管理记录提交反馈块（确认完成 / 版本合并两入口同构） ---------- */
+/* 状态语义：submitting 提交中（进度 + 禁用重试）/ success 已提交或已同步 / failed 失败
+   （原因 + 未提交文件 + 建议 + 重试，账本持久化，重试成功后清除）；沿用现有主题变量。 */
+.mgt { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.mgt-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
+.mgt-body { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.mgt-body code { font-size: 12.5px; }
+.mgt.submitting { border-color: var(--inprogress); }
+.mgt.submitting .mgt-title { color: var(--inprogress); }
+.mgt.success { border-color: var(--ok-text); }
+.mgt.success .mgt-body { color: var(--ok-text); }
+.mgt.failed { border-color: var(--warn); background: rgba(220, 38, 38, 0.06); }
+.mgt.failed .mgt-title { color: var(--warn); }
+.mgt.failed .mgt-body { color: var(--text); }
+.mgt ul { margin: 6px 0 0; padding-left: 18px; }
+.mgt ul li { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.mgt .mgt-advice { margin-top: 6px; }
+.mgt .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.mgt .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--inprogress);
+  border-top-color: transparent; border-radius: 50%; animation: mgt-spin 0.8s linear infinite; vertical-align: -2px; }
+@keyframes mgt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mgt .spin { animation: none; } }
