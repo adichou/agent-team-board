@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260916-002 界面演示 · Agent Team Board 产品落地页</title>
+<style>
+  :root, html[data-theme="light"] {
+    --bg:#f5f6f8; --panel:#ffffff; --text:#1b212b; --muted:#5d6675;
+    --accent:#2f6bdf; --accent-weak:#e8eefc; --border:#dde2ea;
+    --code-bg:#eef1f6; --code-text:#22303f;
+    --ok:#1d8a4e; --ok-weak:#e2f4e9; --err:#c23b3b; --err-weak:#fbe9e9;
+    --shadow:0 1px 3px rgba(20,30,50,.08);
+  }
+  html[data-theme="dark"] {
+    --bg:#0d1117; --panel:#151b23; --text:#e4e8ee; --muted:#94a0b0;
+    --accent:#6f97f2; --accent-weak:#1b2637; --border:#273140;
+    --code-bg:#0a0f16; --code-text:#c9d4e2;
+    --ok:#4fc382; --ok-weak:#12291c; --err:#e07a7a; --err-weak:#331a1a;
+    --shadow:0 1px 3px rgba(0,0,0,.5);
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      --bg:#0d1117; --panel:#151b23; --text:#e4e8ee; --muted:#94a0b0;
+      --accent:#6f97f2; --accent-weak:#1b2637; --border:#273140;
+      --code-bg:#0a0f16; --code-text:#c9d4e2;
+      --ok:#4fc382; --ok-weak:#12291c; --err:#e07a7a; --err-weak:#331a1a;
+      --shadow:0 1px 3px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Segoe UI","Microsoft YaHei",sans-serif;
+  }
+
+  /* ===== 演示辅助控制条（非落地页内容） ===== */
+  #demo-bar {
+    position:sticky; top:0; z-index:50;
+    display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center;
+    padding:10px 16px; font-size:13px;
+    background:var(--panel);
+    border-bottom:2px dashed var(--accent);
+  }
+  #demo-bar strong { color:var(--accent); }
+  #demo-bar .dim { color:var(--muted); }
+  #demo-bar label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; }
+  #demo-bar select, #demo-bar button {
+    font:inherit; padding:2px 8px; border:1px solid var(--border);
+    border-radius:6px; background:var(--panel); color:var(--text);
+  }
+  #demo-bar .hint { flex-basis:100%; color:var(--muted); }
+  .state-idle { color:var(--muted); }
+  .state-ok   { color:var(--ok); font-weight:600; }
+  .state-err  { color:var(--err); font-weight:600; }
+
+  /* ===== 落地页画布 ===== */
+  #page {
+    max-width:960px; margin:24px auto 56px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; box-shadow:var(--shadow); overflow:hidden;
+  }
+  body.sim-narrow #page { max-width:390px; outline:2px dashed var(--accent); outline-offset:8px; }
+  body.sim-narrow #vp-tag { display:inline; }
+  #vp-tag { display:none; color:var(--accent); font-size:12px; }
+
+  header#top {
+    display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; justify-content:space-between;
+    padding:22px 28px 18px; border-bottom:1px solid var(--border);
+  }
+  .brand { font-size:22px; font-weight:700; }
+  .brand .sub { font-size:15px; font-weight:400; color:var(--muted); margin-left:8px; }
+  .top-actions { display:flex; gap:10px; align-items:center; }
+  .badge {
+    font-size:12.5px; font-weight:600; color:var(--accent);
+    background:var(--accent-weak); border:1px solid var(--accent);
+    border-radius:999px; padding:2px 12px;
+  }
+  a.anchor {
+    color:var(--accent); text-decoration:none; font-weight:600;
+    border:1px solid var(--border); border-radius:8px; padding:3px 14px;
+  }
+  a.anchor:hover { background:var(--accent-weak); }
+
+  section { padding:8px 28px 18px; }
+  section + section { border-top:1px dashed var(--border); }
+  h2 { font-size:17px; margin:18px 0 10px; }
+  h2 .en { font-size:12.5px; color:var(--muted); font-weight:400; margin-left:8px; }
+  p.lead { margin:6px 0 12px; }
+
+  .panes3 { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .pane {
+    border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13.5px;
+  }
+  .pane b { display:block; margin-bottom:2px; }
+  .pane span { color:var(--muted); }
+
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .card {
+    border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+  }
+  .card h3 { margin:0 0 6px; font-size:15px; color:var(--accent); }
+  .card p { margin:0; font-size:13.5px; color:var(--muted); }
+  .flow { font-size:12.5px; margin-top:8px; color:var(--text); letter-spacing:.2px; }
+  .flow code {
+    background:var(--accent-weak); border-radius:4px; padding:0 4px; font-size:12px;
+  }
+
+  .step { margin:10px 0 14px; }
+  .step .cap { font-weight:600; margin-bottom:6px; }
+  .step .note { font-size:13px; color:var(--muted); margin-top:4px; }
+
+  .codebox {
+    display:flex; align-items:flex-start; gap:10px;
+    background:var(--code-bg); border:1px solid var(--border);
+    border-radius:10px; padding:9px 12px;
+  }
+  .codebox code {
+    flex:1; font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:var(--code-text); word-break:break-all; white-space:pre-wrap;
+  }
+  .copy-btn {
+    flex:none; min-width:66px; cursor:pointer; font-size:13px;
+    color:var(--accent); background:var(--panel);
+    border:1px solid var(--border); border-radius:8px; padding:4px 12px;
+  }
+  .copy-btn:hover { border-color:var(--accent); }
+  .copy-btn.ok  { color:var(--ok);  background:var(--ok-weak);  border-color:var(--ok); }
+  .copy-btn.err { color:var(--err); background:var(--err-weak); border-color:var(--err); }
+
+  #english-summary p { font-size:14px; margin:8px 0; }
+  #english-summary b { color:var(--accent); }
+
+  footer {
+    border-top:1px solid var(--border); padding:14px 28px;
+    font-size:13px; color:var(--muted); text-align:center;
+  }
+
+  /* 真实窄窗口同样退化为单列 */
+  @media (max-width: 640px) {
+    .cards, .panes3 { grid-template-columns:1fr; }
+    #page { margin:12px 10px 40px; }
+    section, header#top, footer { padding-left:16px; padding-right:16px; }
+  }
+
+  #toast {
+    position:fixed; left:50%; bottom:30px; z-index:99;
+    transform:translateX(-50%) translateY(16px); opacity:0; pointer-events:none;
+    background:var(--err); color:#fff; font-size:14px;
+    padding:10px 18px; border-radius:10px; max-width:86vw;
+    transition:opacity .25s, transform .25s;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ===== 演示辅助控制条（评审用，非落地页内容） ===== -->
+<div id="demo-bar" role="toolbar" aria-label="演示辅助控制条">
+  <strong>演示辅助</strong>
+  <span class="dim">REQ-20260916-002 · 以下控制不属于落地页内容</span>
+  <label>主题
+    <select id="theme-sel" aria-label="切换主题">
+      <option value="auto" selected>跟随系统</option>
+      <option value="light">浅色</option>
+      <option value="dark">深色</option>
+    </select>
+  </label>
+  <label>视口
+    <select id="vp-sel" aria-label="切换视口">
+      <option value="wide" selected>桌面宽屏</option>
+      <option value="narrow">窄屏 ≈390px</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="sim-fail"> 模拟复制失败</label>
+  <span id="demo-status" class="state-idle">状态：初始（未操作）</span>
+  <span id="vp-tag">← 虚线框内为 ≈390px 窄屏模拟（单列布局）</span>
+  <span class="hint">落地页为纯静态展示页（无表单、无网络请求），故无加载/空数据状态；可演示状态集中在主题切换、视口布局与复制按钮的初始/成功/失败降级反馈。</span>
+</div>
+
+<!-- ===== 落地页演示本体 ===== -->
+<main id="page">
+
+  <header id="top">
+    <div class="brand">Agent Team Board<span class="sub">智能体团队看板</span></div>
+    <div class="top-actions">
+      <span id="vp-tag2"></span>
+      <span class="badge">v1.0.0</span>
+      <a class="anchor" href="#english-summary">English</a>
+    </div>
+  </header>
+
+  <section id="intro">
+    <h2>产品介绍<span class="en">What is it</span></h2>
+    <p class="lead">ZCode 插件：需求 / Bug 的文件化管理 + Agent TDD 开发流程 + 本地网页状态板。</p>
+    <div class="panes3">
+      <div class="pane"><b>Project Board</b><span>文件为事实源，随项目进 git，不依赖特定会话</span></div>
+      <div class="pane"><b>Discussion Board</b><span>/req /bug /dev /board 四命令 + skill 行为规范</span></div>
+      <div class="pane"><b>Status Board</b><span>本地网页状态板（127.0.0.1:8888），人机操作入口</span></div>
+    </div>
+  </section>
+
+  <section id="capabilities">
+    <h2>核心能力<span class="en">Capabilities</span></h2>
+    <div class="cards">
+      <div class="card">
+        <h3>文件化事实源</h3>
+        <p>docs/agent-team-board 随 git 版本化：人读 markdown，机器读写 status.json，任何会话可随时接续。</p>
+      </div>
+      <div class="card">
+        <h3>状态机人机分工</h3>
+        <p>单向流转，接受 / 确认完成仅限人工，PreToolUse 钩子确定性拦截 Agent 越权。</p>
+        <div class="flow"><code>submitted</code> → <code>accepted</code> → <code>in-progress</code> → <code>done</code></div>
+      </div>
+      <div class="card">
+        <h3>TDD 两阶段流程</h3>
+        <p>认领即实施：先写测试跑红，再实现跑绿，atb report 上报测试报告待人工确认。</p>
+      </div>
+      <div class="card">
+        <h3>批量开发 / 批量完善</h3>
+        <p>队列化批量推进多个需求 / Bug 的开发与文档完善，无需逐条值守。</p>
+      </div>
+      <div class="card">
+        <h3>构建 · 版本 · 发布</h3>
+        <p>dev / main 分支协作，版本计划合并后一键预检、构建、回验、发布。</p>
+      </div>
+      <div class="card">
+        <h3>待人工决策（hold）闭环</h3>
+        <p>开发中遇到需要人工拍板的问题即挂起并列出选项，决策后继续，不静默猜测。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="quickstart">
+    <h2>快速启动<span class="en">Quick start</span></h2>
+    <div class="step">
+      <div class="cap">1. 初始化看板（在项目根目录执行）</div>
+      <div class="codebox">
+        <code>node ~/plugins/agent-team-board/scripts/atb.mjs init</code>
+        <button class="copy-btn" type="button" data-copy>复制</button>
+      </div>
+      <div class="note">可选：执行 <code>node ~/plugins/agent-team-board/scripts/atb.mjs cli install</code> 安装终端命令后，可简写为 <code>atb …</code>。</div>
+    </div>
+    <div class="step">
+      <div class="cap">2. 启动 Status Board 本地服务</div>
+      <div class="codebox">
+        <code>node ~/plugins/agent-team-board/scripts/server.mjs</code>
+        <button class="copy-btn" type="button" data-copy>复制</button>
+      </div>
+      <div class="note">浏览器打开 <code>http://127.0.0.1:8888</code>，在看板上「接受 / 确认完成」。</div>
+    </div>
+  </section>
+
+  <section id="electron">
+    <h2>Electron 桌面 App<span class="en">Desktop app</span></h2>
+    <div class="step">
+      <div class="cap">开发运行</div>
+      <div class="codebox"><code>npm install &amp;&amp; npm run app</code>
+        <button class="copy-btn" type="button" data-copy>复制</button>
+      </div>
+    </div>
+    <div class="step">
+      <div class="cap">打包分发（mac dmg / win nsis）</div>
+      <div class="codebox"><code>npm run dist</code>
+        <button class="copy-btn" type="button" data-copy>复制</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="english-summary">
+    <h2>English Summary</h2>
+    <p><b>What.</b> Agent Team Board is a ZCode plugin that brings file-based requirement / bug management, an agent-driven TDD workflow, and a local web status board (Project Board / Discussion Board / Status Board).</p>
+    <p><b>Capabilities.</b> Files as the single source of truth (docs/agent-team-board, versioned with git); a one-way state machine where accept / done are human-only actions enforced by PreToolUse hooks; claim-and-implement two-phase TDD (tests red → code green → report); batch develop and batch refine; build → version plan → publish pipeline; a hold loop that pauses for human decisions instead of guessing.</p>
+    <p><b>Run.</b> Status Board: <code>node &lt;plugin&gt;/scripts/atb.mjs init</code>, then <code>node &lt;plugin&gt;/scripts/server.mjs</code> and open <code>http://127.0.0.1:8888</code> (optionally <code>atb cli install</code>). Desktop app: <code>npm install</code> then <code>npm run app</code>; package with <code>npm run dist</code> (macOS dmg / Windows nsis). Current release: 1.0.0.</p>
+    <p><a class="anchor" href="#top">↑ 返回中文顶部 / Back to top</a></p>
+  </section>
+
+  <footer>
+    Agent Team Board · 版本 1.0.0 · 本地优先 · 无外部依赖
+  </footer>
+
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var statusEl = $('#demo-status');
+  var toast = $('#toast');
+  var toastTimer = null;
+
+  function setStatus(kind, text) {
+    statusEl.className = 'state-' + kind;
+    statusEl.textContent = '状态：' + text;
+  }
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2800);
+  }
+
+  /* 主题切换：auto 跟随系统 prefers-color-scheme */
+  $('#theme-sel').addEventListener('change', function (e) {
+    document.documentElement.dataset.theme = e.target.value;
+    setStatus('idle', '主题 → ' + e.target.selectedOptions[0].text);
+  });
+
+  /* 视口切换：模拟窄屏单列布局 */
+  $('#vp-sel').addEventListener('change', function (e) {
+    var narrow = e.target.value === 'narrow';
+    document.body.classList.toggle('sim-narrow', narrow);
+    $('#vp-tag2').textContent = narrow ? '（窄屏模拟）' : '';
+    setStatus('idle', narrow ? '视口 → 窄屏 ≈390px（单列）' : '视口 → 桌面宽屏（双列）');
+    if (narrow) window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  /* 复制模拟失败开关：演示降级路径 */
+  var simFail = false;
+  $('#sim-fail').addEventListener('change', function (e) {
+    simFail = e.target.checked;
+    setStatus(simFail ? 'err' : 'idle',
+      simFail ? '复制模拟 → 失败（观察降级反馈）' : '复制模拟 → 真实剪贴板');
+  });
+
+  function selectText(el) {
+    var r = document.createRange();
+    r.selectNodeContents(el);
+    var s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  }
+
+  function failPath(btn, code) {
+    selectText(code);
+    btn.textContent = '复制失败';
+    btn.classList.remove('ok');
+    btn.classList.add('err');
+    setStatus('err', '复制失败 → 降级：已选中文本，请手动 ⌘C / Ctrl+C');
+    showToast('复制失败：已为你选中文本，请按 ⌘C / Ctrl+C 手动复制');
+    setTimeout(function () {
+      btn.textContent = '复制';
+      btn.classList.remove('err');
+    }, 1800);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (btn) {
+    btn.addEventListener('click', function () {
+      var code = btn.parentElement.querySelector('code');
+      var text = code.textContent.trim();
+      if (simFail) { failPath(btn, code); return; }
+      var done = function () {
+        btn.textContent = '已复制 ✓';
+        btn.classList.add('ok');
+        setStatus('ok', '复制成功（按钮短暂显示「已复制」后还原）');
+        setTimeout(function () {
+          btn.textContent = '复制';
+          btn.classList.remove('ok');
+        }, 1500);
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { failPath(btn, code); });
+      } else {
+        try {
+          selectText(code);
+          if (!document.execCommand('copy')) throw new Error('execCommand failed');
+          done();
+        } catch (e) { failPath(btn, code); }
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>
