@@ -1013,10 +1013,11 @@ const ATBBuild = (() => {
     rel.error = null;
     render();
     try {
-      const r = await fetch(`/api/product-release/state?project=${encodeURIComponent(state.project)}`);
+      const r = await fetch(`/api/build-publish/state?project=${encodeURIComponent(state.project)}`);
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       if (state.rel !== rel || rel.seq !== seq) return;
+      rel.config = data.config || {};
       rel.runs = (data.runs || []).filter((x) => x.bldId === v.id);
       rel.phase = 'ready';
       if (!rel.runs.some((x) => x.id === rel.runId)) rel.runId = rel.runs[0]?.id || null;
@@ -1038,12 +1039,13 @@ const ATBBuild = (() => {
     const v = selVersion();
     if (!rel || !v || rel.verId !== v.id) return;
     const seq = ++rel.detailSeq;
+    if (rel.runId !== id) rel.directoryActions = {};
     rel.runId = id;
     rel.detailPhase = 'loading';
     rel.detailError = null;
     render();
     try {
-      const r = await fetch(`/api/product-release/run/${encodeURIComponent(id)}?project=${encodeURIComponent(state.project)}`);
+      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(id)}?project=${encodeURIComponent(state.project)}`);
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       if (state.rel !== rel || rel.detailSeq !== seq) return;
@@ -1065,16 +1067,16 @@ const ATBBuild = (() => {
 
   // 发布动作（POST precheck / refreeze / start / retry / cancel）：显式点击触发；
   // 执行中 busy 禁用防重复；完成只刷新（重发 state + run 读取，不重复执行）
-  async function relAction(id, action) {
+  async function relAction(id, action, payload = {}) {
     const rel = state.rel;
     if (!rel || rel.busy || !id || !action) return;
     rel.busy = true;
     render();
     try {
-      const r = await fetch(`/api/product-release/run/${encodeURIComponent(id)}/${action}?project=${encodeURIComponent(state.project)}`, {
+      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(id)}/${action}?project=${encodeURIComponent(state.project)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify(payload),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `操作失败（${r.status}）`);
@@ -1092,7 +1094,7 @@ const ATBBuild = (() => {
     const rel = state.rel;
     if (!id || !state.project) return;
     try {
-      const r = await fetch(`/api/product-release/run/${encodeURIComponent(id)}/plan?project=${encodeURIComponent(state.project)}`);
+      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(id)}/plan?project=${encodeURIComponent(state.project)}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
       if (state.rel !== rel) return;
@@ -1111,9 +1113,11 @@ const ATBBuild = (() => {
   async function confirmRelStart() {
     const rel = state.rel;
     const id = rel?.planModal?.runId;
+    const token = rel?.planModal?.plan?.token;
+    if (!rel) return;
     rel.planModal = null;
     if (!id) return;
-    await relAction(id, 'start');
+    await relAction(id, 'start', { token });
   }
 
   function refreshReleasePane() {
@@ -1138,6 +1142,7 @@ const ATBBuild = (() => {
 
   async function doCreateRelease() {
     const rc = state.releaseConfirm;
+    const project = state.project;
     const view = $('#buildView');
     const v = findVersion(rc?.verId);
     if (!v || rc.busy) return;
@@ -1153,13 +1158,14 @@ const ATBBuild = (() => {
     render();
     try {
       const sep = state.project ? `?project=${encodeURIComponent(state.project)}` : '';
-      const r = await fetch(`/api/product-release/from-build${sep}`, {
+      const r = await fetch(`/api/build-publish/from-build${sep}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bldId: v.id, version }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `创建失败（${r.status}）`);
+      if (state.project !== project || state.releaseConfirm !== rc) return;
       state.releaseConfirm = null;
       const runId = data.run?.id || null;
       toast(`✓ 已创建产品发布 ${runId || ''}（草稿）：请在本页签预检并启动`);
@@ -1171,6 +1177,7 @@ const ATBBuild = (() => {
       if (runId) rel.runId = runId;
       render();
       await ensureReleaseData(true);
+      if (state.project === project && state.selVerId === v.id && runId) await relAction(runId, 'precheck');
     } catch (e) {
       rc.busy = false;
       rc.error = e.message;
@@ -1218,12 +1225,56 @@ const ATBBuild = (() => {
     const locked = v.status !== 'merged';
     return `<button type="button" class="btn small primary" data-rel-create data-ver-release="${esc(v.id)}"${locked
       ? ' disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"'
-      : ' title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"'}>创建发布</button>`;
+      : ' title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"'}>创建并预检</button>`;
+  }
+
+
+  // 构建发布操作区始终可见，缺配置和预检问题就近说明。
+  function renderPublishActions(v, rel) {
+    const run = rel?.detail?.run;
+    const configured = !!rel?.config?.homepageRepoRoot;
+    const ready = configured && !!run?.precheck?.ok && ['draft', 'failed', 'canceled'].includes(run?.status) && !rel?.busy;
+    const reason = !configured ? '请先配置官网仓库' : !run ? '请先创建并预检' : run.status === 'running' ? '发布中…' : run.status === 'succeeded' ? '已发布' : !run.precheck?.ok ? '请重新预检并处理阻塞项' : '';
+    return `<section class="bld-publish-actions"><strong>本版本发布</strong><p>
+      <button type="button" class="btn primary" data-rel-act="plan" data-rel-run="${esc(run?.id || '')}"${ready ? '' : ' disabled'}>${run?.status === 'running' ? '发布中…' : run?.status === 'succeeded' ? '已发布' : '发布'}</button>
+      ${relCreateBtnHtml(v)} <span class="muted">${esc(reason)}</span>
+      ${!configured ? '<button type="button" class="btn" data-publish-settings>前往设置</button>' : ''}</p></section>`;
+  }
+
+  function renderPublishDirectories(rel) {
+    const dirs = rel.detail.directories || {};
+    return `<section><h4>发布目录</h4><div style="display:flex;flex-wrap:wrap;gap:16px">${['webapp', 'site'].map(target => {
+      const d = dirs[target] || { reason: '未记录（待确认）' };
+      const action = rel.directoryActions?.[target];
+      return `<div style="flex:1 1 260px;min-width:0"><strong>${target === 'webapp' ? '构建物目录' : '官网目录'}</strong>
+        <p style="overflow-wrap:anywhere;user-select:text">${esc(d.path || d.reason)}</p>
+        ${d.repoRoot ? `<p style="overflow-wrap:anywhere">官网仓库根目录：${esc(d.repoRoot)}</p>` : ''}
+        <button type="button" class="btn small" data-publish-open="${target}"${d.available && !action?.busy ? '' : ' disabled'}>${action?.busy ? '正在打开…' : '在 Finder 中打开'}</button>
+        <p role="status">${esc(action?.message || (!d.available ? d.reason : '') || '')}</p></div>`;
+    }).join('')}</div></section>`;
+  }
+
+  async function openPublishDirectory(target) {
+    const rel = state.rel;
+    if (!rel?.runId || rel.directoryActions?.[target]?.busy) return;
+    rel.directoryActions ||= {};
+    rel.directoryActions[target] = { busy: true }; render();
+    try {
+      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(rel.runId)}/open?project=${encodeURIComponent(state.project)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || '打开失败');
+      rel.directoryActions[target] = { message: data.message };
+    } catch (e) { rel.directoryActions[target] = { message: e.message }; }
+    if (state.rel === rel) render();
+  }
+
+  function goPublishSettings() {
+    window.dispatchEvent(new CustomEvent('atb:publish-settings', { detail: { project: state.project, versionId: state.selVerId } }));
   }
 
   function renderReleasePane(v) {
     const rel = relOf(v);
-    const pane = (body) => `<div class="bld-rel-pane" data-rel-ver="${esc(v.id)}">${body}</div>`;
+    const pane = (body) => `<div class="bld-rel-pane" data-rel-ver="${esc(v.id)}">${renderPublishActions(v, rel)}${body}</div>`;
     if (!rel || rel.phase === 'loading') {
       return pane('<p class="muted" role="status">正在加载发布记录…</p>'); // 页签与版本选择仍可用，不以旧记录顶替
     }
@@ -1268,13 +1319,13 @@ const ATBBuild = (() => {
     const tgt = (label, t) => `<div class="bld-rel-target"><strong>${label}</strong> ${relStepChip(t?.status)}${t?.localUrl ? ` <a href="${esc(t.localUrl)}" target="_blank" rel="noreferrer">${esc(t.localUrl)}</a>` : ''}</div>`;
     const dis = rel.busy ? ' disabled' : '';
     const acts = [];
-    if (run.status === 'draft') {
+    if (['draft', 'failed', 'canceled'].includes(run.status)) {
       acts.push(`<button type="button" class="btn small" data-rel-act="precheck" data-rel-run="${esc(run.id)}"${dis}>预检</button>`);
       acts.push(`<button type="button" class="btn small" data-rel-act="refreeze" data-rel-run="${esc(run.id)}"${dis} title="main 已前进时按当前 main 重新冻结（旧预检失效后须重新预检）">重新冻结</button>`);
       acts.push(`<button type="button" class="btn small primary" data-rel-act="plan" data-rel-run="${esc(run.id)}"${run.precheck?.ok ? dis : ' disabled title="请先预检（预检不推送 / 不部署）"'}>预览发布计划</button>`);
     }
     if (run.status === 'failed') {
-      acts.push(`<button type="button" class="btn small warn" data-rel-act="retry" data-rel-run="${esc(run.id)}"${dis}>重试失败阶段</button>`);
+      acts.push(`<button type="button" class="btn small warn" data-rel-act="plan" data-rel-run="${esc(run.id)}"${dis}>重试失败阶段</button>`);
       acts.push(`<button type="button" class="btn small" data-rel-act="refreeze" data-rel-run="${esc(run.id)}"${dis}>重新冻结</button>`);
     }
     if (['prechecking', 'running'].includes(run.status)) {
@@ -1297,6 +1348,9 @@ const ATBBuild = (() => {
           ${tgt('官网与文档', run.targets?.site)}
         </div>
         ${run.status === 'failed' ? `<p class="meta err small" role="note">失败阶段：${esc(failed?.label || failed?.key || '未提供')}${errText ? `：${esc(String(errText))}` : ''}</p>` : ''}
+        ${renderPublishDirectories(rel)}
+        ${run.precheck ? `<div><strong>预检</strong>${run.precheck.stale ? '<p class="err">配置或冻结输入已变化，请重新预检</p>' : ''}<ul>${(run.precheck.checks || []).map(c => `<li>${esc(c.label)}：${c.ok ? '通过' : esc(c.detail || '未通过')}</li>`).join('')}</ul></div>` : ''}
+        <details><summary>执行日志</summary><pre>${esc((rel.detail.logs || []).map(x => `${x.at} ${x.message}`).join('\n'))}</pre></details>
         <div class="bld-rel-stages"><strong>阶段</strong>
           <ul>${stages.length ? stages.map((s) => `<li class="${s.status === 'failed' ? 'err' : ''}">${esc(s.label || s.key || '未提供')} ${relStepChip(s.status)}${s.status === 'failed' && (s.error?.message || s.error) ? `<span class="muted small">${esc(String(s.error?.message || s.error))}</span>` : ''}</li>`).join('') : '<li class="muted small">未提供</li>'}</ul>
         </div>
@@ -1320,7 +1374,7 @@ const ATBBuild = (() => {
           </div>
           <footer class="modal-foot">
             <button type="button" class="btn" id="bldRelPlanCancel">取消</button>
-            <button type="button" class="btn primary" id="bldRelPlanConfirm">确认启动发布</button>
+            <button type="button" class="btn primary" id="bldRelPlanConfirm">确认发布</button>
           </footer>
         </div>
       </div>`;
@@ -1472,7 +1526,7 @@ const ATBBuild = (() => {
       // 可见说明「请先完成合并入 main」；沿用 openReleaseConfirm 既有发布校验与核对弹层，
       // 按所在卡片版本绑定（data-ver-release 带卡片 id），不依赖右侧选中态。
       const releaseLocked = v.status !== 'merged';
-      const releaseBtn = `<button type="button" class="btn small primary bld-ver-release" data-ver-release="${esc(v.id)}"${releaseLocked ? ` disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"` : ` title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"`} aria-label="创建发布 ${esc(v.id)}">创建发布</button>`;
+      const releaseBtn = `<button type="button" class="btn small primary bld-ver-release" data-ver-release="${esc(v.id)}"${releaseLocked ? ` disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"` : ` title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"`} aria-label="创建发布 ${esc(v.id)}">创建并预检</button>`;
       // BUG-20260915-014：「查看发布记录」就地激活所在卡片版本的发布页签（不跳隐藏模块）
       const releaseViewBtn = `<button type="button" class="btn small bld-ver-release-view" data-ver-release-view="${esc(v.id)}" title="在当前版本详情的「发布」页签查看本版本的发布记录" aria-label="查看发布记录 ${esc(v.id)}">查看发布记录</button>`;
       // REQ-20260913-004 删除键：排在两键之后、quiet 危险弱化样式（不抢主操作）；
@@ -2139,6 +2193,8 @@ const ATBBuild = (() => {
         else relAction(id, act);
       });
     }
+    for (const el of view.querySelectorAll('[data-publish-open]')) el.addEventListener('click', () => openPublishDirectory(el.dataset.publishOpen));
+    for (const el of view.querySelectorAll('[data-publish-settings]')) el.addEventListener('click', goPublishSettings);
     q('#bldRelRetry')?.addEventListener('click', () => ensureReleaseData(true));
     q('[data-rel-detail-retry]')?.addEventListener('click', () => { if (state.rel?.runId) fetchRelDetail(state.rel.runId); });
     q('#bldRelPlanCancel')?.addEventListener('click', closeRelPlan);
@@ -2178,7 +2234,7 @@ const ATBBuild = (() => {
     openReleaseConfirm, doCreateRelease,
     // BUG-20260915-014：详情「概况 / 发布」页签与发布记录接缝（测试与就地查看 / 动作交互）
     setDetailTab, openReleaseTab, selectReleaseRun, relAction,
-    openRelPlan, confirmRelStart, refreshReleasePane,
+    openRelPlan, confirmRelStart, refreshReleasePane, openPublishDirectory,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };

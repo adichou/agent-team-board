@@ -942,6 +942,16 @@ const EN = {
   '未知错误': 'unknown error',
   '任务完成但未返回结论': 'Task finished without a conclusion',
   '确认任务仍在运行：进度见任务页卡片，完成后结论自动回填（本面板稍后自动刷新）': 'The confirmation task is still running: see the progress on the tasks-page card; the conclusion is filled in automatically when it finishes (this panel refreshes shortly)',
+  // BUG-20260916-001 设置页「官网仓库」全局共享配置区（静态文案）
+  '官网仓库': 'Website repository',
+  '所有项目全局共享。修改会影响所有项目后续预检，旧预检失效；历史运行目录快照保持原值。': 'Shared globally across all projects. Changes affect subsequent prechecks in every project and invalidate old ones; directory snapshots of past runs keep their original values.',
+  '官网仓库根目录': 'Website repository root directory',
+  '完整绝对路径': 'full absolute path',
+  '产品子目录自动取项目名；仓库须可访问并具有 main 分支。': 'The product subdirectory is derived from the project name automatically; the repository must be accessible and have a main branch.',
+  '正在读取官网配置…': 'Loading website configuration…',
+  '重新读取': 'Reload',
+  '返回发布': 'Back to release',
+  '已保存。旧预检已失效，请返回发布重新预检。': 'Saved. Previous prechecks are now stale — go back to the release tab and precheck again.',
 };
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
@@ -969,6 +979,9 @@ const EN_DYNAMIC = {
   '✕ 发布计划读取失败：◇': '✕ Failed to load the release plan: $1',
   '失败阶段：◇': 'Failed stage: $1',
   '失败阶段：◇：◇': 'Failed stage: $1: $2',
+  // BUG-20260916-001 设置页官网配置读取/保存失败反馈（动态拼接）
+  '官网配置读取失败：◇': 'Failed to load the website configuration: $1',
+  '保存失败：◇': 'Save failed: $1',
   // BUG-20260914-017：分支同步 toast 拼接句（成功 / 部分失败 × 有无 main 跳过注记四种形态；
   // main 注记按服务端 skipped 数据拼接，本地无 main 时不带注记维持原口径）
   '✓ 已同步远端：fetch 完成，已推送 ◇ → ◇；main 已跳过，请通过发布流程推送': '✓ Remote synced: fetch done, pushed $1 → $2; main skipped — push it through the release process',

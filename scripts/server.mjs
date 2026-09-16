@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { buildPublishApi } from './lib/build-publish-api.mjs';
 // Status Board 本地服务 —— 零依赖 Node http，默认端口 8888。
 // 单服务多项目：所有数据 API 支持 ?project=<项目根绝对路径>，
 // 未传时用默认项目（注册表第一项，首启以启动目录播种）。
@@ -3352,6 +3353,11 @@ async function handleApi(req, res, u, pathname) {
   }
 
   // REQ-20260913-001 构建模块：版本计划（合并入 main）与分支浏览同步（不进 REQ/BUG 状态机）
+  if (pathname.startsWith('/api/build-publish')) {
+    const body = req.method === 'POST' ? JSON.parse((await readBody(req)) || '{}') : {};
+    return sendJson(res, 200, await buildPublishApi({ method: req.method, pathname, body, root, dataDir }));
+  }
+
   if (pathname.startsWith('/api/build')) {
     const r = await handleBuildApi(req, res, u, pathname, root, dataDir);
     if (r !== null) return r;

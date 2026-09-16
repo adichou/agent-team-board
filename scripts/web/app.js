@@ -7963,13 +7963,66 @@ async function refreshGitState() {
 // 重启后自动继续 / 允许非 Git 项目执行五控件、保存按钮与密钥说明），仅保留「批量任务」分区。
 // 服务端 /api/dispatch/settings 与派发消费逻辑不在本单范围：仍读取既有落盘配置，不清空、不改执行行为。
 // REQ-20260911-009：并列新增「Git 工作流」分区（dev 分支初始化）。
+// BUG-20260916-001：官网配置全局共享，独立于项目发布记录。
+const homepageSettings = { value: '', loaded: false, busy: false, error: null, message: '', source: null, seq: 0 };
+window.addEventListener('atb:publish-settings', (event) => {
+  homepageSettings.source = event.detail;
+  setView('settings');
+});
+function homepageSettingsHtml() {
+  const h = homepageSettings;
+  return `<section class="cx-config homepage"><h4>官网仓库</h4>
+    <p>所有项目全局共享。修改会影响所有项目后续预检，旧预检失效；历史运行目录快照保持原值。</p>
+    ${!h.loaded && !h.error ? '<p role="status">正在读取官网配置…</p>' : ''}
+    <label class="field">官网仓库根目录<input id="homepageRoot" value="${esc(h.value)}" placeholder="完整绝对路径"${!h.loaded || h.busy ? ' disabled' : ''}></label>
+    <p>产品子目录自动取项目名；仓库须可访问并具有 main 分支。</p>
+    <button type="button" class="btn primary" id="homepageSave"${!h.loaded || h.busy ? ' disabled' : ''}>${h.busy ? '保存中…' : '保存'}</button>
+    ${h.error ? '<button type="button" class="btn" id="homepageRetry">重新读取</button>' : ''}
+    ${h.source ? '<button type="button" class="btn" id="homepageReturn">返回发布</button>' : ''}
+    <p role="status">${esc(h.error || h.message)}</p></section>`;
+}
+async function loadHomepageSettings() {
+  const h = homepageSettings, seq = ++h.seq;
+  h.error = null;
+  try {
+    const r = await api('/api/build-publish/config');
+    if (seq !== h.seq) return;
+    h.value = r.config.homepageRepoRoot; h.loaded = true;
+  } catch (e) { if (seq === h.seq) h.error = `官网配置读取失败：${e.message}`; }
+}
+function bindHomepageSettings(view) {
+  const h = homepageSettings;
+  view.querySelector('#homepageRoot')?.addEventListener('input', (e) => { h.value = e.target.value; h.message = '有未保存的更改'; });
+  view.querySelector('#homepageRetry')?.addEventListener('click', async () => { await loadHomepageSettings(); paintSettingsView(view); });
+  view.querySelector('#homepageSave')?.addEventListener('click', async () => {
+    if (h.busy) return;
+    h.value = view.querySelector('#homepageRoot').value; h.busy = true; h.error = null;
+    paintSettingsView(view);
+    try {
+      const r = await api('/api/build-publish/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ homepageRepoRoot: h.value }) });
+      h.value = r.config.homepageRepoRoot; h.message = '已保存。旧预检已失效，请返回发布重新预检。';
+    } catch (e) { h.error = `保存失败：${e.message}`; }
+    h.busy = false; paintSettingsView(view);
+  });
+  view.querySelector('#homepageReturn')?.addEventListener('click', async () => {
+    const source = h.source;
+    if (!source) return;
+    if (state.project !== source.project) await switchProject(source.project);
+    setView('build');
+    await window.ATBBuild?.openReleaseTab(source.versionId);
+    await window.ATBBuild?.refreshReleasePane();
+  });
+}
+
 function paintSettingsView(view) {
   view.innerHTML = `
     <div class="drawer-body settings-body">
+      ${homepageSettingsHtml()}
       ${taskSettingsAreaHtml()}
       ${gitWorkflowAreaHtml()}
     </div>`;
   bindSettingsView(view);
+  bindHomepageSettings(view);
 }
 
 async function renderSettingsView() {
@@ -7980,6 +8033,7 @@ async function renderSettingsView() {
   state.tasks.loading = true;
   state.git.loading = true;
   paintSettingsView(view);
+  const homepageLoad = loadHomepageSettings();
   const gitLoad = refreshGitState(); // REQ-20260911-009：Git 状态与任务设置并行加载
   try {
     if (!state.codex.settings) state.codex.settings = (await api('/api/dispatch/settings')).settings;
@@ -7991,6 +8045,7 @@ async function renderSettingsView() {
   }
   await ensureTaskSettings(true); // REQ-20260908-020：批量任务分区随设置视图实时读取（失败记录于 state.tasks.error）
   await gitLoad;
+  await homepageLoad;
   paintSettingsView(view); // 阶段二：就绪渲染隐藏开关（或失败态错误 + 重试）
 }
 
