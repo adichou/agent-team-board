@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260917-001 演示 — 版本计划发布后左侧列表未显示「已发布」标签</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --panel-2: #fafbfc; --border: #e2e5ea;
+    --text: #1f2328; --muted: #6a737d; --link: #0969da;
+    --ok-bg: rgba(26, 137, 23, 0.12); --ok-text: #1a7f1a;
+    --warn: #dc2626; --info-bg: rgba(9, 105, 218, 0.12); --info-text: #0969da;
+    --inprogress: #b45309; --wait-bg: rgba(217, 119, 6, 0.12);
+    --btn: #ffffff; --btn-border: #d0d7de; --primary: #1f6feb; --primary-text: #ffffff;
+    --err-bg: rgba(220, 38, 38, 0.08);
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2129; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --link: #58a6ff;
+    --ok-bg: rgba(63, 185, 80, 0.18); --ok-text: #3fb950;
+    --warn: #f85149; --info-bg: rgba(88, 166, 255, 0.16); --info-text: #58a6ff;
+    --inprogress: #d29922; --wait-bg: rgba(187, 128, 9, 0.2);
+    --btn: #21262d; --btn-border: #30363d; --primary: #238636; --primary-text: #ffffff;
+    --err-bg: rgba(248, 81, 73, 0.12);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  header.top { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header.top h1 { margin: 0 0 4px; font-size: 17px; }
+  header.top .sub { color: var(--muted); font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--btn-border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--btn-border);
+    background: var(--btn); color: var(--text); padding: 4px 12px; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  button.small { padding: 2px 8px; font-size: 12px; border-radius: 5px; }
+  button.quiet { color: var(--muted); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .seg button.on { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .note-banner { margin: 10px 20px 0; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+    border: 1px dashed var(--btn-border); background: var(--panel-2); }
+  .note-banner.bug-on { border-color: var(--warn); background: var(--err-bg); }
+  main.wrap { display: grid; grid-template-columns: minmax(320px, 5fr) minmax(340px, 6fr);
+    gap: 14px; padding: 14px 20px 40px; align-items: start; }
+  @media (max-width: 900px) { main.wrap { grid-template-columns: 1fr; } }
+  .col { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .col h2 { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+    background: var(--panel-2); cursor: pointer; transition: border-color .15s; }
+  .card:hover { border-color: var(--link); }
+  .card.sel { border-color: var(--link); box-shadow: 0 0 0 1px var(--link); }
+  .card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card .t strong { font-size: 14px; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .card .meta.err { color: var(--warn); }
+  .card-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .bugflag { font-size: 12px; color: var(--warn); border: 1px dashed var(--warn); border-radius: 6px;
+    padding: 1px 6px; background: var(--err-bg); }
+  .st { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .st-ok { background: var(--ok-bg); color: var(--ok-text); }
+  .st-fail { background: rgba(220, 38, 38, .1); color: var(--warn); }
+  .st-run { background: var(--info-bg); color: var(--info-text); }
+  .st-wait { background: var(--wait-bg); color: var(--inprogress); }
+  .st-mute { background: var(--panel); color: var(--muted); border: 1px solid var(--border); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .empty { padding: 18px 8px; text-align: center; color: var(--muted); }
+  .detail-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .detail-tabs button { border: none; background: none; border-radius: 6px 6px 0 0; color: var(--muted); padding: 6px 14px; }
+  .detail-tabs button.active { color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--link); }
+  section.block { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel-2); }
+  section.block h4 { margin: 0 0 6px; font-size: 13px; }
+  dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 13px; }
+  dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+  .rel-list .card { cursor: default; }
+  .rel-list .card.pick { cursor: pointer; }
+  .rel-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .rel-split { grid-template-columns: 1fr; } }
+  .form-err { color: var(--warn); background: var(--err-bg); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .modal-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex;
+    align-items: center; justify-content: center; z-index: 30; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    width: min(440px, 92vw); padding: 16px; }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal ul { margin: 6px 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  .modal label.field { display: block; margin: 10px 0 4px; font-size: 13px; }
+  .modal input { width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--btn-border);
+    background: var(--panel); color: var(--text); font: inherit; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--info-text);
+    border-top-color: transparent; border-radius: 50%; animation: spin 1s steps(8) infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18); z-index: 40; font-size: 13px; }
+  .toast.ok { border-color: var(--ok-text); }
+  .toast.err { border-color: var(--warn); }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>BUG-20260917-001 演示 — 版本计划发布后，左侧列表未显示「已发布」标签</h1>
+  <p class="sub">还原看板「构建 → 版本计划」左右两栏。核心对照：发布成功后，左侧版本卡片标签是否随之为「已发布」。</p>
+  <div class="toolbar">
+    <span class="seg" id="modeSeg" role="group" aria-label="缺陷/修复对照模式">
+      <button type="button" data-mode="bug" class="on">缺陷现状</button>
+      <button type="button" data-mode="fixed">期望修复后</button>
+    </span>
+    <button type="button" id="btnDemo">▶ 一键演示发布流程</button>
+    <span style="width:1px;height:22px;background:var(--border)"></span>
+    <span class="muted small">状态反馈演示：</span>
+    <button type="button" class="small" id="stNormal">正常</button>
+    <button type="button" class="small" id="stEmpty">空态</button>
+    <button type="button" class="small" id="stLoading">加载中</button>
+    <button type="button" class="small" id="stError">读取失败</button>
+    <button type="button" class="small quiet" id="btnTheme">深浅色切换</button>
+  </div>
+</header>
+<div class="note-banner" id="banner"></div>
+<main class="wrap">
+  <div class="col" id="leftCol" aria-label="版本计划列表"></div>
+  <div class="col" id="rightCol" aria-label="版本详情"></div>
+</main>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- 状态 ----------
+  var state = {
+    mode: 'bug',            // bug = 缺陷现状；fixed = 期望修复后
+    view: 'normal',         // normal | empty | loading | error
+    detailTab: 'overview',  // overview | release
+    selId: null,
+    versions: [
+      { id: 'BLD-20260917-001', name: 'v1.2.0 看板发布修复', status: 'merged', items: 3, updatedAt: '今天 14:02', runs: [] },
+      { id: 'BLD-20260916-002', name: 'v1.1.3 筛选优化', status: 'draft', items: 2, updatedAt: '昨天 10:11', runs: [] },
+      { id: 'BLD-20260915-003', name: 'v1.1.2 发布页签', status: 'merged', items: 5, updatedAt: '09-15 18:40', runs: [
+        { id: 'PREL-20260915-011', version: '1.1.2', status: 'succeeded',
+          targets: { webapp: 'done', site: 'done' }, note: '历史记录：演示用预置数据' }
+      ] }
+    ]
+  };
+  var VER_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', failed: '失败' };
+  var VER_CLS = { draft: 'st-mute', merging: 'st-run', merged: 'st-ok', failed: 'st-fail' };
+  var REL_LABEL = { draft: '草稿', prechecking: '预检', running: '进行中', succeeded: '已发布', failed: '失败', canceled: '已取消' };
+  function relCls(s) {
+    return s === 'succeeded' ? 'st-ok' : s === 'failed' ? 'st-fail'
+      : (s === 'running' || s === 'prechecking') ? 'st-run' : 'st-mute';
+  }
+  function chip(cls, text) { return '<span class="st ' + cls + '">' + text + '</span>'; }
+  function relChip(s) { return chip(relCls(s), REL_LABEL[s] || s); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(sel, root) { return (root || document).querySelector(sel); }
+
+  // 左侧卡片标签：本 Bug 核心 —— fixed 模式下版本存在 succeeded 运行则显示「已发布」
+  function cardChip(v) {
+    var released = v.runs.some(function (r) { return r.status === 'succeeded'; });
+    if (state.mode === 'fixed' && released) return chip('st-ok', '已发布');
+    return chip(VER_CLS[v.status] || 'st-mute', VER_LABEL[v.status] || v.status);
+  }
+
+  // ---------- 渲染：左侧列表 ----------
+  function renderLeft() {
+    var col = $('#leftCol');
+    var html = '<h2>构建 · 版本计划（左侧列表）</h2>';
+    if (state.view === 'empty') {
+      col.innerHTML = html + '<div class="empty">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
+      return;
+    }
+    html += state.versions.map(function (v) {
+      var released = v.runs.some(function (r) { return r.status === 'succeeded'; });
+      var flag = (state.mode === 'bug' && released)
+        ? ' <span class="bugflag">缺陷：已发布成功，此卡片仍只显示「已合并」</span>' : '';
+      var mergeBtn = '<button type="button" class="small primary" data-act="merge" data-id="' + esc(v.id) + '"'
+        + (v.status === 'merged' ? ' disabled title="已合并入 main"' : '') + '>' + (v.status === 'failed' ? '重试合并入 main' : '合并入 main') + '</button>';
+      var relBtn = '<button type="button" class="small primary" data-act="release" data-id="' + esc(v.id) + '"'
+        + (v.status !== 'merged' ? ' disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"' : '')
+        + ' aria-label="创建发布 ' + esc(v.id) + '">创建并预检</button>';
+      var viewBtn = '<button type="button" class="small" data-act="viewrel" data-id="' + esc(v.id) + '">查看发布记录</button>';
+      return '<div class="card' + (v.id === state.selId ? ' sel' : '') + '" data-ver="' + esc(v.id) + '" role="button" tabindex="0">'
+        + '<div class="t"><strong>' + esc(v.name) + '</strong> ' + cardChip(v) + flag + '</div>'
+        + '<div class="meta">' + esc(v.id) + ' · ' + v.items + ' 个关联单 · 更新 ' + esc(v.updatedAt) + '</div>'
+        + '<div class="card-acts"><button type="button" class="small" data-act="answer" data-id="' + esc(v.id) + '"'
+        + (v.status === 'merging' || v.status === 'merged' ? ' disabled title="已合并入 main，不允许再 AI 完善"' : '')
+        + '>AI 完善</button>' + mergeBtn + relBtn + viewBtn
+        + '<button type="button" class="small quiet" data-act="del" data-id="' + esc(v.id) + '"'
+        + (v.status === 'merging' ? ' disabled title="合并中，不可删除"' : '') + '>删除</button></div></div>';
+    }).join('');
+    col.innerHTML = html;
+  }
+
+  // ---------- 渲染：右侧详情 ----------
+  function findVer(id) { return state.versions.find(function (v) { return v.id === id; }) || null; }
+
+  function renderRight() {
+    var col = $('#rightCol');
+    if (state.view === 'empty') {
+      col.innerHTML = '<h2>版本详情</h2><div class="empty">（空态：无版本可选中）</div>';
+      return;
+    }
+    var v = findVer(state.selId) || state.versions[0];
+    if (!v) { col.innerHTML = '<h2>版本详情</h2><div class="empty">请选择左侧版本</div>'; return; }
+    state.selId = v.id;
+    var html = '<h2>版本详情 — ' + esc(v.id) + '</h2>'
+      + '<div class="detail-tabs">'
+      + '<button type="button" data-tab="overview" class="' + (state.detailTab === 'overview' ? 'active' : '') + '">概况</button>'
+      + '<button type="button" data-tab="release" class="' + (state.detailTab === 'release' ? 'active' : '') + '">发布</button></div>';
+    html += state.detailTab === 'release' ? renderReleasePane(v) : renderOverview(v);
+    col.innerHTML = html;
+  }
+
+  function renderOverview(v) {
+    var released = v.runs.some(function (r) { return r.status === 'succeeded'; });
+    return '<section class="block"><dl class="kv">'
+      + '<dt>版本编号</dt><dd>' + esc(v.id) + '</dd>'
+      + '<dt>显示名</dt><dd>' + esc(v.name) + '</dd>'
+      + '<dt>计划状态</dt><dd>' + chip(VER_CLS[v.status], VER_LABEL[v.status]) + '</dd>'
+      + '<dt>关联单数</dt><dd>' + v.items + '</dd>'
+      + '<dt>更新时间</dt><dd>' + esc(v.updatedAt) + '</dd></dl>'
+      + (state.mode === 'bug' && released
+        ? '<p class="form-err" style="margin-top:8px">缺陷对照：该版本已发布成功，但左侧列表卡片未显示「已发布」标签。</p>' : '')
+      + '</section>'
+      + '<p class="muted small">概况页签仅展示版本计划自身状态；发布状态见「发布」页签。</p>';
+  }
+
+  function renderReleasePane(v) {
+    if (state.view === 'loading') {
+      return '<p class="muted"><span class="spin"></span> 正在加载发布记录…</p>';
+    }
+    if (state.view === 'error') {
+      return '<p class="form-err" role="alert">发布记录读取失败：模拟网络错误（演示失败态）</p>'
+        + '<p><button type="button" class="small" id="btnRetry">重试</button> '
+        + '<span class="muted small">重试只重新读取记录，不执行任何发布操作。</span></p>';
+    }
+    var released = v.runs.some(function (r) { return r.status === 'succeeded'; });
+    var runBtn = '<button type="button" class="primary small" data-act="startrun" data-id="' + esc(v.id) + '"'
+      + (v.status !== 'merged' ? ' disabled title="请先完成合并入 main"' : (released ? ' disabled title="已发布"' : '')) + '>'
+      + (released ? '已发布' : '发布') + '</button>';
+    var createBtn = '<button type="button" class="primary small" data-act="release" data-id="' + esc(v.id) + '"'
+      + (v.status !== 'merged' ? ' disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"' : '') + '>创建并预检</button>';
+    var reason = v.status !== 'merged' ? '请先完成合并入 main'
+      : released ? '已发布' : v.runs.length ? '可启动发布（演示：点击「发布」）' : '请先创建并预检';
+    var head = '<section class="block"><h4>本版本发布</h4><p>' + runBtn + ' ' + createBtn
+      + ' <span class="muted small">' + esc(reason) + '</span></p>'
+      + '<p class="muted small">发布目标：Web App 与官网/用户文档；源码 main/dev 双分支同步为必经前置。</p></section>';
+    if (!v.runs.length) {
+      return head + '<p class="muted">当前版本暂无发布记录</p>';
+    }
+    var cards = v.runs.slice().reverse().map(function (r) {
+      return '<div class="card pick" data-run="' + esc(r.id) + '">'
+        + '<div class="t"><strong>' + esc(r.id) + '</strong> ' + relChip(r.status) + '</div>'
+        + '<div class="meta">v' + esc(r.version) + ' · Web App ' + esc(r.targets.webapp === 'done' ? '完成' : r.targets.webapp === 'running' ? '部署中…' : '待执行')
+        + ' · 官网 ' + esc(r.targets.site === 'done' ? '上线' : r.targets.site === 'running' ? '上线中…' : '待执行') + '</div>'
+        + (r.note ? '<div class="meta">' + esc(r.note) + '</div>' : '') + '</div>';
+    }).join('');
+    return head + '<div class="rel-list">' + cards + '</div>'
+      + '<p class="muted small">发布页签内的运行卡片始终显示发布状态（含「已发布」）；本 Bug 的问题在于左侧列表卡片缺少该标识。</p>';
+  }
+
+  function render() {
+    renderLeft();
+    renderRight();
+    renderBanner();
+  }
+  function renderBanner() {
+    var b = $('#banner');
+    if (state.mode === 'bug') {
+      b.className = 'note-banner bug-on';
+      b.textContent = '当前：缺陷现状 — 发布成功后，左侧版本卡片仍只显示「已合并」，看不到「已发布」（须逐个点开「发布」页签确认）。';
+    } else {
+      b.className = 'note-banner';
+      b.textContent = '当前：期望修复后 — 该版本存在发布成功（succeeded）的运行时，左侧卡片显示绿色「已发布」标签。';
+    }
+  }
+
+  // ---------- 交互 ----------
+  function selectVer(id, tab) {
+    state.selId = id;
+    if (tab) state.detailTab = tab;
+    state.view = 'normal';
+    render();
+  }
+  function toast(msg, cls) {
+    var t = document.createElement('div');
+    t.className = 'toast ' + (cls || '');
+    t.textContent = msg;
+    $('#toastRoot').appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+
+  // 发布流程模拟：草稿 → 预检 → 运行（目标逐个完成）→ 已发布
+  function runRelease(v, version) {
+    var run = { id: 'PREL-20260917-0' + (v.runs.length + 1) + '（演示）', version: version || '1.2.0',
+      status: 'draft', targets: { webapp: 'pending', site: 'pending' }, note: '' };
+    v.runs.push(run);
+    state.detailTab = 'release'; state.view = 'normal'; state.selId = v.id;
+    render();
+    var steps = [
+      function () { run.status = 'prechecking'; run.note = '预检通过（不推送 / 不部署）'; },
+      function () { run.status = 'running'; run.targets.webapp = 'running'; run.note = '源码双分支同步完成，Web App 部署中…'; },
+      function () { run.targets.webapp = 'done'; run.targets.site = 'running'; run.note = 'Web App 已部署，官网上线中…'; },
+      function () { run.targets.site = 'done'; run.status = 'succeeded'; run.note = '两目标 + 源码同步全部通过 → 整体已发布'; }
+    ];
+    var i = 0;
+    var timer = setInterval(function () {
+      if (!findVer(v.id)) { clearInterval(timer); return; } // 版本被删除等场景兜底
+      steps[i](); i++;
+      render();
+      if (i >= steps.length) {
+        clearInterval(timer);
+        if (state.mode === 'bug') {
+          toast('发布成功：但左侧卡片仍显示「已合并」（缺陷现象）', 'err');
+        } else {
+          toast('发布成功：左侧卡片已显示「已发布」', 'ok');
+        }
+      }
+    }, 900);
+  }
+
+  // 创建发布弹窗（核对口径与真实弹层一致：填发行版本号）
+  function openReleaseModal(verId, autoGo) {
+    var v = findVer(verId); if (!v) return;
+    var root = $('#modalRoot');
+    root.innerHTML = '<div class="modal-wrap" id="relWrap" role="dialog" aria-label="创建产品发布">'
+      + '<div class="modal"><h3>创建产品发布（' + esc(v.id) + '）</h3>'
+      + '<p class="muted small">版本「<strong>' + esc(v.name) + '</strong>」已合并 main，将创建产品发布草稿：</p>'
+      + '<ul><li>自动带入：产品、' + esc(v.id) + '、版本名称与描述、' + v.items + ' 个关联条目与 commit、合并证据</li>'
+      + '<li>发布目标：Web App 与官网/用户文档（两个必备目标）；源码 main/dev 双分支原子推送为必经前置</li></ul>'
+      + '<label class="field">发行版本号（与版本显示名分开）<input id="relVersion" value="1.2.0" placeholder="1.2.0（实际对外发行号）"></label>'
+      + '<p class="muted small">创建即冻结 main/dev 分支头与远端目标；预检通过并预览计划后才启动执行。</p>'
+      + '<div class="modal-foot"><button type="button" id="relCancel">取消</button>'
+      + '<button type="button" class="primary" id="relGo">创建发布草稿</button></div></div></div>';
+    $('#relCancel').onclick = function () { root.innerHTML = ''; };
+    $('#relWrap').onclick = function (e) { if (e.target.id === 'relWrap') root.innerHTML = ''; };
+    $('#relGo').onclick = function () {
+      var ver = $('#relVersion').value.trim() || '1.2.0';
+      root.innerHTML = '';
+      toast('已创建产品发布草稿（演示）');
+      runRelease(v, ver);
+      if (autoGo) autoGo();
+    };
+  }
+
+  // 事件委托
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-ver], [data-act], [data-tab], #btnRetry, button[data-mode]');
+    if (!el) return;
+    if (el.hasAttribute('data-mode')) {
+      state.mode = el.getAttribute('data-mode');
+      document.querySelectorAll('#modeSeg button').forEach(function (b) { b.classList.toggle('on', b === el); });
+      render();
+      return;
+    }
+    if (el.id === 'btnRetry') { // 失败态重试 → 加载 → 正常
+      state.view = 'loading'; render();
+      setTimeout(function () { state.view = 'normal'; render(); toast('重试成功：发布记录已恢复'); }, 800);
+      return;
+    }
+    if (el.hasAttribute('data-tab')) {
+      state.detailTab = el.getAttribute('data-tab');
+      state.view = 'normal'; render();
+      return;
+    }
+    if (el.hasAttribute('data-ver')) { selectVer(el.getAttribute('data-ver')); return; }
+    var act = el.getAttribute('data-act');
+    var id = el.getAttribute('data-id');
+    var v = findVer(id);
+    if (!v) return;
+    if (act === 'viewrel') selectVer(id, 'release');
+    else if (act === 'release') { if (!el.disabled) openReleaseModal(id); }
+    else if (act === 'startrun') {
+      if (el.disabled) return;
+      var last = v.runs[v.runs.length - 1];
+      if (last && last.status === 'draft') runRelease(v, last.version);
+    } else if (act === 'merge') { if (!el.disabled) { v.status = 'merged'; v.updatedAt = '刚刚'; render(); toast('演示：合并入 main 完成'); } }
+    else if (act === 'del') { if (!el.disabled) { state.versions = state.versions.filter(function (x) { return x.id !== id; }); if (state.selId === id) state.selId = null; render(); toast('演示：版本已删除'); } }
+    else if (act === 'answer') { if (!el.disabled) toast('演示：AI 完善（已合并版本禁用）'); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      var card = e.target.closest && e.target.closest('[data-ver]');
+      if (card) selectVer(card.getAttribute('data-ver'));
+    }
+  });
+
+  // 顶栏按钮
+  $('#btnDemo').onclick = function () {
+    var v = state.versions.find(function (x) { return x.status === 'merged' && !x.runs.some(function (r) { return r.status === 'succeeded'; }); })
+      || state.versions.find(function (x) { return x.status === 'merged'; });
+    if (!v) { toast('没有可演示的已合并版本', 'err'); return; }
+    openReleaseModal(v.id);
+  };
+  $('#stNormal').onclick = function () { state.view = 'normal'; render(); };
+  $('#stEmpty').onclick = function () { state.view = 'empty'; render(); };
+  $('#stLoading').onclick = function () {
+    state.view = 'loading'; render();
+    setTimeout(function () { if (state.view === 'loading') { state.view = 'normal'; render(); } }, 1600);
+  };
+  $('#stError').onclick = function () {
+    state.detailTab = 'release'; state.view = 'error'; render();
+  };
+  $('#btnTheme').onclick = function () {
+    var cur = document.documentElement.getAttribute('data-theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  };
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+
+  // 初始化：默认选中演示主角版本
+  state.selId = state.versions[0].id;
+  render();
+})();
+</script>
+</body>
+</html>

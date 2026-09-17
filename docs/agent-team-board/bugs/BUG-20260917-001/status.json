@@ -1,0 +1,54 @@
+{
+  "id": "BUG-20260917-001",
+  "type": "bug",
+  "title": "版本计划发布后，左侧的列表中没有显示版本计划已发布的标签",
+  "status": "in-progress",
+  "parent": null,
+  "owner": "atb-0917-823b",
+  "createdAt": "2026-09-17T05:28:23.711Z",
+  "updatedAt": "2026-09-17T07:30:39.975Z",
+  "agentCompletedAt": "2026-09-17T07:30:39.975Z",
+  "lastReport": {
+    "at": "2026-09-17T07:30:39.975Z",
+    "coverage": 85,
+    "framework": "Node assert + vm 桩 DOM + 真实 server HTTP（run-all 自研 harness）",
+    "summary": "发布成功后左侧版本卡片显示绿色「已发布」：/api/build/state 按版本附 release 汇总（build-publish-store 新增 publishedByBld：任一 succeeded 运行即 published，取最新成功运行 runId/version；读取异常降级 null 不阻塞），build.js 卡片标签经 versionChip 在 published 时替换为 st-ok「已发布」（title 带运行编号，未发布保持四态与按钮规则），发布动作/刷新状态完成后追加 refresh() 使标识免手动刷新页面联动；详情概况与发布页签行为不变。引入来源归因 BUG-20260916-001（atb list 核验）。新增 7 用例先红后绿，全量 264 测试文件 0 失败",
+    "runId": "run-20260917-269"
+  },
+  "history": [
+    {
+      "at": "2026-09-17T05:28:23.711Z",
+      "from": null,
+      "to": "submitted",
+      "by": "board"
+    },
+    {
+      "at": "2026-09-17T05:28:23.712Z",
+      "from": "submitted",
+      "to": "accepted",
+      "by": "board",
+      "note": "创建并接受"
+    },
+    {
+      "at": "2026-09-17T06:53:22.136Z",
+      "from": "accepted",
+      "to": "planned",
+      "by": "system",
+      "note": "完善后自动转入计划（run-20260917-144628-6e97）"
+    },
+    {
+      "at": "2026-09-17T07:12:50.470Z",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "atb-0917-823b",
+      "note": "认领（atb-0917-823b）"
+    },
+    {
+      "at": "2026-09-17T07:30:39.975Z",
+      "from": "in-progress",
+      "to": "in-progress",
+      "by": "atb-0917-823b",
+      "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    }
+  ]
+}
