@@ -21,6 +21,7 @@ import * as marketing from './lib/marketing-store.mjs';
 import * as releaseStore from './lib/release-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
 import * as buildGit from './lib/build-git.mjs';
+import * as buildPublishStore from './lib/build-publish-store.mjs';
 import * as prelStore from './lib/product-release-store.mjs';
 import * as prelGit from './lib/product-release-git.mjs';
 import * as prelMaterials from './lib/site-materials.mjs';
@@ -2230,7 +2231,8 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 
 
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
-//   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
+//   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取；
+//                                    BUG-20260917-001：每版本附 release 发布汇总，任一 succeeded 发布运行 → published）
 //   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
 //                                    BUG-20260913-001：仅已完成 done 条目进入候选；
 //                                    BUG-20260914-004：已纳入任一版本的条目一并收窄，
@@ -2281,11 +2283,16 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const mgt = mgtCommit.readMgtState(dataDir, 'version', id);
       return mgt ? { mgtCommit: mgt } : {};
     };
+    // BUG-20260917-001：按 bldId 附各版本发布汇总（任一 succeeded 运行 → release.published），
+    // 供左侧版本卡片显示「已发布」标识；随列表一次装配返回（无逐版本请求）；
+    // 发布记录读取异常降级为无标识（release:null），不阻塞构建模块 state。
+    let releaseMap = new Map();
+    try { releaseMap = buildPublishStore.publishedByBld(dataDir); } catch { /* 发布记录异常不阻塞 */ }
     return sendJson(res, 200, {
       initialized: true,
       isRepo: branches.isRepo,
       currentBranch: branches.current,
-      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, ...mgtOf(v.id) })),
+      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, ...mgtOf(v.id), release: releaseMap.get(v.id) || null })),
       statusLabels: buildStore.VERSION_STATUS_LABEL,
     });
   }

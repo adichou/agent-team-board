@@ -48,6 +48,18 @@ export function listRuns(dataDir,bldId){
  if(!fs.existsSync(runsRoot(dataDir)))return [];
  return fs.readdirSync(runsRoot(dataDir)).filter(id=>/^BPUB-/.test(id)).map(id=>readRun(dataDir,id)).filter(r=>!bldId||r.bldId===bldId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
+// BUG-20260917-001：按版本计划（bldId）汇总「已发布」——任一运行 succeeded 即视为已发布（成功
+// 不可逆，之后再建新发行版本的草稿 / 失败不撤下标识）；取最新一条成功运行（listRuns 已按
+// createdAt 新→旧，首条命中即最新）。返回 Map<bldId,{published:true,version,runId}>，
+// 供构建模块列表接口随 versions 一次装配返回，避免前端逐版本请求。
+export function publishedByBld(dataDir){
+ const out=new Map();
+ for(const r of listRuns(dataDir)){
+  if(r.status!=='succeeded'||!r.bldId||out.has(r.bldId))continue;
+  out.set(r.bldId,{published:true,version:r.version,runId:r.id});
+ }
+ return out;
+}
 export const steps=[['sync-source','源码 main/dev 原子推送'],['webapp-build','冻结源码构建'],['webapp-verify','Web App 本机回验'],['site-deploy','官网构建与部署'],['site-verify','官网本机回验']];
 export function createRun(dataDir,input){
  if(!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$/.test(input.version||''))throw new AtbError('发行版本号非法');
