@@ -2,11 +2,11 @@
   "id": "BUG-20260917-001",
   "type": "bug",
   "title": "版本计划发布后，左侧的列表中没有显示版本计划已发布的标签",
-  "status": "in-progress",
+  "status": "done",
   "parent": null,
   "owner": "atb-0917-823b",
   "createdAt": "2026-09-17T05:28:23.711Z",
-  "updatedAt": "2026-09-17T07:30:39.975Z",
+  "updatedAt": "2026-09-17T10:23:09.652Z",
   "agentCompletedAt": "2026-09-17T07:30:39.975Z",
   "lastReport": {
     "at": "2026-09-17T07:30:39.975Z",
@@ -49,6 +49,13 @@
       "to": "in-progress",
       "by": "atb-0917-823b",
       "note": "上报测试报告（覆盖率 85%），待人工确认完成"
+    },
+    {
+      "at": "2026-09-17T10:23:09.653Z",
+      "from": "in-progress",
+      "to": "done",
+      "by": "board",
+      "note": "人工确认完成"
     }
   ]
 }
