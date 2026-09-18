@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // BUG-20260914-013 集成测试泄漏 server/stub 进程：端口占用预检、确定性收尾、run-all 聚合兜底
 // 载体：scripts/tests/lib/test-process.mjs（pickFreePort/stopChild/stopPid/waitHealth/listTestResidue/sweepTestResidue）
-// 用例：见 docs/agent-team-board/bugs/BUG-20260914-013/test-cases.md（C1–C9）
+// 用例：见 agent-team-board/data/bugs/BUG-20260914-013/test-cases.md（C1–C9）
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

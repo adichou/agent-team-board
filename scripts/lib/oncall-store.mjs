@@ -15,6 +15,8 @@ import {
   // REQ-20260909-009：附件白名单 / 大小 / 落盘 / 读取口径上收 core（条目截图与讨论单附件同一真源）
   ATTACHMENT_MAX_BYTES, ATTACHMENT_IMAGE_MIME, attachmentMime, saveItemAttachment, readItemAttachment,
   parseItemAttachments,
+  // REQ-20260916-007：提示词内命令需定位项目根（板根上一级）
+  projectRootOfBoard,
 } from './core.mjs';
 
 export const ONCALL_STATUS = ['pending', 'answering', 'answered', 'failed'];
@@ -37,7 +39,7 @@ const nowIso = () => new Date().toISOString();
 // ---------- 目录与初始化 ----------
 
 export function oncallDir(dataDir) {
-  return path.join(dataDir, 'oncall');
+  return path.join(dataDir, 'runtime', 'oncall');
 }
 export function ticketsDir(dataDir) {
   return path.join(oncallDir(dataDir), 'tickets');
@@ -68,7 +70,7 @@ export function ensureOncall(dataDir) {
   if (!readJson(settingsPath)) {
     writeJsonAtomic(settingsPath, { version: 1, date: localDateStamp(), counters: { ask: 0, run: 0 } });
   }
-  const gi = path.join(dataDir, '.gitignore');
+  const gi = path.join(dataDir, 'runtime', '.gitignore');
   const wanted = ['oncall/runs/'];
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
@@ -79,7 +81,7 @@ export function ensureOncall(dataDir) {
 // ---------- 编号（独立序列，按日重置） ----------
 
 function nextOncallCounter(dataDir, kind) {
-  const lockPath = path.join(dataDir, '.locks', 'oncall.lock');
+  const lockPath = path.join(dataDir, 'runtime', '.locks', 'oncall.lock');
   acquireLock(lockPath, ONCALL_LOCK_STALE_MS, { pid: process.pid, at: nowIso() });
   try {
     ensureOncall(dataDir);
@@ -464,7 +466,7 @@ export function listDispatches(dataDir) {
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ATB_PATH = path.join(pluginRoot, 'scripts', 'atb.mjs');
 const atbPathOf = () => ATB_PATH;
-const projectRootOf = (dataDir) => path.resolve(dataDir, '..', '..');
+const projectRootOf = (dataDir) => projectRootOfBoard(dataDir);
 
 export function oncallSessionName({ staff = null, date = null } = {}) {
   const stamp = date || localDateStamp();

@@ -33,9 +33,9 @@ function mkProject() {
 // backdate：把条目 createdAt 改到指定偏移（毫秒），用于构造稳定的创建时间顺序
 function backdate(dataDir, id, deltaMs) {
   const { dir } = core.resolveItemDir(dataDir, id);
-  const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   st.createdAt = new Date(Date.parse(st.createdAt) - deltaMs).toISOString();
-  fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(st, null, 2) + '\n');
+  fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(st, null, 2) + '\n');
 }
 
 function mkItem(p, type, title, { accept = true, plan = true, backMs = 0 } = {}) {
@@ -50,11 +50,11 @@ function mkItem(p, type, title, { accept = true, plan = true, backMs = 0 } = {})
 // 模拟「他人已认领」：直改条目状态与认领锁（等价外部竞态，绕过实施互斥便于注入）
 function forceClaim(p, id, owner) {
   const { dir } = core.resolveItemDir(p.dataDir, id);
-  const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   st.status = 'in-progress';
   st.owner = owner;
-  fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(st, null, 2) + '\n');
-  fs.writeFileSync(path.join(p.dataDir, '.locks', `${id}.lock`), JSON.stringify({ owner, at: new Date().toISOString() }));
+  fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(st, null, 2) + '\n');
+  fs.writeFileSync(path.join(p.dataDir, 'runtime', '.locks', `${id}.lock`), JSON.stringify({ owner, at: new Date().toISOString() }));
 }
 
 function cleanup(p) {
@@ -106,7 +106,7 @@ t('Z02b 空候选：createBatch 报错，不产生批次文件', () => {
   const p = mkProject();
   try {
     assert.throws(() => batch.createBatch(p.dataDir, { projectRoot: p.root }), /没有可实施候选/);
-    assert.equal(fs.existsSync(path.join(p.dataDir, 'dispatch', 'batches')), false, '不应创建批次目录');
+    assert.equal(fs.existsSync(path.join(p.dataDir, 'runtime', 'dispatch', 'batches')), false, '不应创建批次目录');
   } finally { cleanup(p); }
 });
 
@@ -131,7 +131,7 @@ t('Z02d 上限设置已移除（REQ-20260908-019）：多余 limit 入参与存�
   try {
     for (let i = 1; i <= 2; i++) mkItem(p, 'requirement', `候选-${i}`);
     // 存量项目 settings.json 残留 defaults.batchLimit：不再被读取，候选实时全量生效
-    const sp = path.join(p.dataDir, 'dispatch', 'settings.json');
+    const sp = path.join(p.dataDir, 'runtime', 'dispatch', 'settings.json');
     const s = JSON.parse(fs.readFileSync(sp, 'utf8'));
     s.defaults = { ...(s.defaults || {}), batchLimit: 1 };
     fs.writeFileSync(sp, JSON.stringify(s));
@@ -266,7 +266,7 @@ t('BUG-20260906-002 手工先认领：批次 next/Codex 派发/他人 claim 均�
     const a = mkItem(p, 'requirement', 'A', { backMs: 1000 });
     const b = mkItem(p, 'requirement', 'B');
     core.claim(p.dataDir, a, 'manual-worker'); // 手工先认领 A
-    assert.ok(fs.existsSync(path.join(p.dataDir, '.locks', 'impl.lock')), '手工认领应占用项目实施互斥');
+    assert.ok(fs.existsSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock')), '手工认领应占用项目实施互斥');
     assert.throws(
       () => core.claim(p.dataDir, b, 'manual-worker'),
       /只能有一个实施任务/,
@@ -281,7 +281,7 @@ t('BUG-20260906-002 手工先认领：批次 next/Codex 派发/他人 claim 均�
     assert.equal(got.holder && got.holder.itemId, a, '持锁应指明在实施条目');
     assert.equal(core.getItemDetail(p.dataDir, b).status, 'planned', '另一项不得被并行派发');
     core.report(p.dataDir, a, { summary: 'ok', by: 'manual-worker' });
-    assert.equal(fs.existsSync(path.join(p.dataDir, '.locks', 'impl.lock')), false, '手工 report 应释放实施占用');
+    assert.equal(fs.existsSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock')), false, '手工 report 应释放实施占用');
     const run = batch.nextItem(p.dataDir, bt.batchId, { owner: 'batch-worker' });
     assert.equal(run.itemId, b, '占用解除后批次继续派发下一项');
   } finally { cleanup(p); }
@@ -294,20 +294,20 @@ t('BUG-20260906-002 手工占用：人工确认完成/驳回即释放；批次�
     const b = mkItem(p, 'requirement', 'B');
     core.claim(p.dataDir, a, 'manual-worker');
     core.setStatus(p.dataDir, a, 'done', { by: 'human' });
-    assert.equal(fs.existsSync(path.join(p.dataDir, '.locks', 'impl.lock')), false, '确认完成应释放手工占用');
+    assert.equal(fs.existsSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock')), false, '确认完成应释放手工占用');
     // 模拟崩溃残留：手工占用未释放时条目被人工驳回（done→in-progress），驳回应清理手工占用
-    fs.writeFileSync(path.join(p.dataDir, '.locks', 'impl.lock'), JSON.stringify({ kind: 'manual', itemId: a, owner: 'manual-worker' }));
+    fs.writeFileSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock'), JSON.stringify({ kind: 'manual', itemId: a, owner: 'manual-worker' }));
     core.setStatus(p.dataDir, a, 'in-progress', { by: 'human' });
-    assert.equal(fs.existsSync(path.join(p.dataDir, '.locks', 'impl.lock')), false, '驳回应清理手工占用');
+    assert.equal(fs.existsSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock')), false, '驳回应清理手工占用');
     // 批次持锁期间：手工 claim 提示应指明手工归属语义不回归（批次归属提示见 Z22）
     const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
     const run = batch.nextItem(p.dataDir, bt.batchId, { owner: W1 });
     assert.equal(run.itemId, b);
     core.claim(p.dataDir, b, W1); // 批次属主认领（kind=batch 保持，不由手工逻辑覆盖）
-    const lock = JSON.parse(fs.readFileSync(path.join(p.dataDir, '.locks', 'impl.lock'), 'utf8'));
+    const lock = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock'), 'utf8'));
     assert.equal(lock.kind, 'batch', '批次属主认领后锁归属保持 batch');
     core.report(p.dataDir, b, { summary: 'ok', by: W1, run: { runId: run.runId } });
-    assert.ok(fs.existsSync(path.join(p.dataDir, '.locks', 'impl.lock')), '批次占用不受手工 report 释放影响');
+    assert.ok(fs.existsSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock')), '批次占用不受手工 report 释放影响');
     batch.finishRun(p.dataDir, run.runId, { result: 'reported', reportRef: 'test-report.md' });
   } finally { cleanup(p); }
 });
@@ -391,9 +391,9 @@ t('Z10 旧 report/未关联 run/错误 owner/未上报 均不能通过 reported 
     core.claim(p.dataDir, c, W1);
     // 伪造 C 的旧报告（at 早于 run 创建）
     const { dir: cDir } = core.resolveItemDir(p.dataDir, c);
-    const oldSt = JSON.parse(fs.readFileSync(path.join(cDir, 'status.json'), 'utf8'));
+    const oldSt = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(cDir), 'utf8'));
     oldSt.lastReport = { at: '2020-01-01T00:00:00.000Z', coverage: 90, framework: '', summary: '', runId: runC.runId };
-    fs.writeFileSync(path.join(cDir, 'status.json'), JSON.stringify(oldSt, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(cDir), JSON.stringify(oldSt, null, 2) + '\n');
     fs.writeFileSync(path.join(cDir, 'test-report.md'), 'old');
     assert.throws(() => batch.finishRun(p.dataDir, runC.runId, { result: 'reported', reportRef: 'test-report.md' }), /时间|证据/, '早于本次运行的旧 report 不得通过');
     // 该项核对失败按 failed 收尾（可继续其他项），不得阻塞后续场景
@@ -404,9 +404,9 @@ t('Z10 旧 report/未关联 run/错误 owner/未上报 均不能通过 reported 
     assert.equal(runD.itemId, d, '应派发冻结候选中的 D');
     core.claim(p.dataDir, d, W1);
     const { dir: dDir } = core.resolveItemDir(p.dataDir, d);
-    const dSt = JSON.parse(fs.readFileSync(path.join(dDir, 'status.json'), 'utf8'));
+    const dSt = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dDir), 'utf8'));
     dSt.owner = 'someone-else';
-    fs.writeFileSync(path.join(dDir, 'status.json'), JSON.stringify(dSt, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(dDir), JSON.stringify(dSt, null, 2) + '\n');
     core.report(p.dataDir, d, { summary: 'ok', by: 'someone-else', run: { runId: runD.runId } });
     assert.throws(() => batch.finishRun(p.dataDir, runD.runId, { result: 'reported', reportRef: 'test-report.md' }), /owner/, 'owner 不一致不得通过');
   } finally { cleanup(p); }
@@ -427,7 +427,7 @@ t('Z11 reported 后：条目仍 in-progress、互斥释放、可继续派发（�
 
     const st = core.getItemDetail(p.dataDir, a);
     assert.equal(st.status, 'in-progress', '上报后业务状态保持 in-progress 待人工确认');
-    assert.equal(fs.existsSync(path.join(p.dataDir, '.locks', 'impl.lock')), false, '上报即释放实施互斥');
+    assert.equal(fs.existsSync(path.join(p.dataDir, 'runtime', '.locks', 'impl.lock')), false, '上报即释放实施互斥');
 
     const run2 = batch.nextItem(p.dataDir, bt.batchId, { owner: 'zcode-batch-fake-w1b' });
     assert.equal(run2.itemId, b, '不等 done 应继续派发下一项');
@@ -571,7 +571,7 @@ t('REQ-20260908-001 listRuns 记录带条目标题；条目删除容错空串；
     }
 
     // 条目目录被删除（账本记录仍在）：不抛错，title 回退空串
-    fs.rmSync(path.join(p.dataDir, 'requirements', a), { recursive: true, force: true });
+    fs.rmSync(path.join(p.dataDir, 'data', 'requirements', a), { recursive: true, force: true });
     const after = batch.listRuns(p.dataDir, bt.batchId, { offset: 0, limit: 20 });
     assert.equal(after.records[0].title, '', '条目删除后 title 应容错为空串');
   } finally { cleanup(p); }
@@ -728,7 +728,7 @@ t('D2 不填 developer：账本无字段、提示词与现状逐字一致（不�
     const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
     assert.equal('developer' in bt, false, '账本不应有 developer 字段');
     assert.ok(!bt.prompt.includes('会话名'), '不得追加会话命名指令或缺省名');
-    const spec = path.join(p.dataDir, 'dispatch', 'worker-spec.md');
+    const spec = path.join(p.dataDir, 'runtime', 'dispatch', 'worker-spec.md');
     const legacy = batch.generatePrompt({ projectRoot: p.root, batchId: bt.batchId, workerSpecPath: spec });
     const now = batch.generatePrompt({ projectRoot: p.root, batchId: bt.batchId, workerSpecPath: spec, developer: '张三' });
     assert.equal(now, legacy, 'developer 传值时 generatePrompt 输出必须与不传逐字一致（参数忽略）');
@@ -754,7 +754,7 @@ t('D4 batchSummary 新批次无 developer；存量批次含字段不迁移、摘
     const sum = batch.batchSummary(p.dataDir, bt.batchId);
     assert.equal('developer' in sum.batch, false, '新批次摘要不应携带 developer');
     // 模拟存量批次：账本手工写入 developer 字段，不迁移不清洗（batchSummary 透传账本原样）
-    const bfile = path.join(p.dataDir, 'dispatch', 'batches', bt.batchId, 'batch.json');
+    const bfile = path.join(p.dataDir, 'runtime', 'dispatch', 'batches', bt.batchId, 'batch.json');
     const saved = JSON.parse(fs.readFileSync(bfile, 'utf8'));
     saved.developer = '存量开发';
     fs.writeFileSync(bfile, JSON.stringify(saved, null, 2) + '\n');
@@ -767,7 +767,7 @@ t('D4 batchSummary 新批次无 developer；存量批次含字段不迁移、摘
 
 // ---------- REQ-20260906-023 批次保留上限：最多 100 个，超出删最旧 ----------
 
-const batchesDirOf = (p) => path.join(p.dataDir, 'dispatch', 'batches');
+const batchesDirOf = (p) => path.join(p.dataDir, 'runtime', 'dispatch', 'batches');
 const batchDirNames = (p) => fs.readdirSync(batchesDirOf(p)).sort();
 
 // 构造一个已收尾批次（创建 → 领取 → 认领 → 上报 → 回执，批次自然 finished），返回 batchId
@@ -786,7 +786,7 @@ function forceInFlight(p, batchId) {
   const bfile = path.join(batchesDirOf(p), batchId, 'batch.json');
   const bt = JSON.parse(fs.readFileSync(bfile, 'utf8'));
   const runId = `run-fake-${batchId}`;
-  const rdir = path.join(p.dataDir, 'dispatch', 'runs', runId);
+  const rdir = path.join(p.dataDir, 'runtime', 'dispatch', 'runs', runId);
   fs.mkdirSync(rdir, { recursive: true });
   fs.writeFileSync(path.join(rdir, 'run.json'), JSON.stringify({
     runId, batchId, itemId: bt.candidates[0], owner: W1, phase: 'reserved',

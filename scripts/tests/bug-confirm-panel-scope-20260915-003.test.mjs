@@ -52,6 +52,8 @@ function mkProject() {
     scripts: { test: 'node -e "process.exit(0)"' },
   }, null, 2));
   core.initData(root);
+  // 板级共享用户数据文件（data/README.md，无条目归属）：运行期变脏 → 归属待确认分组样本
+  fs.writeFileSync(path.join(core.dataDirFrom(root), 'data', 'README.md'), '# 板级说明\n');
   git(root, ['add', '.']);
   git(root, ['commit', '-q', '-m', 'chore: 初始化测试仓库']);
   return root;
@@ -79,6 +81,7 @@ function mkAddFailureSuspension(root, title) {
   fs.mkdirSync(path.join(root, 'scripts', 'tests'), { recursive: true });
   fs.writeFileSync(path.join(root, 'scripts', 'tests', `${item.id}.test.mjs`), 'import assert from "node:assert/strict";\n');
   fs.appendFileSync(path.join(nx.itemDir, 'README.md'), '\n实施补充\n');
+  fs.appendFileSync(path.join(dataDir, 'data', 'README.md'), '\n共享文件变更\n'); // 板级共享（无条目归属）→ 归属待确认
   core.report(dataDir, item.id, { summary: '实施完成', by: 'w1', run: { runId: nx.runId } });
   // 模拟并发 git 进程残留的 index.lock：git add 阶段失败
   fs.writeFileSync(path.join(root, '.git', 'index.lock'), 'stale lock\n');
@@ -87,7 +90,7 @@ function mkAddFailureSuspension(root, title) {
 }
 
 const readAcDetail = (dataDir, runId) =>
-  JSON.parse(fs.readFileSync(path.join(dataDir, 'dispatch', 'runs', runId, 'auto-commit.json'), 'utf8'));
+  JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'dispatch', 'runs', runId, 'auto-commit.json'), 'utf8'));
 
 const subjectsOf = (root, itemId, p) =>
   git(root, ['log', '--format=%s', '--', p]).stdout.split('\n').filter(Boolean)
@@ -107,7 +110,7 @@ t('P1 git add 失败：完整错误保留（不截断、0 组失败也落明细�
   const detail = readAcDetail(dataDir, runId);
   assert.equal(detail.status, 'failed', `失败明细应如实标记 failed：${JSON.stringify(detail.status)}`);
   assert.ok(String(detail.errorFull || '').includes('index.lock'), `明细应保留完整原始错误：${String(detail.errorFull).slice(0, 120)}`);
-  const run = JSON.parse(fs.readFileSync(path.join(dataDir, 'dispatch', 'runs', runId, 'run.json'), 'utf8'));
+  const run = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'dispatch', 'runs', runId, 'run.json'), 'utf8'));
   assert.ok(String(run.autoCommit?.errorFull || '').includes('index.lock'), '运行账本应保留 errorFull');
   const rec = confirmStates.confirmOf(dataDir, item.id);
   assert.ok(rec, '失败也应创建挂起确认记录');
@@ -127,7 +130,7 @@ t('P1 git add 失败：完整错误保留（不截断、0 组失败也落明细�
 
   // 归属分组与变更类型：全局文件归「归属待确认」，本单实现归「本单可归属」
   const byPath = new Map(d.files.map((f) => [f.path, f]));
-  assert.equal(byPath.get('docs/agent-team-board/config.json')?.group, 'undetermined', '全局配置文件应归「归属待确认」');
+  assert.equal(byPath.get('agent-team-board/data/README.md')?.group, 'undetermined', '板级共享文件应归「归属待确认」');
   assert.equal(byPath.get('scripts/lib/impl.mjs')?.group, 'own', '快照差集实现文件应归「本单可归属」');
   assert.equal(byPath.get(`scripts/tests/${item.id}.test.mjs`)?.group, 'own');
   assert.equal(byPath.get(`scripts/tests/${item.id}.test.mjs`)?.kind, '新增', '未跟踪新文件变更类型应为「新增」');
@@ -160,8 +163,8 @@ t('P2a 全局文件默认排除：未显式计入的归属待确认路径不随�
   const st = git(root, ['status', '--porcelain', '-uall']).stdout;
   assert.ok(!st.includes('impl.mjs') && !st.includes('.test.mjs'), `本单实现应已补交：\n${st}`);
   assert.ok(subjectsOf(root, item.id, 'scripts/lib/impl.mjs').length === 1, 'impl.mjs 恰一次入库');
-  assert.ok(st.includes('config.json'), `config.json 应默认排除、保留在工作区：\n${st}`);
-  assert.equal(subjectsOf(root, item.id, 'config.json').length, 0, 'config.json 不得被静默提交');
+  assert.ok(st.includes('agent-team-board/data/README.md'), `板级共享文件应默认排除、保留在工作区：\n${st}`);
+  assert.equal(subjectsOf(root, item.id, 'agent-team-board/data/README.md').length, 0, '板级共享文件不得被静默提交');
   assert.equal(confirmStates.confirmOf(dataDir, item.id).state, 'resolved');
 });
 
@@ -172,12 +175,12 @@ t('P2b 显式计入：include 携带的归属待确认路径随补交入库', as
 
   const rec = confirmStates.confirmOf(dataDir, item.id);
   const r = await confirmStore.confirmCommitContinue(dataDir, item.id, {
-    projectRoot: root, fingerprint: rec.fingerprint, include: ['docs/agent-team-board/config.json'],
+    projectRoot: root, fingerprint: rec.fingerprint, include: ['agent-team-board/data/README.md'],
   });
   assert.ok(r.ok, `显式计入后确认应成功：${JSON.stringify(r.reasons || [])}`);
-  assert.equal(subjectsOf(root, item.id, 'docs/agent-team-board/config.json').length, 1, 'config.json 应随补交入库');
+  assert.equal(subjectsOf(root, item.id, 'agent-team-board/data/README.md').length, 1, '板级共享文件应随补交入库');
   const st = git(root, ['status', '--porcelain', '-uall']).stdout;
-  assert.ok(!st.includes('config.json'), `config.json 应已入库：\n${st}`);
+  assert.ok(!st.includes('agent-team-board/data/README.md'), `板级共享文件应已入库：\n${st}`);
 });
 
 // ---------- P3：内容变化拦截 → 重新核验刷新基线 → 确认 ----------
@@ -279,7 +282,7 @@ t('P5a 面板渲染：分组文件表 / 变更类型 / 计入-排除选择 / 确
     files: [
       { path: 'scripts/lib/impl.mjs', group: 'own', kind: '修改', state: '未提交' },
       { path: 'scripts/tests/x.test.mjs', group: 'own', kind: '新增', state: '未提交' },
-      { path: 'config.json', group: 'undetermined', kind: '修改', state: '未提交' },
+      { path: 'agent-team-board/data/README.md', group: 'undetermined', kind: '修改', state: '未提交' },
       { path: 'dispatch/settings.json', group: 'undetermined', kind: '修改', state: '未提交' },
     ],
     verify: null, keepNote: null, fingerprint: { files: {} },

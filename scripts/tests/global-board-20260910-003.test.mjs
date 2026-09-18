@@ -72,14 +72,14 @@ const finItem = plannedItem(finDir, '收尾条目 F');
 const finBatch1 = batch.createBatch(finDir, { ids: [finItem.id], projectRoot: projFin });
 batch.abortBatch(finDir, finBatch1.batch.batchId);
 const finBatch2 = batch.createBatch(finDir, { ids: [finItem.id], projectRoot: projFin });
-const finB2Path = path.join(finDir, 'dispatch', 'batches', finBatch2.batch.batchId, 'batch.json');
+const finB2Path = path.join(finDir, 'runtime', 'dispatch', 'batches', finBatch2.batch.batchId, 'batch.json');
 const finB2 = JSON.parse(fs.readFileSync(finB2Path, 'utf8'));
 finB2.status = 'finished';
 fs.writeFileSync(finB2Path, JSON.stringify(finB2, null, 2));
 
 // projCorrupt：批次账本 JSON 损坏（listBatches 会静默跳过，聚合须显式报该项目读取失败）
 const corDir = core.dataDirFrom(projCorrupt) || core.initData(projCorrupt);
-const corBatchDir = path.join(corDir, 'dispatch', 'batches', 'batch-20990909-001');
+const corBatchDir = path.join(corDir, 'runtime', 'dispatch', 'batches', 'batch-20990909-001');
 fs.mkdirSync(corBatchDir, { recursive: true });
 fs.writeFileSync(path.join(corBatchDir, 'batch.json'), '{oops');
 

@@ -240,7 +240,7 @@ t('A6 幂等与透传：现行 buildRefinePrompt / generatePrompt 输出原样�
 // ---------- B 完善侧透出链路 ----------
 
 function freezeRefinePrompt(dataDir, batchId, prompt) {
-  const file = path.join(dataDir, 'refine', 'batches', batchId, 'batch.json');
+  const file = path.join(dataDir, 'runtime', 'refine', 'batches', batchId, 'batch.json');
   const b = JSON.parse(fs.readFileSync(file, 'utf8'));
   b.prompt = prompt;
   fs.writeFileSync(file, JSON.stringify(b, null, 2));
@@ -256,7 +256,7 @@ t('B1 完善数据层：refineBatchPublicView / refineSummary 归一 zcode 旧�
     assertGeneric(view.prompt, 'B1-publicView');
     const s = refine.refineSummary(p.dataDir, b.batchId);
     assertGeneric(s.batch.prompt, 'B1-summary');
-    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'refine', 'batches', b.batchId, 'batch.json'), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'runtime', 'refine', 'batches', b.batchId, 'batch.json'), 'utf8'));
     assert.match(raw.prompt, /执行 Agent：zcode/, '账本文件不回写（历史原样保留）');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
@@ -278,7 +278,7 @@ t('B2 完善 CLI：refine create 重复启动被拒（REQ-20260913-003）；refi
 // ---------- C 开发侧透出链路 ----------
 
 function freezeDevPrompt(dataDir, batchId, prompt) {
-  const file = path.join(dataDir, 'dispatch', 'batches', batchId, 'batch.json');
+  const file = path.join(dataDir, 'runtime', 'dispatch', 'batches', batchId, 'batch.json');
   const b = JSON.parse(fs.readFileSync(file, 'utf8'));
   b.prompt = prompt;
   fs.writeFileSync(file, JSON.stringify(b, null, 2));
@@ -297,7 +297,7 @@ t('C1 开发数据层与 CLI：batch create 幂等回显、batch summary（batch
     assert.doesNotMatch(again.stdout + again.stderr, AGENT_WORDS, '拒绝输出不含执行端字样');
     const sum = atbJson(['batch', 'summary'], p.root);
     assertGeneric(sum.batch.prompt, 'C1-summary(batchPublicView)');
-    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'dispatch', 'batches', first.batchId, 'batch.json'), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'runtime', 'dispatch', 'batches', first.batchId, 'batch.json'), 'utf8'));
     assert.ok(raw.prompt.includes('codex exec'), '开发账本文件不回写（历史原样保留）');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });
@@ -385,7 +385,7 @@ t('E1 旧前缀 owner 回执互认：zcode-refine-* 前缀领取 → 补文档 �
     assert.equal(done.result, 'done', '旧前缀 run 回执正常');
     const check = atbJson(['refine', 'check'], p.root);
     assert.ok(check.nextAction, '核对入口正常返回');
-    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'refine', 'batches', first.batchId, 'batch.json'), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'runtime', 'refine', 'batches', first.batchId, 'batch.json'), 'utf8'));
     assert.match(raw.prompt, /执行 Agent：zcode/, '流程不回写账本 prompt');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
 });

@@ -1,31 +1,29 @@
-// REQ-20260914-007 管理记录自动提交（mgt-commit）—— 两个人工闭环入口的入库数据层。
-// 职责：
-//   1. 确认完成（in-progress → done）成功后，自动提交本次刷新的条目 status.json 与
-//      confirmations.md / decisions.md 等条目管理留痕文档；
-//   2. 版本合并成功写入最终结果后，自动提交 builds/versions/<BLD>/version.json ——
-//      提交到持有最终版本数据的合并目标分支 main（当前分支非 main 时经临时工作树隔离执行，
-//      不切换当前工作区分支、不推送远端），并在当前分支做同内容提交使工作区不再遗留记录；
+// REQ-20260914-007 管理记录自动提交（mgt-commit）—— 人工闭环入口的入库数据层。
+// REQ-20260916-007 整改（用户/应用数据分离）：
+//   1. 确认完成（in-progress → done）成功后，自动提交本次刷新的条目管理留痕文档
+//      （confirmations.md / decisions.md，均为 data/ 下用户数据）；条目 status.json 已迁
+//      runtime/status/ 且被整目录忽略，不再提交；
+//   2. 版本合并后 builds/versions/<BLD>/version.json 的自动入库整体取消——版本计划账本
+//      属应用数据，本地留存，「同内容双分支提交」机制随之废弃；
 //   3. 提交纪律：路径限定提交（git add 指定路径 + git commit --only），绝不全量 add，
 //      不夹带业务源码 / 其他条目 / 未跟踪需求资料 / 用户预先暂存内容；目标文件操作前已暂存
 //      且暂存内容与本次产物不同（无法安全分离）→ 不提交，pendingManual 明确报告待人工；
 //   4. 幂等：无新变化 → noop（已同步）不制造空提交；重试与重复请求不重复提交；
-//   5. 失败反馈：结果持久化到被忽略的账本目录 commits/mgt/（刷新 / 重启后仍可见），
+//   5. 失败反馈：结果持久化到被忽略的账本目录 runtime/commits/mgt/（刷新 / 重启后仍可见），
 //      重试只补交管理记录，成功（committed / noop）后清除失败提示；
-//   6. 串行协调：同一数据目录的管理记录 Git 写操作经 .locks/mgt-git-write.lock 文件锁串行。
+//   6. 串行协调：同一数据目录的管理记录 Git 写操作经 runtime/.locks/mgt-git-write.lock 串行。
 // 提交失败不抛出到业务层：结果对象如实返回（status/原因/文件/建议），业务状态不受影响。
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { AtbError, acquireLock, releaseLock, resolveItemDir } from './core.mjs';
+import { AtbError, acquireLock, releaseLock, resolveItemDir, ensureRuntimeIgnore, projectRootOfBoard } from './core.mjs';
 import { validateCommitSubject } from './commit-store.mjs';
 
 const GIT_TIMEOUT_MS = 120_000;
 const LOCK_STALE_MS = 60_000;
 const MGT_LOCK = 'mgt-git-write.lock';
-const MGT_IGNORE_LINE = 'commits/mgt/';
 // 待人工处理的通用建议（pendingManual 场景）
 const PENDING_MANUAL_ADVICE =
   '目标文件暂存区已有与本次产物不同的内容，无法安全分离：请人工核对暂存区后自行提交'
@@ -61,15 +59,11 @@ export function isGitRepo(root) {
 
 // ---------- 目标文件集合 ----------
 
-// 确认完成的目标管理文件（操作前静态确定；提交时按「本次确有刷新」过滤，未刷新不卷入）
+// 确认完成的目标管理文件（操作前静态确定；提交时按「本次确有刷新」过滤，未刷新不卷入）。
+// REQ-20260916-007：status.json 已迁 runtime/status/（应用数据，被忽略），不再入提交目标。
 export function itemMgtFiles(dataDir, itemId) {
   const { dir } = resolveItemDir(dataDir, itemId);
-  return ['status.json', 'confirmations.md', 'decisions.md'].map((n) => path.join(dir, n));
-}
-
-// 版本合并的目标管理文件（version.json）
-export function versionMgtFile(dataDir, versionId) {
-  return path.join(dataDir, 'builds', 'versions', String(versionId || ''), 'version.json');
+  return ['confirmations.md', 'decisions.md'].map((n) => path.join(dir, n));
 }
 
 // ---------- 操作前基线 ----------
@@ -108,29 +102,15 @@ export function beforeBaseline(root, absFiles) {
 
 // ---------- 账本（被忽略目录 commits/mgt/：刷新 / 重启后失败提示仍可见） ----------
 
-const mgtDir = (dataDir) => path.join(dataDir, 'commits', 'mgt');
+const mgtDir = (dataDir) => path.join(dataDir, 'runtime', 'commits', 'mgt');
 const stateFileOf = (dataDir, kind, id) =>
   path.join(mgtDir(dataDir), `${kind}-${String(id || '').replace(/[^A-Za-z0-9-]/g, '')}.json`);
 
-// 幂等补一行 'commits/mgt/'；账本目录不进版本控制 → 状态反馈不引起受跟踪文件反复变脏。
-// 该一次性 .gitignore 变更随下一次管理提交一并收纳（见 pendingIgnoreExtra）。
-function ensureLedgerIgnore(dataDir) {
-  const gi = path.join(dataDir, '.gitignore');
-  let cur = '';
-  try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
-  if (cur.split('\n').includes(MGT_IGNORE_LINE)) return false;
-  try {
-    fs.writeFileSync(gi, cur.replace(/\n*$/, '\n') + MGT_IGNORE_LINE + '\n');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
+// REQ-20260916-007：账本 runtime/commits/mgt/ 随 runtime/ 整目录被根 .gitignore 忽略，
+// 旧「板内 .gitignore 幂等补行 + 随管理提交收纳」机制废弃。
 function writeState(dataDir, result) {
   try {
-    // 账本目录先保证被忽略（幂等一次性补行；.gitignore 变更随下一次管理提交一并收纳）
-    ensureLedgerIgnore(dataDir);
+    ensureRuntimeIgnore(projectRootOfBoard(dataDir));
     fs.mkdirSync(mgtDir(dataDir), { recursive: true });
     fs.writeFileSync(stateFileOf(dataDir, result.kind, result.id), JSON.stringify(result, null, 2));
   } catch { /* 账本写失败不影响主流程（提交结果仍随响应返回） */ }
@@ -142,18 +122,6 @@ export function readMgtState(dataDir, kind, id) {
   } catch {
     return null;
   }
-}
-
-// .gitignore 的待收纳判断：文件当前脏，且 HEAD 版本尚未包含账本忽略行（我们的未入库变更）。
-// HEAD 已含该行但仍脏说明是用户自己的其他编辑，不卷入。
-function pendingIgnoreExtra(projectRoot, repoTop, dataDir) {
-  const gi = path.join(dataDir, '.gitignore');
-  if (!fs.existsSync(gi)) return [];
-  const rel = relOf(repoTop, gi);
-  if (!gitRaw(projectRoot, ['status', '--porcelain', '--', rel]).stdout.trim()) return [];
-  const head = gitRaw(projectRoot, ['show', `HEAD:${rel}`]);
-  const headText = head.status === 0 ? String(head.stdout || '') : '';
-  return headText.split('\n').includes(MGT_IGNORE_LINE) ? [] : [gi];
 }
 
 // ---------- 提交执行（路径限定；沿用 git-flow 既定 add + commit --only 模式） ----------
@@ -171,53 +139,6 @@ function commitPathsInWorktree(root, repoTop, absFiles, subject, branch) {
   gitOk(root, ['commit', '-q', '--only', '-m', subject, '--', ...rels], 'git commit');
   const hash = gitOk(root, ['rev-parse', 'HEAD'], '读取提交号').trim();
   return { hash, short: shortHashOf(root, hash), subject, branch: branch || null };
-}
-
-// 提交到 main：当前分支即 main → 原地；否则临时工作树检出 main 隔离执行（不切当前分支、
-// 不触碰当前工作区）。把目标文件内容复制进临时工作树后提交；main 已持有同内容 → 无提交（已同步）。
-function commitVersionToMain(root, repoTop, absFiles, subject, currentBranch) {
-  if (currentBranch === 'main') {
-    return [commitPathsInWorktree(root, repoTop, absFiles, subject, 'main')];
-  }
-  gitOk(root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], 'main 分支不存在');
-  let wt = null;
-  try {
-    const base = (() => {
-      try {
-        const p = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-wt-probe-'));
-        fs.rmSync(p, { recursive: true, force: true });
-        return os.tmpdir();
-      } catch {
-        return '.git/atb-tmp';
-      }
-    })();
-    wt = path.join(base, `atb-mgt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-    const r = gitRaw(root, ['worktree', 'add', wt, 'main']);
-    if (r.status !== 0) {
-      const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
-      throw new AtbError(`创建管理提交工作树失败：${detail}`.slice(0, 200));
-    }
-    for (const f of absFiles) {
-      const rel = relOf(repoTop, f);
-      const dst = path.join(wt, rel);
-      fs.mkdirSync(path.dirname(dst), { recursive: true });
-      fs.copyFileSync(f, dst);
-      gitOk(wt, ['add', '--', rel], 'git add');
-    }
-    const commits = [];
-    if (gitRaw(wt, ['diff', '--cached', '--quiet']).status !== 0) { // 有差异才提交，不制造空提交
-      gitOk(wt, ['commit', '-q', '-m', subject], 'git commit');
-      const hash = gitOk(wt, ['rev-parse', 'HEAD'], '读取提交号').trim();
-      commits.push({ hash, short: shortHashOf(root, hash), subject, branch: 'main' });
-    }
-    return commits;
-  } finally {
-    if (wt) {
-      if (gitRaw(root, ['worktree', 'remove', '--force', wt]).status !== 0) {
-        gitRaw(root, ['worktree', 'prune']);
-      }
-    }
-  }
 }
 
 // ---------- 分类（确定性归因） ----------
@@ -318,32 +239,17 @@ export function commitItemDoneMgmt({ dataDir, projectRoot, itemId, baseline }) {
     const { refreshed, pendingManual, files } = classifyInitial(baseline, itemMgtFiles(dataDir, itemId));
     return performCommit({
       dataDir, projectRoot, kind: 'item', id: itemId, subject, repoTop: baseline.repoTop,
-      refreshed, pendingManual, files, toMain: false,
+      refreshed, pendingManual, files,
       noopReason: '本次操作没有新的管理变更，视为已同步',
     });
   });
 }
 
-// 版本合并管理提交。baseline 需在合并开始前采集（versionMgtFile + beforeBaseline）。
-export function commitVersionMergeMgmt({ dataDir, projectRoot, versionId, baseline }) {
-  const subject = `doc: 版本合并记录 ${versionId}`;
-  return runGuarded({ dataDir, kind: 'version', id: versionId, subject }, () => {
-    if (!baseline || !baseline.isRepo) {
-      const r = resultOf({ kind: 'version', id: versionId, subject, status: 'skipped', reason: '项目不是 git 仓库，管理记录未自动提交（可人工提交）' });
-      writeState(dataDir, r);
-      return r;
-    }
-    const { refreshed, pendingManual, files } = classifyInitial(baseline, [versionMgtFile(dataDir, versionId)]);
-    return performCommit({
-      dataDir, projectRoot, kind: 'version', id: versionId, subject, repoTop: baseline.repoTop,
-      refreshed, pendingManual, files, toMain: true,
-      noopReason: '版本记录无新变化，视为已同步',
-    });
-  });
-}
-
-// 重试：只补交管理记录（不重放确认完成 / 版本合并）
+// 重试：只补交管理记录（不重放确认完成）。REQ-20260916-007：version 类随版本入库取消下线。
 export function retryMgmt({ dataDir, projectRoot, kind, id }) {
+  if (kind !== 'item') {
+    throw new AtbError(`版本合并管理提交已随应用数据分离取消（kind=${kind} 不再支持重试）`);
+  }
   const state = readMgtState(dataDir, kind, id);
   if (!state || !Array.isArray(state.files) || !state.files.length) {
     throw new AtbError(`没有可重试的管理记录提交（${kind} ${id}）`);
@@ -360,7 +266,6 @@ export function retryMgmt({ dataDir, projectRoot, kind, id }) {
     return performCommit({
       dataDir, projectRoot, kind, id, subject, repoTop,
       refreshed: safe, pendingManual, files: state.files,
-      toMain: kind === 'version',
       noopReason: '管理记录已全部入库，无新变化',
     });
   });
@@ -369,7 +274,7 @@ export function retryMgmt({ dataDir, projectRoot, kind, id }) {
 // ---------- 内部：锁、提交与结果落账 ----------
 
 function runGuarded({ dataDir, kind, id, subject }, fn) {
-  const lockPath = path.join(dataDir, '.locks', MGT_LOCK);
+  const lockPath = path.join(dataDir, 'runtime', '.locks', MGT_LOCK);
   let locked = false;
   try {
     try {
@@ -395,7 +300,7 @@ const pendingReasonOf = (relPaths) =>
 
 function performCommit({
   dataDir, projectRoot, kind, id, subject, repoTop,
-  refreshed, pendingManual, files, toMain, noopReason,
+  refreshed, pendingManual, files, noopReason,
 }) {
   const relPending = pendingManual.map((f) => relOf(repoTop, f));
 
@@ -414,7 +319,7 @@ function performCommit({
     return r;
   }
 
-  ensureLedgerIgnore(dataDir); // writeState 亦会兜底；此处提前保证本次提交即可收纳忽略行
+  ensureRuntimeIgnore(projectRootOfBoard(dataDir)); // 根忽略规则兜底（runtime 账本不进版本控制）
   const err0 = validateCommitSubject(subject, id);
   if (err0) {
     const r = resultOf({ kind, id, subject, status: 'failed', files, reason: `提交说明不合规：${err0}` });
@@ -423,22 +328,11 @@ function performCommit({
   }
 
   try {
-    // 账本 .gitignore 的一次性变更随本次当前分支提交一并收纳（不长期留脏；main 侧不卷入）
-    const extra = pendingIgnoreExtra(projectRoot, repoTop, dataDir);
     const currentBranch = String(gitRaw(projectRoot, ['branch', '--show-current']).stdout || '').trim();
     if (!currentBranch) throw new AtbError('当前处于 detached HEAD，无法提交管理记录');
 
     const commits = [];
-    if (toMain) {
-      // 版本记录提交到持有最终版本数据的合并目标分支 main（当前即 main 时原地提交，
-      // 账本 .gitignore 忽略行随本次一并收纳；临时工作树侧不卷入看板共享文件）
-      const inPlaceExtra = currentBranch === 'main' ? extra : [];
-      commits.push(...commitVersionToMain(projectRoot, repoTop, [...refreshed, ...inPlaceExtra], subject, currentBranch));
-    }
-    if (!(toMain && currentBranch === 'main')) {
-      // 当前分支同内容提交（版本场景避免工作区遗留记录；条目场景即主提交）
-      commits.push(commitPathsInWorktree(projectRoot, repoTop, [...refreshed, ...extra], subject, currentBranch));
-    }
+    commits.push(commitPathsInWorktree(projectRoot, repoTop, refreshed, subject, currentBranch));
     if (!commits.length) {
       const r = resultOf({ kind, id, subject, status: 'noop', reason: '管理记录已同步（目标分支无新变化）', files });
       writeState(dataDir, r);

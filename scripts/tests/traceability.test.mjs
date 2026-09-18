@@ -19,11 +19,11 @@ const reqCmd = read('commands', 'req.md');
 const boardCmd = read('commands', 'board.md');
 
 // 样例：BUG-20260830-001 的 README（独立 bug 目录）
-const dataRoot = path.join(pluginRoot, 'docs', 'agent-team-board');
+const dataRoot = path.join(pluginRoot, 'agent-team-board');
 const bugDirs = [
-  path.join(dataRoot, 'bugs'),
-  ...fs.readdirSync(path.join(dataRoot, 'requirements'))
-    .map((r) => path.join(dataRoot, 'requirements', r, 'bugs')),
+  path.join(dataRoot, 'data', 'bugs'),
+  ...fs.readdirSync(path.join(dataRoot, 'data', 'requirements'))
+    .map((r) => path.join(dataRoot, 'data', 'requirements', r, 'bugs')),
 ];
 let exemplar = null;
 for (const d of bugDirs) {

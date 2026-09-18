@@ -100,7 +100,7 @@ t('C1 claim 成功提示与实际流转一致：状态 in-progress，可直接�
   assert.match(r.out, /可直接实施/, '提示应说明可直接实施');
   assert.ok(!r.out.includes('待对齐'), '不应再出现「待对齐」措辞');
   assert.ok(!r.out.includes('对齐确认'), '不应再引导人工对齐确认');
-  const st = JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(dataDir, id).dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(core.resolveItemDir(dataDir, id).dir), 'utf8'));
   assert.equal(st.status, 'in-progress', '实际状态应为 in-progress');
   assert.equal(st.owner, 'test-session');
   // BUG-20260906-002：claim 即占用项目实施互斥；用例结束 report 收尾，释放占用供后续用例造数
@@ -109,7 +109,7 @@ t('C1 claim 成功提示与实际流转一致：状态 in-progress，可直接�
 
 t('C2 存量 pending-alignment 续认：提示如实反映状态，不谎报可直接实施', async () => {
   const it = core.createItem(dataDir, { type: 'requirement', title: '存量续认', by: 'test' });
-  const f = path.join(core.resolveItemDir(dataDir, it.id).dir, 'status.json');
+  const f = core.statusFileOfItemDir(core.resolveItemDir(dataDir, it.id).dir);
   const st = JSON.parse(fs.readFileSync(f, 'utf8'));
   st.status = 'pending-alignment';
   st.owner = 'legacy-session';

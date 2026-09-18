@@ -38,9 +38,9 @@ function mkItem(p, type, title, { accept = true, plan = true, deltaMs = 0 } = {}
   if (accept && plan) core.setStatus(p.dataDir, st.id, 'planned', { by: 'tester' });
   if (deltaMs) {
     const { dir } = core.resolveItemDir(p.dataDir, st.id);
-    const s = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+    const s = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
     s.createdAt = new Date(Date.parse(s.createdAt) - deltaMs).toISOString();
-    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(s, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(s, null, 2) + '\n');
   }
   return st.id;
 }
@@ -424,12 +424,12 @@ t('RT-10 既有能力不回归：暂停/恢复、终止出局账、重新执行�
     core.claim(p.dataDir, b, W1);
     batch.finishRun(p.dataDir, run2.runId, { result: 'failed', reason: '测试失败', safeToContinue: true });
     const { dir: bDir } = core.resolveItemDir(p.dataDir, b);
-    const st = JSON.parse(fs.readFileSync(path.join(bDir, 'status.json'), 'utf8'));
+    const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(bDir), 'utf8'));
     st.status = 'planned';
     st.owner = '';
-    fs.writeFileSync(path.join(bDir, 'status.json'), JSON.stringify(st, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(bDir), JSON.stringify(st, null, 2) + '\n');
     // 认领锁随人工处理一并清理（真实路径由看板/终端流转释放；状态机无 in-progress→planned 边，只能手工模拟）
-    fs.rmSync(path.join(p.dataDir, '.locks', `${b}.lock`), { force: true });
+    fs.rmSync(path.join(p.dataDir, 'runtime', '.locks', `${b}.lock`), { force: true });
     const retry = batch.retryRun(p.dataDir, run2.runId);
     assert.equal(retry.ok, true, `重新执行应成功：${JSON.stringify(retry)}`);
     const run3 = batch.nextItem(p.dataDir, bt.batchId, { owner: W1 });

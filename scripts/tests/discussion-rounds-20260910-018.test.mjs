@@ -261,7 +261,7 @@ t('H1 服务接口：board 卡片与详情携带逐轮字段；创建即返回�
     const p = spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'atb.mjs'), 'init', '--dir', root], { stdio: 'ignore' });
     p.on('close', resolve);
   });
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
+  const dataDir = path.join(root, 'agent-team-board');
   const port = 31000 + Math.floor(Math.random() * 20000);
   const server = spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'server.mjs')], {
     cwd: root,

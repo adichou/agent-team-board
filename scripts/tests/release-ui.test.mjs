@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const webRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const itemDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'agent-team-board', 'requirements', 'REQ-20260910-029');
+const itemDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'agent-team-board', 'data', 'requirements', 'REQ-20260910-029');
 const html = fs.readFileSync(path.join(webRoot, 'index.html'), 'utf8');
 const app = fs.readFileSync(path.join(webRoot, 'app.js'), 'utf8');
 const relJs = fs.readFileSync(path.join(webRoot, 'release.js'), 'utf8');

@@ -22,7 +22,7 @@ export function checkCodexEnvironment({ cliPath, projectRoot, dataDir, allowNonG
 
   const results = [null, '00000000-0000-0000-0000-000000000000'].map((resumeThreadId) => {
     const args = buildExecArgs({ projectRoot, resumeThreadId, allowNonGit,
-      finalMessageFile: path.join(dataDir, 'dispatch', 'preflight-output-unused.md') });
+      finalMessageFile: path.join(dataDir, 'runtime', 'dispatch', 'preflight-output-unused.md') });
     // --help 仅检查实际参数能否解析，不创建会话、不写最终回复、不发送提示词。
     const result = probe([...args, '--help']);
     const flags = ['--json', '--output-last-message', ...(allowNonGit ? ['--skip-git-repo-check'] : [])];

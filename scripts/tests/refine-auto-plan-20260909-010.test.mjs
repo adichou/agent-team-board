@@ -152,7 +152,7 @@ t('A4 其他状态仍拒绝：条目被驳回回 submitted 后 done → 沿现�
   taskSettings.saveTaskSettings(dataDir, { refine: { autoPlanAfterDone: true } }); // 开启也不放宽
   // refining 中人工驳回回待接受被既有保护拦截（REQ-20260908-020），直接落盘模拟极端状态变化
   const dir = core.resolveItemDir(dataDir, got.itemId).dir;
-  const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   st.status = 'submitted';
   core.writeStatus(dir, st);
   assert.throws(
@@ -195,13 +195,13 @@ t('A6 失败不丢单：autoPlanRefinedItem 前置读取失败返回 transitione
   const { req, got } = claimAndEdit(root, dataDir, '目录损坏', { autoPlan: true });
   // 条目目录损坏（status.json 不可读）→ 流转函数返回 status-read-failed，不抛错
   const dir = core.resolveItemDir(dataDir, req.id).dir;
-  const backup = fs.readFileSync(path.join(dir, 'status.json'), 'utf8');
-  fs.unlinkSync(path.join(dir, 'status.json'));
+  const backup = fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8');
+  fs.unlinkSync(core.statusFileOfItemDir(dir));
   const plan = refine.autoPlanRefinedItem(dataDir, req.id, got.runId);
   assert.equal(plan.transitioned, false);
   assert.equal(plan.reason, 'status-read-failed', '前置读取失败给明确 reason');
   // 恢复 status.json 后 done 回执仍成功（完善完成事实不丢失）——核验需要 status.json，恢复后基线仍可比对
-  fs.writeFileSync(path.join(dir, 'status.json'), backup);
+  fs.writeFileSync(core.statusFileOfItemDir(dir), backup);
   const { receipt } = refine.finishRefineRun(dataDir, got.runId, { result: 'done', summary: '补全了描述' });
   assert.equal(receipt.result, 'done');
   assert.equal(receipt.autoPlan.transitioned, true, '恢复后正常流转（函数级失败分支已单独覆盖）');
@@ -231,7 +231,7 @@ t('A7 设置存储：refine 分区保存/读取往返；非法值整体拒绝；
   }
   assert.equal(taskSettings.loadTaskSettings(dataDir).refine.autoPlanAfterDone, true, '拒绝后既有值不被破坏');
   // 存量存储无 refine 分区 → 回退 false
-  fs.writeFileSync(path.join(dataDir, 'tasks', 'settings.json'), JSON.stringify({ version: 1 }));
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'tasks', 'settings.json'), JSON.stringify({ version: 1 }));
   assert.equal(taskSettings.autoPlanAfterRefineDone(taskSettings.loadTaskSettings(dataDir)), false, '存量缺字段按关闭回退');
 });
 
@@ -405,7 +405,7 @@ t('A10 Agent 纪律不变：HUMAN_ONLY_TO 语义与 state-guard 拦截规则零�
   assert.match(lib, /HUMAN_ONLY_TO = new Set\(\['accepted', 'planned', 'done'\]\)/, 'HUMAN_ONLY_TO 集合不变');
   const guard = fs.readFileSync(path.join(pluginRoot, 'scripts', 'state-guard.mjs'), 'utf8');
   assert.match(guard, /v === 'accepted' \|\| v === 'planned' \|\| v === 'done'/, 'bash 模式仍拦截 atb status <ID> planned');
-  assert.match(guard, /path\.basename\(norm\) === 'status\.json'/, 'file 模式仍拦截 status.json 直写');
+  assert.match(guard, /agent-team-board\\\/runtime\\\/status\\\/\[\^\/\]\+\\\.json\$/, 'file 模式仍拦截 status.json 直写（REQ-20260916-007 新布局 runtime/status）');
 });
 
 // ---------- A11 面板记录标注 ----------

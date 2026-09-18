@@ -11,7 +11,7 @@ export const REFINE_ITEM_STATES = ['unrefined', 'refining', 'refined'];
 export const REFINE_STATE_LABEL = { unrefined: '未完善', refining: '完善中', refined: '已完善' };
 
 function statesPath(dataDir) {
-  return path.join(dataDir, 'refine', 'states.json');
+  return path.join(dataDir, 'runtime', 'refine', 'states.json');
 }
 
 function writeJsonAtomic(file, obj) {

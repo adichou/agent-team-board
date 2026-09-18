@@ -57,8 +57,8 @@ async function atbNewAccepted(root, type, title, desc) {
   if (desc) args.push('--desc', desc);
   await atbRun(root, args);
   // REQ-20260908-020：完善候选 = 已接受未完善；新建后人工接受
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
-  const ids = fs.readdirSync(path.join(dataDir, type === 'req' ? 'requirements' : 'bugs')).sort();
+  const dataDir = path.join(root, 'agent-team-board');
+  const ids = fs.readdirSync(path.join(dataDir, 'data', type === 'req' ? 'requirements' : 'bugs')).sort();
   const id = ids[ids.length - 1];
   await atbRun(root, ['status', id, 'accepted']);
   return id;

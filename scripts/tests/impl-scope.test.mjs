@@ -46,9 +46,9 @@ function mkProject() {
 
 function backdate(dataDir, id, deltaMs) {
   const { dir } = core.resolveItemDir(dataDir, id);
-  const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   st.createdAt = new Date(Date.parse(st.createdAt) - deltaMs).toISOString();
-  fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(st, null, 2) + '\n');
+  fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(st, null, 2) + '\n');
 }
 
 function mkItem(p, type, title, { accept = true, backMs = 0 } = {}) {
@@ -64,10 +64,10 @@ function mkItem(p, type, title, { accept = true, backMs = 0 } = {}) {
 
 function forceClaim(p, id, owner) {
   const { dir } = core.resolveItemDir(p.dataDir, id);
-  const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   st.status = 'in-progress';
   st.owner = owner;
-  fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(st, null, 2) + '\n');
+  fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(st, null, 2) + '\n');
 }
 
 const cleanup = (p) => { try { fs.rmSync(p.root, { recursive: true, force: true }); } catch {} };
@@ -271,9 +271,9 @@ t('S5 调度器：无 setScope/scope 机件；开启后按最旧优先领取全�
     core.setStatus(d, st.id, 'planned', { by: 'h' }); // REQ-20260908-010：选单口径 planned
     if (backMs) {
       const { dir } = core.resolveItemDir(d, st.id);
-      const j = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+      const j = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
       j.createdAt = new Date(Date.parse(j.createdAt) - backMs).toISOString();
-      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(j, null, 2) + '\n');
+      fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(j, null, 2) + '\n');
     }
     return st.id;
   };

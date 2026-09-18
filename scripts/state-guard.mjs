@@ -2,7 +2,7 @@
 // PreToolUse 守卫 —— 确定性拦截 Agent 的越权操作（REQ-20260901-003 扩展后含两层）。
 // 由 hooks 配置以两种模式调起（ZCode 用 hooks/hooks.json 的 process schema，
 // Codex 用 hooks/codex.json 的 command schema——BUG-20260906-014），hook 输入 JSON 从 stdin 读取：
-//   state-guard.mjs file  ① Write/Edit 直写 docs/agent-team-board/**/status.json
+//   state-guard.mjs file  ① Write/Edit 直写 agent-team-board/runtime/status/**.json（条目实时状态）
 //                         ② 无有效认领锁时 Write/Edit 本插件源码（scripts/commands/skills/hooks/manifest 等）
 //   state-guard.mjs bash  ① 改写 intent 触碰 status.json（cat 等只读放行）
 //                         ② atb status <ID> accepted|planned|done（人工专属）
@@ -68,8 +68,8 @@ function realpathAncestralHitsPluginRoot(absPath) {
         const real = fs.realpathSync(abs);
         const rel = path.relative(PLUGIN_ROOT, real);
         if (rel.startsWith('..') || path.isAbsolute(rel)) return false; // 插件根之外
-        if (rel === '') return suffix.length > 0 && suffix[0] !== 'docs'; // 祖先即插件根：剩余段决定落点
-        return !rel.startsWith(`docs${path.sep}`); // 看板数据目录豁免
+        if (rel === '') return suffix.length > 0 && suffix[0] !== 'docs' && suffix[0] !== 'agent-team-board'; // 祖先即插件根：剩余段决定落点
+        return !rel.startsWith(`docs${path.sep}`) && !rel.startsWith(`agent-team-board${path.sep}`); // 看板数据目录豁免（docs/ 历史前缀 + agent-team-board/ 板根，REQ-20260916-007）
       } catch {
         return false;
       }
@@ -81,11 +81,11 @@ function realpathAncestralHitsPluginRoot(absPath) {
   }
 }
 
-// 从 cwd 向上找看板目录，检查 .locks/ 下是否有未过期认领锁
+// 从 cwd 向上找看板板根（REQ-20260916-007 新布局），检查 runtime/.locks/ 下是否有未过期认领锁
 function hasValidClaimLock(cwd) {
   let dir = path.resolve(cwd || process.cwd());
   for (;;) {
-    const locks = path.join(dir, 'docs', 'agent-team-board', '.locks');
+    const locks = path.join(dir, 'agent-team-board', 'runtime', '.locks');
     if (fs.existsSync(locks)) {
       try {
         for (const f of fs.readdirSync(locks)) {
@@ -131,10 +131,11 @@ if (mode === 'file') {
   for (const fp of targets) {
     if (!fp) continue;
     const norm = path.resolve(hook.cwd || process.cwd(), fp);
-    const inBoard = /(^|\/)docs\/agent-team-board(\/|$)/.test(norm);
-    if (inBoard && path.basename(norm) === 'status.json') {
+    // REQ-20260916-007：条目实时状态迁 runtime/status/<ID>.json（机器状态文件，禁止直写）
+    const isRuntimeStatus = /(^|\/)agent-team-board\/runtime\/status\/[^/]+\.json$/.test(norm);
+    if (isRuntimeStatus) {
       deny(
-        `status.json 是机器状态文件，禁止直写修改（${norm}）。` +
+        `runtime/status 下的条目状态文件由 atb 维护，禁止直写修改（${norm}）。` +
         '状态变更只能通过 node <插件>/scripts/atb.mjs 的子命令完成。' + HUMAN_STATE_HINT
       );
     }
@@ -409,11 +410,13 @@ function hitsPluginSource(seg) {
   return seg.split(/\s+/).some(tokenRealpathHitsPluginRoot);
 }
 
-// 「status.json 目标」形态：/ 前缀的路径形态（文档/测试内容中「提及」不算），或 find
-// 按名定位的谓词形态（-name status.json）——BUG-20260907-007：find 段中文件名与目录
-// 路径分离（`find <board> -name status.json -delete`），路径形态匹配不到目标。
+// 「条目状态目标」形态（REQ-20260916-007 新布局）：runtime/status/<ID>.json 的 / 前缀
+// 路径形态（文档/测试内容中「提及」不算），或 find 按名定位的谓词形态——BUG-20260907-007：
+// find 段中文件名与目录路径分离（`find <board> -name <ID>.json -delete`），路径形态匹配不到目标。
 function hitsBoardStatusTarget(norm) {
-  return /\/status\.json/i.test(norm) || /(^|\s)-i?name\s+status\.json(\s|$)/i.test(norm);
+  // 路径形态允许通配/后缀变体（glob 如 REQ-20260907-00*.json）；find -name 谓词形态按精确文件名
+  return /\/runtime\/status\/(REQ|BUG)-\d{8}-[^\/\s]*\.json/i.test(norm)
+    || /(^|\s)-i?name\s+(REQ|BUG)-\d{8}-[^\s]*\.json(\s|$)/i.test(norm);
 }
 
 // ---------- BUG-20260907-013：改写意图与插件源码按「写目标」语义关联 ----------
@@ -544,12 +547,12 @@ function gitSubcommandOf(tokens) {
   return null;
 }
 
-// 从 cwd 向上找看板数据目录（docs/agent-team-board）；无看板 = 非看板项目，不管辖
+// 从 cwd 向上找看板板根（agent-team-board/，REQ-20260916-007 新布局）；无看板 = 非看板项目，不管辖
 function boardDataDirOf(cwd) {
   let dir = path.resolve(cwd || process.cwd());
   for (;;) {
-    const cand = path.join(dir, 'docs', 'agent-team-board');
-    if (fs.existsSync(cand)) return cand;
+    const cand = path.join(dir, 'agent-team-board');
+    if (fs.existsSync(path.join(cand, 'data')) || fs.existsSync(path.join(cand, 'runtime'))) return cand;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -574,7 +577,7 @@ if (mode === 'bash') {
     //     > 误判为重定向（B1 回归教训）。
     if (hitsBoardStatusTarget(norm) && /agent-team-board/i.test(norm) && hasRewriteIntent(seg)) {
       deny(
-        `禁止用 Bash 改写 docs/agent-team-board 下的 status.json（命令片段：${seg.trim()}）。` +
+        `禁止用 Bash 改写 agent-team-board/runtime/status 下的条目状态文件（命令片段：${seg.trim()}）。` +
         '状态变更只能通过 atb 子命令完成；只读查看请用 atb show。' + HUMAN_STATE_HINT
       );
     }

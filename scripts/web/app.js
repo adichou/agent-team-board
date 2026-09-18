@@ -249,6 +249,8 @@ const state = {
   codexPending: { count: 0, items: [], byItem: new Set() }, // 顶栏徽标 + 行标记（每轮询刷新）
   // REQ-20260911-009 设置页「Git 工作流」分区：分支状态加载/执行反馈
   git: { loading: false, data: null, error: null, busy: false, sig: '' },
+  // REQ-20260916-007 数据布局（旧 docs/agent-team-board/ → agent-team-board/{data,runtime} 迁移入口）
+  layout: { loading: false, data: null, error: null, busy: false },
   project: null, // 当前展示项目的根绝对路径
   // REQ-20260910-002：深链宿主探测；BUG-20260910-005 补 probing/failed 状态机
   // （undefined=未知；loaded=探测完成；probing=探测进行中；failed=探测通道失败——不等于未安装）
@@ -917,7 +919,7 @@ async function submitProjInit(raw) {
       projNotice('该目录已初始化：请改用「导入项目」。', true);
       return;
     }
-    const direct = `${r.root.replace(/\/+$/, '')}/docs/agent-team-board`;
+    const direct = `${r.root.replace(/\/+$/, '')}/agent-team-board`;
     target.textContent = `将写入：${r.wouldWrite}`
       + (r.wouldWrite !== direct ? `（目录位于 git 仓库内，数据写入仓库根；输入：${raw}）` : '');
     projPanel.preview = { input: raw, root: r.root, wouldWrite: r.wouldWrite };
@@ -2955,7 +2957,7 @@ function holdTimelineHtml(h) {
     const label = HOLD_EVENT_LABEL[e.kind] || e.kind;
     return `<li>${esc(fmtTime(e.at))} · ${esc(label)}${e.by ? `（${esc(e.by)}）` : ''}</li>`;
   }).join('');
-  const runLine = h.runId ? `<p class="hold-run">运行：${esc(h.runId)}（详情见 docs/agent-team-board/dispatch/runs/，决策留痕见条目目录 decisions.md）</p>` : '<p class="hold-run">决策留痕见条目目录 decisions.md</p>';
+  const runLine = h.runId ? `<p class="hold-run">运行：${esc(h.runId)}（详情见 agent-team-board/runtime/dispatch/runs/，决策留痕见条目目录 decisions.md）</p>` : '<p class="hold-run">决策留痕见条目目录 decisions.md</p>';
   return `<div class="hold-timeline" data-hold-timeline="${esc(h.itemId)}">
     ${h.reason ? `<p class="hold-reason">受阻原因：${esc(h.reason)}</p>` : ''}
     ${runLine}
@@ -4724,15 +4726,16 @@ function resolveDocSelection(sel, view) {
 }
 
 // 文档磁盘路径（BUG-20260913-003：按条目类型 / 归属拼装真实磁盘位置，口径同 core.mjs resolveItemDir——
-// 需求 requirements/<单号>/；独立 Bug bugs/<编号>/；归属需求的 Bug requirements/<REQ>/bugs/<编号>/）
+// 需求 data/requirements/<单号>/；独立 Bug data/bugs/<编号>/；归属需求的 Bug data/requirements/<REQ>/bugs/<编号>/；
+// REQ-20260916-007：条目文档在 agent-team-board/data/ 用户数据根下）
 function docRefPath(projectRoot, itemId, name, parent = null) {
   let rel;
   if (itemId.startsWith('REQ-')) {
-    rel = `docs/agent-team-board/requirements/${itemId}/${name}`;
+    rel = `agent-team-board/data/requirements/${itemId}/${name}`;
   } else if (parent) {
-    rel = `docs/agent-team-board/requirements/${parent}/bugs/${itemId}/${name}`;
+    rel = `agent-team-board/data/requirements/${parent}/bugs/${itemId}/${name}`;
   } else {
-    rel = `docs/agent-team-board/bugs/${itemId}/${name}`;
+    rel = `agent-team-board/data/bugs/${itemId}/${name}`;
   }
   return projectRoot ? `${projectRoot}/${rel}` : rel;
 }
@@ -7741,7 +7744,7 @@ $('#shortcutHelpWrap')?.addEventListener('click', (e) => { if (e.target === e.cu
 $('#btnInit').addEventListener('click', async () => {
   try {
     await api('/api/init', { method: 'POST' });
-    toast('✓ 已初始化 docs/agent-team-board/');
+    toast('✓ 已初始化 agent-team-board/');
     state.knownIds = null; // REQ-20260906-016：初始化是目录状态变化，既有条目不算新建，首轮重新播种
     await refreshHealth();
     await poll();
@@ -8023,9 +8026,62 @@ function paintSettingsView(view) {
       ${homepageSettingsHtml()}
       ${taskSettingsAreaHtml()}
       ${gitWorkflowAreaHtml()}
+      ${layoutMigrationAreaHtml()}
     </div>`;
   bindSettingsView(view);
   bindHomepageSettings(view);
+}
+
+// REQ-20260916-007「数据布局迁移」分区：旧布局项目（docs/agent-team-board/）一键迁移到
+// 新布局（agent-team-board/data 用户数据进 git、runtime 应用数据停止提交）。
+function layoutMigrationAreaHtml() {
+  const l = state.layout;
+  if (l.loading) {
+    return `
+    <section class="cx-config layout-migration" aria-busy="true">
+      <h4>数据布局迁移</h4>
+      <p class="muted small">正在检测数据布局…</p>
+    </section>`;
+  }
+  if (l.error) {
+    return `
+    <section class="cx-config layout-migration">
+      <h4>数据布局迁移</h4>
+      <div class="notice err">布局检测失败：${esc(l.error)} <button type="button" class="btn small" id="lmRetry">重试</button></div>
+    </section>`;
+  }
+  const d = l.data || { legacy: false, modern: false, hint: '' };
+  const btn = d.legacy
+    ? `<button type="button" class="btn primary" id="lmMigrate"${l.busy ? ' disabled' : ''}>一键迁移到新布局</button>`
+    : `<button type="button" class="btn" id="lmMigrate" disabled>${d.modern ? '已是新布局' : '无可迁移数据'}</button>`;
+  return `
+    <section class="cx-config layout-migration">
+      <h4>数据布局迁移</h4>
+      <p class="muted small">用户数据（条目文档）在 agent-team-board/data/ 随 git 提交；应用数据（状态、账本）在 agent-team-board/runtime/ 本地留存、不进 git。</p>
+      <div class="ts-block"><p style="margin:2px 0 0">${esc(d.hint)}</p></div>
+      <div class="dep-toolbar">
+        ${btn}
+        <span class="muted small" id="lmStatus" role="status"></span>
+      </div>
+    </section>`;
+}
+
+async function refreshLayoutState() {
+  if (!state.project) return;
+  state.layout.loading = true;
+  try {
+    const d = await api('/api/layout/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: state.project }),
+    }, null);
+    state.layout.loading = false;
+    state.layout.error = null;
+    state.layout.data = d;
+  } catch (e) {
+    state.layout.loading = false;
+    state.layout.error = e.message;
+  }
 }
 
 async function renderSettingsView() {
@@ -8035,9 +8091,11 @@ async function renderSettingsView() {
   // 编辑与保存禁用，避免未加载完成就覆盖配置
   state.tasks.loading = true;
   state.git.loading = true;
+  state.layout = { loading: true, data: null, error: null, busy: false }; // REQ-20260916-007
   paintSettingsView(view);
   const homepageLoad = loadHomepageSettings();
   const gitLoad = refreshGitState(); // REQ-20260911-009：Git 状态与任务设置并行加载
+  const layoutLoad = refreshLayoutState(); // REQ-20260916-007：布局检测并行加载
   try {
     if (!state.codex.settings) state.codex.settings = (await api('/api/dispatch/settings')).settings;
   } catch (e) {
@@ -8049,6 +8107,7 @@ async function renderSettingsView() {
   await ensureTaskSettings(true); // REQ-20260908-020：批量任务分区随设置视图实时读取（失败记录于 state.tasks.error）
   await gitLoad;
   await homepageLoad;
+  await layoutLoad;
   paintSettingsView(view); // 阶段二：就绪渲染隐藏开关（或失败态错误 + 重试）
 }
 
@@ -8085,6 +8144,50 @@ function bindSettingsView(view) {
     } finally {
       tsSave.disabled = false;
       tsSave.textContent = '保存批量任务设置';
+    }
+  });
+
+  // REQ-20260916-007「数据布局迁移」分区：检测重试 + 一键迁移（确认 → 执行 → 就近反馈）
+  const lmRetry = view.querySelector('#lmRetry');
+  if (lmRetry) lmRetry.addEventListener('click', async () => {
+    state.layout.loading = true;
+    paintSettingsView(view);
+    await refreshLayoutState();
+    paintSettingsView(view);
+  });
+  const lmMigrate = view.querySelector('#lmMigrate');
+  const lmStatus = view.querySelector('#lmStatus');
+  if (lmMigrate && !lmMigrate.disabled) lmMigrate.addEventListener('click', async () => {
+    const ok = await uiConfirm({
+      title: '迁移到新布局？',
+      message: '条目文档将移动到 agent-team-board/data/（git mv 保留历史并继续提交）；运行数据（状态、账本、设置）移到 agent-team-board/runtime/ 并停止提交（本地保留）。迁移不自动提交，变更随下一次提交入库。操作幂等，失败不会损坏数据。',
+      confirmText: '开始迁移',
+    });
+    if (!ok) return;
+    state.layout.busy = true;
+    lmMigrate.disabled = true;
+    if (lmStatus) lmStatus.textContent = '正在迁移…';
+    try {
+      const r = await api('/api/migrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: state.project }),
+      }, null);
+      state.layout.busy = false;
+      await refreshLayoutState();
+      paintSettingsView(view);
+      if (r.changed) {
+        toast('✓ 已迁移到新布局（条目文档进 data/，应用数据本地留存）');
+        state.knownIds = null; // 目录结构变化：刷新看板数据
+        await poll();
+      } else {
+        toast(`= ${r.reason || '无需迁移'}`);
+      }
+    } catch (e) {
+      state.layout.busy = false;
+      paintSettingsView(view);
+      const st2 = view.querySelector('#lmStatus');
+      if (st2) st2.textContent = `失败：${e.message}（可重试；迁移幂等，已完成部分不会重复执行）`;
     }
   });
 

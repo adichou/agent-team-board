@@ -17,8 +17,12 @@ const guard = path.join(pluginRoot, 'scripts', 'state-guard.mjs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-codeguard-'));
 fs.mkdirSync(path.join(tmp, 'proj'), { recursive: true });
 const project = fs.realpathSync(path.join(tmp, 'proj'));
-const board = path.join(project, 'docs', 'agent-team-board');
-fs.mkdirSync(path.join(board, '.locks'), { recursive: true });
+// REQ-20260916-007 新布局：板根 agent-team-board/（data 用户数据 + runtime 应用数据）
+const board = path.join(project, 'agent-team-board');
+const statusFile = (id) => path.join(board, 'runtime', 'status', `${id}.json`);
+fs.mkdirSync(path.join(board, 'runtime', '.locks'), { recursive: true });
+fs.mkdirSync(path.join(board, 'runtime', 'status'), { recursive: true });
+fs.mkdirSync(path.join(board, 'data', 'requirements', 'R1'), { recursive: true });
 const SRC = path.join(pluginRoot, 'scripts', 'web', 'app.js'); // 受保护源码样本
 
 function run(mode, toolInput, cwd, env = {}) {
@@ -183,14 +187,15 @@ t('Q3 curl 人工 API：参数值与路径拆词应拦截', async () => {
   }
 });
 
-t('Q4 status.json 路径拆词改写应拦截', async () => {
+t('Q4 条目状态文件路径拆词改写应拦截', async () => {
   const commands = [
-    `echo '{"x":1}' > ${board}/requirements/R1/st""atus.json`,
-    `echo x | tee ${board}/requirements/R1/st''atus.json`,
+    `echo '{"x":1}' > ${board}/runtime/st""atus/REQ-20260907-001.json`,
+    `echo x | tee ${board}/runtime/st''atus/REQ-20260907-001.json`,
+    `echo x > ${board}/runtime/status/REQ-20260907-0""01.json`,
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
-    assert.equal(r.code, 2, `拆词 status.json 改写应拦截（${command}）`);
+    assert.equal(r.code, 2, `拆词条目状态文件改写应拦截（${command}）`);
   }
 });
 
@@ -199,7 +204,7 @@ t('Q5 误报回归：引号内普通字样与拆词只读不新增误拦', async
     `node ${pluginRoot}/scripts/atb.mjs report REQ-20260907-006 --coverage 90 --summary "修复 st\\"\\atus 拆词绕过与 ac cepted 字样提及"`,
     `node ${pluginRoot}/scripts/atb.mjs report REQ-20260907-006 --summary "提及 st\\\"\\\"atus 与 done 字样的说明文本"`,
     `echo "文本提及 st atus 与 ac cepted 字样"`,
-    `cat ${board}/requirements/R1/st""atus.json`,
+    `cat ${board}/runtime/st""atus/REQ-20260907-001.json`,
     `atb st""atus REQ-20260907-001 in-pro""gress`,
   ];
   for (const command of commands) {
@@ -211,7 +216,7 @@ t('Q5 误报回归：引号内普通字样与拆词只读不新增误拦', async
 // BUG-20260907-007：改写意图检测缺口——解释器内联代码（node -e/--eval/-p、ruby/perl -e、
 // python -c 等）与 find 写动作（-delete/-fprint 族）可改删 status.json / 插件源码，此前均放行。
 t('N1 解释器内联代码改写 status.json 应拦截', async () => {
-  const sj = `${board}/requirements/R1/status.json`;
+  const sj = statusFile('REQ-20260907-001');
   const commands = [
     `node -e "require('fs').writeFileSync('${sj}','{}')"`,
     `node --eval "require('fs').writeFileSync('${sj}','{}')"`,
@@ -222,21 +227,21 @@ t('N1 解释器内联代码改写 status.json 应拦截', async () => {
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
-    assert.equal(r.code, 2, `解释器内联改写 status.json 应拦截（${command}）`);
+    assert.equal(r.code, 2, `解释器内联改写条目状态文件应拦截（${command}）`);
   }
 });
 
 t('N2 find 写动作删改 status.json 应拦截', async () => {
   const commands = [
-    `find ${board} -name status.json -delete`,
-    `find ${board} -name status.json -fprint /tmp/atb-out`,
-    `find ${board} -name status.json -fprint0 /tmp/atb-out`,
-    `find ${board} -name status.json -fprintf /tmp/atb-out '%p\\n'`,
-    `find ${board} -name status.json -fls /tmp/atb-out`,
+    `find ${board}/runtime/status -name REQ-20260907-001.json -delete`,
+    `find ${board}/runtime/status -name REQ-20260907-001.json -fprint /tmp/atb-out`,
+    `find ${board}/runtime/status -name REQ-20260907-001.json -fprint0 /tmp/atb-out`,
+    `find ${board}/runtime/status -name REQ-20260907-001.json -fprintf /tmp/atb-out '%p\\n'`,
+    `find ${board}/runtime/status -name REQ-20260907-001.json -fls /tmp/atb-out`,
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
-    assert.equal(r.code, 2, `find 写动作触碰 status.json 应拦截（${command}）`);
+    assert.equal(r.code, 2, `find 写动作触碰条目状态文件应拦截（${command}）`);
   }
 });
 
@@ -259,8 +264,8 @@ t('N4 误报回归：无内联代码的解释器调用与只读 find 放行', as
   const commands = [
     `node ${pluginRoot}/scripts/atb.mjs show REQ-20260901-003`,
     `node --version`,
-    `python3 -m json.tool ${board}/requirements/R1/status.json`,
-    `find ${board} -name status.json`,
+    `python3 -m json.tool ${statusFile('REQ-20260907-001')}`,
+    `find ${board}/runtime/status -name REQ-20260907-001.json`,
     `find ${pluginRoot}/scripts -name '*.mjs' | head -3`,
     `node ${pluginRoot}/scripts/atb.mjs report BUG-20260907-007 --coverage 90 --summary "提及 node -e 与 find -delete 字样的说明文本"`,
     `echo "文本提及 node --eval 与 find -delete 字样"`,
@@ -275,7 +280,7 @@ t('N5 perl 形态回归：-pi 原地改写与 -e 内联均拦截', async () => {
   const commands = [
     `perl -pi -e 's/a/b/' ${SRC}`,
     `perl -pi.bak 's/a/b/' ${SRC}`,
-    `perl -e "unlink(glob('${board}/requirements/*/status.json'))"`,
+    `perl -e "unlink(glob('${board}/runtime/status/REQ-20260907-00*.json'))"`,
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
@@ -331,37 +336,37 @@ t('C3 无锁：插件路径仅作读取/遍历来源、写目标在插件外放�
 
 // G3 有效锁：放行
 t('G3 有效认领锁：同类命令放行', async () => {
-  fs.writeFileSync(path.join(board, '.locks', 'REQ-TEST-001.lock'), JSON.stringify({ owner: 't', at: new Date().toISOString() }));
+  fs.writeFileSync(path.join(board, 'runtime', '.locks', 'REQ-TEST-001.lock'), JSON.stringify({ owner: 't', at: new Date().toISOString() }));
   const w = await run('file', { file_path: SRC }, project);
   assert.equal(w.code, 0, `有效锁应放行 Write：${w.err}`);
   const b = await run('bash', { command: `echo x > ${pluginRoot}/commands/dev.md` }, project);
   assert.equal(b.code, 0, '有效锁应放行 Bash 改写');
-  fs.rmSync(path.join(board, '.locks', 'REQ-TEST-001.lock'));
+  fs.rmSync(path.join(board, 'runtime', '.locks', 'REQ-TEST-001.lock'));
 });
 
 // G4 豁免：看板 markdown 直改 0；status.json 直写仍 2（原规则不破坏）
-t('G4 豁免与原规则：看板 markdown 放行、status.json 直写仍拦', async () => {
-  const md = path.join(board, 'README.md');
+t('G4 豁免与原规则：看板条目 markdown 放行、runtime 状态文件直写仍拦', async () => {
+  const md = path.join(board, 'data', 'requirements', 'R1', 'README.md');
   fs.writeFileSync(md, '# t');
   const w = await run('file', { file_path: md }, project);
-  assert.equal(w.code, 0, '看板 markdown 应放行');
-  const sj = await run('file', { file_path: path.join(board, 'requirements', 'X', 'status.json') }, project);
-  assert.equal(sj.code, 2, 'status.json 直写仍应拦截');
+  assert.equal(w.code, 0, '看板条目 markdown 应放行');
+  const sj = await run('file', { file_path: statusFile('REQ-20260907-002') }, project);
+  assert.equal(sj.code, 2, 'runtime/status 条目状态文件直写仍应拦截');
 });
 
 // G5 只读不误报（BUG-20260901-002 修复面）：cat status.json、提及看板目录的只读命令 → 0
-t('G5 只读不误报：cat status.json / 只读提及看板目录放行', async () => {
-  const c1 = await run('bash', { command: `cat ${board}/requirements/R1/status.json` }, project);
-  assert.equal(c1.code, 0, `cat status.json 应放行：${c1.err}`);
-  const c2 = await run('bash', { command: `ls docs/agent-team-board && grep -r 认领 docs/agent-team-board/requirements` }, project);
+t('G5 只读不误报：cat 条目状态文件 / 只读提及看板目录放行', async () => {
+  const c1 = await run('bash', { command: `cat ${statusFile('REQ-20260907-001')}` }, project);
+  assert.equal(c1.code, 0, `cat 条目状态文件应放行：${c1.err}`);
+  const c2 = await run('bash', { command: `ls agent-team-board && grep -r 认领 agent-team-board/data/requirements` }, project);
   assert.equal(c2.code, 0, `只读提及看板目录应放行：${c2.err}`);
 });
 
 // BUG-20260901-002 回归面：合法命令文本提及看板目录与 status.json 不误拦；真实改写仍拦
 t('F1 误报回归：atb 合法子命令文本提及目录与状态文件名放行', async () => {
   const commands = [
-    `node ${pluginRoot}/scripts/atb.mjs new req "守卫误报" --desc "命令文本提及 docs/agent-team-board 与 /status.json 即被拦"`,
-    `node ${pluginRoot}/scripts/atb.mjs report REQ-20260901-003 --coverage 90 --summary "修复 docs/agent-team-board/…/status.json 误报"`,
+    `node ${pluginRoot}/scripts/atb.mjs new req "守卫误报" --desc "命令文本提及 agent-team-board 与 runtime/status 状态文件名即被拦"`,
+    `node ${pluginRoot}/scripts/atb.mjs report REQ-20260901-003 --coverage 90 --summary "修复 agent-team-board/runtime/status/…/状态文件 误报"`,
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
@@ -371,9 +376,9 @@ t('F1 误报回归：atb 合法子命令文本提及目录与状态文件名放�
 
 t('F2 误报回归：只读命令按路径形态提及 status.json 放行', async () => {
   const commands = [
-    `cat ${board}/requirements/R1/status.json | head -5`,
-    `ls docs/agent-team-board/requirements/R1/status.json`,
-    `grep -c status.json ${board}/README.md`,
+    `cat ${statusFile('REQ-20260907-001')} | head -5`,
+    `ls ${board}/runtime/status/REQ-20260907-001.json`,
+    `grep -c status ${board}/runtime/README.md`,
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
@@ -381,8 +386,8 @@ t('F2 误报回归：只读命令按路径形态提及 status.json 放行', asyn
   }
 });
 
-t('F3 回归：status.json 真实改写命令仍拦截', async () => {
-  const sj = `${board}/requirements/R1/status.json`;
+t('F3 回归：条目状态文件真实改写命令仍拦截', async () => {
+  const sj = statusFile('REQ-20260907-001');
   const commands = [
     `echo '{"status":"done"}' > ${sj}`,
     `sed -i '' 's/submitted/accepted/' ${sj}`,
@@ -391,7 +396,7 @@ t('F3 回归：status.json 真实改写命令仍拦截', async () => {
   ];
   for (const command of commands) {
     const r = await run('bash', { command }, tmpNoLock);
-    assert.equal(r.code, 2, `status.json 改写应拦截（${command}）`);
+    assert.equal(r.code, 2, `条目状态文件改写应拦截（${command}）`);
   }
 });
 
@@ -427,8 +432,8 @@ fs.copyFileSync(guard, path.join(fakePlugin, 'scripts', 'state-guard.mjs'));
 const sibling = path.join(fakeRoot, 'other-project');
 fs.mkdirSync(path.join(sibling, 'src'), { recursive: true });
 
-t('P1 无锁：插件根内 docs/agent-team-board 条目 markdown 放行（豁免生效）', async () => {
-  const md = path.join(fakePlugin, 'docs', 'agent-team-board', 'bugs', 'B-1', 'README.md');
+t('P1 无锁：插件根内 agent-team-board/data 条目 markdown 放行（豁免生效）', async () => {
+  const md = path.join(fakePlugin, 'agent-team-board', 'data', 'bugs', 'B-1', 'README.md');
   fs.mkdirSync(path.dirname(md), { recursive: true });
   fs.writeFileSync(md, '# t');
   const r = await runGuardAt(path.join(fakePlugin, 'scripts', 'state-guard.mjs'), 'file', { file_path: md }, tmpNoLock);
@@ -452,10 +457,10 @@ t('P3 无锁：插件根内源码仍拦截（修复不放松保护）', async ()
 });
 
 t('P4 无锁：真实安装形态下本仓库看板条目 markdown 放行', async () => {
-  const md = path.join(pluginRoot, 'docs', 'agent-team-board', 'bugs', 'BUG-20260906-015', 'README.md');
+  const md = path.join(pluginRoot, 'agent-team-board', 'data', 'bugs', 'BUG-20260906-015', 'README.md');
   assert.ok(fs.existsSync(md), '回归样本 markdown 应存在');
   const r = await run('file', { file_path: md }, tmpNoLock);
-  assert.equal(r.code, 0, `本仓库看板 markdown（插件根内 docs/）应放行：${r.err}`);
+  assert.equal(r.code, 0, `本仓库看板 markdown（插件根内 agent-team-board/data/）应放行：${r.err}`);
 });
 
 // BUG-20260907-008：软链别名绕过——生产形态 cache 目录软链指向源码仓库，命令文本用
@@ -511,13 +516,13 @@ t('S4 无锁：~ 前缀别名路径改写应拦截', async () => {
 t('S5 误报回归：别名指向非插件目录、别名下 docs 豁免与只读命令不误拦', async () => {
   const otherAlias = path.join(fakeRoot, 'other-alias'); // 软链 → 非插件目录
   fs.symlinkSync(sibling, otherAlias, 'dir');
-  const boardMd = path.join(aliasRoot, 'docs', 'agent-team-board', 'bugs', 'B-2', 'README.md');
+  const boardMd = path.join(aliasRoot, 'agent-team-board', 'data', 'bugs', 'B-2', 'README.md');
   fs.mkdirSync(path.dirname(boardMd), { recursive: true });
   fs.writeFileSync(boardMd, '# t');
   const guardAt = path.join(fakePlugin, 'scripts', 'state-guard.mjs');
   const commands = [
     `echo hi > ${otherAlias}/src/main.swift`, // 别名指向其他项目：放行
-    `echo x > ${boardMd}`, // 别名下的看板 markdown：docs/ 豁免放行
+    `echo x > ${boardMd}`, // 别名下的看板 markdown：板根前缀豁免放行
     `cat ${aliasSrc}`, // 只读：放行
     `curl -s http://127.0.0.1:8888/api/items`, // URL token 不当作路径：放行（无人工状态参数）
   ];
@@ -557,10 +562,10 @@ t('NF2 无锁：file 模式经软链别名路径写新文件（含多级不存�
   }
 });
 
-t('NF3 误报回归：docs/ 豁免与插件外新文件放行', async () => {
+t('NF3 误报回归：看板板根豁免与插件外新文件放行', async () => {
   const guardAt = path.join(fakePlugin, 'scripts', 'state-guard.mjs');
-  const realBoardNew = path.join(pluginRoot, 'docs', 'agent-team-board', 'bugs', 'B-new', 'README.md');
-  const aliasBoardNew = path.join(aliasRoot, 'docs', 'agent-team-board', 'bugs', 'B-new', 'README.md');
+  const realBoardNew = path.join(pluginRoot, 'agent-team-board', 'data', 'bugs', 'B-new', 'README.md');
+  const aliasBoardNew = path.join(aliasRoot, 'agent-team-board', 'data', 'bugs', 'B-new', 'README.md');
   const outsideNew = path.join(sibling, 'src', 'brand-new.swift');
   const tmpNew = path.join(tmpNoLock, 'notes.md');
   for (const file_path of [realBoardNew, aliasBoardNew, outsideNew, tmpNew]) {
@@ -572,9 +577,9 @@ t('NF3 误报回归：docs/ 豁免与插件外新文件放行', async () => {
 });
 
 t('NF4 有效认领锁：file 模式新建插件源码文件放行', async () => {
-  fs.writeFileSync(path.join(board, '.locks', 'REQ-TEST-002.lock'), JSON.stringify({ owner: 't', at: new Date().toISOString() }));
+  fs.writeFileSync(path.join(board, 'runtime', '.locks', 'REQ-TEST-002.lock'), JSON.stringify({ owner: 't', at: new Date().toISOString() }));
   const r = await run('file', { file_path: path.join(pluginRoot, 'scripts', 'locked-new.tmp') }, project);
-  fs.rmSync(path.join(board, '.locks', 'REQ-TEST-002.lock'));
+  fs.rmSync(path.join(board, 'runtime', '.locks', 'REQ-TEST-002.lock'));
   assert.equal(r.code, 0, `有效锁应放行新建源码文件：${r.err}`);
 });
 

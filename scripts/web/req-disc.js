@@ -506,7 +506,7 @@ const ATBReqDisc = (() => {
     if (!q || !state.data) return;
     const d = state.data;
     const round = latestRound();
-    const docPath = `${d.projectRoot}/docs/agent-team-board/requirements/${d.reqId}/README.md`;
+    const docPath = `${d.projectRoot}/agent-team-board/data/requirements/${d.reqId}/README.md`;
     const text = [
       `${d.reqId} / ${d.id}（第 ${round ? round.no : 1} 轮）`,
       `项目：${d.projectRoot}`,

@@ -15,7 +15,7 @@ import * as core from '../lib/core.mjs';
 
 const __http = http;
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const itemDir = path.join(pluginRoot, 'docs', 'agent-team-board', 'requirements', 'REQ-20260910-010');
+const itemDir = path.join(pluginRoot, 'agent-team-board', 'data', 'requirements', 'REQ-20260910-010');
 
 // ---------- 测试环境 ----------
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-missingdir-'));
@@ -172,7 +172,7 @@ t('S4 单项移出放宽：目录已不存在（含同名文件形态）的注�
   const saved = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
   assert.ok(saved.removed.includes(fileD), '移出应记入 removed（防隐式重现）');
   assert.equal(fs.readFileSync(fileD, 'utf8'), 'now a file', '同名文件不得被删除（只动注册表）');
-  assert.ok(fs.existsSync(path.join(dataA, 'requirements')), '其他项目磁盘数据不受影响');
+  assert.ok(fs.existsSync(path.join(dataA, 'data', 'requirements')), '其他项目磁盘数据不受影响');
   await post(`${base}/api/project/remove`, { path: fileD }, 400); // 已移出 → 不在列表中
   await post(`${base}/api/project/remove`, { path: 'relative/path' }, 400);
 });
@@ -194,7 +194,7 @@ t('B1 批量移出：仅移出仍不存在的候选，注册表/removed 落盘�
   }
   assert.ok(h.projects.includes(projectA) && h.projects.includes(projectB) && h.projects.includes(lockSub),
     '存在项目与权限恢复项不受批量移出影响');
-  assert.ok(fs.existsSync(path.join(dataB, 'requirements')), '磁盘看板数据保留');
+  assert.ok(fs.existsSync(path.join(dataB, 'data', 'requirements')), '磁盘看板数据保留');
 });
 
 t('B2 确认时重新核实：候选恢复存在 → 跳过；已不在列表 → 跳过；不扩大移出范围', async () => {

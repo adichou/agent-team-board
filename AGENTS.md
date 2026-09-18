@@ -5,8 +5,8 @@
 ## 开发必须走看板
 
 1. **改前先登记**：改动本仓库任何源码（scripts/、commands/、skills/、hooks/、插件 manifest、根文档）前，必须先 `/req` 或 `/bug` 登记条目 → 人工在看板「接受」→ 人工「移入计划」→ `node scripts/atb.mjs claim <ID>` 认领（认领即产生认领锁）。
-2. **源码受硬保护**：无有效认领锁时，PreToolUse 钩子（hooks/hooks.json → scripts/state-guard.mjs）会确定性拦截对源码的写入（REQ-20260901-003）。不要尝试绕过；看板数据目录（docs/agent-team-board/ 的条目 markdown）编辑不受限。
-3. **状态铁律**：绝不直写任何 `status.json`；绝不把条目置为 accepted / planned / done（仅限人工）；Agent 的常规状态操作只有 claim 与 report。
+2. **源码受硬保护**：无有效认领锁时，PreToolUse 钩子（hooks/hooks.json → scripts/state-guard.mjs）会确定性拦截对源码的写入（REQ-20260901-003）。不要尝试绕过；看板用户数据目录（agent-team-board/data/ 的条目 markdown）编辑不受限。
+3. **状态铁律**：绝不直写任何条目状态文件（`agent-team-board/runtime/status/*.json`）；绝不把条目置为 accepted / planned / done（仅限人工）；Agent 的常规状态操作只有 claim 与 report。
 
 ## TDD 与收口
 
@@ -26,7 +26,7 @@
 | ---- | ---- |
 | 全量测试 | `npm test`（= `node scripts/tests/run-all.mjs`） |
 | 单个测试 | `node scripts/tests/<name>.test.mjs` |
-| 直写 status.json / 置人工状态被拦 | 改用 atb 子命令；接受 / 置计划 / 确认完成请人工操作 |
+| 直写条目状态文件 / 置人工状态被拦 | 改用 atb 子命令；接受 / 置计划 / 确认完成请人工操作 |
 | 无认领锁改源码被拦 | 先登记 → 人工接受并移入计划 → `atb claim` 认领后再改 |
 | Bash 里 git commit 被拦 | `atb report` 后系统自动收口提交，无需手工提交 |
 
@@ -35,7 +35,7 @@
 - 项目定位、目录与模块地图、环境与运行命令：README.md
 - 开发本产品：本文件 + README.md
 - 使用本产品管理任务（任意项目）：skills/agent-team-board/SKILL.md（唯一权威）
-- 工程事实源与历史单据：docs/agent-team-board/（批量任务详解：batch-execution.md）
+- 工程单据（用户数据，进 git）：agent-team-board/data/；运行应用数据（本地留存）：agent-team-board/runtime/；批量任务详解：skills/agent-team-board/batch-execution.md
 
 ## 双入口边界
 

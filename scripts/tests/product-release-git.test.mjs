@@ -135,8 +135,8 @@ t('B5 脏工作区 / dev 缺失 / 分支被占用 → 明确报错，不自动�
   assert.equal(git(proj, 'status', '--porcelain').includes('?? dirty.txt'), true, '不自动暂存/丢弃');
   fs.rmSync(path.join(proj, 'dirty.txt'));
   // 看板数据目录的改动不阻塞（与 REL 口径一致）
-  fs.mkdirSync(path.join(proj, 'docs/agent-team-board/runs'), { recursive: true });
-  fs.writeFileSync(path.join(proj, 'docs/agent-team-board/runs/x.json'), '{}');
+  fs.mkdirSync(path.join(proj, 'agent-team-board/runtime/runs'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'agent-team-board/runtime/runs/x.json'), '{}');
   const r = await prelGit.switchMainVerifyHead(proj, exec, { expectedMainSha: mainSha });
   assert.equal(r.ok, true);
   // 分支被其他 worktree 占用（先切离 main 再让其他工作树占用 main）

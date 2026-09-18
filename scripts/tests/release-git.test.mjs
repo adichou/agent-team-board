@@ -105,7 +105,7 @@ for (const scenario of [
     try {
       fs.mkdirSync(path.join(env.work, 'src'));
       fs.writeFileSync(path.join(env.work, 'src/.keep'), '');
-      const tracked = [...scenario.board.map((p) => `docs/agent-team-board/${p}`)];
+      const tracked = [...scenario.board.map((p) => `agent-team-board/data/${p}`)];
       if (scenario.outside && scenario.outside !== 'untracked') tracked.push('src/repro.txt');
       for (const file of tracked) fs.writeFileSync(path.join(env.work, file), 'before\n');
       git(env.work, ['add', '-A']);

@@ -16,7 +16,7 @@ const js = fs.readFileSync(path.join(webRoot, 'app.js'), 'utf8');
 const oncall = fs.readFileSync(path.join(webRoot, 'oncall.js'), 'utf8');
 const css = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
 const flat = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
-const itemDir = path.join(root, 'docs', 'agent-team-board', 'requirements', 'REQ-20260910-009');
+const itemDir = path.join(root, 'agent-team-board', 'data', 'requirements', 'REQ-20260910-009');
 
 let failed = 0;
 const t = (name, fn) => {

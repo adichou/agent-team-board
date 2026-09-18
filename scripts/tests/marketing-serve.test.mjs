@@ -115,12 +115,12 @@ t('H1~H7 /api/marketing* 接口全链路', async () => {
     assert.equal(r.json.profile.evidence[0].type, 'fact');
 
     // H3：过期 revision → 409 + conflict:true；最新 revision 可保存
-    const before = fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'marketing', 'profile.json'), 'utf8');
+    const before = fs.readFileSync(path.join(root, 'agent-team-board', 'runtime', 'marketing', 'profile.json'), 'utf8');
     r = await req(port, 'POST', `/api/marketing/profile${P}`, { revision: 1, positioning: positioning({ intro: '陈旧' }), evidence: [] });
     assert.equal(r.status, 409);
     assert.equal(r.json.conflict, true);
     assert.equal(r.json.currentRevision, 2, '响应携带服务端最新 revision');
-    assert.equal(fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'marketing', 'profile.json'), 'utf8'), before, '冲突不改旧文件');
+    assert.equal(fs.readFileSync(path.join(root, 'agent-team-board', 'runtime', 'marketing', 'profile.json'), 'utf8'), before, '冲突不改旧文件');
     r = await req(port, 'POST', `/api/marketing/profile${P}`, { revision: 2, positioning: positioning({ intro: '第三版' }), evidence: [] });
     assert.equal(r.status, 200);
     assert.equal(r.json.profile.revision, 3);
@@ -146,14 +146,14 @@ t('H1~H7 /api/marketing* 接口全链路', async () => {
     assert.equal(r.json.state.profile.currentPricing, null, '候选不会自动成为当前');
     r = await req(port, 'POST', `/api/marketing/pricing${P}`, pricing({ packages: [{ name: '专业版', benefits: '全部功能', price: 39 }] }));
     assert.equal(r.json.version.version, 'v2');
-    const v1Raw = fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'marketing', 'pricing', 'v1.json'), 'utf8');
+    const v1Raw = fs.readFileSync(path.join(root, 'agent-team-board', 'runtime', 'marketing', 'pricing', 'v1.json'), 'utf8');
 
     r = await req(port, 'POST', `/api/marketing/pricing/current${P}`, { version: 'v1' });
     assert.equal(r.status, 200);
     assert.equal(r.json.profile.currentPricing, 'v1');
     r = await req(port, 'POST', `/api/marketing/pricing/current${P}`, { version: 'v2' });
     assert.equal(r.json.profile.currentPricing, 'v2', '显式切换到 v2');
-    assert.equal(fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'marketing', 'pricing', 'v1.json'), 'utf8'), v1Raw, 'v1 内容不变');
+    assert.equal(fs.readFileSync(path.join(root, 'agent-team-board', 'runtime', 'marketing', 'pricing', 'v1.json'), 'utf8'), v1Raw, 'v1 内容不变');
     r = await req(port, 'POST', `/api/marketing/pricing/current${P}`, { version: 'v9' });
     assert.equal(r.status, 400, '未知版本拒绝');
 

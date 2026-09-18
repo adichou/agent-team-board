@@ -29,7 +29,7 @@ const solo = core.createItem(core.dataDirFrom(project), { type: 'bug', title: '�
 assert.ok(req.id && bug.id && solo.id, '条目创建失败');
 
 // 文档正文写入关键词（README 首行 H1 含单号与标题，用于验证 H1 不算内容命中）
-const reqDir = path.join(core.dataDirFrom(project), 'requirements', req.id);
+const reqDir = path.join(core.dataDirFrom(project), 'data', 'requirements', req.id);
 fs.appendFileSync(path.join(reqDir, 'design.md'), '\n## 实施记录\n\n方案采用 ZEBRA-CROSSING 布局算法。\n');
 fs.appendFileSync(path.join(reqDir, 'README.md'), '\n## 补充\n\n正文里提到 ZEBRA-CROSSING 才算内容命中。\n');
 

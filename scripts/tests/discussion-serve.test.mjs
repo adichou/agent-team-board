@@ -5,6 +5,7 @@
 // 用法：node scripts/tests/discussion-serve.test.mjs
 
 import assert from 'node:assert/strict';
+import * as core from '../lib/core.mjs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -44,7 +45,7 @@ const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
 
 function publish(dataDir, id, items) {
-  const dir = path.join(dataDir, 'oncall', 'tickets', id);
+  const dir = path.join(dataDir, 'runtime', 'oncall', 'tickets', id);
   fs.writeFileSync(path.join(dir, 'minutes.md'), '# 纪要\n\n- 共识：走看板沉淀');
   fs.writeFileSync(path.join(dir, 'candidates.json'), JSON.stringify({ discussionId: id, items }));
   fs.writeFileSync(path.join(dir, 'PUBLISH.json'), JSON.stringify({ discussionId: id, publishedAt: '2026-09-09T00:00:00.000Z' }));
@@ -59,7 +60,7 @@ t('H1~H4 /api/discussion* 接口全链路', async () => {
     p.on('close', resolve);
   });
   assert.equal(initRes, 0, 'atb init 应成功');
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
+  const dataDir = path.join(root, 'agent-team-board');
 
   const port = 31000 + Math.floor(Math.random() * 20000);
   const server = spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'server.mjs')], {
@@ -143,7 +144,7 @@ t('H1~H4 /api/discussion* 接口全链路', async () => {
 
     // 条目侧来源讨论（双向关联）
     const itemId = r.json.results[0].itemId;
-    const st = JSON.parse(fs.readFileSync(path.join(dataDir, 'requirements', itemId, 'status.json'), 'utf8'));
+    const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(path.join(dataDir, 'data', 'requirements', itemId)), 'utf8'));
     assert.equal(st.sourceDiscussion.id, id);
 
     // H3：archive / resume

@@ -248,7 +248,7 @@ async function serverPart() {
     assert.equal('batchEntry' in dd.json, false, 'BUG-20260908-020：accepted 条目详情不再下发 batchEntry');
 
     // S2c 批次 finished 后 planned 的 batchEntry 回到 null
-    const bfile = path.join(dataDir, 'dispatch', 'batches', b1.batchId, 'batch.json');
+    const bfile = path.join(dataDir, 'runtime', 'dispatch', 'batches', b1.batchId, 'batch.json');
     const raw = JSON.parse(fs.readFileSync(bfile, 'utf8'));
     raw.status = 'finished';
     fs.writeFileSync(bfile, JSON.stringify(raw));

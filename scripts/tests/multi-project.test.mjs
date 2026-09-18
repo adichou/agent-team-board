@@ -107,8 +107,8 @@ t('M1 health 无参数可用，含 projects 与 defaultProject', async () => {
 t('M2 board 按项目返回各自数据', async () => {
   const a = await get(`${base}/api/board?project=${encodeURIComponent(projectA)}`);
   const b = await get(`${base}/api/board?project=${encodeURIComponent(projectB)}`);
-  assert.equal(a.dataDir, path.join(projectA, 'docs', 'agent-team-board'));
-  assert.equal(b.dataDir, path.join(projectB, 'docs', 'agent-team-board'));
+  assert.equal(a.dataDir, path.join(projectA, 'agent-team-board'));
+  assert.equal(b.dataDir, path.join(projectB, 'agent-team-board'));
   // 两项目计数器独立、编号可能相同（各为当天 001），判据用标题与数据目录
   const titlesA = a.items.map((i) => i.title).join('|');
   const titlesB = b.items.map((i) => i.title).join('|');

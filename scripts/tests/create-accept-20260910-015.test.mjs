@@ -74,7 +74,7 @@ function runGuard(command) {
   });
 }
 
-const dataDirOf = (root) => path.join(root, 'docs', 'agent-team-board');
+const dataDirOf = (root) => path.join(root, 'agent-team-board');
 
 /* ---------- C 组：core ---------- */
 
@@ -86,7 +86,7 @@ t('C1 core：accept 一步直达 accepted——status / history 两条 / 文档�
   const st = core.createItem(dataDir, { type: 'requirement', title: '一步接受', description: '描述', by: 'tester', accept: true });
   assert.equal(st.status, 'accepted', '返回状态应为 accepted');
   const dir = core.resolveItemDir(dataDir, st.id).dir;
-  const disk = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const disk = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   assert.equal(disk.status, 'accepted');
   assert.equal(disk.history.length, 2, 'history 应两条（创建 + 接受）');
   assert.equal(disk.history[0].from, null);
@@ -118,8 +118,10 @@ t('C2 core：与分步接受等价；缺省行为不变（仍 submitted）', () 
   const stepwise = core.createItem(dataDir, { type: 'requirement', title: '两步', by: 'tester' });
   core.setStatus(dataDir, stepwise.id, 'accepted', { by: 'tester' });
 
-  const a = JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(dataDir, oneShot.id).dir, 'status.json'), 'utf8'));
-  const b = JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(dataDir, stepwise.id).dir, 'status.json'), 'utf8'));
+  // REQ-20260916-007：status.json 属应用数据，落 runtime/status/<ID>.json（条目目录内不再有）
+  const statusFileOf = (id) => path.join(dataDir, 'runtime', 'status', `${id}.json`);
+  const a = JSON.parse(fs.readFileSync(statusFileOf(oneShot.id), 'utf8'));
+  const b = JSON.parse(fs.readFileSync(statusFileOf(stepwise.id), 'utf8'));
   assert.equal(a.status, b.status, '状态一致');
   assert.equal(a.history.length, b.history.length, 'history 条数一致（两条）');
   assert.deepEqual(
@@ -132,7 +134,7 @@ t('C2 core：与分步接受等价；缺省行为不变（仍 submitted）', () 
   // 缺省（不带 accept）：与现状完全一致
   const plain = core.createItem(dataDir, { type: 'requirement', title: '旧口径', by: 'tester' });
   assert.equal(plain.status, 'submitted');
-  const plainDisk = JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(dataDir, plain.id).dir, 'status.json'), 'utf8'));
+  const plainDisk = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(core.resolveItemDir(dataDir, plain.id).dir), 'utf8'));
   assert.equal(plainDisk.history.length, 1, '不带 accept 仍只有一条 history');
   assert.equal(refineStateOf(dataDir, plain.id), null, '不带 accept 不进 refine 索引');
 });
@@ -141,7 +143,7 @@ t('C3 core：原子性——接受环节写状态失败时回滚删除条目目�
   const root = tmp();
   core.initData(root);
   const dataDir = dataDirOf(root);
-  const reqRoot = path.join(dataDir, 'requirements');
+  const reqRoot = path.join(dataDir, 'data', 'requirements');
   const before = fs.readdirSync(reqRoot).length;
 
   const orig = fs.writeFileSync;
@@ -174,18 +176,18 @@ t('L1 CLI：atb new req|bug --accept 一步创建并接受', async () => {
   assert.equal(r1.code, 0, `应成功（err=${r1.err}）`);
   assert.match(r1.out, /已接受/, '输出应明确提示已接受');
   assert.doesNotMatch(r1.out, /等待人工接受/, '不应再提示等待人工接受');
-  const reqIds = fs.readdirSync(path.join(dataDir, 'requirements'));
+  const reqIds = fs.readdirSync(path.join(dataDir, 'data', 'requirements'));
   assert.equal(reqIds.length, 1, '应只创建一个需求条目');
-  const st1 = JSON.parse(fs.readFileSync(path.join(dataDir, 'requirements', reqIds[0], 'status.json'), 'utf8'));
+  const st1 = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(path.join(dataDir, 'data', 'requirements', reqIds[0])), 'utf8'));
   assert.equal(st1.status, 'accepted');
   assert.equal(refineStateOf(dataDir, reqIds[0]), 'unrefined');
 
   const r2 = await runAtb(['new', 'bug', '一步直达的Bug', '--desc', '现象', '--accept', '--dir', root], root);
   assert.equal(r2.code, 0);
   assert.match(r2.out, /已接受/);
-  const bugIds = fs.readdirSync(path.join(dataDir, 'bugs'));
+  const bugIds = fs.readdirSync(path.join(dataDir, 'data', 'bugs'));
   assert.equal(bugIds.length, 1, '应只创建一个 Bug 条目');
-  const st2 = JSON.parse(fs.readFileSync(path.join(dataDir, 'bugs', bugIds[0], 'status.json'), 'utf8'));
+  const st2 = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(path.join(dataDir, 'data', 'bugs', bugIds[0])), 'utf8'));
   assert.equal(st2.status, 'accepted');
 });
 
@@ -198,8 +200,8 @@ t('L2 CLI：不带 --accept 输出与现状一致；USAGE 帮助含 --accept', a
   assert.equal(r.code, 0);
   assert.match(r.out, /状态 submitted/, '不带开关仍提示 submitted');
   assert.match(r.out, /等待人工接受/, '不带开关仍提示等待人工接受');
-  const reqIds = fs.readdirSync(path.join(dataDir, 'requirements'));
-  const st = JSON.parse(fs.readFileSync(path.join(dataDir, 'requirements', reqIds[0], 'status.json'), 'utf8'));
+  const reqIds = fs.readdirSync(path.join(dataDir, 'data', 'requirements'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(path.join(dataDir, 'data', 'requirements', reqIds[0])), 'utf8'));
   assert.equal(st.status, 'submitted');
 
   const h = await runAtb([], tmp());
@@ -235,8 +237,8 @@ t('S1 server：/api/new accept:true 一步 accepted（含附件照常落盘 + RE
     assert.equal(r.json.status, 'accepted', '返回状态应为 accepted');
     const dataDir = dataDirOf(root);
     const id = r.json.id;
-    const dir = path.join(dataDir, 'requirements', id);
-    const disk = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+    const dir = path.join(dataDir, 'data', 'requirements', id);
+    const disk = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
     assert.equal(disk.status, 'accepted');
     assert.equal(disk.history.length, 2, 'history 可追溯两步');
     assert.match(disk.history[1].note, /创建并接受/);
@@ -279,7 +281,7 @@ t('S2 server：缺省 / accept:false / accept:"true"（非严格布尔）均落 
     assert.equal(r.status, 201);
     assert.equal(r.json.status, 'submitted', '非严格布尔 true 不生效（旧客户端零影响）');
 
-    const reqRoot = path.join(dataDir, 'requirements');
+    const reqRoot = path.join(dataDir, 'data', 'requirements');
     const before = fs.readdirSync(reqRoot).length;
     r = await req(port, 'POST', `/api/new${P}`, {
       type: 'bug', title: '非法附件整单拒绝', accept: true,

@@ -5,6 +5,7 @@
 // 用法：node scripts/tests/marketing-board-serve.test.mjs
 
 import assert from 'node:assert/strict';
+import * as core from '../lib/core.mjs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -205,16 +206,16 @@ t('V1~V7 /api/marketing 渠道与行动接口全链路', async () => {
     assert.equal(r.json.created, true);
     const reqId = r.json.link.id;
     assert.match(reqId, /^REQ-/);
-    const st = JSON.parse(fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'requirements', reqId, 'status.json'), 'utf8'));
+    const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(path.join(root, 'agent-team-board', 'data', 'requirements', reqId)), 'utf8'));
     assert.equal(st.status, 'submitted', 'REQ 进入 submitted');
-    const reqReadme = fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'requirements', reqId, 'README.md'), 'utf8');
+    const reqReadme = fs.readFileSync(path.join(root, 'agent-team-board', 'data', 'requirements', reqId, 'README.md'), 'utf8');
     assert.ok(reqReadme.includes(a1.id), '双向关联：README 含行动编号');
     // 同 key 重试幂等
     r = await req(port, 'POST', `/api/marketing/activity/req${P}`, { id: a1.id, key: 'landing', title: '落地页埋点', description: '补充转化埋点' });
     assert.equal(r.status, 200);
     assert.equal(r.json.created, false);
     assert.equal(r.json.link.id, reqId);
-    const reqDirs = fs.readdirSync(path.join(root, 'docs', 'agent-team-board', 'requirements')).filter((x) => x.startsWith('REQ-'));
+    const reqDirs = fs.readdirSync(path.join(root, 'agent-team-board', 'data', 'requirements')).filter((x) => x.startsWith('REQ-'));
     assert.equal(reqDirs.length, 1, '不重复创建');
 
     // V6：同名不同路径项目隔离

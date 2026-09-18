@@ -147,15 +147,17 @@ async function stageLocalPrecheck(ctx) {
   }
   // porcelain 的前两列是状态；保留首行空格，避免固定列路径解析错位。
   const status = await gitCmd(ctx, ['status', '--porcelain'], '检查工作区', { raw: true });
-  // 看板数据目录（docs/agent-team-board/）是看板自身写入（运行记录 / 阶段日志），
+  // 看板目录（agent-team-board/，REQ-20260916-007）是看板自身写入（条目文档 / 运行记录 / 阶段日志），
   // 不属于发布内容、也不应自阻塞流水线；其余任何脏路径（含暂存区）均阻塞。
-  const BOARD_DIR = 'docs/agent-team-board/';
+  const BOARD_DIR = 'agent-team-board/'; // REQ-20260916-007：新板根（runtime 被忽略，实际豁免 data/ 用户文档与迁移过渡路径）
   const dirty = status.split('\n').filter(Boolean).filter((line) => {
     let p = line.slice(3).trim();
     if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
     if (p.includes(' -> ')) p = p.split(' -> ').pop().trim(); // 重命名取目标路径
-    // 看板目录整目录未跟踪时 git 折叠显示为上游目录（如 docs/）：按路径前缀判定归属看板
-    return !(p.startsWith(BOARD_DIR) || BOARD_DIR.startsWith(`${p}/`) || p === 'docs' || p === 'docs/');
+    // 看板目录整目录未跟踪时 git 折叠显示为上游目录（如 agent-team-board）：按路径前缀判定归属看板；
+    // 根 .gitignore 是 atb 幂等追加的 runtime 忽略行（看板自身写入，本地生效即可，不随发布推送）
+    const boardOwned = p.startsWith(BOARD_DIR) || BOARD_DIR.startsWith(`${p}/`) || p === '.gitignore';
+    return !boardOwned;
   });
   if (dirty.length) {
     const files = dirty.slice(0, 5).map((l) => l.slice(3).trim()).join('、');

@@ -41,7 +41,7 @@ function mkItem(p, { type = 'requirement', title, accept = true, plan = false })
 }
 
 function readSt(p, id) {
-  return JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(p.dataDir, id).dir, 'status.json'), 'utf8'));
+  return JSON.parse(fs.readFileSync(core.statusFileOfItemDir(core.resolveItemDir(p.dataDir, id).dir), 'utf8'));
 }
 
 // ---------- 第一部分：状态机与守卫（用例 1/2/3/14） ----------

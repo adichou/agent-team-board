@@ -247,7 +247,7 @@ function scopeOfRec(dataDir, projectRoot, rec) {
   if (!root || !rec.runId) return null;
   let run = null;
   try {
-    run = JSON.parse(fs.readFileSync(path.join(dataDir, 'dispatch', 'runs', rec.runId, 'run.json'), 'utf8'));
+    run = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'dispatch', 'runs', rec.runId, 'run.json'), 'utf8'));
   } catch { return null; }
   try {
     return gitFlow.confirmScopeForRun({ dataDir, projectRoot: root, run });
@@ -483,7 +483,7 @@ function requireDevelopWaiting(dataDir, itemId) {
 
 // run 读取（含 projectRoot 便于核验；dispatch run 与账本解耦读取）
 function requireRun(dataDir, rec) {
-  const runFile = path.join(dataDir, 'dispatch', 'runs', rec.runId, 'run.json');
+  const runFile = path.join(dataDir, 'runtime', 'dispatch', 'runs', rec.runId, 'run.json');
   let run = null;
   try {
     run = JSON.parse(fs.readFileSync(runFile, 'utf8'));
@@ -822,7 +822,7 @@ export function confirmDetail(dataDir, itemId, { projectRoot = null } = {}) {
 // 盘点历史 reported 运行：有效的运行级处理证据优先，避免同路径新修改复活旧记录。
 // 无证据时展示仍脏的遗留/暂扣路径；证据失效时保持可见供重新核验，读取过程不写账本。
 export function legacyConfirmViews(dataDir, projectRoot) {
-  const runsDir = path.join(dataDir, 'dispatch', 'runs');
+  const runsDir = path.join(dataDir, 'runtime', 'dispatch', 'runs');
   let names = [];
   try { names = fs.readdirSync(runsDir); } catch { return []; }
   const out = [];

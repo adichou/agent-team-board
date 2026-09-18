@@ -174,7 +174,8 @@ function inputLine(i) {
 export function buildGrowthPrompt({
   projectRoot, atbPath, type, inputs, runId, observation = null, continueOf = null, archiveMissing = false,
 }) {
-  const marketingDir = path.join(projectRoot, 'docs', 'agent-team-board', 'marketing');
+  // REQ-20260916-007：营销资料属应用数据，落 <项目根>/agent-team-board/runtime/marketing（与 marketing-store 实际存储一致）
+  const marketingDir = path.join(projectRoot, 'agent-team-board', 'runtime', 'marketing');
   const lines = [
     `# project-growth 任务提示词（${GROWTH_TYPE_LABEL[type]}）`,
     `- 项目：${projectRoot}（只允许访问该项目授权范围内的路径，不得读取其他项目）。`,

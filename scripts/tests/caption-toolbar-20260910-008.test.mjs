@@ -18,7 +18,7 @@ const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const source = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'app.js'), 'utf8');
 const htmlSrc = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'index.html'), 'utf8');
 const cssSrc = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'style.css'), 'utf8');
-const demoPath = path.join(pluginRoot, 'docs', 'agent-team-board', 'requirements', 'REQ-20260910-008', 'ui-demo.html');
+const demoPath = path.join(pluginRoot, 'agent-team-board', 'data', 'requirements', 'REQ-20260910-008', 'ui-demo.html');
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
 

@@ -96,7 +96,7 @@ const readJson = (file) => {
 /* ---------- 目录 ---------- */
 
 export function releasesDir(dataDir) {
-  return path.join(dataDir, 'releases');
+  return path.join(dataDir, 'runtime', 'releases');
 }
 export function runsDir(dataDir) {
   return path.join(releasesDir(dataDir), 'runs');

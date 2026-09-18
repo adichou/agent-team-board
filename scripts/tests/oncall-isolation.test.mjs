@@ -43,7 +43,7 @@ t('I1 隔离：咨询单不进 REQ/BUG 列表与 /dev 选单；不占用实施�
   const a = oncall.listTickets(dataDir)[0];
   oncall.dispatchTickets(dataDir, { ids: [a.id], mode: 'zcode', staff: '张三', by: 'board', kind: 'batch' });
   oncall.answerTicket(dataDir, a.id, { answer: '答', by: 'x', mode: 'zcode' });
-  const implLock = path.join(dataDir, '.locks', 'impl.lock');
+  const implLock = path.join(dataDir, 'runtime', '.locks', 'impl.lock');
   assert.ok(!fs.existsSync(implLock), 'oncall 流程不得占用 impl.lock');
 
   // REQ/BUG claim/report 状态机照常（oncall 不干扰）
@@ -53,11 +53,11 @@ t('I1 隔离：咨询单不进 REQ/BUG 列表与 /dev 选单；不占用实施�
   assert.equal(core.getItemDetail(dataDir, req.id).status, 'in-progress');
 
   // oncall 数据目录独立：不落在 requirements/bugs 下
-  const oncallTickets = path.join(dataDir, 'oncall', 'tickets');
+  const oncallTickets = path.join(dataDir, 'runtime', 'oncall', 'tickets');
   assert.ok(fs.existsSync(oncallTickets), '咨询单应在 oncall/tickets/ 下');
   assert.equal(fs.readdirSync(oncallTickets).length, 2);
-  assert.ok(!fs.existsSync(path.join(dataDir, 'requirements', a.id)), '不得混入 requirements/');
-  assert.ok(!fs.existsSync(path.join(dataDir, 'bugs', a.id)), '不得混入 bugs/');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'data', 'requirements', a.id)), '不得混入 requirements/');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'data', 'bugs', a.id)), '不得混入 bugs/');
 });
 
 let failed = 0;

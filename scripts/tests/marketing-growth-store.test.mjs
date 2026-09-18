@@ -114,7 +114,7 @@ t('G1 五类入口创建任务：输入引用及版本来自当前档案；状�
   assert.equal(rv.run.observation.from, '2026-09-01');
 
   // 位置：agent-runs/<id>/run.json 落盘
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'agent-runs', pos.run.id, 'run.json')), '任务记录落盘');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', pos.run.id, 'run.json')), '任务记录落盘');
 });
 
 t('G2 提示词契约：项目归属 / 资料路径 / 输入版本 / 目标 / 输出要求 / 保存协议 / 技能缺失兜底', () => {
@@ -123,7 +123,7 @@ t('G2 提示词契约：项目归属 / 资料路径 / 输入版本 / 目标 / �
     projectRoot: root, atbPath: ATB, type: 'pricing', by: 'board',
   });
   assert.ok(prompt.includes(root), '包含项目路径（限定该项目）');
-  assert.ok(prompt.includes(path.join('docs', 'agent-team-board', 'marketing')), '包含营销资料目录');
+  assert.ok(prompt.includes(path.join('agent-team-board', 'runtime', 'marketing')), '包含营销资料目录（新布局 runtime）');
   assert.ok(prompt.includes('profile.json'), '包含输入引用');
   assert.ok(prompt.includes('保存协议'), '包含保存协议');
   assert.ok(prompt.includes(`${ATB} growth receipt ${run.id}`), '包含统一 CLI 写回命令');
@@ -165,9 +165,9 @@ t('G3 回执写入：状态 received、记录会话 / 时间 / 摘要，草稿�
   assert.ok(got.receiptAt, '回执时间');
   assert.match(got.summary, /1 条事实.*候选 1 项/, '输出摘要');
   assert.equal(got.draftRef, `agent-runs/${run.id}/draft.md`, '草稿引用');
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'agent-runs', run.id, 'draft.md')), 'draft.md 落盘');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', run.id, 'draft.md')), 'draft.md 落盘');
   assert.equal(got.receipts.at(-1).result, 'success', '执行结果入回执日志');
-  const md = fs.readFileSync(path.join(dataDir, 'marketing', 'agent-runs', run.id, 'draft.md'), 'utf8');
+  const md = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', run.id, 'draft.md'), 'utf8');
   assert.ok(md.includes('事实') && md.includes('假设') && md.includes('候选行动'), 'draft.md 分区渲染');
   assert.ok(md.includes('候选定价 v2'), 'draft.md 含候选');
 });
@@ -176,14 +176,14 @@ t('G4 幂等：相同任务重复回执跳过，不重复保存、时间戳不�
   const { root, dataDir } = mkProject();
   const { run } = growth.createAgentRun(dataDir, { projectRoot: root, atbPath: ATB, type: 'positioning', by: 'board' });
   const r1 = growth.saveAgentRunReceipt(dataDir, { id: run.id, draft: draftBase(), session: 's1', by: 'board' });
-  const before = fs.readFileSync(path.join(dataDir, 'marketing', 'agent-runs', run.id, 'run.json'), 'utf8');
+  const before = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', run.id, 'run.json'), 'utf8');
   const r2 = growth.saveAgentRunReceipt(dataDir, {
     id: run.id, draft: draftBase({ facts: ['完全不同的内容'] }), session: 's2', by: 'board',
   });
   assert.equal(r2.duplicate, true, '幂等跳过');
   assert.equal(r2.contentChanged, true, '内容不同仅标记');
   assert.equal(r2.run.session, 's1', '不覆盖首次会话');
-  const after = fs.readFileSync(path.join(dataDir, 'marketing', 'agent-runs', run.id, 'run.json'), 'utf8');
+  const after = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', run.id, 'run.json'), 'utf8');
   assert.equal(after, before, '记录文件未被重复保存改写');
 });
 
@@ -197,7 +197,7 @@ t('G5 过期输入：档案并发更新后回执拒绝（不写草稿不覆盖�
   });
   assert.throws(() => growth.saveAgentRunReceipt(dataDir, { id: run.id, draft: draftBase(), session: 's', by: 'board' }),
     /过期|stale/, '回执被拒绝');
-  assert.ok(!fs.existsSync(path.join(dataDir, 'marketing', 'agent-runs', run.id, 'draft.md')), '未写入草稿');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', run.id, 'draft.md')), '未写入草稿');
   const fresh = growth.readAgentRun(dataDir, run.id);
   assert.equal(fresh.status, 'waiting', '任务保持等待，可按当前版本重建');
   assert.equal(fresh.receipts.at(-1).result, 'rejected:stale', '拒绝原因入日志');
@@ -241,7 +241,7 @@ t('G7 草稿校验：数据不足不得带候选且须给补采建议；结构�
   assert.throws(() => growth.saveAgentRunReceipt(dataDir, {
     id: run.id, draft: draftBase({ candidates: [{ id: 'c1', title: '缺 kind' }] }), session: 's', by: 'board',
   }), (e) => !!(e.fields && e.fields['candidates.0.kind']), '候选 kind 定位字段');
-  assert.ok(!fs.existsSync(path.join(dataDir, 'marketing', 'agent-runs', run.id, 'draft.md')), '校验失败不写盘');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', run.id, 'draft.md')), '校验失败不写盘');
 
   const ok = growth.saveAgentRunReceipt(dataDir, {
     id: run.id, draft: draftBase({ insufficient: true, advice: ['先补采访客分母'] }), session: 's', by: 'board',
@@ -288,7 +288,7 @@ t('G9 采纳定价：创建候选版本且不自动成为当前；重复采纳�
   assert.equal(mkt.readState(dataDir).current, null, '候选不自动成为当前方案');
   const a2 = growth.adoptAgentRunCandidate(dataDir, { id: run.id, candidateId: 'c1', by: 'board' });
   assert.equal(a2.already, true, '重复采纳幂等');
-  assert.deepEqual(fs.readdirSync(path.join(dataDir, 'marketing', 'pricing')).sort(), ['v1.json', 'v2.json'], '不重复创建版本');
+  assert.deepEqual(fs.readdirSync(path.join(dataDir, 'runtime', 'marketing', 'pricing')).sort(), ['v1.json', 'v2.json'], '不重复创建版本');
 });
 
 t('G10 采纳定位：内容作为「假设」证据追加进档案（revision 递增、来源指向 agent-runs）', () => {
@@ -422,7 +422,7 @@ t('G16 读态：两态返回；run 字段齐备（ID / 会话 / 输入及版本 
   assert.equal(growth.readGrowth(dataDir).runs.find((x) => x.id === waiting.run.id).result, 'waiting', '未回执 → waiting');
 
   // 损坏 run.json → 只读占位，其余照常
-  fs.writeFileSync(path.join(dataDir, 'marketing', 'agent-runs', waiting.run.id, 'run.json'), '{ broken');
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'marketing', 'agent-runs', waiting.run.id, 'run.json'), '{ broken');
   const g2 = growth.readGrowth(dataDir);
   assert.equal(g2.runs.find((x) => x.id === waiting.run.id).corrupt, true, '损坏只读占位');
   assert.ok(g2.runs.find((x) => x.id === run.id), '其余照常');

@@ -29,7 +29,7 @@ const item = (id, extra = {}) => ({
 
 function defaultBoard() {
   return {
-    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/docs/agent-team-board',
+    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/agent-team-board',
     items: [
       item('REQ-20990101-001'), item('REQ-20990101-003'), item('REQ-20990101-005'),
       item('BUG-20990101-002', { status: 'submitted' }),

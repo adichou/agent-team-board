@@ -153,7 +153,7 @@ t('S1~S5 /api/marketing/growth 接口与 CLI 回执', async () => {
     c = cli(['growth', 'receipt', run1.id, '--file', draftFile, '--dir', other]);
     assert.notEqual(c.status, 0, '跨项目写入应失败');
     assert.match(c.stderr, /不存在|项目/, '跨项目错误说明');
-    assert.ok(!fs.existsSync(path.join(other, 'docs', 'agent-team-board', 'marketing', 'agent-runs', run1.id)), '未写入另一项目');
+    assert.ok(!fs.existsSync(path.join(other, 'agent-team-board', 'runtime', 'marketing', 'agent-runs', run1.id)), '未写入另一项目');
 
     // S5d：show 跨会话读取（接续上下文）
     c = cli(['growth', 'show', run1.id, '--dir', root]);

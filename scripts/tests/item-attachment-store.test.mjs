@@ -15,16 +15,16 @@ const t = (name, fn) => cases.push([name, fn]);
 
 function tmpDataDir() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-item-att-'));
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
+  const dataDir = path.join(root, 'agent-team-board');
   fs.mkdirSync(dataDir, { recursive: true });
   return dataDir;
 }
 
 const b64 = (s) => Buffer.from(s).toString('base64');
-const attDir = (dataDir, id) => path.join(dataDir, 'requirements', id, 'attachments');
-const bugAttDir = (dataDir, id) => path.join(dataDir, 'bugs', id, 'attachments');
+const attDir = (dataDir, id) => path.join(dataDir, 'data', 'requirements', id, 'attachments');
+const bugAttDir = (dataDir, id) => path.join(dataDir, 'data', 'bugs', id, 'attachments');
 const readme = (dataDir, id, bug = false) =>
-  fs.readFileSync(path.join(dataDir, bug ? 'bugs' : 'requirements', id, 'README.md'), 'utf8');
+  fs.readFileSync(path.join(dataDir, 'data', bug ? 'bugs' : 'requirements', id, 'README.md'), 'utf8');
 
 t('S1 创建带附件：落盘 attachments/ 子目录，README 描述（需求）/ 现象（Bug）节末尾按添加顺序追加引用行', () => {
   const dataDir = tmpDataDir();
@@ -86,7 +86,7 @@ t('S2 同名附件自动加序号不覆盖，README 引用落盘后的最终文�
 t('S3 服务端二次校验整单拒绝：非白名单后缀 / 超 8MB / 防穿越文件名 / 缺数据，不创建目录不占号', () => {
   const dataDir = tmpDataDir();
   core.createItem(dataDir, { type: 'requirement', title: '占位', by: 't' }); // 占 001 号
-  const before = fs.readdirSync(path.join(dataDir, 'requirements'));
+  const before = fs.readdirSync(path.join(dataDir, 'data', 'requirements'));
   const bad = [
     [{ name: 'evil.sh', dataBase64: b64('x') }],                                        // 非白名单后缀
     [{ name: 'big.png', dataBase64: Buffer.alloc(8 * 1024 * 1024 + 1).toString('base64') }], // 超 8MB
@@ -104,7 +104,7 @@ t('S3 服务端二次校验整单拒绝：非白名单后缀 / 超 8MB / 防穿�
       },
     );
   }
-  assert.deepEqual(fs.readdirSync(path.join(dataDir, 'requirements')), before, '被拒的单不得留下半写入条目目录');
+  assert.deepEqual(fs.readdirSync(path.join(dataDir, 'data', 'requirements')), before, '被拒的单不得留下半写入条目目录');
 });
 
 t('S4 张数上限 9：第 10 张整单拒绝', () => {
@@ -117,7 +117,7 @@ t('S4 张数上限 9：第 10 张整单拒绝', () => {
     () => core.createItem(dataDir, { type: 'requirement', title: '十张', by: 't', attachments: ten }),
     /9|张/,
   );
-  assert.equal(fs.readdirSync(path.join(dataDir, 'requirements')).length, 1, '超限整单拒绝不留目录');
+  assert.equal(fs.readdirSync(path.join(dataDir, 'data', 'requirements')).length, 1, '超限整单拒绝不留目录');
 });
 
 t('S5 无附件创建口径不变：README 无引用行、无 attachments/ 目录', () => {
@@ -136,7 +136,7 @@ t('S6 「✎ 修改」兼容：载入描述（含图片行）；仅改标题不�
     attachments: [{ name: 'shot.png', dataBase64: b64('x') }],
   });
   // 载入口径：readDescriptionSection 返回的原文包含图片引用行（前端编辑框以此预填）
-  const cur = core.readDescriptionSection(path.join(dataDir, 'bugs', st.id), 'bug');
+  const cur = core.readDescriptionSection(path.join(dataDir, 'data', 'bugs', st.id), 'bug');
   assert.match(cur, /!\[截图\]\(attachments\/shot\.png\)/, '描述节原文应包含图片行');
 
   // 仅改标题：描述节不动（图片行保留）
@@ -150,7 +150,7 @@ t('S6 「✎ 修改」兼容：载入描述（含图片行）；仅改标题不�
   const md2 = readme(dataDir, st.id, true);
   assert.match(md2, /!\[截图\]\(attachments\/shot\.png\)/, '描述整体替换不意外清除图片行');
   assert.match(md2, /补充：详情见上图/, '新增描述应写入');
-  const section2 = core.readDescriptionSection(path.join(dataDir, 'bugs', st.id), 'bug');
+  const section2 = core.readDescriptionSection(path.join(dataDir, 'data', 'bugs', st.id), 'bug');
   assert.ok(section2.includes('![截图](attachments/shot.png)') && section2.includes('补充：详情见上图'), '图片行与新增内容均应在现象节内');
 });
 
@@ -160,7 +160,7 @@ t('S7 附件读取：白名单 + 防穿越 + 8MB 展示上限', () => {
     type: 'requirement', title: '读取', description: '', by: 't',
     attachments: [{ name: 'ok.png', dataBase64: b64('bytes') }],
   });
-  const dir = path.join(dataDir, 'requirements', st.id);
+  const dir = path.join(dataDir, 'data', 'requirements', st.id);
   assert.equal(core.readItemAttachment(dir, 'ok.png').toString(), 'bytes');
   assert.equal(core.attachmentMime('ok.png'), 'image/png');
   assert.equal(core.attachmentMime('nope.sh'), null, '非白名单无 MIME');

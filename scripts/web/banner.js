@@ -3,13 +3,13 @@
  * Node 测试走 module.exports，对纯函数直接单测。不依赖 app.js 的 $/state。
  *
  * 层栈 layers 是「从根到当前最深层」的目录路径数组，首元素恒为 ''（项目根），
- * 例如 ['', 'docs', 'docs/agent-team-board']。所有函数均为纯函数：返回新数组，
+ * 例如 ['', 'agent-team-board', 'agent-team-board/data']。所有函数均为纯函数：返回新数组，
  * 不修改入参。entries 拉取与 DOM 渲染由 app.js 负责，本模块只管路径栈。 */
 (function (global) {
   'use strict';
 
   // 默认展开路径（与旧目录树 expandDefaultPath 行为一致）
-  const DEFAULT_PATH = 'docs/agent-team-board';
+  const DEFAULT_PATH = 'agent-team-board/data'; // REQ-20260916-007：条目文档数据根
 
   // 进入目录 dirPath：已在栈中 → 截断到该层（含）；否则追加为最深层。
   // dirPath 为 ''（项目根）时等同于回到只剩根层。

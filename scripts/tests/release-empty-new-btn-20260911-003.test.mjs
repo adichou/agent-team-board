@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const relSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'release.js'), 'utf8');
-const itemDir = path.join(root, 'docs', 'agent-team-board', 'bugs', 'BUG-20260911-003');
+const itemDir = path.join(root, 'agent-team-board', 'data', 'bugs', 'BUG-20260911-003');
 const demoSrc = fs.readFileSync(path.join(itemDir, 'ui-demo.html'), 'utf8');
 
 const cases = [];

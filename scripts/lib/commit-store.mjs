@@ -33,7 +33,7 @@ const readJson = (file) => {
 // ---------- 目录助手（事实源：<dataDir>/commits/runs/<runId>/run.json） ----------
 
 export function commitsDir(dataDir) {
-  return path.join(dataDir, 'commits');
+  return path.join(dataDir, 'runtime', 'commits');
 }
 export function commitRunsDir(dataDir) {
   return path.join(commitsDir(dataDir), 'runs');

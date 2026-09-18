@@ -60,7 +60,7 @@ function atbJson(args, cwd) {
 
 // 直写存量 settings.json（模拟 REQ-20260908-020 时代保存的旧数据，无 source 字段）
 function writeLegacySettings(dataDir, models) {
-  const file = path.join(dataDir, 'tasks', 'settings.json');
+  const file = path.join(dataDir, 'runtime', 'tasks', 'settings.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ version: 1, agents: { refine: ['zcode', 'codex'], develop: ['zcode', 'codex'] }, models }, null, 2));
 }

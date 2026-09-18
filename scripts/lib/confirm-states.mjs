@@ -53,7 +53,7 @@ export function clipReasonKeepEnds(text, maxChars) {
 }
 
 function confirmsFile(dataDir) {
-  return path.join(dataDir, 'confirms', 'confirms.json');
+  return path.join(dataDir, 'runtime', 'confirms', 'confirms.json');
 }
 
 function writeJsonAtomic(file, obj) {
@@ -64,8 +64,8 @@ function writeJsonAtomic(file, obj) {
 
 // 幂等初始化：目录 + .gitignore（执行账本不进版本控制；与 holds/refine 同口径）
 function ensureLedger(dataDir) {
-  fs.mkdirSync(path.join(dataDir, 'confirms'), { recursive: true });
-  const gi = path.join(dataDir, '.gitignore');
+  fs.mkdirSync(path.join(dataDir, 'runtime', 'confirms'), { recursive: true });
+  const gi = path.join(dataDir, 'runtime', '.gitignore');
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
   if (!cur.split('\n').includes('confirms/')) {
@@ -173,7 +173,7 @@ export function archivedRounds(dataDir, itemId) {
 // 时间/超时上限）；同条目互斥以本账本 running 状态为准；服务重启时遗留 running 任务由
 // 恢复逻辑标记 interrupted——不出现「测试跑完但确认没落账」的中间态（挂起保持 waiting）。
 function confirmTasksFile(dataDir) {
-  return path.join(dataDir, 'confirms', 'tasks.json');
+  return path.join(dataDir, 'runtime', 'confirms', 'tasks.json');
 }
 
 export function readConfirmTasks(dataDir) {

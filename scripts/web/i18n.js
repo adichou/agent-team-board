@@ -127,6 +127,20 @@ const EN = {
   '已在 dev 分支': 'On the dev branch',
   '初始化 dev 分支': 'Initialize the dev branch',
   '项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。': 'The project is not a git repository: initialize git in the terminal first (new projects are initialized automatically via atb init).',
+  // REQ-20260916-007 设置页「数据布局迁移」分区（旧布局一键迁移到 data/ + runtime/）
+  '将在项目根 agent-team-board/ 创建数据目录：条目文档在 data/ 随代码进 git，运行数据在 runtime/ 本地留存不提交。': 'Creates the data directory at agent-team-board/ in the project root: item documents in data/ are committed with git; runtime data in runtime/ is kept locally and never committed.',
+  '数据布局迁移': 'Data layout migration',
+  '正在检测数据布局…': 'Detecting data layout…',
+  '用户数据（条目文档）在 agent-team-board/data/ 随 git 提交；应用数据（状态、账本）在 agent-team-board/runtime/ 本地留存、不进 git。': 'User data (item documents) lives in agent-team-board/data/ and is committed with git; application data (statuses, ledgers) lives in agent-team-board/runtime/, kept locally and never committed.',
+  '一键迁移到新布局': 'Migrate to the new layout',
+  '已是新布局': 'Already on the new layout',
+  '无可迁移数据': 'Nothing to migrate',
+  '迁移到新布局？': 'Migrate to the new layout?',
+  '条目文档将移动到 agent-team-board/data/（git mv 保留历史并继续提交）；运行数据（状态、账本、设置）移到 agent-team-board/runtime/ 并停止提交（本地保留）。迁移不自动提交，变更随下一次提交入库。操作幂等，失败不会损坏数据。': 'Item documents move to agent-team-board/data/ (git mv keeps history and stays committed); runtime data (statuses, ledgers, settings) moves to agent-team-board/runtime/ and stops being committed (kept locally). Migration does not auto-commit; changes land with the next commit. The operation is idempotent and failures never corrupt data.',
+  '开始迁移': 'Start migration',
+  '正在迁移…': 'Migrating…',
+  '✓ 已迁移到新布局（条目文档进 data/，应用数据本地留存）': '✓ Migrated to the new layout (item documents in data/, application data kept locally)',
+  '无需迁移': 'nothing to migrate',
   // REQ-20260912-001 设置页「Git 工作流」详细描述（双分支协作 / 分支职责 / 自动提交）
   '采用 dev + main 双分支协作：': 'Adopt the dev + main dual-branch workflow:',
   'dev 分支承载需求设计、开发和测试；main 分支承载版本构建，发布构建物。': 'The dev branch carries requirement design, development, and testing; the main branch carries version builds and release artifacts.',
@@ -191,7 +205,7 @@ const EN = {
   '两类批量任务均为子代理模式，子代理模型跟随主调度会话；保存仅对后续新任务生效。': 'Both batch task types run in subagent mode; the subagent model follows the dispatch session. Saving only affects future tasks.',
   '✓ 已保存批量任务设置（流转开关仅对后续完善回执生效）': '✓ Batch task settings saved (flow toggle affects only future refine receipts)',
   '✓ 已保存运行配置（模型设置将用于后续新执行；进行中的执行与续跑保持原设置）': '✓ Run config saved (model settings apply to future runs; running runs and resumes keep the original)',
-  '✓ 已初始化 docs/agent-team-board/': '✓ Initialized docs/agent-team-board/',
+  '✓ 已初始化 agent-team-board/': '✓ Initialized agent-team-board/',
   '✓ 自动派发已开启：将串行处理已计划条目（最旧优先）': '✓ Auto dispatch enabled: planned items will be processed serially (oldest first)',
   '个在工作的批量任务': 'active batch tasks',
   '主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：': 'Dispatch prompt (paste into an Agent session of this project; the prompt is agent-agnostic):',
@@ -959,6 +973,9 @@ const EN = {
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
 const EN_DYNAMIC = {
+  // REQ-20260916-007 数据布局迁移：检测失败 / 迁移失败（插值 e.message）
+  '布局检测失败：◇': 'Layout detection failed: $1',
+  '失败：◇（可重试；迁移幂等，已完成部分不会重复执行）': 'Failed: $1 (retryable; migration is idempotent — completed steps are not repeated)',
   // REQ-20260913-001 构建模块搜索反馈（命中数动态拼接）
   '命中 ◇ / 共 ◇ 个版本（按版本名 / 单号）': '$1 of $2 versions matched (by name / item id)',
   // REQ-20260913-004 支持版本删除：弹窗标题 / 成功失败反馈（动态拼接）
@@ -1009,7 +1026,7 @@ const EN_DYNAMIC = {
   '尚缺 ◇ 项决策，补齐后可复工': '$1 decision(s) still missing; answer them to enable resume',
   '待人工决策：◇ 项未答；到列表下方「待人工确认」区补决策并复工': 'Awaiting human decisions: $1 unanswered; answer and resume in the "Pending human decisions" area below the list',
   '受阻原因：◇': 'Blocked reason: $1',
-  '运行：◇（详情见 docs/agent-team-board/dispatch/runs/，决策留痕见条目目录 decisions.md）': 'Run: $1 (see docs/agent-team-board/dispatch/runs/; decision trail in the item\'s decisions.md)',
+  '运行：◇（详情见 agent-team-board/runtime/dispatch/runs/，决策留痕见条目目录 decisions.md）': 'Run: $1 (see agent-team-board/runtime/dispatch/runs/; decision trail in the item\'s decisions.md)',
   '进展记录读取失败：◇': 'Failed to load the progress log: $1',
   '待确认清单加载失败：◇': 'Failed to load pending decisions: $1',
   // REQ-20260914-001 挂起确认（动态拼接）

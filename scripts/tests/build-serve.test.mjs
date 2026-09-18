@@ -382,7 +382,7 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: bugC.id, commit: commit2 }] });
     assert.equal(r.status, 201, `创建删除用版本应成功：${r.text}`);
     const vid3 = r.json.version.id;
-    const verDir = (id) => path.join(dataDirA, 'builds', 'versions', id);
+    const verDir = (id) => path.join(dataDirA, 'runtime', 'builds', 'versions', id);
     r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: vid3 });
     assert.equal(r.status, 200, `删除 draft 版本应成功：${r.text}`);
     assert.equal(r.json.ok, true);

@@ -77,9 +77,9 @@ function assertIdle(dataDir,id){
  if(active.has(`${dataDir}:${id}`)||store.listRuns(dataDir).some(r=>r.id!==id&&['running','prechecking'].includes(r.status)))throw new AtbError('项目已有活动发布，请等待结束');
 }
 async function clean(root){
- // untracked-files=normal 会把看板数据目录折叠成 "?? docs/"，导致其内运行记录被误判为脏；用 all 展开完整路径后排除。
+ // untracked-files=normal 会把看板目录折叠成 "?? agent-team-board/"，导致其内运行记录被误判为脏；用 all 展开完整路径后排除（REQ-20260916-007：runtime 整目录忽略，仅 data/ 可能出现）。
  const dirty=await git(root,'status','--porcelain','--untracked-files=all');
- if(dirty.split('\n').filter(Boolean).some(l=>!l.slice(3).startsWith('docs/agent-team-board/')))throw new AtbError('源码工作区有未提交修改，请先处理；不自动暂存或丢弃');
+ if(dirty.split('\n').filter(Boolean).some(l=>{const p=l.slice(3).split(' -> ').pop().trim();return !(p.startsWith('agent-team-board/')||p==='.gitignore')}))throw new AtbError('源码工作区有未提交修改，请先处理；不自动暂存或丢弃');
 }
 export async function precheck(dataDir,root,id){
  assertIdle(dataDir,id);

@@ -50,7 +50,7 @@ function setup({ search = '', boardOnline = true } = {}) {
   const document = element();
   document.createElement = element;
   for (const sel of INITIALLY_HIDDEN) document.querySelector(sel).classList.add('hidden');
-  const board = { initialized: true, projectRoot: '/project/a', dataDir: '/project/a/docs/agent-team-board', items: [item('REQ-20990101-001'), item('BUG-20990101-002')] };
+  const board = { initialized: true, projectRoot: '/project/a', dataDir: '/project/a/agent-team-board', items: [item('REQ-20990101-001'), item('BUG-20990101-002')] };
   const requests = [];
   const sandbox = {
     document, URLSearchParams, console,

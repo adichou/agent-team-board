@@ -41,7 +41,7 @@ export function saveProductId(projectName,productId){
  const cfg={...old,productIds:map};
  fs.mkdirSync(path.dirname(configFile()),{recursive:true});writeJsonAtomic(configFile(),cfg);return cfg;
 }
-export const runsRoot=dataDir=>path.join(dataDir,'builds','publish-runs');
+export const runsRoot=dataDir=>path.join(dataDir,'runtime','builds','publish-runs'); // REQ-20260916-007：应用数据
 export function runDir(dataDir,id){if(!/^BPUB-[a-f0-9-]{36}$/.test(id))throw new AtbError('构建发布运行编号非法');return path.join(runsRoot(dataDir),id);}
 export function readRun(dataDir,id){try{return JSON.parse(fs.readFileSync(path.join(runDir(dataDir,id),'run.json'),'utf8'));}catch(e){throw new AtbError(`构建发布运行读取失败：${e.message}`);}}
 export function listRuns(dataDir,bldId){

@@ -86,9 +86,9 @@ t('H4 ZCode 侧 hooks/hooks.json 保持 process schema 不变', () => {
 
 // 临时项目：有看板与有效锁（claim 场景）与无锁两种 cwd
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-codexhooks-'));
-fs.mkdirSync(path.join(tmp, 'proj-locked', 'docs', 'agent-team-board', '.locks'), { recursive: true });
+fs.mkdirSync(path.join(tmp, 'proj-locked', 'agent-team-board', 'runtime', '.locks'), { recursive: true });
 const projLocked = fs.realpathSync(path.join(tmp, 'proj-locked'));
-fs.writeFileSync(path.join(projLocked, 'docs', 'agent-team-board', '.locks', 'claim.lock'), 'lock');
+fs.writeFileSync(path.join(projLocked, 'agent-team-board', 'runtime', '.locks', 'claim.lock'), 'lock');
 fs.mkdirSync(path.join(tmp, 'proj-nolock'), { recursive: true });
 const projNoLock = fs.realpathSync(path.join(tmp, 'proj-nolock'));
 
@@ -114,16 +114,16 @@ function patch(target, body = '+x') {
 // H5 Codex 文件编辑（apply_patch patch 文本）直写 status.json → 拦截
 t('H5 apply_patch 直写 status.json 被拦（Codex file 输入契约）', async () => {
   const r = await run('file', 'apply_patch', {
-    command: patch('docs/agent-team-board/requirements/REQ-20260906-003/bugs/BUG-20260906-014/status.json'),
+    command: patch('agent-team-board/runtime/status/BUG-20260906-014.json'),
   }, projLocked);
   assert.equal(r.code, 2, `期望 2，得到 ${r.code}：${r.err}`);
-  assert.match(r.err, /status\.json/, '拒绝原因应指明 status.json');
+  assert.match(r.err, /runtime\/status|状态文件/, '拒绝原因应指明条目状态文件');
 });
 
 // H6 apply_patch 更新看板 markdown（含 status.json 字样但目标非它）→ 放行
 t('H6 apply_patch 更新看板 markdown 放行（不误拦提及字样）', async () => {
   const r = await run('file', 'apply_patch', {
-    command: patch('docs/agent-team-board/requirements/REQ-20260906-003/bugs/BUG-20260906-014/README.md', '+提及 status.json 字样不算目标'),
+    command: patch('agent-team-board/data/requirements/REQ-20260906-003/bugs/BUG-20260906-014/README.md', '+提及状态文件字样不算目标'),
   }, projLocked);
   assert.equal(r.code, 0, `期望 0，得到 ${r.code}：${r.err}`);
 });
@@ -146,7 +146,7 @@ t('H8 Codex Bash 契约：人工专属状态命令拦截、只读放行', async 
   }, projLocked);
   assert.equal(denied.code, 2, `期望 2，得到 ${denied.code}：${denied.err}`);
   const ro = await run('bash', 'Bash', {
-    command: `cat ${projLocked}/docs/agent-team-board/requirements/REQ-20260906-003/status.json`,
+    command: `cat ${projLocked}/agent-team-board/runtime/status/REQ-20260906-003.json`,
   }, projLocked);
   assert.equal(ro.code, 0, `只读应放行（exit=${ro.code}）：${ro.err}`);
 });
@@ -154,7 +154,7 @@ t('H8 Codex Bash 契约：人工专属状态命令拦截、只读放行', async 
 // H9 ZCode file 契约（file_path 字段）回归：status.json 仍拦
 t('H9 ZCode file 契约回归：file_path 直写 status.json 仍拦', async () => {
   const r = await run('file', 'Write', {
-    file_path: `${projLocked}/docs/agent-team-board/requirements/REQ-20260906-003/status.json`,
+    file_path: `${projLocked}/agent-team-board/runtime/status/REQ-20260906-003.json`,
   }, projLocked);
   assert.equal(r.code, 2, `期望 2，得到 ${r.code}：${r.err}`);
 });

@@ -40,7 +40,7 @@ t('D1 submitted 需求删除：目录移除、列表不再出现、其余条目�
   const r = core.deleteItem(dataDir, victim.id, { by: 'human' });
   assert.equal(r.id, victim.id, '返回被删单号');
   assert.equal(r.title, '误登记需求', '返回被删标题');
-  assert.equal(fs.existsSync(path.join(dataDir, 'requirements', victim.id)), false, '条目目录应整体移除');
+  assert.equal(fs.existsSync(path.join(dataDir, 'data', 'requirements', victim.id)), false, '条目目录应整体移除');
   assert.ok(!core.listItems(dataDir).some((x) => x.id === victim.id), '列表不应再含被删条目');
   assert.ok(core.listItems(dataDir).some((x) => x.id === keeper.id), '其余条目不受影响');
 
@@ -58,9 +58,9 @@ t('D2 submitted Bug（独立与归属需求）删除：各自目录移除，宿�
 
   core.deleteItem(dataDir, alone.id, { by: 'human' });
   core.deleteItem(dataDir, nested.id, { by: 'human' });
-  assert.equal(fs.existsSync(path.join(dataDir, 'bugs', alone.id)), false, '独立 Bug 目录应移除');
-  assert.equal(fs.existsSync(path.join(dataDir, 'requirements', host.id, 'bugs', nested.id)), false, '归属 Bug 目录应移除');
-  assert.ok(fs.existsSync(path.join(dataDir, 'requirements', host.id)), '宿主需求应完好');
+  assert.equal(fs.existsSync(path.join(dataDir, 'data', 'bugs', alone.id)), false, '独立 Bug 目录应移除');
+  assert.equal(fs.existsSync(path.join(dataDir, 'data', 'requirements', host.id, 'bugs', nested.id)), false, '归属 Bug 目录应移除');
+  assert.ok(fs.existsSync(path.join(dataDir, 'data', 'requirements', host.id)), '宿主需求应完好');
   const detail = core.getItemDetail(dataDir, host.id);
   assert.equal(detail.bugCount, 0, '宿主需求下属 Bug 计数应归零');
 });
@@ -156,7 +156,7 @@ t('D6 服务端：DELETE /api/item/:id——submitted 成功且看板列表不�
     const ok = await httpRequest(port, 'DELETE', `/api/item/${sub.id}`);
     assert.equal(ok.code, 200, `待接受删除应成功：${ok.body}`);
     assert.equal(JSON.parse(ok.body).ok, true, '响应应带 ok 标记');
-    assert.equal(fs.existsSync(path.join(dataDir, 'requirements', sub.id)), false, '目录应已移除');
+    assert.equal(fs.existsSync(path.join(dataDir, 'data', 'requirements', sub.id)), false, '目录应已移除');
     const board = JSON.parse((await httpRequest(port, 'GET', '/api/board')).body);
     assert.ok(!board.items.some((x) => x.id === sub.id), '看板列表不应再含被删条目');
 

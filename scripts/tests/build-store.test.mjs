@@ -37,7 +37,7 @@ t('B1 创建版本：编号 BLD-YYYYMMDD-NNN 递增；默认名称「版本 YYYY
   const v2 = buildStore.createVersion(dataDir, { name: '自定义名', items: [itemOf('BUG-20260913-002', H2)] });
   assert.equal(v2.name, '自定义名');
   assert.notEqual(v2.id, v1.id, '同日编号递增不重复');
-  const raw = JSON.parse(fs.readFileSync(path.join(dataDir, 'builds', 'versions', v1.id, 'version.json'), 'utf8'));
+  const raw = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'builds', 'versions', v1.id, 'version.json'), 'utf8'));
   assert.equal(raw.id, v1.id);
 });
 
@@ -147,7 +147,7 @@ t('B9a 删除 draft 版本：整目录移除、listVersions 不再返回、其�
   const r = buildStore.deleteVersion(dataDir, a.id);
   assert.equal(r.ok, true);
   assert.equal(r.id, a.id);
-  assert.equal(fs.existsSync(path.join(dataDir, 'builds', 'versions', a.id)), false, '版本目录应整目录移除');
+  assert.equal(fs.existsSync(path.join(dataDir, 'runtime', 'builds', 'versions', a.id)), false, '版本目录应整目录移除');
   assert.deepEqual(buildStore.listVersions(dataDir).map((v) => v.id), [b.id], '列表不再返回被删版本，其余不受影响');
   assert.throws(() => buildStore.readVersion(dataDir, a.id), core.AtbError, '读取被删版本报错');
 });
@@ -179,7 +179,7 @@ t('B9c merging 禁删（BuildConflictError、目录保留）；draft / failed / 
     assert.ok(e instanceof buildStore.BuildConflictError, '应为 BuildConflictError（HTTP 409）');
     assert.match(e.message, /合并中不可删除|合并结束/);
   }
-  assert.equal(fs.existsSync(path.join(dataDir, 'builds', 'versions', m.id)), true, '拒绝时目录不动');
+  assert.equal(fs.existsSync(path.join(dataDir, 'runtime', 'builds', 'versions', m.id)), true, '拒绝时目录不动');
   buildStore.recoverMerging(dataDir); // merging → failed（服务重启口径）
   assert.equal(buildStore.deleteVersion(dataDir, m.id).ok, true, 'failed 可删');
   // merged 可删（仅移除看板记录）

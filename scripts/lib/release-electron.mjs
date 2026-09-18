@@ -118,12 +118,12 @@ async function stageLocalPrecheck(ctx) {
   const status = await tryGit(ctx, ['status', '--porcelain']);
   if (status == null) throw new ElectronStageError('无法读取 Git 工作区状态', 'git-error');
   // 看板数据目录豁免口径与 Git 流水线一致（看板自身写入，不属发布内容）
-  const BOARD_DIR = 'docs/agent-team-board/';
+  const BOARD_DIR = 'agent-team-board/'; // REQ-20260916-007：新板根（runtime 被忽略，实际豁免 data/ 用户文档与迁移过渡路径）
   const dirty = status.split('\n').filter(Boolean).filter((line) => {
     let p = line.slice(3).trim();
     if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
     if (p.includes(' -> ')) p = p.split(' -> ').pop().trim();
-    return !(p.startsWith(BOARD_DIR) || BOARD_DIR.startsWith(`${p}/`) || p === 'docs' || p === 'docs/');
+    return !(p.startsWith(BOARD_DIR) || BOARD_DIR.startsWith(`${p}/`) || p === 'docs' || p === 'docs/' || p === '.gitignore');
   });
   if (dirty.length) {
     const files = dirty.slice(0, 5).map((l) => l.slice(3).trim()).join('、');

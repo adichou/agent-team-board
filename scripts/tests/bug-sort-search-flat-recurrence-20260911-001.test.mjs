@@ -25,7 +25,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const htmlSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'index.html'), 'utf8');
 const cssSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'style.css'), 'utf8');
 const jsSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'app.js'), 'utf8');
-const itemDir = path.join(root, 'docs', 'agent-team-board', 'bugs', 'BUG-20260911-001');
+const itemDir = path.join(root, 'agent-team-board', 'data', 'bugs', 'BUG-20260911-001');
 
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);

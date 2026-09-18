@@ -18,7 +18,7 @@ const css = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
 const oncall = fs.readFileSync(path.join(webRoot, 'oncall.js'), 'utf8');
 const shellCss = fs.readFileSync(path.join(root, 'electron', 'shell-css.mjs'), 'utf8');
 const demo = fs.readFileSync(
-  path.join(root, 'docs', 'agent-team-board', 'requirements', 'REQ-20260910-012', 'ui-demo.html'),
+  path.join(root, 'agent-team-board', 'data', 'requirements', 'REQ-20260910-012', 'ui-demo.html'),
   'utf8',
 );
 
@@ -83,7 +83,7 @@ const t = (name, fn) => cases.push([name, fn]);
 
 t('T1 行为：有项目时 #dataDir 为空，无项目时仅简短引导且不含路径', () => {
   const h = setup();
-  h.state.board = { initialized: true, projectRoot: '/p/a', dataDir: '/p/a/docs/agent-team-board', items: [] };
+  h.state.board = { initialized: true, projectRoot: '/p/a', dataDir: '/p/a/agent-team-board', items: [] };
   h.state.listSig = '';
   h.run('renderBoard()');
   assert.equal(h.document.querySelector('#dataDir').textContent, '', '已初始化项目：顶栏路径行必须为空');

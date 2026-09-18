@@ -20,7 +20,7 @@ export const HOLD_MAX_QUESTIONS = 20;
 export const HOLD_TEXT_MAX_CHARS = 200; // 问题 / 原因 / 答复共用短文本上限（与 REASON_MAX_CHARS 同口径）
 
 function holdsFile(dataDir) {
-  return path.join(dataDir, 'holds', 'holds.json');
+  return path.join(dataDir, 'runtime', 'holds', 'holds.json');
 }
 
 function writeJsonAtomic(file, obj) {
@@ -31,8 +31,8 @@ function writeJsonAtomic(file, obj) {
 
 // 幂等初始化：目录 + .gitignore（执行账本不进版本控制；与 refine 同口径）
 function ensureLedger(dataDir) {
-  fs.mkdirSync(path.join(dataDir, 'holds'), { recursive: true });
-  const gi = path.join(dataDir, '.gitignore');
+  fs.mkdirSync(path.join(dataDir, 'runtime', 'holds'), { recursive: true });
+  const gi = path.join(dataDir, 'runtime', '.gitignore');
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
   if (!cur.split('\n').includes('holds/')) {

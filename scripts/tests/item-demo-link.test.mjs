@@ -25,12 +25,12 @@ function mkProject(tag, demoBody) {
   core.initData(project);
   const dataDir = core.dataDirFrom(project);
   const item = core.createItem(dataDir, { type: 'requirement', title: `演示宿主${tag}`, by: 'test' });
-  const dir = path.join(dataDir, 'requirements', item.id);
+  const dir = path.join(dataDir, 'data', 'requirements', item.id);
   fs.writeFileSync(path.join(dir, 'ui-demo.html'), demoBody);
   fs.writeFileSync(path.join(dir, 'README.md'), `# ${item.id} 演示宿主${tag}\n\n[Demo](./ui-demo.html)\n`);
   // 同项目第二个条目（同日序号 +1）：验证同项目内同名演示文件不串单
   const item2 = core.createItem(dataDir, { type: 'requirement', title: `演示宿主${tag}二`, by: 'test' });
-  const dir2 = path.join(dataDir, 'requirements', item2.id);
+  const dir2 = path.join(dataDir, 'data', 'requirements', item2.id);
   fs.writeFileSync(path.join(dir2, 'ui-demo.html'), demoBody.replace('唯一标记', '唯一标记2'));
   return { tmp, project, dataDir, item, dir, item2, dir2 };
 }
@@ -40,7 +40,7 @@ const PROJ_B = mkProject('b', '<!doctype html><html><body><p>demo-B-唯一标记
 // 仅 A 项目有的第三个条目（当日 -003）：跨项目定位核验用（B 只有 -001/-002）
 const PROJ_A_ITEM3 = core.createItem(PROJ_A.dataDir, { type: 'requirement', title: '演示宿主a三', by: 'test' });
 fs.writeFileSync(
-  path.join(PROJ_A.dataDir, 'requirements', PROJ_A_ITEM3.id, 'ui-demo.html'),
+  path.join(PROJ_A.dataDir, 'data', 'requirements', PROJ_A_ITEM3.id, 'ui-demo.html'),
   '<!doctype html><html><body><p>demo-A3-唯一标记</p></body></html>',
 );
 
@@ -200,11 +200,11 @@ t('D7 回归：文档 JSON / fs 列目录 / 图片 raw 均不受影响', async (
     'base64',
   );
   fs.writeFileSync(path.join(PROJ_A.dir, 'dot.png'), PNG_1PX);
-  const relPng = path.join('docs/agent-team-board/requirements', PROJ_A.item.id, 'dot.png').split(path.sep).join('/');
+  const relPng = path.join('agent-team-board/data/requirements', PROJ_A.item.id, 'dot.png').split(path.sep).join('/');
   const raw = await request('GET', `${base}/api/fs/raw?path=${Q(relPng)}&project=${Q(PROJ_A.project)}`);
   assert.equal(raw.status, 200, `raw 图片应 200，得到 ${raw.status}：${raw.text.slice(0, 160)}`);
   assert.equal(raw.headers['content-type'], 'image/png');
-  const ls = await request('GET', `${base}/api/fs?path=${Q('docs/agent-team-board')}&project=${Q(PROJ_A.project)}`);
+  const ls = await request('GET', `${base}/api/fs?path=${Q('agent-team-board/data')}&project=${Q(PROJ_A.project)}`);
   assert.equal(ls.status, 200);
   assert.ok(ls.json.entries.some((e) => e.name === 'requirements'), 'fs 列目录应正常');
 });

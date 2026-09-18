@@ -54,7 +54,7 @@ t('S1 serve：/api/req-disc 全链路（start / 状态检测 / quote / archive /
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   const P = `?project=${encodeURIComponent(root)}`;
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
+  const dataDir = path.join(root, 'agent-team-board');
   try {
     let up = false;
     for (let i = 0; i < 40; i++) {
@@ -66,7 +66,7 @@ t('S1 serve：/api/req-disc 全链路（start / 状态检测 / quote / archive /
     let r = await reqHttp(port, 'POST', `/api/new${P}`, { type: 'req', title: '引用讨论需求', description: '# 背景\n\n从需求详情发起讨论。\n\n讨论结束后生成纪要。\n' });
     assert.equal(r.status, 201);
     const reqId = r.json.id;
-    const reqDir = path.join(dataDir, 'requirements', reqId);
+    const reqDir = path.join(dataDir, 'data', 'requirements', reqId);
     const readmeFile = path.join(reqDir, 'README.md');
 
     // 无讨论 → null
@@ -104,7 +104,7 @@ t('S1 serve：/api/req-disc 全链路（start / 状态检测 / quote / archive /
     assert.equal(r.status, 400, '白名单外文档应 400');
 
     // Agent 成套落盘（模拟原会话执行收尾提示词）
-    const roundDir = path.join(dataDir, 'discussions', discId, 'rounds', '1');
+    const roundDir = path.join(dataDir, 'runtime', 'discussions', discId, 'rounds', '1');
     fs.mkdirSync(roundDir, { recursive: true });
     fs.writeFileSync(path.join(roundDir, 'minutes.md'), '# 纪要\n\n## 明确共识\n\n1. 入口改为提示词。\n');
     const baseline = crypto.createHash('sha256').update(fs.readFileSync(readmeFile, 'utf8'), 'utf8').digest('hex');
@@ -136,7 +136,7 @@ t('S1 serve：/api/req-disc 全链路（start / 状态检测 / quote / archive /
     assert.ok(after.includes('在 Agent 新会话中讨论'), 'README 应写入勾选项');
     assert.ok(!after.includes('从需求详情发起讨论。'), '原文应被替换');
     assert.equal(r.json.applied.afterVersion, 2);
-    assert.ok(fs.readFileSync(path.join(dataDir, 'discussions', discId, 'readme-versions', 'v1.md'), 'utf8') === before, '旧版应保留');
+    assert.ok(fs.readFileSync(path.join(dataDir, 'runtime', 'discussions', discId, 'readme-versions', 'v1.md'), 'utf8') === before, '旧版应保留');
 
     // 重复应用幂等（README 不再变化）
     r = await reqHttp(port, 'POST', `/api/req-disc/${discId}/apply${P}`, { selected: ['c1'] });
@@ -145,7 +145,7 @@ t('S1 serve：/api/req-disc 全链路（start / 状态检测 / quote / archive /
     assert.equal(fs.readFileSync(readmeFile, 'utf8'), after, '不应二次写入');
 
     // 需求状态不受影响（讨论不改状态机）
-    const st = JSON.parse(fs.readFileSync(path.join(reqDir, 'status.json'), 'utf8'));
+    const st = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'status', `${reqId}.json`), 'utf8'));
     assert.equal(st.status, 'submitted', '需求状态应保持不变');
 
     // 未知讨论编号 → 400

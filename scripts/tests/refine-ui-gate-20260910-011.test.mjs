@@ -239,7 +239,7 @@ t('G7 归一规则：022 时代冻结提示词的 Bug 演示口径在展示层�
   assert.equal(taskSettings.normalizePromptForDisplay(norm), norm, '归一幂等');
 
   // 真实存量账本（若存在）：冻结原文可被归一，且归一为纯展示操作——账本文件内容不变
-  const ledger = path.join(pluginRoot, 'docs', 'agent-team-board', 'refine', 'batches', 'RFB-20260909-022', 'batch.json');
+  const ledger = path.join(pluginRoot, 'agent-team-board', 'runtime', 'refine', 'batches', 'RFB-20260909-022', 'batch.json');
   if (fs.existsSync(ledger)) {
     const before = fs.readFileSync(ledger, 'utf8');
     const raw = JSON.parse(before);

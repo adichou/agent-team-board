@@ -120,12 +120,14 @@ export async function worktreeDirtyFiles(projectRoot, exec) {
   if (r.code !== 0) {
     throw new ProductGitError(`检查工作区失败：${head(r.stderr || r.stdout)}`, 'git-error');
   }
-  const BOARD_DIR = 'docs/agent-team-board/';
+  const BOARD_DIR = 'agent-team-board/'; // REQ-20260916-007：新板根（runtime 被忽略，实际豁免 data/ 用户文档与迁移过渡路径）
   return String(r.stdout || '').split('\n').filter(Boolean).filter((line) => {
     let p = line.slice(3).trim();
     if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
     if (p.includes(' -> ')) p = p.split(' -> ').pop().trim();
-    return !(p.startsWith(BOARD_DIR) || BOARD_DIR.startsWith(`${p}/`) || p === 'docs' || p === 'docs/');
+    // 根 .gitignore 豁免：atb 幂等追加的 runtime 忽略行属看板自身写入（与 REL 流水线同口径）
+    const boardOwned = p.startsWith(BOARD_DIR) || BOARD_DIR.startsWith(`${p}/`) || p === '.gitignore';
+    return !boardOwned;
   }).map((line) => line.slice(3).trim());
 }
 

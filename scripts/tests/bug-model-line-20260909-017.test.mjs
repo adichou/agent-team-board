@@ -70,7 +70,7 @@ function legacyPrompt(root, batchId) {
 
 // 就地把账本 prompt 改写为旧口径（模拟存量批次；不改变其余字段）
 function freezeLegacyPrompt(dataDir, batchId, root) {
-  const file = path.join(dataDir, 'refine', 'batches', batchId, 'batch.json');
+  const file = path.join(dataDir, 'runtime', 'refine', 'batches', batchId, 'batch.json');
   const b = JSON.parse(fs.readFileSync(file, 'utf8'));
   b.prompt = legacyPrompt(root, batchId);
   fs.writeFileSync(file, JSON.stringify(b, null, 2));
@@ -137,7 +137,7 @@ t('C1 数据层公开视图：refineBatchPublicView / refineSummary 归一旧口
     const s = refine.refineSummary(p.dataDir, b.batchId);
     assert.ok(s.batch.prompt.includes(FOLLOW_LINE) && !s.batch.prompt.includes(OLD_SNIPPET), 'refineSummary 同口径');
     // 处置口径：不回写账本——盘上文件仍保留旧 prompt（历史记录原样）
-    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'refine', 'batches', b.batchId, 'batch.json'), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'runtime', 'refine', 'batches', b.batchId, 'batch.json'), 'utf8'));
     assert.ok(raw.prompt.includes(OLD_SNIPPET), '账本文件不回写（design.md 处置口径：历史原样保留）');
     assert.equal(raw.candidates[0].id, id, '账本其余字段不受影响');
   } finally { fs.rmSync(p.root, { recursive: true, force: true }); }
@@ -233,7 +233,7 @@ t('D1 新建与流程：存量收尾后新建批次 prompt 正确落账（验收
     assert.equal(second.created, true, '存量收尾后可新建');
     assert.ok(second.prompt.includes(FOLLOW_LINE), '新建提示词含跟随指令');
     assert.ok(!second.prompt.includes(OLD_SNIPPET), '新建提示词不含旧行');
-    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'refine', 'batches', second.batchId, 'batch.json'), 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(path.join(p.dataDir, 'runtime', 'refine', 'batches', second.batchId, 'batch.json'), 'utf8'));
     assert.ok(raw.prompt.includes(FOLLOW_LINE) && !raw.prompt.includes(OLD_SNIPPET), '新账本文件落盘口径正确（验收 3）');
     // REQ-20260913-003：建轮不冻结——账本 candidates 为空，新候选经实时队列生效可领取
     assert.equal(raw.candidates.length, 0, '新账本不再冻结候选快照');

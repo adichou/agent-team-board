@@ -69,7 +69,7 @@ t('N4 ATB_AGENT_NAME 作为缺省名前缀生效', () => {
 t('N5 锁文件 owner 与 status.owner 同源一致', () => {
   const id = mk('n5');
   core.claim(dataDir, id, 'codex-dev-loop');
-  const lock = JSON.parse(fs.readFileSync(path.join(dataDir, '.locks', `${id}.lock`), 'utf8'));
+  const lock = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', '.locks', `${id}.lock`), 'utf8'));
   const st = core.readStatus(core.resolveItemDir(dataDir, id).dir);
   assert.equal(lock.owner, st.owner);
   finish(id, 'codex-dev-loop');

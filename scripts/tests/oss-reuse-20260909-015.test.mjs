@@ -53,7 +53,7 @@ function assertOssGuidance(text, where) {
 t('A1 core：新建需求生成的 design.md「方案」节自带开源选型指引（三选一理由 + licenses.md）', () => {
   const { dataDir } = tempProject('a1');
   const req = core.createItem(dataDir, { type: 'requirement', title: '牵引', by: 't' });
-  const design = fs.readFileSync(path.join(dataDir, 'requirements', req.id, 'design.md'), 'utf8');
+  const design = fs.readFileSync(path.join(dataDir, 'data', 'requirements', req.id, 'design.md'), 'utf8');
   assertOssGuidance(design, '需求 design.md');
   assert.match(design, /三选一/, '应写明自研理由三选一口径');
   assert.match(design, /无合适库|引入成本/, '应覆盖「无合适库 / 引入成本高于自研」理由项');
@@ -63,7 +63,7 @@ t('A1 core：新建需求生成的 design.md「方案」节自带开源选型指
 t('A2 core：新建 Bug 生成的 design.md 同样自带指引；「引入来源（源单）」节不回归', () => {
   const { dataDir } = tempProject('a2');
   const bug = core.createItem(dataDir, { type: 'bug', title: '独立缺陷', by: 't' });
-  const design = fs.readFileSync(path.join(dataDir, 'bugs', bug.id, 'design.md'), 'utf8');
+  const design = fs.readFileSync(path.join(dataDir, 'data', 'bugs', bug.id, 'design.md'), 'utf8');
   assertOssGuidance(design, 'Bug design.md');
   assert.match(design, /引入来源（源单）/, '引入来源（源单）节应保留');
   assert.match(design, /未定位（排查过程/, '「未定位」写法指引应保留');
@@ -224,7 +224,7 @@ t('B6 style.css：lic-flag 标识样式存在；红用 --warn、待确认用既�
 t('B8 服务端零改动：licenses.md 经既有白名单可读取并进 it.docs，无需服务端改动', () => {
   const { dataDir } = tempProject('b8');
   const req = core.createItem(dataDir, { type: 'requirement', title: '文档', by: 't' });
-  const dir = path.join(dataDir, 'requirements', req.id);
+  const dir = path.join(dataDir, 'data', 'requirements', req.id);
   fs.writeFileSync(path.join(dir, 'licenses.md'), '# 开源信息\n\n| 库名 | 版本 | 引入方式 | License | 仓库地址 |\n| -- | -- | -- | -- | -- |\n| x | 1.0 | npm | MIT | https://example/x |\n');
   const detail = core.getItemDetail(dataDir, req.id);
   assert.ok(detail.docs.includes('licenses.md'), 'orderedDocs 应把 licenses.md 带进 it.docs');
