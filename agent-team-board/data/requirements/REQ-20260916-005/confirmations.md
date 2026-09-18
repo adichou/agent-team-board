@@ -11,8 +11,8 @@
   - auto：doc: 如果 main 分支不存在则使用 master 分支，以兼容历史仓库 REQ-20260916-005（52b54bdc3b，0 个路径）
 - 待人工核对路径（3）：scripts/server.mjs、scripts/web/app.js、scripts/web/i18n.js
 - 暂扣待补交路径（10）：scripts/tests/bug-sync-main-release-note-20260914-017.test.mjs、scripts/tests/git-workflow-desc-20260912-001.test.mjs、scripts/tests/req-main-branch-fallback-20260916-005.test.mjs、scripts/lib/build-git.mjs、scripts/lib/build-store.mjs、scripts/lib/git-flow.mjs、scripts/lib/product-release-git.mjs、scripts/lib/product-release-pipeline.mjs、scripts/lib/product-release-store.mjs、scripts/web/build.js
-- 最近核验：2026-09-18 15:09:05 未通过
-  - 仍有 1 个候选路径未入库（本单可归属 1 · 归属待确认 0）：agent-team-board/data/requirements/REQ-20260916-005/confirmations.md——与面板计数同源
+- 最近核验：2026-09-18 15:32:57 未通过
+  - 仍有 2 个候选路径未入库（本单可归属 2 · 归属待确认 0）：agent-team-board/data/requirements/REQ-20260916-005/confirmations.md、scripts/tests/bug-async-verify-20260915-008.test.mjs——与面板计数同源
 
 事件留痕：
 - 2026-09-18 06:36:04 declared（auto-commit）：自动提交不完整：存在归属不明或暂扣待人工路径
@@ -33,3 +33,5 @@
 - 2026-09-18 13:56:55 verified（board）：核验未通过（1 项；指纹基线刷新为当前内容）
 - 2026-09-18 15:06:39 confirm-rejected（board）：测试未通过（npm test 退出码 1）：提交后内容验证失败
 - 2026-09-18 15:09:05 verified（board）：核验未通过（1 项；指纹基线刷新为当前内容）
+- 2026-09-18 15:15:37 confirm-rejected（board）：测试未通过（npm test 退出码 1）：提交后内容验证失败
+- 2026-09-18 15:32:57 verified（board）：核验未通过（1 项；指纹基线刷新为当前内容）
