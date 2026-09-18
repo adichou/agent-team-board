@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260909-011 界面演示 · 提示词通用化 + 设置去掉 Agent 配置</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dee5; --text: #24292f; --muted: #6b7280;
+    --primary: #2563eb; --primary-ink: #ffffff; --ok-bg: #e8f5e9; --ok-ink: #1b7e2a;
+    --warn-bg: #fff7e0; --warn-ink: #9a6700; --err-bg: #fdecea; --err-ink: #c0392b;
+    --info-bg: #e8f0fe; --info-ink: #1d4ed8; --disabled: #eef0f3; --code-bg: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --panel: #1d2129; --border: #333a45; --text: #e2e6eb; --muted: #98a1ad;
+      --primary: #3b82f6; --ok-bg: #14351c; --ok-ink: #63d07c; --warn-bg: #3a2f10; --warn-ink: #e0b341;
+      --err-bg: #3d1712; --err-ink: #ef8a7e; --info-bg: #16233d; --info-ink: #86b1fb;
+      --disabled: #22262e; --code-bg: #171b21;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { padding: 6px 14px; border: 1px solid var(--border); background: var(--panel);
+    border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .tab.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 14px; }
+  .panel h4 { margin: 0 0 8px; font-size: 14px; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  input[type="text"] { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); }
+  select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); }
+  button.btn { padding: 6px 16px; border-radius: 6px; border: 1px solid var(--primary);
+    background: var(--primary); color: var(--primary-ink); cursor: pointer; font-size: 13px; }
+  button.btn.small { padding: 3px 10px; font-size: 12px; }
+  button.btn:disabled { border-color: var(--border); background: var(--disabled);
+    color: var(--muted); cursor: not-allowed; }
+  button.btn.ghost { background: transparent; color: var(--primary); }
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 13px; }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .notice.err { background: var(--err-bg); color: var(--err-ink); }
+  .notice.info { background: var(--info-bg); color: var(--info-ink); }
+  .status-line { font-size: 12.5px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { padding: 5px 12px; border: 0; background: var(--panel); color: var(--text);
+    cursor: pointer; font-size: 12.5px; }
+  .seg button.active { background: var(--primary); color: var(--primary-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; font-size: 12px; line-height: 1.55; overflow: auto; white-space: pre-wrap;
+    color: var(--text); max-height: 340px; }
+  .removed { text-decoration: line-through; color: var(--muted); }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 8px 18px; border-radius: 8px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .toast.show { opacity: .95; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+  .checkbox-row input { width: 16px; height: 16px; }
+  .hr { border: 0; border-top: 1px dashed var(--border); margin: 14px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+  .badge { display: inline-block; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 8px; color: var(--muted); margin-left: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260909-011 界面演示</h1>
+  <p class="sub">批量完善 / 批量开发提示词通用化（不再区分 Agent）+「设置 → 批量任务」去掉 Agent 配置。
+    本页为纯前端模拟：所有状态、提示词文案均在页面内存中，不写项目配置、不发起请求。深浅色跟随系统。</p>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-view="settings">设置 · 批量任务</div>
+    <div class="tab" data-view="launch">任务启动区（完善 / 开发）</div>
+    <div class="tab" data-view="prompt">提示词对照（现行 vs 目标）</div>
+  </div>
+
+  <!-- ============ 视图一：设置 ============ -->
+  <div id="view-settings">
+    <div class="row">
+      <span class="muted">场景切换：</span>
+      <div class="seg" id="setScene">
+        <button data-s="normal" class="active">正常</button>
+        <button data-s="loading">加载中</button>
+        <button data-s="error">加载失败</button>
+      </div>
+      <span class="muted" id="setSceneHint">正常：显示已保存的流转开关，可编辑、保存。</span>
+    </div>
+
+    <div class="panel" id="setPanel"></div>
+
+    <div class="panel">
+      <h4>与现行界面的差异（本需求删除项）</h4>
+      <ul class="muted" style="margin:4px 0;padding-left:18px">
+        <li><span class="removed">批量完善 / 批量开发两张表格：执行 Agent / 模型来源 / 子代理模型 / 推理强度 / 是否隐藏 五列</span>（REQ-20260908-026 隐藏开关 + REQ-20260909-005 四路模型来源）</li>
+        <li><span class="removed">「该类别已全部隐藏：启动选项无可用 Agent」提示与保存时的 agents / models 提交</span></li>
+        <li><span class="removed">启动区「设置中已隐藏全部执行 Agent」禁用提示（见视图二）</span></li>
+      </ul>
+      <p class="muted" style="margin:4px 0">保留：分区标题、通用说明、「完善完成后自动转入计划」开关（REQ-20260909-010，默认关闭）、保存按钮与就近状态反馈。设置页「运行参数」区不受影响（演示略）。</p>
+    </div>
+  </div>
+
+  <!-- ============ 视图二：启动区 ============ -->
+  <div id="view-launch" style="display:none">
+    <div class="row">
+      <span class="muted">候选场景：</span>
+      <div class="seg" id="candScene">
+        <button data-s="has" class="active">有候选</button>
+        <button data-s="empty">无候选（空）</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h4>批量完善 · 启动区 <span class="badge">目标形态：无执行 Agent 选择</span></h4>
+      <div id="refineLaunch"></div>
+    </div>
+
+    <div class="panel">
+      <h4>批量开发 · 启动区 <span class="badge">目标形态：无执行 Agent 选择</span></h4>
+      <div id="devLaunch"></div>
+    </div>
+
+    <div class="panel">
+      <h4>交互说明</h4>
+      <ul class="muted" style="margin:4px 0;padding-left:18px">
+        <li>启动 = 创建任务并复制<b>通用</b>主调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）——口径不变，仅去掉前置的 Agent 选择。</li>
+        <li>「执行 Agent」下拉、空占位「选择执行 Agent…」（BUG-20260908-016）与「设置中已隐藏全部执行 Agent」禁用提示全部移除；无候选时启动仍禁用并说明原因。</li>
+        <li>提示词粘贴到任意一种 Agent 会话均可执行；会话 / 子会话命名由提示词内的通用指令描述（见视图三）。</li>
+        <li>终态「启动新一轮」同样去掉 Agent 下拉，仅保留按钮（演示略，行为一致）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ 视图三：提示词对照 ============ -->
+  <div id="view-prompt" style="display:none">
+    <div class="row">
+      <span class="muted">任务类型：</span>
+      <div class="seg" id="promptKind">
+        <button data-k="refine" class="active">批量完善</button>
+        <button data-k="develop">批量开发</button>
+      </div>
+      <span class="muted">版本：</span>
+      <div class="seg" id="promptVer">
+        <button data-v="target" class="active">目标（单一通用版）</button>
+        <button data-v="zcode">现行 zcode 版</button>
+        <button data-v="codex">现行 codex 版</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h4 id="promptTitle"></h4>
+      <pre id="promptBox"></pre>
+      <p class="legend" id="promptLegend"></p>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* ---------- 通用 ---------- */
+const $ = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => [...(el || document).querySelectorAll(s)];
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+/* ---------- 视图切换 ---------- */
+$$('#tabs .tab').forEach((tab) => tab.addEventListener('click', () => {
+  $$('#tabs .tab').forEach((x) => x.classList.remove('active'));
+  tab.classList.add('active');
+  const v = tab.dataset.view;
+  ['settings', 'launch', 'prompt'].forEach((name) => {
+    $('#view-' + name).style.display = name === v ? '' : 'none';
+  });
+}));
+
+/* ---------- 视图一：设置（状态机：normal / loading / error） ---------- */
+const setScenes = {
+  normal: '正常：显示已保存的流转开关，可编辑、保存（保存仅提交流转开关）。',
+  loading: '加载中：显示「正在加载任务设置」骨架，禁用编辑与保存，防止未加载完成覆盖配置。',
+  error: '加载失败：显示错误与「重试」；重试后回到正常态（区分于「全部隐藏」提示——后者已随配置移除）。',
+};
+let setScene = 'normal';
+let setDirty = false;
+
+function renderSettings() {
+  const p = $('#setPanel');
+  $('#setSceneHint').textContent = setScenes[setScene];
+  if (setScene === 'loading') {
+    p.innerHTML = `
+      <h4>批量任务</h4>
+      <p class="muted" role="status">正在加载任务设置…</p>
+      <div class="checkbox-row" aria-busy="true">
+        <input type="checkbox" disabled> <span class="muted">完善完成后自动转入计划</span>
+      </div>
+      <div class="row"><button class="btn" disabled>保存批量任务设置</button>
+      <span class="status-line">正在加载任务设置</span></div>`;
+    return;
+  }
+  if (setScene === 'error') {
+    p.innerHTML = `
+      <h4>批量任务</h4>
+      <div class="notice err">任务设置加载失败：服务暂不可用（演示模拟） <button class="btn small ghost" id="stRetry">重试</button></div>`;
+    $('#stRetry').addEventListener('click', () => { setScene = 'normal'; setDirty = false; renderSettings(); toast('已重试：加载成功'); });
+    return;
+  }
+  setDirty = false;
+  p.innerHTML = `
+    <h4>批量任务</h4>
+    <p class="muted">批量完善 / 批量开发均为子代理模式（主调度会话逐项派子代理），提示词为通用版本，无需选择或配置执行 Agent；子代理模型与智能/推理档位默认跟随主调度会话。</p>
+    <div class="checkbox-row">
+      <input type="checkbox" id="autoPlan" title="开启后：完善回执 done 核验通过且条目仍为已接受时，自动移入计划（planned）并进入批量开发候选；默认关闭 = 人工移入计划">
+      <label for="autoPlan">完善完成后自动转入计划</label>
+    </div>
+    <p class="muted" style="margin:2px 0 0">开启后：完善回执 done 核验通过且条目仍为已接受时，自动移入计划（planned）并进入批量开发候选；默认关闭 = 人工移入计划；保存后仅对后续完善回执生效，进行中与已完成的完善运行不追溯。</p>
+    <hr class="hr">
+    <div class="row">
+      <button class="btn" id="setSave">保存批量任务设置</button>
+      <span class="status-line" id="setStatus" role="status">已加载设置</span>
+    </div>`;
+  const box = $('#autoPlan');
+  const status = $('#setStatus');
+  const save = $('#setSave');
+  box.addEventListener('change', () => { setDirty = true; status.textContent = '有未保存的更改'; });
+  save.addEventListener('click', async () => {
+    save.disabled = true; save.textContent = '保存中…';
+    await new Promise((r) => setTimeout(r, 500)); // 模拟请求
+    save.disabled = false; save.textContent = '保存批量任务设置';
+    setDirty = false;
+    status.textContent = '已保存，流转开关仅对后续完善回执生效';
+    toast('✓ 已保存批量任务设置（流转开关仅对后续完善回执生效）');
+  });
+}
+$$('#setScene button').forEach((b) => b.addEventListener('click', () => {
+  $$('#setScene button').forEach((x) => x.classList.remove('active'));
+  b.classList.add('active');
+  setScene = b.dataset.s;
+  renderSettings();
+}));
+renderSettings();
+
+/* ---------- 视图二：启动区（有候选 / 无候选） ---------- */
+let candScene = 'has';
+
+function renderLaunch() {
+  const has = candScene === 'has';
+  // 批量完善启动区
+  $('#refineLaunch').innerHTML = has ? `
+    <p class="muted" style="margin:0 0 6px">批量完善：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。</p>
+    <div class="notice info">候选：已接受未完善 <b>3</b> 项（每轮实时读取，含本轮新接受的单）</div>
+    <div class="row">
+      <label class="field-inline">开发人员
+        <input type="text" maxlength="30" placeholder="如 张三（可留空）" id="refDev">
+      </label>
+      <button class="btn" id="refStart" title="创建完善任务并复制通用主调度提示词">启动</button>
+    </div>
+    <p class="muted">启动 = 创建任务并复制主调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）；条目保持 accepted，不占实施互斥。</p>`
+    : `
+    <div class="notice">暂无可完善候选：已接受条目均已完善（或尚无已接受条目）。</div>
+    <div class="row">
+      <label class="field-inline">开发人员
+        <input type="text" maxlength="30" placeholder="如 张三（可留空）" disabled>
+      </label>
+      <button class="btn" disabled title="暂无可完善候选：已接受条目均已完善（或尚无已接受条目）">启动</button>
+    </div>`;
+  // 批量开发启动区
+  $('#devLaunch').innerHTML = has ? `
+    <div class="row">
+      <label class="field-inline">开发人员
+        <input type="text" maxlength="30" placeholder="如 张三（可留空）" id="devDev">
+      </label>
+      <button class="btn" id="devStart" title="创建批次并复制通用主调度提示词">启动</button>
+    </div>
+    <p class="muted">已计划队列（最旧优先）：REQ-20260909-011、REQ-20260909-009 等 2 项——运行中新置计划的条目自动进入队列。启动 = 创建任务并复制调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）。</p>`
+    : `
+    <div class="notice">暂无已计划候选：请先在看板接受条目，并在详情页「移入计划」（仅已计划且未被认领的条目可入批）。</div>
+    <div class="row">
+      <label class="field-inline">开发人员
+        <input type="text" maxlength="30" placeholder="如 张三（可留空）" disabled>
+      </label>
+      <button class="btn" disabled title="暂无已计划候选：请先接受条目并移入计划">启动</button>
+    </div>`;
+  const ref = $('#refStart');
+  if (ref) ref.addEventListener('click', () => {
+    toast('✓ 已创建完善任务 RB-20260909-002 并复制通用主调度提示词（演示模拟）');
+    switchView('prompt'); promptState.kind = 'refine'; promptState.ver = 'target'; renderPrompt();
+  });
+  const dev = $('#devStart');
+  if (dev) dev.addEventListener('click', () => {
+    toast('✓ 已创建批次 BATCH-20260909-002 并复制通用主调度提示词（演示模拟）');
+    switchView('prompt'); promptState.kind = 'develop'; promptState.ver = 'target'; renderPrompt();
+  });
+}
+function switchView(v) {
+  $$('#tabs .tab').forEach((x) => x.classList.toggle('active', x.dataset.view === v));
+  ['settings', 'launch', 'prompt'].forEach((name) => {
+    $('#view-' + name).style.display = name === v ? '' : 'none';
+  });
+}
+$$('#candScene button').forEach((b) => b.addEventListener('click', () => {
+  $$('#candScene button').forEach((x) => x.classList.remove('active'));
+  b.classList.add('active');
+  candScene = b.dataset.s;
+  renderLaunch();
+}));
+renderLaunch();
+
+/* ---------- 视图三：提示词对照 ---------- */
+const PROMPTS = {
+  refine: {
+    target: {
+      title: '批量完善 · 主调度提示词 —— 目标（单一通用版，节选）',
+      legend: '生成点：scripts/lib/refine-store.mjs buildRefinePrompt。通用版要点：无 zcode / codex 字样与分叉段落；领取前缀为单一通用前缀（演示取 refine-<批次尾号>-<序号>，具体措辞开发阶段定）；模型口径沿用「跟随主调度会话」（REQ-20260909-005）但措辞不点名执行端。',
+      text: [
+        '你是当前项目的批量完善调度员，只负责派发与接收短回执。',
+        '项目：/path/to/project',
+        '完善批次：RB-20260909-002',
+        '',
+        '子代理模型与智能/推理档位：跟随主调度会话——启动每个子代理时，其模型与智能/推理档位',
+        '必须与当前主调度会话保持一致；支持显式指定的执行端显式传入与会话一致的值，不支持的',
+        '执行端不另行指定、依赖子代理默认继承主会话配置；不得落到与主会话不同的默认档。',
+        '',
+        '在当前 Agent 会话中执行本提示词，每轮派发一个子代理，按执行流程完善本批一个已接受条目的文档。',
+        '每个子代理只做一项；同一时间只运行一个；不要让子 Agent 再派发子 Agent。',
+        '',
+        'CLI 约定：atb 指 node /path/to/project/scripts/atb.mjs（下同）。',
+        '',
+        '子代理流程（每项一个）：',
+        '1. 领取：atb refine next --by refine-<批次尾号>-<序号> --dir "/path/to/project"',
+        '   （返回条目、目录、缺失原因；stop 时按提示结束）',
+        '2. 阅读条目现有说明与项目代码/文档，直接编辑条目目录下的 markdown 补全：',
+        '   需求只补 README：描述 + 验收标准；涉及 UI 时须含界面布局、交互行为、状态反馈与界面展示……',
+        '   项目里查不到的事实一律写「待确认」，不要编造。',
+        '3. 回执：atb refine done <RUN-ID> --summary "<补全要点>"；无法完善用 atb refine fail。',
+        '',
+        '4. 主会话核对：atb refine check --batch RB-20260909-002 --dir "/path/to/project"',
+        '   nextAction=continue 时派发下一个子代理；stop 时结束。只接收短回执，不复制实施历史。',
+        '',
+        '硬性约束：条目全程保持 accepted（已接受）；不要修改业务源码；不要修改条目 status.json；',
+        '不要调用 claim/report、不要写 test-report.md、不要 git commit；只编辑条目目录下 markdown。',
+      ].join('\n'),
+    },
+    zcode: {
+      title: '批量完善 · 主调度提示词 —— 现行 zcode 版（节选，将被通用版替代）',
+      legend: '差异化点：执行 Agent 行、general-purpose 子 Agent、子代理会话命名、--by 前缀 zcode-refine。',
+      text: [
+        '……（公共段落与目标版一致，略）',
+        '执行 Agent：zcode。在 Zcode 本项目新建会话粘贴本提示词，每轮新启动一个 general-purpose 子 Agent 派发一项，',
+        '子代理会话命名统一为：RB-20260909-002-refine-<序号>，与主调度会话区分。',
+        '……',
+        '1. 领取：atb refine next --by zcode-refine-<批次尾号>-<序号> --dir "/path/to/project"',
+        '……',
+        '4. 主会话核对：atb refine check --batch RB-20260909-002 --dir "/path/to/project"',
+        '   nextAction=continue 时启动下一个子 Agent；stop 时结束。只接收短回执，不复制实施历史。',
+      ].join('\n'),
+    },
+    codex: {
+      title: '批量完善 · 主调度提示词 —— 现行 codex 版（节选，将被通用版替代）',
+      legend: '差异化点：执行 Agent 行、子任务/子会话派发口径、子会话命名、--by 前缀 codex-refine（BUG-20260908-013：不得混入 zcode-refine 标识）。',
+      text: [
+        '……（公共段落与目标版一致，略）',
+        '执行 Agent：codex。在 codex 会话中执行本提示词；每轮以子任务/子会话派发一项，',
+        '子会话命名统一为：<条目编号>（如 REQ-20260908-021），与主调度会话 RB-20260909-002 区分。',
+        '……',
+        'codex 口径：领取/回执命令在子会话内执行（工作目录用 --dir 指定）；',
+        '主会话只接收规定的短回执，不复制子会话的完整文档内容。',
+        '1. 领取：atb refine next --by codex-refine-<批次尾号>-<序号> --dir "/path/to/project"',
+      ].join('\n'),
+    },
+  },
+  develop: {
+    target: {
+      title: '批量开发 · 主调度提示词 —— 目标（单一通用版，节选）',
+      legend: '生成点：scripts/lib/batch.mjs generatePrompt。通用版要点：删除 codex / general-purpose 两分支段落，派发口径用通用词；其余调度要素保留。',
+      text: [
+        '你是当前项目的批次调度员，只负责派发与接收短回执。',
+        '项目：/path/to/project',
+        '批次：BATCH-20260909-002',
+        '',
+        '子代理模型与智能/推理档位：跟随主调度会话——启动每个子代理时，其模型与智能/推理档位',
+        '必须与当前主调度会话保持一致；支持显式指定的执行端显式传入与会话一致的值，不支持的',
+        '执行端不另行指定、依赖子代理默认继承主会话配置；不得落到与主会话不同的默认档。',
+        '',
+        '执行规范：docs/agent-team-board/dispatch/worker-spec.md',
+        '批次摘要入口：node /path/to/project/scripts/atb.mjs batch check --batch BATCH-20260909-002 --dir /path/to/project',
+        '',
+        '在当前 Agent 会话中执行本提示词，每轮派发一个子代理，按执行规范自行选择本批',
+        '一个可实施条目，认领、实施、测试并上报。每个子代理只做一项。',
+        '同一时间只运行一个；不要让子 Agent 再派发子 Agent。',
+        '只传本项目、批次标识与规范路径，不复制本会话的历史实施记录。',
+        '',
+        '完整需求、代码、测试日志、报告均由子代理按需读取或落盘。',
+        '主会话只接收规定的短回执，并调用最小核对入口。',
+        'nextAction=continue 时启动下一个新子代理；stop 时结束；',
+        'needs_attention 时说明简短原因和记录入口，等待人工处理。',
+        'stop 且核对响应携带 nextBatch 时为批次排队自动接续：同一会话不重开，',
+        '直接以 nextBatch.batchId 替换本提示词中的批次标识与核对入口继续执行下一批。',
+        '不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。',
+        '收尾只给批次计数和异常入口。不得代替人工接受需求或确认完成。',
+      ].join('\n'),
+    },
+    zcode: {
+      title: '批量开发 · 主调度提示词 —— 现行 zcode 版（节选，将被通用版替代）',
+      legend: '差异化点：general-purpose 子 Agent 派发口径。',
+      text: [
+        '……（公共段落与目标版一致，略）',
+        '每轮新启动一个 general-purpose 子 Agent，按执行规范自行选择本批',
+        '一个可实施条目，认领、实施、测试并上报。每个子 Agent 只做一项。',
+        '……',
+      ].join('\n'),
+    },
+    codex: {
+      title: '批量开发 · 主调度提示词 —— 现行 codex 版（节选，将被通用版替代）',
+      legend: '差异化点：执行 Agent 行 + 子任务/子会话派发 + 子会话命名口径。',
+      text: [
+        '……（公共段落与目标版一致，略）',
+        '执行 Agent：codex。在 codex 会话中执行本提示词，每轮以子任务/子会话派发一项，',
+        '子会话命名统一为：<条目编号>（如 REQ-20260908-021），与主调度会话区分；',
+        '主会话只接收规定的短回执，不复制子会话的完整实施记录。',
+        '……',
+      ].join('\n'),
+    },
+  },
+};
+const promptState = { kind: 'refine', ver: 'target' };
+function renderPrompt() {
+  const cfg = PROMPTS[promptState.kind][promptState.ver];
+  $('#promptTitle').textContent = cfg.title;
+  $('#promptBox').textContent = cfg.text;
+  $('#promptLegend').textContent = cfg.legend;
+  $$('#promptKind button').forEach((b) => b.classList.toggle('active', b.dataset.k === promptState.kind));
+  $$('#promptVer button').forEach((b) => b.classList.toggle('active', b.dataset.v === promptState.ver));
+}
+$$('#promptKind button').forEach((b) => b.addEventListener('click', () => { promptState.kind = b.dataset.k; renderPrompt(); }));
+$$('#promptVer button').forEach((b) => b.addEventListener('click', () => { promptState.ver = b.dataset.v; renderPrompt(); }));
+renderPrompt();
+</script>
+</body>
+</html>

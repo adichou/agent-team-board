@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260910-002 演示 · 任务模块「提示词」页签新增打开 Zcode / Codex 工作区</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #d8dce3; --ink: #1f2430; --muted: #6b7280;
+    --accent: #2563eb; --accent-ink: #ffffff; --ok: #16a34a; --warn: #b45309; --err: #dc2626;
+    --chip-bg: #e9edf3; --pre-bg: #fbfcfe; --shadow: 0 1px 2px rgba(16,24,40,.06);
+  }
+  html[data-theme="dark"] {
+    --bg: #14171c; --panel: #1d2129; --line: #333a46; --ink: #e6e9ef; --muted: #9aa3b2;
+    --accent: #60a5fa; --accent-ink: #10141b; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --chip-bg: #262c37; --pre-bg: #171b22; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  header.topbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  header.topbar b { font-size: 15px; }
+  header.topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  header.topbar .path { color: var(--muted); font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  header.topbar .spacer { flex: 1; }
+  nav.modtabs { display: flex; gap: 4px; padding: 8px 16px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+  nav.modtabs button {
+    border: 1px solid transparent; border-bottom: none; background: transparent; color: var(--muted);
+    padding: 6px 14px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px;
+  }
+  nav.modtabs button.active { background: var(--bg); color: var(--ink); border-color: var(--line); font-weight: 600; }
+  main.wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; padding: 14px 16px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 900px) { main.wrap { grid-template-columns: 1fr; } }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 12px 14px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 10px; }
+  .tabs button {
+    border: 1px solid var(--line); background: var(--chip-bg); color: var(--ink);
+    border-radius: 999px; padding: 3px 14px; cursor: pointer; font-size: 13px;
+  }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .notice { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--chip-bg); padding: 6px 10px; border-radius: 6px; margin: 8px 0; }
+  .notice.warn { border-left-color: var(--warn); }
+  .notice.err { border-left-color: var(--err); }
+  .notice.ok { border-left-color: var(--ok); }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 7px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.06); color: var(--accent-ink); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  pre.prompt {
+    border: 1px dashed var(--line); background: var(--pre-bg); border-radius: 8px;
+    padding: 10px 12px; font: 12px/1.7 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all; max-height: 220px; overflow: auto; margin: 6px 0 2px;
+    user-select: all;
+  }
+  pre.url { border: 1px solid var(--line); background: var(--pre-bg); border-radius: 6px; padding: 6px 8px; font: 11px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; margin: 4px 0; }
+  label.field { display: block; margin: 8px 0 2px; font-size: 12px; color: var(--muted); }
+  input[type="text"] {
+    width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+    border-radius: 6px; padding: 5px 8px; font: 12px ui-monospace, Menlo, monospace;
+  }
+  select { width: 100%; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 5px 6px; font-size: 12px; }
+  .radios { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; margin: 4px 0; }
+  .radios label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+  #logList { list-style: none; margin: 4px 0 0; padding: 0; max-height: 260px; overflow: auto; }
+  #logList li { border-top: 1px dashed var(--line); padding: 5px 2px; font-size: 12px; }
+  #logList li:first-child { border-top: none; }
+  #logList time { color: var(--muted); margin-right: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; }
+  #toasts .toast {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 8px 12px; box-shadow: var(--shadow); font-size: 13px; max-width: 340px;
+  }
+  #toasts .toast.err { border-left-color: var(--err); }
+  #toasts .toast.ok { border-left-color: var(--ok); }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; background: var(--chip-bg); border: 1px solid var(--line); }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 14px; margin: 8px 0; }
+  .meta div label { display: block; color: var(--muted); font-size: 11px; }
+  .stat { margin: 6px 0; }
+  input[type="text"].dev { max-width: 200px; }
+  details.ascii { margin-top: 10px; }
+  details.ascii pre { border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--pre-bg); font-size: 11px; overflow: auto; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="dot" title="服务状态（演示）"></span>
+  <b>Agent Team Board</b>
+  <span class="muted small">REQ-20260910-002 交互演示</span>
+  <span class="path" id="projectHint"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="themeBtn" title="深浅色切换（默认跟随系统）">🌗 深/浅色</button>
+</header>
+
+<nav class="modtabs" aria-label="模块导航（演示，仅任务可用）">
+  <button type="button" disabled title="演示聚焦任务模块">讨论</button>
+  <button type="button" disabled title="演示聚焦任务模块">需求</button>
+  <button type="button" class="active">任务</button>
+  <button type="button" disabled title="演示聚焦任务模块">文件</button>
+  <button type="button" disabled title="演示聚焦任务模块">设置</button>
+</nav>
+
+<main class="wrap">
+  <!-- 左：任务模块面板 -->
+  <section class="card" id="taskPanel" aria-label="任务面板"></section>
+
+  <!-- 右：演示控制区（非看板真实界面） -->
+  <aside>
+    <section class="card">
+      <b class="small">演示控制（非看板真实界面）</b>
+      <label class="field">形态对照</label>
+      <div class="radios" id="formRadios">
+        <label><input type="radio" name="form" value="current"> 现状</label>
+        <label><input type="radio" name="form" value="expected" checked> 期望</label>
+      </div>
+      <label class="field">面板状态</label>
+      <select id="uiStateSel">
+        <option value="normal">正常（有批次 · 含待启动）</option>
+        <option value="empty">空（无批次 · 启动区）</option>
+        <option value="noprompt">空态提示词（存量批次缺 prompt）</option>
+        <option value="loading">加载中</option>
+        <option value="fail">失败（接口异常）</option>
+        <option value="noproject">未选项目（state.project 为空）</option>
+      </select>
+      <label class="field">Codex 打开通道（机制待 design 定夺 · 模拟）</label>
+      <select id="channelSel">
+        <option value="A">A · codex:// 深链（threads/new 已验证、workspace 路由待确认）</option>
+        <option value="B">B · 内置 CLI 终端（codex -C &lt;项目根&gt;）</option>
+        <option value="C">C · 机制待定（如实提示待确认）</option>
+      </select>
+      <label class="field">当前项目根（演示可改，实时反映到深链）</label>
+      <input type="text" id="projectInput" value="/Users/demo/src/agent-team-board">
+      <label class="field">Zcode 深链实时预览</label>
+      <pre class="url" id="zcodeUrlPre"></pre>
+      <label class="field">Codex 通道实时预览</label>
+      <pre class="url" id="codexUrlPre"></pre>
+    </section>
+    <section class="card" style="margin-top:12px">
+      <b class="small">操作日志</b>
+      <button class="btn small" id="clearLog" style="float:right">清空</button>
+      <ul id="logList"></ul>
+    </section>
+    <details class="ascii card" style="margin-top:12px">
+      <summary class="small muted">可选补充：提示词页签线框（期望形态）</summary>
+      <pre>┌─ 任务模块 ────────────────────────────────┐
+│ [批量完善] [批量开发]        ← 一级页签      │
+│ (概况)(队列)[提示词](记录)   ← 二级页签      │
+│ ┌──────────────────────────────────────┐ │
+│ │ 主调度提示词（…提示词通用）：            │ │
+│ │ [重新复制] [复制续接提示词*]            │ │
+│ │ ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐  │ │
+│ │   提示词全文（pre · 限高滚动 · 全选）   │ │
+│ │ └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘  │ │
+│ │ [打开 Zcode 工作区] [打开 Codex 工作区] │ │
+│ └──────────────────────────────────────┘ │
+│ * 仅批量开发面板有「复制续接提示词」          │
+└──────────────────────────────────────────┘</pre>
+    </details>
+  </aside>
+</main>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+const $ = (s, r) => (r || document).querySelector(s);
+const state = {
+  form: 'expected',        // current | expected
+  panel: 'refine',         // refine | develop
+  pane: 'prompt',          // 演示聚焦：概况 / 提示词有内容，其余页签给占位
+  ui: 'normal',            // normal | empty | noprompt | loading | fail | noproject
+  channel: 'A',
+  project: '/Users/demo/src/agent-team-board',
+  batchCreated: false,     // 空态点「启动」后模拟进入运行态
+};
+
+const PROMPTS = {
+  refine: [
+    '你是当前项目的已接受需求完善批次调度员，只负责派发与接收短回执。',
+    '项目：' + state.project,
+    '批次：RFB-20260910-001',
+    'CLI 约定：atb 指 node /Users/demo/src/agent-team-board/scripts/atb.mjs。',
+    '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，',
+    '按执行规范自行选择一个可完善条目，领取、补全文档（README 描述与验收标准）并回执。',
+    '每个子代理只处理一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+    '（示意文本——实际以 scripts/lib/refine-store.mjs buildRefinePrompt() 输出为准）',
+  ].join('\n'),
+  develop: [
+    '你是当前项目的批次调度员，只负责派发与接收短回执。',
+    '项目：' + state.project,
+    '批次：batch-20260910-001',
+    '执行规范：docs/agent-team-board/dispatch/worker-spec.md',
+    '批次摘要入口：node scripts/atb.mjs batch check --batch batch-20260910-001 --dir <项目根>',
+    '每轮新启动一个子代理，按执行规范自行选择本批一个可实施条目，认领、实施、测试并上报。',
+    '每个子代理只做一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+    '（示意文本——实际以 scripts/lib/batch.mjs generatePrompt() 输出为准）',
+  ].join('\n'),
+};
+const BATCH_META = {
+  refine: { id: 'RFB-20260910-001', label: '完善任务', mode: '子代理模式 · 提示词通用' },
+  develop: { id: 'batch-20260910-001', label: '开发任务', mode: '子代理模式 · 提示词通用' },
+};
+
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function now() { return new Date().toLocaleTimeString('zh-CN', { hour12: false }); }
+function log(msg) {
+  const li = document.createElement('li');
+  li.innerHTML = '<time>' + now() + '</time>' + msg;
+  const list = $('#logList');
+  list.insertBefore(li, list.firstChild);
+}
+function toast(msg, cls) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (cls || '');
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+function zcodeUrl() { return 'zcode://workspace/open?path=' + encodeURIComponent(state.project); }
+function codexPreview() {
+  if (state.channel === 'A') return 'codex://threads/new?prompt=<提示词>（已验证存在·未文档化）\n工作区/聚焦类路由：待实机确认';
+  if (state.channel === 'B') return '服务端最小端点 → 终端标签：codex -C "' + state.project + '"（CLI 随 ChatGPT.app 内置，-C 实测可用）';
+  return '（机制待定：design.md 定夺前如实提示「待确认」，不假装可打开）';
+}
+
+/* ---------- 任务面板渲染 ---------- */
+function promptToolbarHtml() {
+  const isDev = state.panel === 'develop';
+  const current = state.form === 'current';
+  let wsBtns = '';
+  const noProject = state.ui === 'noproject';
+  const dis = noProject ? ' disabled title="未选择项目：无项目根可打开（最终口径见 README 待确认）"' : '';
+  const zTitle = ' title="打开/聚焦本项目 Zcode 工作区；需手动新建会话并粘贴，深链不会自动新建或发送"';
+  const cTitle = ' title="打开/聚焦本项目 Codex 工作区；机制待 design 定夺；需手动新建会话并粘贴"';
+  if (current) {
+    // 现状：仅批量开发有 Zcode 按钮；批量完善没有任何工作区入口
+    wsBtns = isDev
+      ? '<div class="toolbar"><button type="button" class="btn" id="openZcode"' + zTitle + '>打开 Zcode 工作区</button><span class="muted small">（现状：无 Codex 入口）</span></div>'
+      : '';
+  } else {
+    wsBtns = '<div class="toolbar">'
+      + '<button type="button" class="btn" id="openZcode"' + zTitle + dis + '>打开 Zcode 工作区</button>'
+      + '<button type="button" class="btn" id="openCodex"' + cTitle + dis + '>打开 Codex 工作区</button>'
+      + '</div>';
+  }
+  const copyBtns = '<button type="button" class="btn" id="recopy" title="重试复制不会创建新任务">重新复制</button>'
+    + (isDev ? '<button type="button" class="btn" id="resumeCopy" title="主会话退出/压缩后，新会话用同一提示词续接">复制续接提示词</button>' : '');
+  return { copyBtns, wsBtns };
+}
+
+function panePromptHtml() {
+  if (state.ui === 'noprompt') {
+    return '<p class="muted small" style="margin:2px 0 0">暂无调度提示词（存量批次可能缺失）。</p>'
+      + '<p class="muted small">（工作区按钮是否仍展示由 design 定夺，演示按「随提示词一起隐藏」呈现）</p>';
+  }
+  const { copyBtns, wsBtns } = promptToolbarHtml();
+  return '<div>'
+    + '<div class="toolbar"><span class="muted small">主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：</span>' + copyBtns + '</div>'
+    + '<pre class="prompt" id="promptPre" tabindex="0">' + esc(PROMPTS[state.panel]) + '</pre>'
+    + wsBtns
+    + '</div>';
+}
+
+function paneOverviewHtml(meta) {
+  return '<div class="meta">'
+    + '<div><label>批次</label><span class="mono">' + esc(meta.id) + '</span> <span class="chip">待启动</span></div>'
+    + '<div><label>模式</label>' + esc(meta.mode) + '</div>'
+    + '<div><label>当前条目</label>待启动：请在 Agent 会话粘贴调度提示词</div>'
+    + '<div><label>开发人员</label>未指定</div>'
+    + '</div>'
+    + '<p class="muted small stat">已上报 0 · 异常 0 · 待处理 3 · 合计 3（示意计数）</p>';
+}
+
+function paneStubHtml(name) {
+  return '<p class="muted small">「' + name + '」页签内容与本次改动无关，演示从略——本条只改「提示词」页签的工作区入口按钮区。</p>';
+}
+
+function startAreaHtml() {
+  const meta = BATCH_META[state.panel];
+  return '<section>'
+    + '<div class="stat">已' + (state.panel === 'refine' ? '接受未完善' : '计划') + '候选 <b>3</b> · 受依赖阻塞 <b>0</b>（最旧优先，实时读取）</div>'
+    + '<div class="toolbar">'
+    + '<label class="small muted" for="devInput">开发人员</label>'
+    + '<input type="text" class="dev" id="devInput" maxlength="30" placeholder="可留空">'
+    + '<button type="button" class="btn primary" id="startBtn" title="创建任务并复制通用主调度提示词（复制成功 ≠ 执行中）">启动</button>'
+    + '</div>'
+    + '<p class="muted small">启动 = 创建' + esc(meta.label) + '并复制主调度提示词；提示词通用，可在任意一种 Agent 会话粘贴执行。'
+    + (state.form === 'current' ? '' : '创建后可在「提示词」页签用「打开 Zcode / Codex 工作区」直达工作区再粘贴。')
+    + '（启动区本身不加工作区入口——默认口径，见 README 待确认）</p>'
+    + '</section>';
+}
+
+function renderPanel() {
+  const panelEl = $('#taskPanel');
+  const meta = BATCH_META[state.panel];
+  const running = state.ui !== 'empty';
+  let body = '';
+  if (state.ui === 'loading') {
+    body = '<p class="muted">加载中…</p>';
+  } else if (state.ui === 'fail') {
+    body = '<div class="notice err">加载失败：/api/' + (state.panel === 'refine' ? 'refine' : 'batch') + '/current 请求异常（模拟）。</div>'
+      + '<div class="toolbar"><button type="button" class="btn" id="retryBtn">重试</button></div>'
+      + '<p class="muted small">失败态下无批次数据可依，工作区按钮不渲染；重试成功后回到正常态。</p>';
+  } else if (!running) {
+    body = startAreaHtml();
+  } else {
+    const panes = [
+      ['overview', '概况'], ['queue', '队列'], ['prompt', '提示词'], ['records', '记录'],
+    ].map(([k, label]) =>
+      '<button type="button" class="' + (state.pane === k ? 'active' : '') + '" data-pane="' + k + '">' + label + '</button>'
+    ).join('');
+    let paneBody;
+    if (state.pane === 'prompt') paneBody = panePromptHtml();
+    else if (state.pane === 'overview') paneBody = paneOverviewHtml(meta);
+    else if (state.pane === 'queue') paneBody = paneStubHtml('队列');
+    else paneBody = paneStubHtml('记录');
+    body = '<div class="toolbar" style="margin-top:0">'
+      + '<span class="chip">运行中（示意）</span><span class="mono small">' + esc(meta.id) + '</span>'
+      + '<span class="muted small">' + esc(meta.mode) + ' · 批次存在即有「提示词」页签</span></div>'
+      + '<nav class="tabs" role="tablist" aria-label="任务分区">' + panes + '</nav>'
+      + paneBody;
+  }
+
+  const modes = [['refine', '批量完善'], ['develop', '批量开发']]
+    .map(([k, label]) => '<button type="button" class="' + (state.panel === k ? 'active' : '') + '" data-mode="' + k + '">' + label + '</button>')
+    .join('');
+  panelEl.innerHTML =
+    '<nav class="tabs" role="tablist" aria-label="任务面板" style="margin-top:0">' + modes + '</nav>'
+    + '<p class="muted small" style="margin:0 0 6px">当前形态：<b>' + (state.form === 'current' ? '现状（开发侧仅 Zcode 按钮 / 完善侧无入口）' : '期望（两面板 · Zcode + Codex 成对入口）') + '</b>'
+    + ' · 状态：<b>' + $('#uiStateSel option[value="' + state.ui + '"]').textContent + '</b></p>'
+    + body;
+
+  bindPanel(panelEl);
+}
+
+/* ---------- 交互 ---------- */
+function bindPanel(root) {
+  for (const b of root.querySelectorAll('[data-mode]')) {
+    b.addEventListener('click', () => {
+      state.panel = b.dataset.mode;
+      log('切换一级页签 → ' + (state.panel === 'refine' ? '批量完善' : '批量开发'));
+      renderPanel();
+    });
+  }
+  for (const b of root.querySelectorAll('[data-pane]')) {
+    b.addEventListener('click', () => { state.pane = b.dataset.pane; renderPanel(); });
+  }
+  const start = $('#startBtn', root);
+  if (start) start.addEventListener('click', () => {
+    state.ui = 'normal'; state.batchCreated = true;
+    $('#uiStateSel').value = 'normal';
+    toast('✓ 任务已创建、提示词已复制（模拟），请在对应项目会话粘贴发送；状态：待启动', 'ok');
+    log('「启动」→ 创建任务并复制主调度提示词（模拟）→ 进入运行态');
+    renderPanel();
+  });
+  const retry = $('#retryBtn', root);
+  if (retry) retry.addEventListener('click', async () => {
+    state.ui = 'loading'; renderPanel();
+    log('失败 → 重试：加载中…（模拟 800ms）');
+    await new Promise((r) => setTimeout(r, 800));
+    state.ui = 'normal'; $('#uiStateSel').value = 'normal';
+    log('重试成功 → 回到正常态');
+    renderPanel();
+  });
+  const recopy = $('#recopy', root);
+  if (recopy) recopy.addEventListener('click', async () => {
+    const ok = await copyText(PROMPTS[state.panel]);
+    toast(ok ? '已复制提示词；请在当前项目的 Agent 会话粘贴发送' : '复制失败：请点击提示词文本一键全选手动复制', ok ? 'ok' : 'err');
+    log('「重新复制」→ 剪贴板写入' + (ok ? '成功' : '失败（file:// 下可能受限，演示降级提示）'));
+  });
+  const resume = $('#resumeCopy', root);
+  if (resume) resume.addEventListener('click', async () => {
+    const ok = await copyText(PROMPTS[state.panel]);
+    toast(ok ? '已复制续接提示词；新主会话粘贴发送后先核对再继续' : '复制失败：请手动选中提示词文本复制', ok ? 'ok' : 'err');
+    log('「复制续接提示词」→ ' + (ok ? '成功' : '失败'));
+  });
+  const z = $('#openZcode', root);
+  if (z) z.addEventListener('click', () => {
+    if (z.disabled) return;
+    if (state.ui === 'noproject') { // 现状口径在该态为静默（期望形态按钮已禁用，不会到这里；保留兜底）
+      log('打开 Zcode 工作区：state.project 为空 → 静默无反应（现状口径）');
+      return;
+    }
+    // 演示不真实触发自定义 scheme 跳转，仅展示将构造的深链
+    log('打开 Zcode 工作区 → <span class="mono">' + esc(zcodeUrl()) + '</span>（打开/聚焦本项目 Zcode 工作区；不自动新建会话或发送）');
+    toast('已触发 Zcode 深链（演示模拟，不真实跳转）；请在工作区手动新建会话粘贴提示词', 'ok');
+  });
+  const c = $('#openCodex', root);
+  if (c) c.addEventListener('click', () => {
+    if (c.disabled) return;
+    if (state.channel === 'C') {
+      log('打开 Codex 工作区：机制待定 → 如实提示待确认，不静默、不伪装成功');
+      toast('Codex 打开机制待 design 定夺（README「待确认」）；此处如实提示', 'err');
+      return;
+    }
+    const p = state.channel === 'A'
+      ? 'codex://threads/new?prompt=<提示词>（未文档化·已验证存在；工作区/聚焦路由待实机确认）'
+      : '终端标签：codex -C "' + state.project + '"（内置 CLI · -C 实测可用；需服务端最小端点）';
+    log('打开 Codex 工作区（通道 ' + state.channel + '，模拟）→ <span class="mono">' + esc(p) + '</span>');
+    toast('已按通道 ' + state.channel + ' 触发（演示模拟，不真实打开）；需手动新建会话粘贴提示词', 'ok');
+  });
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { return false; }
+}
+
+/* ---------- 控制区 ---------- */
+$('#formRadios').addEventListener('change', (e) => {
+  state.form = e.target.value;
+  log('形态切换 → ' + (state.form === 'current' ? '现状（改动前）' : '期望（本需求落地后）'));
+  renderPanel();
+});
+$('#uiStateSel').addEventListener('change', (e) => {
+  state.ui = e.target.value;
+  log('状态切换 → ' + e.target.selectedOptions[0].textContent);
+  if (state.ui === 'loading') {
+    renderPanel();
+    setTimeout(() => {
+      if (state.ui !== 'loading') return;
+      state.ui = 'normal'; $('#uiStateSel').value = 'normal';
+      log('加载完成（模拟 900ms）→ 正常态');
+      renderPanel();
+    }, 900);
+    return;
+  }
+  renderPanel();
+});
+$('#channelSel').addEventListener('change', (e) => {
+  state.channel = e.target.value;
+  log('Codex 通道切换 → ' + e.target.selectedOptions[0].textContent.split('（')[0]);
+  refreshPreviews();
+  if (state.form === 'expected' && (state.ui === 'normal' || state.ui === 'noproject')) renderPanel();
+});
+$('#projectInput').addEventListener('input', (e) => {
+  state.project = e.target.value.trim() || '';
+  refreshPreviews();
+});
+$('#clearLog').addEventListener('click', () => { $('#logList').innerHTML = ''; });
+$('#themeBtn').addEventListener('click', () => {
+  const html = document.documentElement;
+  const cur = html.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  html.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+});
+
+function refreshPreviews() {
+  $('#zcodeUrlPre').textContent = state.project ? zcodeUrl() : '（未选择项目：不构造深链）';
+  $('#codexUrlPre').textContent = codexPreview();
+  $('#projectHint').textContent = state.project ? '项目：' + state.project : '项目：未选择';
+}
+
+/* ---------- 启动 ---------- */
+refreshPreviews();
+renderPanel();
+log('演示就绪：左侧为任务模块「提示词」页签；右侧可对照现状/期望、切换状态与 Codex 通道。');
+log('说明：演示中的深链/终端拉起均为模拟记录，不真实跳转；Codex 机制以开发阶段 design.md 为准。');
+</script>
+</body>
+</html>

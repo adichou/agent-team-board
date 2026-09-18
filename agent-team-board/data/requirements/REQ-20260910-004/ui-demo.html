@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260910-004 演示 — /board 按提示词项目打开看板</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --panel2: #fafafa; --border: #d8dbe0;
+    --text: #1f2328; --muted: #6a737d; --accent: #2563eb; --accent-soft: #dbeafe;
+    --ok: #1a7f37; --warn: #9a6700; --err: #cf222e; --ok-bg: #dafbe1; --err-bg: #ffebe9; --load-bg: #ddf4ff;
+    --chip: #eef1f4; --sidebar: #eceef1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --panel2: #1c2129; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --accent: #4493f8; --accent-soft: #16233a;
+      --ok: #3fb950; --warn: #d29922; --err: #f85149; --ok-bg: #12261e; --err-bg: #2d1417; --load-bg: #0c2233;
+      --chip: #21262d; --sidebar: #10151c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  header.demo-head { padding: 14px 18px 6px; }
+  header.demo-head h1 { font-size: 16px; margin: 0 0 2px; }
+  header.demo-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .stage { display: grid; grid-template-columns: minmax(340px, 5fr) minmax(320px, 4fr); gap: 14px; padding: 10px 18px 20px; align-items: start; }
+  @media (max-width: 860px) { .stage { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .card h2 { font-size: 13px; margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--border);
+             color: var(--muted); font-weight: 600; background: var(--panel2); }
+  .client { display: grid; grid-template-columns: 132px 1fr; min-height: 430px; }
+  .projbar { border-right: 1px solid var(--border); background: var(--sidebar); padding: 8px 6px; }
+  .projbar .pb-title { font-size: 11px; color: var(--muted); padding: 2px 6px 6px; }
+  .projbar .proj { padding: 5px 8px; border-radius: 6px; font-size: 12.5px; cursor: default; display: flex; align-items: center; gap: 6px; }
+  .projbar .proj.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .projbar .proj .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none; }
+  .projbar .proj.active .dot { background: var(--accent); }
+
+  .chat { display: flex; flex-direction: column; }
+  .msgs { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-height: 300px; max-height: 340px; }
+  .msg { max-width: 92%; padding: 7px 10px; border-radius: 9px; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .msg.agent { align-self: flex-start; background: var(--chip); border-bottom-left-radius: 3px; }
+  .msg.agent.fail { background: var(--err-bg); }
+  .msg .cand { display: block; margin: 4px 2px 0; padding: 5px 10px; background: var(--panel); border: 1px solid var(--border);
+               border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--text); text-align: left; width: 100%; }
+  .msg .cand:hover { border-color: var(--accent); color: var(--accent); }
+  .steps { padding: 0 12px 8px; }
+  .step { display: flex; gap: 8px; align-items: baseline; padding: 2.5px 0; font-size: 12.5px; color: var(--muted); }
+  .step .ic { width: 16px; text-align: center; flex: none; font-size: 12px; }
+  .step.run { color: var(--text); }
+  .step.run .ic::after { content: "◍"; display: inline-block; animation: spin 0.9s linear infinite; }
+  .step.ok .ic { color: var(--ok); } .step.ok { color: var(--text); }
+  .step.err .ic, .step.err { color: var(--err); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .cmdrow { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--panel2); }
+  .cmdrow input { flex: 1; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+                  border-radius: 7px; padding: 7px 10px; font: 13px ui-monospace, Menlo, monospace; }
+  .cmdrow button { border: none; background: var(--accent); color: #fff; border-radius: 7px; padding: 7px 16px; cursor: pointer; font-size: 13px; }
+  .cmdrow button:disabled { opacity: .55; cursor: default; }
+  .samples { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
+  .samples button { border: 1px solid var(--border); background: var(--panel); color: var(--muted); border-radius: 999px;
+                    padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  .samples button:hover { color: var(--accent); border-color: var(--accent); }
+  .simrow { padding: 0 12px 10px; font-size: 12px; color: var(--muted); }
+  .simrow label { cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
+
+  /* 看板窗口 */
+  .board-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  .board-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .board-brand .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent-soft); color: var(--accent);
+                       display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+  .board-brand b { font-size: 13px; white-space: nowrap; }
+  .board-brand .dir { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .board-top select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 6px; font-size: 12.5px; max-width: 150px; }
+  .board-nav { display: flex; gap: 4px; padding: 7px 12px 0; border-bottom: 1px solid var(--border); }
+  .board-nav span { padding: 4px 12px; font-size: 12.5px; color: var(--muted); border-bottom: 2px solid transparent; }
+  .board-nav span.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .board-body { padding: 10px 12px 14px; min-height: 250px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 7px; background: var(--panel2); }
+  .item .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); flex: none; }
+  .item .t { flex: 1; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { flex: none; font-size: 11px; padding: 1.5px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.s-accepted { color: var(--accent); border-color: var(--accent); }
+  .badge.s-in-progress { color: var(--warn); border-color: var(--warn); }
+  .badge.s-done { color: var(--ok); border-color: var(--ok); }
+  .board-empty { text-align: center; padding: 38px 10px; }
+  .board-empty h3 { margin: 0 0 6px; font-size: 14px; }
+  .board-empty p { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+  .board-empty button { border: none; background: var(--accent); color: #fff; border-radius: 7px; padding: 7px 18px; cursor: pointer; font-size: 13px; }
+  .board-load { text-align: center; color: var(--muted); padding: 60px 10px; font-size: 13px; }
+  .board-load::before { content: "◍"; display: block; font-size: 20px; animation: spin 0.9s linear infinite; margin-bottom: 8px; }
+  .board-note { padding: 6px 12px 10px; color: var(--muted); font-size: 11.5px; }
+  .hint { margin: 0 18px 14px; color: var(--muted); font-size: 12px; }
+  .flash { animation: flash 0.8s ease 1; }
+  @keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent-soft); } 100% { box-shadow: 0 0 0 0 transparent; } }
+</style>
+</head>
+<body>
+<header class="demo-head">
+  <h1>REQ-20260910-004 演示 — /board 优先按提示词中提及的项目打开看板</h1>
+  <p>左：模拟 ZCode 客户端（左侧项目栏 + 会话）；右：模拟 Status Board（顶栏项目切换器 + 需求列表）。点快捷示例或输入 /board 变体后按回车 / 点执行。</p>
+</header>
+
+<div class="stage">
+  <!-- 会话侧 -->
+  <section class="card">
+    <h2>会话（ZCode 客户端）</h2>
+    <div class="client">
+      <aside class="projbar" id="projbar"><div class="pb-title">左侧项目栏</div></aside>
+      <div class="chat">
+        <div class="msgs" id="msgs"></div>
+        <div class="steps" id="steps"></div>
+        <div class="samples" id="samples"></div>
+        <div class="simrow"><label><input type="checkbox" id="simDown"> 模拟服务未运行（演示后台拉起服务）</label></div>
+        <div class="cmdrow">
+          <input id="cmd" value="/board" spellcheck="false" placeholder="/board [项目名或路径]" aria-label="命令输入">
+          <button id="run" type="button">执行</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 看板侧 -->
+  <section class="card" id="boardCard">
+    <h2>Status Board（http://127.0.0.1:8888）</h2>
+    <div class="board-top">
+      <div class="board-brand">
+        <span class="logo">▦</span>
+        <div style="min-width:0">
+          <b>智能体团队看板</b>
+          <div class="dir" id="bDir">—</div>
+        </div>
+      </div>
+      <select id="bSel" title="顶栏项目切换器（手动切换兜底）" aria-label="项目切换器"></select>
+    </div>
+    <nav class="board-nav">
+      <span>讨论</span><span class="on">需求</span><span>任务</span><span>文件</span>
+    </nav>
+    <div class="board-body" id="bBody"><div class="board-load">连接中…</div></div>
+    <div class="board-note">顶栏切换器为手动兜底；本需求关注点：执行 /board 后它自动停在<strong>解析出的目标项目</strong>上。</div>
+  </section>
+</div>
+<p class="hint">状态覆盖：正常打开 / 加载中（探测、拉起服务）/ 失败（无命中、同名歧义、路径不存在）/ 空态（项目未初始化）。深浅色随系统自动适配。</p>
+
+<script>
+(function () {
+  'use strict';
+  var SESSION_PROJECT = '/Users/demo/Documents/src/agent-team-board';
+
+  // 已知项目注册表（模拟 ~/.agent-team-board/projects.json，路径末段=项目名）
+  var REGISTRY = [
+    { path: SESSION_PROJECT, init: true },
+    { path: '/Users/demo/Documents/src/my-app', init: true },
+    { path: '/Users/demo/Documents/src/api-gateway', init: true },
+    { path: '/Users/demo/work/api-gateway', init: true },      // 与上一个同名 → 歧义演示
+    { path: '/Users/demo/Documents/src/fresh-proj', init: false } // 未初始化 → 空态演示
+  ];
+  var EXISTING_DIRS = REGISTRY.map(function (r) { return r.path; })
+    .concat(['/Users/demo/Documents/src']); // 存在但非看板项目的目录
+
+  var ITEMS = {
+    '/Users/demo/Documents/src/agent-team-board': [
+      { id: 'REQ-20260910-004', t: 'StatusBoard 命令优先以提示词中提及的项目来打开看板', s: '已接受', cls: 's-accepted' },
+      { id: 'REQ-20260909-010', t: '支持需求完善后自动转入计划，提供配置', s: '已完成', cls: 's-done' },
+      { id: 'BUG-20260910-001', t: '项目切换器在窄屏溢出', s: '开发中', cls: 's-in-progress' }
+    ],
+    '/Users/demo/Documents/src/my-app': [
+      { id: 'REQ-20260830-001', t: '支持登录 Passkey', s: '已完成', cls: 's-done' },
+      { id: 'BUG-20260901-002', t: '设置页保存偶发失败', s: '开发中', cls: 's-in-progress' }
+    ],
+    '/Users/demo/Documents/src/api-gateway': [
+      { id: 'REQ-20260905-003', t: '路由规则支持灰度发布', s: '待测试', cls: 's-in-progress' }
+    ],
+    '/Users/demo/work/api-gateway': [
+      { id: 'REQ-20260903-002', t: '网关日志接入链路追踪', s: '已接受', cls: 's-accepted' }
+    ]
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var msgs = $('msgs'), stepsEl = $('steps'), bBody = $('bBody'), bSel = $('bSel'), bDir = $('bDir');
+  var busy = false;
+
+  function shortName(p) { var a = String(p).split('/').filter(Boolean); return a.length ? a[a.length - 1] : p; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // ---------- 左侧项目栏 ----------
+  (function renderSidebar() {
+    var bar = $('projbar');
+    REGISTRY.forEach(function (r) {
+      if (!r.init && r.path !== SESSION_PROJECT) return; // 未初始化项目不常驻展示，避免剧透歧义示例
+      var d = document.createElement('div');
+      d.className = 'proj' + (r.path === SESSION_PROJECT ? ' active' : '');
+      d.title = r.path + (r.path === SESSION_PROJECT ? '（当前会话所属项目）' : '');
+      d.innerHTML = '<span class="dot"></span>' + esc(shortName(r.path));
+      bar.appendChild(d);
+    });
+  })();
+
+  // ---------- 看板渲染 ----------
+  var curProject = null;
+  function renderBoard(path, opts) {
+    opts = opts || {};
+    curProject = path;
+    var reg = REGISTRY.filter(function (r) { return r.path === path; })[0] || { init: false };
+    bDir.textContent = path ? 'docs/agent-team-board · ' + path : '—';
+    bSel.innerHTML = '';
+    REGISTRY.forEach(function (r) {
+      var o = document.createElement('option');
+      o.value = r.path; o.textContent = shortName(r.path); o.title = r.path;
+      o.selected = r.path === path; bSel.appendChild(o);
+    });
+    if (!path) { bBody.innerHTML = '<div class="board-load">连接中…</div>'; return; }
+    if (!reg.init) {
+      bBody.innerHTML =
+        '<div class="board-empty"><h3>当前项目尚未初始化看板</h3>' +
+        '<p>将在 <code>docs/agent-team-board/</code> 创建数据目录，需求与 Bug 随代码进 git。</p>' +
+        '<button type="button" id="btnInit">初始化</button></div>';
+      $('btnInit').addEventListener('click', function () {
+        reg.init = true;
+        msgAgent('已执行 atb init：数据目录已创建。');
+        renderBoard(path);
+      });
+      return;
+    }
+    var list = (ITEMS[path] || []).map(function (it) {
+      return '<div class="item"><span class="id">' + esc(it.id) + '</span><span class="t">' + esc(it.t) +
+             '</span><span class="badge ' + it.cls + '">' + esc(it.s) + '</span></div>';
+    }).join('');
+    bBody.innerHTML = list || '<div class="board-empty"><h3>暂无条目</h3><p>点右上「＋ 新建」创建第一条需求或 Bug。</p></div>';
+    if (opts.flash) { $('boardCard').classList.remove('flash'); void $('boardCard').offsetWidth; $('boardCard').classList.add('flash'); }
+  }
+  bSel.addEventListener('change', function () {
+    renderBoard(bSel.value, { flash: true });
+    msgAgent('（手动兜底）已通过顶栏项目切换器切换到：' + bSel.value);
+  });
+
+  // ---------- 消息流 ----------
+  function scrollMsgs() { msgs.scrollTop = msgs.scrollHeight; }
+  function msgUser(text) {
+    var d = document.createElement('div'); d.className = 'msg user'; d.textContent = text;
+    msgs.appendChild(d); scrollMsgs();
+  }
+  function msgAgent(html, fail) {
+    var d = document.createElement('div'); d.className = 'msg agent' + (fail ? ' fail' : '');
+    d.innerHTML = html; msgs.appendChild(d); scrollMsgs(); return d;
+  }
+
+  // ---------- 步骤区 ----------
+  function step(text) {
+    var d = document.createElement('div'); d.className = 'step run';
+    d.innerHTML = '<span class="ic"></span><span>' + esc(text) + '</span>';
+    stepsEl.appendChild(d); return d;
+  }
+  function stepDone(d, ok, note) {
+    d.className = 'step ' + (ok ? 'ok' : 'err');
+    d.querySelector('.ic').textContent = ok ? '✔' : '✘';
+    if (note !== undefined) d.querySelector('span:last-child').innerHTML = note;
+  }
+  function clearSteps() { stepsEl.innerHTML = ''; }
+
+  // ---------- 命令解析（演示版规则） ----------
+  function parseTarget(arg) {
+    arg = (arg || '').trim().replace(/^["']|["']$/g, '');
+    if (!arg) return { kind: 'session' };
+    if (/^~\//.test(arg)) arg = '/Users/demo' + arg.slice(1);
+    if (arg[0] === '/') {
+      if (EXISTING_DIRS.indexOf(arg) < 0) return { kind: 'err', reason: '项目目录不存在：' + arg };
+      return { kind: 'path', path: arg };
+    }
+    var hits = REGISTRY.filter(function (r) { return shortName(r.path) === arg; });
+    if (hits.length === 1) return { kind: 'name', path: hits[0].path };
+    if (hits.length > 1) return { kind: 'ambiguous', name: arg, hits: hits };
+    return { kind: 'err', reason: '已知项目中没有名为「' + arg + '」的项目' };
+  }
+  function knownList() {
+    return REGISTRY.map(function (r) { return '· ' + r.path; }).join('\n');
+  }
+
+  function openBoard(path) {
+    var url = 'http://127.0.0.1:8888/?project=' + encodeURIComponent(path);
+    var s = step('打开 ' + url);
+    setTimeout(function () {
+      stepDone(s, true);
+      renderBoard(path, { flash: true });
+      msgAgent('看板已打开（顶栏切换器已停在目标项目 <b>' + esc(shortName(path)) + '</b>）：\n<code>' + esc(url) + '</code>');
+      finish();
+    }, 450);
+  }
+
+  function finish() { busy = false; $('run').disabled = false; }
+
+  function run() {
+    if (busy) return;
+    var raw = $('cmd').value.trim();
+    if (!raw) return;
+    busy = true; $('run').disabled = true; clearSteps();
+    msgUser(raw);
+    var m = raw.match(/^\/board\b\s*(.*)$/);
+    if (!m) {
+      msgAgent('请在演示中输入 /board 开头的命令。', true); busy = false; $('run').disabled = false; return;
+    }
+    var arg = m[1];
+
+    // 步骤 1：探测服务（必要时后台拉起）
+    var s1 = step($('simDown').checked ? '探测服务 curl -sf http://127.0.0.1:8888/api/health' : '探测服务 curl -sf http://127.0.0.1:8888/api/health — 已在运行');
+    setTimeout(function () {
+      var down = $('simDown').checked; $('simDown').checked = false;
+      if (down) {
+        var s1b = step('后台拉起服务 node server.mjs → 复检');
+        setTimeout(function () {
+          stepDone(s1b, true);
+          afterHealth();
+        }, 700);
+      } else {
+        stepDone(s1, true); afterHealth();
+      }
+    }, 500);
+
+    function afterHealth() {
+      // 步骤 2：解析目标项目
+      var res = parseTarget(arg);
+      var s2;
+      if (res.kind === 'session') {
+        s2 = step('解析目标项目：提示词未提及项目 → 取左侧项目栏当前会话项目');
+        setTimeout(function () {
+          stepDone(s2, true, '解析目标项目：未提及 → 左侧项目栏会话项目 <code>' + esc(SESSION_PROJECT) + '</code>');
+          openBoard(SESSION_PROJECT);
+        }, 400);
+      } else if (res.kind === 'path') {
+        s2 = step('解析目标项目：按路径 ' + res.path);
+        setTimeout(function () { stepDone(s2, true); openBoard(res.path); }, 400);
+      } else if (res.kind === 'name') {
+        s2 = step('解析目标项目：按名称「' + arg + '」匹配已知项目（/api/health projects）');
+        setTimeout(function () {
+          stepDone(s2, true, '解析目标项目：名称「' + esc(arg) + '」唯一命中 <code>' + esc(res.path) + '</code>');
+          openBoard(res.path);
+        }, 400);
+      } else if (res.kind === 'ambiguous') {
+        s2 = step('解析目标项目：按名称「' + arg + '」');
+        setTimeout(function () {
+          stepDone(s2, false, '解析目标项目：名称「' + esc(arg) + '」命中 ' + res.hits.length + ' 个同名项目，需人工确认');
+          var d = msgAgent('「' + esc(arg) + '」匹配到多个同名项目，不猜测、不静默打开。请选择要打开的项目：', true);
+          res.hits.forEach(function (h) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = 'cand mono'; b.textContent = h.path;
+            b.addEventListener('click', function () {
+              d.innerHTML = '已确认目标项目：<code>' + esc(h.path) + '</code>';
+              msgUser(h.path);
+              openBoard(h.path);
+            });
+            d.appendChild(b);
+          });
+          busy = false; $('run').disabled = false;
+        }, 400);
+        return;
+      } else {
+        s2 = step('解析目标项目');
+        setTimeout(function () {
+          stepDone(s2, false, '解析目标项目：' + esc(res.reason));
+          msgAgent(res.reason + '。\n请确认项目名或提供项目根绝对路径。当前已知项目：\n<code>' + esc(knownList()) + '</code>', true);
+          busy = false; $('run').disabled = false;
+        }, 400);
+        return;
+      }
+    }
+
+  }
+
+  // ---------- 快捷示例 ----------
+  var SAMPLES = [
+    { label: '不带参数（兜底）', cmd: '/board' },
+    { label: '按项目名', cmd: '/board agent-team-board' },
+    { label: '按路径（~ 展开）', cmd: '/board ~/Documents/src/my-app' },
+    { label: '同名歧义', cmd: '/board api-gateway' },
+    { label: '路径不存在', cmd: '/board ~/Documents/src/no-such' },
+    { label: '未初始化项目', cmd: '/board fresh-proj' }
+  ];
+  SAMPLES.forEach(function (s) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = s.label;
+    b.addEventListener('click', function () { $('cmd').value = s.cmd; run(); });
+    $('samples').appendChild(b);
+  });
+
+  $('run').addEventListener('click', run);
+  $('cmd').addEventListener('keydown', function (e) { if (e.key === 'Enter') run(); });
+
+  // 初始：看板停在上次选择（演示从会话项目开始）
+  renderBoard(SESSION_PROJECT);
+  msgAgent('试试右下快捷示例：带项目名 / 带路径 / 不带参数 / 同名歧义 / 路径不存在 / 未初始化项目。');
+})();
+</script>
+</body>
+</html>

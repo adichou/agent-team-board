@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-008 演示 · 任务界面多页签布局（完善 / 开发独立页签 + 页签内分区）</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #d9dee4; --text: #1f2733; --muted: #6b7684;
+    --accent: #2563eb; --accent-soft: #e8effd; --ok: #16794c; --ok-soft: #e6f4ec;
+    --err: #b3261e; --err-soft: #fbeae9; --warn: #8a5a00; --warn-soft: #fdf3e0;
+    --info-bg: #eef1f5; --chip-bg: #f1f3f6; --shadow: 0 6px 22px rgba(0,0,0,.14);
+  }
+  html[data-theme="dark"] {
+    --bg: #14181d; --panel: #1d232b; --line: #38414c; --text: #e6e9ed; --muted: #98a2ad;
+    --accent: #6f9bff; --accent-soft: #21324f; --ok: #57c78d; --ok-soft: #1d3529;
+    --err: #ef8a84; --err-soft: #44201e; --warn: #d9a75a; --warn-soft: #3d3115;
+    --info-bg: #232a33; --chip-bg: #232a33; --shadow: 0 6px 22px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+         font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  header.demo-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  header.demo-head h1 { font-size: 16px; margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 7px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .btn.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .btn.danger { background: var(--err-soft); color: var(--err); border-color: transparent; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  select, input[type="text"] { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+  .hidden { display: none !important; }
+
+  .board { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .module-nav { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
+  .view-tab { border: none; background: transparent; color: var(--muted); font-size: 13.5px;
+              padding: 6px 12px; cursor: pointer; border-radius: 7px 7px 0 0; }
+  .view-tab.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+  /* 任务面板：头部 + 一级页签 + 二级页签 + 分区内容 */
+  .batch-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px 0; }
+  .path { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-btn { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 7px;
+              width: 26px; height: 26px; cursor: pointer; flex: none; }
+  .tabs.l1 { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px 8px; }
+  .tab.l1-tab { border: 1px solid var(--line); background: transparent; color: var(--muted);
+                border-radius: 99px; padding: 4px 14px; font-size: 13px; cursor: pointer; }
+  .tab.l1-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .tabs.l2 { display: flex; gap: 2px; flex-wrap: wrap; padding: 0 14px; border-bottom: 1px solid var(--line); }
+  .tab.l2-tab { border: none; background: transparent; color: var(--muted); padding: 6px 13px;
+                font-size: 12.5px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.l2-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab.l2-tab:focus-visible, .tab.l1-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pane { padding: 12px 16px 16px; }
+
+  .notice { border-radius: 8px; padding: 9px 12px; margin: 8px 0; font-size: 13px;
+            background: var(--info-bg); color: var(--muted); }
+  .notice.warn { background: var(--warn-soft); color: var(--warn); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  .notice.err { background: var(--err-soft); color: var(--err); }
+  .status-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chip { border-radius: 999px; padding: 2px 10px; font-size: 12px; background: var(--chip-bg); color: var(--muted); }
+  .chip.st-running { background: var(--accent-soft); color: var(--accent); }
+  .chip.st-finished { background: var(--ok-soft); color: var(--ok); }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .cid.link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 14px;
+               margin: 10px 0; }
+  .meta-grid label { display: block; font-size: 12px; color: var(--muted); }
+  .task-stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin: 8px 0; }
+  .drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+                  color: var(--muted); margin: 4px 10px 4px 0; }
+  .dep-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .prompt-pre { background: var(--info-bg); border: 1px solid var(--line); border-radius: 8px;
+                padding: 10px 12px; font: 12px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap;
+                max-height: 220px; overflow: auto; margin: 8px 0; }
+  .task-queue { border-top: 1px dashed var(--line); margin-top: 12px; padding-top: 8px; }
+  .task-queue-list, .batch-queue-list { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; }
+  .task-queue-item, .batch-queue-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+                border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+  .reason-chip { border-radius: 999px; padding: 1px 8px; font-size: 11.5px;
+                 background: var(--warn-soft); color: var(--warn); }
+  .records-table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12.5px; }
+  .records-table th, .records-table td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; }
+  .records-table th { color: var(--muted); font-weight: 500; }
+  .kind-chip { border-radius: 999px; padding: 1px 8px; font-size: 11.5px; background: var(--chip-bg); color: var(--muted); }
+  .hint-note { border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--text);
+               border-radius: 0 8px 8px 0; padding: 8px 12px; margin: 10px 0; font-size: 13px; }
+  #toast { position: fixed; right: 18px; bottom: 18px; max-width: 460px; border-radius: 8px;
+           padding: 10px 14px; font-size: 13px; box-shadow: var(--shadow); display: none; z-index: 9; }
+  #toast.show { display: block; }
+  #toast.ok { background: var(--ok-soft); color: var(--ok); }
+  #toast.err { background: var(--err-soft); color: var(--err); }
+  footer.tip { margin-top: 12px; }
+  @media (max-width: 760px) { .batch-head { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>REQ-20260909-008 · 任务界面多页签布局演示</h1>
+    <span class="muted small">完善 / 开发独立一级页签 + 页签内二级分区</span>
+    <span style="flex:1"></span>
+    <label class="chk">数据情景
+      <select id="scenarioSel">
+        <option value="normal">正常（完善 / 开发各有运行中任务）</option>
+        <option value="empty">空（均无任务 → 启动态不拆页签）</option>
+        <option value="fail">加载失败（面板拉取报错）</option>
+      </select>
+    </label>
+    <button class="btn small" id="themeBtn" type="button">外观：跟随系统</button>
+  </header>
+
+  <div class="board">
+    <nav class="module-nav" aria-label="模块导航">
+      <button class="view-tab" type="button" data-nav="oncall">讨论</button>
+      <button class="view-tab" type="button" data-nav="status">需求</button>
+      <button class="view-tab active" type="button" data-nav="runs">任务</button>
+      <button class="view-tab" type="button" data-nav="files">文件</button>
+      <button class="view-tab" type="button" data-nav="settings">设置</button>
+    </nav>
+
+    <section id="taskView" aria-label="任务面板">
+      <div class="batch-head">
+        <span class="path" title="/Users/adichou/Documents/src/agent-team-board">/Users/adichou/Documents/src/agent-team-board</span>
+        <button class="icon-btn" id="panelClose" type="button" title="返回需求模块" aria-label="返回需求模块">✕</button>
+      </div>
+      <!-- 一级页签：完善 / 开发两个独立页签（现状保留），各自记忆二级页签 -->
+      <nav class="tabs l1" role="tablist" aria-label="任务子面板" id="l1Tabs"></nav>
+      <!-- 二级页签：本需求新增——运行态按 概况 / 队列 / 提示词 / 记录 分区（命名以 design.md 定稿为准） -->
+      <nav class="tabs l2 hidden" role="tablist" aria-label="任务内容分区" id="l2Tabs"></nav>
+      <div class="pane" id="paneBody" role="tabpanel"></div>
+    </section>
+  </div>
+
+  <footer class="tip">
+    <p class="muted small">演示说明：一级页签「批量完善 / 批量开发」相互独立，各自记忆当前二级页签（来回切换不重置）；运行态内容拆为「概况 / 队列 / 提示词 / 记录」二级页签，同一时刻只显示一个分区；「模拟一轮轮询刷新」演示 2 秒轮询重渲染——数据更新但当前二级页签与输入草稿保持。无任务（启动态）不拆二级页签，沿用单屏启动区；可用右上角「数据情景」切换正常 / 空 / 加载失败。仅模拟界面，不写入真实看板数据。</p>
+  </footer>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+/* ---------- 演示数据（模拟 /api/refine/current + /api/refine/candidates 与 /api/batch/current） ---------- */
+const L1 = [
+  { mode: 'refine', label: '批量完善' },
+  { mode: 'develop', label: '批量开发' },
+];
+const PANES = [
+  { key: 'overview', label: '概况' },
+  { key: 'queue', label: '队列' },
+  { key: 'prompt', label: '提示词' },
+  { key: 'records', label: '记录' },
+];
+const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+function baseData() {
+  return {
+    refine: {
+      batch: { id: 'RFB-20260909-022', status: 'running', agent: 'zcode', developer: '张三', createdAt: '09-09 14:02' },
+      current: { itemId: 'REQ-20260909-005', owner: 'zcode-refine-022-1', startedAt: '14:21', elapsed: '06:32' },
+      counts: { done: 3, failed: 0, interrupted: 0, remaining: 3, total: 6 },
+      pending: [
+        { id: 'REQ-20260909-019', title: '设置页运行参数分组收纳', reasons: ['验收标准待补充'] },
+        { id: 'BUG-20260909-004', title: '切项目后任务面板残留旧状态', reasons: ['现象 / 复现步骤待补充'] },
+      ],
+      records: [
+        { itemId: 'REQ-20260909-005', result: 'done', summary: '补全 README 描述与验收标准 + ui-demo.html', at: '14:18' },
+        { itemId: 'REQ-20260909-002', result: 'done', summary: '补全 README 描述与验收标准', at: '14:09' },
+      ],
+      prompt: '你是需求完善批次的执行 worker……（RFB-20260909-022 主调度提示词，演示文本）\n1. node scripts/atb.mjs refine next --by zcode-refine-022-2\n2. 补全条目 README（描述 + 验收标准；涉及 UI 须含界面展示与 ui-demo.html）\n3. refine done <RUN-ID> --summary "……"',
+    },
+    develop: {
+      batch: { id: 'BAT-20260909-031', status: 'running', agent: 'zcode', developer: '张三', createdAt: '09-09 13:40' },
+      current: { itemId: 'REQ-20260909-006', owner: 'zcode-dev-031-2', startedAt: '14:05', elapsed: '22:48' },
+      counts: { done: 4, failed: 1, blockedRuns: 0, interrupted: 0, remaining: 2, total: 7 },
+      pending: [
+        { id: 'REQ-20260908-024', title: '看板列卡片键盘导航', reasons: [] },
+        { id: 'BUG-20260909-001', title: '深色模式下徽标对比度不足', reasons: [] },
+      ],
+      queuedBatches: [
+        { batchId: 'BAT-20260909-032', status: 'prepared', pos: 1, total: 3, createdAt: '09-09 14:02', developer: '李四' },
+      ],
+      records: [
+        { itemId: 'BUG-20260909-003', result: 'failed', summary: '编译失败：缺少符号 Xxx', at: '13:58' },
+        { itemId: 'REQ-20260909-001', result: 'reported', summary: '按 TDD 完成，覆盖率 82%', at: '13:44' },
+      ],
+      prompt: '你是开发批次的主调度会话……（BAT-20260909-031 主调度提示词，演示文本）\n1. node scripts/atb.mjs dev next\n2. 按 test-cases.md 先红后绿\n3. dev report <RUN-ID> --coverage 82',
+    },
+  };
+}
+
+const state = {
+  l1: 'refine',                 // 当前一级页签
+  pane: { refine: 'overview', develop: 'overview' }, // 各一级页签独立记忆的二级页签
+  scenario: 'normal',
+  loading: false,
+  error: '',
+  data: baseData(),
+  pollTick: 0,
+  draftAgent: { refine: '', develop: '' }, // 模拟「草稿不回落」的输入保护
+};
+
+let toastTimer = null;
+function toast(msg, isErr = false) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show ' + (isErr ? 'err' : 'ok');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2800);
+}
+
+/* ---------- 渲染 ---------- */
+function stChip(b) {
+  const map = { running: '执行中', prepared: '待启动', paused: '已暂停', finished: '已结束' };
+  return `<span class="chip ${b.status === 'running' ? 'st-running' : b.status === 'finished' ? 'st-finished' : ''}">${map[b.status] || b.status}</span>`;
+}
+
+function renderL1() {
+  $('#l1Tabs').innerHTML = L1.map((t) =>
+    `<button type="button" class="tab l1-tab${state.l1 === t.mode ? ' active' : ''}" role="tab"
+       aria-selected="${state.l1 === t.mode}" data-l1="${t.mode}">${t.label}</button>`).join('');
+}
+
+function renderL2() {
+  const d = state.data[state.l1];
+  const showL2 = !state.error && !state.loading && !!d.batch; // 启动态 / 加载 / 失败不渲染二级页签行
+  $('#l2Tabs').classList.toggle('hidden', !showL2);
+  if (!showL2) return;
+  $('#l2Tabs').innerHTML = PANES.map((p) =>
+    `<button type="button" class="tab l2-tab${state.pane[state.l1] === p.key ? ' active' : ''}" role="tab"
+       aria-selected="${state.pane[state.l1] === p.key}" data-l2="${p.key}">${p.label}${p.key === 'queue' ? ` (${d.pending.length})` : ''}</button>`).join('');
+}
+
+function overviewHtml(d) {
+  const c = d.counts;
+  const abnormal = (c.failed || 0) + (c.blockedRuns || 0) + (c.interrupted || 0);
+  const cur = d.current;
+  return `
+    <div class="status-line">${stChip(d.batch)}
+      <span class="cid">${d.batch.id}</span>
+      <span class="muted small">执行 Agent ${d.batch.agent}（子代理模式） · 创建 ${d.batch.createdAt} · 开发人员 ${d.batch.developer || '未指定'}</span>
+    </div>
+    <div class="notice info">已请求实时刷新口径演示：数据随轮询更新，当前二级页签不会被重置。</div>
+    <section class="meta-grid">
+      <div><label>当前条目</label><span><span class="cid link" data-goto-item="${cur.itemId}">${cur.itemId}</span>（点击深链跳条目）</span></div>
+      <div><label>子代理会话</label><span>${cur.owner}</span></div>
+      <div><label>开始时间</label><span>${cur.startedAt}</span></div>
+      <div><label>耗时</label><span>已用时 ${cur.elapsed}</span></div>
+      <div><label>最后活动</label><span>${now()}</span></div>
+    </section>
+    <div class="task-stats">
+      <span>已处理 <b>${c.done}</b></span><span>异常 <b>${abnormal}</b></span>
+      <span>处理中 <b>1</b></span><span>待处理 <b>${c.remaining}</b></span>
+      <span class="muted small">共 ${c.total}</span>
+    </div>
+    <div class="drawer-actions">
+      <button type="button" class="btn warn" data-act="pause">暂停后续领取</button>
+      <button type="button" class="btn danger" data-act="abort" title="停止派发后续项；剩余项出局；本轮记录保留">终止任务</button>
+    </div>
+    <p class="muted small">操作按钮归入「概况」分区；提示词 / 记录操作在对应二级页签内（位置变化，行为与现状一致）。</p>`;
+}
+
+function queueHtml(d) {
+  const isDev = state.l1 === 'develop';
+  const rows = d.pending.map((x) => `
+    <li class="task-queue-item">
+      <span class="cid link" data-goto-item="${x.id}">${x.id}</span>
+      <span>${x.title}</span>
+      ${x.reasons.map((r) => `<span class="reason-chip" title="缺失原因">${r}</span>`).join('')}
+      <span class="muted small">${isDev ? '待开发' : '待完善'}</span>
+    </li>`).join('');
+  const queued = isDev ? (d.queuedBatches || []).map((q) => `
+    <li class="batch-queue-item">
+      <span class="chip">排队中</span><span class="cid">${q.batchId}</span>
+      <span class="muted small">第 ${q.pos} 位 · ${q.total} 项 · 创建 ${q.createdAt} · 开发人员 ${q.developer}</span>
+      <button type="button" class="btn danger small" data-act="del-queued" title="仅移除批次账本，候选回到候选池">删除</button>
+    </li>`).join('') : '';
+  return `
+    <section class="task-queue" style="border-top:none;margin-top:0;padding-top:0">
+      <div class="dep-toolbar"><span class="muted small">待处理队列（最近 2 条 / 共 ${d.pending.length} 条）</span></div>
+      ${rows ? `<ul class="task-queue-list">${rows}</ul>` : '<p class="muted small">暂无待处理条目。</p>'}
+    </section>
+    ${isDev ? `<section class="task-queue">
+      <div class="dep-toolbar"><span class="muted small">排队批次（当前批次结束后自动接续）</span></div>
+      ${queued ? `<ul class="batch-queue-list">${queued}</ul>` : '<p class="muted small">无排队批次。</p>'}
+    </section>` : '<p class="muted small">批量完善无排队批次概念——该分区仅展示待完善队列。</p>'}`;
+}
+
+function promptHtml(d) {
+  return `
+    <div class="dep-toolbar" style="margin-top:0">
+      <span class="muted small">主调度提示词（新建 ${d.batch.agent} 会话粘贴发送）：</span>
+      <button type="button" class="btn" data-act="recopy" title="复制失败可重试；重试不会创建新批次">重新复制</button>
+      ${state.l1 === 'develop' ? '<button type="button" class="btn" data-act="resume-copy">复制续接提示词</button>' : ''}
+    </div>
+    <pre class="prompt-pre" tabindex="0">${d.prompt}</pre>
+    ${state.l1 === 'develop' ? '<div class="dep-toolbar"><button type="button" class="btn" data-act="open-ws">打开 Zcode 工作区</button></div>' : ''}`;
+}
+
+function recordsHtml(d) {
+  const R = { done: '已处理', reported: '已处理', failed: '异常', interrupted: '已中断', skipped: '已出局' };
+  const rows = d.records.map((r) => `
+    <tr>
+      <td><span class="kind-chip">${r.itemId.startsWith('BUG-') ? 'Bug' : '需求'}</span> <span class="cid link" data-goto-item="${r.itemId}">${r.itemId}</span></td>
+      <td>${R[r.result] || r.result}</td>
+      <td>${r.at}</td>
+      <td>${r.summary || '—'}</td>
+      <td>${['failed', 'interrupted', 'blocked'].includes(r.result) ? '<button type="button" class="btn small" data-act="retry">重新执行</button>' : '—'}</td>
+    </tr>`).join('');
+  return `
+    <p class="muted small" style="margin-top:0">本轮处理记录（四列表格，最近 2 次尝试；全量账本在服务端，是否放宽展示上限见 README「待确认」）：</p>
+    <table class="records-table">
+      <thead><tr><th>条目</th><th>结果</th><th>时间</th><th>回执摘要</th><th>操作</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="muted">暂无执行记录。</td></tr>'}</tbody>
+    </table>`;
+}
+
+function startPanelHtml(kind) {
+  const isRefine = kind === 'refine';
+  const cands = isRefine ? state.data.refine.pending : state.data.develop.pending;
+  return `
+    <div class="notice">${isRefine
+      ? '批量完善：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 须含界面展示与 ui-demo.html），Bug 补现象 / 复现步骤 / 期望行为 / 验收说明。派子代理只补文档，条目保持已接受。'
+      : '批量开发（仅子代理模式）：创建任务并复制主调度提示词，由对应会话逐项派子代理；候选口径 = 已计划队列（最旧优先）。'}</div>
+    <div class="muted small">候选：${isRefine ? '已接受未完善' : '已计划'} <b>${cands.length}</b> 项（每轮实时读取）</div>
+    <label class="field-inline">执行 Agent
+      <select id="agentSel" title="仅子代理模式：zcode / codex 均复制主调度提示词">
+        <option value="">选择执行 Agent…</option>
+        <option value="zcode">zcode（复制调度提示词）</option>
+        <option value="codex">codex（复制调度提示词）</option>
+      </select>
+    </label>
+    <label class="field-inline">开发人员 <input type="text" id="devInput" placeholder="如 张三（可留空）" value="张三"></label>
+    <div class="dep-toolbar">
+      <button type="button" class="btn primary" id="panelStart" disabled title="选择执行 Agent 后启动">启动</button>
+      <span class="muted small">启动 = 创建任务并复制主调度提示词（复制成功 ≠ 执行中）。</span>
+    </div>
+    <div class="hint-note">启动态（无进行中任务）不拆二级页签：内容少，保持单屏启动区 + 队列预览（README 建议口径，design.md 定稿）。</div>
+    ${queueHtml({ pending: cands })}`;
+}
+
+function renderBody() {
+  const body = $('#paneBody');
+  if (state.loading) { body.innerHTML = '<p class="muted">加载中…</p>'; return; }
+  if (state.error) {
+    body.innerHTML = `
+      <div class="notice err">批量${state.l1 === 'refine' ? '完善' : '开发'}面板数据加载失败：演示模拟的接口错误（如 /api/${state.l1 === 'refine' ? 'refine' : 'batch'}/current 拉取失败）。失败不改变两级页签选择。</div>
+      <div class="dep-toolbar"><button type="button" class="btn primary" id="retryBtn">重试</button>
+      <span class="muted small">提示：可在右上角「数据情景」切回「正常」后再重试。</span></div>`;
+    $('#retryBtn').addEventListener('click', () => loadPanel(state.l1));
+    return;
+  }
+  const d = state.data[state.l1];
+  if (!d.batch) { body.innerHTML = startPanelHtml(state.l1); bindStartPanel(); return; }
+  const pane = state.pane[state.l1];
+  body.innerHTML = {
+    overview: overviewHtml(d),
+    queue: queueHtml(d),
+    prompt: promptHtml(d),
+    records: recordsHtml(d),
+  }[pane];
+}
+
+function bindStartPanel() {
+  const sel = $('#agentSel'), start = $('#panelStart');
+  if (sel && start) {
+    sel.value = state.draftAgent[state.l1] || '';
+    start.disabled = !sel.value;
+    sel.addEventListener('change', () => { state.draftAgent[state.l1] = sel.value; start.disabled = !sel.value; });
+  }
+  if (start) start.addEventListener('click', () =>
+    toast('✓ 演示：已创建任务并复制主调度提示词（不写入真实数据；创建成功后进入运行态二级页签）'));
+}
+
+function renderAll() { renderL1(); renderL2(); renderBody(); }
+
+/* ---------- 交互 ---------- */
+function loadPanel(mode) {
+  state.l1 = mode; state.loading = true; state.error = '';
+  renderAll();
+  setTimeout(() => {
+    state.loading = false;
+    state.error = state.scenario === 'fail' ? 'load-failed' : '';
+    if (state.scenario === 'empty') { state.data[mode].batch = null; }
+    else if (state.data[mode].batch === null) { state.data = baseData(); }
+    renderAll();
+  }, 600);
+}
+
+$('#l1Tabs').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-l1]');
+  if (!t || t.dataset.l1 === state.l1) return;
+  loadPanel(t.dataset.l1); // 切一级页签：短暂加载后渲染，二级页签取各自记忆值
+});
+
+$('#l2Tabs').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-l2]');
+  if (!t) return;
+  state.pane[state.l1] = t.dataset.l2; // 纯前端切换：不发起请求
+  renderL2(); renderBody();
+});
+
+$('#paneBody').addEventListener('click', (e) => {
+  const goto = e.target.closest('[data-goto-item]');
+  if (goto) { toast(`演示：深链跳转条目 ${goto.dataset.gotoItem}（现有 data-goto-item 行为保留）`); return; }
+  const act = e.target.closest('[data-act]');
+  if (!act) return;
+  const map = {
+    pause: '演示：已请求暂停后续领取（当前项继续执行）',
+    abort: '演示：任务已终止，本轮记录保留',
+    recopy: '演示：主调度提示词已重新复制（重试不会创建新批次）',
+    'resume-copy': '演示：续接提示词已复制（新会话同一提示词续接）',
+    'open-ws': '演示：打开 / 聚焦本项目 Zcode 工作区',
+    'del-queued': '演示：排队批次已删除，候选回到候选池',
+    retry: '演示：已重新执行该条目（新一次尝试入账）',
+  };
+  toast(map[act.dataset.act] || '演示操作');
+});
+
+$('#panelClose').addEventListener('click', () => toast('演示：返回需求模块（现有行为）'));
+
+// 模拟一轮 2 秒轮询刷新：数据变化触发重渲染，但当前两级页签与输入草稿保持（REQ 核心口径）
+window.simulatePoll = function () {
+  if (state.loading || state.error) { toast('当前无有效面板数据，轮询仅签名无变化', true); return; }
+  state.pollTick++;
+  for (const mode of ['refine', 'develop']) {
+    const d = state.data[mode];
+    if (!d.batch) continue;
+    d.counts.done = Math.min(d.counts.done + 1, d.counts.total);
+    d.counts.remaining = Math.max(d.counts.total - d.counts.done - 1, 0);
+    d.records.unshift({ itemId: `REQ-20260909-0${10 + state.pollTick}`, result: 'done', summary: `第 ${state.pollTick} 轮轮询新增回执（演示）`, at: now() });
+    d.records = d.records.slice(0, 2);
+  }
+  renderAll(); // 重渲染后 state.pane / state.l1 不变 → 页签不重置
+  toast(`✓ 已模拟一轮轮询刷新（第 ${state.pollTick} 轮）：当前页签保持「${L1.find((x) => x.mode === state.l1).label} → ${PANES.find((p) => p.key === state.pane[state.l1]).label}」`);
+};
+
+$('#scenarioSel').addEventListener('change', (e) => {
+  state.scenario = e.target.value;
+  state.data = baseData();
+  loadPanel(state.l1);
+  toast(`数据情景已切换：${e.target.selectedOptions[0].textContent}`);
+});
+
+$$('.view-tab').forEach((t) => t.addEventListener('click', () => {
+  if (t.dataset.nav === 'runs') return;
+  toast(`演示仅覆盖「任务」模块，「${t.textContent}」不在本需求范围`);
+}));
+
+/* ---------- 深浅色 ---------- */
+const THEME_MODES = [['auto', '外观：跟随系统'], ['light', '外观：浅色'], ['dark', '外观：深色']];
+let themeIdx = 0;
+function applyTheme() {
+  const [mode, label] = THEME_MODES[themeIdx];
+  const dark = mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : '';
+  $('#themeBtn').textContent = label;
+}
+$('#themeBtn').addEventListener('click', () => { themeIdx = (themeIdx + 1) % 3; applyTheme(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+/* ---------- 工具条：模拟轮询按钮（挂在演示头右侧） ---------- */
+(function injectPollBtn() {
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn small'; btn.id = 'pollBtn';
+  btn.textContent = '⟳ 模拟一轮轮询刷新';
+  btn.addEventListener('click', window.simulatePoll);
+  $('#scenarioSel').closest('label.chk').after(btn);
+})();
+
+renderAll();
+applyTheme();
+</script>
+</body>
+</html>

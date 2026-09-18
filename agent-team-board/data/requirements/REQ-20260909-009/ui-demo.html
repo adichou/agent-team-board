@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-009 演示 · 新建条目的描述支持截图</title>
+<!--
+  单文件可交互演示：无外网依赖、无构建步骤，浏览器直接打开。
+  覆盖：界面布局（新建弹窗截图区块 / 类型切换隐藏 / 缩略图网格与空态）、
+  交互行为（文件选择与粘贴添加、逐张移除、超限与非法格式被拒、创建成功生成
+  README 描述节图片引用、抽屉内联展示与点击放大）、
+  状态反馈（正常 / 空态 / 创建中加载态 / 校验失败与创建失败保留表单）。
+  深浅色可手动切换。全部数据为虚构，不写入项目看板数据。
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #d9dee4; --text: #1f2733; --muted: #6b7684;
+    --accent: #2563eb; --accent-soft: #e8effd; --ok: #16794c; --ok-soft: #e6f4ec;
+    --err: #b3261e; --err-soft: #fbeae9; --warn: #8a5a00; --warn-soft: #fdf3e0;
+    --info-bg: #eef1f5; --drop: #f0f4ff; --shadow: 0 10px 34px rgba(0,0,0,.18);
+  }
+  html[data-theme="dark"] {
+    --bg: #14181d; --panel: #1d232b; --line: #38414c; --text: #e6e9ed; --muted: #98a2ad;
+    --accent: #6f9bff; --accent-soft: #21324f; --ok: #57c78d; --ok-soft: #1d3529;
+    --err: #ef8a84; --err-soft: #44201e; --warn: #d9a75a; --warn-soft: #3d3115;
+    --info-bg: #232a33; --drop: #1c2636; --shadow: 0 10px 34px rgba(0,0,0,.55);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+         font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  header.demo-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  header.demo-head h1 { font-size: 16px; margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 7px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .btn.quiet { background: transparent; color: var(--muted); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  select, input[type="text"], textarea { border: 1px solid var(--line); background: var(--panel);
+         color: var(--text); border-radius: 6px; padding: 5px 8px; font-size: 13px; font-family: inherit; }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+
+  /* 看板骨架：顶栏 + 需求列表 */
+  .board { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .logo { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+          background: linear-gradient(135deg, #4f46e5, #0ea5e9); color: #fff; font-size: 14px; }
+  .brand b { font-size: 14px; font-weight: 600; }
+  .req-list { display: grid; gap: 8px; padding: 12px 14px 16px; }
+  .req-row { border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; }
+  .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .chip { font-size: 11.5px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px;
+          color: var(--muted); background: var(--info-bg); }
+  .chip.pending { color: var(--warn); border-color: transparent; }
+  .chip.submitted { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
+  .card-title { margin: 4px 0 2px; font-weight: 600; font-size: 13.5px; }
+  .card-title button { border: none; background: none; color: var(--accent); cursor: pointer;
+                       font: inherit; padding: 0; text-decoration: underline; }
+
+  /* 弹窗 */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(15,20,28,.45); display: none;
+                align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 5;
+                overflow: auto; }
+  .modal-wrap.open { display: flex; }
+  .modal { width: 560px; max-width: 100%; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 12px; box-shadow: var(--shadow); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between;
+                padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .modal-head h3 { margin: 0; font-size: 15px; }
+  .icon-btn { border: none; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer; }
+  form { padding: 14px 16px 6px; }
+  .field { display: block; margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+  .field > :first-child { display: block; margin-bottom: 4px; }
+  .field input, .field select, .field textarea { width: 100%; }
+  textarea { resize: vertical; min-height: 74px; }
+
+  /* 截图区块 */
+  .shots { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin: -2px 0 12px;
+           background: var(--bg); }
+  .shots.hidden { display: none; }
+  .shots-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .shots-head .label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .shots-head .count { font-size: 12px; color: var(--muted); }
+  .paste-hint { font-size: 12px; color: var(--muted); }
+  .shots-empty { margin: 8px 0 2px; font-size: 12.5px; color: var(--muted); }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .thumb { position: relative; width: 104px; }
+  .thumb img { width: 104px; height: 72px; object-fit: cover; border-radius: 7px;
+               border: 1px solid var(--line); display: block; background: var(--drop); }
+  .thumb .meta { font-size: 11px; color: var(--muted); margin-top: 3px; overflow: hidden;
+                 text-overflow: ellipsis; white-space: nowrap; }
+  .thumb .rm { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 50%;
+               border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+               font-size: 11px; line-height: 1; cursor: pointer; }
+  .thumb .rm:hover { color: var(--err); border-color: var(--err); }
+  .field-err { margin: 8px 0 0; padding: 7px 10px; border-radius: 7px; background: var(--err-soft);
+               color: var(--err); font-size: 12.5px; }
+  .field-err:empty { display: none; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; }
+
+  /* 创建结果（模拟详情抽屉 README） */
+  .result { border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+            margin-top: 14px; overflow: hidden; }
+  .result-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+                 padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  .result-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .result-body { padding: 6px 16px 16px; }
+  .result h4 { font-size: 13.5px; margin: 12px 0 6px; }
+  .md-src { font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap;
+            background: var(--info-bg); border: 1px solid var(--line); border-radius: 8px;
+            padding: 10px 12px; color: var(--muted); }
+  .md-view img { max-width: 240px; max-height: 160px; border-radius: 8px; border: 1px solid var(--line);
+                 margin: 4px 8px 4px 0; cursor: zoom-in; vertical-align: top; }
+  .img-missing { display: inline-block; border: 1px dashed var(--err); color: var(--err); border-radius: 8px;
+                 padding: 10px 14px; font-size: 12.5px; margin: 4px 8px 4px 0; }
+  .figcap { display: block; font-size: 11.5px; color: var(--muted); margin: -2px 0 8px; }
+  .notice { border-radius: 8px; padding: 9px 12px; margin: 10px 0; font-size: 13px;
+            background: var(--info-bg); color: var(--muted); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  .notice.err { background: var(--err-soft); color: var(--err); }
+
+  /* 轻提示与灯箱 */
+  #toast { position: fixed; right: 18px; bottom: 18px; max-width: 440px; border-radius: 8px;
+           padding: 10px 14px; font-size: 13px; box-shadow: var(--shadow); display: none; z-index: 9; }
+  #toast.show { display: block; }
+  #toast.ok { background: var(--ok-soft); color: var(--ok); }
+  #toast.err { background: var(--err-soft); color: var(--err); }
+  #lightbox { position: fixed; inset: 0; background: rgba(10,14,20,.82); display: none;
+              place-items: center; cursor: zoom-out; z-index: 8; }
+  #lightbox.open { display: grid; }
+  #lightbox img { max-width: 92vw; max-height: 88vh; border-radius: 10px; }
+  footer.tip { margin-top: 12px; }
+  @media (max-width: 640px) { .thumb { width: 88px; } .thumb img { width: 88px; height: 62px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>REQ-20260909-009 · 新建条目的描述支持截图</h1>
+    <span class="muted small">需求 / Bug 新建表单附截图</span>
+    <span style="flex:1"></span>
+    <label class="chk"><input type="checkbox" id="failSwitch"> 模拟创建失败</label>
+    <button class="btn small" id="themeBtn" type="button">外观：跟随系统</button>
+  </header>
+
+  <div class="board">
+    <div class="topbar">
+      <div class="brand"><span class="logo">▦</span><b>智能体团队看板</b>
+        <span class="muted small">演示骨架（仅含本需求涉及的入口）</span></div>
+      <button class="btn primary" id="btnNew" type="button">＋ 新建</button>
+    </div>
+    <div class="req-list" id="reqList">
+      <div class="req-row">
+        <div class="card-top"><span class="cid">REQ-20260909-001</span><span class="chip submitted">待接受</span></div>
+        <div class="card-title">看板顶栏增加刷新按钮</div>
+        <span class="muted small">无截图的老条目：README 描述节为纯文本，展示不受影响</span>
+      </div>
+      <div class="req-row">
+        <div class="card-top"><span class="cid">BUG-20260909-003</span><span class="chip pending">已接受</span></div>
+        <div class="card-title">深色模式下筛选条文字对比度不足</div>
+        <span class="muted small">典型带截图场景：Bug 现象与复现步骤配图</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 创建结果：模拟详情抽屉 README 页签 -->
+  <div class="result" id="result" style="display:none">
+    <div class="result-head">
+      <h3 id="resultTitle">创建结果</h3>
+      <span class="chip submitted">待接受</span>
+      <span style="flex:1"></span>
+      <span class="muted small">模拟详情抽屉 · README 页签</span>
+    </div>
+    <div class="result-body">
+      <div class="notice ok" id="resultNotice"></div>
+      <h4>README markdown 源（描述节末尾按顺序追加图片引用）</h4>
+      <div class="md-src" id="resultSrc"></div>
+      <h4>渲染效果（点击图片放大）</h4>
+      <div class="md-view" id="resultView"></div>
+    </div>
+  </div>
+
+  <footer class="tip muted small">
+    演示说明：上传 / 粘贴均为真实浏览器行为（FileReader 本地预览，不上传任何数据）；「模拟粘贴截图」
+    生成内置示例图，用于无截图素材时体验流程；张数上限演示取 9 张。创建成功后的「详情抽屉」为模拟渲染，
+    真实落地以 scripts/web/ 现有组件为准。
+  </footer>
+</div>
+
+<!-- 统一新建弹窗 -->
+<div class="modal-wrap" id="modalWrap">
+  <div class="modal" role="dialog" aria-label="新建条目">
+    <div class="modal-head"><h3>新建条目</h3>
+      <button class="icon-btn" id="modalClose" type="button" aria-label="关闭">✕</button></div>
+    <form id="newForm" novalidate>
+      <label class="field">类型
+        <select id="fType">
+          <option value="req">需求（REQ）</option>
+          <option value="bug">Bug（BUG）</option>
+          <option value="ask">讨论（开放式）</option>
+        </select>
+      </label>
+      <label class="field">标题
+        <input type="text" id="fTitle" maxlength="120" placeholder="一句话说清这条需求 / Bug / 讨论">
+      </label>
+      <label class="field"><span id="fDescLabel">描述</span>
+        <textarea id="fDesc" rows="4" placeholder="验收标准、现象与复现步骤等（可留空，后续补充）"></textarea>
+      </label>
+
+      <!-- 截图区块：类型为「讨论」时隐藏（REQ-20260909-004 口径） -->
+      <div class="shots" id="shotsBox">
+        <div class="shots-head">
+          <span class="label">截图（可选）</span>
+          <span class="count" id="shotCount">已附 0 / 9</span>
+          <button class="btn small" id="btnPick" type="button">上传图片</button>
+          <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp,image/avif,image/x-icon" multiple hidden>
+          <span class="paste-hint">或直接 ⌘V 粘贴</span>
+          <span style="flex:1"></span>
+          <button class="btn small quiet" id="btnDemoShot" type="button" title="生成内置示例图，模拟粘贴一张截图">模拟粘贴截图</button>
+        </div>
+        <div class="field-err" id="shotErr" role="alert"></div>
+        <div class="shots-empty" id="shotsEmpty">粘贴或选择图片，创建后写入描述（png / jpg / webp 等，单张 ≤ 8MB）</div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn" id="modalCancel" type="button">取消</button>
+        <button class="btn primary" id="fSubmit" type="submit">创建</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+<div id="lightbox" title="点击任意处关闭"><img alt="放大查看"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var MAX_COUNT = 9, MAX_BYTES = 8 * 1024 * 1024;
+  var WHITE = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif'];
+  var shots = [];   // { name, size, src(dataURL) }
+  var seq = 0, creating = false, createdCount = 0;
+
+  /* ---------- 外观 ---------- */
+  var themeIdx = 0, themes = ['', 'light', 'dark'], labels = ['跟随系统', '浅色', '深色'];
+  function applyTheme() {
+    document.documentElement.setAttribute('data-theme', themes[themeIdx]);
+    $('themeBtn').textContent = '外观：' + labels[themeIdx];
+  }
+  $('themeBtn').addEventListener('click', function () { themeIdx = (themeIdx + 1) % 3; applyTheme(); });
+  applyTheme();
+
+  /* ---------- 轻提示 ---------- */
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'show ' + (isErr ? 'err' : 'ok');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ''; }, 3400);
+  }
+  function shotErr(msg) { $('shotErr').textContent = msg || ''; }
+
+  /* ---------- 内置示例截图（内联 SVG，无外网依赖） ---------- */
+  function sampleShot(kind) {
+    var bg = kind === 'bug' ? '#fdf2f2' : '#eef4ff', fg = kind === 'bug' ? '#b91c1c' : '#2563eb';
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400">'
+      + '<rect width="640" height="400" fill="' + bg + '"/>'
+      + '<rect x="40" y="40" width="560" height="320" rx="10" fill="#fff" stroke="' + fg + '" stroke-width="2"/>'
+      + '<circle cx="66" cy="66" r="7" fill="' + fg + '" opacity=".9"/><circle cx="90" cy="66" r="7" fill="' + fg + '" opacity=".5"/>'
+      + '<rect x="70" y="100" width="220" height="16" rx="4" fill="' + fg + '"/>'
+      + '<rect x="70" y="136" width="500" height="10" rx="3" fill="#c8d2e0"/>'
+      + '<rect x="70" y="158" width="420" height="10" rx="3" fill="#c8d2e0"/>'
+      + '<rect x="70" y="180" width="470" height="10" rx="3" fill="#c8d2e0"/>'
+      + '<rect x="70" y="230" width="130" height="34" rx="8" fill="' + fg + '"/>'
+      + '<text x="135" y="252" font-family="sans-serif" font-size="14" fill="#fff" text-anchor="middle">' + (kind === 'bug' ? '复现' : '操作') + '</text>'
+      + '<text x="620" y="348" font-family="sans-serif" font-size="12" fill="' + fg + '" text-anchor="end">示例截图 ' + (kind === 'bug' ? 'BUG' : 'REQ') + '</text></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+  }
+
+  /* ---------- 类型切换（对齐 syncNewFormFields 口径：讨论隐藏截图区） ---------- */
+  function syncType() {
+    var isAsk = $('fType').value === 'ask';
+    $('shotsBox').classList.toggle('hidden', isAsk);
+    $('fDescLabel').textContent = isAsk ? '背景（可选）' : '描述';
+    $('fDesc').placeholder = isAsk ? '填写讨论背景，不需要关联需求；留空也可创建'
+                                   : '验收标准、现象与复现步骤等（可留空，后续补充）';
+  }
+  $('fType').addEventListener('change', syncType);
+
+  /* ---------- 截图管理 ---------- */
+  function fmtSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB'; }
+  function renderShots() {
+    var box = $('thumbs');
+    box.innerHTML = '';
+    shots.forEach(function (s, i) {
+      var d = document.createElement('div');
+      d.className = 'thumb';
+      d.innerHTML = '<img alt="截图预览 ' + s.name + '"><span class="meta"></span>';
+      d.querySelector('img').src = s.src;
+      d.querySelector('.meta').textContent = s.name + ' · ' + fmtSize(s.size);
+      var rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'rm'; rm.textContent = '✕';
+      rm.setAttribute('aria-label', '移除 ' + s.name);
+      rm.addEventListener('click', function () {
+        if (creating) return;
+        shots.splice(i, 1); renderShots();
+      });
+      d.appendChild(rm);
+      box.appendChild(d);
+    });
+    $('shotsEmpty').style.display = shots.length ? 'none' : 'block';
+    $('shotCount').textContent = '已附 ' + shots.length + ' / ' + MAX_COUNT;
+  }
+
+  function addShot(name, size, src) {
+    shotErr('');
+    if ($('fType').value === 'ask') { toast('讨论类型不附截图（REQ-20260909-004 口径）', true); return; }
+    if (shots.length >= MAX_COUNT) {
+      shotErr('已达张数上限 ' + MAX_COUNT + ' 张：请先移除，或创建后再补充到 README。'); return;
+    }
+    var ext = name.split('.').pop().toLowerCase();
+    if (WHITE.indexOf(ext) === -1) {
+      shotErr('仅支持图片（' + WHITE.join(' / ') + '）：已忽略 ' + name); return;
+    }
+    if (size > MAX_BYTES) {
+      shotErr('截图 ' + (size / 1048576).toFixed(1) + 'MB 超过 8MB 上限：' + name + ' 未添加。'); return;
+    }
+    // 同名加序号不覆盖（服务端 saveAttachment 同口径，此处一并演示）
+    var finalName = name, stem = name.replace(/\.[^.]+$/, ''), e = '.' + ext, i = 2;
+    while (shots.some(function (s) { return s.name === finalName; })) { finalName = stem + '-' + (i++) + e; }
+    shots.push({ name: finalName, size: size, src: src });
+    renderShots();
+  }
+
+  // 文件选择（真实 FileReader 本地预览，无上传）
+  $('btnPick').addEventListener('click', function () { $('fileInput').click(); });
+  $('fileInput').addEventListener('change', function () {
+    var files = Array.prototype.slice.call(this.files || []);
+    files.forEach(function (f) {
+      if (!/^image\//.test(f.type)) { shotErr('仅支持图片（' + WHITE.join(' / ') + '）：已忽略 ' + f.name); return; }
+      var r = new FileReader();
+      r.onload = function () { addShot(f.name, f.size, String(r.result)); };
+      r.readAsDataURL(f);
+    });
+    this.value = '';
+  });
+
+  // 弹窗内粘贴（读取剪贴板图片项，自动命名）
+  document.addEventListener('paste', function (e) {
+    if (!$('modalWrap').classList.contains('open') || creating) return;
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    var got = false;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.kind === 'file' && it.type.indexOf('image/') === 0) {
+        var f = it.getAsFile(); if (!f) continue;
+        got = true;
+        var ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+        var ts = new Date(), pad = function (n) { return String(n).padStart(2, '0'); };
+        var name = 'paste-' + ts.getHours() + pad(ts.getMinutes()) + pad(ts.getSeconds()) + '.' + ext;
+        var r = new FileReader();
+        r.onload = (function (nm, sz) {
+          return function () { addShot(nm, sz, String(r.result)); };
+        })(name, f.size);
+        r.readAsDataURL(f);
+      }
+    }
+    if (got) e.preventDefault();
+  });
+
+  // 无素材时体验流程：模拟粘贴一张内置示例图（走同一校验与管理逻辑）
+  $('btnDemoShot').addEventListener('click', function () {
+    if (creating) return;
+    var kind = $('fType').value === 'bug' ? 'bug' : 'req';
+    var src = sampleShot(kind);
+    addShot('示例截图-' + (++seq) + '.svg', Math.round(src.length * 0.75), src);
+  });
+
+  /* ---------- 弹窗开关与重置 ---------- */
+  function openModal(type) {
+    $('fType').value = type || 'req';
+    $('fTitle').value = ''; $('fDesc').value = '';
+    shots = []; renderShots(); shotErr(''); syncType();
+    creating = false;
+    $('fSubmit').disabled = false; $('fSubmit').textContent = '创建';
+    $('modalWrap').classList.add('open');
+    $('fTitle').focus();
+  }
+  function closeModal() { $('modalWrap').classList.remove('open'); }
+  $('btnNew').addEventListener('click', function () { openModal('req'); });
+  $('modalClose').addEventListener('click', closeModal);
+  $('modalCancel').addEventListener('click', closeModal);
+  $('modalWrap').addEventListener('click', function (e) { if (e.target === this) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if ($('lightbox').classList.contains('open')) $('lightbox').classList.remove('open');
+      else closeModal();
+    }
+  });
+
+  /* ---------- 提交：创建中 → 成功（README 描述节 + 内联图片）或失败保留 ---------- */
+  $('newForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (creating) return;
+    var type = $('fType').value, title = $('fTitle').value.trim(), desc = $('fDesc').value.trim();
+    if (!title) { toast('标题不能为空', true); $('fTitle').focus(); return; }
+    creating = true;
+    $('fSubmit').disabled = true; $('fSubmit').textContent = '创建中…';
+    shotErr('');
+    setTimeout(function () {
+      if ($('failSwitch').checked) {
+        // 失败态：保留标题 / 描述 / 已附截图，明确提示后可重试
+        creating = false;
+        $('fSubmit').disabled = false; $('fSubmit').textContent = '创建';
+        toast('创建失败：演示模拟的服务端错误（标题、描述与截图均已保留，可直接重试）', true);
+        return;
+      }
+      var prefix = type === 'bug' ? 'BUG' : 'REQ';
+      var id = prefix + '-20260909-0' + (10 + (++createdCount));
+      closeModal();
+      toast('✓ 已创建 ' + id + '（待接受）');
+      renderResult(id, prefix, title, desc);
+      var list = $('reqList');
+      var row = document.createElement('div');
+      row.className = 'req-row';
+      row.innerHTML = '<div class="card-top"><span class="cid">' + id + '</span>'
+        + '<span class="chip submitted">待接受</span>'
+        + (shots.length ? '<span class="chip">截图 ' + shots.length + ' 张</span>' : '') + '</div>'
+        + '<div class="card-title">' + esc(title) + '</div>'
+        + '<span class="muted small">刚创建：' + (shots.length ? '描述节含 ' + shots.length + ' 张截图引用' : '无截图（纯文本描述，口径不变）') + '</span>';
+      list.insertBefore(row, list.firstChild);
+      creating = false;
+      $('fSubmit').disabled = false; $('fSubmit').textContent = '创建';
+    }, 900);
+  });
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ---------- 创建结果：README 源 + 模拟抽屉渲染（点击放大 / 缺图占位） ---------- */
+  function renderResult(id, prefix, title, desc) {
+    var heading = prefix === 'BUG' ? '现象' : '描述';
+    var descBody = desc || '（待补充）';
+    var refLines = shots.map(function (s) { return '![截图](attachments/' + s.name + ')'; });
+    var src = '# ' + id + ' ' + title + '\n\n'
+      + '- 状态：submitted（待人工接受）\n\n'
+      + '## ' + heading + '\n\n' + descBody
+      + (refLines.length ? '\n\n' + refLines.join('\n') : '')
+      + '\n\n## 验收标准\n\n- [ ] （待补充）';
+    $('resultSrc').textContent = src;
+    $('resultTitle').textContent = id + ' ' + title;
+
+    var v = $('resultView');
+    v.innerHTML = '';
+    if (!shots.length) {
+      v.innerHTML = '<p class="muted small">本次创建未附截图：描述节保持纯文本，与现状一致。</p>';
+    } else {
+      shots.forEach(function (s, i) {
+        var img = document.createElement('img');
+        img.src = s.src; img.alt = '截图 ' + s.name; img.loading = 'lazy';
+        img.addEventListener('click', function () {
+          $('lightbox').querySelector('img').src = s.src;
+          $('lightbox').classList.add('open');
+        });
+        v.appendChild(img);
+        var cap = document.createElement('span');
+        cap.className = 'figcap';
+        cap.textContent = 'attachments/' + s.name + '（点击放大）';
+        v.appendChild(cap);
+      });
+      // 查看失败占位演示：文件被移走 / 超限时显示占位说明而非空白破图
+      var miss = document.createElement('span');
+      miss.className = 'img-missing';
+      miss.textContent = '图片加载失败占位演示：附件不存在或超过 8MB';
+      v.appendChild(miss);
+    }
+    $('resultNotice').textContent = shots.length
+      ? '创建成功：' + shots.length + ' 张截图已落盘至 docs/agent-team-board/' + (prefix === 'BUG' ? 'bugs' : 'requirements') + '/' + id + '/attachments/，README「' + heading + '」节末尾按顺序追加图片引用（上方为模拟渲染）。'
+      : '创建成功：无截图时描述节保持纯文本，创建口径不变（标题为唯一必填项）。';
+    $('result').style.display = 'block';
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('lightbox').addEventListener('click', function () { this.classList.remove('open'); });
+
+  renderShots();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-004 · 开放式讨论模块 · 可交互演示</title>
+<!--
+  单文件可交互演示：无外网依赖、无构建步骤，浏览器直接打开。
+  覆盖：界面布局（宽屏分栏 / 窄屏切换）、交互行为（新建、提示词复制、讨论完毕与纪要读取、
+  草稿编辑勾选、混合批量创建、部分失败重试、归档/继续讨论）、状态反馈（正常/空/加载/失败）。
+  全部数据为虚构，不连接 Agent、不创建真实条目。视觉沿用用户确认的 open-discussion.html 方向（demo.html 快照）。
+-->
+<style>
+:root{
+  --p:#fff; --bg:#f4f6f9; --t:#1b2434; --m:#66748c; --b:#e2e7ef;
+  --a:#2563eb; --v:#4f46e5; --soft:#eef0fc;
+  --ok:#15803d; --okbg:#ecfdf3; --danger:#b91c1c; --dangerbg:#fef2f2; --warnbg:#fffbeb;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --p:#161d29; --bg:#0e131b; --t:#e5eaf3; --m:#8b98ad; --b:#263041;
+  --a:#3b82f6; --v:#818cf8; --soft:#242742;
+  --ok:#4ade80; --okbg:#122419; --danger:#f87171; --dangerbg:#2a1517; --warnbg:#292013;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;color:var(--t);background:var(--bg)}
+button,input,textarea,select{font:inherit;color:inherit}
+button{background:var(--p);border:1px solid var(--b);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+button:hover{border-color:var(--m)}
+button:disabled{opacity:.5;cursor:default}
+.primary{background:var(--a);border-color:var(--a);color:#fff}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.grow{flex:1}
+.muted{font-size:12px;color:var(--m)}
+#app{max-width:1060px;margin:0 auto;border:1px solid var(--b);background:var(--p)}
+header{padding:10px 18px;background:var(--p);border-bottom:1px solid var(--b)}
+.logo{width:34px;height:34px;background:linear-gradient(135deg,#4f46e5,#0ea5e9);border-radius:9px;display:grid;place-items:center;color:#fff;font-size:17px}
+.nav{display:flex;padding:8px 18px;gap:4px;background:var(--p);border-bottom:1px solid var(--b)}
+.nav span{padding:6px 14px;color:var(--m)}
+.nav .on{background:var(--soft);color:var(--v);border-radius:8px}
+.filters{padding:12px 18px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.filters button[aria-pressed="true"]{background:var(--soft);border-color:var(--v);color:var(--v)}
+.split{display:grid;grid-template-columns:285px minmax(0,1fr);border-top:1px solid var(--b)}
+.list{padding:14px 12px;overflow:auto}
+.record{display:block;width:100%;text-align:left;padding:12px;margin:8px 0;border-radius:10px}
+.record[aria-pressed="true"]{border-color:var(--v);background:var(--soft)}
+.record span{display:block;margin-top:6px}
+.detail{background:var(--p);border-left:1px solid var(--b);min-width:0}
+.head{padding:16px 18px 12px;border-bottom:1px solid var(--b)}
+h2{font-size:16px;font-weight:500;margin:6px 0 12px}
+h3{font-size:14px;font-weight:500;margin:12px 0 8px}
+.chip{font-size:11px;border:1px solid currentColor;border-radius:99px;padding:1px 8px;color:var(--v)}
+.chip.arch{color:var(--m)}
+.body{padding:14px 18px 22px}
+.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 14px;background:var(--bg);border:1px solid var(--b);border-radius:10px;padding:12px;margin-bottom:12px}
+.meta label{display:block;color:var(--m);font-size:11px}
+.meta span{font-size:12px}
+.tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}
+.tabs button{border-radius:99px;padding:4px 12px;font-size:12px}
+.tabs button[aria-pressed="true"]{background:var(--a);color:#fff;border-color:var(--a)}
+.paper{border:1px solid var(--b);border-radius:10px;padding:12px 16px}
+p{margin:6px 0 12px}
+ul{padding-left:20px}
+li{margin:7px 0}
+.draft{border:1px solid var(--b);border-radius:10px;padding:12px;margin:10px 0}
+input[type=text],textarea,select{width:100%;padding:7px 9px;border:1px solid var(--b);border-radius:6px;background:var(--bg);margin:5px 0 10px}
+textarea{min-height:90px;resize:vertical}
+input[type=checkbox]{accent-color:var(--a);width:16px;height:16px}
+.notice{padding:10px 12px;background:var(--soft);color:var(--v);border-radius:8px;margin:10px 0;font-size:12px}
+.notice.err{background:var(--dangerbg);color:var(--danger)}
+.notice.loading{background:var(--warnbg);color:var(--t)}
+.notice.ok{background:var(--okbg);color:var(--ok)}
+.empty{padding:26px 14px;text-align:center;color:var(--m);border:1px dashed var(--b);border-radius:10px;margin:10px 0}
+.result-ok{font-size:12px;color:var(--ok)}
+.result-fail{font-size:12px;color:var(--danger)}
+.back{display:none}
+footer{border-top:1px solid var(--b);padding:8px 18px;font-size:12px;color:var(--m);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+[hidden]{display:none!important}
+@media(max-width:700px){
+  .split{grid-template-columns:1fr}
+  .detail{display:none;border-left:0}
+  #app.focused .detail{display:block}
+  #app.focused .list{display:none}
+  .back{display:inline-block}
+  .nav{padding:8px}
+  .nav span{padding:6px 9px}
+  .meta{grid-template-columns:1fr 1fr}
+  input[type=text],textarea{font-size:16px}
+}
+@media(pointer:coarse){button{min-height:44px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="row">
+    <span class="logo">▦</span>
+    <div><div>智能体团队看板</div><div class="muted">agent-team-board</div></div>
+    <span class="grow"></span>
+    <button data-theme-toggle title="切换深浅色">浅色</button>
+    <button class="primary" data-new>＋ 新建讨论</button>
+  </header>
+  <div class="nav"><span class="on">讨论</span><span>需求</span><span>任务</span><span>文件</span><span style="margin-left:auto">设置</span></div>
+  <div class="filters">
+    <button data-filter="active" aria-pressed="true">讨论中 <span data-activecount>0</span></button>
+    <button data-filter="archived" aria-pressed="false">已归档 <span data-archivecount>0</span></button>
+    <span class="grow muted">开放式讨论 · Agent 会话交流 · 看板沉淀成果</span>
+  </div>
+  <div class="split">
+    <section class="list" aria-label="讨论记录">
+      <div class="muted">最近更新</div>
+      <div data-records></div>
+    </section>
+    <section class="detail" aria-label="讨论详情">
+      <div class="head">
+        <div class="row">
+          <button class="back" data-back>← 返回列表</button>
+          <span class="muted grow" data-id></span>
+          <span class="chip" data-status></span>
+        </div>
+        <h2 data-title></h2>
+        <div class="row">
+          <button data-prompt="start">启动提示词</button>
+          <button data-finish>讨论完毕</button>
+          <span class="grow"></span>
+          <button data-archive>归档讨论</button>
+        </div>
+      </div>
+      <div class="body">
+        <div class="meta">
+          <div><label>讨论方式</label><span>Agent 外部会话</span></div>
+          <div><label>讨论范围</label><span>开放式 · 无需关联需求</span></div>
+          <div><label>成果</label><span data-outcome></span></div>
+        </div>
+        <div class="notice" data-notice></div>
+        <div data-promptbox hidden>
+          <label for="discussion-prompt" class="muted" data-promptlabel></label>
+          <textarea id="discussion-prompt" readonly></textarea>
+          <div class="row">
+            <button class="primary" data-copy>复制提示词</button>
+            <button data-hideprompt>收起</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <button data-tab="minutes" aria-pressed="true">背景与纪要</button>
+          <button data-tab="drafts" aria-pressed="false">生成需求 / Bug</button>
+        </div>
+        <div data-pane></div>
+      </div>
+    </section>
+  </div>
+  <footer>
+    <span data-feedback aria-live="polite" class="grow">交互 Demo · 不连接 Agent，不创建真实条目 · 窄屏点击记录进入详情</span>
+    <button data-reset>重置演示数据</button>
+  </footer>
+</div>
+<script>
+(() => {
+  'use strict';
+  const root = document.getElementById('app');
+  const q = (s) => root.querySelector(s);
+  const NL = String.fromCharCode(10);
+
+  // ---------- 深浅色 ----------
+  const themeBtn = q('[data-theme-toggle]');
+  const applyTheme = (t) => {
+    document.documentElement.dataset.theme = t;
+    themeBtn.textContent = t === 'dark' ? '深色' : '浅色';
+    try { localStorage.setItem('rfb004-theme', t); } catch {}
+  };
+  let theme = 'light';
+  try { theme = localStorage.getItem('rfb004-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch {}
+  applyTheme(theme);
+  themeBtn.onclick = () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+
+  // ---------- 演示数据（全虚构） ----------
+  const seed = () => ([
+    {
+      id: 'ASK-DEMO-001', title: '怎样提升看板的日常使用效率？', state: 'active', ready: true, waiting: false, reading: false, readError: '',
+      updated: '09-09 08:12',
+      background: '集中讨论日常操作中不顺手的地方，梳理值得开发的能力和需要修复的问题。',
+      minutes: {
+        consensus: '讨论在 Agent 会话中进行，看板负责归档成果；需要开发的结论转为需求，已存在的异常转为 Bug。',
+        suggestion: '提供统一检索入口；窄屏返回应保留筛选与阅读位置。',
+        open: '各条目的实施优先级，留待排期时确定。',
+        action: '核对候选条目的范围、描述与验收标准，再创建条目。'
+      },
+      drafts: [
+        { type: 'req', title: '支持跨模块快速定位条目', desc: '提供统一入口，通过编号或标题定位需求、Bug 和讨论记录。', criteria: '输入编号或标题可查看匹配记录；点击结果进入对应详情；无匹配时显示空态。', selected: true, created: false, createState: '', createError: '' },
+        { type: 'bug', title: '窄屏返回列表后丢失筛选条件', desc: '复现：筛选「讨论中」，打开详情，再返回列表。' + NL + '实际：筛选被重置为默认档。' + NL + '预期：保留原筛选与阅读位置。', criteria: '返回后保持原筛选；列表停留在打开详情前的位置。', selected: true, created: false, createState: '', createError: '', failOnce: true }
+      ]
+    },
+    { id: 'ASK-DEMO-002', title: '如何减少重复的手工操作？', state: 'active', ready: false, waiting: false, reading: false, readError: '', updated: '09-08 17:40', background: '从日常使用习惯出发，讨论哪些操作适合简化。', minutes: null, drafts: [] },
+    { id: 'ASK-DEMO-003', title: '明确讨论与开发的边界', state: 'archived', ready: true, waiting: false, reading: false, readError: '', updated: '09-07 21:05', background: '讨论哪些结论需要转成开发条目。', minutes: { consensus: '讨论只沉淀结论；进入开发必须转为需求或 Bug 条目并走状态机。', suggestion: '保持讨论零成果也可归档。', open: '无。', action: '已创建一条需求落地该边界。' }, drafts: [
+      { type: 'req', title: '区分「讨论成果」与「开发条目」的入口', desc: '讨论页仅沉淀纪要与候选草稿；创建动作统一走既有条目机制，初始状态待接受。', criteria: '从讨论创建的条目进入待接受状态；详情双向可见来源讨论。', selected: true, created: true, number: 'REQ-DEMO-000', createState: '', createError: '' }
+    ] }
+  ]);
+
+  let records = seed();
+  let seq = records.length;
+  let filter = 'active';
+  let item = records[0];
+  let tab = 'minutes';
+  let listScrollTop = 0; // 窄屏返回列表时恢复滚动位置
+
+  const feedback = (t) => { q('[data-feedback]').textContent = t; };
+  const nowLabel = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const touch = (r) => { r.updated = nowLabel(); };
+  function el(tag, text, cls) { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; }
+
+  const TYPE_LABEL = { req: '需求', bug: 'Bug' };
+
+  // ---------- 渲染 ----------
+  function render() {
+    q('[data-activecount]').textContent = records.filter((r) => r.state === 'active').length;
+    q('[data-archivecount]').textContent = records.filter((r) => r.state === 'archived').length;
+
+    const shown = records.filter((r) => r.state === filter);
+    const box = q('[data-records]');
+    box.replaceChildren();
+    if (!shown.length) {
+      const empty = el('div', filter === 'active' ? '暂无讨论中的记录' : '暂无已归档的记录', 'empty');
+      empty.append(el('div', '点击右上角「＋ 新建讨论」开始一次开放式讨论（已归档档为空属正常空态）'));
+      box.append(empty);
+    }
+    shown.forEach((r) => {
+      const b = el('button', r.title, 'record');
+      b.setAttribute('aria-pressed', String(r === item));
+      const hint = r.state === 'archived' ? '已归档'
+        : r.waiting ? '讨论中 · 等待纪要'
+        : r.ready ? (r.drafts.some((d) => !d.created) ? '讨论中 · 有待创建草稿' : '讨论中 · 纪要已生成')
+        : '讨论中 · 外部会话';
+      b.append(el('span', r.id, 'muted'), el('span', hint + ' · ' + r.updated, 'muted'));
+      b.onclick = () => { item = r; tab = 'minutes'; q('[data-promptbox]').hidden = true; listScrollTop = q('.list').scrollTop; root.classList.add('focused'); render(); };
+      box.append(b);
+    });
+
+    q('[data-id]').textContent = item.id;
+    q('[data-title]').textContent = item.title;
+    const st = q('[data-status]');
+    st.textContent = item.state === 'active' ? '讨论中' : '已归档';
+    st.classList.toggle('arch', item.state === 'archived');
+    q('[data-outcome]').textContent = item.drafts.filter((d) => d.created).length + ' 条已生成 · ' + item.drafts.filter((d) => !d.created).length + ' 项草稿';
+
+    const notice = q('[data-notice]');
+    notice.classList.remove('err', 'loading', 'ok');
+    notice.hidden = false;
+    if (item.reading) { notice.classList.add('loading'); notice.textContent = '正在读取纪要……（演示模拟加载态，约 1 秒）'; }
+    else if (item.readError) { notice.classList.add('err'); notice.textContent = '纪要读取失败：' + item.readError; }
+    else if (item.waiting) { notice.textContent = '讨论仍在进行：等待 Agent 按约定目录输出纪要。落盘后这里会自动展示。'; }
+    else if (item.ready) { notice.classList.add('ok'); notice.textContent = '纪要已读取，可编辑候选条目并创建需求或 Bug。'; }
+    else { notice.textContent = '在 Agent 会话中自由讨论，结束后回这里生成收尾提示词。'; }
+
+    q('[data-finish]').hidden = item.state === 'archived';
+    q('[data-prompt="start"]').disabled = item.reading;
+    q('[data-finish]').disabled = item.reading;
+    q('[data-archive]').textContent = item.state === 'archived' ? '继续讨论' : '归档讨论';
+    q('[data-archive]').disabled = item.reading;
+
+    root.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
+    renderPane();
+  }
+
+  function renderPane() {
+    const pane = q('[data-pane]');
+    pane.replaceChildren();
+    if (tab === 'minutes') renderMinutes(pane);
+    else renderDrafts(pane);
+  }
+
+  function renderMinutes(pane) {
+    const paper = el('div', '', 'paper');
+    paper.append(el('h3', '讨论背景'), el('p', item.background));
+    if (item.reading) {
+      paper.append(el('h3', '讨论纪要'), el('p', '读取中……', 'muted'));
+    } else if (item.readError) {
+      paper.append(el('h3', '讨论纪要'), el('p', '尚未生成可用的纪要（Agent 输出被拒绝，未渲染半成品）。', 'muted'));
+    } else if (item.ready && item.minutes) {
+      paper.append(
+        el('h3', '讨论纪要'),
+        el('p', '共识：' + item.minutes.consensus),
+        el('p', '建议与取舍：' + item.minutes.suggestion),
+        el('p', '未决问题：' + item.minutes.open),
+        el('p', '后续行动：' + item.minutes.action)
+      );
+    } else {
+      paper.append(el('h3', '讨论纪要'), el('p', '尚无纪要。对话内容保留在 Agent 会话中。', 'muted'));
+    }
+    pane.append(paper);
+
+    if (item.waiting && !item.reading) {
+      // 模拟 Agent 侧落盘：成功 / 格式错误 两条路径，验证等待、加载与失败反馈
+      const okBtn = el('button', '模拟纪要已落盘（成功路径）', 'primary');
+      okBtn.onclick = () => simulateRead(false);
+      const badBtn = el('button', '模拟 Agent 输出格式错误（失败路径）');
+      badBtn.onclick = () => simulateRead(true);
+      const wrap = el('div', '', 'row');
+      wrap.style.marginTop = '10px';
+      wrap.append(okBtn, badBtn);
+      pane.append(wrap);
+    } else if (item.readError) {
+      const retry = el('button', '重新读取纪要', 'primary');
+      retry.onclick = () => simulateRead(false);
+      pane.append(retry);
+    }
+  }
+
+  function renderDrafts(pane) {
+    if (!item.drafts.length) {
+      pane.append(emptyDrafts());
+      return;
+    }
+    item.drafts.forEach((d, i) => {
+      const card = el('div', '', 'draft');
+      if (d.created) {
+        // 已创建成果：真实编号、标题、状态与跳转入口（演示中仅提示）
+        const h = el('h3', TYPE_LABEL[d.type] + ' · ' + d.title);
+        card.append(h, el('p', d.number + ' · 待接受 · 来源 ' + item.id, 'result-ok'));
+        const jump = el('button', '跳转条目详情');
+        jump.onclick = () => feedback('演示环境：正式版将打开 ' + d.number + ' 的详情（双向来源关联可跳回本讨论）。');
+        const row = el('div', '', 'row');
+        row.append(jump);
+        card.append(row);
+      } else {
+        const label = el('label', '', 'row');
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = d.selected !== false;
+        check.disabled = d.createState === 'creating';
+        check.onchange = () => { d.selected = check.checked; };
+        label.append(check, el('span', '创建' + TYPE_LABEL[d.type] + (d.type === 'bug' ? '（含复现 / 实际 / 预期）' : '')));
+        card.append(label, el('span', '类型：' + TYPE_LABEL[d.type] + ' · 由纪要草稿生成，未经确认不会自动创建', 'muted'));
+
+        [['标题', 'title'], ['描述 / 复现信息', 'desc'], ['验收标准', 'criteria']].forEach(([name, key]) => {
+          const id = 'draft-' + i + '-' + key;
+          const lab = el('label', name, 'muted');
+          lab.htmlFor = id;
+          const input = document.createElement(key === 'title' ? 'input' : 'textarea');
+          if (key === 'title') input.type = 'text';
+          input.id = id;
+          input.value = d[key];
+          input.disabled = d.createState === 'creating';
+          input.oninput = () => { d[key] = input.value; };
+          card.append(lab, input);
+        });
+
+        if (d.createState === 'creating') card.append(el('p', '创建中……', 'muted'));
+        if (d.createState === 'failed') {
+          card.append(el('p', '创建失败：' + d.createError, 'result-fail'));
+          const retry = el('button', '重试此项');
+          retry.onclick = () => retryCreate(d);
+          card.append(retry);
+        }
+      }
+      pane.append(card);
+    });
+
+    const pendingList = item.drafts.filter((d) => !d.created && d.createState !== 'creating');
+    if (pendingList.length) {
+      const create = el('button', '创建勾选的条目', 'primary');
+      create.disabled = item.drafts.some((d) => d.createState === 'creating');
+      create.onclick = batchCreate;
+      pane.append(create);
+    }
+  }
+
+  function emptyDrafts() {
+    const d = el('div', '', 'empty');
+    d.append(el('div', '当前没有候选条目。纪要可以只有结论，不必生成需求或 Bug。'), el('div', '（这是零候选的正常空态；归档无须以生成条目为前提）', 'muted'));
+    return d;
+  }
+
+  // ---------- 模拟纪要读取（加载 / 失败 / 成功） ----------
+  function simulateRead(bad) {
+    item.reading = true; item.readError = ''; render();
+    feedback('正在读取约定目录中的纪要与候选草稿……');
+    setTimeout(() => {
+      item.reading = false;
+      touch(item);
+      if (bad) {
+        item.readError = 'Agent 输出缺少候选条目结构与讨论编号，拒绝半写入（未渲染不完整内容）。';
+        render();
+        feedback('纪要读取失败：输出不完整，可重试或回到 Agent 会话补齐。');
+      } else {
+        item.waiting = false; item.ready = true;
+        if (!item.minutes) item.minutes = { consensus: '讨论在 Agent 会话中进行，看板负责归档成果；需要开发的结论转为需求，已存在的异常转为 Bug。', suggestion: '从使用频率出发，优先简化重复操作。', open: '实施优先级留待排期确定。', action: '核对候选条目后创建需求或 Bug。' };
+        if (!item.drafts.length) item.drafts = [
+          { type: 'req', title: '沉淀一条演示候选需求', desc: '由本次讨论纪要生成的候选草稿，可编辑后创建。', criteria: '能从讨论详情创建为待接受条目，并可跳转。', selected: true, created: false, createState: '', createError: '' }
+        ];
+        tab = 'minutes';
+        render();
+        feedback('纪要已读取（演示模拟）。讨论状态仍为「讨论中」，等待纪要只是阶段反馈。');
+      }
+    }, 1000);
+  }
+
+  // ---------- 批量创建（含部分失败与仅重试失败项） ----------
+  function batchCreate() {
+    const selected = item.drafts.filter((d) => !d.created && d.selected !== false && d.createState !== 'creating');
+    if (!selected.length) { feedback('请先勾选候选条目。'); return; }
+    if (selected.some((d) => !d.title.trim() || !d.desc.trim())) { feedback('请填写勾选条目的标题与描述（必填校验）。'); return; }
+    selected.forEach((d) => { d.createState = 'creating'; d.createError = ''; });
+    render();
+    feedback('正在创建 ' + selected.length + ' 条条目（初始状态：待接受）……');
+    setTimeout(() => {
+      let ok = 0, fail = 0;
+      selected.forEach((d) => {
+        if (d.failOnce) { // 演示部分失败：此项第一次失败，重试成功
+          d.failOnce = false;
+          d.createState = 'failed';
+          d.createError = '写入被拒：条目编号冲突（演示模拟，可仅重试本项）。';
+          fail++;
+        } else {
+          settleCreate(d); ok++;
+        }
+      });
+      touch(item);
+      tab = 'drafts';
+      render();
+      feedback(fail ? '创建完成：成功 ' + ok + ' 条，失败 ' + fail + ' 条；失败项可单独重试，成功项不会重复创建。' : '创建完成：成功 ' + ok + ' 条，均为待接受；刷新或重试不会重复创建。');
+    }, 900);
+  }
+
+  function settleCreate(d) {
+    d.created = true;
+    d.createState = '';
+    d.createError = '';
+    d.number = (d.type === 'req' ? 'REQ' : 'BUG') + '-DEMO-' + String(seq++).padStart(3, '0');
+  }
+
+  function retryCreate(d) {
+    d.createState = 'creating';
+    render();
+    feedback('正在重试创建失败项……');
+    setTimeout(() => { settleCreate(d); touch(item); render(); feedback('重试成功：' + d.number + ' 已创建（待接受）。'); }, 700);
+  }
+
+  // ---------- 提示词 ----------
+  function prompt(kind) {
+    q('[data-promptbox]').hidden = false;
+    q('[data-promptlabel]').textContent = kind === 'start' ? '复制到 Agent 新会话' : '复制到原 Agent 会话';
+    q('#discussion-prompt').value = [
+      '【演示提示词，不执行真实落盘】',
+      '讨论编号：' + item.id,
+      '主题：' + item.title,
+      kind === 'start'
+        ? '请与我进行开放式讨论。无需绑定某一需求。讨论期间不修改代码或条目。'
+        : '请总结当前会话，输出共识、建议、未决问题与行动项，并将候选需求或 Bug 分别整理为标题、描述及验收标准草稿，完整写入约定目录。只输出纪要与草稿，不直接创建或接受条目。'
+    ].join(NL);
+    q('[data-promptbox]').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  // ---------- 事件绑定 ----------
+  q('[data-prompt]').onclick = () => { if (!item.reading) prompt('start'); };
+  q('[data-finish]').onclick = () => {
+    if (item.reading) return;
+    item.waiting = true; tab = 'minutes'; touch(item);
+    render(); prompt('finish');
+    feedback('已生成收尾提示词。讨论保持「讨论中」，等待纪要只是阶段反馈。');
+  };
+  q('[data-copy]').onclick = async () => {
+    const ta = q('#discussion-prompt');
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      feedback('提示词已复制，请粘贴到 Agent 会话（复制不代表 Agent 已连接）。');
+    } catch {
+      ta.focus(); ta.select();
+      let done = false;
+      try { done = document.execCommand('copy'); } catch {}
+      feedback(done ? '提示词已复制（降级方式）。' : '剪贴板不可用：请按 ⌘C / Ctrl+C 手动复制选中的提示词。');
+    }
+  };
+  q('[data-hideprompt]').onclick = () => { q('[data-promptbox]').hidden = true; };
+  root.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; render(); });
+  root.querySelectorAll('[data-filter]').forEach((b) => b.onclick = () => {
+    filter = b.dataset.filter;
+    root.querySelectorAll('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    const found = records.find((r) => r.state === filter);
+    if (found) item = found;
+    tab = 'minutes';
+    root.classList.remove('focused');
+    render();
+  });
+  q('[data-back]').onclick = () => {
+    root.classList.remove('focused');
+    q('.list').scrollTop = listScrollTop; // 返回列表：保留筛选（未改动）与滚动位置
+    feedback('已返回列表：筛选与滚动位置保持不变。');
+  };
+  q('[data-archive]').onclick = () => {
+    if (item.reading) return;
+    item.state = item.state === 'active' ? 'archived' : 'active';
+    filter = item.state;
+    touch(item);
+    root.querySelectorAll('[data-filter]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.filter === filter)));
+    render();
+    feedback(item.state === 'archived'
+      ? '讨论已归档（无须先生成条目）；纪要与已创建成果仍保留展示。'
+      : '讨论已恢复「讨论中」；此前纪要与已生成条目不丢失。');
+  };
+  q('[data-new]').onclick = () => {
+    const title = el('input'); title.type = 'text'; title.placeholder = '例如：怎样简化日常工作流程？'; title.maxLength = 120;
+    const bg = el('textarea'); bg.placeholder = '填写讨论背景，不需要关联需求';
+    const pane = q('[data-pane]');
+    pane.replaceChildren(el('h3', '新建开放式讨论'));
+    const l = el('label', '讨论标题（必填，120 字内）'); l.htmlFor = 'new-discussion-title'; title.id = l.htmlFor;
+    const bl = el('label', '讨论背景（可选）'); bl.htmlFor = 'new-discussion-background'; bg.id = bl.htmlFor;
+    const save = el('button', '创建并生成启动提示词', 'primary');
+    save.onclick = () => {
+      if (!title.value.trim()) { feedback('请填写讨论标题（必填校验）。'); title.focus(); return; }
+      item = {
+        id: 'ASK-DEMO-' + String(++seq).padStart(3, '0'),
+        title: title.value.trim(), background: bg.value.trim() || '（未填写背景）',
+        state: 'active', ready: false, waiting: false, reading: false, readError: '',
+        updated: nowLabel(), minutes: null, drafts: []
+      };
+      records.unshift(item);
+      filter = 'active'; tab = 'minutes';
+      root.querySelectorAll('[data-filter]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.filter === filter)));
+      render(); prompt('start');
+      feedback('已创建 ' + item.id + '（无关联需求）。请复制启动提示词到 Agent 新会话。');
+    };
+    pane.append(l, title, bl, bg, save);
+    root.classList.add('focused');
+    q('[data-notice]').hidden = true;
+    q('[data-promptbox]').hidden = true;
+  };
+  q('[data-reset]').onclick = () => {
+    records = seed(); seq = records.length;
+    filter = 'active'; item = records[0]; tab = 'minutes';
+    root.classList.remove('focused');
+    render();
+    feedback('演示数据已重置。');
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

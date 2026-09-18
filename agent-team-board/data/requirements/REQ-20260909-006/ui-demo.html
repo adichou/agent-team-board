@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-006 演示 · 详情页页签式布局</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --border: #d0d7de; --fg: #1f2328;
+    --muted: #636c76; --accent: #0969da; --accent-soft: #ddf4ff;
+    --ok: #1a7f37; --warn: #9a6700; --danger: #cf222e; --chip: #f0f3f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+      --muted: #8b949e; --accent: #4493f8; --accent-soft: #121d2f;
+      --ok: #3fb950; --warn: #d29922; --danger: #f85149; --chip: #21262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--fg); }
+  .page { display: flex; gap: 14px; max-width: 1080px; margin: 0 auto; padding: 16px; align-items: flex-start; }
+  .hint { max-width: 760px; margin: 0 auto 10px; padding: 10px 14px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; color: var(--muted); }
+  .hint b { color: var(--fg); }
+
+  /* 演示控制面板 */
+  .panel { width: 240px; flex: none; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: 12.5px; }
+  .panel h3 { margin: 0 0 8px; font-size: 13px; }
+  .panel .grp { margin: 10px 0 4px; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+  .panel label { display: flex; gap: 6px; align-items: center; margin: 6px 0; cursor: pointer; }
+  .panel button { width: 100%; margin: 6px 0 0; }
+
+  /* 抽屉骨架（模拟宽屏右栏形态） */
+  .drawer { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; max-height: 86vh; }
+  .drawer-head { padding: 10px 14px 8px; border-bottom: 1px solid var(--border); }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--chip); border: 1px solid var(--border); padding: 1px 7px; border-radius: 99px; cursor: pointer; }
+  .icon-btn { margin-left: auto; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; }
+  .drawer-head h2 { margin: 8px 0 0; font-size: 15.5px; }
+  .flag { font-size: 11px; border: 1px solid var(--ok); color: var(--ok); border-radius: 99px; padding: 0 7px; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px 0; }
+  .tab { appearance: none; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 99px; padding: 4px 13px; font-size: 12.5px; cursor: pointer; }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .tab .cnt { font-size: 11px; color: var(--muted); }
+
+  .drawer-body { padding: 12px 16px 22px; overflow-y: auto; }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 14px; margin-bottom: 10px; }
+  .meta-grid label { display: block; font-size: 11px; color: var(--muted); }
+  .meta-grid span { font-size: 12.5px; word-break: break-all; }
+  .state { border-radius: 99px; padding: 0 8px; font-size: 12px; }
+  .state.s-accepted { background: var(--accent-soft); color: var(--accent); }
+  .state.s-submitted { background: var(--chip); color: var(--warn); }
+
+  .notice { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 7px 10px; font-size: 12.5px; margin: 8px 0; background: var(--bg); }
+  .notice.ok { border-left-color: var(--ok); }
+  .notice code { background: var(--chip); border-radius: 4px; padding: 0 4px; font-size: 11.5px; }
+
+  .drawer-actions { display: flex; gap: 8px; align-items: center; margin: 8px 0 12px; flex-wrap: wrap; }
+  .drawer-actions-center { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .drawer-nav-pos { font-size: 11.5px; color: var(--muted); }
+  .btn { appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--fg); border-radius: 6px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+  .btn.warn { color: var(--warn); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  h4.sec { margin: 12px 0 6px; font-size: 13px; }
+  ul.list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  ul.list li { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  ul.list li:last-child { border-bottom: none; }
+  li.link, .link { cursor: pointer; }
+  li.link:hover { background: var(--bg); }
+  .dot { width: 8px; height: 8px; border-radius: 99px; flex: none; }
+  .dot.s-done { background: var(--ok); } .dot.s-submitted { background: var(--warn); }
+  .chip { border: 1px solid var(--border); border-radius: 99px; padding: 0 7px; font-size: 11px; color: var(--muted); }
+  .chip.oc-answered { color: var(--ok); border-color: var(--ok); }
+  .chip.oc-pending { color: var(--warn); border-color: var(--warn); }
+  .small { font-size: 11.5px; }
+
+  details.box { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 10px 0; }
+  details.box summary { cursor: pointer; font-size: 12.5px; }
+
+  /* 文档区状态 */
+  .doc { font-size: 13px; }
+  .doc h3 { font-size: 14px; margin: 14px 0 6px; } .doc h3:first-child { margin-top: 0; }
+  .doc code { background: var(--chip); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+  .doc ul { padding-left: 20px; }
+  .state-block { border: 1px dashed var(--border); border-radius: 8px; padding: 26px 16px; text-align: center; color: var(--muted); font-size: 13px; margin: 6px 0; }
+  .state-block.error { color: var(--danger); border-color: var(--danger); }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 99px; animation: r .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(16px); background: var(--fg); color: var(--bg); border-radius: 8px; padding: 8px 16px; font-size: 12.5px; opacity: 0; pointer-events: none; transition: .22s; max-width: 86vw; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 860px) { .page { flex-direction: column; } .panel { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="hint">REQ-20260909-006 离线交互演示：详情抽屉改为五页签（基本信息 / 说明 / 设计 / 测试用例 / 讨论纪要）。左侧为演示控制，用于触发正常 / 空 / 加载 / 失败等状态；仅模拟界面，不写入项目看板。</div>
+
+<div class="page">
+  <aside class="panel" aria-label="演示控制">
+    <h3>演示控制</h3>
+    <div class="grp">条目形态</div>
+    <label><input type="radio" name="kind" value="req" checked> 需求单（有讨论、下属 Bug）</label>
+    <label><input type="radio" name="kind" value="bug"> Bug 单（讨论空态）</label>
+    <div class="grp">状态模拟</div>
+    <label><input type="checkbox" id="simFail"> 测试用例页签首次加载失败</label>
+    <label><input type="checkbox" id="simMiss"> 设计文档缺失（空态）</label>
+    <label><input type="checkbox" id="simNoDisc"> 需求无讨论（空态）</label>
+    <div class="grp">其他</div>
+    <button class="btn" id="btnReset" type="button">重置演示状态</button>
+    <p class="small" style="color:var(--muted)">上一条 / 下一条可切换条目，切后回到「基本信息」页签。</p>
+  </aside>
+
+  <section class="drawer" aria-label="条目详情（演示）">
+    <header class="drawer-head">
+      <div class="card-top">
+        <button class="btn" id="btnBack" type="button" title="返回列表（演示）">← 返回</button>
+        <span class="cid" id="itemId" title="点击复制编号（演示）">REQ-20260909-006</span>
+        <span class="flag">⚑ 测试</span>
+        <button class="icon-btn" id="btnClose" type="button" title="关闭">✕</button>
+      </div>
+      <h2 id="itemTitle">需求 bug 单详情页布局优化，使用页签式布局</h2>
+    </header>
+    <nav class="tabs" id="tabs" aria-label="详情页签"></nav>
+    <div class="drawer-body" id="tabBody" role="tabpanel"></div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- 演示数据 ---------------- */
+const ITEMS = [
+  { id: 'REQ-20260909-006', kind: 'req', title: '需求 bug 单详情页布局优化，使用页签式布局', status: ['accepted', '已接受'], owner: '—', bugs: [
+      { id: 'BUG-20260909-010', title: '窄屏页签行溢出（示例数据）', status: 'submitted' },
+      { id: 'BUG-20260909-011', title: '讨论列表点击未跳转（示例数据）', status: 'done' } ] },
+  { id: 'REQ-20260908-027', kind: 'req', title: '列表工具条按当前筛选档收窄（上一条示例）', status: ['accepted', '已接受'], owner: '—', bugs: [] },
+  { id: 'BUG-20260909-003', kind: 'bug', title: '详情页轮询刷新导致页签重置（下一条示例）', status: ['submitted', '待接受'], owner: '—', bugs: null },
+];
+const DISCS = [
+  { id: 'ASK-20260909-021', title: '五个页签是否固定显示？', status: 'answered', label: '已回复', rounds: 3, at: '09-09 08:12' },
+  { id: 'ASK-20260909-024', title: '测试报告页签放在哪里？', status: 'pending', label: '待回复', rounds: 1, at: '09-09 08:31' },
+];
+const DOC_README = `<h3>描述</h3><p>详情抽屉改为页签式布局，固定五个页签：基本信息、说明、设计、测试用例、讨论纪要。</p>
+<ul><li>首页签集中条目元信息与状态操作；</li><li>文档页签按需加载渲染 markdown；</li><li>讨论纪要承接需求讨论列表与发起入口。</li></ul>
+<h3>验收标准</h3><ul><li>五页签顺序与默认激活符合约定；</li><li>各区块功能与迁移前一致。</li></ul>
+<p>（示例文档内容，实际渲染自条目目录 <code>README.md</code>）</p>`;
+const DOC_TC = `<h3>用例</h3><ul><li>TC1 打开详情默认落在「基本信息」；</li><li>TC2 文档页签首次加载后切换不重复请求；</li><li>TC3 讨论项点击跳转讨论模块并打开对应抽屉。</li></ul>
+<p>（示例文档内容，实际渲染自条目目录 <code>test-cases.md</code>）</p>`;
+
+/* ---------------- 演示状态 ---------------- */
+const D = { idx: 0, tab: 'base', docCache: {}, tcFailedOnce: false };
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let toastTimer;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200); }
+function cur() { return ITEMS[D.idx]; }
+function opt(id) { return $( '#' + id); }
+function tabsDef() {
+  const it = cur();
+  return [
+    { key: 'base', label: '基本信息' },
+    { key: 'readme', label: '说明' },
+    { key: 'design', label: '设计' },
+    { key: 'tc', label: '测试用例' },
+    { key: 'disc', label: '讨论纪要', cnt: it.kind === 'req' && !opt('simNoDisc').checked ? DISCS.length : 0 },
+  ];
+}
+
+/* ---------------- 页签栏 ---------------- */
+function renderTabs() {
+  $('#tabs').innerHTML = tabsDef().map((t) =>
+    `<button type="button" class="tab ${D.tab === t.key ? 'active' : ''}" data-tab="${t.key}" ${t.key === 'disc' && t.cnt ? `title="共 ${t.cnt} 条讨论"` : ''}>${t.label}${t.key === 'disc' && t.cnt ? ` <span class="cnt">${t.cnt}</span>` : ''}</button>`).join('');
+  for (const b of $('#tabs').querySelectorAll('[data-tab]')) b.addEventListener('click', () => { D.tab = b.dataset.tab; renderTabs(); renderBody(); });
+}
+
+/* ---------------- 内容区 ---------------- */
+function baseHtml(it) {
+  return `
+    <section class="meta-grid">
+      <div><label>状态</label><span class="state s-${it.status[0]}">${it.status[1]}</span></div>
+      <div><label>类型</label><span>${it.kind === 'req' ? '需求' : 'Bug'}</span></div>
+      <div><label>认领者</label><span>${esc(it.owner)}</span></div>
+      <div><label>创建</label><span>2026-09-09 08:36</span></div>
+      <div><label>更新</label><span>2026-09-09 08:39</span></div>
+      <div><label>最近报告</label><span>—</span></div>
+    </section>
+    <div class="notice">未入计划。可点「移入计划」排入开发计划，或在 ZCode 会话运行 <code>/dev ${esc(it.id)}</code> 让 Agent 直接认领。</div>
+    <div class="drawer-actions">
+      <button class="btn" data-nav="prev" type="button">← 上一条</button>
+      <div class="drawer-actions-center">
+        ${it.status[0] === 'accepted'
+          ? `<button class="btn primary" data-demo="移入计划（演示）" type="button">➤ 移入计划</button>
+             <button class="btn warn" data-demo="驳回接受（演示）" type="button">↩ 驳回接受</button>`
+          : `<button class="btn primary" data-demo="接受（演示）" type="button">✓ 接受</button>
+             <button class="btn" data-demo="编辑标题/描述（演示）" type="button">✎ 改标题/描述</button>`}
+        <span class="drawer-nav-pos">${D.idx + 1} / ${ITEMS.length}</span>
+      </div>
+      <button class="btn" data-nav="next" type="button">下一条 →</button>
+    </div>
+    ${it.kind === 'req' ? `<h4 class="sec">下属 Bug（${(it.bugs || []).length}，未完成 ${(it.bugs || []).filter((b) => b.status !== 'done').length}）</h4>
+      ${it.bugs && it.bugs.length ? `<ul class="list">${it.bugs.map((b) => `
+        <li class="link" data-goto="${esc(b.id)}"><span class="dot s-${b.status}"></span><span class="cid">${esc(b.id)}</span><span>${esc(b.title)}</span></li>`).join('')}</ul>`
+        : `<div class="state-block">暂无下属 Bug</div>`}` : ''}
+    <details class="box"><summary>批量执行设置（依赖 0 项）</summary>
+      <p class="small" style="color:var(--muted)">前置条目人工验收完成后才自动实施；父子归属不算依赖。（演示折叠，功能与现状一致）</p>
+    </details>`;
+}
+
+function discHtml(it) {
+  if (it.kind === 'bug') return `<div class="state-block">Bug 单暂不支持发起讨论（是否开放待确认）</div>`;
+  if (opt('simNoDisc').checked) return `
+    <h4 class="sec">需求讨论</h4>
+    <div class="drawer-actions" style="margin:6px 0 10px"><button class="btn" data-demo="发起讨论（演示）" type="button">＋ 发起讨论</button></div>
+    <div class="state-block">尚无讨论，点击「＋ 发起讨论」与 Agent 澄清本需求。</div>`;
+  return `
+    <h4 class="sec">需求讨论 <span class="small" style="color:var(--muted)">（${DISCS.length}）</span></h4>
+    <div class="drawer-actions" style="margin:6px 0 10px"><button class="btn" data-demo="发起讨论（演示，预填本需求）" type="button">＋ 发起讨论</button></div>
+    <ul class="list">${DISCS.map((t) => `
+      <li class="link" data-disc="${esc(t.id)}" title="点击进入讨论抽屉（演示）">
+        <span class="cid">${esc(t.id)}</span><span style="flex:1">${esc(t.title)}</span>
+        <span class="chip oc-${t.status}">${t.label}</span>
+        <span class="small" style="color:var(--muted)">${t.rounds} 轮 · ${t.at}</span>
+      </li>`).join('')}</ul>`;
+}
+
+/* 文档页签：加载 → 成功 / 空态 / 失败可重试 */
+function loadDocPane(key, html, emptyText, failFirst) {
+  const body = $('#tabBody');
+  if (D.docCache[key] != null) { body.innerHTML = `<article class="doc">${D.docCache[key]}</article>`; return; }
+  body.innerHTML = `<div class="state-block"><span class="spin"></span>文档加载中…</div>`;
+  setTimeout(() => {
+    if (D.tab !== key) return; // 页签已切走，丢弃过期渲染
+    if (failFirst) {
+      body.innerHTML = `<div class="state-block error">文档加载失败：演示模拟网络错误<br><br><button class="btn" data-retry type="button">重试</button></div>`;
+      body.querySelector('[data-retry]').addEventListener('click', () => { D.docCache[key] = null; delete D.docCache[key]; D.tcFailedOnce = true; loadDocPane(key, html, emptyText, false); });
+      return;
+    }
+    D.docCache[key] = html;
+    if (D.tab !== key) return;
+    body.innerHTML = `<article class="doc">${html}</article>`;
+  }, 650);
+}
+
+function renderBody() {
+  const it = cur();
+  const body = $('#tabBody');
+  switch (D.tab) {
+    case 'base': body.innerHTML = baseHtml(it); break;
+    case 'readme': loadDocPane('readme', DOC_README); break;
+    case 'design':
+      if (opt('simMiss').checked) { body.innerHTML = `<div class="state-block">尚未创建 design.md，开发阶段补充</div>`; }
+      else loadDocPane('design', `<h3>方案</h3><p>抽屉头部不变，头部下方为页签栏与内容区；各区块整体迁入对应页签。（示例）</p>`);
+      break;
+    case 'tc': loadDocPane('tc', DOC_TC, null, opt('simFail').checked && !D.tcFailedOnce); break;
+    case 'disc': body.innerHTML = discHtml(it); break;
+  }
+  // 统一绑定演示交互
+  for (const b of body.querySelectorAll('[data-demo]')) b.addEventListener('click', () => toast('演示操作：' + b.dataset.demo + '，不真实流转'));
+  for (const b of body.querySelectorAll('[data-nav]')) b.addEventListener('click', () => navItem(b.dataset.nav));
+  for (const el of body.querySelectorAll('[data-goto]')) el.addEventListener('click', () => { toast('演示：跳转 ' + el.dataset.goto + ' 详情，页签回到「基本信息」'); const i = ITEMS.findIndex((x) => x.id === el.dataset.goto); setItem(i >= 0 ? i : D.idx); });
+  for (const el of body.querySelectorAll('[data-disc]')) el.addEventListener('click', () => toast('演示：进入讨论模块并打开 ' + el.dataset.disc + ' 抽屉（真实行为见 REQ-20260908-022）'));
+}
+
+/* ---------------- 条目切换（页签重置回基本信息） ---------------- */
+function setItem(idx) { D.idx = idx; D.tab = 'base'; D.docCache = {}; D.tcFailedOnce = false; syncHead(); renderTabs(); renderBody(); }
+function navItem(dir) { setItem((D.idx + (dir === 'next' ? 1 : ITEMS.length - 1)) % ITEMS.length); }
+function syncHead() { const it = cur(); $('#itemId').textContent = it.id; $('#itemTitle').textContent = it.title; }
+
+/* ---------------- 初始化 ---------------- */
+function reset() {
+  opt('simFail').checked = false; opt('simMiss').checked = false; opt('simNoDisc').checked = false;
+  document.querySelector('input[name=kind][value=req]').checked = true;
+  setItem(0); toast('演示状态已重置');
+}
+for (const r of document.querySelectorAll('input[name=kind]')) r.addEventListener('change', () => {
+  const k = document.querySelector('input[name=kind]:checked').value;
+  const i = ITEMS.findIndex((x) => x.kind === k);
+  setItem(i >= 0 ? i : D.idx);
+});
+opt('simNoDisc').addEventListener('change', renderTabs);
+$('#btnReset').addEventListener('click', reset);
+$('#btnBack').addEventListener('click', () => toast('演示：返回列表（窄屏形态下关闭抽屉）'));
+$('#btnClose').addEventListener('click', () => toast('演示：关闭详情抽屉'));
+$('#itemId').addEventListener('click', () => toast('已复制编号（演示）：' + cur().id));
+setItem(0);
+</script>
+</body>
+</html>

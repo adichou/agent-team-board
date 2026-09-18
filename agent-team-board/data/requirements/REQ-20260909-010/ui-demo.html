@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260909-010 演示 · 需求完善后自动转入计划（默认手动）</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #d9dee4; --text: #1f2733; --muted: #6b7684;
+    --accent: #2563eb; --accent-soft: #e8effd; --ok: #16794c; --ok-soft: #e6f4ec;
+    --err: #b3261e; --err-soft: #fbeae9; --warn-soft: #fdf3e0; --warn: #8a5a00;
+    --disabled-bg: #eef0f3; --disabled-text: #9aa3ad;
+    --st-submitted: #98a2ad; --st-accepted: #8a5a00; --st-planned: #6d3fc4;
+  }
+  html[data-theme="dark"] {
+    --bg: #14181d; --panel: #1d232b; --line: #38414c; --text: #e6e9ed; --muted: #98a2ad;
+    --accent: #6f9bff; --accent-soft: #21324f; --ok: #57c78d; --ok-soft: #1d3529;
+    --err: #ef8a84; --err-soft: #44201e; --warn-soft: #3d3115; --warn: #d9a75a;
+    --disabled-bg: #232a33; --disabled-text: #5d6873;
+    --st-submitted: #5d6873; --st-accepted: #d9a75a; --st-planned: #a98bf0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+         font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  header h1 { font-size: 17px; margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
+  @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .demo-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 7px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  .notice { border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+  .notice.err { background: var(--err-soft); color: var(--err); }
+  .notice.warn { background: var(--warn-soft); color: var(--warn); }
+  .notice.ok { background: var(--ok-soft); color: var(--ok); }
+  h4 { margin: 14px 0 6px; font-size: 14.5px; }
+  h4:first-child { margin-top: 0; }
+  .ts-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table.ts-table { border-collapse: collapse; width: 100%; min-width: 520px; }
+  .ts-table th, .ts-table td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: middle; white-space: nowrap; }
+  .ts-table thead th { font-size: 12.5px; color: var(--muted); font-weight: 600; background: var(--bg); }
+  .ts-table tr:last-child td { border-bottom: none; }
+  .ts-agent { font-weight: 600; }
+  select { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+           border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  .autoplan-row { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 2px;
+                  border: 1px dashed var(--accent); border-radius: 8px; padding: 10px 12px; background: var(--accent-soft); }
+  .autoplan-row .chk { color: var(--text); font-weight: 600; }
+  .autoplan-row .hint { flex: 1; }
+  .dep-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px;
+          border: 1px solid var(--line); color: var(--muted); }
+  .chip.st { font-weight: 600; }
+  .chip.submitted { color: var(--st-submitted); border-color: var(--st-submitted); }
+  .chip.accepted { color: var(--st-accepted); border-color: var(--st-accepted); }
+  .chip.planned { color: var(--st-planned); border-color: var(--st-planned); }
+  .chip.refine { background: var(--bg); }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  .card .id { font-weight: 700; font-size: 13.5px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  pre.term { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+             font: 12px/1.75 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word;
+             max-height: 300px; overflow-y: auto; margin: 8px 0 0; }
+  pre.term .hl-ok { color: var(--ok); font-weight: 700; }
+  pre.term .hl-warn { color: var(--warn); font-weight: 700; }
+  pre.term .hl-info { background: var(--accent-soft); border-radius: 3px; padding: 1px 3px; }
+  .lane-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; margin: 6px 0 2px; }
+  .lane-step { border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; color: var(--muted); }
+  .lane-step.on { border-color: var(--accent); color: var(--accent); font-weight: 700; background: var(--accent-soft); }
+  .arrow { color: var(--muted); }
+  .skeleton { border-radius: 8px; background: linear-gradient(90deg, var(--disabled-bg) 25%, var(--bg) 50%, var(--disabled-bg) 75%);
+              background-size: 200% 100%; animation: sweep 1.1s infinite; height: 110px; }
+  @keyframes sweep { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .history { font-size: 12.5px; margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .history li { padding: 2px 0; color: var(--muted); }
+  .history li b { color: var(--text); }
+  #toast { position: fixed; right: 18px; bottom: 18px; max-width: 440px; border-radius: 8px; padding: 10px 14px;
+           font-size: 13px; box-shadow: 0 6px 22px rgba(0,0,0,.18); display: none; }
+  #toast.show { display: block; }
+  #toast.ok { background: var(--ok-soft); color: var(--ok); }
+  #toast.err { background: var(--err-soft); color: var(--err); }
+  footer.legend { margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>REQ-20260909-010 · 需求完善后自动转入计划（离线交互演示）</h1>
+    <span class="muted small">仅模拟界面，不写入项目看板数据</span>
+    <button class="btn" id="themeBtn" style="margin-left:auto">切换深浅色</button>
+  </header>
+
+  <div class="demo-bar">
+    <button class="btn" id="reloadBtn">重新加载设置</button>
+    <label class="chk"><input type="checkbox" id="failLoad"> 模拟下次加载失败</label>
+    <label class="chk"><input type="checkbox" id="failSave"> 模拟保存失败</label>
+    <button class="btn" id="resetBtn">重置演示条目</button>
+    <span class="muted small">（状态反馈演示：加载中 / 加载失败+重试 / 保存中 / 成功 / 失败）</span>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <h4>设置 → 批量任务（新增流转开关）</h4>
+        <div id="settingsArea"><div class="skeleton"></div><p class="muted small">设置加载中…</p></div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h4>口径速览</h4>
+        <ul class="history">
+          <li>· 默认<b>关闭（手动）</b>：完善 done 后条目保持已接受，需人工「移入计划」——现状零回归。</li>
+          <li>· 开启后：仅 <b>done 回执核验通过</b>（summary 达标、文档相对基线确有变更、条目仍为已接受）时自动 accepted → planned。</li>
+          <li>· fail / release / 终止出局 / 完善中<b>不触发</b>；条目已非已接受则不重复流转、不报错。</li>
+          <li>· 自动流转是<b>回执处理内部的系统行为</b>（history 可追溯），Agent 仍不得执行 atb status &lt;ID&gt; planned（state-guard 拦截不变）。</li>
+          <li>· 自动流转失败<b>不丢单</b>：回执仍成功、完善账本照记已完善，警示提示人工移入计划。</li>
+          <li>· 保存后仅对<b>后续</b> done 回执生效；进行中 / 已完成不追溯。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h4>完善回执模拟（atb refine done）</h4>
+        <div class="card" id="itemCard"></div>
+        <div class="lane-flow" id="laneFlow"></div>
+        <div class="row">
+          <button class="btn" id="nextBtn">① 模拟 refine next（领取）</button>
+          <button class="btn primary" id="doneBtn">② 模拟 refine done（回执）</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="planBtn">人工移入计划（对照）</button>
+          <span class="muted small">先人工移入计划再回执 → 演示条件流转（不重复流转）</span>
+        </div>
+        <p class="muted small">候选口径：批量开发候选 = 已计划且未认领——条目转 planned 后即进入候选。</p>
+        <ul class="history" id="histList"></ul>
+        <pre class="term" id="term">（等待操作…）</pre>
+      </div>
+    </div>
+  </div>
+
+  <footer class="legend panel">
+    <span class="muted small">范围提示：本需求不改完善流程纪律（全程保持 accepted 的过程口径不变，流转发生在 done 回执之后）、不改批量开发候选口径、不新增看板列；设置页保存沿用 /api/tasks/settings 与防重复提交 / toast 反馈。深浅色随系统并可手动切换。</span>
+  </footer>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- 主题（默认跟随系统，可手动切换） ----
+  var themeBtn = document.getElementById('themeBtn');
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+  themeBtn.addEventListener('click', function () {
+    var root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  // ---- 状态模型（模拟 <dataDir>/tasks/settings.json 新增流转开关 + 一条演示条目） ----
+  var settings = { autoPlanOnDone: false, saved: true };   // saved=false 表示草稿未保存
+  var item = { id: 'REQ-20260909-101', title: '演示条目（完善后流转）', status: 'accepted', refine: 'unrefined', runId: null };
+  var hist = [
+    { at: '09-09 12:00:01', text: '∅ → submitted', by: 'board' },
+    { at: '09-09 12:00:08', text: 'submitted → accepted', by: '用户（Status Board）' },
+  ];
+  var term = document.getElementById('term');
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function toast(msg, isErr) {
+    clearTimeout(toastTimer);
+    toastEl.textContent = msg;
+    toastEl.className = 'show ' + (isErr ? 'err' : 'ok');
+    toastTimer = setTimeout(function () { toastEl.className = ''; }, 3200);
+  }
+  function termLine(html) {
+    if (term.dataset.empty) { term.textContent = ''; term.dataset.empty = ''; }
+    term.insertAdjacentHTML('beforeend', html + '\n');
+    term.scrollTop = term.scrollHeight;
+  }
+  term.dataset.empty = '1';
+
+  var REFINE_LABEL = { unrefined: '未完善', refining: '完善中', refined: '已完善' };
+  var ST_LABEL = { submitted: '待接受', accepted: '已接受', planned: '已计划' };
+
+  function renderSettings() {
+    var area = document.getElementById('settingsArea');
+    area.innerHTML = ''
+      + '<p class="muted small">子代理模型默认跟随主调度会话；隐藏后该 Agent 不出现在对应任务的启动选项中（现状保留，本演示从简）。</p>'
+      + '<div class="ts-block" style="margin:12px 0"><div class="muted small">批量完善：</div>'
+      + '<div class="ts-table-wrap" style="margin-top:6px"><table class="ts-table">'
+      + '<thead><tr><th>执行 Agent</th><th>模型来源</th><th>是否隐藏</th></tr></thead>'
+      + '<tbody>'
+      + '<tr><td class="ts-agent">Codex</td><td>跟随主调度会话</td><td></td></tr>'
+      + '<tr><td class="ts-agent">Zcode</td><td>跟随主调度会话</td><td></td></tr>'
+      + '</tbody></table></div></div>'
+      + '<div class="autoplan-row">'
+      + '  <label class="chk"><input type="checkbox" id="autoPlanChk" ' + (settings.autoPlanOnDone ? 'checked' : '') + '> 完善完成后自动转入计划</label>'
+      + '  <div class="hint muted small">开启后：完善回执 done 核验通过且条目仍为已接受时，自动移入计划（planned）并进入批量开发候选；默认关闭 = 人工移入计划。仅对保存后的后续完善回执生效。</div>'
+      + '</div>'
+      + '<div class="dep-toolbar">'
+      + '  <button type="button" class="btn primary" id="tsSave">保存批量任务设置</button>'
+      + '  <span class="muted small" id="tsStatus" role="status">' + (settings.saved ? '已加载设置' : '有未保存的更改') + '</span>'
+      + '</div>';
+    area.querySelector('#autoPlanChk').addEventListener('change', function () {
+      settings.autoPlanOnDone = this.checked;
+      settings.saved = false;
+      area.querySelector('#tsStatus').textContent = '有未保存的更改';
+    });
+    area.querySelector('#tsSave').addEventListener('click', saveSettings);
+  }
+
+  function saveSettings() {
+    var btn = document.getElementById('tsSave');
+    var statusEl = document.getElementById('tsStatus');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+    statusEl.textContent = '正在保存…';
+    setTimeout(function () {
+      btn.disabled = false;
+      btn.textContent = '保存批量任务设置';
+      if (document.getElementById('failSave').checked) {
+        statusEl.textContent = '保存失败（草稿保留）';
+        toast('保存失败：模拟的服务端错误（非法值整体拒绝，不落半截配置）', true);
+        return;
+      }
+      settings.saved = true;
+      statusEl.textContent = '已保存设置';
+      toast('已保存批量任务设置：完善流转开关仅对后续完善回执生效');
+      termLine('<span class="hl-info">[设置] 已保存：完善完成后自动转入计划 = ' + (settings.autoPlanOnDone ? '开启' : '关闭（手动）') + '，仅对后续 done 回执生效</span>');
+    }, 800);
+  }
+
+  function loadSettings() {
+    var area = document.getElementById('settingsArea');
+    area.innerHTML = '<div class="skeleton"></div><p class="muted small">设置加载中…</p>';
+    setTimeout(function () {
+      if (document.getElementById('failLoad').checked) {
+        area.innerHTML = '<div class="notice err">任务设置加载失败：模拟的网络错误 '
+          + '<button type="button" class="btn" id="tsRetry">重试</button></div>';
+        area.querySelector('#tsRetry').addEventListener('click', function () {
+          document.getElementById('failLoad').checked = false;
+          loadSettings();
+        });
+        return;
+      }
+      renderSettings();
+    }, 900);
+  }
+
+  function renderHistory() {
+    var ul = document.getElementById('histList');
+    ul.innerHTML = hist.map(function (h) {
+      return '<li>' + h.at + '　<b>' + esc(h.text) + '</b>　by ' + esc(h.by) + '</li>';
+    }).join('');
+  }
+
+  function renderCard() {
+    document.getElementById('itemCard').innerHTML = ''
+      + '<div class="row"><span class="id">' + item.id + '</span>'
+      + ' <span class="chip st ' + item.status + '">' + ST_LABEL[item.status] + '</span>'
+      + ' <span class="chip refine">' + REFINE_LABEL[item.refine] + '</span></div>'
+      + '<div class="muted small">' + esc(item.title) + (item.runId ? ' · 运行 ' + item.runId : '') + '</div>';
+    var inCand = item.status === 'planned';
+    document.getElementById('laneFlow').innerHTML = ''
+      + '<span class="lane-step on">已接受</span><span class="arrow">→</span>'
+      + '<span class="lane-step' + (item.refine === 'refining' ? ' on' : '') + '">完善中</span><span class="arrow">→</span>'
+      + '<span class="lane-step' + (item.refine === 'refined' ? ' on' : '') + '">已完善</span><span class="arrow">→</span>'
+      + '<span class="lane-step' + (item.status === 'planned' ? ' on' : '') + '">已计划</span><span class="arrow">→</span>'
+      + '<span class="lane-step">批量开发候选</span>'
+      + '　<span class="' + (inCand ? 'hl' : 'muted') + ' small" style="' + (inCand ? 'color:var(--ok);font-weight:700' : '') + '">'
+      + (inCand ? '✓ 已进入批量开发候选（planned 且未认领）' : '未进入候选（需 planned）') + '</span>';
+  }
+
+  function resetDemo() {
+    item = { id: 'REQ-20260909-101', title: '演示条目（完善后流转）', status: 'accepted', refine: 'unrefined', runId: null };
+    hist = [
+      { at: '09-09 12:00:01', text: '∅ → submitted', by: 'board' },
+      { at: '09-09 12:00:08', text: 'submitted → accepted', by: '用户（Status Board）' },
+    ];
+    term.textContent = '（等待操作…）';
+    term.dataset.empty = '1';
+    renderCard();
+    renderHistory();
+    toast('已重置演示条目（accepted · 未完善）');
+  }
+
+  // ---- 交互 ----
+  document.getElementById('reloadBtn').addEventListener('click', loadSettings);
+  document.getElementById('resetBtn').addEventListener('click', resetDemo);
+
+  document.getElementById('nextBtn').addEventListener('click', function () {
+    if (item.status !== 'accepted') { toast('条目已离开已接受（当前 ' + ST_LABEL[item.status] + '）：不再需要本批完善，请先重置', true); return; }
+    if (item.refine === 'refining') { toast('已在完善中，请直接回执 done', true); return; }
+    if (item.refine === 'refined') { toast('本条目已完善过：请重置后再演示', true); return; }
+    item.refine = 'refining';
+    item.runId = 'run-20260909-13000' + Math.floor(Math.random() * 9 + 1);
+    renderCard();
+    termLine('✓ 已预留 ' + item.id + '（runId: ' + item.runId + '）——完善中（条目保持 accepted）');
+  });
+
+  document.getElementById('planBtn').addEventListener('click', function () {
+    if (item.status !== 'accepted') { toast('仅已接受条目可人工移入计划', true); return; }
+    item.status = 'planned';
+    hist.push({ at: nowStr(), text: 'accepted → planned（移入计划）', by: '用户（人工）' });
+    renderCard(); renderHistory();
+    termLine('<span class="hl-info">[人工] 已移入计划：' + item.id + '（accepted → planned，对照路径）</span>');
+  });
+
+  document.getElementById('doneBtn').addEventListener('click', function () {
+    if (item.refine !== 'refining') { toast('请先执行 ① 模拟 refine next 领取条目', true); return; }
+    // 完善核验（演示恒通过：summary 达标 + 文档相对冻结基线确有变更）
+    item.refine = 'refined';
+    var autoPlanned = false;
+    var note;
+    if (settings.autoPlanOnDone && settings.saved) {
+      if (item.status === 'accepted') {
+        item.status = 'planned';
+        autoPlanned = true;
+        note = '已自动转入计划';
+        hist.push({ at: nowStr(), text: 'accepted → planned（完善后自动转入计划）', by: '系统 · ' + item.runId });
+      } else {
+        note = '未自动转入计划：条目已离开已接受（当前 ' + ST_LABEL[item.status] + '），无需重复流转';
+      }
+    } else if (settings.autoPlanOnDone && !settings.saved) {
+      note = '未自动转入计划：开关已勾选但尚未保存（草稿不生效）';
+    } else {
+      note = '未开启自动转入计划（默认手动）：条目保持已接受，需人工移入计划';
+    }
+    renderCard(); renderHistory();
+    var receipt = { result: 'done', runId: item.runId, itemId: item.id, summary: '补全 README 描述/验收标准与 ui-demo.html', autoPlanned: autoPlanned, autoPlanNote: note };
+    termLine('✓ 已收尾完善运行 ' + item.runId + '（done）');
+    if (autoPlanned) {
+      termLine('<span class="hl-ok">✓ 已自动转入计划：' + item.id + '（accepted → planned），已进入批量开发候选</span>');
+    } else if (note.indexOf('已离开已接受') !== -1) {
+      termLine('<span class="hl-warn">⚠ ' + note + '——回执不受影响，完善账本已记已完善</span>');
+    } else {
+      termLine('= ' + note);
+    }
+    termLine('  回执：' + esc(JSON.stringify(receipt)));
+  });
+
+  function nowStr() {
+    var d = new Date();
+    function p(n) { return n < 10 ? '0' + n : n; }
+    return '09-09 ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  // 初始渲染
+  loadSettings();
+  renderCard();
+  renderHistory();
+})();
+</script>
+</body>
+</html>

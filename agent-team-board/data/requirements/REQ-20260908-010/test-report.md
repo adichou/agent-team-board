@@ -1,0 +1,14 @@
+# 测试报告 — REQ-20260908-010 批量实施应改名为批量开发，方案应优化为提供一个已计划的状态分类，按照已计划的单自动串行处理。
+
+- 时间：2026-09-08T06:00:13.292Z
+- 执行者：zcode-batch-014-1
+- 测试框架：node:test（run-all 聚合 + vm 沙箱 UI 测试 + 真 server/假 CLI 集成）
+- 覆盖率：87%
+
+## 总结
+
+新增 planned（已计划）状态：状态机 accepted↔planned/in-progress、claim 同等认领；state-guard 把 planned 纳入人工专属拦截（atb status 与 curl 两通道）；选单口径 accepted→planned 且最旧优先（纯创建时间序）；batch nextItem 实时吸收新置计划条目（不受 limit 截断、排除其他批次冻结项）；任务模块统一「开发启动」（zcode=批次+提示词待启动 / codex=自动派发开关，未选模式禁用）+ 已计划队列预览；详情页置计划/移出计划（免确认可撤销）、列表批量移出计划（逐条流转+成败分列）、筛选六档含已计划；「批量实施」全面更名「批量开发」（web/CLI/server/skill/dev.md/batch-execution.md 等）；存量未结束批次剩余 accepted 候选按出局收尾、需人工置计划（本项目在途 batch-20260908-014 同样适用）。新增 planned-state.test.mjs 15 用例，同步更新 scheduler/batch-*/impl-*/codex-*/dispatch-api 等 20+ 既有测试，npm test 85 文件全绿（另两次全量各出现 1 个不同偶发，单独复跑均通过）。
+
+## 明细
+
+（可粘贴命令输出、失败用例说明等）
