@@ -59,7 +59,8 @@ submitted ──人工──▶ accepted ──人工──▶ planned ──Age
    - `$ATB report <ID> --coverage N --summary "…"`——写 test-report.md 并标记「待人工确认完成」。
 4. 开发过程中可以并且应该**直接编辑条目下的 markdown**（README/design/test-cases），这是人的阅读界面，不经过状态机。实施要点写入 design.md 作为实施记录。
 5. **需求质量前置（REQ-20260903-001、REQ-20260908-015、REQ-20260908-021）**：涉及 UI 的需求必须在 README 描述里讲清界面布局、交互行为与状态反馈，并提供「界面展示」。两阶段口径：**创建**阶段（/req）README 内嵌 ASCII 线框 / 结构示意即可，人工接受前直观看到界面形态；**完善**阶段（refine 批次）界面展示须升级为条目目录内可交互 `ui-demo.html` 演示（README 链接并保留文字说明，浏览器直接打开可交互）——接受即视为设计认可，Agent 直接按描述实施，不再有方案对齐环节。
-6. **插件源码受认领锁保护（REQ-20260901-003）**：无有效认领锁时 Write/Edit/Bash 改动本插件源码（scripts/commands/skills/hooks/manifest 等）会被钩子拦截——改码前必须先在看板登记并 claim；锁有效期内方可修改，看板数据目录（docs/）markdown 不受限。
+6. **插件源码受认领锁保护（REQ-20260901-003）**：无有效认领锁时 Write/Edit/Bash 改动本插件源码（scripts/commands/skills/hooks/manifest 等）会被钩子拦截——改码前必须先在看板登记并 claim；锁有效期内方可修改，看板用户数据目录（`agent-team-board/data/`）markdown 不受限。
+7. **git 提交通道（REQ-20260911-009 / REQ-20260917-002）**：看板项目内 Agent 经 Bash 的 `git commit` 默认拦截，仅以下形态放行（须同时满足）——提交范围**仅含条目目录用户数据**（`agent-team-board/data/{requirements,bugs}/<条目ID>/` 内路径，含嵌套归属 `bugs/` 子目录）、命令**带 pathspec**（目录整体或文件均可，通配符/排除形态除外）、提交**主题含条目编号**（`doc: … REQ-YYYYMMDD-NNN`，讨论轮可含讨论单号）。无 pathspec 裸提交、`-a`/`--amend`/`-F` 等不可静态核验形态、范围含源码或 `runtime/` 应用数据、主题无单号仍拦；`atb report` 后的系统自动收口提交不经 Agent Bash（开发收口仍**不要手工 commit**）。开发收口的提交由系统在 `run receipt` 核验通过后自动完成。
 
 ## CLI 速查
 
@@ -178,4 +179,5 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 | `待人工决策（N 项未答）` | 条目正等人工作答（REQ-20260911-007）：请人工在 Status Board「待人工确认」补决策并复工后再实施 |
 | `非法流转：…` | 状态机单向；检查当前状态（`$ATB show <ID>`） |
 | 钩子拦截提示 | 你触碰了铁律 1/2，改用 `$ATB` 子命令或请用户人工操作 |
+| `流程外 git commit 已拦截` | 看板项目内 Agent 提交仅放行条目目录用户数据（`agent-team-board/data/{requirements,bugs}/<条目ID>/` 内）：命令带 pathspec + 提交主题含条目编号；无 pathspec、含源码/runtime 路径或主题无单号会被拦（REQ-20260917-002）。开发收口由 `run receipt` 后系统自动提交，不要手工 commit |
 | 终端嫌 `node <插件>/scripts/atb.mjs` 太长 | 提示用户执行一次 `$ATB cli install`，之后终端直接敲 `atb …`（REQ-20260908-007） |
