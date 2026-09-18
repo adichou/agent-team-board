@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260911-002 演示 — 隐藏营销 / 发布模块</title>
+<style>
+  /* 视觉令牌沿用看板 style.css 的浅 / 深双主题（prefers-color-scheme） */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --accepted: #2563eb; --submitted: #64748b; --accent: #4f46e5;
+    --accent-soft: rgba(79,70,229,.1); --warn: #dc2626;
+    --ok-bg: #ecfdf5; --ok-text: #047857; --info-bg: #eff6ff; --info-text: #1d4ed8;
+    --warn-bg: #fef2f2; --warn-text: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+      --accepted: #60a5fa; --submitted: #94a3b8; --accent: #818cf8;
+      --accent-soft: rgba(129,140,248,.16); --warn: #f87171;
+      --ok-bg: #052e1c; --ok-text: #6ee7b7; --info-bg: #0b1d3a; --info-text: #93c5fd;
+      --warn-bg: #3a1212; --warn-text: #fca5a5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ---------- 演示页骨架 ---------- */
+  .demo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px 16px; background: linear-gradient(135deg, #4f46e5, #0ea5e9); color: #fff; }
+  .demo-head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .demo-head .spacer { flex: 1; }
+  .seg { display: inline-flex; background: rgba(255,255,255,.16); border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: transparent; color: #fff; padding: 5px 14px; border-radius: 6px; }
+  .seg button.on { background: #fff; color: #1b2434; font-weight: 600; }
+  .demo-banner { padding: 6px 16px; background: var(--info-bg); color: var(--info-text); font-size: 12px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 12px 16px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ---------- 看板 mock ---------- */
+  .board { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .topbar .proj { border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    border-radius: 6px; padding: 4px 8px; }
+  .topbar .grow { flex: 1; }
+  .module-nav { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); align-items: center; }
+  .module-nav .view-tab { border: 0; background: transparent; color: var(--muted);
+    padding: 5px 12px; border-radius: 6px; transition: background-color .18s, color .18s; }
+  .module-nav .view-tab:hover { color: var(--text); background: rgba(127,140,170,.12); }
+  .module-nav .view-tab.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .module-nav .view-tab.gone { display: none; }  /* 目标态：隐藏入口不占位 */
+  .module-nav .nav-extra { margin-left: auto; }
+  .urlbar { display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid var(--border);
+    background: var(--bg); font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .urlbar .box { flex: 1; min-width: 220px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; background: var(--panel);
+    color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .urlbar select { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); padding: 2px 4px; font: inherit; }
+
+  .placeholder-view { padding: 40px 20px; text-align: center; color: var(--muted); }
+  .notice { border-radius: 8px; padding: 7px 10px; margin: 10px 0; font-size: 12px; border: 1px solid var(--border); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-text); border-color: transparent; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
+  .notice.info { background: var(--info-bg); color: var(--info-text); border-color: transparent; }
+
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 12px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+
+  /* ---------- 营销 / 发布模块 mock ---------- */
+  .mod-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px 0; flex-wrap: wrap; }
+  .mod-head h2 { margin: 0; font-size: 15px; }
+  .mod-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 8px 12px 0; }
+  .mod-tabs .tab { border: 0; background: transparent; color: var(--muted); padding: 7px 10px;
+    border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
+  .mod-tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .mod-pane { padding: 12px 14px; min-height: 220px; }
+  .chip { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--border); color: var(--muted); }
+  .chip.sel { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); }
+  .empty { text-align: center; padding: 28px 10px; }
+  .empty h3 { margin: 0 0 6px; font-size: 14px; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 14px; }
+  .kv label { display: block; font-size: 11px; color: var(--muted); }
+  .fieldbox { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-top: 8px;
+    background: var(--bg); color: var(--text); min-height: 56px; font-size: 12px; }
+  .run-list { display: flex; flex-direction: column; gap: 6px; }
+  .run-row { display: flex; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; cursor: pointer; background: var(--panel); font-size: 12px; flex-wrap: wrap; }
+  .run-row:hover { border-color: var(--accent); }
+  .run-row.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .run-row .grow { flex: 1; }
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+  .step { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .step.done { color: var(--ok-text); border-color: var(--ok-text); }
+  .step.now { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .log { font-family: ui-monospace, Menlo, monospace; font-size: 11px; border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 8px; background: var(--bg); max-height: 140px; overflow: auto; }
+  .log div { padding: 1px 0; }
+
+  /* ---------- 右侧说明面板 ---------- */
+  .side { display: flex; flex-direction: column; gap: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 10px 12px; }
+  .panel h3 { margin: 0 0 8px; font-size: 13px; }
+  .chg { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
+  .chg:last-child { border-bottom: 0; }
+  .chg .mark { flex: none; width: 16px; height: 16px; border-radius: 4px; display: inline-flex;
+    align-items: center; justify-content: center; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
+  .chg.hit .mark { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .netlog { font-family: ui-monospace, Menlo, monospace; font-size: 11px; max-height: 150px; overflow: auto;
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); }
+  .netlog .entry { display: flex; gap: 6px; }
+  .netlog .get { color: var(--ok-text); }
+  .netlog .post { color: var(--info-text); }
+  .netlog .entry.sup { color: var(--muted); text-decoration: line-through; }
+  .legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-left: 3px solid var(--ok-text); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; max-width: 80vw; }
+  .toast.on { opacity: 1; }
+  .toast.err { border-left-color: var(--warn); }
+</style>
+</head>
+<body>
+
+<header class="demo-head">
+  <h1>REQ-20260911-002 演示 — 隐藏营销 / 发布模块</h1>
+  <span class="spacer"></span>
+  <div class="seg" role="group" aria-label="场景切换">
+    <button type="button" id="sceneNow" class="on">隐藏前示意</button>
+    <button type="button" id="sceneTarget">目标（隐藏后）</button>
+  </div>
+</header>
+<div class="demo-banner">
+  静态交互演示（单文件、无外网依赖）：切换右上场景对比顶栏导航收敛——「营销 / 发布」两入口消失、导航收敛为「需求 / 任务 / 设置」，旧深链与刷新快照回落需求模块，且不再发出 /api/marketing/*、/api/release/* 请求。所有数据均为演示用假数据；副标题键移出等附带口径见 README 待确认项。
+</div>
+
+<div class="layout">
+  <!-- ============ 看板 mock ============ -->
+  <div class="board">
+    <div class="topbar">
+      <span class="muted small">项目</span>
+      <select class="proj" aria-label="项目选择（演示）"><option>agent-team-board</option></select>
+      <span class="muted small">顶栏其余操作区（演示省略）</span>
+      <span class="grow"></span>
+      <button type="button" class="btn primary">＋ 新建</button>
+    </div>
+    <nav class="module-nav" role="group" aria-label="模块导航">
+      <button type="button" class="view-tab active" data-view="status">需求</button>
+      <button type="button" class="view-tab" data-view="runs">任务</button>
+      <button type="button" class="view-tab nav-mkt" data-view="marketing">营销</button>
+      <button type="button" class="view-tab nav-rel" data-view="release">发布</button>
+      <button type="button" class="view-tab nav-extra" data-view="settings">设置</button>
+    </nav>
+    <div class="urlbar">
+      <span class="small" style="font-family:inherit">地址</span>
+      <span class="box" id="urlBox">http://127.0.0.1:8888/?project=agent-team-board</span>
+      <select id="oldView" aria-label="旧链接模块"><option value="marketing">营销</option><option value="release">发布</option></select>
+      <button type="button" class="btn small" id="btnOldLink" title="模拟从书签 / 刷新打开旧模块深链">模拟打开旧链接</button>
+      <button type="button" class="btn small" id="btnRefresh" title="模拟 Cmd+R：按当前视图写入会话快照后刷新恢复">模拟刷新（快照恢复）</button>
+    </div>
+
+    <!-- 需求 / 任务 / 设置（演示占位，两场景一致：本项不改动） -->
+    <section id="viewStatus" class="placeholder-view">
+      <p><strong>【演示占位】需求模块（#reqView）</strong></p>
+      <p class="small">列表 + 详情双栏工作区（本项不改动）。隐藏模块的深链 / 快照一律回落到这里。</p>
+      <p class="small" id="statusNote"></p>
+    </section>
+    <section id="viewRuns" class="placeholder-view" hidden>
+      <p><strong>【演示占位】任务模块（#runsView）</strong></p>
+      <p class="small">本项不改动任务与设置模块；两场景入口均保留、切换不受影响。</p>
+    </section>
+    <section id="viewSettings" class="placeholder-view" hidden>
+      <p><strong>【演示占位】设置模块（#settingsView）</strong></p>
+      <p class="small">本项不改动；「设置」保持导航行末辅助入口位置。</p>
+    </section>
+
+    <!-- 营销模块 mock（现状场景可达；目标态不可达） -->
+    <section id="viewMarketing" hidden>
+      <div class="mod-head">
+        <h2>营销</h2>
+        <span class="muted small">项目营销档案：定位、证据与定价版本</span>
+        <span class="grow" style="flex:1"></span>
+        <span class="chip" id="mktStage">探索</span>
+      </div>
+      <nav class="mod-tabs" role="tablist" aria-label="营销页签">
+        <button type="button" class="tab active" data-mkt-tab="overview">概览</button>
+        <button type="button" class="tab" data-mkt-tab="positioning">定位与定价</button>
+        <button type="button" class="tab" data-mkt-tab="channels">渠道与行动</button>
+        <button type="button" class="tab" data-mkt-tab="review">效果与复盘</button>
+      </nav>
+      <div class="mod-pane" id="mktPane"><!-- 由 JS 渲染 --></div>
+    </section>
+
+    <!-- 发布模块 mock（现状场景可达；目标态不可达） -->
+    <section id="viewRelease" hidden>
+      <div class="mod-head">
+        <h2>发布</h2>
+        <span class="muted small">构建与发布流程：预检 → 计划确认 → 执行 → 核验</span>
+        <span class="grow" style="flex:1"></span>
+        <label class="small" style="display:flex; gap:4px; align-items:center; margin:0">
+          <input type="checkbox" id="failNext"> 模拟下次拉取失败
+        </label>
+      </div>
+      <div class="mod-pane">
+        <div class="chips" style="margin-bottom:8px" id="relTargets">
+          <span class="chip sel" data-t="all">全部目标</span>
+          <span class="chip" data-t="git">Git 远端</span>
+          <span class="chip" data-t="apple">Apple App Store</span>
+          <span class="chip" data-t="electron">桌面应用（Electron）</span>
+          <span style="flex:1"></span>
+          <select id="relStatus" aria-label="状态筛选（演示）" style="border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);padding:2px 4px;font:inherit">
+            <option value="all">全部状态</option><option value="running">执行中</option><option value="done">已核验</option>
+          </select>
+        </div>
+        <div id="relList"><!-- 由 JS 渲染：加载 / 失败 / 列表 --></div>
+        <div id="relDetail" style="margin-top:10px"><!-- 选中运行详情 --></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 右侧说明面板 ============ -->
+  <div class="side">
+    <div class="panel">
+      <h3>改动点清单（目标场景生效项打勾）</h3>
+      <div id="chgList"></div>
+    </div>
+    <div class="panel">
+      <h3>网络请求记录（演示）</h3>
+      <p class="muted small" style="margin:0 0 6px">现状场景：进入营销 / 发布发出模块请求；目标场景：请求不再发出（删除线示意被抑制）。</p>
+      <div class="netlog" id="netlog"><div class="muted">（暂无请求）</div></div>
+      <div style="display:flex; gap:8px; margin-top:8px; align-items:center">
+        <span class="grow"></span>
+        <button type="button" class="btn small" id="btnClearLog">清空</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>状态反馈速览</h3>
+      <div class="legend">
+        <span>· 正常态：导航 / 模块页签切换即时生效</span>
+        <span>· 空态：营销档案未初始化引导（现状场景）</span>
+        <span>· 加载态：发布运行列表进入时加载占位</span>
+        <span>· 失败态：勾选模拟失败后拉取报错 + 重试</span>
+        <span>· 回落态：目标场景旧深链 / 刷新快照回落需求</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ========== 演示状态 ========== */
+const S = {
+  scene: 'now',            // now=隐藏前 | target=目标（隐藏后）
+  view: 'status',
+  mktTab: 'overview',
+  mktInit: false, mktBusy: false,
+  relLoaded: false, relSel: null, relFilter: 'all', relStatus: 'all',
+  failNext: false,
+  snapView: 'status',       // 模拟 sessionStorage 会话快照（snap.view）
+};
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+const HIDDEN = ['marketing', 'release'];  // 本项隐藏的两个模块
+const NAME = { marketing: '营销', release: '发布' };
+
+/* 改动点清单（目标场景点亮） */
+const CHANGES = [
+  '顶栏「营销」导航入口隐藏（index.html data-view="marketing"）',
+  '顶栏「发布」导航入口隐藏（index.html data-view="release"）',
+  '导航收敛为 需求 / 任务 / 设置，无空占位；设置保持行末辅助入口',
+  '旧深链 ?view=marketing / ?view=release 回落需求模块 + 一次性提示',
+  '刷新快照停在营销 / 发布时，隐藏生效后刷新回落需求（快照子状态保留）',
+  '隐藏生效后不再发出 /api/marketing/* 与 /api/release/*（轮询一并停止）',
+  'MODULE_SUB 营销 / 发布副标题键随入口移出（待确认 2，沿用 oncall / files 先例）',
+  '服务端路由、模块源码与数据零改动：隐藏 ≠ 删除（恢复点记录于 design.md）',
+];
+function renderChanges() {
+  const box = $('#chgList');
+  box.replaceChildren(...CHANGES.map((text) => {
+    const row = document.createElement('div');
+    row.className = 'chg' + (S.scene === 'target' ? ' hit' : '');
+    const mark = document.createElement('span');
+    mark.className = 'mark';
+    mark.textContent = S.scene === 'target' ? '✓' : '';
+    const span = document.createElement('span');
+    span.textContent = text;
+    row.append(mark, span);
+    return row;
+  }));
+}
+
+/* ========== toast ========== */
+let toastTimer;
+function toast(msg, err = false) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.toggle('err', err);
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 3200);
+}
+
+/* ========== 网络请求记录 ========== */
+function logNet(path, opts = {}) {
+  const box = $('#netlog');
+  if (box.querySelector('.muted')) box.replaceChildren();
+  const row = document.createElement('div');
+  row.className = 'entry' + (opts.suppressed ? ' sup' : '');
+  const t = document.createElement('span');
+  t.className = 'muted';
+  t.textContent = new Date().toTimeString().slice(0, 8);
+  const m = document.createElement('span');
+  m.className = opts.method === 'POST' ? 'post' : 'get';
+  m.textContent = opts.method || 'GET';
+  const p = document.createElement('span');
+  p.textContent = path + (opts.suppressed ? '（已隐藏：请求不再发出）' : '');
+  row.append(t, m, p);
+  box.prepend(row);
+  while (box.children.length > 14) box.lastChild.remove();
+}
+$('#btnClearLog').addEventListener('click', () =>
+  $('#netlog').replaceChildren(Object.assign(document.createElement('div'), { className: 'muted', textContent: '（暂无请求）' })));
+
+/* ========== 场景切换 ========== */
+function applyScene() {
+  const target = S.scene === 'target';
+  $('#sceneNow').classList.toggle('on', !target);
+  $('#sceneTarget').classList.toggle('on', target);
+  // 导航入口：目标态隐藏「营销」「发布」（不占位；需求 / 任务 / 设置不受影响）
+  $('.nav-mkt').classList.toggle('gone', target);
+  $('.nav-rel').classList.toggle('gone', target);
+  // 若当前停留在被隐藏视图 → 回落需求模块（对应 setView 兜底）
+  if (target && HIDDEN.includes(S.view)) {
+    setView(S.view, { viaFallback: true });
+  } else {
+    syncUrl();
+    syncTabs();
+  }
+  renderChanges();
+  renderNotes();
+}
+$('#sceneNow').addEventListener('click', () => { S.scene = 'now'; applyScene(); });
+$('#sceneTarget').addEventListener('click', () => { S.scene = 'target'; applyScene(); });
+
+/* ========== 视图切换（含深链 / 快照回落） ========== */
+function syncUrl() {
+  const view = S.view === 'status' ? '' : `&view=${S.view}`;
+  $('#urlBox').textContent = `http://127.0.0.1:8888/?project=agent-team-board${view}`;
+}
+function setView(v, opts = {}) {
+  const target = S.scene === 'target';
+  if (target && HIDDEN.includes(v)) {
+    // 回落：目标态不接受被隐藏视图（对应 setView 的 HIDDEN_VIEWS 兜底 + toast + URL 重写）
+    logNet(v === 'marketing' ? '/api/marketing/state' : '/api/release/state', { suppressed: true });
+    toast(`「${NAME[v]}」模块已暂时隐藏，已回到需求模块`, true);
+    v = 'status';
+  }
+  S.view = v;
+  const SEC = { status: 'viewStatus', runs: 'viewRuns', settings: 'viewSettings', marketing: 'viewMarketing', release: 'viewRelease' };
+  for (const b of $$('.module-nav .view-tab')) b.classList.toggle('active', b.dataset.view === v && !b.classList.contains('gone'));
+  for (const [view, id] of Object.entries(SEC)) $('#' + id).hidden = view !== v;
+  syncUrl();
+  renderNotes();
+  if (v === 'marketing') enterMarketing();
+  if (v === 'release') enterRelease();
+}
+$$('.module-nav .view-tab').forEach((b) => b.addEventListener('click', () => {
+  if (b.classList.contains('gone')) return;
+  setView(b.dataset.view);
+}));
+
+function renderNotes() {
+  const target = S.scene === 'target';
+  $('#statusNote').textContent = target
+    ? '目标场景：营销 / 发布入口已隐藏，正常操作无法到达；深链与刷新快照回落到这里。'
+    : '现状场景：可从顶栏「营销 / 发布」进入两模块。';
+}
+
+/* 旧深链模拟 */
+$('#btnOldLink').addEventListener('click', () => setView($('#oldView').value));
+
+/* 模拟刷新（快照恢复）：写入 snap.view → 重新走 boot 的「URL 深链优先，其次快照」 */
+$('#btnRefresh').addEventListener('click', () => {
+  S.snapView = S.view; // saveViewSnapshot：view 进快照（子状态一并保留，演示省略）
+  const v = S.snapView;
+  if (S.scene === 'target' && HIDDEN.includes(v)) {
+    toast('刷新：快照停留在已隐藏模块，回落需求模块（子状态保留，恢复隐藏后可续用）');
+  } else {
+    toast(`刷新：按快照恢复进入「${v === 'status' ? '需求' : NAME[v] || (v === 'runs' ? '任务' : '设置')}」模块（演示）`);
+  }
+  setView(v);
+});
+
+/* ========== 营销模块 mock ========== */
+function enterMarketing() {
+  // 对应 window.ATBMarketing.enter：幂等拉取（未初始化 → 空态引导）
+  logNet('/api/marketing/state');
+  renderMkt();
+}
+function renderMkt() {
+  for (const b of $$('[data-mkt-tab]')) {
+    const on = b.dataset.mktTab === S.mktTab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  const pane = $('#mktPane');
+  if (S.mktTab === 'overview') {
+    pane.innerHTML = !S.mktInit ? `
+      <div class="empty">
+        <h3>尚未建立营销档案</h3>
+        <p class="muted small">读取项目 README 形成草稿；数据落 docs/agent-team-board/marketing/（服务端能力保留，仅界面隐藏）。</p>
+        <button type="button" class="btn primary" id="mktInit">${S.mktBusy ? '正在建立…' : '初始化营销档案'}</button>
+      </div>
+      <p class="muted small" style="text-align:center">空态演示：未初始化引导（真实界面同款文案，仅现状场景可达）。</p>` : `
+      <div class="kv">
+        <div><label>阶段</label><span class="chip">探索</span></div>
+        <div><label>目标人群</label><span>小团队 Agent 协作（演示）</span></div>
+        <div><label>定价模式</label><span>免费（演示）</span></div>
+        <div><label>定价版本</label><span>v1（当前，演示）</span></div>
+      </div>
+      <div class="notice info">正常态演示：初始化完成后的概览（演示假数据）。目标场景本模块整体不可达。</div>`;
+    const btn = $('#mktInit');
+    if (btn) btn.addEventListener('click', () => {
+      if (S.mktBusy) return;
+      S.mktBusy = true; renderMkt();
+      logNet('/api/marketing/init', { method: 'POST' });
+      setTimeout(() => { S.mktBusy = false; S.mktInit = true; renderMkt(); toast('营销档案已初始化（演示假数据）'); }, 450);
+    });
+    return;
+  }
+  if (S.mktTab === 'positioning') {
+    pane.innerHTML = `
+      <label class="small muted">定位描述（演示）
+        <div class="fieldbox" contenteditable="true" style="margin-top:4px">为一句话价值主张（演示占位，可直接输入体验草稿）</div>
+      </label>
+      <div class="notice warn">草稿边界：未保存的表单草稿仅存内存、不进快照（既有口径）。隐藏生效后同会话内无法再访问草稿——是否在隐藏时提示，见 README 待确认 3。</div>
+      <button type="button" class="btn primary" id="mktSave">保存定位与证据</button>`;
+    $('#mktSave').addEventListener('click', () => { logNet('/api/marketing/profile', { method: 'POST' }); toast('已保存（演示）'); });
+    return;
+  }
+  pane.innerHTML = `
+    <div class="empty"><h3>【${S.mktTab === 'channels' ? '渠道与行动' : '效果与复盘'}】演示占位</h3>
+    <p class="muted small">真实界面为${S.mktTab === 'channels' ? '渠道 / 实验 / 行动看板' : '指标卡片、观察与复盘'}（本演示不展开）。</p></div>`;
+}
+$$('[data-mkt-tab]').forEach((b) => b.addEventListener('click', () => { S.mktTab = b.dataset.mktTab; renderMkt(); }));
+
+/* ========== 发布模块 mock ========== */
+const RUNS = [
+  { id: 'REL-20990911-001', target: 'git', targetLabel: 'Git 远端', status: '执行中', stage: 3, total: 7 },
+  { id: 'REL-20990910-004', target: 'electron', targetLabel: '桌面应用（Electron）', status: '已核验', stage: 7, total: 7 },
+];
+const STAGE_NAMES = ['预检', '计划确认', '执行', '核验'];
+function enterRelease() {
+  // 对应 window.ATBRelease.enter：首次进入加载态 + pollTimer 轮询（演示只拉一次）
+  logNet('/api/release/state');
+  S.relLoaded = false;
+  renderRelList();
+  setTimeout(() => {
+    if (S.view !== 'release') return; // 快速切走后不覆盖（既有口径：旧请求不得覆盖当前视图）
+    if (S.failNext) {
+      S.failNext = false;
+      $('#failNext').checked = false;
+      $('#relList').innerHTML = `
+        <div class="notice warn">运行列表加载失败：模拟网络错误（演示）。</div>
+        <button type="button" class="btn small" id="relRetry">重试</button>`;
+      $('#relRetry').addEventListener('click', () => enterRelease());
+      toast('发布模块加载失败：模拟网络错误（演示）', true);
+      return;
+    }
+    S.relLoaded = true;
+    renderRelList();
+  }, 480);
+}
+function renderRelList() {
+  const box = $('#relList');
+  if (!S.relLoaded) {
+    box.innerHTML = '<p class="muted">加载中…</p><p class="muted small">加载态演示：进入发布模块先呈现加载指示。</p>';
+    $('#relDetail').replaceChildren();
+    return;
+  }
+  const list = RUNS.filter((r) => (S.relFilter === 'all' || r.target === S.relFilter)
+    && (S.relStatus === 'all' || (S.relStatus === 'running' ? r.status === '执行中' : r.status === '已核验')));
+  if (!list.length) {
+    box.innerHTML = `<div class="empty"><h3>暂无匹配的发布运行</h3><p class="muted small">空态演示：筛选无结果（数据保留在 docs/agent-team-board/releases/runs）。</p></div>`;
+    $('#relDetail').replaceChildren();
+    return;
+  }
+  box.innerHTML = `<div class="run-list">${list.map((r) => `
+    <div class="run-row${S.relSel === r.id ? ' sel' : ''}" data-run="${r.id}" role="button" tabindex="0">
+      <span class="cid">${r.id}</span><span>${r.targetLabel}</span>
+      <span class="grow"></span>
+      <span class="chip${r.status === '执行中' ? ' sel' : ''}">${r.status}</span>
+      <span class="muted small">阶段 ${r.stage}/${r.total}</span>
+    </div>`).join('')}</div>`;
+  $$('#relList .run-row').forEach((row) => row.addEventListener('click', () => {
+    S.relSel = row.dataset.run; renderRelList(); renderRelDetail();
+  }));
+  if (S.relSel) renderRelDetail();
+}
+function renderRelDetail() {
+  const run = RUNS.find((r) => r.id === S.relSel);
+  const box = $('#relDetail');
+  if (!run) { box.replaceChildren(); return; }
+  box.innerHTML = `
+    <div class="mod-tabs" role="tablist" aria-label="运行详情页签">
+      <button type="button" class="tab active">概览</button>
+      <button type="button" class="tab">阶段日志</button>
+      <button type="button" class="tab">产物</button>
+      <button type="button" class="tab">操作历史</button>
+    </div>
+    <div class="mod-pane" style="min-height:0">
+      <div class="steps">${STAGE_NAMES.map((n, i) => `<span class="step ${i < 2 ? 'done' : i === 2 && run.status === '执行中' ? 'now' : ''}">${i + 1}. ${n}</span>`).join('')}</div>
+      <div class="log">
+        <div>[12:0${run.id.endsWith('1') ? '1' : '4'}:02] 预检通过（demo log）</div>
+        <div>[12:0${run.id.endsWith('1') ? '1' : '4'}:10] 计划已确认，开始执行</div>
+        ${run.status === '已核验' ? '<div>[12:20:40] 核验完成，产物已归档</div>' : '<div>[12:15:00] 执行中…（进入模块后轮询刷新，隐藏期间停止轮询）</div>'}
+      </div>
+      <p class="muted small" style="margin:6px 0 0">运行详情四页签（概览 / 阶段日志 / 产物 / 操作历史）演示节选；预检不推送、启动须计划确认的既有口径不变。</p>
+    </div>`;
+}
+$('#relTargets').addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-t]');
+  if (!chip) return;
+  S.relFilter = chip.dataset.t;
+  $$('#relTargets .chip').forEach((c) => c.classList.toggle('sel', c === chip));
+  renderRelList();
+});
+$('#relStatus').addEventListener('change', (e) => { S.relStatus = e.target.value; renderRelList(); });
+$('#failNext').addEventListener('change', (e) => { S.failNext = e.target.checked; });
+
+/* ========== 初始化 ========== */
+renderChanges();
+renderNotes();
+renderMkt();
+syncUrl();
+</script>
+</body>
+</html>

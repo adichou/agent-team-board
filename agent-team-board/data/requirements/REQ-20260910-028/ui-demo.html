@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>新建讨论 · 截图上传演示（REQ-20260910-028）</title>
+<style>
+:root{--bg:#eef2f8;--card:#fff;--ink:#213047;--muted:#61718a;--line:#b7c3d6;--btn:#eaf0ff;--btnink:#203d77;--err:#b3261e;--errbg:#fbeae9;--ok:#1c7c43;--okbg:#e8f6ee}
+@media (prefers-color-scheme:dark){:root{--bg:#141a24;--card:#1e2632;--ink:#e7edf6;--muted:#9aa8bd;--line:#3a4759;--btn:#28374e;--btnink:#bcd0f5;--err:#ff8f88;--errbg:#3a2422;--ok:#7fd8a1;--okbg:#1f3329}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:760px;margin:26px auto;padding:22px 26px;background:var(--card);border-radius:14px;border:1px solid var(--line)}
+h1{font-size:21px;margin:0 0 4px}h3{margin:18px 0 8px;font-size:16px}
+p{margin:8px 0}.muted{color:var(--muted)}.small{font-size:13px}
+label.field{display:block;margin:14px 0}
+input,textarea,select,button{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink)}
+input,textarea{width:100%}textarea{resize:vertical;min-height:74px}
+button{cursor:pointer;background:var(--btn);color:var(--btnink)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+section.shotrow{border-top:1px dashed var(--line);padding-top:12px}
+.shot-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.shot-list{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.shot-item{width:180px;padding:8px;border:1px solid var(--line);border-radius:9px;text-align:center}
+.shot-item img{width:100%;height:86px;object-fit:cover;border-radius:6px;cursor:zoom-in;display:block}
+.shot-item .meta{display:block;font-size:12px;color:var(--muted);margin:6px 0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shot-item button{font-size:13px;padding:4px 8px;margin:2px}
+.shot-empty{color:var(--muted);font-size:13px}
+.shot-error{color:var(--err);background:var(--errbg);border-radius:6px;padding:6px 10px;font-size:13px}
+.hidden{display:none!important}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:86vw;padding:10px 18px;border-radius:9px;background:var(--ink);color:var(--bg);font-size:14px;box-shadow:0 6px 24px #0005;z-index:60}
+#toast.err{background:var(--err);color:#fff}
+#toast.ok{background:var(--ok);color:#fff}
+.overlay{position:fixed;inset:0;background:#0d152ad9;z-index:50;display:flex;flex-direction:column;align-items:center;padding:20px}
+.overlay header{width:100%;max-width:980px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#fff}
+.overlay strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.overlay .body{margin-top:16px;max-width:96vw;text-align:center}
+.overlay .body img{max-width:94vw;max-height:72vh;object-fit:contain;border-radius:8px;background:#fff}
+.pv-msg{color:#fff;margin:26px 0 10px}
+.pv-msg button{margin:6px}
+.detail{border-top:1px solid var(--line);margin-top:16px;padding-top:6px}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--btn);color:var(--btnink);font-size:13px;margin-right:6px}
+.chip.green{background:var(--okbg);color:var(--ok)}
+.md{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+nav.states{display:flex;gap:8px;flex-wrap:wrap}
+footer.foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+</style>
+<main>
+  <h1>新建条目 · 讨论截图上传（REQ-20260910-028 演示）</h1>
+  <p class="muted small">交互示意，示例截图为虚构演示数据；单文件内联 CSS/JS，无网络与构建依赖。「现状」对应代码当前行为（讨论隐藏截图区），「目标」为本需求上线后的行为。</p>
+
+  <nav class="states" id="modes">
+    <button type="button" data-mode="now">现状：讨论无截图区</button>
+    <button type="button" data-mode="goal" class="on">目标：讨论支持截图</button>
+  </nav>
+
+  <form id="newForm">
+    <label class="field">类型
+      <select id="fType">
+        <option value="req">需求（REQ）</option>
+        <option value="bug">Bug（BUG）</option>
+        <option value="ask" selected>讨论（ASK）</option>
+      </select>
+    </label>
+    <label class="field">标题
+      <input id="fTitle" maxlength="120" placeholder="一句话说清这条需求 / Bug / 讨论" value="看板列表滚动卡顿的排查思路">
+    </label>
+    <label class="field"><span id="fDescLabel">背景（可选）</span>
+      <textarea id="fDesc" rows="3" placeholder="填写讨论背景，不需要关联需求；留空也可创建">滚动到 200 行以后偶发掉帧，想讨论排查方向。</textarea>
+    </label>
+
+    <section class="shotrow" id="fShotRow">
+      <div class="shot-head">
+        <span>截图（可选）</span>
+        <span class="muted small" id="fShotCount">0 / 9</span>
+        <button type="button" id="fShotPick">上传图片</button>
+        <span class="muted small">或直接 ⌘V 粘贴</span>
+        <span class="muted small">双击查看大图</span>
+      </div>
+      <input type="file" id="fShotFile" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon,image/bmp,image/avif" multiple hidden>
+      <div id="fShotList" class="shot-list hidden"></div>
+      <p id="fShotEmpty" class="shot-empty">粘贴或选择图片，创建后保存到该讨论目录（png / jpg / webp 等，单张 ≤ 8MB）</p>
+      <p id="fShotError" class="shot-error hidden" role="alert"></p>
+      <div class="btnrow">
+        <button type="button" id="demoPaste">模拟粘贴一张</button>
+        <button type="button" id="demoBig">校验演示：超大图（9MB）</button>
+        <button type="button" id="demoBadType">校验演示：非法格式</button>
+        <button type="button" id="demoFill">补满 9 张（上限演示）</button>
+      </div>
+      <p class="muted small">预览演示状态：
+        <select id="pvState"><option value="normal">正常</option><option value="loading">加载中</option><option value="error">失败（可重试）</option></select>
+      </p>
+    </section>
+
+    <hr>
+    <p class="muted small">提交结果演示：
+      <select id="outcome"><option value="ok">创建成功</option><option value="fail">创建失败（网络）</option><option value="old">服务版本过旧（拦截）</option></select>
+    </p>
+    <footer class="foot">
+      <button type="button" id="modalCancel">取消</button>
+      <button type="button" id="fSubmitAccept">创建并接受</button>
+      <button type="submit" id="fSubmit" class="primary">创建</button>
+    </footer>
+  </form>
+
+  <section id="detail" class="detail hidden">
+    <h3><span class="chip green">讨论中</span><span id="dId">ASK-20260910-099</span> <span id="dTitle" class="muted"></span></h3>
+    <h4 style="margin:14px 0 6px">讨论背景</h4>
+    <div class="md" id="dBg"></div>
+    <h4 style="margin:14px 0 6px">截图（<span id="dAttN">0</span> 张，点击放大）</h4>
+    <div class="shot-list" id="dAtts"></div>
+    <p class="muted small">创建成功后进入讨论模块定位新讨论并展示启动提示词；截图随讨论保存，详情内可查看。</p>
+    <div class="btnrow"><button type="button" id="backForm">返回表单再演示一次</button></div>
+  </section>
+</main>
+
+<div id="shotPreview" class="overlay hidden" role="dialog" aria-modal="true" aria-label="截图大图预览">
+  <header><strong id="pvName"></strong><button type="button" id="pvClose">✕ 关闭</button></header>
+  <div class="body" id="pvBody" aria-live="polite"></div>
+</div>
+<div id="lightbox" class="overlay hidden" role="dialog" aria-modal="true" aria-label="附件大图">
+  <header><strong id="lbName"></strong><button type="button" id="lbClose">✕ 关闭</button></header>
+  <div class="body"><img id="lbImg" alt="放大查看"></div>
+</div>
+<div id="toast" class="hidden" role="status"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const MAX = 9, MB = 1024 * 1024;
+const EXT = ['png','jpg','jpeg','gif','webp','svg','ico','bmp','avif'];
+let mode = 'goal', shots = [], busy = false, seq = 0;
+
+// 内嵌示例图（SVG dataURL，无外网依赖）
+function sample(i){
+  const bg = ['#e3f3ff','#ede9ff','#e6f9ec','#fff2e3'][i % 4];
+  const tag = ['列表掉帧复现','控制台输出','对比环境','时间线'][i % 4];
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540"><rect width="960" height="540" fill="${bg}"/><rect x="40" y="36" width="880" height="62" rx="10" fill="#233c65"/><text x="68" y="77" fill="#fff" font-size="26">Demo screenshot ${i+1}</text><rect x="40" y="126" width="300" height="376" rx="12" fill="#fff"/><rect x="368" y="126" width="552" height="180" rx="12" fill="#fff"/><text x="398" y="222" fill="#233c65" font-size="30">${tag}</text><rect x="368" y="326" width="552" height="176" rx="12" fill="#fff" opacity=".7"/></svg>`);
+}
+const SAMPLE_NAME = ['list-drop.png','console-log.png','env-compare.jpg','timeline.webp'];
+
+function toast(msg, cls){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = cls || '';
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.add('hidden'), 3600);
+}
+function shotError(msg){
+  const el = $('#fShotError');
+  el.textContent = msg || '';
+  el.classList.toggle('hidden', !msg);
+}
+function sizeText(n){ return n >= MB ? (n/MB).toFixed(1)+'MB' : Math.max(1, Math.round(n/1024))+'KB'; }
+function extOf(name){ const m = /\.([a-z0-9]+)$/i.exec(String(name||'').trim()); return m ? m[1].toLowerCase() : ''; }
+function validate(name, size){
+  if (!EXT.includes(extOf(name))) return `仅支持 ${EXT.join(' / ')}：${name}`;
+  if (size > 8 * MB) return `截图 ${(size/MB).toFixed(1)}MB 超过 8MB 上限（${name}）`;
+  if (shots.length >= MAX) return `截图最多 ${MAX} 张，已达上限`;
+  return null;
+}
+function addShot(name, size, dataUrl){
+  if (busy) return false;
+  const err = validate(name, size);
+  if (err) { shotError(err); return false; }
+  shots.push({ name, size, dataUrl });
+  shotError('');
+  renderShots();
+  return true;
+}
+
+function renderShots(){
+  $('#fShotCount').textContent = `${shots.length} / ${MAX}`;
+  $('#fShotEmpty').classList.toggle('hidden', shots.length > 0);
+  const list = $('#fShotList');
+  list.classList.toggle('hidden', shots.length === 0);
+  list.replaceChildren();
+  shots.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'shot-item';
+    card.title = `${s.name} · 双击查看大图`;
+    const img = document.createElement('img');
+    img.src = s.dataUrl; img.alt = s.name;
+    const meta = document.createElement('span');
+    meta.className = 'meta'; meta.textContent = `${s.name} · ${sizeText(s.size)}`;
+    const view = document.createElement('button');
+    view.type = 'button'; view.textContent = '查看大图';
+    view.onclick = () => pvShow(i, view);
+    img.ondblclick = () => pvShow(i, view);
+    const x = document.createElement('button');
+    x.type = 'button'; x.textContent = '✕ 移除'; x.disabled = busy;
+    x.setAttribute('aria-label', `移除 ${s.name}`);
+    x.onclick = () => { shots.splice(i, 1); renderShots(); };
+    card.append(img, meta, view, x);
+    list.append(card);
+  });
+  $('#fShotPick').disabled = busy || shots.length >= MAX; // 达上限禁用入口
+  ['#demoPaste','#demoBig','#demoBadType','#demoFill'].forEach((id) => { $(id).disabled = busy; });
+}
+
+// 类型切换：截图区可见性（现状=讨论隐藏；目标=三类都显示）+ 字段文案 + 创建并接受
+function syncFields(){
+  const t = $('#fType').value;
+  const showShot = mode === 'goal' || t !== 'ask';
+  $('#fShotRow').classList.toggle('hidden', !showShot);
+  if (mode === 'now' && t === 'ask') shotError('');
+  $('#fDescLabel').textContent = t === 'ask' ? '背景（可选）' : '描述';
+  $('#fDesc').placeholder = t === 'ask' ? '填写讨论背景，不需要关联需求；留空也可创建' : '验收标准、现象与复现步骤等（可留空，后续补充）';
+  $('#fSubmitAccept').classList.toggle('hidden', t === 'ask'); // 讨论无接受概念
+}
+
+// 大图预览：正常 / 加载中 / 失败三态（沿 REQ-20260910-017 口径示意）
+function pvShow(i, opener){
+  const s = shots[i];
+  if (!s) return;
+  $('#pvName').textContent = s.name;
+  const body = $('#pvBody');
+  body.replaceChildren();
+  const state = $('#pvState').value;
+  $('#shotPreview').classList.remove('hidden');
+  $('#pvClose').focus();
+  const drawNormal = () => {
+    const img = document.createElement('img');
+    img.src = s.dataUrl; img.alt = `放大查看 ${s.name}`;
+    body.replaceChildren(img);
+  };
+  if (state === 'loading') {
+    const p = document.createElement('p');
+    p.className = 'pv-msg'; p.textContent = '图片加载中…';
+    const done = document.createElement('button');
+    done.type = 'button'; done.textContent = '模拟解码完成';
+    done.onclick = drawNormal;
+    body.append(p, done);
+  } else if (state === 'error') {
+    const p = document.createElement('p');
+    p.className = 'pv-msg'; p.textContent = `图片无法加载：${s.name}`;
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.textContent = '重试';
+    retry.onclick = () => { $('#pvState').value = 'normal'; pvShow(i); };
+    const close = document.createElement('button');
+    close.type = 'button'; close.textContent = '关闭';
+    close.onclick = pvClose;
+    body.append(p, retry, close);
+  } else drawNormal();
+}
+function pvClose(){
+  $('#shotPreview').classList.add('hidden');
+  $('#pvBody').replaceChildren();
+}
+
+// 提交流程：创建中禁用 → 成功（进详情）/ 失败（保留可重试）/ 旧服务拦截（不丢截图）
+$('#newForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const t = $('#fType').value;
+  if (!$('#fTitle').value.trim()) { toast('标题不能为空', 'err'); return; }
+  if (t === 'ask' && mode === 'now' && shots.length === 0) { /* 现状口径：讨论本就不带截图，直接创建 */ }
+  busy = true;
+  $('#fSubmit').disabled = true; $('#fSubmit').textContent = '创建中…';
+  $('#fSubmitAccept').disabled = true;
+  $('#modalCancel').disabled = true; $('#fType').disabled = true;
+  renderShots();
+  toast('创建中…');
+  setTimeout(() => {
+    const out = $('#outcome').value;
+    busy = false;
+    $('#fSubmit').disabled = false; $('#fSubmit').textContent = '创建';
+    $('#fSubmitAccept').disabled = false;
+    $('#modalCancel').disabled = false; $('#fType').disabled = false;
+    renderShots();
+    if (out === 'fail') {
+      toast('创建失败：网络异常，表单与截图已保留，可重试', 'err'); // 失败保留全部内容
+    } else if (out === 'old' && shots.length) {
+      toast('创建失败：看板服务版本过旧，提交会丢弃截图。请在终端运行 atb serve 自动重启过旧服务，然后重试', 'err'); // BUG-20260909-010 口径
+    } else if (out === 'old') {
+      toast('创建失败：网络异常，表单与截图已保留，可重试', 'err');
+    } else {
+      showDetail();
+    }
+  }, 900);
+});
+
+// 创建成功 → 讨论详情示意（背景 + 截图可放大）
+function showDetail(){
+  $('#newForm').classList.add('hidden');
+  $('#modes').classList.add('hidden');
+  const d = $('#detail');
+  d.classList.remove('hidden');
+  const t = $('#fType').value;
+  const id = t === 'req' ? 'REQ-20260910-099' : t === 'bug' ? 'BUG-20260910-099' : 'ASK-20260910-099';
+  const st = t === 'ask' ? '讨论中' : '已接受';
+  d.querySelector('.chip.green').textContent = st;
+  $('#dId').textContent = id;
+  $('#dTitle').textContent = $('#fTitle').value.trim();
+  $('#dBg').textContent = $('#fDesc').value.trim() || '（未填写背景）';
+  const atts = $('#dAtts');
+  atts.replaceChildren();
+  $('#dAttN').textContent = shots.length;
+  shots.forEach((s) => {
+    const fig = document.createElement('div');
+    fig.className = 'shot-item';
+    const img = document.createElement('img');
+    img.src = s.dataUrl; img.alt = `附件 ${s.name}`; img.style.cursor = 'zoom-in';
+    img.onclick = () => { $('#lbName').textContent = s.name; $('#lbImg').src = s.dataUrl; $('#lightbox').classList.remove('hidden'); $('#lbClose').focus(); };
+    const meta = document.createElement('span');
+    meta.className = 'meta'; meta.textContent = `${s.name}（点击放大）`;
+    fig.append(img, meta);
+    atts.append(fig);
+  });
+  toast(`✓ 已创建 ${id}（${st}${shots.length ? '，含 ' + shots.length + ' 张截图' : '，无截图'}）`, 'ok');
+}
+$('#backForm').onclick = () => {
+  $('#detail').classList.add('hidden');
+  $('#newForm').classList.remove('hidden');
+  $('#modes').classList.remove('hidden');
+  shots = []; renderShots(); shotError('');
+};
+
+// 现状 / 目标对照
+$('#modes').onclick = (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b) return;
+  mode = b.dataset.mode;
+  for (const x of $('#modes').querySelectorAll('button')) x.style.outline = x === b ? '2px solid #4a7dff' : 'none';
+  syncFields();
+  toast(mode === 'goal' ? '目标形态：讨论类型也显示截图区（本需求）' : '现状形态：讨论类型隐藏截图区（REQ-20260909-004 旧口径）');
+};
+$('#modes').querySelector('button[data-mode=goal]').style.outline = '2px solid #4a7dff';
+
+// 上传 / 粘贴 / 校验演示
+$('#fShotPick').onclick = () => $('#fShotFile').click();
+$('#fShotFile').onchange = (e) => {
+  for (const f of e.target.files || []) {
+    const r = new FileReader();
+    r.onload = () => addShot(f.name, f.size, String(r.result || ''));
+    r.readAsDataURL(f);
+  }
+  e.target.value = '';
+};
+$('#demoPaste').onclick = () => {
+  const i = seq++;
+  addShot(`paste-${Date.now()}.png`, 240 * 1024, sample(i)); // 粘贴自动命名示意
+};
+window.addEventListener('paste', (e) => { // 真实粘贴：弹窗打开期间剪贴板图片同样可入列
+  const items = e.clipboardData?.items || [];
+  for (const it of items) {
+    if (it.type.startsWith('image/')) {
+      const f = it.getAsFile();
+      if (f) { const r = new FileReader(); r.onload = () => addShot(`paste-${Date.now()}.png`, f.size, String(r.result)); r.readAsDataURL(f); }
+    }
+  }
+});
+$('#demoBig').onclick = () => {
+  const err = validate('big-shot.png', 9 * MB);
+  shotError(err || '（未触发，先移除几张）');
+};
+$('#demoBadType').onclick = () => shotError(validate('notes.txt', 1024) || '（未触发，先移除几张）');
+$('#demoFill').onclick = () => {
+  while (shots.length < MAX) { const i = seq++; shots.push({ name: SAMPLE_NAME[i % 4].replace(/(\.\w+)$/, `-${i+1}$1`), size: 300 * 1024 + i * 1024, dataUrl: sample(i) }); }
+  renderShots();
+  toast(`已补满 ${MAX} 张：上传入口禁用，继续添加将提示上限`, 'ok');
+};
+
+// 预览 / 灯箱关闭：按钮、Esc、遮罩空白处（点图片不关）
+function bindOverlay(id, closer){
+  const ov = $(id);
+  ov.addEventListener('click', (e) => { if (e.target === ov) closer(); });
+}
+$('#pvClose').onclick = pvClose;
+bindOverlay('#shotPreview', pvClose);
+$('#lbClose').onclick = () => $('#lightbox').classList.add('hidden');
+bindOverlay('#lightbox', () => $('#lightbox').classList.add('hidden'));
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#lightbox').classList.contains('hidden')) { e.preventDefault(); e.stopPropagation(); $('#lightbox').classList.add('hidden'); return; }
+  if (!$('#shotPreview').classList.contains('hidden')) { e.preventDefault(); e.stopPropagation(); pvClose(); }
+});
+
+$('#fType').onchange = syncFields;
+$('#modalCancel').onclick = () => toast('已取消：本次填写与截图不保存（演示）');
+$('#fSubmitAccept').onclick = () => $('#newForm').requestSubmit(); // 仅需求 / Bug 可见：一步创建并接受
+
+// 初始：目标形态 + 讨论类型 + 两张示例截图
+syncFields();
+addShot(SAMPLE_NAME[0], 420 * 1024, sample(0));
+addShot(SAMPLE_NAME[1], 380 * 1024, sample(1));
+shotError('');
+</script>
+</html>

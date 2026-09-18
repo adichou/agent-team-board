@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260911-009 演示 — 设置页「Git 工作流」+ 到待测试自动 commit</title>
+<!--
+  单文件可交互演示（无外网依赖 / 无构建步骤，浏览器直接打开）。
+  演示内容：
+  1. 需求 2 —— Status Board 设置页新增「Git 工作流」分区：状态展示 + 「初始化 dev 分支」按钮
+     + 确认 → 执行中 → 成功/失败反馈；场景切换：正常（main·无 dev）/ 已在 dev / 非 git 仓库 /
+     执行失败（可重试）。
+  2. 需求 3/4 —— 批量开发批次中条目上报进入待测试后自动 commit（业务/测试/文档分组、消息含单号），
+     条目 ↔ commit 双向索引；三态：提交成功 / 提交失败·重试 / 幂等跳过（git 历史已含单号）。
+  深浅色适配可选实现（右上角切换）。全部数据为内存模拟，不访问真实服务、不执行任何 Git 操作。
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #e5e7eb; --muted: #6b7280;
+    --text: #1f2937; --primary: #4f46e5; --primary-weak: rgba(79, 70, 229, .1);
+    --ok: #047857; --ok-bg: #ecfdf5; --err: #b91c1c; --err-bg: #fef2f2;
+    --warn: #92400e; --warn-bg: #fffbeb; --info: #1d4ed8; --info-bg: #eff6ff;
+    --skeleton: #e5e7eb; --skeleton-hi: #f3f4f6;
+  }
+  html[data-theme="dark"] {
+    --bg: #111827; --panel: #1f2937; --border: #374151; --muted: #9ca3af;
+    --text: #e5e7eb; --primary: #818cf8; --primary-weak: rgba(129, 140, 248, .16);
+    --ok: #34d399; --ok-bg: rgba(6, 78, 59, .35); --err: #f87171; --err-bg: rgba(127, 29, 29, .35);
+    --warn: #fbbf24; --warn-bg: rgba(120, 53, 15, .35); --info: #93c5fd; --info-bg: rgba(30, 58, 138, .35);
+    --skeleton: #374151; --skeleton-hi: #4b5563;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13.5px/1.65 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  }
+  /* ---------- 演示工具栏 ---------- */
+  .demo-bar {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px 18px;
+    align-items: center; padding: 10px 16px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-bar .brand { font-weight: 600; }
+  .demo-bar .brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text); padding: 5px 12px;
+    cursor: pointer; font-size: 12.5px;
+  }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .demo-bar label.switch { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .demo-bar .note { width: 100%; color: var(--muted); font-size: 12px; margin: 0; }
+  /* ---------- 页面骨架（模拟看板设置页） ---------- */
+  .board { display: flex; min-height: calc(100vh - 108px); }
+  .side {
+    width: 160px; flex: none; border-right: 1px solid var(--border); background: var(--panel);
+    padding: 14px 10px; font-size: 13px;
+  }
+  .side .nav { display: block; padding: 7px 10px; border-radius: 7px; color: var(--muted); text-decoration: none; }
+  .side .nav.active { background: var(--primary-weak); color: var(--primary); font-weight: 600; }
+  .main { flex: 1; padding: 18px 22px 40px; max-width: 900px; }
+  h3.page-title { margin: 0 0 4px; font-size: 16px; }
+  p.page-sub { margin: 0 0 16px; color: var(--muted); font-size: 12.5px; }
+  /* ---------- 设置分区（对齐看板 cx-config 形态） ---------- */
+  section.cx-config {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 14px;
+  }
+  section.cx-config h4 { margin: 0 0 4px; font-size: 14px; }
+  section.cx-config p.muted { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+  .ts-block { border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px; }
+  .field-inline { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; }
+  .dep-toolbar { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .status-line { color: var(--muted); font-size: 12.5px; }
+  .status-line.ok { color: var(--ok); }
+  .status-line.err { color: var(--err); }
+  /* Git 状态行 */
+  .git-facts { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; margin: 8px 0 2px; }
+  .git-facts .fact b { font-weight: 600; }
+  .git-facts .fact .chip {
+    display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--muted); margin-left: 4px;
+  }
+  .git-facts .chip.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+  .git-facts .chip.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
+  .skeleton { display: inline-block; height: 14px; width: 64px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--skeleton) 25%, var(--skeleton-hi) 50%, var(--skeleton) 75%);
+    background-size: 200% 100%; animation: shimmer 1.1s infinite; vertical-align: middle; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .spin {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--primary);
+    animation: rot .7s linear infinite; vertical-align: -2px; margin-right: 5px;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  /* 确认条（模拟确认弹窗内容，内联展示便于演示） */
+  .confirm-card {
+    margin-top: 10px; border: 1px solid var(--border); border-left: 3px solid var(--primary);
+    background: var(--info-bg); border-radius: 8px; padding: 10px 12px; font-size: 12.5px;
+  }
+  .confirm-card p { margin: 0 0 8px; }
+  .notice { border-radius: 8px; padding: 8px 12px; font-size: 12.5px; margin-top: 10px; }
+  .notice.err { background: var(--err-bg); color: var(--err); border: 1px solid var(--err); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok); }
+  /* ---------- 自动提交演示区 ---------- */
+  .demo-note { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
+  .item-card {
+    display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--panel);
+    flex-wrap: wrap; transition: box-shadow .2s;
+  }
+  .item-card.hl { box-shadow: 0 0 0 2px var(--primary); }
+  .item-card .id { font-weight: 600; font-size: 13px; }
+  .item-card .title { color: var(--muted); font-size: 12.5px; }
+  .flags { display: inline-flex; gap: 6px; }
+  .flag { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--border); color: var(--muted); }
+  .flag.test { color: var(--info); border-color: var(--info); background: var(--info-bg); }
+  .flag.committed { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+  .commits { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .commits .c-head { padding: 8px 12px; background: var(--panel); font-size: 12.5px; font-weight: 600; border-bottom: 1px solid var(--border); }
+  .commit-row {
+    display: flex; gap: 10px; align-items: baseline; padding: 7px 12px; background: var(--panel);
+    border-bottom: 1px solid var(--border); font-size: 12.5px; cursor: pointer;
+  }
+  .commit-row:last-child { border-bottom: 0; }
+  .commit-row:hover { background: var(--primary-weak); }
+  .commit-row .hash { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--primary); flex: none; }
+  .commit-row .msg b { font-weight: 600; }
+  .commit-row .msg .no { color: var(--muted); }
+  .index-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .empty-hint { border: 1px dashed var(--border); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 12.5px; background: var(--panel); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="brand">REQ-20260911-009<small>dev 分支开发 · 到待测试自动 commit</small></span>
+  <span class="seg" role="group" aria-label="场景切换">
+    <button type="button" data-scene="normal" class="on">正常：main·无 dev</button>
+    <button type="button" data-scene="ondev">已在 dev 分支</button>
+    <button type="button" data-scene="nogit">非 git 仓库</button>
+    <button type="button" data-scene="fail">执行失败（可重试）</button>
+  </span>
+  <label class="switch"><input type="checkbox" id="themeToggle"> 深色</label>
+  <p class="note">纯内存模拟，不访问真实服务、不执行任何 Git 操作。「执行失败」场景同时作用于下方自动提交演示（提交失败 → 保留改动 → 重试成功）。</p>
+</div>
+
+<div class="board">
+  <nav class="side" aria-label="模块页签">
+    <a class="nav" href="#" onclick="return false">需求</a>
+    <a class="nav" href="#" onclick="return false">任务</a>
+    <a class="nav active" href="#" onclick="return false">设置</a>
+  </nav>
+  <main class="main">
+    <h3 class="page-title">项目设置</h3>
+    <p class="page-sub">演示范围：设置页新增「Git 工作流」分区（需求 2）；「批量任务」分区为现状示意。</p>
+
+    <!-- 现状示意：批量任务分区 -->
+    <section class="cx-config">
+      <h4>批量任务</h4>
+      <p class="muted">两类批量任务均为子代理模式，子代理模型跟随主调度会话；保存仅对后续新任务生效。（现状示意，非本需求范围）</p>
+      <div class="ts-block">
+        <label class="field-inline"><input type="checkbox" checked> 完善完成后自动转入计划</label>
+      </div>
+      <div class="dep-toolbar">
+        <button type="button" class="btn primary" disabled>保存批量任务设置</button>
+        <span class="status-line">已加载设置</span>
+      </div>
+    </section>
+
+    <!-- 本需求新增：Git 工作流分区 -->
+    <section class="cx-config" id="gitSection" aria-label="Git 工作流">
+      <h4>Git 工作流</h4>
+      <p class="muted">开发在 dev 分支进行；每条需求或 Bug 开发完进入待测试时自动 commit（消息含单号）。</p>
+      <div class="git-facts" id="gitFacts"><!-- 状态行由 JS 渲染 --></div>
+      <div class="dep-toolbar">
+        <button type="button" class="btn primary" id="gitBtn">初始化 dev 分支</button>
+        <span class="status-line" id="gitStatus" role="status">正在读取 Git 状态…</span>
+      </div>
+      <div id="gitConfirm"></div>
+      <div id="gitNotice"></div>
+    </section>
+
+    <!-- 需求 3/4：到待测试自动 commit + 索引 演示 -->
+    <section class="cx-config" id="autoCommitSection" aria-label="到待测试自动提交演示">
+      <h4>演示：上报到待测试 → 自动 commit → 条目/提交索引</h4>
+      <p class="muted">模拟批量开发批次中一条条目的上报回执：核验通过后系统自动按「业务 / 测试 / 文档」分组提交，消息均为「类型: 描述 单号」，并建立双向索引。</p>
+      <div class="item-card" id="itemCard">
+        <div>
+          <div class="id">REQ-20260912-031</div>
+          <div class="title">支持按标签筛选需求卡片</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+          <span class="flags" id="itemFlags"></span>
+          <button type="button" class="btn primary" id="reportBtn">模拟上报（进入待测试）</button>
+        </div>
+      </div>
+      <div id="commitArea">
+        <div class="empty-hint" id="commitEmpty">尚未上报——点击「模拟上报」观察自动提交与索引反馈。</div>
+        <div class="commits hidden" id="commitList" style="display:none">
+          <div class="c-head">该单提交（条目 → commit 索引；点击任一行反查条目）</div>
+          <!-- commit 行由 JS 渲染 -->
+        </div>
+        <div id="commitNotice"></div>
+        <p class="index-hint" id="indexHint"></p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var scene = 'normal';           // normal | ondev | nogit | fail
+  var git = { repo: true, branch: 'main', devExists: false };
+  var gitBusy = false, failedOnce = false;
+  var item = { reported: false, committed: false, retried: false };
+  var $ = function (id) { return document.getElementById(id); };
+
+  var COMMITS = [
+    { hash: 'a1f30c2', type: 'doc',   msg: 'doc: 完善验收与界面文档 REQ-20260912-031' },
+    { hash: '7be94d1', type: 'feat',  msg: 'feat: 标签筛选与计数联动 REQ-20260912-031' },
+    { hash: 'c55a08e', type: 'test',  msg: 'test: 标签筛选用例 REQ-20260912-031' }
+  ];
+
+  // ---------- 深浅色 ----------
+  $('themeToggle').addEventListener('change', function () {
+    document.documentElement.dataset.theme = this.checked ? 'dark' : '';
+  });
+
+  // ---------- 场景切换 ----------
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.seg button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      scene = b.dataset.scene;
+      resetGit(); resetItem();
+    });
+  });
+
+  // ---------- 需求 2：Git 工作流分区 ----------
+  function chip(text, cls) { return '<span class="chip ' + (cls || '') + '">' + text + '</span>'; }
+
+  function renderGitFacts() {
+    var f = $('gitFacts'), s = $('gitStatus'), btn = $('gitBtn');
+    if (gitBusy) {
+      f.innerHTML =
+        '<span class="fact">当前分支：<span class="skeleton"></span></span>' +
+        '<span class="fact">dev 分支：<span class="skeleton"></span></span>';
+      return;
+    }
+    if (!git.repo) {
+      f.innerHTML =
+        '<span class="fact">仓库状态：' + chip('非 git 仓库', 'warn') + '</span>' +
+        '<span class="fact">当前分支：—</span><span class="fact">dev 分支：—</span>';
+      return;
+    }
+    var devChip = git.devExists ? chip('已存在', 'ok') : chip('未创建', 'warn');
+    f.innerHTML =
+      '<span class="fact">当前分支：<b>' + git.branch + '</b></span>' +
+      '<span class="fact">dev 分支：' + devChip + '</span>';
+  }
+
+  function renderGit() {
+    var btn = $('gitBtn'), s = $('gitStatus');
+    btn.disabled = false; s.className = 'status-line';
+    $('gitConfirm').innerHTML = ''; $('gitNotice').innerHTML = '';
+    if (gitBusy) {
+      btn.disabled = true; btn.innerHTML = '<span class="spin"></span>正在创建并切换到 dev 分支…';
+      s.textContent = '执行中，请稍候';
+      renderGitFacts();
+      return;
+    }
+    if (!git.repo) {
+      btn.textContent = '初始化 dev 分支';
+      btn.disabled = true;
+      s.textContent = '项目不是 git 仓库：请先在看板初始化项目（是否由本按钮顺带 git init 见 README 待确认）';
+      renderGitFacts();
+      return;
+    }
+    if (git.branch === 'dev') {
+      btn.textContent = '已在 dev 分支'; btn.disabled = true;
+      s.className = 'status-line ok'; s.textContent = '已就绪：开发分支为 dev，无需重复初始化';
+      renderGitFacts();
+      return;
+    }
+    btn.textContent = '初始化 dev 分支';
+    s.textContent = git.devExists
+      ? 'dev 分支已存在：点击仅切换当前分支，不重复创建'
+      : '将基于 ' + git.branch + ' 按需创建 dev 分支并切换';
+    renderGitFacts();
+  }
+
+  $('gitBtn').addEventListener('click', function () {
+    if (gitBusy || !git.repo || git.branch === 'dev') return;
+    $('gitConfirm').innerHTML =
+      '<div class="confirm-card"><p>将' + (git.devExists ? '把当前项目切换到已有的 dev 分支' : '基于 ' + git.branch + ' 创建 dev 分支并切换') +
+      '——这会影响整个工作区的当前分支。确认继续？</p>' +
+      '<button type="button" class="btn primary small" id="cfYes">确认</button> ' +
+      '<button type="button" class="btn small" id="cfNo">取消</button></div>';
+    $('cfYes').addEventListener('click', execGit);
+    $('cfNo').addEventListener('click', function () {
+      $('gitConfirm').innerHTML = ''; $('gitStatus').textContent = '已取消，仓库状态未改变';
+    });
+  });
+
+  function execGit() {
+    gitBusy = true; renderGit();
+    $('gitConfirm').innerHTML = '';
+    setTimeout(function () {
+      gitBusy = false;
+      if (scene === 'fail' && !failedOnce) {
+        failedOnce = true;
+        $('gitNotice').innerHTML =
+          '<div class="notice err">初始化失败：工作区存在未提交改动，分支切换被拒绝（模拟）。改动已保留，可处理后重试。</div>';
+        $('gitStatus').className = 'status-line err';
+        $('gitStatus').textContent = '失败：可重试（重试不重复创建已存在的分支）';
+        renderGitFacts();
+        var btn = $('gitBtn');
+        btn.disabled = false; btn.textContent = '重试初始化 dev 分支';
+        return;
+      }
+      git.repo = true; git.devExists = true; git.branch = 'dev';
+      $('gitNotice').innerHTML = '<div class="notice ok">已切换到 dev 分支：后续每条需求 / Bug 到待测试将自动 commit（消息含单号）。</div>';
+      renderGit();
+    }, 900);
+  }
+
+  function resetGit() {
+    gitBusy = false; failedOnce = false;
+    if (scene === 'nogit') { git = { repo: false, branch: '—', devExists: false }; }
+    else if (scene === 'ondev') { git = { repo: true, branch: 'dev', devExists: true }; }
+    else { git = { repo: true, branch: 'main', devExists: false }; }
+    // 模拟状态查询加载
+    gitBusy = true; renderGit();
+    setTimeout(function () { gitBusy = false; renderGit(); }, 600);
+  }
+
+  // ---------- 需求 3/4：上报自动提交演示 ----------
+  function renderFlags() {
+    var html = '';
+    if (item.reported) html += '<span class="flag test">待测试</span>';
+    if (item.committed) html += '<span class="flag committed">已提交</span>';
+    if (!html) html = '<span class="flag">开发中</span>';
+    $('itemFlags').innerHTML = html;
+  }
+
+  function renderCommits() {
+    $('commitEmpty').style.display = 'none';
+    var list = $('commitList');
+    list.style.display = 'block';
+    list.querySelectorAll('.commit-row').forEach(function (r) { r.remove(); });
+    COMMITS.forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'commit-row';
+      row.innerHTML = '<span class="hash">' + c.hash + '</span>' +
+        '<span class="msg"><b>' + c.type + '</b>: ' + c.msg.replace(/^(doc|feat|test): /, '')
+          .replace(/ REQ-20260912-031$/, '') +
+        ' <span class="no">REQ-20260912-031</span></span>';
+      row.title = '点击反查条目：REQ-20260912-031';
+      row.addEventListener('click', function () {
+        var card = $('itemCard');
+        card.classList.add('hl');
+        $('indexHint').textContent = '索引反查：commit ' + c.hash + '（消息含单号 REQ-20260912-031）→ 条目 REQ-20260912-031';
+        setTimeout(function () { card.classList.remove('hl'); }, 900);
+      });
+      list.appendChild(row);
+    });
+    $('indexHint').textContent = '索引：REQ-20260912-031 → ' + COMMITS.length + ' 个提交；点击任一提交行反查条目。';
+  }
+
+  $('reportBtn').addEventListener('click', function () {
+    var btn = $('reportBtn');
+    if (btn.disabled) return;
+    if (item.reported && item.committed) {           // 幂等
+      $('commitNotice').innerHTML =
+        '<div class="notice ok">幂等跳过：git 历史已含该单号提交（REQ-20260912-031），重复上报不产生新 commit。</div>';
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>上报核验中…自动提交中';
+    $('commitNotice').innerHTML = '';
+    setTimeout(function () {
+      item.reported = true; renderFlags();
+      if (scene === 'fail' && !item.retried) {       // 提交失败态
+        item.retried = true;
+        btn.disabled = false; btn.textContent = '重试自动提交';
+        $('commitNotice').innerHTML =
+          '<div class="notice err">自动提交失败：hooks 校验超时（模拟）。改动与文档保留在工作区，不阻断批次内其余条目，可重试。</div>';
+        $('itemFlags').innerHTML = '<span class="flag test">待测试</span><span class="flag">提交失败·改动保留</span>';
+        return;
+      }
+      item.committed = true; item.retried = false;
+      btn.disabled = true; btn.textContent = '已上报（自动提交完成）';
+      renderFlags(); renderCommits();
+      $('commitNotice').innerHTML =
+        '<div class="notice ok">上报已核验：业务 / 测试 / 文档按现行规范分组提交，消息含单号，只 commit 不 push。</div>';
+    }, 1000);
+  });
+
+  function resetItem() {
+    item = { reported: false, committed: false, retried: false };
+    var btn = $('reportBtn');
+    btn.disabled = false; btn.textContent = '模拟上报（进入待测试）';
+    $('commitEmpty').style.display = '';
+    $('commitList').style.display = 'none';
+    $('commitNotice').innerHTML = ''; $('indexHint').textContent = '';
+    renderFlags();
+  }
+
+  // ---------- 初始化 ----------
+  renderFlags();
+  resetGit();
+})();
+</script>
+</body>
+</html>

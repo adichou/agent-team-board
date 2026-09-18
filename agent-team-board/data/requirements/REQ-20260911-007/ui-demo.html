@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>待人工确认 · 承接机制演示（REQ-20260911-007）</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f2f4f8;--panel:#fff;--text:#1f2937;--muted:#6b7280;--border:#d7dce5;--accent:#2f6bdb;
+  --accent-text:#fff;--warn-bg:#fff7e6;--warn-border:#f0c36d;--warn-text:#8a6116;
+  --ok:#1a7f4b;--ok-bg:#e8f6ee;--danger:#b3352c;--danger-bg:#fbeae9;--chip-bg:#eef1f6;--shadow:0 10px 30px #0002;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141822;--panel:#202634;--text:#e8edf7;--muted:#9aa7bd;--border:#414c61;--accent:#5b8cf0;--warn-bg:#33290f;--warn-border:#8a6d20;--warn-text:#e5c268;--ok:#57c08a;--ok-bg:#12291c;--danger:#ef8a80;--danger-bg:#3a1b18;--chip-bg:#2a3142;--shadow:0 10px 30px #0008}}
+:root[data-theme=dark]{--bg:#141822;--panel:#202634;--text:#e8edf7;--muted:#9aa7bd;--border:#414c61;--accent:#5b8cf0;--warn-bg:#33290f;--warn-border:#8a6d20;--warn-text:#e5c268;--ok:#57c08a;--ok-bg:#12291c;--danger:#ef8a80;--danger-bg:#3a1b18;--chip-bg:#2a3142;--shadow:0 10px 30px #0008}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.65 system-ui,-apple-system,"PingFang SC","Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+main{padding:26px;max-width:1080px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px;font-size:13.5px}
+button,select,input,textarea{font:inherit;color:inherit;border:1px solid var(--border);border-radius:8px;padding:7px 12px;background:var(--panel)}
+button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.ghost{background:transparent}
+.toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:18px;box-shadow:var(--shadow)}
+.toolbar label{display:flex;gap:8px;align-items:center;font-size:13.5px;color:var(--muted)}
+.hint{color:var(--muted);font-size:13px}
+section{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:var(--shadow)}
+.sec-title{font-size:13px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin:0 0 12px}
+/* 看板六列（迷你示意，既有列不变） */
+.board{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.lane{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px;min-height:118px}
+.lane h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:600}
+.mini{background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:11.5px;margin-bottom:6px;line-height:1.45}
+.mini .flag{display:inline-block;background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text);border-radius:5px;padding:0 5px;font-size:10.5px;margin-top:3px}
+.mini.moved{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok)}
+/* 待人工确认聚合区 */
+.pending-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.pending-head h2{font-size:17px;margin:0}
+.badge{background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text);border-radius:999px;padding:1px 11px;font-size:13px}
+.pending-sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.card{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg)}
+.card.removing{opacity:0;transition:opacity .45s}
+.row1{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.row1 .id{font-weight:700}
+.row1 .title{flex:1;min-width:200px}
+.chip{background:var(--chip-bg);border-radius:999px;padding:1px 10px;font-size:12px;color:var(--muted);white-space:nowrap}
+.waited{color:var(--warn-text);font-size:13px;white-space:nowrap}
+.qlist{margin:10px 0 4px;padding:0;list-style:none}
+.qlist li{display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:13.5px}
+.qmark{font-weight:700;width:1.2em}
+.qmark.un{color:var(--warn-text)}
+.qmark.done{color:var(--ok)}
+.qtext.done{color:var(--muted);text-decoration:line-through}
+.qtext.done .ans{color:var(--ok);text-decoration:none;font-weight:600}
+.count{font-size:13px;color:var(--warn-text);margin:4px 0 10px}
+.count.ok{color:var(--ok)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.errbox{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger);border-radius:8px;padding:10px 14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.emptybox{border:1px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--muted)}
+.skel{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;color:var(--muted);background:linear-gradient(90deg,var(--bg) 25%,var(--chip-bg) 50%,var(--bg) 75%);background-size:200% 100%;animation:sh 1.1s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+/* 进展记录展开 */
+.log{display:none;margin-top:12px;border-top:1px dashed var(--border);padding-top:10px}
+.log.open{display:block}
+.log pre{white-space:pre-wrap;font-size:12.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:0;color:var(--muted)}
+/* 决策表单侧拉 */
+aside{position:fixed;top:0;right:0;bottom:0;width:min(520px,94vw);background:var(--panel);border-left:1px solid var(--border);box-shadow:-14px 0 40px #0003;display:flex;flex-direction:column;z-index:30}
+aside[hidden]{display:none}
+aside header{display:flex;justify-content:space-between;align-items:start;padding:16px 20px;border-bottom:1px solid var(--border);gap:10px}
+aside header h3{margin:0;font-size:16px}
+aside header p{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.body{overflow:auto;flex:1;padding:18px 20px}
+.qitem{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;background:var(--bg)}
+.qitem label{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
+.qitem .full{width:100%;margin-top:6px}
+.qitem .note{margin-top:8px}
+aside footer{display:flex;gap:10px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
+.notice{border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13.5px;display:none}
+.notice.show{display:block}
+.notice.info{background:var(--chip-bg)}
+.notice.ok{background:var(--ok-bg);color:var(--ok)}
+.notice.err{background:var(--danger-bg);color:var(--danger)}
+/* 二次确认条 */
+.confirmbar{display:none;background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text);border-radius:8px;padding:10px 12px;margin-top:10px;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13.5px}
+.confirmbar.show{display:flex}
+/* toast */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:26px;background:var(--panel);border:1px solid var(--accent);color:var(--text);border-radius:10px;padding:10px 18px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s;max-width:min(720px,92vw);font-size:13.5px;z-index:50}
+#toast.show{opacity:1}
+#toast.err{border-color:var(--danger);color:var(--danger)}
+footer.page{color:var(--muted);font-size:12.5px;text-align:center;padding:4px 0 30px}
+@media(max-width:860px){.board{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<main>
+  <h1>待人工确认 · 承接机制演示</h1>
+  <p class="sub">REQ-20260911-007：声明 → 持久呈现 → 人工决策 → 复工。全部数据为内存模拟，不访问真实服务、不修改任何条目状态或文件。</p>
+
+  <div class="toolbar">
+    <label>演示场景
+      <select id="scenario">
+        <option value="normal">正常（2 条待确认）</option>
+        <option value="empty">空（无待确认）</option>
+        <option value="loading">加载中</option>
+        <option value="loadfail">加载失败</option>
+        <option value="savefail">决策保存失败</option>
+        <option value="resumefail">复工失败</option>
+      </select>
+    </label>
+    <button id="theme" class="ghost">主题：跟随系统</button>
+    <span class="hint">savefail / resumefail 只影响对应操作的结果，可与其他场景叠加理解。</span>
+  </div>
+
+  <section aria-label="看板列示意">
+    <p class="sec-title">Status Board · 既有看板列（不变，仅示意）</p>
+    <div class="board" id="board"></div>
+    <p class="hint" style="margin:10px 0 0">「等人工决策」条目仍按真实状态（in-progress）留在「开发中」列，仅追加角标；复工成功后迷你卡移入「已计划」列（演示联动）。</p>
+  </section>
+
+  <section aria-label="待人工确认聚合区">
+    <div class="pending-head"><h2>⚠ 待人工确认</h2><span class="badge" id="pcount">2</span></div>
+    <p class="pending-sub">持久聚合视图 · 不随批次结束消失 · 条目待确认期间不被 batch next / claim 误派发（明确拒绝并指向待确认原因）</p>
+    <div id="pendingArea"></div>
+  </section>
+
+  <footer class="page">演示核对路径见条目 README「界面展示」节 · 单文件内联实现，无外网依赖</footer>
+</main>
+
+<aside id="drawer" hidden role="dialog" aria-labelledby="drawerTitle">
+  <header>
+    <div>
+      <h3 id="drawerTitle">补决策</h3>
+      <p id="drawerSub">逐项作答，支持补充说明；可保存未答完的草稿</p>
+    </div>
+    <button id="drawerClose" class="ghost" aria-label="关闭决策表单">✕ 关闭</button>
+  </header>
+  <div class="body">
+    <div id="drawerNotice" class="notice" role="status" aria-live="polite"></div>
+    <div id="loadingBox" class="skel">正在读取决策项…（读取期间提交禁用，保留关闭入口）</div>
+    <form id="dform" hidden></form>
+  </div>
+  <footer>
+    <button type="button" id="drawerCancel" class="ghost">取消</button>
+    <button type="button" id="dsave" class="primary">保存决策</button>
+  </footer>
+</aside>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+const $=(s,el=document)=>el.querySelector(s);
+const LANES=[['submitted','待接受'],['accepted','已接受'],['planned','已计划'],['developing','开发中'],['confirming','待测试'],['done','已完成']];
+
+// 模拟数据：条目 1 取自本需求提出背景（cam-media-man REQ-20260908-001）；条目 2 为纯模拟编号。
+function freshItems(){return [
+  {id:'REQ-20260908-001',title:'重构 UI 与业务分层（cam-media-man）',waited:'已等待 3 天',runId:'run-20260908-001',proj:'cam-media-man',
+   log:'run-20260908-001 · dispatch/runs/（模拟）\n2026-09-08 10:12  worker 完成首个切片：分层调研与脚手架\n2026-09-08 10:30  worker 交 blocked 回执：缺人工确认首批平台、target、模块及覆盖率口径\n2026-09-08 起     条目滞留 in-progress，批量开发不再取到，等待人工决策…',
+   qs:[
+    {t:'首批平台范围',opts:['iOS 优先','macOS 优先','iOS + macOS 同时']},
+    {t:'target 设备档位',opts:['仅现代设备','含旧设备兜底']},
+    {t:'覆盖率口径',opts:['行覆盖 ≥ 70%','行+分支覆盖 ≥ 60%','本次不设阈值']},
+   ],ans:['','',''],notes:['','','']},
+  {id:'REQ-DEMO-002',title:'设置页长列表性能优化（模拟条目）',waited:'已等待 1 天',runId:'run-20260911-002',proj:'agent-team-board',
+   log:'run-20260911-002 · dispatch/runs/（模拟）\n2026-09-10 16:02  worker 调研后交 blocked 回执：方案取舍需人工定夺\n2026-09-10 起     等待人工决策…',
+   qs:[
+    {t:'实现方案取舍',opts:['数据分页','前端虚拟滚动']},
+    {t:'是否保留全量导出',opts:['保留','移除']},
+   ],ans:['','',''],notes:['','']},
+];}
+let items=freshItems();
+let scenario='normal', confirmDone=null, drawerItem=null, drawerBusy=false;
+
+function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className=err?'show err':'show';clearTimeout(t._h);t._h=setTimeout(()=>t.className='',3200);}
+function missing(it){return it.qs.map((q,i)=>it.ans[i]?-1:i).filter(i=>i>=0);}
+function renderBoard(){
+  $('#board').innerHTML=LANES.map(([k,label])=>{
+    let minis='';
+    if(k==='developing') minis=items.filter(it=>!it._moved).map(it=>`<div class="mini" data-mini="${it.id}"><b>${it.id}</b><br>${it.title}<br><span class="flag">⚠ 等人工决策</span></div>`).join('');
+    if(k==='planned') minis=items.filter(it=>it._moved).map(it=>`<div class="mini moved" data-mini="${it.id}"><b>${it.id}</b><br>${it.title}<br><span class="flag" style="border-color:var(--ok);background:var(--ok-bg);color:var(--ok)">✓ 已复工 · 回到已计划</span></div>`).join('');
+    return `<div class="lane"><h4>${label}</h4>${minis}</div>`;
+  }).join('');
+}
+function renderPending(){
+  const area=$('#pendingArea');
+  $('#pcount').textContent=items.filter(it=>!it._moved).length;
+  if(scenario==='loading'){area.innerHTML='<div class="skel">正在加载待人工确认清单…</div><div class="skel" style="width:70%">…</div>';return;}
+  if(scenario==='loadfail'){area.innerHTML='<div class="errbox"><span>待确认清单加载失败：模拟网络错误。历史数据未受影响，可重试。</span><button id="retryLoad" class="primary">重试</button></div>';$('#retryLoad').onclick=()=>{scenario='normal';$('#scenario').value='normal';renderPending();toast('已重新加载待人工确认清单');};return;}
+  const live=items.filter(it=>!it._moved);
+  if(scenario==='empty'||live.length===0){area.innerHTML='<div class="emptybox">✓ 暂无待人工确认的条目<br><span style="font-size:12.5px">（另一可选形态：无待确认条目时本区整体隐藏，不占版面）</span></div>';return;}
+  area.innerHTML=live.map(cardHtml).join('');
+  live.forEach(bindCard);
+}
+function cardHtml(it){
+  const miss=missing(it), done=it.qs.length-miss.length;
+  const qlist=it.qs.map((q,i)=>{
+    const ok=!!it.ans[i];
+    return `<li><span class="qmark ${ok?'done':'un'}">${ok?'✓':'○'}</span><span class="qtext ${ok?'done':''}">${q.t}${ok?` <span class="ans">· ${it.ans[i]}</span>`:''}</span></li>`;
+  }).join('');
+  return `<article class="card" id="card-${it.id}">
+    <div class="row1"><span class="id">${it.id}</span><span class="title">${it.title}</span><span class="chip">in-progress · 等人工决策</span><span class="waited">${it.waited}</span></div>
+    <ul class="qlist">${qlist}</ul>
+    <p class="count ${done===it.qs.length?'ok':''}">${done===it.qs.length?'决策项已齐备，可复工':`待决：${it.qs.map(q=>q.t).join(' · ')}（缺 ${miss.length} 项未答，共 ${it.qs.length} 项）`}</p>
+    <div class="actions">
+      <button data-act="log" class="ghost">查看进展记录</button>
+      <button data-act="decide" class="primary">补决策</button>
+      <button data-act="resume" ${miss.length?'disabled':''} title="${miss.length?`缺 ${miss.length} 项决策未答，补齐后可复工`:'决策项齐备，点击让条目回到可执行状态'}">复工</button>
+      <button data-act="done" class="ghost">确认完成…</button>
+    </div>
+    <div class="confirmbar" id="cb-${it.id}"></div>
+    <div class="log" id="log-${it.id}"><pre>${it.log}</pre><p class="hint">详情入口：dispatch/runs/${it.runId}/（模拟链接，演示不跳转）</p></div>
+  </article>`;
+}
+function bindCard(it){
+  const card=$('#card-'+it.id);
+  $('[data-act=log]',card).onclick=()=>$('#log-'+it.id).classList.toggle('open');
+  $('[data-act=decide]',card).onclick=()=>openDrawer(it);
+  $('[data-act=resume]',card).onclick=()=>doResume(it);
+  $('[data-act=done]',card).onclick=()=>askConfirmDone(it);
+}
+function askConfirmDone(it){
+  const miss=missing(it), bar=$('#cb-'+it.id);
+  if(!miss.length){toast(`${it.id} 决策项已齐备，确认完成按既有流程执行（演示不继续）`);bar.classList.remove('show');return;}
+  bar.innerHTML=`<span>该条目尚有 ${miss.length} 项决策未答（${miss.map(i=>it.qs[i].t).join('、')}）。仍要确认完成吗？</span><span><button class="ghost" data-cb="no">取消</button> <button class="primary" data-cb="yes">仍要完成</button></span>`;
+  bar.classList.add('show');
+  $('[data-cb=no]',bar).onclick=()=>bar.classList.remove('show');
+  $('[data-cb=yes]',bar).onclick=()=>{bar.classList.remove('show');toast(`${it.id} 已按人工显式选择确认完成，未答决策项不再拦截（流转留痕；演示结束）`);};
+}
+/* ---------- 决策表单 ---------- */
+function notice(kind,msg){const n=$('#drawerNotice');n.className='notice show '+kind;n.textContent=msg;}
+function openDrawer(it){
+  drawerItem=it;
+  $('#drawer').hidden=false;
+  $('#drawerTitle').textContent=`补决策 · ${it.id}`;
+  $('#drawerSub').textContent=`${it.proj} · 提出 ${it.waited} · 详情见 dispatch/runs/${it.runId}/`;
+  $('#dform').hidden=true;$('#loadingBox').style.display='block';
+  notice('info','正在读取决策项…（期间提交禁用，可关闭）');
+  $('#dsave').disabled=true;
+  setTimeout(()=>{ // 模拟读取完成
+    if($('#drawer').hidden||drawerItem!==it)return;
+    $('#loadingBox').style.display='none';
+    buildForm(it);
+    $('#dform').hidden=false;$('#dsave').disabled=false;
+    const miss=missing(it);
+    notice(miss.length?'info':'ok',miss.length?`共 ${it.qs.length} 项决策，尚缺 ${miss.length} 项未答；可先保存草稿。`:'决策项已齐备，保存后可复工。');
+  },700);
+}
+function buildForm(it){
+  $('#dform').innerHTML=it.qs.map((q,i)=>`<div class="qitem">
+    <label>${i+1}. ${q.t}</label>
+    <select class="full" data-q="${i}">
+      <option value="">（未答）</option>
+      ${q.opts.map(o=>`<option ${it.ans[i]===o?'selected':''}>${o}</option>`).join('')}
+    </select>
+    <input class="full note" data-n="${i}" placeholder="补充说明（可选）" value="${(it.notes[i]||'').replace(/"/g,'&quot;')}">
+  </div>`).join('');
+  $('#dform').querySelectorAll('select[data-q]').forEach(sel=>sel.onchange=()=>{it.ans[+sel.dataset.q]=sel.value;});
+  $('#dform').querySelectorAll('input[data-n]').forEach(inp=>inp.oninput=()=>{it.notes[+inp.dataset.n]=inp.value;});
+}
+function closeDrawer(){if(drawerBusy)return;$('#drawer').hidden=true;drawerItem=null;}
+$('#drawerClose').onclick=closeDrawer;$('#drawerCancel').onclick=closeDrawer;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#drawer').hidden){e.preventDefault();closeDrawer();}});
+$('#dsave').onclick=()=>{
+  const it=drawerItem;if(!it||drawerBusy)return;
+  drawerBusy=true;$('#dsave').disabled=true;$('#dsave').textContent='保存中…';
+  notice('info','正在保存决策（将写入条目文档，留痕可追溯）…');
+  setTimeout(()=>{
+    drawerBusy=false;$('#dsave').disabled=false;$('#dsave').textContent='保存决策';
+    if(scenario==='savefail'){scenario='normal';$('#scenario').value='normal';
+      notice('err','保存失败：模拟写入错误。输入已保留，可再次点击「保存决策」重试。');return;}
+    const miss=missing(it);
+    renderPending();renderBoard();
+    if(miss.length)notice('ok',`草稿已保存，尚缺 ${miss.length} 项未答；复工入口保持禁用。`);
+    else{notice('ok','决策项已全部作答并保存；复工入口已启用。');toast(`✓ ${it.id} 决策已补齐（${it.qs.length}/${it.qs.length}），可复工`);}
+  },900);
+};
+/* ---------- 复工 ---------- */
+function doResume(it){
+  const card=$('#card-'+it.id), btn=$('[data-act=resume]',card);
+  btn.disabled=true;btn.textContent='复工中…';
+  setTimeout(()=>{
+    if(scenario==='resumefail'){scenario='normal';$('#scenario').value='normal';
+      btn.disabled=false;btn.textContent='复工';
+      toast(`复工失败：条目状态已变化（已由人工确认完成），请刷新后重试。未做任何状态变更。`,true);return;}
+    it._moved=true; // 演示联动：回到 planned（已计划）
+    card.classList.add('removing');
+    setTimeout(()=>{renderPending();renderBoard();},450);
+    toast(`✓ ${it.id} 已复工：待确认口径已留痕，条目回到已计划（planned），等待批量开发重新取单`);
+  },800);
+}
+/* ---------- 场景 / 主题 ---------- */
+$('#scenario').onchange=e=>{scenario=e.target.value;renderPending();};
+const THEMES=['auto','light','dark'];
+$('#theme').onclick=()=>{
+  const cur=document.documentElement.dataset.theme;
+  const next=THEMES[(THEMES.indexOf(cur)+1)%THEMES.length];
+  document.documentElement.dataset.theme=next;
+  $('#theme').textContent='主题：'+(next==='auto'?'跟随系统':next==='light'?'浅色':'深色');
+};
+renderBoard();renderPending();
+</script>
+</body>
+</html>

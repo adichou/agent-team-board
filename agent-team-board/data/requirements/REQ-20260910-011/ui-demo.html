@@ -1,0 +1,209 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>二次提示精简演示 · 可撤销操作免确认</title><style>
+:root{--bg:#edf1f6;--card:#fff;--ink:#243047;--muted:#637087;--line:#d8e0ec;--pri:#2f6fed;--warn:#c07a1a;--danger:#c23636;--ok:#1d7d4f}
+*{box-sizing:border-box}body{font:15px/1.6 system-ui,"PingFang SC",sans-serif;background:var(--bg);color:var(--ink);margin:0;padding:20px}
+main{max-width:960px;margin:auto}h1{font-size:20px;margin:0 0 4px}.sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+label.ctl{display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-size:14px}
+button{font:inherit;padding:6px 12px;border:1px solid #b9c6da;border-radius:7px;background:#f6f8fc;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--pri);border-color:var(--pri);color:#fff}
+button.warn{background:#fdf3e3;border-color:var(--warn);color:var(--warn)}
+button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+button.small{padding:2px 8px;font-size:12px;border-radius:6px}
+button:focus-visible{outline:3px solid #7ea2f5;outline-offset:1px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.lane{background:#f3f6fb;border:1px solid var(--line);border-radius:10px;padding:8px;min-height:120px}
+.lane-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600;padding:2px 4px 8px}
+.lane-head .cnt{color:var(--muted);font-weight:400}
+.lane .empty{color:var(--muted);font-size:13px;text-align:center;padding:18px 0}
+.item{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px}
+.item .t1{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px}
+.item .t2{font-size:13px;margin:2px 0 6px 20px;color:#3a4a66}
+.item .acts{display:flex;gap:6px;margin-left:20px;flex-wrap:wrap}
+.badge{font-size:11px;border-radius:5px;padding:0 5px;background:#efe6ff;color:#6b3fd4}
+input[type=checkbox]{width:15px;height:15px;accent-color:var(--pri)}
+#log{white-space:pre-wrap;font-size:13px;min-height:22px;color:#33415e}
+#log.err{color:var(--danger)}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#223047;color:#fff;border-radius:9px;padding:10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 6px 24px rgba(16,28,48,.35);max-width:min(92vw,640px);font-size:14px}
+#toast.err{background:#7c1d1d}
+#toast .toast-act{background:#fff;color:#223047;border-color:#fff;font-weight:600}
+#toast[hidden]{display:none}
+.modal-wrap{position:fixed;inset:0;background:rgba(20,30,50,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-wrap[hidden]{display:none}
+.modal{background:#fff;border-radius:12px;padding:18px;max-width:430px;width:100%;box-shadow:0 10px 40px rgba(10,20,40,.3)}
+.confirm-title{font-weight:700;margin-bottom:8px}.confirm-msg{font-size:13.5px;white-space:pre-wrap;color:#3a4a66;margin:0 0 14px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px}
+.hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+</style><main>
+<h1>可撤销操作免二次确认 · 交互演示</h1>
+<p class="sub">REQ-20260910-011 · 虚构内存数据，不访问真实看板 · 接受 / 驳回待接受 / 移入计划 / 移出计划可撤销 → 免确认；删除不可撤销 → 保留确认并显示单号标题</p>
+<div class="panel">
+  <label class="ctl">模式
+    <select id="mode"><option value="before">现状：先弹二次确认</option><option value="after">本需求：立即执行 · 可撤销</option></select>
+  </label>
+  <label class="ctl">场景
+    <select id="scene">
+      <option value="normal">正常</option>
+      <option value="partial">部分失败（完善中的单驳回被拦）</option>
+      <option value="conflict">撤销冲突（撤销时状态已变）</option>
+      <option value="empty">待接受为空（空态）</option>
+    </select>
+  </label>
+  <div class="hint">「批量进行中」状态在执行任意批量操作时呈现（进度 + 控件禁用）。撤销按钮 toast 停留 8 秒，与既有详情页范式一致。</div>
+</div>
+<div class="panel toolbar">
+  <button id="bAccept" class="primary">接受所选（0）</button>
+  <button id="bPlan">移入计划（0）</button>
+  <button id="bReject" class="warn">驳回待接受（0）</button>
+  <button id="bUnplan" class="warn">移出计划（0）</button>
+  <button id="bReset" class="small">重置数据</button>
+</div>
+<div class="panel board" id="board"></div>
+<div class="panel"><strong style="font-size:13px">操作反馈</strong><div id="log" role="status" aria-live="polite">待操作。</div></div>
+</main>
+<div id="toast" hidden></div>
+<div class="modal-wrap" id="modalWrap" hidden><div class="modal" role="dialog" aria-modal="true">
+  <div class="confirm-title" id="mTitle"></div><p class="confirm-msg" id="mMsg"></p>
+  <div class="modal-foot"><button id="mCancel">取消</button><button id="mOk" class="primary">确定</button></div>
+</div></div>
+<script>
+const $=id=>document.getElementById(id);
+const LANES=[['submitted','待接受'],['accepted','已接受'],['planned','已计划']];
+let items=[],sel=new Set(),busy=false,toastTimer=null;
+const seed=()=>{sel=new Set();return [
+ {id:'REQ-20260910-101',title:'支持登录 Passkey',st:'submitted'},
+ {id:'REQ-20260910-102',title:'导出周报到邮件',st:'submitted'},
+ {id:'REQ-20260910-103',title:'批量完善看板文档',st:'accepted',refining:true},
+ {id:'REQ-20260910-104',title:'看板深色模式',st:'accepted'},
+ {id:'REQ-20260910-105',title:'搜索结果高亮',st:'planned'}]};
+function reset(){items=seed();if($('scene').value==='empty'){items[0].st=items[1].st='accepted';}busy=false;$('modalWrap').hidden=true;hideToast();log('待操作。');render();}
+function log(t,err){const el=$('log');el.textContent=t;el.classList.toggle('err',!!err);}
+/* 页内确认框（对齐 uiConfirm：异步、同屏一个、danger 变红） */
+let modalResolve=null;
+function confirmBox({title,msg,confirmText='确定',danger=false}={}){
+  $('mTitle').textContent=title;$('mMsg').textContent=msg;
+  const ok=$('mOk');ok.textContent=confirmText;ok.className='btn '+(danger?'danger':'primary');
+  $('modalWrap').hidden=false;ok.focus();
+  return new Promise(r=>{modalResolve=r;});
+}
+function closeModal(v){$('modalWrap').hidden=true;const r=modalResolve;modalResolve=null;if(r)r(v);}
+$('mOk').onclick=()=>closeModal(true);$('mCancel').onclick=()=>closeModal(false);
+$('modalWrap').addEventListener('click',e=>{if(e.target===$('modalWrap'))closeModal(false);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('modalWrap').hidden)closeModal(false);});
+/* toast：带操作按钮停留 8 秒，纯文本 3.2 秒 */
+function hideToast(){clearTimeout(toastTimer);$('toast').hidden=true;}
+function toast(msg,{err=false,action=null}={}){
+  const el=$('toast');el.classList.toggle('err',err);el.replaceChildren();
+  const t=document.createElement('span');t.textContent=msg;el.append(t);
+  if(action){const b=document.createElement('button');b.className='toast-act';b.textContent=action.label;
+    b.onclick=()=>{hideToast();action.run();};el.append(b);}
+  el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(hideToast,action?8000:3200);
+}
+/* 四个可撤销操作的批量定义（elig=勾选资格；failWhen=服务端拦截场景） */
+const OPS={
+ accept:{label:'接受',verb:'接受',from:'submitted',to:'accepted',confirmTitle:'确定接受所选',elig:it=>it.st==='submitted',failWhen:()=>null},
+ plan:{label:'移入计划',verb:'移入计划',from:'accepted',to:'planned',confirmTitle:'确定移入计划所选',elig:it=>it.st==='accepted',failWhen:()=>null},
+ reject:{label:'驳回待接受',verb:'驳回待接受',from:'accepted',to:'submitted',confirmTitle:'确定驳回待接受所选',elig:it=>it.st==='accepted',
+   failWhen:it=>it.refining?'完善中的单待本轮批量完善结束后再驳回（服务端拦截）':null},
+ unplan:{label:'移出计划',verb:'移出计划',from:'planned',to:'accepted',confirmTitle:'确定移出计划所选',elig:it=>it.st==='planned',failWhen:()=>null},
+};
+function selectedOf(op){return items.filter(it=>sel.has(it.id)&&OPS[op].elig(it));}
+/* 撤销：把 succeeded 批次按反向边整体回退；conflict 场景模拟状态已变 → 服务端按状态机拒绝 */
+function undoBatch(op,succeeded){
+  return()=>{ if($('scene').value==='conflict'){toast('撤销失败：状态已被其他操作变更（服务端按状态机拒绝）',{err:true});log('撤销失败：REQ-… 状态已被其他操作变更，未回退。',true);return;}
+    for(const id of succeeded){const it=items.find(x=>x.id===id);if(it)it.st=OPS[op].from;sel.add(id);}
+    render();toast(`↩ 已撤销 ${succeeded.length} 条，状态已回退（${OPS[op].label} → ${laneName(OPS[op].from)}）`);
+    log(`已撤销 ${OPS[op].verb} ${succeeded.length} 条，状态已回退。`);};
+}
+function laneName(st){return LANES.find(l=>l[0]===st)[1];}
+async function runBatch(op){
+  const o=OPS[op];const list=selectedOf(op);
+  if(busy||!$('modalWrap').hidden)return;
+  if(!list.length){toast(`没有可${o.verb}的${laneName(o.from)}条目`,{err:true});return;}
+  /* 现状模式：先弹二次确认（本需求将去掉这一步） */
+  if($('mode').value==='before'){
+    const ok=await confirmBox({title:`${o.confirmTitle} ${list.length} 条？`,msg:list.map(i=>i.id).join('\n'),confirmText:o.label});
+    if(!ok){log('已取消，未做任何变更。');return;}
+  }
+  busy=true;render();
+  const succeeded=[],failures=[];
+  for(let i=0;i<list.length;i++){
+    log(`正在${o.verb} ${i+1} / ${list.length}…`);render();
+    await new Promise(r=>setTimeout(r,420));
+    const err=o.failWhen(list[i]);
+    if(err){failures.push({id:list[i].id,err});sel.add(list[i].id);}      // 失败保留勾选便于重试
+    else{list[i].st=o.to;succeeded.push(list[i].id);sel.delete(list[i].id);}
+  }
+  busy=false;render();
+  const line=`${o.verb}完成：成功 ${succeeded.length} 条，失败 ${failures.length} 条`
+    +(failures.length?'\n'+failures.map(f=>`失败 ${f.id}（${f.err}）`).join('\n'):'');
+  log(line,failures.length>0);
+  const action=($('mode').value==='after'&&succeeded.length)?{label:'撤销',run:undoBatch(op,succeeded)}:null;
+  toast(line.split('\n')[0],{err:failures.length>0,action});
+}
+/* 待接受卡片单条接受：现状确认 / 本需求立即执行 + 撤销 */
+async function cardAccept(id){
+  if(busy||!$('modalWrap').hidden)return;
+  if($('mode').value==='before'){
+    const ok=await confirmBox({title:`确定接受所选 1 条需求 / Bug？`,msg:id,confirmText:'接受'});
+    if(!ok){log('已取消，未做任何变更。');return;}
+  }
+  const it=items.find(x=>x.id===id);it.st='accepted';render();
+  log(`✓ ${id} 已接受`);
+  const undo=()=>{ if($('scene').value==='conflict'){toast('撤销失败：状态已被其他操作变更（服务端按状态机拒绝）',{err:true});log('撤销失败：'+id+' 状态已被其他操作变更，未回退。',true);return;}
+    it.st='submitted';render();toast(`↩ 已撤销 ${id}，状态已回退（驳回接受 → 待接受）`);log(`已撤销 ${id} 的接受，状态已回退。`);};
+  toast(`✓ ${id} 已接受`,{action:$('mode').value==='after'?{label:'撤销',run:undo}:null});
+}
+/* 删除：不可撤销 → 两种模式都保留 danger 确认，且显示单号 + 标题 */
+async function cardDelete(id){
+  if(busy||!$('modalWrap').hidden)return;
+  const it=items.find(x=>x.id===id);
+  const ok=await confirmBox({title:`删除 ${id}？`,msg:`「${it.title}」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复。`,confirmText:'删除',danger:true});
+  if(!ok){log('已取消，条目未删除。');return;}
+  items=items.filter(x=>x.id!==id);sel.delete(id);render();
+  toast(`✓ 已删除 ${id}（不可撤销，无撤销按钮）`);log(`已删除 ${id}「${it.title}」。看板层面不可恢复，无撤销入口。`);
+}
+function render(){
+  const board=$('board');board.replaceChildren();
+  for(const [st,name] of LANES){
+    const lane=document.createElement('section');lane.className='lane';
+    const list=items.filter(it=>it.st===st);
+    const head=document.createElement('div');head.className='lane-head';
+    const all=document.createElement('label');all.style.cssText='display:flex;gap:4px;align-items:center;font-weight:400;font-size:12px';
+    const cb=document.createElement('input');cb.type='checkbox';
+    cb.checked=list.length>0&&list.every(it=>sel.has(it.id));cb.disabled=busy||!list.length;
+    cb.onchange=()=>{for(const it of list)cb.checked?sel.add(it.id):sel.delete(it.id);render();};
+    all.append(cb,document.createTextNode('全选'));
+    head.append(Object.assign(document.createElement('span'),{textContent:name}),all,Object.assign(document.createElement('span'),{className:'cnt',textContent:`${list.length}`}));
+    lane.append(head);
+    if(!list.length){lane.append(Object.assign(document.createElement('div'),{className:'empty',textContent:'（空）'}));}
+    for(const it of list){
+      const card=document.createElement('div');card.className='item';
+      const t1=document.createElement('div');t1.className='t1';
+      const c=document.createElement('input');c.type='checkbox';c.checked=sel.has(it.id);c.disabled=busy;
+      c.onchange=()=>{c.checked?sel.add(it.id):sel.delete(it.id);render();};
+      t1.append(c,Object.assign(document.createElement('span'),{textContent:it.id}));
+      if(it.refining)t1.append(Object.assign(document.createElement('span'),{className:'badge',textContent:'完善中'}));
+      card.append(t1,Object.assign(document.createElement('div'),{className:'t2',textContent:it.title}));
+      if(it.st==='submitted'){
+        const acts=document.createElement('div');acts.className='acts';
+        const a=document.createElement('button');a.className='small primary';a.textContent='✓ 接受';a.disabled=busy;a.onclick=()=>cardAccept(it.id);
+        const d=document.createElement('button');d.className='small danger';d.textContent='🗑 删除';d.disabled=busy;d.onclick=()=>cardDelete(it.id);
+        acts.append(a,d);card.append(acts);
+      }
+      lane.append(card);
+    }
+    board.append(lane);
+  }
+  const n={accept:selectedOf('accept').length,plan:selectedOf('plan').length,reject:selectedOf('reject').length,unplan:selectedOf('unplan').length};
+  $('bAccept').textContent=`接受所选（${n.accept}）`;$('bAccept').disabled=busy||!n.accept;
+  $('bPlan').textContent=`移入计划（${n.plan}）`;$('bPlan').disabled=busy||!n.plan;
+  $('bReject').textContent=`驳回待接受（${n.reject}）`;$('bReject').disabled=busy||!n.reject;
+  $('bUnplan').textContent=`移出计划（${n.unplan}）`;$('bUnplan').disabled=busy||!n.unplan;
+}
+$('bAccept').onclick=()=>runBatch('accept');$('bPlan').onclick=()=>runBatch('plan');
+$('bReject').onclick=()=>runBatch('reject');$('bUnplan').onclick=()=>runBatch('unplan');
+$('bReset').onclick=reset;$('mode').onchange=reset;$('scene').onchange=reset;
+reset();
+</script></html>

@@ -1,0 +1,39 @@
+# 测试用例 — REQ-20260914-001 自动提交不完整时挂起条目并暂停队列，人工确认后恢复开发
+
+> TDD 流程：先在这里列出用例并跑红，再实现代码跑绿。
+
+| # | 用例 | 优先级 | 结果 |
+| -- | ---- | ------ | ---- |
+| C01 | 文件在领取前已脏、当前单又修改：挂起当前单并暂停队列，文档已提交也不视为开发完成 | P0 | 通过（confirm-block T「C01」） |
+| C02 | test 或业务分组提交失败/遗漏：保留已成功提交的 hash，不重复提交，仍阻止后续领取 | P0 | 通过（confirm-block T「C02」） |
+| C03 | 挂起后从自动派发、batch next、claim、/dev loop 发起后续开发：统一拒绝并返回阻塞条目 | P0 | 通过（confirm-block T「C03」+ confirm-serve G1/G2） |
+| C04 | 刷新、重启、切换会话：挂起记录和队列暂停仍存在，不能绕过 | P0 | 通过（confirm-block T「C03/C04」新进程 claim 被拒；confirm-analyze T「C17」新进程读回） |
+| C05 | 人工核对文件与差异、确认归属后补交并验证成功：当前单收尾，后续仅派发一次 | P0 | 通过（confirm-block T「C05」+ confirm-serve S1） |
+| C06 | 人工确认时内容已变、提交遗漏或测试失败：保留挂起并逐项说明，可重新核验 | P0 | 通过（confirm-block T「C06a/C06b」） |
+| C07 | 重复点击确认、请求重试：不重复 commit、不重复派发；处理中按钮禁用 | P0 | 通过（confirm-block T「C05/C07 幂等」；按钮禁用为 UI 静态契约） |
+| C08 | 人工已在终端补交：核验完整内容和关联，不凭任意带单号 commit 直接通过 | P0 | 通过（confirm-block T「C08」） |
+| C09 | 纯文档/合法无改动任务：按声明范围和可验证原因判断，不误要求业务文件 | P1 | 通过（confirm-block T「C09」） |
+| C10 | 点击保持挂起：现场和队列保留；取消队列须显式操作，不自动跳过阻塞项 | P1 | 通过（confirm-block T「C10」） |
+| C11 | 卡片、详情、队列区的已提交/待提交数量、原因和差异一致；失败提供重试 | P1 | 通过（confirm-block T「C11」清单/详情计数同源） |
+| C12 | 人工确认提交后不自动设置验收 done，保留既有人工确认完成入口 | P0 | 通过（confirm-block T「C05」条目保持 in-progress） |
+| C13 | 已预留未开始的后续项不启动；当前单核验与补交流程仍可执行，不发生执行权死锁 | P0 | 通过（confirm-block T「C03/C05/C13」） |
+| C14 | 旧部分提交/暂扣账本恢复后不能再按普通成功处理；仅文档成功的历史条目展示不完整状态 | P0 | 通过（confirm-block T「C14」+ 真实项目只读冒烟呈现 5 条历史恢复视图） |
+| C15 | AI 分析遇到必须人工确认的问题：当前条目挂起，后续分析领取/派发均被阻止，不能因文档生成而标记分析完成 | P0 | 通过（confirm-analyze T「C15」） |
+| C16 | 分析确认界面展示背景、问题、选项及影响，支持自由文本；必答缺失时禁止继续，推荐选项不自动算已确认 | P0 | 通过（confirm-analyze T「C16」+ confirm-serve S2） |
+| C17 | 保存草稿/保持挂起以及刷新/重启：问题、答案草稿与队列暂停保留，不触发恢复 | P0 | 通过（confirm-analyze T「C17」） |
+| C18 | 人工确认后当前分析收到完整答案并继续；未完成收尾前不派发下一条，再遇未决问题重新挂起 | P0 | 通过（confirm-analyze T「C18」；再挂起=重新声明开新轮，见 C19） |
+| C19 | 问题或文档版本变化：过期确认被拒绝，提示核对新问题；有效答案及确认时间可追溯 | P0 | 通过（confirm-analyze T「C19」） |
+| C20 | 分析恢复失败可重试且保留答案；重复确认不重复启动，不自动接受需求、开发或验收 done | P0 | 通过（confirm-analyze T「C20」） |
+| C21 | 分析与开发阻塞共享入口但分别展示对应表单，条目详情与队列暂停提示一致 | P1 | 通过（confirm-analyze T「C21」+ confirm-serve S1/S2） |
+
+实施说明：
+
+- 开发侧回归：`scripts/tests/confirm-block-20260914-001.test.mjs`（12 例，C01–C14）
+- 分析侧回归：`scripts/tests/confirm-analyze-20260914-001.test.mjs`（7 例，C15–C21）
+- 服务端 / 拦截面：`scripts/tests/confirm-serve-20260914-001.test.mjs`（4 例：S1/S2/G1/G2）
+- 行为演进影响的存量用例已同步更新预期（需求重定义队列语义，见 design.md）：
+  `dev-flow-20260911-009` D8（失败不再立即续派，改为挂起→人工确认→恢复）、
+  `bug-revert-held-notice-20260914-014` C1（暂扣即挂起，nextAction stop）、
+  `batch-ui` / `refine-ui` / `bug-refine-done-notice-dup-20260914-001` / `detail-close-btn` /
+  `shortcuts-20260910-007` / `impl-entry-ui` / `new-shot-preview-20260910-017` /
+  `i18n-dict` / `i18n-coverage`（新增 UI 层与词条的桩/窗口/词条维护）。

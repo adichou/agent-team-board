@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260911-010 演示 — 回退批量 Commit，保留已完成 commit 号显示</title>
+<style>
+  /* ---------- 主题变量（深浅色适配，初始跟随系统，可手动切换） ---------- */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dee5; --text: #1c2430; --muted: #6b7684;
+    --accent: #2f6fed; --ok-bg: #e6f4ea; --ok-fg: #1a7f37; --ok-br: #b7dfc1;
+    --warn-bg: #fdf1e2; --warn-fg: #9a6700; --warn-br: #f0d9ad;
+    --err-bg: #fdebec; --err-fg: #c0392b; --err-br: #f2c1c4;
+    --code-bg: #eef1f5; --code-fg: #24435c; --chip-bg: #ffffff; --hover: #f0f4fa;
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181f; --panel: #1d232d; --border: #333c49; --text: #e6eaf0; --muted: #97a3b2;
+    --accent: #6c9cff; --ok-bg: #17301f; --ok-fg: #6fdc8c; --ok-br: #2c5a3d;
+    --warn-bg: #33290f; --warn-fg: #e6c068; --warn-br: #5c4d1e;
+    --err-bg: #3a1d1f; --err-fg: #ff9d96; --err-br: #6b3336;
+    --code-bg: #262e3a; --code-fg: #a8c6f0; --chip-bg: #1d232d; --hover: #232c39;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin: 14px 0; }
+  .lead { max-width: 980px; }
+
+  /* ---------- 控制条 ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+  .ctrl { display: flex; align-items: center; gap: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .theme-btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  #statusBar { margin-top: 10px; padding: 8px 12px; border-radius: 6px; font-size: 13px; border: 1px solid var(--border); background: var(--hover); }
+  #statusBar.err { background: var(--err-bg); color: var(--err-fg); border-color: var(--err-br); }
+  #statusBar.load { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warn-br); }
+
+  /* ---------- 任务模块页签 ---------- */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tab { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--panel); cursor: default; font-size: 13px; }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.gone { display: none; }
+  .tab-note { border: 1px dashed var(--border); border-radius: 6px; padding: 8px 12px; color: var(--muted); font-size: 12.5px; }
+
+  /* ---------- 需求模块已完成档 ---------- */
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip { padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--chip-bg); font-size: 12.5px; color: var(--muted); }
+  .chip.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .lane-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 8px; }
+  .quick-entry { border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  .quick-entry.gone { display: none; }
+
+  table.items { width: 100%; border-collapse: collapse; }
+  table.items th, table.items td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13.5px; vertical-align: top; }
+  table.items th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+  tr.item { cursor: pointer; }
+  tr.item:hover { background: var(--hover); }
+  tr.item.sel { background: var(--hover); }
+  tr.item.gone td { color: var(--muted); font-style: italic; cursor: default; }
+
+  /* ---------- 提交状态徽标（保留功能的四种状态） ---------- */
+  .commit-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; border: 1px solid transparent; white-space: nowrap; }
+  .cm-uncommitted { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warn-br); }
+  .cm-committed { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--ok-br); }
+  .cm-error { background: var(--err-bg); color: var(--err-fg); border-color: var(--err-br); cursor: pointer; }
+  .cm-loading { background: var(--hover); color: var(--muted); border-color: var(--border); }
+  code.hash { background: var(--code-bg); color: var(--code-fg); border-radius: 4px; padding: 2px 7px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; display: inline-block; margin: 2px 4px 2px 0; }
+  code.hash:hover { text-decoration: underline; }
+
+  /* ---------- 详情 ---------- */
+  .drawer { border-top: 1px dashed var(--border); margin-top: 12px; padding-top: 12px; }
+  .field { display: flex; gap: 10px; margin: 6px 0; align-items: flex-start; }
+  .field label { min-width: 72px; color: var(--muted); font-size: 12.5px; padding-top: 2px; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .btn.retry { border-color: var(--err-br); color: var(--err-fg); }
+
+  /* ---------- 索引示意 / 全局看板 ---------- */
+  table.plain { width: 100%; border-collapse: collapse; }
+  table.plain td, table.plain th { border: 1px solid var(--border); padding: 6px 10px; font-size: 13px; text-align: left; }
+  .g-row { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .g-row.gone { display: none; }
+  .tag { border: 1px solid var(--border); border-radius: 4px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--text); color: var(--bg);
+    padding: 6px 16px; border-radius: 6px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .toast.show { opacity: .92; }
+</style>
+</head>
+<body>
+<div class="lead">
+  <h1>REQ-20260911-010 界面演示 — 回退批量 Commit，保留已完成条目的 commit 号显示</h1>
+  <p class="muted small">单文件内存模拟演示：不访问真实服务、不执行任何 Git 操作。数据源切到 REQ-20260911-009 的 commit↔单号索引（一个 commit 可关联多个单号；一个单号只关联一个 commit）。</p>
+</div>
+
+<!-- 控制条：回退前后对照 + 提交状态四态 + 深浅色 -->
+<div class="panel">
+  <div class="controls">
+    <div class="ctrl"><span class="small">回退状态</span>
+      <div class="seg" id="segRollback">
+        <button data-v="before" class="on">回退前（现状）</button>
+        <button data-v="after">回退后（本需求）</button>
+      </div>
+    </div>
+    <div class="ctrl"><span class="small">索引数据源状态</span>
+      <div class="seg" id="segSource">
+        <button data-v="normal" class="on">正常</button>
+        <button data-v="empty">空（无记录）</button>
+        <button data-v="loading">加载中</button>
+        <button data-v="error">失败</button>
+      </div>
+    </div>
+    <div class="ctrl"><button class="theme-btn" id="themeBtn">切换深浅色</button></div>
+  </div>
+  <div id="statusBar">当前：回退前 · 索引正常。已完成条目的提交状态徽标与详情字段为保留功能。</div>
+</div>
+
+<!-- 1. 任务模块：批量 Commit 页签随回退消失 -->
+<div class="panel">
+  <h2>① 任务模块 — 页签组</h2>
+  <div class="tabs">
+    <div class="tab">概览</div>
+    <div class="tab">批量完善</div>
+    <div class="tab">批量开发</div>
+    <div class="tab gone" id="commitTab">批量 Commit</div>
+  </div>
+  <div class="tab-note" id="tabNote">回退后：「批量 Commit」页签与面板整体移除，不留空占位或禁用页签；本地提交唯一路径为「到待测试自动 commit」（REQ-20260911-009）。</div>
+</div>
+
+<!-- 2. 需求模块：已完成档列表（徽标 = 保留功能） -->
+<div class="panel">
+  <h2>② 需求模块 —「已完成」档列表（点击行看详情）</h2>
+  <div class="chips" id="chips"></div>
+  <div class="lane-head">
+    <span class="small muted">默认仅列最新 100 项，更早用搜索获取 · 徽标数据源：REQ-20260911-009 索引</span>
+    <button class="quick-entry" id="quickCommit" title="进入任务模块批量 Commit 面板（回退后移除）">▶ 开始 Commit</button>
+  </div>
+  <table class="items">
+    <thead><tr><th style="width:190px">编号</th><th>标题</th><th style="width:250px">提交状态</th></tr></thead>
+    <tbody id="itemRows"></tbody>
+  </table>
+  <div class="drawer" id="drawer"></div>
+</div>
+
+<!-- 3. 索引关联示意 -->
+<div class="panel">
+  <h2>③ commit ↔ 单号 关联示意（取数口径）</h2>
+  <table class="plain">
+    <thead><tr><th>方向</th><th>记录</th></tr></thead>
+    <tbody>
+      <tr><td>单号 → commit<br><span class="small muted">一个单号只关联一个 commit</span></td>
+          <td id="mapForward"></td></tr>
+      <tr><td>commit → 单号<br><span class="small muted">一个 commit 可关联多个单号</span></td>
+          <td id="mapReverse"></td></tr>
+    </tbody>
+  </table>
+  <p class="small muted" style="margin-bottom:0">注：与 REQ-20260911-009 现行「一单多 commit（业务/测试/文档分组）」口径存在矛盾，最终以人工确认结论为准（本单 README 待确认 1）。</p>
+</div>
+
+<!-- 4. 全局看板：CMT 批次简报行随回退消失 -->
+<div class="panel">
+  <h2>④ 全局看板 — 批量任务简报行</h2>
+  <div class="g-row"><span class="tag">RFB-20260910-023</span><span class="tag">refine</span><span>批量完善 · running</span></div>
+  <div class="g-row"><span class="tag">batch-20260911-02</span><span class="tag">develop</span><span>批量开发 · running</span></div>
+  <div class="g-row gone" id="cmtRow"><span class="tag">CMT-20260911-001</span><span class="tag">commit</span><span>批量 Commit · running（回退后不再出现该类行）</span></div>
+</div>
+
+<div class="toast" id="toast">已复制</div>
+
+<script>
+'use strict';
+/* ---------- 模拟数据（纯内存，仅演示） ---------- */
+const ITEMS = [
+  { id: 'REQ-20260910-021', title: '看板列表支持按负责人排序', owner: 'zcode' },
+  { id: 'BUG-20260910-008', title: '详情页关联需求链接失效', owner: 'zcode' },
+  { id: 'REQ-20260910-030', title: '导出看板周报 Markdown', owner: 'codex' },
+  { id: 'BUG-20260911-002', title: '深色模式徽标对比度不足', owner: 'zcode' },
+  { id: 'REQ-20260911-005', title: '全局看板增加失败率统计', owner: 'codex' },
+];
+/* REQ-20260911-009 索引模拟：单号 → 唯一 commit；一个 commit 被两个单共享 */
+const INDEX = {
+  'REQ-20260910-021': 'a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4',
+  'BUG-20260910-008': 'a1b2c3d4e5f67890a1b2c3d4e5f67890a1b2c3d4',
+  'BUG-20260911-002': 'e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4',
+  'REQ-20260911-005': 'e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4',
+};
+const LANES = [['submitted','待接受',3],['accepted','已接受',2],['planned','已计划',4],['developing','开发中',6],['confirming','待测试',5],['done','已完成',ITEMS.length]];
+
+const state = { rollback: 'before', source: 'normal', loaded: { ...INDEX }, selId: null };
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = (h) => h.slice(0, 10);
+
+/* ---------- 主题 ---------- */
+const root = document.documentElement;
+if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) root.dataset.theme = 'dark';
+$('#themeBtn').addEventListener('click', () => { root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; });
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+/* ---------- 徽标渲染（保留功能四态；错误态为可点击重试按钮） ---------- */
+function badgeHtml(id, inDrawer) {
+  if (state.source === 'loading') {
+    return `<span class="commit-badge cm-loading">读取中…</span><span class="small muted">（沿用上次数据，不闪「未提交」）</span>`;
+  }
+  if (state.source === 'error') {
+    return `<button type="button" class="commit-badge cm-error" data-retry title="提交状态查询失败：索引接口不可用。点击重试；已加载的成功记录保留。">提交状态加载失败</button>`
+      + (inDrawer ? ' <button type="button" class="btn retry" data-retry>重试读取</button>' : '');
+  }
+  const hash = state.loaded[id];
+  if (!hash) return `<span class="commit-badge cm-uncommitted" title="索引中无该单关联记录">未提交</span>`;
+  return `<span class="commit-badge cm-committed">已提交</span> <code class="hash" data-copy="${esc(hash)}" title="点击复制完整提交号：${esc(hash)}">${esc(short(hash))}</code>`;
+}
+
+/* ---------- 列表与详情 ---------- */
+function renderRows() {
+  $('#itemRows').innerHTML = ITEMS.map((it) => `
+    <tr class="item${state.selId === it.id ? ' sel' : ''}" data-id="${esc(it.id)}">
+      <td>${esc(it.id)}</td>
+      <td>${esc(it.title)}<div class="small muted">负责人 ${esc(it.owner)}</div></td>
+      <td>${badgeHtml(it.id, false)}</td>
+    </tr>`).join('');
+  renderDrawer();
+}
+function renderDrawer() {
+  const it = ITEMS.find((x) => x.id === state.selId);
+  const d = $('#drawer');
+  if (!it) { d.innerHTML = '<p class="small muted" style="margin:0">（点击上方条目行查看详情 — 详情含「提交状态」字段，提交号逐个可复制）</p>'; return; }
+  d.innerHTML = `
+    <div class="field"><label>编号</label><span>${esc(it.id)}</span></div>
+    <div class="field"><label>标题</label><span>${esc(it.title)}</span></div>
+    <div class="field"><label>状态</label><span>已完成（done）</span></div>
+    <div class="field"><label>提交状态</label><span>${badgeHtml(it.id, true)}</span></div>`;
+}
+$('#itemRows').addEventListener('click', (e) => {
+  const retry = e.target.closest('[data-retry]');
+  if (retry) { setSource('normal'); return; } // 重试 = 强制重拉，成功恢复
+  const hash = e.target.closest('[data-copy]');
+  if (hash) { copyText(hash.dataset.copy); return; }
+  const tr = e.target.closest('tr.item');
+  if (tr) { state.selId = tr.dataset.id === state.selId ? null : tr.dataset.id; renderRows(); }
+});
+$('#drawer').addEventListener('click', (e) => {
+  if (e.target.closest('[data-retry]')) { setSource('normal'); return; }
+  const hash = e.target.closest('[data-copy]');
+  if (hash) copyText(hash.dataset.copy);
+});
+
+function copyText(text) {
+  const done = () => toast('已复制 ' + short(text));
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch { toast('复制失败，请手动选择'); }
+  document.body.removeChild(ta);
+}
+
+/* ---------- 回退开关：页签 / 快捷入口 / CMT 行 ---------- */
+function renderRollback() {
+  const after = state.rollback === 'after';
+  $('#commitTab').classList.toggle('gone', after);
+  $('#quickCommit').classList.toggle('gone', after);
+  $('#cmtRow').classList.toggle('gone', after);
+  $('#tabNote').style.display = after ? '' : 'none';
+}
+$('#segRollback').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.rollback = b.dataset.v;
+  document.querySelectorAll('#segRollback button').forEach((x) => x.classList.toggle('on', x === b));
+  renderRollback(); renderStatus();
+});
+
+/* ---------- 数据源四态 ---------- */
+let loadingTimer = null;
+function setSource(v) {
+  clearTimeout(loadingTimer);
+  state.source = v;
+  if (v === 'empty') state.loaded = {};           // 索引为空：全部「未提交」，不报错
+  if (v === 'normal') state.loaded = { ...INDEX };
+  if (v === 'loading') {                          // 拉取期间沿用上次数据，1.6s 后自动回到正常（模拟轮询完成）
+    loadingTimer = setTimeout(() => setSource('normal'), 1600);
+  }
+  document.querySelectorAll('#segSource button').forEach((x) => x.classList.toggle('on', x.dataset.v === v));
+  renderRows(); renderStatus();
+}
+$('#segSource').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  setSource(b.dataset.v);
+});
+
+function renderStatus() {
+  const roll = state.rollback === 'after' ? '回退后（批量 Commit 已移除）' : '回退前（现状）';
+  const src = {
+    normal: '索引正常：已完成条目按索引显示「已提交 + 提交号 / 未提交」',
+    empty: '索引为空（如刚回退、自动提交尚未产生记录）：全部显示「未提交」，不报错',
+    loading: '加载中：随主轮询拉取，期间沿用上一次成功数据，不闪「未提交」',
+    error: '取数失败：徽标显示「提交状态加载失败」，点击可重试；已加载的成功记录保留',
+  }[state.source];
+  const bar = $('#statusBar');
+  bar.className = state.source === 'error' ? 'err' : state.source === 'loading' ? 'load' : '';
+  bar.textContent = `当前：${roll} · ${src}。`;
+}
+
+/* ---------- 档位 chips / 索引示意 ---------- */
+$('#chips').innerHTML = LANES.map(([k, label, n]) =>
+  `<span class="chip${k === 'done' ? ' active' : ''}" title="本演示聚焦「已完成」档，其余档位仅供布局上下文">${label} ${n}</span>`).join('');
+$('#mapForward').innerHTML = ITEMS.map((it) => {
+  const h = INDEX[it.id];
+  return `<div>${esc(it.id)} → ${h ? `<code class="hash" data-copy="${esc(h)}" title="点击复制">${esc(short(h))}</code>` : '<span class="muted">（未提交，无关联）</span>'}</div>`;
+}).join('');
+const rev = {};
+for (const [id, h] of Object.entries(INDEX)) (rev[h] = rev[h] || []).push(id);
+$('#mapReverse').innerHTML = Object.entries(rev).map(([h, ids]) =>
+  `<div><code class="hash" data-copy="${esc(h)}" title="点击复制">${esc(short(h))}</code> → ${ids.map(esc).join('、')}</div>`).join('');
+document.body.addEventListener('click', (e) => {
+  const hash = e.target.closest('#mapForward code, #mapReverse code');
+  if (hash) copyText(hash.dataset.copy);
+});
+
+$('#quickCommit').addEventListener('click', () => toast('（现状行为）跳转任务模块「批量 Commit」面板 — 回退后此入口移除'));
+
+renderRollback(); renderRows(); renderStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>布局优化演示 · REQ-20260910-012</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --accent: #4f46e5;
+    --accent-soft: rgba(79,70,229,.1); --warn: #dc2626; --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --primary: #3b82f6; --accent: #818cf8;
+      --accent-soft: rgba(129,140,248,.16); --warn: #f87171; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, "PingFang SC", "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+
+  /* ===== 演示控制条（不属于模拟应用） ===== */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 10px 18px; background: var(--panel); border-bottom: 1px dashed var(--border); font-size: 13px; }
+  .demo-bar label { display: inline-flex; gap: 6px; align-items: center; }
+  select, button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 5px 12px; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  button:disabled { opacity: .45; cursor: wait; }
+  .demo-note { color: var(--muted); }
+
+  /* ===== 模拟应用窗口 ===== */
+  .app { display: flex; flex-direction: column; height: calc(100vh - 44px); min-height: 480px; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px 78px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .traffic { position: absolute; left: 14px; top: 14px; display: flex; gap: 6px; }
+  .traffic i { width: 12px; height: 12px; border-radius: 50%; }
+  .traffic i:nth-child(1) { background: #ff5f57; } .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+  .app { position: relative; }
+  .topbar-drag-hint { position: absolute; left: 84px; top: 12px; font-size: 10px; color: var(--muted); }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .logo { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #6366f1, #3b82f6); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  .brand h1 { font-size: 15px; margin: 0; }
+  .path { display: none; font-size: 11px; color: var(--muted); max-width: 320px; overflow-wrap: anywhere; }
+  .mod-tabs { display: flex; gap: 2px; margin-left: 6px; }
+  .mod-tabs .tab { border: 0; background: none; padding: 6px 11px; border-radius: 8px; color: var(--muted); font-weight: 500; }
+  .mod-tabs .tab:hover { color: var(--text); background: var(--accent-soft); }
+  .mod-tabs .tab.active { color: var(--accent); background: var(--accent-soft); }
+  .mod-tabs .tab.extra { margin-left: 12px; }
+  .top-acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .top-hint { font-size: 12px; color: var(--muted); max-width: 300px; }
+  .hidden { display: none !important; }
+
+  .module-nav { display: none; gap: 2px; padding: 6px 18px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .page-head { display: flex; align-items: center; gap: 12px; padding: 7px 18px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .module-sub { margin: 0; color: var(--muted); font-size: 12px; }
+  .search { margin-left: auto; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; }
+  .search input { border: 0; background: none; outline: none; width: 170px; }
+  .filter-bar { display: none; gap: 6px; padding: 7px 18px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .fchip { border-radius: 99px; padding: 3px 12px; font-size: 12px; }
+  .fchip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .fchip .n { color: var(--muted); }
+
+  /* ===== 旧布局独有 ===== */
+  .app[data-layout="old"] .path { display: block; }
+  .app[data-layout="old"] .mod-tabs { display: none; }
+  .app[data-layout="old"] .module-nav { display: flex; }
+  .app[data-layout="old"] .module-nav .tab { border: 0; background: none; padding: 6px 11px; border-radius: 8px; color: var(--muted); font-weight: 500; }
+  .app[data-layout="old"] .module-nav .tab:hover { color: var(--text); background: var(--accent-soft); }
+  .app[data-layout="old"] .module-nav .tab.active { color: var(--accent); background: var(--accent-soft); }
+  .app[data-layout="old"] .module-nav .tab.extra { margin-left: auto; }
+  .app[data-layout="old"].has-subtabs .filter-bar { display: flex; }
+
+  /* ===== 内容区 ===== */
+  .content { flex: 1; display: flex; min-height: 0; }
+  .vrail { display: none; flex-direction: column; gap: 6px; padding: 12px 8px; border-right: 1px solid var(--border); background: var(--panel); }
+  .vrail .vt {
+    writing-mode: vertical-rl; text-orientation: upright;
+    letter-spacing: 2px; padding: 12px 7px; border-radius: 9px; border: 1px solid transparent;
+    background: none; font-size: 13px; color: var(--muted); min-height: 96px;
+  }
+  .vrail .vt:hover { color: var(--text); background: var(--accent-soft); }
+  .vrail .vt.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .app[data-layout="new"].has-subtabs .vrail { display: flex; }
+  .pane { flex: 1; overflow: auto; padding: 14px 18px; }
+  .row-card { border: 1px solid var(--border); background: var(--panel); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .rid { font-weight: 600; }
+  .rt { flex: 1; min-width: 200px; }
+  .chip { font-size: 11px; border-radius: 99px; padding: 1px 9px; border: 1px solid var(--border); color: var(--muted); }
+  .pane-empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  .pane-load { color: var(--muted); padding: 40px 0; text-align: center; }
+  .spin { display: inline-block; animation: rot 1s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .err-box { border: 1px solid var(--warn); color: var(--warn); border-radius: 10px; padding: 14px; max-width: 520px; }
+
+  /* ===== 管理项目弹窗 ===== */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 22, .5); display: flex; align-items: center; justify-content: center; }
+  .modal { width: min(560px, 92vw); max-height: 84vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .modal h3 { margin: 0 0 4px; display: flex; align-items: center; }
+  .modal h3 button { margin-left: auto; }
+  .proj-row { display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--border); padding: 12px 2px; flex-wrap: wrap; }
+  .proj-name { font-weight: 600; }
+  .proj-cur { font-size: 11px; color: var(--ok); border: 1px solid var(--ok); border-radius: 99px; padding: 0 7px; margin-left: 6px; }
+  .proj-path { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .proj-info { flex: 1; min-width: 220px; }
+  .notice { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border); box-shadow: 0 6px 22px rgba(0,0,0,.25); border-radius: 10px; padding: 9px 16px; }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <strong>REQ-20260910-012 布局演示</strong>
+  <label>布局对照
+    <select id="layoutSel">
+      <option value="new">新布局（目标：页签上移 + 纵向子页签）</option>
+      <option value="old">旧布局（现状：路径在顶栏 + 横向页签）</option>
+    </select>
+  </label>
+  <label>演示状态
+    <select id="stateSel">
+      <option value="normal">正常</option>
+      <option value="empty">空（无项目）</option>
+      <option value="loading">加载</option>
+      <option value="error">失败</option>
+    </select>
+  </label>
+  <span class="demo-note">数据为内存模拟，不读写磁盘；交通灯与拖动提示仅示意 app 版顶栏让位约束。</span>
+</div>
+
+<div class="app" id="app" data-layout="new">
+  <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+  <span class="topbar-drag-hint" aria-hidden="true">⇄ 拖动区</span>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▦</span>
+      <h1>智能体团队看板</h1>
+      <span class="path" id="pathLine">/Users/demo/Documents/src/agent-team-board/docs/agent-team-board</span>
+    </div>
+    <nav class="mod-tabs" id="topTabs" aria-label="模块导航"></nav>
+    <div class="top-acts">
+      <span class="top-hint hidden" id="topHint"></span>
+      <select id="projSel" title="切换项目看板"></select>
+      <button type="button" id="btnManage">管理项目</button>
+      <button type="button" class="primary">＋ 新建</button>
+    </div>
+  </header>
+
+  <nav class="module-nav" id="moduleNav" aria-label="模块导航（旧布局）"></nav>
+
+  <section class="page-head">
+    <p class="module-sub" id="moduleSub"></p>
+    <div class="search"><span aria-hidden="true">⌕</span><input type="search" placeholder="搜需求 / Bug / 文档…" aria-label="搜索当前模块"></div>
+  </section>
+
+  <nav class="filter-bar" id="filterBar" aria-label="子页签（旧布局横向）"></nav>
+
+  <main class="content">
+    <aside class="vrail" id="vrail" aria-label="子页签（新布局左侧纵向，文字竖直）"></aside>
+    <div class="pane" id="pane"></div>
+  </main>
+</div>
+
+<div class="modal-wrap hidden" id="projWrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="项目管理">
+    <h3>项目管理 <button type="button" id="projClose" aria-label="关闭">✕</button></h3>
+    <p class="notice">项目路径完整展示在这里（本需求第 1 点）；顶栏不再默认显示路径。</p>
+    <div id="projList"></div>
+    <section class="proj-row" id="projConfirm" style="border-color:var(--warn)">
+      <div class="proj-info" id="projConfirmText"></div>
+      <button type="button" id="projCancel">取消</button>
+      <button type="button" id="projRemoveOk" style="color:var(--warn)">确认移出</button>
+    </section>
+  </div>
+</div>
+
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const app = $('app');
+
+// 模块定义：sub 为该模块的子页签（无则不渲染纵向栏/横向筛选条）
+const MODULES = [
+  { key: 'oncall',  label: '讨论', sub: 'disc',  subTitle: '开放式讨论：两态筛选迁入左侧纵向页签' },
+  { key: 'status',  label: '需求', sub: 'req',   subTitle: '需求工作区：六档状态筛选迁入左侧纵向页签' },
+  { key: 'runs',    label: '任务', sub: null,    subTitle: '任务模块：无子页签，内容区占满' },
+  { key: 'global',  label: '全局', sub: 'glob',  subTitle: '全局总览：状态筛选迁入左侧纵向页签' },
+  { key: 'files',   label: '文件', sub: null,    subTitle: '文件模块：无子页签，内容区占满' },
+  { key: 'settings',label: '设置', sub: null,    extra: true, subTitle: '设置模块：无子页签，内容区占满' },
+];
+const SUBS = {
+  req:  [['submitted','待接受'],['accepted','已接受'],['planned','已计划'],['developing','开发中'],['confirming','待测试'],['done','已完成']],
+  disc: [['discussing','讨论中'],['archived','已归档']],
+  glob: [['running','执行中'],['prepared','待启动'],['queued','排队中'],['paused','已暂停'],['needs','待核对']],
+};
+const DATA = {
+  req: [
+    ['REQ-20260910-001', '看板页面信息架构重排', 'submitted'], ['REQ-20260910-002', '项目切换器记忆恢复', 'submitted'],
+    ['REQ-20260910-005', '支持项目管理', 'accepted'], ['REQ-20260910-007', '快捷键帮助面板', 'accepted'], ['REQ-20260910-009', '列表排序记忆', 'accepted'],
+    ['REQ-20260909-015', '开源选型规范', 'planned'],
+    ['REQ-20260908-002', '所有列表提供排序', 'developing'], ['REQ-20260909-004', '开放式讨论模块', 'developing'],
+    ['REQ-20260906-013', '待测试状态列', 'confirming'],
+    ['REQ-20260905-001', 'Electron 桌面壳', 'done'],
+  ],
+  disc: [
+    ['ASK-20260910-001', '布局改造的验收口径', 'discussing'], ['ASK-20260909-004', '讨论纪要格式', 'discussing'],
+    ['ASK-20260908-002', '旧批次命名清理', 'archived'],
+  ],
+  glob: [
+    ['run-20260910-1102', '批量完善 · agent-team-board', 'running'], ['run-20260910-1041', '批量开发 · demo-app', 'prepared'],
+    ['run-20260909-1730', '批量完善 · demo-app', 'queued'], ['run-20260909-1502', '批量开发 · demo-lib', 'paused'],
+    ['run-20260909-0930', '批量完善 · demo-lib', 'needs'],
+  ],
+};
+
+let view = 'status', subSel = { req: 'submitted', disc: 'discussing', glob: 'running' };
+let demoState = 'normal', layout = 'new', busy = false;
+let projects = ['/Users/demo/Documents/src/agent-team-board', '/Users/demo/Documents/src/demo-app'];
+let current = projects[0], pendingRemove = null;
+
+const labelOf = (m) => MODULES.find((x) => x.key === m).label;
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.remove('hidden'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.add('hidden'), 2400); }
+
+function tabsHtml() {
+  return MODULES.map((m) => `<button type="button" class="tab${m.extra ? ' extra' : ''}${m.key === view ? ' active' : ''}" data-view="${m.key}">${m.label}</button>`).join('');
+}
+
+function subCount(subKey, lane) { return (DATA[subKey] || []).filter((r) => r[2] === lane).length; }
+
+function renderChrome() {
+  $('topTabs').innerHTML = tabsHtml();
+  $('moduleNav').innerHTML = tabsHtml();
+  $('moduleSub').textContent = MODULES.find((m) => m.key === view).subTitle;
+  const subKey = MODULES.find((m) => m.key === view).sub;
+  app.classList.toggle('has-subtabs', !!subKey && demoState === 'normal');
+  // 旧布局横向筛选条
+  $('filterBar').innerHTML = subKey ? SUBS[subKey].map(([k, t]) =>
+    `<button type="button" class="fchip${subSel[subKey] === k ? ' active' : ''}" data-sub="${k}">${t} <span class="n">${subCount(subKey, k)}</span></button>`).join('') : '';
+  // 新布局纵向页签（文字竖直）
+  $('vrail').innerHTML = subKey ? SUBS[subKey].map(([k, t]) =>
+    `<button type="button" class="vt${subSel[subKey] === k ? ' active' : ''}" data-sub="${k}" title="${t}">${t} ${subCount(subKey, k)}</button>`).join('') : '';
+  // 顶栏提示：新布局仅无项目时给简短引导（不含路径）；旧布局常驻完整路径
+  const pathEl = $('pathLine'), hintEl = $('topHint');
+  if (demoState === 'empty') { pathEl.textContent = '暂无项目：打开「管理项目」初始化或导入'; hintEl.textContent = '暂无项目：打开「管理项目」初始化或导入'; }
+  else { pathEl.textContent = current; hintEl.textContent = ''; }
+  hintEl.classList.toggle('hidden', layout !== 'new' || demoState !== 'empty' || demoState === 'loading');
+  pathEl.classList.toggle('hidden', false);
+}
+
+function renderPane() {
+  const pane = $('pane');
+  const subKey = MODULES.find((m) => m.key === view).sub;
+  const dis = (s) => (s ? '' : 'disabled');
+  if (demoState === 'loading') {
+    pane.innerHTML = `<p class="pane-load"><span class="spin">◌</span> 正在加载${labelOf(view)}模块…（布局重排期间不闪烁错位）</p>`;
+    return;
+  }
+  if (demoState === 'error') {
+    pane.innerHTML = `<div class="err-box"><b>读取失败</b>：模拟服务不可用（演示失败态）。<br>布局改造不新增失败态，沿用连接状态点与既有提示。<br><br><button type="button" id="btnRetry">重试</button></div>`;
+    $('btnRetry').onclick = () => { demoState = 'normal'; $('stateSel').value = 'normal'; renderAll(); toast('已恢复连接（模拟）。'); };
+    return;
+  }
+  if (demoState === 'empty') {
+    pane.innerHTML = `<div class="pane-empty"><b>暂无项目</b><br>顶栏不再显示路径；打开右上角「管理项目」初始化或导入项目。<br><button type="button" id="btnGoManage" class="primary" style="margin-top:10px">管理项目</button></div>`;
+    $('btnGoManage').onclick = openProj;
+    return;
+  }
+  const rows = subKey ? DATA[subKey].filter((r) => r[2] === subSel[subKey]) : [];
+  if (!subKey) {
+    pane.innerHTML = `<p class="notice">${labelOf(view)}模块无子页签：不显示左侧纵向栏，内容区占满（演示以占位内容表示）。</p>` +
+      Array.from({ length: 3 }, (_, i) => `<div class="row-card"><span class="rid">${labelOf(view)}面板 ${i + 1}</span><span class="rt">占位内容——纵向栏缺席时内容区向左扩展，可用宽度更大。</span><span class="chip">占位</span></div>`).join('');
+    return;
+  }
+  pane.innerHTML = rows.length
+    ? rows.map(([id, title, lane]) => `<div class="row-card"><span class="rid">${id}</span><span class="rt">${title}</span><span class="chip">${SUBS[subKey].find(([k]) => k === lane)[1]}</span></div>`).join('')
+    : `<div class="pane-empty">当前档位暂无条目（计数为 0 也可以切换）</div>`;
+}
+
+function renderProjSel() {
+  const el = $('projSel');
+  el.innerHTML = projects.length ? '' : '<option>（暂无项目）</option>';
+  for (const p of projects) { const o = document.createElement('option'); o.value = p; o.textContent = p.split('/').pop(); o.selected = p === current; el.append(o); }
+  el.disabled = busy || !projects.length;
+}
+
+function renderProjPanel() {
+  const list = $('projList');
+  $('projConfirm').style.display = pendingRemove ? '' : 'none';
+  if (!projects.length) { list.innerHTML = '<p class="notice">暂无项目。使用上方表单初始化或导入。</p>'; return; }
+  list.innerHTML = projects.map((p) => `
+    <div class="proj-row">
+      <div class="proj-info">
+        <div class="proj-name">${p.split('/').pop()}${p === current ? '<span class="proj-cur">当前</span>' : ''}</div>
+        <div class="proj-path" title="${p}">${p}</div>
+      </div>
+      <button type="button" data-sw="${p}">切换</button>
+      <button type="button" data-rm="${p}" style="color:var(--warn)">移出</button>
+    </div>`).join('');
+  $('projConfirmText').innerHTML = pendingRemove ? `移出 <b>${pendingRemove.split('/').pop()}</b>？<br><span class="proj-path">${pendingRemove}</span><br>仅从列表移出，目录与文档保留（模拟）。` : '';
+}
+
+function renderAll() { renderChrome(); renderPane(); renderProjSel(); renderProjPanel(); }
+
+// 交互：模块页签（新旧两处共用委托）
+for (const navId of ['topTabs', 'moduleNav']) {
+  $(navId).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-view]'); if (!b) return;
+    view = b.dataset.view; renderAll();
+  });
+}
+// 交互：子页签（横向 chips 与纵向竖排页签行为一致）
+for (const navId of ['filterBar', 'vrail']) {
+  $(navId).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sub]'); if (!b) return;
+    const subKey = MODULES.find((m) => m.key === view).sub;
+    subSel[subKey] = b.dataset.sub; renderAll();
+    const txt = b.textContent.trim();
+    toast(`${layout === 'new' ? '纵向子页签' : '横向筛选'}：已切到「${txt}」，过滤与计数即时刷新。`);
+  });
+}
+
+$('layoutSel').onchange = (e) => { layout = e.target.value; app.dataset.layout = layout; renderAll(); toast(layout === 'new' ? '新布局：路径仅存于管理项目，页签上移顶栏，子页签纵向竖排。' : '旧布局对照：路径占顶栏、模块页签独占一行、子页签横向。'); };
+$('stateSel').onchange = (e) => { demoState = e.target.value; pendingRemove = null; renderAll(); };
+
+$('projSel').onchange = (e) => { current = e.target.value; renderAll(); toast('已切换项目（模拟）。新布局顶栏仍不显示路径，完整路径见「管理项目」。'); };
+
+// 管理项目弹窗
+function openProj() { pendingRemove = null; $('projWrap').classList.remove('hidden'); renderProjPanel(); }
+$('btnManage').onclick = openProj;
+$('projClose').onclick = () => $('projWrap').classList.add('hidden');
+$('projWrap').addEventListener('click', (e) => { if (e.target === $('projWrap')) $('projWrap').classList.add('hidden'); });
+$('projList').addEventListener('click', (e) => {
+  const sw = e.target.closest('[data-sw]'), rm = e.target.closest('[data-rm]');
+  if (sw) { current = sw.dataset.sw; renderAll(); toast('已切换：' + current); }
+  else if (rm) { pendingRemove = rm.dataset.rm; renderProjPanel(); }
+});
+$('projCancel').onclick = () => { pendingRemove = null; renderProjPanel(); };
+$('projRemoveOk').onclick = () => {
+  projects = projects.filter((p) => p !== pendingRemove);
+  if (current === pendingRemove) current = projects[0] || '';
+  if (!projects.length) { demoState = 'empty'; $('stateSel').value = 'empty'; }
+  toast('已移出（模拟），目录与文档保留。');
+  pendingRemove = null; renderAll();
+};
+
+renderAll();
+toast('默认新布局：模块页签在顶栏、子页签在左侧纵向竖排；可切「旧布局」对照。');
+</script>
+</body>
+</html>

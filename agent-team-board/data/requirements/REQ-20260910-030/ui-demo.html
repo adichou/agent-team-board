@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>桌面应用（Electron）构建发布演示（REQ-20260910-030）</title>
+<style>
+:root{
+  --bg:#eef2f8;--card:#fff;--ink:#213047;--muted:#61718a;--line:#b7c3d6;
+  --btn:#eaf0ff;--btnink:#203d77;--primary:#2b5bd7;--primaryink:#fff;
+  --ok:#1c7c43;--okbg:#e8f6ee;--warn:#9a6700;--warnbg:#fdf3d7;
+  --err:#b3261e;--errbg:#fbeae9;--run:#1f6feb;--runbg:#e7f0fe;--graybg:#eef1f5;
+  --ele:#7048b6;--elebg:#f0eafc;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#141a24;--card:#1e2632;--ink:#e7edf6;--muted:#9aa8bd;--line:#3a4759;
+    --btn:#28374e;--btnink:#bcd0f5;--primary:#5b8cff;--primaryink:#0d1526;
+    --ok:#7fd8a1;--okbg:#1f3329;--warn:#e3b341;--warnbg:#3a3222;
+    --err:#ff8f88;--errbg:#3a2422;--run:#7db1ff;--runbg:#1f2c42;--graybg:#262f3d;
+    --ele:#c3a6ff;--elebg:#2b2440}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:7px;background:var(--btn);color:var(--btnink);padding:5px 11px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--primary);color:var(--primaryink);border-color:transparent}
+button.ghost{background:transparent}
+input,select{font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink)}
+.hidden{display:none!important}
+.muted{color:var(--muted)}.small{font-size:12.5px}
+/* 顶栏 */
+.topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600}
+.brand .logo{display:inline-flex;width:26px;height:26px;align-items:center;justify-content:center;background:var(--primary);color:var(--primaryink);border-radius:7px}
+.module-nav{display:flex;gap:4px;flex-wrap:wrap}
+.module-nav button{border-color:transparent;background:transparent;color:var(--muted);border-radius:8px;padding:5px 12px}
+.module-nav button.active{background:var(--btn);color:var(--btnink);font-weight:600}
+.module-nav button.nav-extra{margin-left:6px}
+.top-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* 模块头 */
+.page-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px 0;max-width:1280px;margin:0 auto;width:100%}
+.page-head h2{font-size:17px;margin:0}
+.page-head .filters{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* 演示控制条 */
+.demo-bar{max-width:1280px;margin:10px auto 0;padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--warnbg);border:1px dashed var(--warn);border-radius:9px;font-size:12.5px}
+.demo-bar .grp{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.demo-bar button{padding:2px 9px;font-size:12.5px;border-radius:6px}
+.demo-bar button.on{background:var(--primary);color:var(--primaryink)}
+.demo-bar .sep{width:1px;height:16px;background:var(--line)}
+/* 主区 */
+.main{display:flex;gap:12px;max-width:1280px;margin:12px auto;padding:0 16px;width:100%;align-items:flex-start}
+.run-list{flex:1 1 340px;min-width:280px;display:flex;flex-direction:column;gap:8px}
+.run-detail{flex:1.6 1 460px;min-width:300px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.run-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.run-card:hover{border-color:var(--primary)}
+.run-card.sel{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset}
+.run-card .t{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.run-card .t strong{font-size:14px}
+.run-card .meta{color:var(--muted);font-size:12.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.chip.git{background:var(--runbg);color:var(--run)}
+.chip.apple{background:var(--okbg);color:var(--ok)}
+.chip.electron{background:var(--elebg);color:var(--ele)}
+.chip.unsigned{background:var(--warnbg);color:var(--warn);font-weight:500}
+.st{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.st.success{background:var(--okbg);color:var(--ok)}
+.st.failed{background:var(--errbg);color:var(--err)}
+.st.running{background:var(--runbg);color:var(--run)}
+.st.waiting{background:var(--warnbg);color:var(--warn)}
+.st.canceled,.st.draft{background:var(--graybg);color:var(--muted)}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--run);border-top-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* 状态占位（空/加载/失败） */
+.placeholder{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px 18px;text-align:center}
+.placeholder h3{margin:0 0 6px;font-size:15px}
+.skel{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--graybg) 25%,var(--btn) 45%,var(--graybg) 65%);background-size:200% 100%;animation:sk 1.1s infinite;margin:8px 0}
+@keyframes sk{to{background-position:-200% 0}}
+.errbox{background:var(--errbg);color:var(--err);border-radius:9px;padding:10px 12px;font-size:13px}
+.okbox{background:var(--okbg);color:var(--ok);border-radius:9px;padding:10px 12px;font-size:13px}
+.warnbox{background:var(--warnbg);color:var(--warn);border-radius:9px;padding:10px 12px;font-size:13px}
+/* 详情 */
+.detail-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.detail-head h3{margin:0;font-size:16px;flex:1 1 auto;min-width:160px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px 14px;margin:10px 0;font-size:13px}
+.kv div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv b{color:var(--muted);font-weight:500;margin-right:4px}
+/* 阶段 */
+.stages{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.stage{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;background:var(--card);color:var(--muted)}
+.stage.done{border-color:var(--ok);color:var(--ok)}
+.stage.cur{border-color:var(--run);color:var(--run)}
+.stage.fail{border-color:var(--err);color:var(--err);background:var(--errbg)}
+.arrow{color:var(--muted);align-self:center}
+/* 页签 */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 10px;flex-wrap:wrap}
+.tabs button{border:none;border-bottom:2px solid transparent;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);padding:6px 12px}
+.tabs button.active{color:var(--btnink);border-bottom-color:var(--primary);font-weight:600;background:var(--btn)}
+.pane{min-height:150px;font-size:13px}
+.log{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto}
+.stagegrp{margin:8px 0}
+.stagegrp b{font-size:12.5px}
+.audit{border-left:2px solid var(--line);margin:6px 0 6px 4px;padding-left:12px}
+.audit p{margin:3px 0;font-size:12.5px}
+.audit .t{color:var(--muted);margin-right:6px;font-family:ui-monospace,Menlo,monospace}
+.art{border:1px solid var(--line);border-radius:9px;padding:8px 12px;margin:6px 0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+/* 新建侧拉 */
+.drawer-mask{position:fixed;inset:0;background:#0d152ab0;z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,94vw);background:var(--card);border-left:1px solid var(--line);z-index:50;display:flex;flex-direction:column;box-shadow:-8px 0 24px #0003}
+.drawer header{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.drawer header h3{margin:0;font-size:16px;flex:1}
+.drawer .body{flex:1;overflow:auto;padding:14px 16px}
+.drawer footer{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.typegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.typecard{border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;text-align:center;background:var(--card)}
+.typecard.sel{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset;background:var(--btn)}
+.typecard.off{opacity:.5;cursor:not-allowed}
+.typecard b{display:block;font-size:13.5px}
+.typecard span{font-size:12px;color:var(--muted)}
+label.field{display:block;margin:12px 0;font-size:13px}
+label.field input,label.field select{width:100%;margin-top:4px}
+label.inline{display:flex;gap:6px;align-items:center;margin:6px 0;font-size:13px;cursor:pointer}
+label.inline input{width:auto}
+.checks{margin:10px 0}
+.checks p{margin:4px 0;font-size:13px}
+.plan{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:13px}
+.commits{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:86vw;padding:9px 18px;border-radius:9px;background:var(--ink);color:var(--bg);font-size:13.5px;box-shadow:0 6px 24px #0005;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+#toast.err{background:var(--err);color:#fff}
+#toast.ok{background:var(--ok);color:#fff}
+.note{font-size:12.5px;color:var(--muted);margin-top:4px}
+.backbtn{display:none}
+@media (max-width:960px){
+  .main{flex-direction:column}
+  .run-detail{order:-1;width:100%}
+  .run-list.sel-hidden{display:none}
+  .backbtn{display:inline-block}
+}
+</style>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">▦</span>智能体团队看板</div>
+  <nav class="module-nav" aria-label="模块导航">
+    <button type="button" data-nav="oncall">讨论</button>
+    <button type="button" data-nav="status">需求</button>
+    <button type="button" data-nav="runs">任务</button>
+    <button type="button" data-nav="files">文件</button>
+    <button type="button" data-nav="marketing">营销</button>
+    <button type="button" class="active" data-nav="publish">发布</button>
+    <button type="button" class="nav-extra" data-nav="settings">设置</button>
+  </nav>
+  <div class="top-actions">
+    <select title="切换项目看板（演示）" aria-label="当前项目"><option>agent-team-board</option><option>myapp-ios（演示）</option></select>
+    <button type="button" id="btnNew" class="primary" title="打开发布新建面板">＋ 新建发布</button>
+  </div>
+</header>
+
+<section class="page-head">
+  <h2>发布</h2>
+  <span class="muted small">Git 远端 · Apple App Store · 桌面应用（Electron）· 按项目隔离</span>
+  <div class="filters">
+    <select id="fType" aria-label="按目标类型筛选">
+      <option value="all">全部目标</option>
+      <option value="git">Git 远端</option>
+      <option value="apple">Apple App Store</option>
+      <option value="electron">桌面应用（Electron）</option>
+    </select>
+    <select id="fStatus" aria-label="按状态筛选">
+      <option value="all">全部状态</option>
+      <option value="running">进行中</option>
+      <option value="success">成功</option>
+      <option value="failed">失败</option>
+      <option value="canceled">已取消</option>
+      <option value="draft">草稿</option>
+    </select>
+    <input id="fSearch" type="search" placeholder="搜运行 / 版本 / 平台…" aria-label="搜索发布运行" style="width:170px">
+  </div>
+</section>
+
+<div class="demo-bar" role="group" aria-label="演示控制">
+  <span>演示控制（虚构数据）：</span>
+  <span class="grp">列表状态
+    <button type="button" data-list="normal" class="on">正常</button>
+    <button type="button" data-list="empty">空态</button>
+    <button type="button" data-list="loading">加载中</button>
+    <button type="button" data-list="error">加载失败</button>
+  </span>
+  <span class="sep"></span>
+  <span class="grp">选中运行模拟
+    <button type="button" id="simAdvance">阶段推进</button>
+    <button type="button" id="simFail">触发失败</button>
+    <button type="button" id="simReset">重置演示数据</button>
+  </span>
+</div>
+
+<main class="main">
+  <section class="run-list" id="runList" aria-label="发布运行列表"></section>
+  <section class="run-detail" id="runDetail" aria-label="运行详情"></section>
+</main>
+
+<!-- 新建发布侧拉面板 -->
+<div class="drawer-mask hidden" id="drawerMask"></div>
+<aside class="drawer hidden" id="drawer" role="dialog" aria-label="新建发布">
+  <header>
+    <h3>新建发布</h3>
+    <button type="button" class="ghost" id="drawerClose" aria-label="关闭新建发布面板">✕</button>
+  </header>
+  <div class="body">
+    <p class="muted small" style="margin-top:0">发布是实际执行流程：预检只读（不安装依赖、不构建、不推送）；启动即授权下方明确计划。</p>
+    <b class="small">目标类型</b>
+    <div class="typegrid" id="typeGrid">
+      <div class="typecard" data-type="git" role="button" tabindex="0"><b>Git 远端</b><span>分支 / 标签推送</span></div>
+      <div class="typecard" data-type="apple" role="button" tabindex="0"><b>Apple App Store</b><span>构建 / TestFlight / 提审</span></div>
+      <div class="typecard sel" data-type="electron" role="button" tabindex="0"><b>桌面应用（Electron）</b><span>macOS / Windows 构建</span></div>
+      <div class="typecard off" title="首期未开放"><b>网站</b><span>首期未开放</span></div>
+    </div>
+
+    <form id="electronForm">
+      <b class="small">目标平台（可多选）</b>
+      <label class="inline"><input type="checkbox" id="pMac" checked>macOS（应用包 .app，安装形态 .dmg）</label>
+      <label class="inline"><input type="checkbox" id="pWin" checked>Windows（安装包 NSIS .exe）</label>
+      <label class="field">macOS 架构
+        <select id="archMac">
+          <option>arm64（Apple Silicon）</option>
+          <option>x64（Intel）</option>
+          <option>universal（通用二进制）</option>
+        </select>
+      </label>
+      <label class="field">Windows 架构
+        <select id="archWin"><option>x64</option></select>
+      </label>
+      <label class="field">版本号
+        <input id="verInput" value="0.1.0">
+      </label>
+      <p class="note">版本号默认读取项目 package.json（当前 0.1.0），可覆盖。</p>
+      <label class="field">输出目录
+        <input id="outDir" value="dist/">
+      </label>
+      <p class="note">dist/ 已在 .gitignore 忽略；产物仅存本地，不自动上传分发。</p>
+      <label class="inline" style="margin-top:8px"><input type="checkbox" id="dirtyToggle">演示：工作区有未提交修改（预检将阻塞）</label>
+      <p class="note">未配置签名证书时产物标注「未签名」（首期不做签名 / 公证，不伪造签名状态）。</p>
+    </form>
+
+    <form id="gitForm" class="hidden">
+      <label class="field">Remote / 源分支
+        <span style="display:flex;gap:8px;margin-top:4px">
+          <select style="flex:1"><option>origin（已脱敏）</option></select>
+          <input value="main" style="flex:1">
+        </span>
+      </label>
+      <label class="field">目标分支
+        <input value="main">
+      </label>
+      <label class="field">版本标签（可选）
+        <input value="v1.4.3">
+      </label>
+      <label class="field">项目校验命令
+        <input value="npm test">
+      </label>
+      <label class="inline"><input type="checkbox" id="dirtyToggleGit">演示：工作区有未提交修改（预检将阻塞）</label>
+    </form>
+
+    <form id="appleForm" class="hidden">
+      <label class="field">工程 / Scheme
+        <span style="display:flex;gap:8px;margin-top:4px">
+          <select style="flex:1"><option>MyApp.xcworkspace</option></select>
+          <input value="MyApp" style="flex:1">
+        </span>
+      </label>
+      <label class="field">版本 / Build
+        <span style="display:flex;gap:8px;margin-top:4px">
+          <input value="1.2.1" style="flex:1"><input value="141" style="flex:1">
+        </span>
+      </label>
+      <p class="note">凭据引用 ~/.appstoreconnect/config.json，内容不进入看板与日志。</p>
+    </form>
+
+    <div id="preRes" class="hidden" style="margin-top:10px"></div>
+    <div id="planBox" class="hidden"></div>
+  </div>
+  <footer>
+    <button type="button" id="btnDraft">保存草稿</button>
+    <button type="button" id="btnPre">预检</button>
+    <button type="button" id="btnLaunch" class="primary" disabled>启动发布</button>
+  </footer>
+</aside>
+
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ---------- 数据 ---------- */
+var TLABEL = {git:'Git 远端', apple:'Apple App Store', electron:'桌面应用（Electron）'};
+var STAGES = {
+  git: ['配置冻结','本地预检','获取远端','质量检查','推送计划','执行推送','结果核验'],
+  electron: ['配置冻结','本地预检','依赖安装','桌面构建','产物核验']
+};
+var ELOGS = [
+  '$ git rev-parse HEAD\n  → 9a3f2c1（源提交已冻结）· 平台 macOS(arm64)+Windows(x64) · 版本 0.1.0 · 输出 dist/',
+  'Git 仓库 / 非 detached HEAD ✓ · 工作区与暂存区干净 ✓\npackage.json main → electron/main.mjs（Electron 工程）✓\nelectron-builder 构建配置就绪 ✓ · node / npm 可用 ✓',
+  '隔离工作目录（冻结提交 9a3f2c1）\n$ npm install\n  → 退出码 0（electron 37.2 / electron-builder 25.1 就绪）',
+  '$ electron-builder --mac --arm64\n  → Agent Team Board-0.1.0-arm64.dmg 生成\n$ electron-builder --win --x64\n  → Agent Team Board Setup 0.1.0.exe 生成（跨平台构建，未签名）',
+  '产物存在性 ✓ · 大小与 SHA-256 已记录 · 源 OID 9a3f2c1 · electron-builder 25.1.8\n全部产物核验通过 → 标记成功（产物仅存本地）'
+];
+var GLOGS = [
+  '$ git rev-parse HEAD\n  → a1b2c3d4…（源提交 OID 已冻结）',
+  '$ git status --porcelain\n  → 工作区 / 暂存区干净，非 detached HEAD',
+  '$ git fetch origin main\n  → 远端 OID f5e6d7c… 判定：可快进',
+  '$ npm test\n  → 退出码 0（42 passed），隔离工作目录 @ 冻结提交',
+  '$ git push --dry-run origin main:main\n  → 预检通过（dry-run 不实际推送）',
+  '$ git push origin main:main v1.4.2\n  → 远端返回 OK',
+  '$ git ls-remote origin main\n  → 远端 ref == 冻结 OID ✓ 结果核验通过'
+];
+function mkLogs(type, upto){
+  var s = STAGES[type], L = type === 'git' ? GLOGS : ELOGS, out = [];
+  for (var i = 0; i <= upto && i < s.length; i++){
+    out.push(L[i] != null ? L[i] : 'ok');
+  }
+  return out;
+}
+function mkRun(o){ return Object.assign({logs:[], history:[]}, o); }
+
+function initialRuns(){
+  return [
+    mkRun({id:'REL-20260911-002', type:'electron', title:'Agent Team Board 0.1.0 · macOS+Windows', status:'running', stageIdx:2,
+      src:'9a3f2c1', created:'09-11 07:20', ver:'0.1.0', plat:'macOS(arm64) + Windows(x64)', out:'dist/'}),
+    mkRun({id:'REL-20260911-001', type:'electron', title:'Agent Team Board 0.1.0 · macOS+Windows', status:'success', stageIdx:4,
+      src:'8d1e4b9', created:'09-11 06:40', ver:'0.1.0', plat:'macOS(arm64) + Windows(x64)', out:'dist/'}),
+    mkRun({id:'REL-20260910-007', type:'electron', title:'Agent Team Board 0.1.0 · Windows', status:'failed', stageIdx:3, failIdx:3,
+      failMsg:'Windows 目标构建失败：electron-builder 退出码 1（产物生成中断，详见阶段日志）。依赖安装已完成并保留；重试只重跑「桌面构建」及后续未完成阶段，不重复安装依赖。',
+      src:'5c7a2e8', created:'09-10 22:10', ver:'0.1.0', plat:'Windows(x64)', out:'dist/'}),
+    mkRun({id:'REL-20260910-005', type:'git', title:'main → origin/main', status:'success', stageIdx:6,
+      src:'a1b2c3d', created:'09-10 14:02', tag:'v1.4.2', check:'npm test'})
+  ];
+}
+
+var state = {
+  list: 'normal', runs: initialRuns(), sel: null, tab: 'overview',
+  filters: {type:'all', status:'all', q:''},
+  drawer: {type:'electron', pre: null}
+};
+var timers = {};
+
+/* ---------- 工具 ---------- */
+function $(s){ return document.querySelector(s); }
+function el(tag, cls, txt){ var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+function toast(msg, kind){
+  var t = $('#toast'); t.textContent = msg; t.className = 'show' + (kind ? ' ' + kind : '');
+  clearTimeout(t._h); t._h = setTimeout(function(){ t.className = ''; }, 3000);
+}
+var STLBL = {success:'成功', running:'进行中', failed:'失败', canceled:'已取消', draft:'草稿'};
+function stChip(st){ return '<span class="st ' + st + '">' + (st === 'running' ? '<span class="spin"></span> ' : '') + STLBL[st] + '</span>'; }
+function typeChip(t){ return '<span class="chip ' + t + '">' + TLABEL[t] + '</span>'; }
+function getRun(id){ for (var i = 0; i < state.runs.length; i++) if (state.runs[i].id === id) return state.runs[i]; return null; }
+function now(){ var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+function audit(r, txt){ r.history.unshift({t: now(), txt: txt}); }
+function stopTimer(id){ clearTimeout(timers[id]); delete timers[id]; }
+
+/* ---------- 列表 ---------- */
+function visibleRuns(){
+  var f = state.filters;
+  return state.runs.filter(function(r){
+    if (f.type !== 'all' && r.type !== f.type) return false;
+    if (f.status !== 'all' && r.status !== f.status) return false;
+    if (f.q){
+      var q = f.q.toLowerCase();
+      if ((r.id + r.title + (r.tag || '') + (r.ver || '')).toLowerCase().indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+}
+function renderList(){
+  var box = $('#runList'); box.innerHTML = '';
+  if (state.list === 'loading'){
+    var p = el('div','placeholder'); p.appendChild(el('h3',null,'正在加载发布运行…'));
+    p.appendChild(el('p','muted small','读取运行列表与阶段状态'));
+    for (var i = 0; i < 4; i++) p.appendChild(el('div','skel'));
+    box.appendChild(p); return;
+  }
+  if (state.list === 'error'){
+    var e = el('div','placeholder'); e.appendChild(el('h3',null,'运行列表加载失败'));
+    e.appendChild(el('div','errbox','无法读取发布运行：本地看板服务未响应（网络中断或服务已停止）。已开始的构建不受影响，服务恢复后可继续跟踪。'));
+    var rb = el('button',null,'重试'); rb.style.marginTop = '10px';
+    rb.onclick = function(){ setList('loading'); setTimeout(function(){ setList('normal'); toast('运行列表已恢复', 'ok'); }, 1200); };
+    e.appendChild(rb); box.appendChild(e); return;
+  }
+  if (state.list === 'empty'){
+    var m = el('div','placeholder'); m.appendChild(el('h3',null,'当前项目还没有发布运行'));
+    m.appendChild(el('p','muted small','支持三种发布目标：Git 远端（分支 / 标签推送）、Apple App Store（构建 / TestFlight / 提审）与桌面应用（Electron，macOS / Windows 安装包构建）。网站与网络存储将在后续版本开放。'));
+    var nb = el('button','primary','＋ 新建发布'); nb.onclick = openDrawer;
+    nb.style.marginTop = '8px'; m.appendChild(nb); box.appendChild(m); return;
+  }
+  var runs = visibleRuns();
+  if (!runs.length){
+    var n = el('div','placeholder'); n.appendChild(el('h3',null,'无匹配结果'));
+    n.appendChild(el('p','muted small','当前筛选（目标 / 状态 / 关键词）下没有运行。'));
+    var cb = el('button',null,'清除筛选'); cb.style.marginTop = '8px';
+    cb.onclick = function(){ state.filters = {type:'all',status:'all',q:''}; $('#fType').value = 'all'; $('#fStatus').value = 'all'; $('#fSearch').value = ''; renderAll(); };
+    n.appendChild(cb); box.appendChild(n); return;
+  }
+  runs.forEach(function(r){
+    var c = el('div','run-card' + (state.sel === r.id ? ' sel' : ''));
+    var t = el('div','t');
+    t.insertAdjacentHTML('beforeend', typeChip(r.type));
+    t.appendChild(el('strong',null,r.title));
+    t.insertAdjacentHTML('beforeend', stChip(r.status));
+    c.appendChild(t);
+    var meta = r.type === 'git'
+      ? '源提交 ' + r.src + (r.tag ? ' · 标签 ' + r.tag : '') + ' · ' + r.created
+      : '源提交 ' + r.src + ' · 输出 ' + r.out + ' · ' + r.created;
+    c.appendChild(el('div','meta', r.id + ' · ' + meta));
+    if (r.status === 'failed' && r.failMsg) c.appendChild(el('div','meta', '失败：' + r.failMsg.slice(0, 60) + '…'));
+    c.onclick = function(){ state.sel = r.id; state.tab = 'overview'; renderAll(); };
+    box.appendChild(c);
+  });
+}
+
+/* ---------- 详情 ---------- */
+function stageHtml(r){
+  var arr = STAGES[r.type], html = [];
+  for (var i = 0; i < arr.length; i++){
+    if (i) html.push('<span class="arrow">→</span>');
+    var cls = 'stage', mark = '○';
+    if (r.status === 'success'){ cls = 'stage done'; mark = '✓'; }
+    else if (r.status === 'failed'){
+      if (i < r.failIdx){ cls = 'stage done'; mark = '✓'; }
+      else if (i === r.failIdx){ cls = 'stage fail'; mark = '✗'; }
+    }
+    else if (r.status === 'canceled'){
+      if (i < r.stageIdx){ cls = 'stage done'; mark = '✓'; }
+    }
+    else { /* running / draft */
+      if (i < r.stageIdx){ cls = 'stage done'; mark = '✓'; }
+      else if (i === r.stageIdx){ cls = 'stage cur'; mark = '◉'; }
+    }
+    html.push('<span class="' + cls + '">' + mark + ' ' + arr[i] + '</span>');
+  }
+  return html.join('');
+}
+function paneOverview(r){
+  var d = el('div','pane');
+  if (r.type === 'electron'){
+    d.innerHTML = '<div class="kv">' +
+      '<div><b>目标</b>桌面应用（Electron）</div>' +
+      '<div><b>应用 / 版本</b>Agent Team Board ' + r.ver + '</div>' +
+      '<div><b>平台</b>' + r.plat + '</div>' +
+      '<div><b>源提交</b>' + r.src + '（构建基于冻结提交）</div>' +
+      '<div><b>输出目录</b>' + r.out + '（仅存本地）</div>' +
+      '<div><b>创建</b>' + r.created + '</div></div>' +
+      '<p class="note">构建在冻结提交的隔离工作目录执行；产物记录路径 / 大小 / SHA-256 / 源 OID，可追溯。未配置签名证书 → 产物「未签名」，不伪造签名状态。</p>';
+    if (r.status === 'success'){
+      d.appendChild(el('div','okbox','产物核验通过：2 个产物（macOS dmg / Windows exe）均已记录摘要并追溯到源提交 ' + r.src + '。'));
+    }
+  } else {
+    d.innerHTML = '<div class="kv">' +
+      '<div><b>目标</b>origin / main</div>' +
+      '<div><b>源提交</b>' + r.src + '</div>' +
+      '<div><b>标签</b>' + (r.tag || '—') + '</div>' +
+      '<div><b>校验命令</b>' + (r.check || 'npm test') + '</div></div>' +
+      '<p class="commits">待发布提交（示例）：<br>44f2a10 fix: 登录崩溃修复<br>c9d8e21 chore: 版本号 1.4.2</p>';
+  }
+  return d;
+}
+function paneLogs(r){
+  var d = el('div','pane');
+  var upto = r.status === 'failed' ? r.failIdx : r.stageIdx;
+  if (r.status === 'canceled') upto = Math.max(0, r.stageIdx - 1);
+  var arr = STAGES[r.type];
+  for (var i = 0; i <= Math.min(upto, arr.length - 1); i++){
+    var g = el('div','stagegrp');
+    var head = el('b', null, (i + 1) + '. ' + arr[i]);
+    if (r.status === 'failed' && i === r.failIdx) head.style.color = 'var(--err)';
+    g.appendChild(head);
+    var log = el('div','log');
+    var body = mkLogs(r.type, i)[i] || '';
+    if (r.status === 'failed' && i === r.failIdx) body += '\n✗ ' + r.failMsg;
+    if (r.status === 'running' && i === r.stageIdx) body += '\n…执行中';
+    if (r.status === 'canceled' && i === upto) body += '\n– 后续阶段已取消';
+    log.textContent = body;
+    g.appendChild(log); d.appendChild(g);
+  }
+  if (!d.childNodes.length) d.appendChild(el('p','muted','暂无日志'));
+  return d;
+}
+function paneArts(r){
+  var d = el('div','pane');
+  if (r.type !== 'electron'){
+    d.innerHTML = '<div class="art"><b>推送结果证据</b><br>远端 refs/heads/main：f5e6d7c… → a1b2c3d4…（快进）· git ls-remote 直读核验</div>' +
+      (r.tag ? '<div class="art"><b>标签</b>' + r.tag + ' → a1b2c3d4（与冻结提交一致）</div>' : '');
+    return d;
+  }
+  if (r.status === 'success'){
+    d.innerHTML = '<div class="art"><b>Agent Team Board-0.1.0-arm64.dmg</b> <span class="chip unsigned">未签名</span><br>macOS arm64 · 96.4 MB · SHA-256 7c1d…e90 · 源提交 9a3f2c1 · electron-builder 25.1.8</div>' +
+      '<div class="art"><b>Agent Team Board Setup 0.1.0.exe</b> <span class="chip unsigned">未签名</span><br>Windows x64 · 88.1 MB · SHA-256 4b8e…a17 · 源提交 9a3f2c1 · electron-builder 25.1.8</div>' +
+      '<p class="note">产物仅存本地（dist/），不自动上传分发；未配置签名证书，界面与产物明确标注「未签名」。</p>';
+  } else if (r.status === 'failed'){
+    d.innerHTML = '<div class="art"><b>无产物</b><br>构建失败于「' + STAGES.electron[r.failIdx] + '」，未生成可核验产物；修复后重试，将从失败阶段续跑。</div>';
+  } else if (r.status === 'running'){
+    d.innerHTML = '<div class="art"><b>构建进行中</b><br>尚无产物；「桌面构建」完成后进入产物核验并在此列出清单。</div>';
+  } else {
+    d.appendChild(el('p','muted','暂无产物（草稿 / 未构建）'));
+  }
+  return d;
+}
+function paneAudit(r){
+  var d = el('div','pane audit');
+  if (!r.history.length) r.history = [{t:r.created, txt:'创建运行（' + STLBL[r.status] + '）'}];
+  d.innerHTML = r.history.map(function(h){ return '<p><span class="t">' + h.t + '</span>' + h.txt + '</p>'; }).join('');
+  return d;
+}
+function renderDetail(){
+  var box = $('#runDetail'); box.innerHTML = '';
+  var r = state.sel && getRun(state.sel);
+  if (!r){ box.appendChild(el('p','muted','点击左侧运行查看详情：阶段输入、时间、结果、脱敏日志与产物证据。')); return; }
+
+  var head = el('div','detail-head');
+  var back = el('button','ghost backbtn','← 返回列表'); back.onclick = function(){ state.sel = null; renderAll(); };
+  head.appendChild(back);
+  head.appendChild(el('h3', null, r.title));
+  head.insertAdjacentHTML('beforeend', typeChip(r.type) + stChip(r.status));
+  box.appendChild(head);
+
+  var kv = el('div','kv');
+  if (r.type === 'electron'){
+    kv.innerHTML = '<div><b>平台</b>' + r.plat + '</div><div><b>版本</b>' + r.ver + '</div>' +
+      '<div><b>源提交</b>' + r.src + '</div><div><b>输出</b>' + r.out + '</div>' +
+      '<div><b>创建</b>' + r.created + '</div>';
+  } else {
+    kv.innerHTML = '<div><b>目标</b>origin（已脱敏）</div><div><b>源提交</b>' + r.src + '</div>' +
+      '<div><b>标签</b>' + (r.tag || '—') + '</div><div><b>创建</b>' + r.created + '</div>';
+  }
+  box.appendChild(kv);
+
+  var st = el('div','stages'); st.innerHTML = stageHtml(r); box.appendChild(st);
+  if (r.status === 'failed'){
+    box.appendChild(el('div','errbox','阶段「' + STAGES[r.type][r.failIdx] + '」失败：' + r.failMsg));
+  }
+
+  var tabs = el('div','tabs');
+  [['overview','概览'],['logs','阶段日志'],['arts','产物'],['audit','操作历史']].forEach(function(t){
+    var b = el('button', state.tab === t[0] ? 'active' : '', t[1]);
+    b.onclick = function(){ state.tab = t[0]; renderAll(); };
+    tabs.appendChild(b);
+  });
+  box.appendChild(tabs);
+  box.appendChild(state.tab === 'logs' ? paneLogs(r) : state.tab === 'arts' ? paneArts(r) : state.tab === 'audit' ? paneAudit(r) : paneOverview(r));
+
+  var act = el('div','actions');
+  if (r.status === 'running'){
+    var cx = el('button',null,'取消后续阶段'); cx.onclick = function(){ cancelRun(r); };
+    var rf = el('button',null,'刷新状态'); rf.onclick = function(){ toast('已刷新：运行进行中（阶段「' + STAGES[r.type][r.stageIdx] + '」执行中）'); };
+    act.appendChild(cx); act.appendChild(rf);
+  } else if (r.status === 'failed'){
+    var rt = el('button','primary','重试失败阶段'); rt.onclick = function(){ retryRun(r); };
+    act.appendChild(rt);
+    var rf2 = el('button',null,'刷新状态'); rf2.onclick = function(){ toast('已刷新：仍为失败（等待重试）'); };
+    act.appendChild(rf2);
+  } else if (r.status === 'success'){
+    var vr = el('button',null,'刷新状态');
+    vr.onclick = function(){ toast(r.type === 'electron' ? '已核验：全部产物存在且 SHA-256 一致' : '已核验：远端 ref 与冻结 OID 一致', 'ok'); };
+    act.appendChild(vr);
+  } else if (r.status === 'canceled'){
+    var rs = el('button','primary','重试未完成阶段'); rs.onclick = function(){ retryRun(r); };
+    act.appendChild(rs);
+  }
+  if (act.childNodes.length) box.appendChild(act);
+}
+
+/* ---------- 运行模拟 ---------- */
+function advance(r){
+  if (r.status !== 'running') return;
+  var n = STAGES[r.type].length;
+  if (r.stageIdx >= n - 1){ finishRun(r); return; }
+  r.stageIdx++;
+  audit(r, '完成阶段「' + STAGES[r.type][r.stageIdx] + '」');
+  if (r.stageIdx >= n - 1){ finishRun(r); return; }
+  renderAll();
+}
+function finishRun(r){
+  r.stageIdx = STAGES[r.type].length - 1;
+  r.status = 'success';
+  audit(r, r.type === 'electron'
+    ? '产物核验通过：2 个产物（dmg / exe）大小与 SHA-256 已记录，源 OID ' + r.src + '，标记成功'
+    : '结果核验通过：远端 ref == 冻结 OID，标记成功');
+  toast(r.type === 'electron' ? '构建成功：产物已核验并记录（仅存本地）' : '发布成功：远端已核验', 'ok');
+  renderAll();
+}
+function retryRun(r){
+  if (r.status === 'failed'){ r.status = 'running'; r.failIdx = null; r.failMsg = ''; audit(r, '重试失败阶段（只重跑未完成操作：依赖安装已完成则不重装）'); }
+  else if (r.status === 'canceled'){ r.status = 'running'; audit(r, '重新启动未完成阶段'); }
+  toast('已重试：从失败阶段续跑，已完成阶段与证据保留');
+  renderAll();
+  autoRun(r.id);
+}
+function cancelRun(r){
+  stopTimer(r.id);
+  r.status = 'canceled';
+  audit(r, '取消后续阶段（已完成阶段与日志证据保留）');
+  toast('已取消后续阶段');
+  renderAll();
+}
+function autoRun(id){
+  stopTimer(id);
+  var r = getRun(id); if (!r || r.status !== 'running') return;
+  timers[id] = setInterval(function(){
+    var rr = getRun(id);
+    if (!rr || rr.status !== 'running'){ stopTimer(id); return; }
+    advance(rr);
+    if (rr.status !== 'running') stopTimer(id);
+  }, 1400);
+}
+
+/* ---------- 列表状态 / 演示控制 ---------- */
+function setList(mode){
+  state.list = mode;
+  document.querySelectorAll('.demo-bar [data-list]').forEach(function(b){
+    b.classList.toggle('on', b.dataset.list === mode);
+  });
+  if (mode === 'loading'){ setTimeout(function(){ if (state.list === 'loading'){ setList('normal'); toast('运行列表已加载'); } }, 1500); }
+  renderAll();
+}
+document.querySelectorAll('.demo-bar [data-list]').forEach(function(b){ b.onclick = function(){ setList(b.dataset.list); }; });
+$('#simAdvance').onclick = function(){
+  var r = state.sel && getRun(state.sel);
+  if (!r || r.status !== 'running'){ toast('请选择一个「进行中」的运行再模拟阶段推进'); return; }
+  advance(r);
+};
+$('#simFail').onclick = function(){
+  var r = state.sel && getRun(state.sel);
+  if (!r || r.status !== 'running'){ toast('请选择一个「进行中」的运行再触发失败'); return; }
+  stopTimer(r.id);
+  r.failIdx = r.stageIdx; r.status = 'failed';
+  r.failMsg = r.type === 'electron'
+    ? '构建失败：electron-builder 退出码 1（示例：Windows 目标产物生成中断）。日志与已安装依赖保留；重试只重跑「桌面构建」及后续未完成阶段。'
+    : '网络响应丢失：推送请求超时。先查询远端实际 ref 再决定是否重推，避免已成功后盲目重试。';
+  audit(r, '阶段「' + STAGES[r.type][r.stageIdx] + '」失败：' + r.failMsg);
+  renderAll();
+};
+$('#simReset').onclick = function(){
+  Object.keys(timers).forEach(stopTimer);
+  state.runs = initialRuns(); state.sel = null; state.tab = 'overview';
+  setList('normal'); toast('演示数据已重置', 'ok');
+};
+
+/* ---------- 筛选 ---------- */
+$('#fType').onchange = function(){ state.filters.type = this.value; renderAll(); };
+$('#fStatus').onchange = function(){ state.filters.status = this.value; renderAll(); };
+$('#fSearch').oninput = function(){ state.filters.q = this.value.trim(); renderAll(); };
+document.querySelectorAll('.module-nav button').forEach(function(b){
+  if (b.dataset.nav !== 'publish') b.onclick = function(){ toast('演示聚焦「发布」模块，其余页签不可切换'); };
+});
+
+/* ---------- 新建面板 ---------- */
+function openDrawer(){
+  state.drawer = {type:'electron', pre:null};
+  syncDrawer();
+  $('#drawer').classList.remove('hidden'); $('#drawerMask').classList.remove('hidden');
+}
+function closeDrawer(){ $('#drawer').classList.add('hidden'); $('#drawerMask').classList.add('hidden'); }
+function syncDrawer(){
+  document.querySelectorAll('#typeGrid .typecard').forEach(function(c){
+    c.classList.toggle('sel', c.dataset.type === state.drawer.type);
+  });
+  $('#electronForm').classList.toggle('hidden', state.drawer.type !== 'electron');
+  $('#gitForm').classList.toggle('hidden', state.drawer.type !== 'git');
+  $('#appleForm').classList.toggle('hidden', state.drawer.type !== 'apple');
+  $('#preRes').classList.add('hidden'); $('#planBox').classList.add('hidden');
+  $('#btnLaunch').disabled = true;
+}
+$('#btnNew').onclick = openDrawer;
+$('#drawerClose').onclick = closeDrawer;
+$('#drawerMask').onclick = closeDrawer;
+document.querySelectorAll('#typeGrid .typecard').forEach(function(c){
+  if (c.classList.contains('off')){
+    c.onclick = function(){ toast('「' + c.querySelector('b').textContent + '」首期未开放，仅保留扩展设计'); };
+  } else {
+    c.onclick = function(){ state.drawer.type = c.dataset.type; state.drawer.pre = null; syncDrawer(); };
+  }
+});
+$('#btnDraft').onclick = function(){
+  var m = {git:'Git 远端发布草稿已保存（可稍后预检 / 启动）', apple:'Apple 发布草稿已保存（可稍后预检 / 启动）', electron:'桌面构建草稿已保存（可稍后预检 / 启动）'};
+  toast(m[state.drawer.type], 'ok');
+};
+function platText(){
+  var mac = $('#pMac').checked, win = $('#pWin').checked;
+  if (mac && win) return 'macOS(' + $('#archMac').value.split('（')[0] + ') + Windows(' + $('#archWin').value + ')';
+  if (mac) return 'macOS(' + $('#archMac').value.split('（')[0] + ')';
+  if (win) return 'Windows(' + $('#archWin').value + ')';
+  return '';
+}
+$('#btnPre').onclick = function(){
+  var box = $('#preRes'); box.classList.remove('hidden'); box.innerHTML = '';
+  var t = state.drawer.type;
+  var dirty = (t === 'electron' && $('#dirtyToggle').checked) || (t === 'git' && $('#dirtyToggleGit').checked);
+  var checks;
+  if (t === 'electron'){
+    if (!platText()){ box.appendChild(el('div','errbox','预检阻塞：至少选择一个目标平台（macOS / Windows）。')); state.drawer.pre = 'fail'; $('#btnLaunch').disabled = true; return; }
+    checks = [
+      ['Git 仓库 / 非 detached HEAD', true],
+      ['工作区与暂存区干净', !dirty],
+      ['package.json main → electron/main.mjs（Electron 工程）', true],
+      ['electron-builder 构建配置就绪', true],
+      ['node / npm 可用（依赖可安装）', true]
+    ];
+  } else if (t === 'git'){
+    checks = [
+      ['Git 仓库 / 非 detached HEAD', true],
+      ['工作区与暂存区干净', !dirty],
+      ['远端可 fetch / 可快进', true],
+      ['dry-run 通过（仅预检，不推送）', true]
+    ];
+  } else {
+    checks = [
+      ['macOS / Xcode 可用', true],
+      ['签名证书 + profile + entitlements', true],
+      ['ASC 凭据引用（内容脱敏）', true]
+    ];
+  }
+  box.appendChild(el('b', null, '预检结果（只读，不构建）'));
+  var list = el('div','checks');
+  checks.forEach(function(c, i){
+    setTimeout(function(){
+      var p = el('p');
+      p.innerHTML = c[1] ? '<span style="color:var(--ok)">✓</span> ' + c[0] : '<span style="color:var(--err)">✗</span> ' + c[0];
+      list.appendChild(p);
+      if (i === checks.length - 1){
+        if (dirty){
+          box.appendChild(el('div','errbox','预检阻塞：工作区有未提交修改。发布不自动 add/commit/stash，请先经现有提交功能处理后再预检。'));
+          state.drawer.pre = 'fail'; $('#btnLaunch').disabled = true;
+        } else {
+          box.appendChild(el('div','okbox','预检通过。注意：预检仅为只读检查，未安装依赖、未构建、未推送。'));
+          state.drawer.pre = 'ok'; $('#btnLaunch').disabled = false;
+        }
+      }
+    }, 300 * (i + 1));
+  });
+  box.appendChild(list);
+};
+$('#btnLaunch').onclick = function(){
+  if (state.drawer.pre !== 'ok'){ toast('请先通过预检'); return; }
+  var pb = $('#planBox'); pb.classList.remove('hidden'); pb.innerHTML = '';
+  var t = state.drawer.type;
+  if (t === 'electron'){
+    var active = state.runs.filter(function(r){ return r.type === 'electron' && r.status === 'running'; })[0];
+    if (active){
+      pb.appendChild(el('div','errbox','同目标并发互斥：已有进行中的桌面构建运行 ' + active.id + '。请先等待其完成 / 取消 / 失败后再启动（并发运行互斥，409 口径）。'));
+      toast('同目标（桌面应用）已有活动运行 ' + active.id + '，并发互斥', 'err');
+      return;
+    }
+    pb.innerHTML = '<div class="plan"><b>构建计划确认（启动即授权该明确计划）</b>' +
+      '<br>目标：Agent Team Board ' + $('#verInput').value + ' · ' + platText() +
+      '<br>输出目录：' + $('#outDir').value + '（仅存本地，不自动上传分发）' +
+      '<br>冻结提交：<span class="commits">9a3f2c1（当前 HEAD）</span> · 工具：electron-builder 25.1.8' +
+      '<br><span style="color:var(--warn)">未配置签名证书：产物将标注「未签名」</span></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="planGo">确认启动</button><button type="button" id="planBack">返回</button></div>';
+  } else if (t === 'git'){
+    pb.innerHTML = '<div class="plan"><b>发布计划确认（启动即授权该明确计划）</b>' +
+      '<br>目标：origin / main → main，标签 v1.4.3' +
+      '<br>待发布提交：<span class="commits">44f2a10 fix: 登录崩溃修复 · c9d8e21 chore: 版本号 1.4.3</span>' +
+      '<br>校验：npm test 通过 · 可快进 · 冻结源提交 9a3f2c1</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="planGo">确认启动</button><button type="button" id="planBack">返回</button></div>';
+  } else {
+    pb.innerHTML = '<div class="plan"><b>发布计划确认（启动即授权该明确计划）</b>' +
+      '<br>目标：MyApp 1.2.1 (141) · iOS · TestFlight' +
+      '<br>完成后停在「待人工提审」，最终提审由你在 ASC 手动操作</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="primary" id="planGo">确认启动</button><button type="button" id="planBack">返回</button></div>';
+  }
+  $('#planGo').onclick = function(){ launch(); };
+  $('#planBack').onclick = function(){ pb.classList.add('hidden'); };
+};
+function launch(){
+  var t = state.drawer.type;
+  var id = 'REL-20260911-0' + (3 + state.runs.length % 6);
+  var r;
+  if (t === 'electron'){
+    r = mkRun({id:id, type:'electron', title:'Agent Team Board ' + $('#verInput').value + ' · ' + platText().replace(' + ', '+'),
+      status:'running', stageIdx:0, src:'9a3f2c1', created:'09-11 ' + now(),
+      ver:$('#verInput').value, plat:platText(), out:$('#outDir').value});
+    audit(r, '启动构建（计划已确认：' + platText() + ' · ' + $('#verInput').value + ' · 输出 ' + $('#outDir').value + '）');
+  } else if (t === 'git'){
+    r = mkRun({id:id, type:'git', title:'main → origin/main', status:'running', stageIdx:0,
+      src:'9a3f2c1', created:'09-11 ' + now(), tag:'v1.4.3', check:'npm test'});
+    audit(r, '启动发布（计划已确认：origin/main + v1.4.3）');
+  } else {
+    r = mkRun({id:id, type:'apple', title:'MyApp 1.2.1 (141) · TestFlight', status:'running', stageIdx:0,
+      src:'9a3f2c1', created:'09-11 ' + now(), ver:'1.2.1 (141)', plat:'iOS', out:'—'});
+    audit(r, '启动发布（计划已确认：MyApp 1.2.1(141)）');
+  }
+  state.runs.unshift(r); state.sel = r.id; state.tab = 'overview'; state.list = 'normal';
+  document.querySelectorAll('.demo-bar [data-list]').forEach(function(b){ b.classList.toggle('on', b.dataset.list === 'normal'); });
+  closeDrawer();
+  toast(t === 'electron' ? '构建已启动：依赖安装 → 桌面构建 → 产物核验（可随时取消后续阶段）' : '发布已启动，阶段执行中', 'ok');
+  renderAll(); autoRun(r.id);
+}
+
+/* ---------- 渲染 ---------- */
+function renderAll(){ renderList(); renderDetail(); }
+setList('normal');
+</script>
+</body>
+</html>

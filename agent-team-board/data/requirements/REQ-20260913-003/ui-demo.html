@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260913-003 批量任务实时执行（去批次概念）界面演示</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --ink: #1f2328; --muted: #656d76;
+    --line: #d0d7de; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
+    --danger: #cf222e; --chip-bg: #ddf4ff; --chip-ink: #0969da;
+    --warn-bg: #fff8c5; --ok-bg: #dafbe1; --danger-bg: #ffebe9; --muted-bg: #f6f8fa;
+    --row-alt: #f6f8fa; --shadow: 0 1px 3px rgba(31,35,40,.1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e;
+      --line: #30363d; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+      --danger: #f85149; --chip-bg: #121d2f; --chip-ink: #58a6ff;
+      --warn-bg: #272115; --ok-bg: #12261e; --danger-bg: #2d1517; --muted-bg: #21262d;
+      --row-alt: #1c2128; --shadow: 0 1px 3px rgba(0,0,0,.5);
+    }
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e;
+    --line: #30363d; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+    --danger: #f85149; --chip-bg: #121d2f; --chip-ink: #58a6ff;
+    --warn-bg: #272115; --ok-bg: #12261e; --danger-bg: #2d1517; --muted-bg: #21262d;
+    --row-alt: #1c2128; --shadow: 0 1px 3px rgba(0,0,0,.5);
+  }
+  html[data-theme="light"] {
+    --bg: #f6f8fa; --panel: #ffffff; --ink: #1f2328; --muted: #656d76;
+    --line: #d0d7de; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
+    --danger: #cf222e; --chip-bg: #ddf4ff; --chip-ink: #0969da;
+    --warn-bg: #fff8c5; --ok-bg: #dafbe1; --danger-bg: #ffebe9; --muted-bg: #f6f8fa;
+    --row-alt: #f6f8fa; --shadow: 0 1px 3px rgba(31,35,40,.1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 16px 16px 60px; }
+  h1 { font-size: 18px; margin: 8px 0 4px; }
+  .page-note { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .page-note code { background: var(--muted-bg); padding: 1px 5px; border-radius: 4px; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; margin: 12px 0; box-shadow: var(--shadow); }
+  .card h2 { font-size: 14px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* 一级页签 */
+  .tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 5px 14px; border-radius: 16px; cursor: pointer; font-size: 13px; }
+  .tab.active { background: var(--chip-bg); color: var(--chip-ink); border-color: var(--chip-ink); font-weight: 600; }
+  .ws-entry { margin-left: auto; }
+  .ws-entry a { color: var(--accent); font-size: 12.5px; }
+
+  /* 按钮 */
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+  .btn.danger { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+  /* 状态 chip */
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; }
+  .chip.s-prepared { background: var(--chip-bg); color: var(--chip-ink); }
+  .chip.s-running  { background: var(--ok-bg); color: var(--ok); }
+  .chip.s-paused   { background: var(--warn-bg); color: var(--warn); }
+  .chip.s-finished { background: var(--muted-bg); color: var(--muted); }
+  .chip.s-aborted  { background: var(--danger-bg); color: var(--danger); }
+  .chip.result-reported { background: var(--ok-bg); color: var(--ok); }
+  .chip.result-failed   { background: var(--danger-bg); color: var(--danger); }
+  .chip.result-interrupted { background: var(--warn-bg); color: var(--warn); }
+  .chip.result-skipped  { background: var(--muted-bg); color: var(--muted); }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+  a.cid { color: var(--accent); text-decoration: none; cursor: pointer; }
+
+  .notice { border: 1px solid var(--line); border-left-width: 3px; border-radius: 6px;
+    padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .notice.info { border-color: var(--chip-ink); background: var(--chip-bg); }
+  .notice.ok   { border-color: var(--ok); background: var(--ok-bg); }
+  .notice.warn { border-color: var(--warn); background: var(--warn-bg); }
+  .notice.danger { border-color: var(--danger); background: var(--danger-bg); }
+
+  /* 二级页签 */
+  .panes { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 12px 0 0; }
+  .pane-tab { border: 1px solid transparent; border-bottom: none; background: none; color: var(--muted);
+    padding: 6px 14px; cursor: pointer; font-size: 13px; border-radius: 6px 6px 0 0; }
+  .pane-tab.active { color: var(--ink); border-color: var(--line); background: var(--panel);
+    font-weight: 600; margin-bottom: -1px; }
+  .pane-body { padding: 12px 2px 2px; }
+
+  /* 概况 */
+  .status-line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0; }
+  .meta-grid label { display: block; color: var(--muted); font-size: 12px; }
+  .meta-grid span { font-size: 13px; }
+  .task-stats { display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 12px; background: var(--muted-bg);
+    border-radius: 6px; margin: 8px 0; font-size: 13px; }
+  .task-stats b { font-size: 15px; }
+
+  /* 队列 */
+  .dep-toolbar { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px; margin: 6px 0; }
+  ul.task-queue-list { list-style: none; margin: 0; padding: 0; }
+  .task-queue-item { display: flex; gap: 10px; align-items: center; padding: 6px 4px;
+    border-bottom: 1px dashed var(--line); font-size: 13px; flex-wrap: wrap; }
+  .task-queue-item .title { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty-queue { color: var(--muted); font-size: 13px; padding: 10px 4px; }
+  .flash { animation: flash 1.2s ease-out 1; }
+  @keyframes flash { 0% { background: var(--ok-bg); } 100% { background: transparent; } }
+
+  /* 提示词 */
+  pre.prompt { background: var(--muted-bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 12px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-word; }
+  pre.prompt .removed { color: var(--danger); text-decoration: line-through; background: var(--danger-bg); }
+  pre.prompt .kept-hl { color: var(--ok); }
+
+  /* 记录表 */
+  table.records { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.records th, table.records td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  table.records tr:nth-child(even) td { background: var(--row-alt); }
+
+  /* 演示控制 */
+  .demo-ctl { border-style: dashed; }
+  .demo-ctl .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+  .demo-ctl .lbl { font-size: 12px; color: var(--muted); min-width: 72px; }
+
+  /* 旧版对照 */
+  details.oldcmp summary { cursor: pointer; color: var(--warn); font-size: 13px; font-weight: 600; }
+  .oldcmp-item { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .oldcmp-item .tag { flex: none; font-size: 11px; color: var(--danger); border: 1px solid var(--danger);
+    border-radius: 8px; padding: 0 7px; }
+  .strike { text-decoration: line-through; color: var(--muted); }
+
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; max-width: 80vw; z-index: 9; }
+  #toast.show { opacity: .95; }
+  #toast.err { background: var(--danger); color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>批量任务实时执行（去批次概念）——界面演示</h1>
+  <p class="page-note">REQ-20260913-003 交互演示，数据均为模拟，不代表真实看板。演示口径：点击「启动」不再创建批次，直接开始一轮连续执行；每完成一项实时从已计划队列领取下一项，队列取空即本轮结束。深浅色跟随系统，可手动切换。</p>
+
+  <!-- 一级页签 -->
+  <div class="card">
+    <div class="tabs">
+      <button class="tab" id="tabRefine">批量完善</button>
+      <button class="tab active" id="tabDevelop">批量开发</button>
+      <span class="ws-entry"><a href="#" onclick="return false">去新建 Zcode 会话</a> · <a href="#" onclick="return false">去新建 Codex 会话</a></span>
+      <button class="btn small" id="themeBtn" title="切换深浅色">深色</button>
+    </div>
+
+    <!-- 运行面板二级页签（仅进行中/终态显示） -->
+    <div id="paneTabs"></div>
+    <div class="pane-body" id="paneBody"></div>
+  </div>
+
+  <!-- 演示控制 -->
+  <div class="card demo-ctl">
+    <h2>演示控制（模拟外部事件与流程推进）</h2>
+    <div class="row">
+      <span class="lbl">强制状态</span>
+      <button class="btn small" data-set-state="idle-empty">空闲·无候选</button>
+      <button class="btn small" data-set-state="idle-ready">空闲·有候选</button>
+      <button class="btn small" data-set-state="pending">待启动</button>
+      <button class="btn small" data-set-state="running">执行中</button>
+      <button class="btn small" data-set-state="paused">已暂停</button>
+      <button class="btn small" data-set-state="done">本轮结束</button>
+      <button class="btn small" data-set-state="aborted">已终止</button>
+    </div>
+    <div class="row">
+      <span class="lbl">事件模拟</span>
+      <button class="btn small" id="btnPlanNew" title="模拟人工在看板「移入计划」：执行中新条目应实时出现在待处理队列">新条目移入计划</button>
+      <button class="btn small" id="btnRegister" title="模拟在 Agent 会话粘贴提示词并登记运行：复制成功 ≠ 执行中">登记运行（模拟）</button>
+      <button class="btn small" id="btnClaim" title="模拟主调度实时领取下一项">领取下一项</button>
+      <button class="btn small" id="btnReport" title="模拟当前项完成并上报：随后自动实时领取下一项">当前项完成上报</button>
+      <button class="btn small" id="btnFail" title="模拟当前项失败上报：异常计数 +1，可重新执行">当前项失败上报</button>
+    </div>
+    <p class="muted small" style="margin:6px 0 0">「登记运行 / 领取 / 上报」在真实流程中由主调度会话与看板核对完成，此处仅为演示状态推进。</p>
+  </div>
+
+  <!-- 旧版对照 -->
+  <div class="card">
+    <details class="oldcmp">
+      <summary>旧版对照：本需求将移除的「批次」概念</summary>
+      <p class="muted small">以下元素在现状（批次口径）的批量开发面板 / 提示词 / 条目详情中存在，本需求实施后全部移除：</p>
+      <div class="oldcmp-item"><span class="tag">移除</span><span>概况批次号 chip：<span class="cid strike">batch-20260913-001</span>（新版概况只有状态 chip，无批次号）</span></div>
+      <div class="oldcmp-item"><span class="tag">移除</span><span>排队批次列表：<span class="strike">排队批次（当前批次结束后自动接续）· 第 2 位 · 5 项 · [删除]</span></span></div>
+      <div class="oldcmp-item"><span class="tag">移除</span><span>概况按钮：<span class="strike">排队新批次</span>（执行中重复启动改为提示「已在执行中」，不新建排队对象）</span></div>
+      <div class="oldcmp-item"><span class="tag">移除</span><span>创建时冻结候选范围（<span class="strike">创建批次冻结当前已计划候选</span>），改为领取时刻实时读取已计划队列</span></div>
+      <div class="oldcmp-item"><span class="tag">移除</span><span>提示词行：「你是当前项目的<span class="strike">批次</span>调度员」「<span class="strike">批次：batch-20260913-001</span>」「<span class="strike">批次摘要入口：… batch check --batch batch-20260913-001 …</span>」及批次排队接续说明</span></div>
+      <div class="oldcmp-item"><span class="tag">移除</span><span>条目详情提示：「<span class="strike">已入批次 batch-20260913-001（执行中）</span>」</span></div>
+    </details>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 演示数据 ---------- */
+  var POOL = [
+    { id: 'REQ-20260913-011', title: '看板列表支持按类型筛选记忆' },
+    { id: 'BUG-20260913-004', title: '详情页时间线偶发重复渲染' },
+    { id: 'REQ-20260913-012', title: '任务搜索支持标题模糊匹配' },
+    { id: 'BUG-20260913-005', title: '暂停后恢复按钮状态不同步' },
+    { id: 'REQ-20260913-013', title: '全局视图聚合口径优化' }
+  ];
+  var S = {
+    mode: 'develop',            // develop | refine
+    phase: 'idle-ready',        // idle-empty | idle-ready | pending | running | done | aborted
+    pauseRequested: false,      // running 下的暂停后续领取
+    pane: 'overview',           // overview | queue | prompt | records
+    queue: [],                  // 实时队列（批量开发=已计划；批量完善=已接受未完善）
+    poolIdx: 0,
+    current: null,              // { id, title, startedAt, owner }
+    records: [],                // { id, title, result, ms, runId }
+    runSeq: 0,
+    startedAt: null,            // 本轮启动时间
+    lastActivityAt: null,
+    timer: null
+  };
+
+  /* ---------- 工具 ---------- */
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $$ (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var t = $('#toast');
+    t.textContent = msg; t.className = 'show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ''; }, 3200);
+  }
+  function fmtElapsed(fromMs) {
+    if (!fromMs) return '—';
+    var s = Math.max(0, Math.floor((Date.now() - fromMs) / 1000));
+    var h = Math.floor(s / 3600); s -= h * 3600;
+    var m = Math.floor(s / 60); s -= m * 60;
+    function p(n) { return String(n).padStart(2, '0'); }
+    return (h > 0 ? h + ':' : '') + p(m) + ':' + p(s);
+  }
+  function nowStr() {
+    var d = new Date();
+    function p(n) { return String(n).padStart(2, '0'); }
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  function takeFromPool() {
+    var it = POOL[S.poolIdx % POOL.length];
+    S.poolIdx++;
+    return { id: it.id, title: it.title };
+  }
+
+  /* ---------- 文案 ---------- */
+  function sourceLabel() { return S.mode === 'refine' ? '已接受未完善（实时读取）' : '已计划（实时读取，最旧优先）'; }
+  function actionLabel() { return S.mode === 'refine' ? '待完善' : '待开发'; }
+
+  /* ---------- 状态推进 ---------- */
+  function seedQueue() {
+    if (!S.queue.length) { S.queue.push(takeFromPool()); S.queue.push(takeFromPool()); }
+  }
+  function setState(phase) {
+    S.phase = phase;
+    if (phase === 'idle-ready') seedQueue();
+    if (phase === 'running') { S.startedAt = S.startedAt || Date.now(); ensureTimer(); }
+    if (phase !== 'running') { /* 终态/空闲保留计时器仅在 running */ }
+    S.lastActivityAt = Date.now();
+    render();
+  }
+  function ensureTimer() {
+    if (S.timer) return;
+    S.timer = setInterval(function () {
+      if (S.phase === 'running' && S.current) {
+        var el = $('#curElapsed');
+        if (el) el.textContent = '已用时 ' + fmtElapsed(S.current.startedAt);
+      }
+    }, 1000);
+  }
+  function startRun() {
+    if (S.phase === 'running' || S.phase === 'pending') {
+      toast('已在执行中：同一时间只允许一个执行会话，不新建排队对象', true);
+      return;
+    }
+    if (!S.queue.length) { toast('暂无实时候选，无法启动', true); return; }
+    S.phase = 'pending';
+    S.startedAt = null; S.pauseRequested = false;
+    S.pane = 'overview';
+    S.lastActivityAt = Date.now();
+    toast('调度提示词已复制（演示）。复制成功 ≠ 执行中，登记运行后才算执行中');
+    render();
+  }
+  function registerRun() {
+    if (S.phase !== 'pending') { toast('当前无待启动的执行，请先点击「启动」', true); return; }
+    S.phase = 'running'; S.startedAt = Date.now();
+    S.current = null; ensureTimer(); S.lastActivityAt = Date.now();
+    toast('运行已登记，本轮执行中：等待主调度实时领取第一项');
+    render();
+  }
+  function claimNext() {
+    if (S.phase !== 'running' && S.phase !== 'paused') { toast('仅执行中可领取', true); return; }
+    if (S.phase === 'paused') { toast('已暂停后续领取：请先恢复', true); return; }
+    if (S.current) { toast('当前已有执行中的条目', true); return; }
+    if (!S.queue.length) {
+      S.phase = 'done'; S.lastActivityAt = Date.now();
+      toast('实时队列已取空：本轮结束');
+      render(); return;
+    }
+    var it = S.queue.shift(); // 最旧优先（队首）
+    S.current = { id: it.id, title: it.title, startedAt: Date.now(), owner: 'subagent-' + it.id };
+    S.lastActivityAt = Date.now();
+    toast('实时领取下一项：' + it.id + (S.pauseRequested ? '（本轮为暂停前的最后一项）' : ''));
+    render();
+  }
+  function reportCurrent(result) {
+    if (!S.current) { toast('当前无执行中的条目', true); return; }
+    S.runSeq++;
+    S.records.unshift({ id: S.current.id, title: S.current.title, result: result,
+      ms: Date.now() - S.current.startedAt, runId: 'run-' + String(1000 + S.runSeq) });
+    var had = S.current.id;
+    S.current = null; S.lastActivityAt = Date.now();
+    if (result === 'failed') toast(had + ' 上报失败：异常计数 +1，可「重新执行」；继续实时领取下一项');
+    else toast(had + ' 已上报，待人工验收');
+    if (S.phase === 'paused') { render(); return; } // 暂停中不领取
+    if (S.queue.length) {
+      render();
+      setTimeout(function () { if (!S.current && S.phase === 'running') claimNext(); }, 900);
+    } else {
+      S.phase = 'done';
+      toast('实时队列已取空：本轮结束');
+      render();
+    }
+  }
+  function retryRecord(runId) {
+    var rec = S.records.filter(function (r) { return r.runId === runId; })[0];
+    if (!rec) return;
+    if (S.phase === 'idle-empty' || S.phase === 'idle-ready') setState('idle-ready');
+    S.queue.unshift({ id: rec.id, title: rec.title });
+    rec.result = 'skipped';
+    toast(rec.id + ' 已重新加入实时队列队首，将在下一项领取时执行');
+    render();
+  }
+  function togglePause() {
+    if (S.phase !== 'running') { toast('仅执行中可暂停/恢复', true); return; }
+    S.pauseRequested = !S.pauseRequested;
+    S.lastActivityAt = Date.now();
+    toast(S.pauseRequested
+      ? '已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项'
+      : '已恢复后续领取');
+    render();
+  }
+  function abortRun() {
+    if (S.phase !== 'running' && S.phase !== 'paused' && S.phase !== 'pending') {
+      toast('当前无可终止的执行', true); return;
+    }
+    if (!window.confirm('确认终止本轮执行？停止派发后续项；在途项标记人工终止并释放占用；本轮全部处理记录保留。')) return;
+    if (S.current) {
+      S.runSeq++;
+      S.records.unshift({ id: S.current.id, title: S.current.title, result: 'interrupted',
+        ms: Date.now() - S.current.startedAt, runId: 'run-' + String(1000 + S.runSeq) });
+      S.current = null;
+    }
+    S.phase = 'aborted'; S.pauseRequested = false; S.lastActivityAt = Date.now();
+    toast('本轮已终止：处理记录已保留；实时队列条目保持在计划中不受影响');
+    render();
+  }
+  function planNewItem() {
+    var it = takeFromPool();
+    S.queue.push(it);
+    S.lastActivityAt = Date.now();
+    if (S.phase === 'idle-empty') S.phase = 'idle-ready';
+    toast(it.id + ' 已移入' + (S.mode === 'refine' ? '待完善' : '计划') + '：实时队列已更新'
+      + (S.phase === 'running' ? '，主调度完成当前项后将实时领取' : ''));
+    render(it.id);
+  }
+
+  /* ---------- 渲染 ---------- */
+  function statusChip() {
+    if (S.phase === 'pending') return '<span class="chip s-prepared">待启动</span>';
+    if (S.phase === 'running') return S.pauseRequested
+      ? '<span class="chip s-paused">已暂停</span>'
+      : '<span class="chip s-running">执行中</span>';
+    if (S.phase === 'done') return '<span class="chip s-finished">已结束</span>';
+    if (S.phase === 'aborted') return '<span class="chip s-aborted">已终止</span>';
+    return '';
+  }
+  function counts() {
+    var done = S.records.filter(function (r) { return r.result === 'reported'; }).length;
+    var abnormal = S.records.filter(function (r) {
+      return r.result === 'failed' || r.result === 'interrupted'; }).length;
+    var active = S.current ? 1 : 0;
+    var remaining = (S.phase === 'running' || S.phase === 'pending' || S.phase === 'paused') ? S.queue.length : 0;
+    return { done: done, abnormal: abnormal, active: active, remaining: remaining,
+      total: done + abnormal + S.records.filter(function (r) { return r.result === 'skipped'; }).length };
+  }
+  function statsLine() {
+    var c = counts();
+    return '<div class="task-stats"><span>已处理 <b>' + c.done + '</b></span>'
+      + '<span>异常 <b>' + c.abnormal + '</b></span>'
+      + '<span>处理中 <b>' + c.active + '</b></span>'
+      + '<span>待处理 <b>' + c.remaining + '</b></span>'
+      + '<span class="muted small">共 ' + c.total + '</span></div>';
+  }
+  function queueHtml(flashId) {
+    var items = S.queue;
+    var rows = items.slice(-3).reverse().map(function (it) {
+      var hit = it.id === flashId ? ' class="task-queue-item flash"' : ' class="task-queue-item"';
+      return '<li' + hit + '><span class="cid">' + esc(it.id) + '</span>'
+        + '<span class="title" title="' + esc(it.title) + '">' + esc(it.title) + '</span>'
+        + '<span class="muted small">' + esc(actionLabel()) + '</span></li>';
+    }).join('');
+    var body = items.length
+      ? '<ul class="task-queue-list">' + rows + '</ul>'
+      : '<div class="empty-queue">' + (S.phase === 'running'
+        ? '队列已空：等待新条目移入' + (S.mode === 'refine' ? '（新接受的未完善条目实时进入）' : '计划（新移入计划的条目实时进入）')
+        : '（空，等待条目' + (S.mode === 'refine' ? '完善' : '移入计划') + '）') + '</div>';
+    return '<section><div class="dep-toolbar"><span>实时队列（' + esc(sourceLabel()) + '，最旧优先）</span>'
+      + '<span>最近 ' + Math.min(3, items.length) + ' 条 / 共 ' + items.length + ' 条</span></div>'
+      + body + '</section>';
+  }
+
+  function renderStartArea() {
+    var ready = S.phase === 'idle-ready' && S.queue.length > 0;
+    var preview = S.queue.length
+      ? esc(S.queue.slice(0, 3).map(function (it) { return it.id; }).join('、'))
+        + (S.queue.length > 3 ? ' 等 ' + S.queue.length + ' 项' : '')
+      : '（空，等待' + (S.mode === 'refine' ? '待完善条目' : '已计划条目') + '）';
+    return '<section>'
+      + '<div class="actions" style="margin-top:0"><button class="btn primary" id="btnStart"'
+      + (ready ? '' : ' disabled title="暂无实时候选：请先在看板接受条目并移入计划（或等待条目完善）"') + '>启动</button></div>'
+      + '<p class="muted small">' + esc(sourceLabel()) + '：' + preview
+      + '——启动即开始本轮连续执行：每完成一项实时领取下一项，队列取空即本轮结束。'
+      + '启动 = 复制调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）；提示词通用，可在任意一种 Agent 会话粘贴执行。</p>'
+      + queueHtml()
+      + '</section>';
+  }
+
+  function renderOverview() {
+    var rec = S.current;
+    var currentText = rec
+      ? '<a class="cid" href="#" onclick="return false">' + esc(rec.id) + '</a> ' + esc(rec.title)
+      : (S.phase === 'pending' ? '待启动：请在 Agent 会话粘贴调度提示词'
+        : (S.phase === 'aborted' ? '任务已终止'
+          : (S.pauseRequested ? '已暂停，等待恢复' : '等待领取下一项（实时）')));
+    var notices = '';
+    if (S.phase === 'aborted') notices += '<div class="notice warn">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应会话人工停止。实时队列条目保持在计划中，可随时重新启动。</div>';
+    if (S.pauseRequested && S.phase === 'running') notices += '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>';
+    if (S.phase === 'done') notices += '<div class="notice ok">本轮实时队列已处理完毕。可再次启动开启新一轮。</div>';
+    var terminal = S.phase === 'done' || S.phase === 'aborted';
+    return statusChip()
+      + '<span class="muted small"> · 子代理模式（提示词通用，任意 Agent 会话可执行） · 最后活动 ' + (S.lastActivityAt ? nowStr() : '—') + '</span>'
+      + notices
+      + '<div class="meta-grid">'
+      + '<div><label>当前条目</label><span>' + currentText + '</span></div>'
+      + '<div><label>子代理会话</label><span>' + (rec ? esc(rec.owner) : '—') + '</span></div>'
+      + '<div><label>开始时间</label><span>' + (rec ? nowStr() : '—') + '</span></div>'
+      + '<div><label>耗时</label><span id="curElapsed">' + (rec ? '已用时 ' + fmtElapsed(rec.startedAt) : '—') + '</span></div>'
+      + '<div><label>本轮启动</label><span>' + (S.startedAt ? fmtElapsed(S.startedAt) + ' 前' : '—') + '</span></div>'
+      + '</div>'
+      + statsLine()
+      + (terminal
+        ? '<div class="actions"><button class="btn primary" id="btnAgain"'
+          + (S.queue.length ? '' : ' disabled title="暂无实时候选：请先在看板接受条目并移入计划"') + '>启动新一轮</button></div>'
+        : '<div class="actions">'
+          + '<button class="btn ' + (S.pauseRequested ? 'primary' : 'warn') + '" id="btnPause">'
+          + (S.pauseRequested ? '恢复后续领取' : '暂停后续领取') + '</button>'
+          + '<button class="btn danger" id="btnAbort" title="停止派发后续项；在途项标记人工终止并释放占用；本轮记录保留">终止任务</button>'
+          + '</div>')
+      + '<p class="muted small">「暂停后续领取」只阻止领取下一项（当前项继续）；立即停止正在运行的工具请到 Agent 原生任务界面操作。'
+      + (S.phase === 'running' ? '当前项完成后主调度将实时领取下一项。' : '') + '</p>';
+  }
+
+  function renderQueue() {
+    if (S.phase === 'done' || S.phase === 'aborted') {
+      return '<p class="muted small">本轮已收尾：实时队列当前为' + (S.queue.length ? '以下待处理条目（将在新一轮领取）' : '空') + '。</p>' + queueHtml();
+    }
+    return queueHtml();
+  }
+
+  function newPrompt() {
+    return [
+      '你是当前项目的任务调度员，只负责派发与接收短回执。',
+      '项目：/Users/demo/agent-team-board',
+      '',
+      '执行规范：docs/agent-team-board/dispatch/worker-spec.md',
+      '任务核对入口：node scripts/atb.mjs dev check --dir /Users/demo/agent-team-board',
+      '',
+      '每轮新启动一个子代理，按执行规范实时从当前已计划队列（最旧优先）领取一个可实施条目，认领、实施、测试并上报。',
+      '每个子代理只做一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+      '同一时间只运行一个；不要让子代理再派发子代理。',
+      '只传本项目与规范路径，不复制本会话的历史实施记录。',
+      '',
+      '完整需求、代码、测试日志、报告均由子代理按需读取或落盘。',
+      '主会话只接收规定的短回执，并调用最小核对入口。',
+      'nextAction=continue 时实时领取下一项并启动新子代理；stop 时结束；',
+      'needs_attention 时说明简短原因和记录入口，等待人工处理。',
+      '实时队列取空（nextAction=stop 且队列为空）即本轮结束。',
+      '不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。',
+      '收尾只给本轮计数和异常入口。不得代替人工接受需求或确认完成。'
+    ].join('\n');
+  }
+  function oldPrompt() {
+    return [
+      '<span class="removed">你是当前项目的批次调度员，只负责派发与接收短回执。</span>',
+      '项目：/Users/demo/agent-team-board',
+      '<span class="removed">批次：batch-20260913-001</span>',
+      '',
+      '执行规范：docs/agent-team-board/dispatch/worker-spec.md',
+      '<span class="removed">批次摘要入口：node scripts/atb.mjs batch check --batch batch-20260913-001 --dir /Users/demo/agent-team-board</span>',
+      '',
+      '<span class="removed">每轮新启动一个子代理，按执行规范自行选择本批一个可实施条目，认领、实施、测试并上报。</span>',
+      '每个子代理只做一项；子代理会话命名统一为：&lt;条目编号&gt;（与主调度会话区分）。',
+      '同一时间只运行一个；不要让子代理再派发子代理。',
+      '<span class="removed">只传本项目、批次标识与规范路径，不复制本会话的历史实施记录。</span>',
+      '',
+      '完整需求、代码、测试日志、报告均由子代理按需读取或落盘。',
+      '主会话只接收规定的短回执，并调用最小核对入口。',
+      'nextAction=continue 时启动下一个新子代理；stop 时结束；',
+      'needs_attention 时说明简短原因和记录入口，等待人工处理。',
+      '<span class="removed">stop 且核对响应携带 nextBatch 时为批次排队自动接续：同一会话不重开，直接以 nextBatch.batchId 替换本提示词中的批次标识与核对入口继续执行下一批。</span>',
+      '不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。',
+      '<span class="removed">收尾只给批次计数和异常入口。</span>不得代替人工接受需求或确认完成。'
+    ].join('\n');
+  }
+  function renderPrompt() {
+    return '<div class="dep-toolbar"><span>主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：</span>'
+      + '<span><label class="small"><input type="radio" name="pv" value="new" checked> 新版（实时口径）</label> '
+      + '<label class="small"><input type="radio" name="pv" value="old"> 旧版对照（批次口径）</label></span></div>'
+      + '<pre class="prompt" id="promptBox"></pre>'
+      + '<div class="actions"><button class="btn primary" id="btnCopy">复制提示词</button></div>'
+      + '<p class="muted small">新版提示词不再包含批次标识与批次接续说明；取单口径为实时领取（每完成一项从当前队列最旧优先领取下一项）。核对入口的最终命令名由设计阶段确定，此处为示意。</p>';
+  }
+  function bindPrompt() {
+    var box = $('#promptBox');
+    function paint() {
+      var v = ($('input[name="pv"]:checked') || {}).value;
+      box.innerHTML = v === 'old' ? oldPrompt() : esc(newPrompt());
+    }
+    $$('input[name="pv"]').forEach(function (r) { r.addEventListener('change', paint); });
+    paint();
+    $('#btnCopy').addEventListener('click', function () {
+      toast('提示词已复制（演示）。复制成功 ≠ 执行中，登记运行后才算执行中');
+    });
+  }
+  var RESULT_LABEL = { reported: '已上报', failed: '失败', interrupted: '已释放', skipped: '已出局' };
+  function renderRecords() {
+    var rows = S.records.slice(0, 4).map(function (r) {
+      return '<tr><td><span class="cid">' + esc(r.id) + '</span></td>'
+        + '<td>' + esc(r.title) + '</td>'
+        + '<td><span class="chip result-' + esc(r.result) + '">' + (RESULT_LABEL[r.result] || r.result) + '</span></td>'
+        + '<td>' + fmtElapsed(Date.now() - r.ms) + ' 用时</td>'
+        + '<td>' + (r.result === 'failed'
+          ? '<button class="btn small" data-retry="' + esc(r.runId) + '">重新执行</button>' : '—') + '</td></tr>';
+    }).join('');
+    return '<table class="records"><thead><tr><th>条目</th><th>标题</th><th>结果</th><th>耗时</th><th>操作</th></tr></thead>'
+      + '<tbody>' + (rows || '<tr><td colspan="5" class="muted small">暂无执行记录</td></tr>') + '</tbody></table>'
+      + '<p class="muted small">本轮处理记录按运行记录展示（不以批次分组）；只显示最近创建的 4 次执行尝试。</p>';
+  }
+
+  function render(flashId) {
+    // 一级页签
+    $('#tabDevelop').className = 'tab' + (S.mode === 'develop' ? ' active' : '');
+    $('#tabRefine').className = 'tab' + (S.mode === 'refine' ? ' active' : '');
+
+    var paneTabs = $('#paneTabs'), body = $('#paneBody');
+    var active = S.phase !== 'idle-empty' && S.phase !== 'idle-ready';
+    if (!active) {
+      paneTabs.innerHTML = '';
+      body.innerHTML = renderStartArea();
+      var b = $('#btnStart');
+      if (b) b.addEventListener('click', startRun);
+      return;
+    }
+    var tabs = [['overview', '概况'], ['queue', '队列'], ['prompt', '提示词'], ['records', '记录']];
+    paneTabs.innerHTML = '<div class="panes">' + tabs.map(function (t) {
+      return '<button class="pane-tab' + (S.pane === t[0] ? ' active' : '') + '" data-pane="' + t[0] + '">' + t[1] + '</button>';
+    }).join('') + '</div>';
+    body.innerHTML = S.pane === 'overview' ? renderOverview()
+      : S.pane === 'queue' ? renderQueue()
+      : S.pane === 'prompt' ? renderPrompt()
+      : renderRecords();
+    $$('.pane-tab', paneTabs).forEach(function (t) {
+      t.addEventListener('click', function () { S.pane = t.getAttribute('data-pane'); render(); });
+    });
+    var btnPause = $('#btnPause'); if (btnPause) btnPause.addEventListener('click', togglePause);
+    var btnAbort = $('#btnAbort'); if (btnAbort) btnAbort.addEventListener('click', abortRun);
+    var btnAgain = $('#btnAgain'); if (btnAgain) btnAgain.addEventListener('click', startRun);
+    if (S.pane === 'prompt') bindPrompt();
+    $$('button[data-retry]', body).forEach(function (x) {
+      x.addEventListener('click', function () { retryRecord(x.getAttribute('data-retry')); });
+    });
+    if (flashId && S.pane === 'queue') { /* flash 由 class 内联 */ }
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  $('#tabDevelop').addEventListener('click', function () { S.mode = 'develop'; render(); });
+  $('#tabRefine').addEventListener('click', function () { S.mode = 'refine'; render(); });
+  $$('button[data-set-state]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var ph = b.getAttribute('data-set-state');
+      if (ph === 'running') { S.pauseRequested = false; if (!S.current && S.queue.length === 0) seedQueue(); }
+      if (ph === 'paused') { S.pauseRequested = true; ph = 'running'; if (!S.current && S.queue.length === 0) seedQueue(); }
+      if (ph === 'done' || ph === 'aborted') { S.pauseRequested = false; S.current = null; }
+      setState(ph);
+    });
+  });
+  $('#btnPlanNew').addEventListener('click', planNewItem);
+  $('#btnRegister').addEventListener('click', registerRun);
+  $('#btnClaim').addEventListener('click', claimNext);
+  $('#btnReport').addEventListener('click', function () { reportCurrent('reported'); });
+  $('#btnFail').addEventListener('click', function () { reportCurrent('failed'); });
+
+  var themeBtn = $('#themeBtn');
+  function paintThemeBtn() {
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    themeBtn.textContent = dark ? '浅色' : '深色';
+  }
+  themeBtn.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var next;
+    if (!cur) next = sysDark ? 'light' : 'dark';
+    else next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    paintThemeBtn();
+  });
+  paintThemeBtn();
+
+  /* ---------- 初始状态：空闲·有候选 ---------- */
+  seedQueue();
+  setState('idle-ready');
+})();
+</script>
+</body>
+</html>

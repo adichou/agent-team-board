@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260913-005 文案整改演示：批量完善/批量开发 → AI 分析/AI 开发</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --ink: #1f2328; --muted: #656d76;
+    --line: #d0d7de; --soft: #f3f4f6; --brand: #0969da; --brand-ink: #ffffff;
+    --warn: #9a6700; --warn-bg: #fff8c5; --warn-line: #d4a72c;
+    --ok: #1a7f37; --ok-bg: #dafbe1; --err: #cf222e; --err-bg: #ffebe9;
+    --chip: #eaeef2; --chip-ink: #24292f; --tip-bg: #24292f; --tip-ink: #ffffff;
+    --term-bg: #0d1117; --term-ink: #c9d1d9; --term-dim: #8b949e;
+    --badge-1-bg: #fff1e5; --badge-1-ink: #953800;
+    --badge-2-bg: #fff8c5; --badge-2-ink: #7d4e00;
+    --badge-3-bg: #dafbe1; --badge-3-ink: #116329;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #9198a1;
+    --line: #30363d; --soft: #21262d; --brand: #4493f8; --brand-ink: #0d1117;
+    --warn: #d29922; --warn-bg: #3a2e04; --warn-line: #7d4e00;
+    --ok: #3fb950; --ok-bg: #11351c; --err: #f85149; --err-bg: #3d1418;
+    --chip: #21262d; --chip-ink: #c9d1d9; --tip-bg: #6e7681; --tip-ink: #0d1117;
+    --term-bg: #010409; --term-ink: #c9d1d9; --term-dim: #7d8590;
+    --badge-1-bg: #3d1f0d; --badge-1-ink: #f0883e;
+    --badge-2-bg: #3a2e04; --badge-2-ink: #d29922;
+    --badge-3-bg: #11351c; --badge-3-ink: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding-bottom: 56px;
+  }
+  .demo-bar {
+    position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .demo-bar h1 { font-size: 14px; margin: 0; font-weight: 600; flex: 1 1 auto; min-width: 260px; }
+  .demo-bar h1 small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: var(--panel); color: var(--ink); padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  section.card > h2 {
+    margin: 0; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--muted);
+    border-bottom: 1px solid var(--line); background: var(--soft);
+  }
+  section.card > h2 em { font-style: normal; color: var(--ink); }
+  .pad { padding: 14px 16px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--ink); border-radius: 7px; padding: 5px 12px; font-size: 13px; cursor: pointer; position: relative;
+  }
+  .btn:hover { background: var(--soft); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.warn { color: var(--warn); border-color: var(--warn-line); }
+  .btn.warn:hover { background: var(--warn-bg); }
+  .btn.danger { background: var(--err); border-color: var(--err); color: #fff; font-weight: 600; }
+  .btn.small { padding: 3px 9px; font-size: 12px; }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  /* 顶栏 mock */
+  .topbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .proj { font-weight: 700; }
+  .proj small { display: block; font-weight: 400; color: var(--muted); }
+  .lane-pick { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  /* 列表 mock */
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 8px; margin-bottom: 8px; background: var(--panel);
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--brand); }
+  .row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge {
+    position: relative; font-size: 11.5px; border-radius: 999px; padding: 2px 9px; cursor: pointer; white-space: nowrap;
+  }
+  .badge .tip {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: max-content; max-width: 320px;
+    background: var(--tip-bg); color: var(--tip-ink); font-size: 12px; line-height: 1.5; padding: 6px 9px;
+    border-radius: 7px; opacity: 0; pointer-events: none; transition: opacity .12s;
+  }
+  .badge:hover .tip, .badge:focus-visible .tip { opacity: 1; }
+  .b-unrefined { background: var(--badge-1-bg); color: var(--badge-1-ink); }
+  .b-refining  { background: var(--badge-2-bg); color: var(--badge-2-ink); }
+  .b-refined   { background: var(--badge-3-bg); color: var(--badge-3-ink); }
+  .hintline { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  /* 任务模块 mock */
+  .tabs { display: flex; gap: 4px; padding: 10px 16px 0; border-bottom: 1px solid var(--line); }
+  .tabs .tab {
+    border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted);
+    padding: 7px 16px; font-size: 13.5px; border-radius: 8px 8px 0 0; cursor: pointer;
+  }
+  .tabs .tab.active {
+    background: var(--panel); border-color: var(--line); color: var(--ink); font-weight: 600;
+    box-shadow: 0 1px 0 var(--panel); position: relative; top: 1px;
+  }
+  .panel-desc { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  .chips { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--line); background: var(--chip); color: var(--chip-ink); border-radius: 999px;
+    padding: 3px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .chip.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+  .task {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 8px; margin-bottom: 8px;
+  }
+  .task:last-child { margin-bottom: 0; }
+  .task .grow { flex: 1; min-width: 0; }
+  .task .meta { color: var(--muted); font-size: 12px; }
+  .task .kind {
+    font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--chip-ink); white-space: nowrap;
+  }
+  .statebox { border: 1px dashed var(--line); border-radius: 8px; padding: 26px 16px; text-align: center; color: var(--muted); }
+  .statebox h3 { margin: 0 0 4px; font-size: 14px; color: var(--ink); }
+  .spin {
+    display: inline-block; width: 16px; height: 16px; border-radius: 50%; vertical-align: -3px; margin-right: 8px;
+    border: 2px solid var(--line); border-top-color: var(--brand); animation: r 0.9s linear infinite;
+  }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .state-pick { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  /* 弹窗 */
+  .mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px;
+  }
+  .mask.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; max-width: 430px; width: 100%; padding: 18px; }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  .modal .acts { display: flex; justify-content: flex-end; gap: 8px; }
+  /* toast */
+  #toasts { position: fixed; right: 16px; bottom: 64px; z-index: 60; display: grid; gap: 8px; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--ok);
+    border-radius: 8px; padding: 9px 14px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.18); max-width: 420px;
+  }
+  .toast.err { border-left-color: var(--err); }
+  /* CLI 对照 */
+  .term { background: var(--term-bg); color: var(--term-ink); border-radius: 8px; padding: 12px 14px; font: 12.5px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+  .term .dim { color: var(--term-dim); }
+  .term .hl { color: #ffd33d; }
+  footer.note { max-width: 980px; margin: 0 auto; padding: 0 16px 8px; color: var(--muted); font-size: 12px; }
+  #fab {
+    position: fixed; right: 16px; bottom: 16px; z-index: 55; display: flex; gap: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <h1>REQ-20260913-005 文案整改演示
+    <small id="barSub">当前口径：旧文案（批量完善 / 批量开发）</small>
+  </h1>
+  <span class="seg" role="group" aria-label="文案口径切换">
+    <button id="modeOld" class="on">旧文案</button>
+    <button id="modeNew">新文案（AI）</button>
+  </span>
+  <span class="seg" role="group" aria-label="主题切换">
+    <button id="thAuto" class="on">跟随系统</button>
+    <button id="thLight">浅色</button>
+    <button id="thDark">深色</button>
+  </span>
+</div>
+
+<main>
+  <!-- ① 看板顶栏 -->
+  <section class="card">
+    <h2>① 看板顶栏 — <em>驳回待接受 title + 档位快捷入口按钮</em></h2>
+    <div class="pad">
+      <div class="topbar">
+        <div class="proj">agent-team-board <small>需求看板 · 顶栏（示意）</small></div>
+        <span class="spacer"></span>
+        <span class="lane-pick">演示档位：
+          <span class="seg">
+            <button id="laneAcc" class="on">已接受档</button>
+            <button id="lanePlan">已计划档</button>
+          </span>
+        </span>
+        <button class="btn warn" id="btnReject">↩ 驳回待接受</button>
+        <button class="btn primary" id="btnQuick">▶ 开始完善</button>
+      </div>
+      <p class="hintline" id="quickHint">提示：按钮 title 同步变化（悬停按钮可看系统 title；下方文字为演示说明）。</p>
+    </div>
+  </section>
+
+  <!-- ② 需求列表行 -->
+  <section class="card">
+    <h2>② 需求 / 缺陷列表 — <em>完善三态徽标（悬停看提示）</em></h2>
+    <div class="pad">
+      <div class="row"><span class="id">REQ-20260913-005</span><span class="title">批量完善和批量开发的文案改为 AI 分析和 AI 开发</span>
+        <span class="badge b-refining" tabindex="0">完善中<span class="tip" data-tip="refining">子代理正在完善本文档；点击查看批量完善面板</span></span></div>
+      <div class="row"><span class="id">REQ-20260913-003</span><span class="title">批量任务去掉批次概念，每次启动到结束实时执行</span>
+        <span class="badge b-unrefined" tabindex="0">未完善<span class="tip" data-tip="unrefined">已接受未完善：可由批量完善任务补全文档；点击查看批量完善面板</span></span></div>
+      <div class="row"><span class="id">BUG-20260913-004</span><span class="title">版本操作入口在详情页重复渲染</span>
+        <span class="badge b-refined" tabindex="0">已完善<span class="tip" data-tip="refined">文档已由批量完善补全；点击查看批量完善面板</span></span></div>
+      <p class="hintline">三种徽标的 hover 提示（tip）均含任务面板名称，随新旧口径同步切换；点击徽标本应跳转任务模块对应面板，此处仅演示提示。</p>
+    </div>
+  </section>
+
+  <!-- ③ 任务模块 -->
+  <section class="card">
+    <h2>③ 任务模块（「任务」页签）— <em>子页签 / 筛选档 / 面板说明 / 终止确认 / 状态反馈</em></h2>
+    <div class="tabs">
+      <button class="tab active" data-bmode="refine">批量完善</button>
+      <button class="tab" data-bmode="develop">批量开发</button>
+    </div>
+    <div class="pad">
+      <p class="panel-desc" id="panelDesc"></p>
+      <div class="chips" id="kindChips">
+        <button class="chip on" data-kind="all">全部</button>
+        <button class="chip" data-kind="develop">批量开发</button>
+        <button class="chip" data-kind="refine">批量完善</button>
+      </div>
+      <div class="state-pick">状态反馈演示：
+        <span class="seg">
+          <button class="on" data-state="normal">正常</button>
+          <button data-state="loading">加载中</button>
+          <button data-state="empty">空</button>
+          <button data-state="fail">失败</button>
+        </span>
+      </div>
+      <div id="stateNormal">
+        <div class="task">
+          <span class="kind" data-klabel="refine">批量完善</span>
+          <span class="grow"><div>run-20260913-216 · 8 项 · 已完成 5</div><div class="meta">运行中 · 批次 BATCH-20260913-04（示意）</div></span>
+          <button class="btn small danger" id="btnAbort">终止任务</button>
+        </div>
+        <div class="task">
+          <span class="kind" data-klabel="develop">批量开发</span>
+          <span class="grow"><div>run-20260913-201 · 12 项 · 已完成 12</div><div class="meta">已结束 · 回执核验通过（示意）</div></span>
+          <button class="btn small warn" id="btnResume">复工演示（toast）</button>
+        </div>
+      </div>
+      <div id="stateLoading" class="statebox" hidden><span class="spin"></span>正在加载任务运行记录…</div>
+      <div id="stateEmpty" class="statebox" hidden>
+        <h3 id="emptyTitle">所有项目的批量任务均已收尾</h3>
+        <p id="emptyBody" style="margin:4px 0 0">到各项目的任务模块（「任务」页签）可启动新的批量开发 / 批量完善任务；新任务登记运行后会自动出现在这里。</p>
+      </div>
+      <div id="stateFail" class="statebox" hidden>
+        <h3 style="color:var(--err)">运行记录加载失败</h3>
+        <p style="margin:4px 0 10px">网络错误：无法连接状态服务（示意）。</p>
+        <button class="btn small" onclick="toast('✕ 重试失败：连接超时（演示）', true)">重试（失败 toast）</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ CLI 文案对照 -->
+  <section class="card">
+    <h2>④ CLI 输出文案对照（终端可见，非网页 UI）</h2>
+    <div class="pad">
+      <div class="term" id="term"></div>
+      <p class="hintline">帮助文本与命令日志同口径替换；命令名（atb refine / atb batch）与状态字段不变。</p>
+    </div>
+  </section>
+</main>
+
+<footer class="note">演示数据为页面内存虚构，仅示意文案口径与状态反馈，不代表最终集成外观。REQ-20260913-005 · 文档完善阶段产出。</footer>
+
+<div id="fab">
+  <button class="btn small" onclick="toast('✓ 已复工 REQ-20260913-005：回到已计划队列，可被' + WORD().dev + '重新取单')">成功 toast</button>
+  <button class="btn small" onclick="toast('✕ 驳回失败：该条目完善中，待本轮' + WORD().refine + '结束后再驳回', true)">失败 toast</button>
+</div>
+
+<div class="mask" id="mask">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h3 id="mTitle"></h3>
+    <p id="mBody"></p>
+    <div class="acts">
+      <button class="btn" id="mCancel">取消</button>
+      <button class="btn danger" id="mOk">终止任务</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  var MODE = 'old'; // old | new
+  var LANE = 'accepted'; // accepted | planned
+  var BMODE = 'refine'; // refine | develop
+
+  // 新旧文案对照表（与 README 描述逐条对应）
+  var W = {
+    old: {
+      refine: '批量完善', dev: '批量开发',
+      quickAcc: '▶ 开始完善', quickPlan: '▶ 开始开发',
+      quickAccTitle: '进入任务模块批量完善面板：对已接受未完善条目批量补全文档（与勾选无关）',
+      quickPlanTitle: '进入任务模块批量开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务',
+      rejectTitle: '驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮批量完善结束后再驳回',
+      tipUnrefined: '已接受未完善：可由批量完善任务补全文档；点击查看批量完善面板',
+      tipRefining: '子代理正在完善本文档；点击查看批量完善面板',
+      tipRefined: '文档已由批量完善补全；点击查看批量完善面板',
+      descRefine: '批量完善：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。',
+      descDev: '批量开发：以已计划队列（最旧优先）为范围派子代理实施，回执核验通过后自动转入待测试（示意说明）。',
+      abortRefine: '终止批量完善任务 BATCH-20260913-04？',
+      abortDev: '终止批量开发任务 BATCH-20260913-04？',
+      abortBody: '终止后停止派发、剩余项出局、在途子代理提示人工停止。该操作不可撤销。',
+      emptyTitle: '所有项目的批量任务均已收尾',
+      emptyBody: '到各项目的任务模块（「任务」页签）可启动新的批量开发 / 批量完善任务；新任务登记运行后会自动出现在这里。',
+      resumeToast: '✓ 已复工 REQ-20260913-005：回到已计划队列，可被批量开发重新取单',
+      rejectFailToast: '✕ 驳回失败：该条目完善中，待本轮批量完善结束后再驳回',
+      cli: [
+        ['dim', '$ atb --help'],
+        ['', '  atb batch create                           创建<span class="hl">批量开发</span>批次（有未结束批次时入队排队，结束后自动接续）'],
+        ['', '  atb hold resume &lt;ID&gt; [--by 人工]      人工复工（决策齐备后条目回已计划队列，被<span class="hl">批量开发</span>重新取单）'],
+        ['dim', '$ atb req accept REQ-20260913-005'],
+        ['', '  已直接进入已接受（未完善），进入<span class="hl">批量完善</span>候选，无需再人工接受'],
+        ['dim', '$ atb refine done run-20260913-234030-eb3e …'],
+        ['', '  已自动转入计划：REQ-20260913-005（accepted → planned，进入<span class="hl">批量开发</span>候选）'],
+        ['dim', '$ atb hold resume REQ-20260912-001'],
+        ['', '  ✓ 已复工 REQ-20260912-001：条目回到已计划（planned）队列，可被<span class="hl">批量开发</span>重新取单；决策记录见条目目录 decisions.md']
+      ]
+    },
+    new: {
+      refine: 'AI 分析', dev: 'AI 开发',
+      quickAcc: '▶ 开始 AI 分析', quickPlan: '▶ 开始 AI 开发',
+      quickAccTitle: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）',
+      quickPlanTitle: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务',
+      rejectTitle: '驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受；完善中的单待本轮 AI 分析结束后再驳回',
+      tipUnrefined: '已接受未完善：可由 AI 分析任务补全文档；点击查看 AI 分析面板',
+      tipRefining: '子代理正在完善本文档；点击查看 AI 分析面板',
+      tipRefined: '文档已由 AI 分析补全；点击查看 AI 分析面板',
+      descRefine: 'AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。',
+      descDev: 'AI 开发：以已计划队列（最旧优先）为范围派子代理实施，回执核验通过后自动转入待测试（示意说明）。',
+      abortRefine: '终止 AI 分析任务 BATCH-20260913-04？',
+      abortDev: '终止 AI 开发任务 BATCH-20260913-04？',
+      abortBody: '终止后停止派发、剩余项出局、在途子代理提示人工停止。该操作不可撤销。',
+      emptyTitle: '所有项目的 AI 任务均已收尾',
+      emptyBody: '到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析任务；新任务登记运行后会自动出现在这里。',
+      resumeToast: '✓ 已复工 REQ-20260913-005：回到已计划队列，可被 AI 开发重新取单',
+      rejectFailToast: '✕ 驳回失败：该条目完善中，待本轮 AI 分析结束后再驳回',
+      cli: [
+        ['dim', '$ atb --help'],
+        ['', '  atb batch create                           创建<span class="hl">AI 开发</span>批次（有未结束批次时入队排队，结束后自动接续）'],
+        ['', '  atb hold resume &lt;ID&gt; [--by 人工]      人工复工（决策齐备后条目回已计划队列，被<span class="hl">AI 开发</span>重新取单）'],
+        ['dim', '$ atb req accept REQ-20260913-005'],
+        ['', '  已直接进入已接受（未完善），进入<span class="hl">AI 分析</span>候选，无需再人工接受'],
+        ['dim', '$ atb refine done run-20260913-234030-eb3e …'],
+        ['', '  已自动转入计划：REQ-20260913-005（accepted → planned，进入<span class="hl">AI 开发</span>候选）'],
+        ['dim', '$ atb hold resume REQ-20260912-001'],
+        ['', '  ✓ 已复工 REQ-20260912-001：条目回到已计划（planned）队列，可被<span class="hl">AI 开发</span>重新取单；决策记录见条目目录 decisions.md']
+      ]
+    }
+  };
+  function WORD() { return W[MODE]; }
+  window.WORD = WORD;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- 主题 ----------
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  var TH = 'auto';
+  function applyTheme() {
+    var dark = TH === 'dark' || (TH === 'auto' && mq.matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }
+  mq.addEventListener('change', applyTheme);
+  ['Auto', 'Light', 'Dark'].forEach(function (k) {
+    $('th' + k).addEventListener('click', function () {
+      TH = k.toLowerCase();
+      ['Auto', 'Light', 'Dark'].forEach(function (j) { $('th' + j).classList.toggle('on', j === k); });
+      applyTheme();
+    });
+  });
+
+  // ---------- toast ----------
+  window.toast = function (msg, isErr) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(function () { t.remove(); }, 3200);
+  };
+
+  // ---------- 渲染 ----------
+  function render() {
+    var w = WORD();
+    $('modeOld').classList.toggle('on', MODE === 'old');
+    $('modeNew').classList.toggle('on', MODE === 'new');
+    $('barSub').textContent = MODE === 'old' ? '当前口径：旧文案（批量完善 / 批量开发）' : '当前口径：新文案（AI 分析 / AI 开发）';
+
+    // ① 顶栏
+    $('laneAcc').classList.toggle('on', LANE === 'accepted');
+    $('lanePlan').classList.toggle('on', LANE === 'planned');
+    var quick = LANE === 'accepted' ? w.quickAcc : w.quickPlan;
+    var quickTitle = LANE === 'accepted' ? w.quickAccTitle : w.quickPlanTitle;
+    $('btnQuick').textContent = quick;
+    $('btnQuick').title = quickTitle;
+    $('btnQuick').setAttribute('aria-label', quick);
+    $('btnReject').title = w.rejectTitle;
+    $('quickHint').textContent = '当前档位：' + (LANE === 'accepted' ? '已接受' : '已计划') +
+      '，快捷入口 →「' + quick + '」（title：' + quickTitle + '）';
+
+    // ② 徽标 tips
+    document.querySelector('.tip[data-tip="unrefined"]').textContent = w.tipUnrefined;
+    document.querySelector('.tip[data-tip="refining"]').textContent = w.tipRefining;
+    document.querySelector('.tip[data-tip="refined"]').textContent = w.tipRefined;
+
+    // ③ 任务模块
+    document.querySelectorAll('.tab').forEach(function (b) {
+      var k = b.getAttribute('data-bmode');
+      b.textContent = k === 'refine' ? w.refine : w.dev;
+      b.classList.toggle('active', k === BMODE);
+    });
+    $('panelDesc').textContent = BMODE === 'refine' ? w.descRefine : w.descDev;
+    document.querySelectorAll('#kindChips .chip').forEach(function (c) {
+      var k = c.getAttribute('data-kind');
+      c.textContent = k === 'all' ? '全部' : (k === 'develop' ? w.dev : w.refine);
+    });
+    document.querySelectorAll('.kind').forEach(function (k) {
+      var key = k.getAttribute('data-klabel');
+      k.textContent = key === 'refine' ? w.refine : w.dev;
+    });
+    $('emptyTitle').textContent = w.emptyTitle;
+    $('emptyBody').textContent = w.emptyBody;
+    $('mTitle').textContent = BMODE === 'refine' ? w.abortRefine : w.abortDev;
+    $('mBody').textContent = w.abortBody;
+
+    // ④ CLI
+    $('term').innerHTML = w.cli.map(function (l) {
+      return '<div class="' + l[0] + '">' + l[1] + '</div>';
+    }).join('');
+  }
+
+  // ---------- 事件 ----------
+  $('modeOld').addEventListener('click', function () { MODE = 'old'; render(); });
+  $('modeNew').addEventListener('click', function () { MODE = 'new'; render(); });
+  $('laneAcc').addEventListener('click', function () { LANE = 'accepted'; render(); });
+  $('lanePlan').addEventListener('click', function () { LANE = 'planned'; render(); });
+  document.querySelectorAll('.tab').forEach(function (b) {
+    b.addEventListener('click', function () { BMODE = b.getAttribute('data-bmode'); render(); });
+  });
+  document.querySelectorAll('#kindChips .chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      document.querySelectorAll('#kindChips .chip').forEach(function (x) { x.classList.remove('on'); });
+      c.classList.add('on');
+    });
+  });
+  document.querySelectorAll('.state-pick .seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.state-pick .seg button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var s = b.getAttribute('data-state');
+      ['normal', 'loading', 'empty', 'fail'].forEach(function (k) {
+        $('state' + k.charAt(0).toUpperCase() + k.slice(1)).hidden = (k !== s);
+      });
+    });
+  });
+  $('btnReject').addEventListener('click', function () { toast(WORD().rejectFailToast, true); });
+  $('btnQuick').addEventListener('click', function () {
+    toast('✓ 已跳转任务模块「' + (LANE === 'accepted' ? WORD().refine : WORD().dev) + '」面板（演示）');
+  });
+  $('btnAbort').addEventListener('click', function () { $('mask').classList.add('open'); });
+  $('mCancel').addEventListener('click', function () { $('mask').classList.remove('open'); });
+  $('mask').addEventListener('click', function (e) { if (e.target === $('mask')) $('mask').classList.remove('open'); });
+  $('mOk').addEventListener('click', function () {
+    var btn = $('mOk');
+    btn.disabled = true; btn.textContent = '终止中…';
+    setTimeout(function () {
+      btn.disabled = false; btn.textContent = '终止任务';
+      $('mask').classList.remove('open');
+      toast('✓ 已终止任务 BATCH-20260913-04：停止派发，剩余项出局（演示）');
+    }, 700);
+  });
+  $('btnResume').addEventListener('click', function () { toast(WORD().resumeToast); });
+
+  render();
+})();
+</script>
+</body>
+</html>
