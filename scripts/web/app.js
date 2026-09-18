@@ -3728,12 +3728,18 @@ function bindConfirmFormActions(d) {
 
 // 差异查看（BUG-20260915-003）：读取失败显示明确错误 + 重试，不冒充无差异；
 // 空差异只表示工作区与 Git 基线一致（如已补交入库）。
+// REQ-20260916-006：成功路径交给语义渲染层（行级着色 / 行号 / 上下文折叠 / 统一并排 /
+// 字符级高亮）；渲染层缺失时回退纯文本 <pre>（优雅降级，加载 / 失败 / 重试语义不变）。
 async function loadConfirmDiff(itemId, p) {
   const box = $('#confirmForm #confirmDiffBox');
   if (!box) return;
   box.innerHTML = '<p class="muted small">正在读取差异…</p>';
   try {
     const r = await api(`/api/confirms/${encodeURIComponent(itemId)}/diff?path=${encodeURIComponent(p)}`);
+    if (window.ATBDiffView?.mount) {
+      window.ATBDiffView.mount(box, { path: p, diff: r.diff || '' });
+      return;
+    }
     box.innerHTML = `<details open class="confirm-diff"><summary>${esc(p)}（工作区 vs Git 基线）</summary><pre>${esc(r.diff || '（与 HEAD 一致：无差异——可能已补交入库）')}</pre></details>`;
   } catch (e) {
     box.innerHTML = `<p class="edit-error-text">差异读取失败：${esc(e.message)}（读取失败不冒充无差异）</p><button type="button" class="btn small" id="confirmDiffRetry">重试</button>`;

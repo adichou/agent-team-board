@@ -23,6 +23,12 @@
   --info-text: #1d4ed8;
   --scrollbar-thumb: rgba(102, 116, 140, 0.35);
   --scrollbar-thumb-hover: rgba(102, 116, 140, 0.55);
+  /* REQ-20260916-006 文件差异语义渲染（浅色）：新增 / 删除 / hunk 行背景与字符级高亮 */
+  --dv-add-bg: #e6ffec;
+  --dv-add-ch: #abf2bc;
+  --dv-del-bg: #ffebe9;
+  --dv-del-ch: #ffc0ba;
+  --dv-hunk-bg: #ddf4ff;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -50,6 +56,12 @@
     --info-text: #93c5fd;
     --scrollbar-thumb: rgba(139, 152, 173, 0.3);
     --scrollbar-thumb-hover: rgba(139, 152, 173, 0.5);
+    /* REQ-20260916-006 文件差异语义渲染（深色） */
+    --dv-add-bg: rgba(46, 160, 67, 0.18);
+    --dv-add-ch: rgba(63, 185, 80, 0.45);
+    --dv-del-bg: rgba(248, 81, 73, 0.16);
+    --dv-del-ch: rgba(248, 81, 73, 0.45);
+    --dv-hunk-bg: rgba(56, 139, 253, 0.16);
   }
 }
 
@@ -3419,3 +3431,44 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .rel-prod-config code { word-break: break-all; }
 /* REQ-20260915-003：构建模块详情底部产品发布操作区（bld-release-block）已迁入左侧版本
    卡片按钮区（.rel-card .card-acts 自带 flex-wrap，容纳五键空间不足自动换行），样式随之移除 */
+
+/* ===== REQ-20260916-006 挂起确认面板：文件差异语义渲染（行级着色 / 行号 / 上下文折叠 / 统一并排 / 字符级高亮） ===== */
+.dv-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dv-title { font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; word-break: break-all; }
+.dv-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.dv-seg button { border: 0; background: transparent; padding: 2px 10px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.dv-seg button + button { border-left: 1px solid var(--border); }
+.dv-seg button[aria-pressed="true"] { background: var(--primary); color: #fff; }
+.dv-body {
+  overflow: auto; /* 长行横向滚动，不换行、不撑破面板 */
+  max-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.dv-row { display: grid; width: max-content; min-width: 100%; box-sizing: border-box; }
+.dv-row.dv-u-row { grid-template-columns: 3.5em 3.5em 1.25em auto; } /* 旧行号 · 新行号 · 标记 · 内容 */
+.dv-row.dv-s-row { grid-template-columns: 3.5em auto 6px 3.5em auto; } /* 左栏（旧）· 分隔 · 右栏（新） */
+.dv-no { color: var(--muted); text-align: right; padding: 0 6px 0 4px; user-select: none; white-space: pre; }
+.dv-sign { text-align: center; user-select: none; }
+.dv-s-add { color: var(--done); font-weight: 600; }
+.dv-s-del { color: var(--warn); font-weight: 600; }
+.dv-code, .dv-old, .dv-new { white-space: pre; padding: 0 8px 0 2px; }
+.dv-meta, .dv-hunk, .dv-note, .dv-fold, .dv-notice { grid-column: 1 / -1; }
+.dv-meta .dv-code, .dv-note .dv-code { color: var(--muted); }
+.dv-hunk { background: var(--dv-hunk-bg); }
+.dv-hunk .dv-code { color: var(--info-text); }
+.dv-u-row.dv-add { background: var(--dv-add-bg); }
+.dv-u-row.dv-del { background: var(--dv-del-bg); }
+.dv-s-row.dv-del .dv-old, .dv-s-row.dv-mod .dv-old { background: var(--dv-del-bg); }
+.dv-s-row.dv-add .dv-new, .dv-s-row.dv-mod .dv-new { background: var(--dv-add-bg); }
+.dv-add .dv-ch, .dv-s-row .dv-new .dv-ch { background: var(--dv-add-ch); border-radius: 2px; }
+.dv-del .dv-ch, .dv-s-row .dv-old .dv-ch { background: var(--dv-del-ch); border-radius: 2px; }
+.dv-fold { display: flex; justify-content: center; }
+.dv-unfold { border: 1px dashed var(--border); background: transparent; color: var(--muted); font-size: 11px; border-radius: 999px; padding: 1px 12px; margin: 2px 0; cursor: pointer; }
+.dv-unfold:hover { color: var(--primary); border-color: var(--primary); }
+.dv-gap { background: var(--border); }
+.dv-notice { padding: 3px 8px; color: var(--warn); background: var(--info-bg); }
+.dv-cell-empty { display: block; }
