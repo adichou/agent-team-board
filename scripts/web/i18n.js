@@ -143,7 +143,10 @@ const EN = {
   '无需迁移': 'nothing to migrate',
   // REQ-20260912-001 设置页「Git 工作流」详细描述（双分支协作 / 分支职责 / 自动提交）
   '采用 dev + main 双分支协作：': 'Adopt the dev + main dual-branch workflow:',
-  'dev 分支承载需求设计、开发和测试；main 分支承载版本构建，发布构建物。': 'The dev branch carries requirement design, development, and testing; the main branch carries version builds and release artifacts.',
+  // REQ-20260916-005：职责句主分支名随解析结果显示（仅 master 历史仓库为 master）——
+  // 分支名以 <span> 拆为独立文本节点，整句键拆为前后两段（默认 main 场景三段拼接与原句一致）。
+  'dev 分支承载需求设计、开发和测试；': 'The dev branch carries requirement design, development, and testing; ',
+  '分支承载版本构建，发布构建物。': 'branch carries version builds and release artifacts.',
   '每个需求或 Bug 单开发完自动提交到本地（仅本地分支操作，不 push）。': 'Each requirement or bug item is auto-committed locally once development finishes (local branch operations only, no push).',
   '正在创建并切换到 dev 分支…': 'Creating and switching to the dev branch…',
   '初始化 dev 分支？': 'Initialize the dev branch?',
@@ -969,6 +972,9 @@ const EN = {
   '重新读取': 'Reload',
   '返回发布': 'Back to release',
   '已保存。旧预检已失效，请返回发布重新预检。': 'Saved. Previous prechecks are now stale — go back to the release tab and precheck again.',
+  // BUG-20260916-002 任务记录「重新执行」blocked 续接：复制失败兜底与面板重试复制（静态文案）
+  '已生成续接提示词，但复制失败：请在「记录」分区的续接提示词面板手动复制': 'Continue prompt generated, but copying failed: copy it manually from the continue-prompt panel in the "Records" pane',
+  '已复制续接提示词；请在原项目会话粘贴发送': 'Continue prompt copied; paste and send it in an Agent session of the original project',
 };
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
@@ -1002,6 +1008,9 @@ const EN_DYNAMIC = {
   // BUG-20260916-001 设置页官网配置读取/保存失败反馈（动态拼接）
   '官网配置读取失败：◇': 'Failed to load the website configuration: $1',
   '保存失败：◇': 'Save failed: $1',
+  // BUG-20260916-002 任务记录「重新执行」blocked 续接：成功 toast 与面板标题（动态拼接）
+  '✓ 已复制续接提示词（条目 ◇，沿用原认领身份 ◇）：请先确认旧子代理已停止，再到原项目会话粘贴发送': '✓ Continue prompt copied (item $1, original owner $2): confirm the old subagent has stopped first, then paste and send it in an Agent session of the original project',
+  '续接提示词（条目 ◇ · 沿用原认领身份 ◇）：在原项目会话粘贴发送，先确认旧子代理已停止': 'Continue prompt (item $1 · original owner $2): paste and send it in an Agent session of the original project; confirm the old subagent has stopped first',
   // BUG-20260914-017：分支同步 toast 拼接句（成功 / 部分失败 × 有无 main 跳过注记四种形态；
   // main 注记按服务端 skipped 数据拼接，本地无 main 时不带注记维持原口径）
   '✓ 已同步远端：fetch 完成，已推送 ◇ → ◇；main 已跳过，请通过发布流程推送': '✓ Remote synced: fetch done, pushed $1 → $2; main skipped — push it through the release process',

@@ -142,7 +142,10 @@ function assertNotOccupied(dataDir, itemIds, excludeVersionId = null) {
   }
 }
 
-export function createVersion(dataDir, { name, items, by = 'board' } = {}) {
+// targetBranch（REQ-20260916-005）：版本计划的合并目标主分支——服务端创建时按
+// git-flow resolveMainBranch 解析结果传入（仅 master 历史仓库为 'master'）；缺省
+// TARGET_BRANCH（'main'），数据层不读 git、不猜测（旧调用 / 既有口径兼容）。
+export function createVersion(dataDir, { name, items, targetBranch = TARGET_BRANCH, by = 'board' } = {}) {
   const info = validateInfo({ name: name ?? '', description: '' });
   const normalized = normalizeItems(items);
   // BUG-20260914-004：先校验占用再分配编号，被拒绝的创建不占当日序列
@@ -153,7 +156,7 @@ export function createVersion(dataDir, { name, items, by = 'board' } = {}) {
     name: info.name || defaultName(),
     description: '',
     status: 'draft',
-    targetBranch: TARGET_BRANCH,
+    targetBranch: String(targetBranch || TARGET_BRANCH),
     items: normalized,
     createdAt: nowIso(),
     updatedAt: nowIso(),

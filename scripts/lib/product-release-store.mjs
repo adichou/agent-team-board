@@ -133,6 +133,9 @@ function normalizeFreeze(freeze) {
   if (!HASH_RE.test(devSha)) throw new AtbError('冻结失败：无法读取 dev 分支头（main/dev 双分支推送前置，两分支缺一不可）');
   if (!String(f.remote || '').trim()) throw new AtbError('冻结失败：源码远端未解析（缺失或歧义时明确阻塞）');
   return {
+    // REQ-20260916-005：冻结时解析出的主分支名（仅 master 历史仓库为 'master'）；
+    // 旧 run 无此字段缺省 'main'，执行阶段按该字段切换 / 推送 / 核验。
+    mainBranch: String(f.mainBranch || 'main'),
     mainSha, devSha,
     remote: String(f.remote).trim(),
     remoteUrl: scrubSecrets(String(f.remoteUrl || '')),

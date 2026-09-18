@@ -25,7 +25,7 @@ import * as buildPublishStore from './lib/build-publish-store.mjs';
 import * as prelStore from './lib/product-release-store.mjs';
 import * as prelGit from './lib/product-release-git.mjs';
 import * as prelMaterials from './lib/site-materials.mjs';
-import { runProductPrecheck, runProductPipeline, refreezeProductRun, collectCurrentInputs } from './lib/product-release-pipeline.mjs';
+import { runProductPrecheck, runProductPipeline, refreezeProductRun, collectCurrentInputs, resolveMainBranchName } from './lib/product-release-pipeline.mjs';
 import { runGitPipeline, realExec as realGitExec } from './lib/release-git.mjs';
 import { runApplePipeline, createRealAdapter as createRealAppleAdapter } from './lib/release-apple.mjs';
 import { runElectronPipeline, readElectronProject } from './lib/release-electron.mjs';
@@ -2102,14 +2102,17 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const bld = buildStore.readVersion(board, String(body.bldId || ''));
       // 冻结事实收集（真实 git 只读；不冒充、不用时间戳代替冻结证据）
+      // REQ-20260916-005：主分支按解析结果取 main 或 master（本地仅 master 的历史仓库
+      // 冻结 master 分支头；两者皆无仍按 main 明确阻塞）。
       const remoteInfo = await prelGit.resolveSourceRemote(root, realExec);
-      const mainSha = await prelGit.branchHead(root, realExec, 'main');
+      const mainBranch = (await resolveMainBranchName(root, realExec)) || 'main';
+      const mainSha = await prelGit.branchHead(root, realExec, mainBranch);
       const devSha = await prelGit.branchHead(root, realExec, 'dev');
-      if (!mainSha) throw new core.AtbError('main 分支缺失：无法冻结（发布必须冻结 main 分支头）');
-      if (!devSha) throw new core.AtbError('dev 分支缺失：main/dev 双分支推送前置，无法冻结');
+      if (!mainSha) throw new core.AtbError(`${mainBranch} 分支缺失：无法冻结（发布必须冻结 ${mainBranch} 分支头）`);
+      if (!devSha) throw new core.AtbError('dev 分支缺失：主分支/dev 双分支推送前置，无法冻结');
       const items = bld.items.map((x) => ({ itemId: x.itemId, commit: x.commit }));
       const contain = await prelGit.verifyItemsOnMain(root, realExec, items, mainSha);
-      if (!contain.ok) throw new core.AtbError(`计划条目不在 main 历史内：${contain.missing.join('、')}（请确认版本已完整合并）`);
+      if (!contain.ok) throw new core.AtbError(`计划条目不在 ${mainBranch} 历史内：${contain.missing.join('、')}（请确认版本已完整合并）`);
       const extraCommits = await prelGit.collectExtraCommits(root, realExec, { mainSha, itemCommits: items.map((x) => x.commit), bldId: bld.id });
       const cfg = releaseStore.readModuleConfig(board);
       let homepage = { repoRoot: cfg.homepageRepoRoot || '', branch: 'main', contentDir: '' };
@@ -2121,7 +2124,7 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
       const run = prelStore.createProductRun(board, {
         productId: path.basename(root),
         bld,
-        freeze: { mainSha, devSha, remote: remoteInfo.remote, remoteUrl: remoteInfo.sanitizedUrl, extraCommits, homepage },
+        freeze: { mainBranch, mainSha, devSha, remote: remoteInfo.remote, remoteUrl: remoteInfo.sanitizedUrl, extraCommits, homepage },
         version: body.version,
         versionName: body.versionName || bld.name,
         by: 'board',
@@ -2147,10 +2150,12 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
         const board = requireBoard();
         const run = prelStore.readProductRun(board, runId);
         // 计划预览：冻结输入 + 将执行步骤 + 将更新的仓库/分支 + 目标与材料状态（只读装配）
+        // REQ-20260916-005：步骤文案中的主分支名按冻结记录取用（回退 master 场景如实显示）。
+        const mb = run.frozen.mainBranch || 'main';
         const steps = [
-          `源码工作目录切换到 main（核对 HEAD = ${String(run.frozen.mainSha).slice(0, 8)}）`,
-          `一次原子推送 main（${String(run.frozen.mainSha).slice(0, 8)}）与 dev（${String(run.frozen.devSha).slice(0, 8)}）到源码远端 ${run.frozen.remote}，推送后核验两分支远端 SHA`,
-          `Web App：从冻结 main 源码自动构建并本机部署回验（版本 ${run.frozen.version}）`,
+          `源码工作目录切换到 ${mb}（核对 HEAD = ${String(run.frozen.mainSha).slice(0, 8)}）`,
+          `一次原子推送 ${mb}（${String(run.frozen.mainSha).slice(0, 8)}）与 dev（${String(run.frozen.devSha).slice(0, 8)}）到源码远端 ${run.frozen.remote}，推送后核验两分支远端 SHA`,
+          `Web App：从冻结 ${mb} 源码自动构建并本机部署回验（版本 ${run.frozen.version}）`,
           `官网与文档：中英文材料核验 + 本机部署回验（内容目录 ${run.frozen.homepage?.contentDir || '（未配置）'}）`,
         ];
         return sendJson(res, 200, {
@@ -2161,7 +2166,7 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
             extraCommits: run.frozen.extraCommits || [],
             precheck: run.precheck,
             warning: (run.frozen.extraCommits || []).length
-              ? `main 相比计划条目另有 ${(run.frozen.extraCommits).length} 个额外提交（含基线与计划外提交），发布范围以冻结 main 为准，不隐去额外变更`
+              ? `${mb} 相比计划条目另有 ${(run.frozen.extraCommits).length} 个额外提交（含基线与计划外提交），发布范围以冻结 ${mb} 为准，不隐去额外变更`
               : null,
           },
         });
@@ -2360,6 +2365,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const version = buildStore.createVersion(board, {
         name: body.name,
         items: items.map((it) => ({ ...it, title: titles.get(String(it?.itemId || '')) || '' })),
+        // REQ-20260916-005：版本计划合并目标按主分支解析结果记录（仅 master 历史仓库
+        // 为 'master'；两者皆无时缺省 main，实际合并前置校验会按补建口径处理）。
+        targetBranch: gitFlow.resolveMainBranch(root) || buildStore.TARGET_BRANCH,
         by: 'board',
       });
       return sendJson(res, 201, { version });
@@ -2416,12 +2424,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       let version;
       try {
         const r = buildGit.mergeCommitsIntoMain(root, { versionId: v.id, versionName: v.name, items: v.items });
-        // REQ-20260915-002：全量合并成功时记录最终 main 分支头（作为发布冻结证据；
-        // 旧计划无 merge.mainSha 时按「候选 + 额外提交」口径展示）
+        // REQ-20260915-002：全量合并成功时记录最终主分支头（作为发布冻结证据；
+        // 旧计划无 merge.mainSha 时按「候选 + 额外提交」口径展示）。
+        // REQ-20260916-005：主分支头按解析结果读取（仅 master 历史仓库为 master 头）。
         const allMerged = v.items.every((it) => (r.results || []).some((x) => x.itemId === it.itemId && x.ok));
         let mainSha = null;
         if (allMerged) {
-          const sha = spawnSync('git', ['rev-parse', 'refs/heads/main'], { cwd: root, encoding: 'utf8', timeout: 15000 });
+          const sha = spawnSync('git', ['rev-parse', `refs/heads/${gitFlow.resolveMainBranch(root) || 'main'}`], { cwd: root, encoding: 'utf8', timeout: 15000 });
           if (sha.status === 0) mainSha = sha.stdout.trim();
         }
         version = buildStore.finishMerge(board, v.id, { results: r.results, mainSha });
@@ -2960,6 +2969,18 @@ async function handleApi(req, res, u, pathname) {
     const runId = String(body.runId || '').trim();
     if (!runId) throw new core.AtbError('缺少 runId：请指定要重新执行的运行');
     const r = batch.retryRun(dataDir, runId);
+    return sendJson(res, 200, r);
+  }
+
+  // BUG-20260916-002：blocked 终态记录 + 条目仍被原 owner 认领 → 生成续接提示词（同 owner 幂等续认，
+  // 单项 /dev 流程承接）；不满足条件返回 fallback 指示（none=在途防线直接指引 / rebuild=维持原重建路径）。
+  // 只读账本与条目状态：不新建 run、不改业务状态。
+  if (req.method === 'POST' && pathname === '/api/batch/continue') {
+    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const runId = String(body.runId || '').trim();
+    if (!runId) throw new core.AtbError('缺少 runId：请指定要续接的运行');
+    const r = batch.continueRun(dataDir, runId, { projectRoot: root });
     return sendJson(res, 200, r);
   }
 

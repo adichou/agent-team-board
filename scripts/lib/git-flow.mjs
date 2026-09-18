@@ -2,7 +2,8 @@
 // 三个职责：
 //   1. 初始化：ensureDevWorkflow —— 按需 `git init`（-b main）、按需创建 dev 分支并把
 //      工作区切到 dev（幂等；空仓库走「未出生分支改名」等价路径），并幂等补建本地 main
-//      （BUG-20260914-003：该路径下 main 从未出生，详见 ensureMainBranch）。只做本地分支
+//      （BUG-20260914-003：该路径下 main 从未出生，详见 ensureMainBranch；REQ-20260916-005：
+//      历史仓库本地仅有 master 时主分支解析为 master，不补建 main）。只做本地分支
 //      操作，不 push、不配置远端、不执行丢弃/还原/暂存无关改动。
 //   2. 自动提交：autoCommitForRun —— 批量开发回执核验通过（reported）后，以
 //      「领取时工作区快照 → 收尾时差集」做确定性归因，把本单改动按 doc / test /
@@ -34,6 +35,8 @@ import {
 
 export const DEV_BRANCH = 'dev';
 export const MAIN_BRANCH = 'main';
+// REQ-20260916-005 历史仓库主分支回退名：本地 main 不存在而 master 存在时以 master 为主分支。
+export const FALLBACK_MAIN_BRANCH = 'master';
 // 快照/提交时路径分块上限（防超长命令行）
 const PATH_CHUNK = 200;
 const GIT_TIMEOUT_MS = 60_000;
@@ -62,12 +65,28 @@ export function isGitRepo(root) {
 
 // 只读分支状态（设置页加载用）：branch 在非仓库/detached 时为 null。
 // devExists：refs/heads/dev 存在，或当前就在 dev（空仓库未出生的 dev 也算已就绪）。
+// mainBranch（REQ-20260916-005）：主分支解析结果——优先 main；本地 main 不存在而
+// master 存在时回退 master；两者皆无 / 非仓库为 null。仅以本地 refs 判定，不读远端。
 export function gitBranchState(root) {
-  if (!isGitRepo(root)) return { isRepo: false, branch: null, devExists: false };
+  if (!isGitRepo(root)) return { isRepo: false, branch: null, devExists: false, mainBranch: null };
   const branch = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim() || null;
   const devExists = branch === DEV_BRANCH
     || gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${DEV_BRANCH}`]).status === 0;
-  return { isRepo: true, branch, devExists };
+  return { isRepo: true, branch, devExists, mainBranch: resolveMainBranch(root) };
+}
+
+// REQ-20260916-005 统一主分支解析：优先 main；本地 main 不存在而 master 存在时以
+// master 为主分支（兼容默认分支为 master 的历史仓库）；两者皆无返回 null（维持现状：
+// 新项目 git init -b main / ensureMainBranch 根提交补建口径）。main 与 master 并存时
+// 一律取 main（与既有行为一致，无回归）。只读本地 refs/heads，不读远端、不重命名分支。
+export function resolveMainBranch(root) {
+  if (gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${MAIN_BRANCH}`]).status === 0) {
+    return MAIN_BRANCH;
+  }
+  if (gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${FALLBACK_MAIN_BRANCH}`]).status === 0) {
+    return FALLBACK_MAIN_BRANCH;
+  }
+  return null;
 }
 
 // 幂等初始化：非 git 项目 → git init -b main；随后按需创建 dev 并切换工作区。
@@ -105,9 +124,15 @@ export function ensureDevWorkflow(root) {
 // `git branch main <root>` 补建本地 main——只创建分支，不切换、不推送、不触碰工作区。
 // 空仓库（HEAD 未出生，尚无基点）跳过不报错；main 已存在不动。补建后本地 main 作为
 // 版本合并目标累积合并提交，口径与 build-git precheckMerge「main 分支不存在」一致。
+// REQ-20260916-005 历史仓库回退：本地 main 不存在而 master 存在时主分支已解析为
+// master——此时不补建 main（补建会凭空多出一个与远端 origin/master 不对应的分支，
+// 后续版本合并 / 发布与用户实际主干脱节），dev 分支照常创建/切换。
 export function ensureMainBranch(root) {
   if (gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${MAIN_BRANCH}`]).status === 0) {
     return false; // main 已存在：幂等不动
+  }
+  if (gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${FALLBACK_MAIN_BRANCH}`]).status === 0) {
+    return false; // 回退命中 master：master 即主分支，不补建 main
   }
   const roots = gitRaw(root, ['rev-list', '--max-parents=0', 'HEAD']);
   if (roots.status !== 0) return false; // HEAD 未出生（尚无提交）：无补建基点

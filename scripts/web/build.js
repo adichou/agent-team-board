@@ -1868,8 +1868,12 @@ const ATBBuild = (() => {
       // BUG-20260914-003：本地有分支但缺 main 时给出可解释提示（与「合并入 main」
       // precheckMerge「main 分支不存在」报错口径一致），引导经设置页 Git 工作流幂等补建。
       // 空仓库（无任何本地分支 = 尚无提交、无补建基点）不出提示。
+      // REQ-20260916-005：主分支按解析结果判定（/api/build/branches 的 mainBranch 字段；
+      // 旧载荷无该字段时回退「local 含 main」推断）——仅 master 的历史仓库主分支已解析
+      // 为 master，不再显示「本地缺少 main」误导提示。
       const locals = b.local || [];
-      const mainMissing = locals.length > 0 && !locals.includes('main');
+      const mainBranch = b.mainBranch || (locals.includes('main') ? 'main' : null);
+      const mainMissing = locals.length > 0 && !mainBranch;
       const mainHint = mainMissing
         ? `<p class="bld-main-hint" role="note">⚠ 本地缺少 main 分支：版本计划「合并入 main」将报「main 分支不存在」。可到「设置 → Git 工作流」执行初始化（幂等，将在首个提交上补建 main，不推送远端）。</p>`
         : '';
