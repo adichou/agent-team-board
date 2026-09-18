@@ -1,0 +1,14 @@
+# 测试报告 — REQ-20260906-009 实时状态标志移动到左侧 logo 处右上角叠加显示
+
+- 时间：2026-09-06T11:53:00.178Z
+- 执行者：zcode-batch-20260906-001-1
+- 测试框架：node assert 静态契约测试
+- 覆盖率：4%
+
+## 总结
+
+实时状态标志(#pollState)移入.brand 徽标容器.logo-badge，absolute 负偏移叠加 logo 右上角并加 panel 色 halo；配色/JS 轮询契约不变。新增 scripts/tests/logo-poll-badge.test.mjs 4 用例先红后绿；全量 38 文件仅 detail-close-btn T2 存量红灯（与本条目无关，已登记 BUG-20260906-012）。测试输出：dispatch/runs/run-20260906-001/test-output.log
+
+## 明细
+
+（可粘贴命令输出、失败用例说明等）
