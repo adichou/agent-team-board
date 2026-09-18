@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-017 演示 · 分支同步界面缺少 main 必须经过发布流程推送的规则说明</title>
+<style>
+  /* 配色沿用 scripts/web/style.css 的明暗两套变量（prefers-color-scheme 自动适配） */
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --text: #1b2434;
+    --muted: #66748c;
+    --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20, 30, 50, 0.08), 0 4px 14px rgba(20, 30, 50, 0.06);
+    --primary: #2563eb;
+    --warn: #dc2626;
+    --ok-bg: #ecfdf5;
+    --ok-text: #047857;
+    --info-bg: #eff6ff;
+    --info-text: #1d4ed8;
+    --warn-bg: #fef2f2;
+    --warn-text: #b91c1c;
+    --chip-run-bg: #eff6ff;
+    --chip-run-text: #1d4ed8;
+    --chip-rel-bg: #ecfdf5;
+    --chip-rel-text: #047857;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b;
+      --panel: #161d29;
+      --text: #e5eaf3;
+      --muted: #8b98ad;
+      --border: #263041;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+      --primary: #3b82f6;
+      --warn: #f87171;
+      --ok-bg: #052e1c;
+      --ok-text: #6ee7b7;
+      --info-bg: #0b1d3a;
+      --info-text: #93c5fd;
+      --warn-bg: #3a1116;
+      --warn-text: #fca5a5;
+      --chip-run-bg: #0b1d3a;
+      --chip-run-text: #93c5fd;
+      --chip-rel-bg: #052e1c;
+      --chip-rel-text: #6ee7b7;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 20px 16px 80px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示页框架 ---------- */
+  .demo-head { max-width: 980px; margin: 0 auto 14px; }
+  .demo-head h1 { font-size: 17px; margin: 0 0 4px; }
+  .demo-head .meta { font-size: 12.5px; }
+
+  .demo-controls {
+    max-width: 980px; margin: 0 auto 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 12px 14px;
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  }
+  .demo-controls label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  select {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+    background: var(--panel); color: var(--muted); border: none;
+  }
+  .seg button.on-defect { background: var(--warn); color: #fff; }
+  .seg button.on-fixed { background: var(--primary); color: #fff; }
+  .btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn.small { font-size: 12.5px; padding: 3px 10px; }
+  .btn.quiet { background: transparent; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+
+  .observe {
+    max-width: 980px; margin: 0 auto 14px; padding: 10px 14px;
+    background: var(--info-bg); color: var(--info-text);
+    border-radius: 10px; font-size: 13px;
+  }
+  .observe strong { display: block; margin-bottom: 2px; }
+
+  /* ---------- 模拟看板：构建模块 ---------- */
+  .board {
+    max-width: 980px; margin: 0 auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .board-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600;
+  }
+  .board-head .chip { font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 9px; background: var(--warn); color: #fff; }
+  .board-head .chip.ok { background: var(--primary); }
+  .rel-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); }
+  .rel-tab {
+    font: inherit; font-size: 13.5px; padding: 7px 14px; cursor: pointer;
+    background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  }
+  .rel-tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+
+  .rel-split { display: flex; min-height: 400px; }
+  .rel-list { width: 46%; border-right: 1px solid var(--border); padding: 12px 14px; overflow-y: auto; }
+  .rel-detail { flex: 1; padding: 12px 16px; overflow-y: auto; }
+  @media (max-width: 700px) { .rel-split { flex-direction: column; } .rel-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border); } }
+
+  .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  /* 修复后：同步按钮旁的常驻范围说明（本 Bug 修复点） */
+  .bld-sync-note {
+    margin: 0 0 10px; padding: 6px 10px; border-radius: 7px; font-size: 12.5px;
+    background: var(--info-bg); color: var(--info-text);
+    display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  }
+  .bld-branch-group { margin-bottom: 14px; }
+  .bld-group-head { font-size: 12px; color: var(--muted); letter-spacing: 0.4px; margin-bottom: 6px; }
+  .bld-branch {
+    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .bld-branch:hover { border-color: var(--border); background: var(--bg); }
+  .bld-branch.sel { border-color: var(--primary); background: var(--info-bg); }
+  .bld-branch > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bld-branch .st {
+    font-size: 11.5px; border-radius: 99px; padding: 1px 9px; white-space: nowrap;
+    background: var(--chip-run-bg); color: var(--chip-run-text); font-weight: 600;
+  }
+  /* 修复后：main 行「通过发布流程推送」标识（本 Bug 修复点） */
+  .bld-branch .st.rel { background: var(--chip-rel-bg); color: var(--chip-rel-text); }
+  .bld-remote { color: var(--muted); }
+
+  .bld-remote-hint, .rel-form-err {
+    border-radius: 8px; padding: 8px 11px; margin: 6px 0; font-size: 12.5px;
+  }
+  .bld-remote-hint { background: var(--warn-bg); color: var(--warn-text); }
+  .rel-form-err { background: var(--warn-bg); color: var(--warn-text); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .rel-empty { padding: 40px 24px; text-align: center; }
+  .rel-empty h3 { margin: 0 0 6px; }
+
+  .bld-log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .bld-log { list-style: none; margin: 0; padding: 0; }
+  .bld-log li { padding: 7px 4px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .bld-log li span:last-child { margin-left: auto; }
+
+  /* ---------- 推送确认弹窗（对齐 build.js renderPushConfirm 口径） ---------- */
+  .rel-modal-wrap {
+    position: fixed; inset: 0; background: rgba(10, 16, 28, 0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 40; padding: 16px;
+  }
+  .rel-modal {
+    width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .rel-modal h3 { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 15px; }
+  .rel-modal-body { padding: 14px 16px; }
+  .rel-modal-body .field { display: block; font-size: 13px; margin-bottom: 10px; }
+  .rel-modal-body select { margin-top: 4px; display: block; min-width: 180px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
+  /* ---------- toast（对齐看板 toast 范式） ---------- */
+  .toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--ok-text);
+    color: var(--text); border-radius: 8px; box-shadow: var(--shadow);
+    padding: 9px 14px; font-size: 13px; max-width: 420px; animation: slidein 0.18s ease-out;
+  }
+  .toast.err { border-left-color: var(--warn); }
+  @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="demo-head">
+  <h1>BUG-20260914-017 · 分支同步界面缺少 main 必须经过发布流程推送的规则说明</h1>
+  <div class="meta muted">还原「构建 → 分支浏览」（BUG-20260914-011 修复后现状：同步 = fetch + 推送除 main 外分支；BUG-20260914-012 修复后现状：main 行无推送按钮）。<b>缺陷态</b>：排除 main 的规则只在悬停提示里、main 行无说明、同步反馈不提 main 被跳过；<b>修复后</b>：按钮旁常驻说明 + main 行「通过发布流程推送」标识 + 反馈含「main 已跳过」。所有数据为演示模拟，不执行真实 git 操作。</div>
+</div>
+
+<div class="demo-controls">
+  <label>模式
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on-defect">当前（缺陷）</button>
+      <button type="button" data-mode="fixed">修复后</button>
+    </span>
+  </label>
+  <label>场景
+    <select id="sceneSel">
+      <option value="typical">典型：dev + main + 功能分支（当前 dev）</option>
+      <option value="mainonly">本地仅有 main</option>
+      <option value="nogit">非 git 仓库</option>
+    </select>
+  </label>
+  <label>语言
+    <select id="langSel">
+      <option value="zh">中文</option>
+      <option value="en">English（验证 i18n 覆盖）</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="failPush"> 模拟推送失败（功能分支被远端拒绝）</label>
+  <label><input type="checkbox" id="failSync"> 模拟同步失败（fetch 不可达）</label>
+  <button type="button" class="btn small" id="reloadBtn">重新加载分支列表</button>
+</div>
+
+<div class="observe" id="observeBox"></div>
+
+<div class="board">
+  <div class="board-head">agent-team-board <span class="chip" id="modeChip">缺陷</span><span class="muted small">构建模块（演示）</span></div>
+  <div class="rel-tabs">
+    <button type="button" class="rel-tab">版本计划</button>
+    <button type="button" class="rel-tab active">分支浏览</button>
+  </div>
+  <div id="paneHost"></div>
+</div>
+
+<div id="modalHost"></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+/* ---------- 演示状态 ---------- */
+const state = {
+  mode: 'defect',           // defect：规则说明缺失（缺陷）；fixed：修复后
+  scene: 'typical',         // typical | mainonly | nogit
+  lang: 'zh',               // zh | en
+  branchesPhase: 'loading', // loading | ready
+  remotes: [],              // 远端分支（origin/xxx）
+  synced: false,            // 本会话是否已成功同步（fetch 成功）
+  lastSync: null,           // { pushed, failed }（skipped 恒含 main，见 build-git.syncRemote）
+  selBranch: null,
+  logPhase: 'idle',         // idle | loading | ready
+  syncBusy: false,
+  pushBusy: false,
+  pushConfirm: null,        // { branch }
+};
+
+/* 模拟数据（对齐项目 dev + main 双分支工作流） */
+const SCENES = {
+  typical: { current: 'dev', local: ['dev', 'main', 'feature/login', 'docs/notes'], remotes: ['origin/dev'] },
+  mainonly: { current: 'main', local: ['main'], remotes: [] },
+};
+const COMMITS = {
+  dev: [
+    { h: '9f31c0aa', s: 'feat(build): 分支浏览同步按钮悬停提示补 main 排除说明', a: 'atb-agent', d: '2026-09-14 11:02' },
+    { h: '4b7e19d2', s: 'fix(build): 和远端同步改为 fetch + push（BUG-20260914-011）', a: 'atb-agent', d: '2026-09-14 09:47' },
+    { h: 'c2a90f31', s: 'chore: 同步远端按钮文案统一为「和远端同步」', a: 'atb-agent', d: '2026-09-13 18:20' },
+  ],
+  main: [
+    { h: '7d55ab10', s: 'build: v0.3.1 合并 REQ-20260913-001（构建模块）', a: 'atb-agent', d: '2026-09-13 16:05' },
+    { h: 'e08cc4f7', s: 'build: v0.3.0 合并 REQ-20260911-009（dev 工作流）', a: 'atb-agent', d: '2026-09-11 21:33' },
+  ],
+  'feature/login': [
+    { h: '1c6f77b3', s: 'feat(login): 登录页骨架', a: 'atb-agent', d: '2026-09-12 22:11' },
+  ],
+  'docs/notes': [],         // 空提交记录状态
+};
+const FAIL_BRANCH = 'feature/login'; // 勾选「模拟推送失败」时被远端拒绝的分支
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ---------- i18n 模拟 ----------
+ * BASE_EN = 现状 i18n.js 已收录词条（缺陷态英文也翻译）；
+ * FIXED_EN = 本 Bug 修复时须新增/改动的词条（仅修复后模式生效）。
+ * 缺陷态英文下其余串（悬停提示、同步 toast、同步中…）保持中文——与现状代码一致（i18n.js 未收录）。 */
+const BASE_EN = {
+  '⟳ 和远端同步': '⟳ Sync with remote',
+  '推送': 'Push',
+  '当前': 'Current',
+  '重试': 'Retry',
+  // 以下两句为 i18n.js 现状已收录并带英文词条的空态文案（英文译文取自 i18n.js 原文）
+  '本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。': 'No remote-tracking branches yet: the list is not synced with the remote — click "⟳ Sync with remote" above to fetch and push; if it is still empty after syncing, the push did not succeed or the remote repository has no branches (never pushed), and you can push branches in the "Local" group above.',
+};
+const FIXED_EN = Object.assign({}, BASE_EN, {
+  '同步中…': 'Syncing…',
+  '刷新': 'Refresh',
+  '本地': 'Local',
+  '远端': 'Remote',
+  '加载分支中…': 'Loading branches…',
+  '加载提交记录中…': 'Loading commits…',
+  '该分支暂无提交': 'No commits on this branch yet',
+  '点击左侧分支查看提交记录': 'Click a branch on the left to view its commits',
+  '提交记录': 'Commits',
+  '同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。': 'Sync only pushes local branches other than main; main must be pushed via the release process.',
+  '通过发布流程推送': 'Push via release process',
+  '推送到远端': 'Push to remote',
+  '当前项目不是 git 仓库': 'This project is not a git repository',
+  '分支浏览与同步需要 git 仓库：可在终端执行 git init，或经 atb init 初始化项目（设置模块「Git 工作流」亦有初始化入口）。': 'Branch browsing and sync require a git repository: run git init in a terminal, or initialize the project via atb init (the Settings module "Git workflow" also has an init entry).',
+  '✕ 同步远端失败：演示模拟（远端不可达）': '✕ Sync failed: simulated (remote unreachable)',
+  '✓ 已同步远端：没有可推送的开发分支；main 必须通过发布流程推送': '✓ Synced with remote: no development branches to push; main must be pushed via the release process',
+  // 远端空态解释（译文口径取自 i18n.js 现状词条）
+  '远端仓库尚无任何分支（从未推送）。': 'The remote repository has no branches yet (never pushed).',
+  '本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。': 'No branch was pushed in this sync: there is no local development branch to push automatically (main is managed by the release module, not pushed here).',
+});
+function t(s) {
+  if (state.lang !== 'en') return s;
+  const dict = state.mode === 'fixed' ? FIXED_EN : BASE_EN;
+  return dict[s] || s;
+}
+/* 带动态段的文案：按 模式 × 语言 组装（缺陷态 = 现状代码 toast 原文） */
+function msgSyncPushed(names, remote) {
+  if (state.mode === 'defect') return `✓ 已同步远端：fetch 完成，已推送 ${names.join('、')} → ${remote}`;
+  if (state.lang === 'en') return `✓ Synced with remote: fetch done, pushed ${names.join(', ')} → ${remote}; main skipped — push it via the release process`;
+  return `✓ 已同步远端：fetch 完成，已推送 ${names.join('、')} → ${remote}；main 已跳过，请通过发布流程推送`;
+}
+function msgSyncPartial(names, reason) {
+  if (state.mode === 'defect') return `✕ 同步完成但部分推送失败：${names.join('、')}（${reason}）`;
+  if (state.lang === 'en') return `✕ Sync finished but some pushes failed: ${names.join(', ')} (${reason}); main skipped — push it via the release process`;
+  return `✕ 同步完成但部分推送失败：${names.join('、')}（${reason}）；main 已跳过，请通过发布流程推送`;
+}
+function msgSyncOnlyMain() {
+  if (state.mode === 'defect') return '✓ 已同步远端：fetch 完成，无可推送的开发分支（main 由发布模块推送）';
+  return t('✓ 已同步远端：没有可推送的开发分支；main 必须通过发布流程推送');
+}
+function msgPushed(branch, remote, first) {
+  if (state.lang === 'en' && state.mode === 'fixed') return `✓ Pushed ${branch} → ${remote}${first ? ' (upstream tracking set up)' : ''}`;
+  return `✓ 已推送 ${branch} → ${remote}${first ? '（已建立上游跟踪）' : ''}`;
+}
+function msgPushFailed(branch) {
+  if (state.lang === 'en' && state.mode === 'fixed') return `✕ Push failed: simulated (${branch} rejected by remote)`;
+  return `✕ 推送失败：演示模拟（${branch} 被远端拒绝）`;
+}
+function syncTitle() {
+  // 缺陷态：现状 title 串未入 i18n 词典 → 英文下仍为中文（与现状一致）
+  const zh = 'fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致';
+  if (state.mode === 'defect') return zh;
+  return state.lang === 'en'
+    ? 'fetch --all --prune the remote, then push local development branches (main excluded) to keep local and remote consistent'
+    : zh;
+}
+
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+/* ---------- 分支浏览渲染（对齐 build.js renderBranchesPane / doSync 现行为） ---------- */
+function scene() { return SCENES[state.scene] || SCENES.typical; }
+
+function renderPane() {
+  const host = $('#paneHost');
+  if (state.scene === 'nogit') {
+    host.innerHTML = `
+      <div class="rel-split"><div class="rel-empty" style="width:100%">
+        <h3>${t('当前项目不是 git 仓库')}</h3>
+        <p class="muted">${t('分支浏览与同步需要 git 仓库：可在终端执行 git init，或经 atb init 初始化项目（设置模块「Git 工作流」亦有初始化入口）。')}</p>
+      </div></div>`;
+    return;
+  }
+  const sc = scene();
+  const note = state.mode === 'fixed'
+    ? `<div class="bld-sync-note" role="note"><strong>ⓘ</strong><span>${t('同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。')}</span></div>`
+    : '';
+  host.innerHTML = `
+    <div class="rel-split">
+      <div class="rel-list" aria-label="分支列表">
+        <div class="bld-branch-tools">
+          <button type="button" class="btn small" id="fetchBtn" title="${esc(syncTitle())}">${state.syncBusy ? t('同步中…') : t('⟳ 和远端同步')}</button>
+          <button type="button" class="btn small quiet" id="refreshBtn">${t('刷新')}</button>
+        </div>
+        ${note}
+        <div id="branchList"></div>
+      </div>
+      <div class="rel-detail" aria-label="提交记录">
+        <div class="bld-log-head"><strong id="logTitle">${t('提交记录')}</strong><button type="button" class="btn small quiet" id="logRefresh" style="display:none">${t('刷新')}</button></div>
+        <div id="logPane"></div>
+      </div>
+    </div>`;
+  $('#fetchBtn').addEventListener('click', doSync);
+  $('#refreshBtn').addEventListener('click', loadBranches);
+  $('#logRefresh').addEventListener('click', () => state.selBranch && selectBranch(state.selBranch));
+  renderBranches();
+  renderLog();
+}
+
+function renderBranches() {
+  const host = $('#branchList');
+  if (!host) return;
+  if (state.branchesPhase === 'loading') {
+    host.innerHTML = `<p class="muted">${t('加载分支中…')}</p>`;
+    return;
+  }
+  const sc = scene();
+  const cur = `<div class="bld-branch bld-cur${state.selBranch === sc.current ? ' sel' : ''}" data-branch="${esc(sc.current)}">
+    <span><strong>${esc(sc.current)}</strong></span>
+    <span class="st">${t('当前')}</span>
+    ${sc.current === 'main' && state.mode === 'fixed' ? `<span class="st rel">${t('通过发布流程推送')}</span>` : ''}
+  </div>`;
+  const local = sc.local.filter((x) => x !== sc.current).map((x) => {
+    // main 行：无推送按钮（BUG-20260914-012 已去除）；修复后补「通过发布流程推送」标识（本 Bug）
+    const tail = x === 'main'
+      ? (state.mode === 'fixed' ? `<span class="st rel">${t('通过发布流程推送')}</span>` : '')
+      : `<button type="button" class="btn small quiet" data-push="${esc(x)}" title="${t('推送到远端')}">${t('推送')}</button>`;
+    return `<div class="bld-branch${state.selBranch === x ? ' sel' : ''}" data-branch="${esc(x)}"><span>${esc(x)}</span>${tail}</div>`;
+  }).join('');
+  const remote = state.remotes.map((x) =>
+    `<div class="bld-branch bld-remote${state.selBranch === x ? ' sel' : ''}" data-branch="${esc(x)}"><span>${esc(x)}</span></div>`).join('');
+  const remoteEmpty = remote ? '' : (
+    state.synced
+      ? `<div class="bld-remote-hint" role="note"><strong>${t('远端仓库尚无任何分支（从未推送）。')}</strong>
+         <span class="small">${t('本次同步未推送任何分支：本地没有可自动推送的开发分支（main 由发布模块管理，不在此推送）。')}</span></div>`
+      : `<p class="muted small">${t('本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取并推送；若同步后仍为空，说明推送未成功或远端仓库尚无任何分支（从未推送），可在上方「本地」分组推送分支。')}</p>`
+  );
+  host.innerHTML = `
+    <div class="bld-branch-group"><div class="bld-group-head">${t('本地')}</div>${cur}${local}</div>
+    <div class="bld-branch-group"><div class="bld-group-head">${t('远端')}</div>${remote || remoteEmpty}</div>`;
+  $$('#branchList .bld-branch[data-branch]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-push]')) return;
+      selectBranch(el.dataset.branch);
+    });
+  });
+  $$('#branchList [data-push]').forEach((el) => {
+    el.addEventListener('click', () => openPushConfirm(el.dataset.push));
+  });
+}
+
+/* ---------- 提交记录（懒加载口径） ---------- */
+function renderLog() {
+  const pane = $('#logPane');
+  if (!pane) return;
+  const title = $('#logTitle');
+  const refresh = $('#logRefresh');
+  if (!state.selBranch) {
+    title.textContent = t('提交记录');
+    refresh.style.display = 'none';
+    pane.innerHTML = `<div class="muted">${t('点击左侧分支查看提交记录')}</div>`;
+    return;
+  }
+  title.textContent = state.selBranch;
+  refresh.style.display = '';
+  if (state.logPhase === 'loading') { pane.innerHTML = `<p class="muted">${t('加载提交记录中…')}</p>`; return; }
+  const commits = COMMITS[state.selBranch.replace(/^origin\//, '')] || [];
+  if (!commits.length) { pane.innerHTML = `<p class="muted small">${t('该分支暂无提交')}</p>`; return; }
+  pane.innerHTML = `<ul class="bld-log">${commits.map((c) => `<li>
+    <code>${esc(c.h)}</code> <span>${esc(c.s)}</span>
+    <span class="muted small">${esc(c.a)} · ${esc(c.d)}</span></li>`).join('')}</ul>`;
+}
+
+function selectBranch(branch) {
+  state.selBranch = branch;
+  state.logPhase = 'loading';
+  renderBranches();
+  renderLog();
+  setTimeout(() => { state.logPhase = 'ready'; renderLog(); }, 420);
+}
+
+function loadBranches() {
+  if (state.scene === 'nogit') { renderPane(); return; }
+  state.branchesPhase = 'loading';
+  state.selBranch = null;
+  state.logPhase = 'idle';
+  renderPane();
+  setTimeout(() => { state.branchesPhase = 'ready'; renderBranches(); }, 520);
+}
+
+/* ---------- 同步（对齐 doSync + build-git.syncRemote：fetch → 推送除 main 外分支） ---------- */
+async function doSync() {
+  if (state.syncBusy) return;
+  state.syncBusy = true;
+  renderPane();
+  await new Promise((r) => setTimeout(r, 800));
+  state.syncBusy = false;
+  if ($('#failSync').checked) {
+    toast(t('✕ 同步远端失败：演示模拟（远端不可达）'), true);
+    renderPane();
+    return;
+  }
+  state.synced = true; // fetch 成功（remoteSynced 口径）
+  const sc = scene();
+  const pushable = sc.local.filter((x) => x !== 'main'); // syncRemote：main 恒 skipped
+  const failed = $('#failPush').checked && pushable.includes(FAIL_BRANCH) ? [FAIL_BRANCH] : [];
+  const pushed = pushable.filter((x) => !failed.includes(x));
+  state.lastSync = { pushed, failed };
+  pushed.forEach((b) => { if (!state.remotes.includes('origin/' + b)) state.remotes.push('origin/' + b); });
+  // origin/main 永不出现（数据层排除 main——两种模式一致，本单不改该规则）
+  if (failed.length) {
+    toast(msgSyncPartial(failed, '演示模拟：远端拒绝'), true);
+  } else if (pushed.length) {
+    toast(msgSyncPushed(pushed, 'origin'));
+  } else {
+    toast(msgSyncOnlyMain());
+  }
+  renderPane();
+}
+
+/* ---------- 推送（非 main 分支，行为与现状一致，本单不改） ---------- */
+function openPushConfirm(branch) {
+  if (state.pushBusy) return;
+  state.pushConfirm = { branch };
+  renderModal();
+}
+
+function renderModal() {
+  const host = $('#modalHost');
+  const p = state.pushConfirm;
+  if (!p) { host.innerHTML = ''; return; }
+  const hasUp = state.remotes.some((r) => r.endsWith('/' + p.branch));
+  const zh = state.lang === 'zh';
+  host.innerHTML = `
+    <div class="rel-modal-wrap" role="dialog" aria-label="${zh ? '推送分支确认' : 'Push branch'}">
+      <div class="rel-modal">
+        <h3>${zh ? `推送分支 ${esc(p.branch)}` : `Push branch ${esc(p.branch)}`}</h3>
+        <div class="rel-modal-body">
+          <label class="field">${zh ? '目标远端' : 'Target remote'}
+            <select><option>origin</option></select></label>
+          <p class="muted small">${hasUp
+            ? (zh ? `该分支已有远端分支：本次推送将更新 origin/${esc(p.branch)}。` : `This branch already has a remote: this push updates origin/${esc(p.branch)}.`)
+            : (zh ? '该分支尚未建立上游跟踪：首推将加 -u 建立跟踪。' : 'No upstream yet: the first push adds -u to set up tracking.')}</p>
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="pushCancel">${zh ? '取消' : 'Cancel'}</button>
+          <button type="button" class="btn primary" id="pushGo" ${state.pushBusy ? 'disabled' : ''}>${state.pushBusy ? (zh ? '推送中…' : 'Pushing…') : (zh ? '确认推送' : 'Push')}</button>
+        </footer>
+      </div>
+    </div>`;
+  $('#pushCancel').addEventListener('click', () => { state.pushConfirm = null; renderModal(); });
+  $('#pushGo').addEventListener('click', doPush);
+}
+
+async function doPush() {
+  const p = state.pushConfirm;
+  if (!p || state.pushBusy) return;
+  state.pushConfirm = null;
+  state.pushBusy = true;
+  renderModal();
+  renderBranches();
+  await new Promise((r) => setTimeout(r, 760));
+  state.pushBusy = false;
+  const remote = 'origin/' + p.branch;
+  if ($('#failPush').checked && p.branch === FAIL_BRANCH) {
+    toast(msgPushFailed(p.branch), true);
+  } else {
+    const first = !state.remotes.includes(remote);
+    if (!state.remotes.includes(remote)) state.remotes.push(remote);
+    state.synced = false;
+    toast(msgPushed(p.branch, remote, first));
+  }
+  renderBranches();
+}
+
+/* ---------- 观察框 / 控件 ---------- */
+function renderObserve() {
+  const box = $('#observeBox');
+  const zh = state.lang === 'zh';
+  const modeTxt = state.mode === 'defect'
+    ? (zh
+      ? '当前为<b>缺陷态</b>：「main 除外」只写在按钮悬停提示里（无常驻说明）；main 行既无推送按钮也无任何说明；同步成功 / 部分失败 toast 均不提 main 被跳过（仅本地只剩 main 时带一句）。'
+      : 'Current = <b>defect</b>: the "main excluded" rule lives only in the button tooltip (no persistent note); the main row has neither a push button nor any explanation; sync toasts never mention that main was skipped (except the only-main case). Note the tooltip below stays Chinese in English mode — the string is missing from i18n.')
+    : (zh
+      ? '当前为<b>修复后</b>：按钮旁常驻「同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。」；main 行带「通过发布流程推送」标识；同步反馈明确「main 已跳过，请通过发布流程推送」；英文界面全部有翻译（含悬停提示）。'
+      : 'Current = <b>fixed</b>: a persistent note sits next to the button; the main row carries a "Push via release process" badge; sync feedback explicitly says main was skipped; everything is translated in English, including the tooltip.');
+  let sceneTxt = '';
+  if (state.scene === 'mainonly') {
+    sceneTxt = zh
+      ? ' 场景「本地仅有 main」：同步后 toast 与远端空态说明「没有可推送的开发分支；main 必须通过发布流程推送」，不引导找 main 推送按钮。'
+      : ' Scene "only main": after sync the toast and the remote empty hint say there is no development branch to push and main must go through the release process.';
+  } else if (state.scene === 'nogit') {
+    sceneTxt = zh
+      ? ' 场景「非 git 仓库」：空态引导与现状一致，本单不改此路径。'
+      : ' Scene "not a git repo": the empty-state guidance is unchanged by this fix.';
+  }
+  box.innerHTML = `<strong>${zh ? '对比要点' : 'What to compare'}</strong>${modeTxt}${sceneTxt}`;
+}
+
+function renderAll() {
+  const chip = $('#modeChip');
+  chip.textContent = state.mode === 'defect' ? (state.lang === 'zh' ? '缺陷' : 'Defect') : (state.lang === 'zh' ? '修复后' : 'Fixed');
+  chip.className = 'chip' + (state.mode === 'fixed' ? ' ok' : '');
+  renderObserve();
+  loadBranches();
+}
+
+$('#modeSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  state.mode = btn.dataset.mode;
+  $$('#modeSeg button').forEach((b) => {
+    b.className = b === btn ? (state.mode === 'defect' ? 'on-defect' : 'on-fixed') : '';
+  });
+  state.synced = false;
+  state.lastSync = null;
+  renderAll();
+});
+$('#sceneSel').addEventListener('change', (e) => {
+  state.scene = e.target.value;
+  state.synced = false;
+  state.lastSync = null;
+  if (state.scene !== 'nogit') state.remotes = [...scene().remotes];
+  renderAll();
+});
+$('#langSel').addEventListener('change', (e) => {
+  state.lang = e.target.value;
+  renderAll();
+});
+$('#reloadBtn').addEventListener('click', renderAll);
+
+/* 初始化 */
+state.remotes = [...scene().remotes];
+renderAll();
+</script>
+</body>
+</html>

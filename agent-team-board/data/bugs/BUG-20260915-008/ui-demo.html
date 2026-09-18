@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260915-008 演示 · 同步跑测试阻塞看板服务，面板冻结且无进度提示</title>
+<style>
+  /* ---------- 主题变量（口径取自 scripts/web/style.css 深浅色，纯离线单文件） ---------- */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --ok: #16a34a; --warn: #dc2626; --info: #2563eb;
+    --chip-req: #4f46e5; --chip-bug: #e11d48;
+    --soft: rgba(127,140,170,.08); --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+  }
+  [data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e6ebf3; --muted: #8b98ad;
+    --border: #2a3446; --primary: #3b82f6; --ok: #4ade80; --warn: #f87171; --info: #60a5fa;
+    --chip-req: #6366f1; --chip-bug: #fb7185;
+    --soft: rgba(139,152,173,.10); --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif; padding: 18px; }
+  h1, h2, h3, h4, p, dl, dd, dt { margin: 0; }
+  button { font: inherit; }
+
+  /* ---------- 演示头 + 控制条 ---------- */
+  .demo-head h1 { font-size: 16px; margin-bottom: 2px; }
+  .demo-head .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; max-width: 960px; }
+  .ctrlbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .ctrl-label { font-size: 12px; color: var(--muted); flex: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 12px; padding: 5px 10px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; font-weight: 600; }
+  .seg.warnseg button[aria-pressed="true"] { background: var(--warn); }
+  .ghost { appearance: none; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .ghost:hover { color: var(--text); border-color: var(--muted); }
+
+  /* ---------- 看板复刻 ---------- */
+  .board { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .topbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand .logo { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, var(--primary), var(--chip-req)); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+  .brand h1 { font-size: 14px; }
+  .brand .path { display: block; color: var(--muted); font-size: 11px; }
+  .poll { color: var(--muted); font-size: 11px; }
+  .module-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+  .view-tab { appearance: none; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 8px; padding: 4px 12px; font-size: 12.5px; cursor: pointer; }
+  .view-tab.active { color: var(--primary); border-color: var(--primary); background: var(--soft); font-weight: 600; }
+  .top-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+  .btn { appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 11.5px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  /* 状态条：轮询口径 + 探活 */
+  .statusbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 14px; background: var(--panel); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .statusbar .dot { color: var(--ok); }
+  .statusbar.frozen .dot { color: var(--warn); }
+  .statusbar.frozen #pollText { color: var(--warn); }
+  #hangNote { color: var(--warn); }
+  #healthOut.ok { color: var(--ok); }
+  #healthOut.err { color: var(--warn); }
+
+  /* 缺陷态阻塞横幅（演示标注） */
+  .freeze-banner { display: flex; gap: 8px; align-items: baseline; padding: 7px 14px; font-size: 12px; color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); border-bottom: 1px solid var(--warn); }
+
+  .content { min-height: 320px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* 待人工确认区 + 卡片 */
+  .hold-area-head { font-weight: 600; font-size: 12.5px; color: var(--text); background: color-mix(in srgb, var(--warn) 8%, var(--panel)); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border)); border-radius: 8px 8px 0 0; padding: 6px 10px; }
+  .confirm-card { background: var(--panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; padding: 9px 12px; }
+  .confirm-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .confirm-card-head > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .chip { border-radius: 99px; font-size: 10.5px; padding: 0 8px; border: 1px solid var(--border); color: var(--muted); }
+  .chip.kind { color: var(--primary); border-color: var(--primary); }
+  .chip.t-dev { color: var(--chip-bug); border-color: var(--chip-bug); }
+  .cid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--muted); }
+  .cid.bug { color: var(--chip-bug); }
+  .confirm-title { font-weight: 600; font-size: 12.5px; }
+  .confirm-reason { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .confirm-counts { font-size: 12px; margin-top: 4px; }
+  .confirm-verify { font-size: 12px; margin-top: 4px; }
+  .confirm-verify.ok { color: var(--ok); }
+  .confirm-verify.bad { color: var(--warn); }
+  .confirm-acts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+  /* 修复后：阶段进度 + 运行时长 */
+  .run-strip { margin-top: 8px; border: 1px dashed var(--info); border-radius: 8px; padding: 6px 10px; background: color-mix(in srgb, var(--info) 6%, transparent); }
+  .stage-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11.5px; }
+  .stage { display: inline-flex; align-items: center; gap: 4px; border-radius: 99px; padding: 1px 9px; border: 1px solid var(--border); color: var(--muted); }
+  .stage.done { color: var(--ok); border-color: var(--ok); }
+  .stage.cur { color: var(--info); border-color: var(--info); font-weight: 600; }
+  .stage-arrow { color: var(--muted); }
+  .elapsed-line { margin-top: 5px; font-size: 12px; color: var(--info); }
+  .elapsed-line .spinner { border-top-color: var(--info); }
+  .run-note { margin-top: 3px; font-size: 11px; color: var(--muted); }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .notice { border-radius: 8px; border: 1px solid var(--border); padding: 6px 10px; font-size: 12px; }
+  .notice.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: color-mix(in srgb, var(--warn) 7%, transparent); }
+  .area-empty { color: var(--muted); font-size: 12px; border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; }
+
+  /* 条目列表 */
+  .list-head { color: var(--muted); font-size: 11.5px; }
+  .item-row { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .item-title { font-size: 12.5px; font-weight: 550; }
+  .item-meta { color: var(--muted); font-size: 11.5px; }
+  .status-chip { border-radius: 99px; font-size: 10.5px; padding: 0 8px; border: 1px solid var(--border); color: var(--muted); }
+  .status-chip.submitted { color: var(--warn); border-color: var(--warn); }
+  .status-chip.accepted { color: var(--ok); border-color: var(--ok); }
+  .status-chip.planned { color: var(--info); border-color: var(--info); }
+  .accept-btn-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+  /* ---------- 确认侧拉面板 ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(10,16,26,.44); opacity: 0; pointer-events: none; transition: opacity .18s ease; z-index: 24; }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .side-panel { position: fixed; top: 0; right: 0; height: 100%; width: min(400px, 92vw); background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow); transform: translateX(102%); transition: transform .2s ease; z-index: 25; display: flex; flex-direction: column; }
+  .side-panel.show { transform: translateX(0); }
+  .side-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .side-head h2 { font-size: 13.5px; }
+  .side-body { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .side-sec h4 { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .fp-line { font-size: 12px; color: var(--ok); }
+  table.files { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  table.files th, table.files td { text-align: left; border-bottom: 1px solid var(--border); padding: 4px 6px; vertical-align: top; }
+  table.files th { color: var(--muted); font-weight: 600; }
+  table.files code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
+  .side-note textarea { width: 100%; min-height: 52px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; padding: 6px 8px; resize: vertical; }
+  .side-foot { margin-top: auto; display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .panel-msg { border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: pre-wrap; display: none; }
+  .panel-msg.show { display: block; }
+  .panel-msg.err { color: var(--warn); border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+  .panel-msg.ok { color: var(--ok); border: 1px solid var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+
+  /* ---------- 服务端进程视角控制台 ---------- */
+  .console { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; overflow: hidden; }
+  .console .con-head { padding: 5px 10px; border-bottom: 1px solid var(--border); color: var(--muted); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .console .con-head .right { display: flex; gap: 8px; align-items: center; }
+  .console .con-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; color: var(--muted); white-space: pre-wrap; max-height: 220px; overflow-y: auto; }
+  .console .err { color: var(--warn); }
+  .console .okc { color: var(--ok); }
+  .console .dim { opacity: .78; }
+  .console .timestamp { opacity: .6; }
+
+  /* ---------- 轻提示 toast ---------- */
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 16px); background: var(--panel); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 10px; padding: 8px 14px; font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; max-width: min(600px, 90vw); z-index: 40; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: var(--warn); color: var(--warn); }
+</style>
+</head>
+<body>
+
+<header class="demo-head">
+  <h1>BUG-20260915-008 · 确认与核验同步跑测试阻塞看板服务，面板整体冻结且无进度提示</h1>
+  <p class="sub">对照「缺陷形态（spawnSync 同步阻塞事件循环）」与「修复后（异步 spawn + 阶段进度 + 同条目互斥）」。演示还原任务页待人工确认区、队列暂停横幅、条目列表与确认侧拉面板，并附服务端进程视角控制台。时间压缩 ×20：演示 12 秒 ≈ 真实 4 分钟（超时上限 600 秒）。卡片与条目取自本单实测叙述（BUG-20260914-020 的确认触发阻塞、BUG-20260915-007 的接受被丢弃），部分文案为示意数据。</p>
+</header>
+
+<div class="ctrlbar">
+  <span class="ctrl-label">情景：</span>
+  <div class="seg warnseg" id="segScenario" role="group" aria-label="情景切换">
+    <button type="button" data-v="defect" aria-pressed="true">缺陷形态（现状）</button>
+    <button type="button" data-v="fixed" aria-pressed="false">修复后（期望）</button>
+  </div>
+  <span class="ctrl-label">模拟测试结果：</span>
+  <div class="seg" id="segOutcome" role="group" aria-label="模拟测试结果">
+    <button type="button" data-v="pass" aria-pressed="true">通过</button>
+    <button type="button" data-v="fail" aria-pressed="false">失败（退出码 1）</button>
+  </div>
+  <button type="button" class="ghost" id="btnReset">重置演示</button>
+  <button type="button" class="ghost" id="btnTheme">深浅色</button>
+</div>
+
+<!-- ======================= 看板复刻 ======================= -->
+<div class="board" id="board">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▦</span>
+      <span>
+        <h1>智能体团队看板</h1>
+        <span class="path">docs/agent-team-board</span>
+      </span>
+    </div>
+    <span class="poll" title="轮询状态">●</span>
+    <nav class="module-nav" aria-label="模块导航">
+      <button type="button" class="view-tab">讨论</button>
+      <button type="button" class="view-tab">需求</button>
+      <button type="button" class="view-tab active">任务</button>
+      <button type="button" class="view-tab">文件</button>
+      <button type="button" class="view-tab">营销</button>
+      <button type="button" class="view-tab">设置</button>
+    </nav>
+    <div class="top-actions">
+      <button type="button" class="btn">管理项目</button>
+      <button type="button" class="btn">全局</button>
+      <button type="button" class="btn primary">＋ 新建</button>
+    </div>
+  </header>
+
+  <!-- 状态条：轮询口径 + 探活（本演示聚焦的反馈面） -->
+  <div class="statusbar" id="statusbar">
+    <span><span class="dot">●</span> <span id="pollText">实时连接 · 上次刷新 0 秒前</span></span>
+    <span id="hangNote" hidden></span>
+    <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+      <button type="button" class="btn small" id="btnHealth" title="探活 /api/health：验收 1 —— 触发核验后 2 秒内仍可响应">探活 /api/health</button>
+      <span id="healthOut"></span>
+    </span>
+  </div>
+
+  <!-- 缺陷态阻塞横幅（演示标注；真实场景恰恰是「什么都看不到」） -->
+  <div class="freeze-banner" id="freezeBanner" hidden>
+    ⚠ 服务事件循环阻塞（演示标注）：spawnSync('npm', ['test','--silent'], { timeout: 600_000 }) 同步执行中——轮询停摆、操作排队挂起、无进度提示，分不清「在跑」与「卡死」
+  </div>
+
+  <main class="content" id="content"><!-- 状态切换渲染区 --></main>
+</div>
+
+<!-- ======================= 确认侧拉面板 ======================= -->
+<div class="overlay" id="overlay"></div>
+<aside class="side-panel" id="sidePanel" aria-label="挂起确认侧拉面板">
+  <header class="side-head">
+    <h2>提交确认 · <span class="cid bug">BUG-20260914-020</span></h2>
+    <button type="button" class="btn small" id="sideClose" style="margin-left:auto;">✕ 关闭</button>
+  </header>
+  <div class="side-body">
+    <p class="confirm-reason">批次收尾提交后仍有路径未入库，落入待人工确认（示意原因）：核对差异与归属后「确认并继续」补交并恢复队列。</p>
+    <div class="side-sec">
+      <h4>内容指纹</h4>
+      <p class="fp-line">✓ 与最近核验基线一致（内容未变化，可绑定确认）</p>
+    </div>
+    <div class="side-sec">
+      <h4>文件核对清单</h4>
+      <table class="files">
+        <thead><tr><th>路径</th><th>归属</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td><code>scripts/lib/confirm-store.mjs</code></td><td>本单</td><td>已入库</td></tr>
+          <tr><td><code>scripts/server.mjs</code></td><td>本单</td><td>已入库</td></tr>
+          <tr><td><code>docs/agent-team-board/bugs/BUG-…/README.md</code></td><td>本单</td><td>已入库</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="side-sec side-note">
+      <h4>保持挂起说明（可选）</h4>
+      <textarea placeholder="选择「保持挂起」时填写说明（演示不落盘）"></textarea>
+    </div>
+    <div class="panel-msg" id="panelMsg"></div>
+  </div>
+  <footer class="side-foot">
+    <button type="button" class="btn" id="sideKeep">保持挂起</button>
+    <button type="button" class="btn" id="sideVerify">重新核验</button>
+    <button type="button" class="btn primary" id="sideContinue">确认并继续</button>
+  </footer>
+</aside>
+
+<!-- ======================= 服务端进程视角控制台 ======================= -->
+<div class="console">
+  <div class="con-head">
+    <span>服务端进程视角（演示模拟输出：事件循环 / spawnSync ↔ spawn / 排队请求）</span>
+    <span class="right">
+      <button type="button" class="ghost" id="btnApi" title="运行期间经 API 重复触发核验：修复后期望 409 互斥拒绝；缺陷形态会再排一次同步运行">模拟 API 重复触发核验</button>
+      <span class="dim" id="conState">情景：缺陷形态（现状）</span>
+    </span>
+  </div>
+  <div class="con-body" id="conBody"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const content = $('#content'), toastEl = $('#toast');
+  const ITEM = 'BUG-20260914-020', OTHER = 'BUG-20260915-007';
+  const SCALE = 20; // 演示加速：1 秒 ≈ 真实 20 秒
+
+  // 阶段时间轴（ms，演示压缩）；测试窗口用于「测试运行中 · 已 N 秒」行
+  const STAGES = {
+    verify:   [{ label: '核验', at: 0 }, { label: '测试', at: 1500 }, { label: '落账', at: 11000 }],
+    continue: [{ label: '核验', at: 0 }, { label: '补交', at: 1500 }, { label: '测试', at: 3000 }, { label: '恢复队列', at: 11500 }],
+  };
+  const TOTAL = { verify: 12000, continue: 13000 };
+  const TEST_WIN = { verify: [1500, 11000], continue: [3000, 11500] };
+
+  const S = {
+    scenario: 'defect', outcome: 'pass',
+    run: null,              // { kind, t0, idx, timer }
+    pollLastAt: Date.now(),
+    queued: 0,
+    acc007: 'submitted',    // submitted | accepting | accepted | stuck
+    health: null,           // null | {waiting} | {text, cls}
+    waitingConfirm: true,   // 确认卡片在场（确认并继续成功后离场 → 空态）
+    verifyLine: { ok: true, text: '最近核验（09:21）：通过' },
+    secondQueued: false,
+  };
+  let uiTimer = null, pollParity = 0, toastTimer = null;
+
+  /* ---------- 基础工具 ---------- */
+  function clock(d = new Date()) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+  function fmtReal(sec) { const t = Math.round(sec * SCALE); return t < 60 ? `${t} 秒` : `${Math.floor(t / 60)} 分 ${t % 60} 秒`; }
+  function toast(msg, isErr) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3400);
+  }
+  function log(type, text) {
+    const body = $('#conBody');
+    const span = document.createElement('span');
+    if (type === 'err') span.className = 'err';
+    else if (type === 'ok') span.className = 'okc';
+    else if (type === 'warn') span.className = 'err';
+    else if (type === 'dim') span.className = 'dim';
+    span.textContent = `${clock()}  ${text}`;
+    body.appendChild(span);
+    while (body.children.length > 40) body.removeChild(body.firstChild);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  /* ---------- 渲染 ---------- */
+  function runActive() { return S.run !== null; }
+  function frozen() { return runActive() && S.scenario === 'defect'; }
+
+  function stageRowHtml() {
+    const st = STAGES[S.run.kind];
+    return st.map((x, i) => {
+      const cls = i < S.run.idx ? 'done' : (i === S.run.idx ? 'cur' : '');
+      const mark = i < S.run.idx ? '✓' : (i === S.run.idx ? '●' : '○');
+      return `<span class="stage ${cls}">${mark} ${x.label}</span>${i < st.length - 1 ? '<span class="stage-arrow">→</span>' : ''}`;
+    }).join('');
+  }
+
+  function cardHtml() {
+    const busy = runActive();
+    return `<section>
+      <div class="hold-area-head">⚠ 待人工确认（1）——阻塞队列，确认后才继续</div>
+      <article class="confirm-card">
+        <header class="confirm-card-head">
+          <div>
+            <span class="chip kind">开发</span>
+            <span class="chip t-dev">提交确认</span>
+            <span class="cid bug">${ITEM}</span>
+            <span class="confirm-title">批次收尾提交核验（挂起确认闭环）</span>
+          </div>
+          <span class="muted" style="color:var(--muted);font-size:11.5px;">已等待 26 分钟</span>
+        </header>
+        <p class="confirm-reason">批次收尾提交后仍有路径未入库，落入待人工确认（示意原因）——终端补交后可「重新核验」刷新结论。</p>
+        <p class="confirm-counts">已提交：2 组（补交 0 组）· 候选未入库 0（本单可归属 0 · 归属待确认 0）</p>
+        <p class="confirm-verify ${S.verifyLine.ok ? 'ok' : 'bad'}">${S.verifyLine.text}</p>
+        ${busy && S.scenario === 'fixed' ? `<div class="run-strip">
+          <div class="stage-row">${stageRowHtml()}</div>
+          <div class="elapsed-line" id="elapsedLine"><span class="spinner"></span>核验任务运行中…</div>
+          <div class="run-note">轮询未中断 · 其他条目可操作 · 同条目重复触发将被互斥拒绝（409）</div>
+        </div>` : ''}
+        <div class="confirm-acts">
+          <button type="button" class="btn small" data-act="open-panel"${busy ? ' disabled' : ''}>查看并确认</button>
+          <button type="button" class="btn small" data-act="verify"${busy ? ' disabled' : ''} title="重新核验：重算候选路径并运行测试">${busy ? '正在核验提交与测试…' : '重新核验'}</button>
+        </div>
+      </article>
+    </section>`;
+  }
+
+  function row007() {
+    const map = {
+      submitted: { chip: ['submitted', '待接受'], btn: `<button type="button" class="btn small" data-act="accept" title="接受 ${OTHER}">✓ 接受</button>` },
+      accepting: { chip: ['submitted', '待接受'], btn: `<button type="button" class="btn small" disabled><span class="spinner"></span>正在接受中…</button>` },
+      accepted:  { chip: ['accepted', '已接受'],  btn: `<span style="color:var(--ok);font-size:11.5px;">✓ 已接受并落账</span>` },
+      stuck:     { chip: ['submitted', '待接受'], btn: `<button type="button" class="btn small" disabled title="请求已被丢弃未落盘——请刷新重试（演示：点「重置演示」恢复）"><span class="spinner"></span>正在接受中…</button>` },
+    };
+    const m = map[S.acc007];
+    return `<article class="item-row">
+      <span class="cid bug">${OTHER}</span>
+      <span class="item-title">report 回执系统收口提交（示意标题）</span>
+      <span class="status-chip ${m.chip[0]}">${m.chip[1]}</span>
+      <span class="accept-btn-wrap">${m.btn}</span>
+    </article>`;
+  }
+
+  function contentHtml() {
+    const confirmArea = S.waitingConfirm
+      ? cardHtml()
+      : '<p class="area-empty">（待人工确认区隐藏：无活动挂起——确认已落账，队列恢复，此为空态）</p>';
+    const banner = S.waitingConfirm
+      ? `<div class="notice warn">开发队列：已暂停 · 阻塞于 <span class="cid bug">${ITEM}</span> · 提交确认</div>`
+      : '';
+    return `${confirmArea}
+      ${banner}
+      <p class="list-head">条目列表（示意；本 Bug 实测中 007 的「接受」在阻塞期间被丢弃）</p>
+      ${row007()}
+      <article class="item-row">
+        <span class="cid bug">BUG-20260915-008</span>
+        <span class="item-title">确认与核验同步跑测试阻塞看板服务（本 Bug 自身，示意行）</span>
+        <span class="status-chip submitted">待接受</span>
+      </article>`;
+  }
+
+  function render() {
+    // 内容区（离散状态变化时整体重建；tick 只改文本节点，不打断 details/焦点）
+    content.innerHTML = contentHtml();
+    // 冻结横幅（演示标注）
+    $('#freezeBanner').hidden = !frozen();
+    // 状态条
+    $('#statusbar').classList.toggle('frozen', frozen());
+    // 侧拉面板按钮
+    const busy = runActive();
+    const sv = $('#sideVerify'), sc = $('#sideContinue');
+    sv.disabled = busy; sc.disabled = busy;
+    sv.textContent = busy ? '正在核验提交与测试…' : '重新核验';
+    sc.textContent = busy ? '正在核验提交与测试…' : '确认并继续';
+    $('#conState').textContent = S.scenario === 'defect' ? '情景：缺陷形态（现状）' : '情景：修复后（期望）';
+    renderHealth();
+    tickStatus();
+  }
+
+  function renderHealth() {
+    const el = $('#healthOut');
+    if (!S.health) { el.textContent = ''; el.className = ''; return; }
+    if (S.health.waiting) { el.textContent = '等待响应中…'; el.className = ''; el.style.color = 'var(--warn)'; return; }
+    el.textContent = S.health.text; el.className = S.health.cls; el.style.color = '';
+  }
+
+  /* ---------- 每秒 UI tick：状态条 + 模拟 2 秒轮询 ---------- */
+  function tickStatus() {
+    const age = Math.max(0, Math.round((Date.now() - S.pollLastAt) / 1000));
+    const hang = $('#hangNote');
+    if (frozen()) {
+      $('#pollText').textContent = `实时连接（指示已停摆）· 上次刷新 ${age} 秒前`;
+      hang.hidden = false;
+      hang.textContent = `轮询请求挂起 · 已排队 ${S.queued} 个（/api/board、/api/health、操作请求）`;
+    } else {
+      $('#pollText').textContent = `实时连接 · 上次刷新 ${age} 秒前`;
+      hang.hidden = true;
+    }
+  }
+
+  function pollSim() {
+    if (frozen()) {
+      S.queued++;
+      log('warn', `GET /api/board —— 排队（事件循环阻塞，请求挂起，第 ${S.queued} 个）`);
+    } else {
+      S.pollLastAt = Date.now();
+      log('dim', runActive() && S.scenario === 'fixed'
+        ? 'GET /api/board 200 · 轮询正常（异步执行：服务保持响应）'
+        : 'GET /api/board 200 · 轮询正常');
+    }
+    tickStatus();
+  }
+
+  /* ---------- 核验/确认运行 ---------- */
+  function startRun(kind) {
+    if (runActive()) return;
+    S.run = { kind, t0: Date.now(), idx: 0, timer: null };
+    const path = kind === 'verify' ? 'verify' : 'continue';
+    if (S.scenario === 'fixed') {
+      log('ok', `POST /api/confirms/${ITEM}/${path} → 202 受理（异步 spawn，立即返回任务运行态）`);
+      log('dim', `child_process.spawn('npm', ['test','--silent']) 后台运行 · 超时上限 600s · 进度经轮询回传`);
+    } else {
+      log('err', `POST /api/confirms/${ITEM}/${path} —— 处理中：runProjectTests() 同步执行`);
+      log('err', `spawnSync('npm', ['test','--silent'], { timeout: 600_000 }) —— 事件循环阻塞开始（演示 12 秒 ≈ 真实 4 分钟）`);
+      toast('缺陷形态：服务同步跑测试（≈4 分钟），整个面板冻结——轮询停摆、操作排队、无进度提示', true);
+    }
+    render();
+    S.run.timer = setInterval(tickRun, 250);
+    tickRun();
+  }
+
+  function tickRun() {
+    const el = Date.now() - S.run.t0;
+    const st = STAGES[S.run.kind];
+    while (S.run.idx + 1 < st.length && el >= st[S.run.idx + 1].at) {
+      S.run.idx++;
+      render();
+      if (S.scenario === 'fixed') log('dim', `阶段完成 → 进入「${st[S.run.idx].label}」（${st[S.run.idx].label} 进行中）`);
+    }
+    // 「测试运行中 · 已 N 秒 / 上限 600 秒」行（仅修复后可见——缺陷形态无进度提示正是问题本身）
+    const line = $('#elapsedLine');
+    if (line) {
+      const [a, b] = TEST_WIN[S.run.kind];
+      if (el >= a && el < b) {
+        const sec = (el / 1000).toFixed(1);
+        line.innerHTML = `<span class="spinner"></span>测试运行中 · 已运行 ${sec} 秒（≈真实 ${fmtReal(el / 1000)}）/ 超时上限 600 秒`;
+      } else {
+        line.innerHTML = `<span class="spinner"></span>${st[S.run.idx].label} 进行中…`;
+      }
+    }
+    if (el >= TOTAL[S.run.kind]) finishRun();
+  }
+
+  function finishRun() {
+    clearInterval(S.run.timer);
+    const kind = S.run.kind, dur = Date.now() - S.run.t0;
+    S.run = null;
+    const pass = S.outcome === 'pass';
+
+    if (S.scenario === 'defect') {
+      log('ok', `spawnSync 返回（npm test ${pass ? '退出码 0' : '退出码 1'}）· 事件循环恢复——排队的 ${S.queued} 个请求开始返回`);
+      if (S.health && S.health.waiting) S.health = { text: `阻塞 ${(dur / 1000).toFixed(1)} 秒后才响应（同步阻塞）`, cls: 'err' };
+      if (S.acc007 === 'accepting') {
+        S.acc007 = 'stuck';
+        log('err', `POST /api/items/${OTHER}/accept —— 阻塞全程挂起，请求最终被丢弃未落盘（按钮停留「正在接受中」，需刷新重试）`);
+        toast('接受请求被丢弃未落盘：按钮停留忙态，需刷新重试（演示：「重置演示」可恢复）', true);
+      }
+      if (S.secondQueued) {
+        log('err', `排队的重复核验开始执行——缺陷形态无互斥：又一次同步运行将再阻塞 ≈4 分钟（演示省略）`);
+        toast('缺陷形态无互斥：重复触发被排队，将再次同步阻塞（演示省略第二次）', true);
+        S.secondQueued = false;
+      }
+    } else {
+      log(pass ? 'ok' : 'err', `npm test ${pass ? '通过（退出码 0）' : '未通过（退出码 1）'} · 异步落账 confirm 账本（verify 字段口径不变）`);
+    }
+
+    const t = clock();
+    if (kind === 'verify') {
+      S.verifyLine = pass
+        ? { ok: true, text: `最近核验（${t}）：通过——提交完整，测试通过` }
+        : { ok: false, text: `最近核验（${t}）：未通过——测试未通过（npm test 退出码 1）：提交后内容验证失败` };
+      toast(pass ? `✓ ${ITEM} 核验通过：提交完整，测试通过` : `核验未通过：测试未通过（npm test 退出码 1）`, !pass);
+    } else {
+      if (pass) {
+        S.waitingConfirm = false;
+        toast(`✓ ${ITEM} 已确认恢复：队列继续`);
+        log('ok', `队列恢复：批次继续 · 确认闭环完成（无活动挂起，确认区隐藏）`);
+        closePanel();
+      } else {
+        S.verifyLine = { ok: false, text: `最近核验（${t}）：未通过——测试未通过（npm test 退出码 1）：提交后内容验证失败` };
+        toast(`确认未通过，保持挂起：测试未通过（npm test 退出码 1）`, true);
+        panelMsg(`确认未通过，保持挂起：\n· 测试未通过（npm test 退出码 1）：提交后内容验证失败`, true);
+      }
+    }
+    render();
+  }
+
+  /* ---------- 交互 ---------- */
+  $('#segScenario').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.v === S.scenario) return;
+    reset(true);
+    S.scenario = b.dataset.v;
+    $$('#segScenario button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === S.scenario)));
+    toast(S.scenario === 'defect'
+      ? '缺陷形态：核验/确认经 spawnSync 同步跑测试，服务事件循环被阻塞（演示 12 秒 ≈ 真实 4 分钟）'
+      : '修复后：异步 spawn + 阶段进度上报 + 同条目互斥；测试期间面板可正常轮询与操作');
+    render();
+  });
+
+  $('#segOutcome').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    S.outcome = b.dataset.v;
+    $$('#segOutcome button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === S.outcome)));
+    toast(`模拟测试结果：${S.outcome === 'pass' ? '通过（退出码 0）' : '失败（退出码 1）'}——下一次运行完成时生效`);
+  });
+
+  $('#btnReset').addEventListener('click', () => { reset(true); toast('演示已重置'); });
+
+  $('#btnTheme').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme || 'light';
+    document.documentElement.dataset.theme = cur === 'light' ? 'dark' : 'light';
+  });
+
+  // 内容区事件委托
+  content.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]');
+    if (!act || act.disabled) return;
+    const a = act.dataset.act;
+    if (a === 'open-panel') { openPanel(); return; }
+    if (a === 'verify') {
+      startRun('verify');
+      if (S.scenario === 'fixed') toast('核验已异步启动：卡片显示阶段与时长进度，轮询与其他操作不受影响');
+      return;
+    }
+    if (a === 'accept') {
+      if (S.acc007 !== 'submitted') return;
+      S.acc007 = 'accepting';
+      if (frozen()) {
+        S.queued++;
+        log('warn', `POST /api/items/${OTHER}/accept —— 排队（事件循环阻塞，请求挂起）`);
+        toast('接受请求已发出，但服务阻塞中——挂起等待（演示：阻塞结束后被丢弃）', true);
+      } else {
+        log('dim', `POST /api/items/${OTHER}/accept …`);
+        setTimeout(() => {
+          if (S.acc007 !== 'accepting') return;
+          S.acc007 = 'accepted';
+          log('ok', `POST /api/items/${OTHER}/accept 200 · 已落账${runActive() ? '（测试运行期间其他条目可操作——跨条目不互斥）' : ''}`);
+          toast(`✓ ${OTHER} 已接受${runActive() ? '（核验运行期间操作不受影响）' : ''}`);
+          render();
+        }, 1200);
+      }
+      render();
+    }
+  });
+
+  // 探活：验收 1 —— 触发核验后 2 秒内 /api/health 仍可响应
+  $('#btnHealth').addEventListener('click', () => {
+    if (S.health && S.health.waiting) return;
+    S.health = { waiting: true };
+    if (frozen()) {
+      S.queued++;
+      log('warn', 'GET /api/health —— 排队（事件循环阻塞，请求挂起）');
+    } else {
+      setTimeout(() => {
+        const ms = 3 + Math.floor(Math.random() * 5);
+        S.health = { text: `● 正常 · ${ms}ms${runActive() && S.scenario === 'fixed' ? '（异步：测试运行期间服务保持响应）' : ''}`, cls: 'ok' };
+        log('ok', `GET /api/health 200 · ${ms}ms`);
+        render();
+      }, 120);
+    }
+    render();
+  });
+
+  // 模拟 API 重复触发（运行期间）：互斥路径演示
+  $('#btnApi').addEventListener('click', () => {
+    if (!runActive()) { toast('请先触发「重新核验 / 确认并继续」，运行期间再模拟 API 重复触发'); return; }
+    if (S.scenario === 'fixed') {
+      log('warn', `POST /api/confirms/${ITEM}/verify → 409 Already running（同条目互斥，明确提示）`);
+      toast('已拒绝：该条目已有核验任务运行中（同条目互斥）——409 + 明确提示', true);
+    } else {
+      S.secondQueued = true; S.queued++;
+      log('warn', `POST /api/confirms/${ITEM}/verify —— 排队（缺陷形态无互斥：阻塞结束后将再次同步运行）`);
+      toast('缺陷形态：重复触发被排队而非拒绝——阻塞结束后会再跑一次测试（无互斥）', true);
+    }
+  });
+
+  // 侧拉面板
+  function openPanel() { $('#sidePanel').classList.add('show'); $('#overlay').classList.add('show'); }
+  function closePanel() { $('#sidePanel').classList.remove('show'); $('#overlay').classList.remove('show'); }
+  function panelMsg(text, isErr) {
+    const el = $('#panelMsg');
+    el.textContent = text;
+    el.className = text ? `panel-msg show ${isErr ? 'err' : 'ok'}` : 'panel-msg';
+  }
+
+  $('#sideClose').addEventListener('click', closePanel);
+  $('#overlay').addEventListener('click', closePanel);
+  $('#sideKeep').addEventListener('click', () => {
+    if (runActive()) return;
+    toast('保持挂起：条目保持待人工确认并记录说明（与本 Bug 无关，演示不改状态）');
+  });
+  $('#sideVerify').addEventListener('click', () => {
+    if (runActive()) return;
+    startRun('verify');
+    if (S.scenario === 'fixed') toast('核验已异步启动：面板可继续操作，完成后回填「最近核验」');
+  });
+  $('#sideContinue').addEventListener('click', () => {
+    if (runActive()) return;
+    panelMsg('');
+    startRun('continue');
+    if (S.scenario === 'fixed') toast('确认已异步受理：核验 → 补交 → 测试 → 恢复队列，阶段进度见卡片');
+  });
+
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePanel(); });
+
+  /* ---------- 重置 ---------- */
+  function reset(clearConsole) {
+    if (S.run) { clearInterval(S.run.timer); S.run = null; }
+    S.pollLastAt = Date.now();
+    S.queued = 0;
+    S.acc007 = 'submitted';
+    S.health = null;
+    S.waitingConfirm = true;
+    S.verifyLine = { ok: true, text: '最近核验（09:21）：通过' };
+    S.secondQueued = false;
+    panelMsg('');
+    closePanel();
+    if (clearConsole) {
+      $('#conBody').replaceChildren();
+      log('dim', '$ node scripts/server.mjs  →  http://127.0.0.1:8888/（演示模拟）');
+      log('dim', 'GET /api/board 200 · 2 秒轮询工作中');
+    }
+    render();
+  }
+
+  /* ---------- 启动 ---------- */
+  uiTimer = setInterval(() => { pollParity = 1 - pollParity; if (pollParity) pollSim(); else tickStatus(); }, 1000);
+  reset(true);
+})();
+</script>
+</body>
+</html>

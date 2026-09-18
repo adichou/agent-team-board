@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260915-010 界面演示 · 讨论按钮提示词末尾换行</title>
+<style>
+  /* ---------- 主题变量（深浅色） ---------- */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dee4; --text: #1f2328; --muted: #6a737d;
+    --accent: #0969da; --accent-text: #ffffff; --danger: #cf222e; --ok: #1a7f37;
+    --menu-bg: #ffffff; --menu-border: #c9d1d9; --chip-bg: #eaeef2; --shadow: 0 8px 24px rgba(0,0,0,.14);
+    --code-bg: #f0f2f5; --hl-danger-bg: #ffebe9; --hl-ok-bg: #dafbe1;
+  }
+  [data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #388bfd; --accent-text: #ffffff; --danger: #f85149; --ok: #3fb950;
+    --menu-bg: #21262d; --menu-border: #444c56; --chip-bg: #21262d; --shadow: 0 8px 24px rgba(0,0,0,.5);
+    --code-bg: #1c2129; --hl-danger-bg: #3d1d20; --hl-ok-bg: #12261e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .topbar h1 { font-size: 16px; margin: 0 12px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 12px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: var(--accent-text); }
+  .ghost { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; color: var(--text); }
+  .ghost.on { border-color: var(--accent); color: var(--accent); }
+  .mode-note { font-size: 12px; color: var(--muted); }
+  .mode-note b.defect { color: var(--danger); } .mode-note b.fixed { color: var(--ok); }
+
+  /* ---------- 布局 ---------- */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .card h2 { font-size: 14px; margin: 0 0 8px; }
+  .card h2 small { font-weight: normal; color: var(--muted); }
+  .chip { display: inline-block; font-size: 12px; background: var(--chip-bg); border-radius: 999px; padding: 1px 10px; color: var(--muted); margin-left: 6px; vertical-align: 1px; }
+  .chip.defect { color: var(--danger); } .chip.fixed { color: var(--ok); }
+  .muted { color: var(--muted); font-size: 12px; }
+
+  /* ---------- 抽屉模拟 ---------- */
+  .drawer-head { display: flex; align-items: center; gap: 8px; }
+  .drawer-head .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 10px 0 0; flex-wrap: wrap; }
+  .tabs button { border: 0; background: transparent; padding: 6px 12px; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  #docView { padding: 10px 4px 4px; min-height: 168px; }
+  #docView .blk { padding: 3px 6px; border-radius: 6px; }
+  #docView h3 { margin: 6px 0; }
+  #docView p, #docView ul { margin: 6px 0; }
+  #docView ul { padding-left: 20px; }
+  .hint-select { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 6px; }
+
+  /* ---------- 右键菜单 ---------- */
+  .ctx-menu { position: fixed; z-index: 60; background: var(--menu-bg); border: 1px solid var(--menu-border); border-radius: 8px; box-shadow: var(--shadow); padding: 4px; min-width: 120px; }
+  .ctx-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text); padding: 6px 10px; border-radius: 6px; }
+  .ctx-menu button:hover { background: var(--chip-bg); }
+
+  /* ---------- 会话区 ---------- */
+  textarea { width: 100%; font: 12px/1.7 ui-monospace, Menlo, monospace; background: var(--code-bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; resize: vertical; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 5px 12px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  input[type="text"] { font: inherit; background: var(--code-bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; min-width: 220px; flex: 1; }
+  #preview { font: 12px/1.8 ui-monospace, Menlo, monospace; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; white-space: pre-wrap; word-break: break-all; min-height: 70px; }
+  #preview .q-bad { background: var(--hl-danger-bg); color: var(--danger); border-radius: 3px; padding: 0 2px; }
+  #preview .q-good { background: var(--hl-ok-bg); color: var(--ok); border-radius: 3px; padding: 0 2px; }
+  #preview .caret { color: var(--muted); }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend i { font-style: normal; padding: 0 4px; border-radius: 3px; }
+  .legend .b { background: var(--hl-danger-bg); color: var(--danger); }
+  .legend .g { background: var(--hl-ok-bg); color: var(--ok); }
+
+  /* ---------- 文档讨论区块 ---------- */
+  .disc-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 0; }
+  .disc-state { font-size: 12px; color: var(--muted); }
+  .prompt-panel { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 8px; background: var(--code-bg); }
+  .prompt-panel .pt { font-size: 13px; font-weight: 600; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  .prompt-panel .ph { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+
+  /* ---------- toast / 弹窗 ---------- */
+  #toasts { position: fixed; top: 14px; right: 14px; z-index: 90; display: flex; flex-direction: column; gap: 8px; max-width: 340px; }
+  .toast { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 12px; font-size: 13px; }
+  .toast.err { border-left-color: var(--danger); }
+  .modal-wrap { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); width: min(560px, 100%); padding: 14px; }
+  .modal h3 { margin: 0 0 8px; font-size: 14px; }
+  .modal .foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+  .flow { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); margin-top: 10px; padding-top: 8px; }
+  .flow b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 顶栏：模式 / 类型 / 主题 / 复制失败开关 -->
+  <div class="topbar">
+    <h1>BUG-20260915-010 界面演示</h1>
+    <div class="seg" id="modeSeg" role="group" aria-label="演示模式">
+      <button type="button" data-mode="defect" class="on">缺陷态（末尾无换行）</button>
+      <button type="button" data-mode="fixed">修复态（末尾恰一个换行）</button>
+    </div>
+    <div class="seg" id="typeSeg" role="group" aria-label="条目类型">
+      <button type="button" data-type="req" class="on">需求详情</button>
+      <button type="button" data-type="bug">Bug 详情</button>
+    </div>
+    <button type="button" class="ghost" id="themeBtn">深浅色切换</button>
+    <button type="button" class="ghost" id="failBtn" aria-pressed="false">模拟自动复制失败</button>
+    <span class="mode-note" id="modeNote"></span>
+  </div>
+
+  <div class="grid">
+    <!-- 左：详情抽屉文档页签模拟 -->
+    <div>
+      <div class="card">
+        <h2>① 详情抽屉 · 文档页签 <small>（右键「💬 讨论」）</small><span class="chip fixed" id="ctxChip">实际代码现状：已修复（BUG-20260914-019）</span></h2>
+        <div class="drawer-head">
+          <span class="id" id="itemId">REQ-20260915-099</span>
+          <span class="muted" id="itemTitle">演示需求：批量导出看板快照</span>
+          <span style="flex:1"></span>
+          <label class="muted" for="docState">文档状态</label>
+          <select id="docState" class="btn">
+            <option value="ready">已就绪</option>
+            <option value="loading">加载中</option>
+            <option value="missing">未创建</option>
+            <option value="error">加载失败</option>
+          </select>
+        </div>
+        <nav class="tabs" aria-label="详情分页">
+          <button type="button">基本信息</button>
+          <button type="button" class="on">说明</button>
+          <button type="button">设计</button>
+          <button type="button">测试用例</button>
+        </nav>
+        <div id="docView" aria-label="说明文档内容区（模拟 #docView）"></div>
+        <p class="hint-select">在文档内容区<b>选中一段文字</b>后右键 → 引用携带「原文：所选文字」；<b>不选中直接右键</b> → 引用整块（无「原文」节）。行号映射为演示简化。</p>
+        <div class="row" style="margin-top:4px">
+          <span class="chip" id="clipChip">剪贴板（模拟）：空</span>
+        </div>
+      </div>
+
+      <!-- 文档讨论区块（仅需求） -->
+      <div class="card" id="discCard">
+        <h2>② 讨论纪要 · 「文档讨论」区块 <small>（需求详情专属）</small><span class="chip defect">实际代码现状：仍无末尾换行（本单待修）</span></h2>
+        <p class="muted" style="margin:4px 0">当前版本该区块随讨论模块暂态隐藏（REQ-20260909-013，机制保留）；演示按恢复入口后口径。<span id="discOnlyReq">Bug 详情不渲染此区块（与真实口径一致）。</span></p>
+        <div class="disc-bar" id="discBar">
+          <span class="disc-state" id="discState">尚未开始讨论</span>
+        </div>
+        <div id="discPanel"></div>
+      </div>
+    </div>
+
+    <!-- 右：Agent 会话 + 最终消息预览 -->
+    <div>
+      <div class="card">
+        <h2>③ Agent 会话输入框 <small>（粘贴提示词 → 直接输入问题）</small></h2>
+        <div class="row">
+          <button type="button" class="btn primary" id="pasteBtn" disabled>粘贴提示词</button>
+          <button type="button" class="btn" id="typeBtn">模拟输入问题</button>
+          <button type="button" class="btn" id="clearBtn">清空</button>
+        </div>
+        <div class="row">
+          <input type="text" id="qInput" value="这里第 3 条是不是可以先只讨论不改文件？" aria-label="模拟输入的问题文本">
+        </div>
+        <textarea id="agentInput" rows="8" aria-label="Agent 会话输入框（模拟）" placeholder="点「粘贴提示词」插入复制的提示词；也可直接在此输入。"></textarea>
+        <h2 style="margin-top:12px">最终消息预览 <small>（⏎ = 换行符；光标落点 ▏）</small></h2>
+        <div id="preview" aria-live="polite"><span class="muted">（空）粘贴并输入问题后，这里展示用户按下发送前的完整消息。</span></div>
+        <p class="legend">图例：<i class="b">红色</i>＝问题与提示词末行连排同一行（缺陷）；<i class="g">绿色</i>＝问题自动另起一行（期望）。</p>
+        <p class="flow">判定规则：提示词末尾<b>恰一个 ⏎</b> → 粘贴后光标已在新行，输入的问题另起一行；<b>无 ⏎</b> → 光标停在末行行尾，问题连排同一行。演示中「模拟输入问题」不额外插入换行，差异完全来自提示词本身的末尾换行。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* =========================================================
+   BUG-20260915-010 演示：讨论按钮提示词末尾换行（缺陷 / 修复对照）
+   单文件、无外网依赖；「复制」仅写入页内模拟剪贴板，不触系统剪贴板。
+   ========================================================= */
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+const state = {
+  mode: 'defect',            // defect=末尾无换行 / fixed=末尾恰一个换行
+  type: 'req',               // req=需求 / bug=Bug
+  docState: 'ready',         // ready/loading/missing/error
+  copyFail: false,
+  clip: null,                // 模拟剪贴板 { label, text }
+  promptEnd: 0,              // 会话框中提示词结束位置（用于预览着色）
+  disc: 'idle',              // 文档讨论区块：idle/started/finished
+  discId: 'DISC-20260915-001',
+  theme: null,
+};
+
+/* ---------- 模拟数据 ---------- */
+const ITEM = {
+  req: { id: 'REQ-20260915-099', title: '演示需求：批量导出看板快照', path: (n) => `/demo/project/docs/agent-team-board/requirements/REQ-20260915-099/${n}` },
+  bug: { id: 'BUG-20260915-099', title: '演示 Bug：快照文件名缺少日期后缀', path: (n) => `/demo/project/docs/agent-team-board/bugs/BUG-20260915-099/${n}` },
+};
+// 说明文档块（start/end 为演示用 1 基源行）
+const DOC_BLOCKS = [
+  { start: 1, end: 1, kind: 'heading', html: '<h3>演示需求：批量导出看板快照</h3>' },
+  { start: 3, end: 4, kind: 'para', text: '支持把当前看板视图导出为 PNG 快照。\n快照在条目详情中留档并随条目归档。', html: '<p style="white-space:pre-line">支持把当前看板视图导出为 PNG 快照。\n快照在条目详情中留档并随条目归档。</p>' },
+  { start: 6, end: 7, kind: 'list', html: '<ul><li>快照命名含日期与视图名</li><li>导出后自动附加到条目</li></ul>' },
+];
+const DOC_PLACEHOLDER = {
+  loading: '正在加载文档…', missing: '文档未创建', error: '文档加载失败',
+};
+
+/* ---------- 提示词组装（结构对齐真实实现，路径为演示数据） ---------- */
+function nl(text) { return state.mode === 'fixed' ? text + '\n' : text; }
+
+// 对齐 scripts/web/app.js buildDocRef（缺陷态=修复前 join('\n')，修复态=BUG-20260914-019 后 + '\n'）
+function buildDocRef({ id, name, path, start, end, text }) {
+  const lines = [
+    '【文档讨论引用】',
+    `${id} / ${name} ${start === end ? `第 ${start} 行` : `第 ${start}–${end} 行`}`,
+    `文档：${path}`,
+  ];
+  if (text != null && text !== '') lines.push('原文：', text);
+  lines.push(
+    '',
+    '【讨论要求】请在本轮及后续讨论中遵守：',
+    '1. 围绕上方引用（文档路径 + 源码行范围）展开讨论与修改。',
+    '2. 每轮回答中如需修改相关文件：修改完成后同轮同步执行 git commit，不留未提交改动。',
+    `3. commit message 须包含：条目单号（如 ${id}）、本轮用户问题摘要、本轮回答（改动）摘要。`,
+    '4. 每轮回答回显本轮 commit log 与 commit 号（短哈希即可）。',
+  );
+  return nl(lines.join('\n'));
+}
+
+// 对齐 scripts/lib/req-disc-store.mjs buildStartPrompt 末行（缺陷态=现状）
+function buildStartPrompt(reqId) {
+  return nl([
+    `你是本项目的需求文档讨论参与者。请在当前会话与我持续讨论需求 ${reqId}（演示需求：批量导出看板快照），讨论编号 ${state.discId}（第 1 轮）。`,
+    '项目根：/demo/project',
+    '',
+    '文档读取入口（只读，存在即可直接读取）：',
+    `- ${ITEM.req.path('README.md')}`,
+    `- ${ITEM.req.path('design.md')}`,
+    `- ${ITEM.req.path('test-cases.md')}`,
+    '',
+    '讨论约定：',
+    '- 区分「明确共识」「Agent 建议（待确认）」「未决问题」，不要混在一起；',
+    '- 讨论期间不修改上述文档、不改项目代码、不改变看板需求状态；结论涉改代码请建议另建需求。',
+    '',
+    '落盘约定（只在收到收尾提示词后使用，本轮产物目录）：',
+    `- 纪要：/demo/project/docs/agent-team-board/discussions/${state.discId}/rounds/1/minutes.md`,
+    `- 说明修改草稿：/demo/project/docs/agent-team-board/discussions/${state.discId}/rounds/1/readme-draft.json`,
+    `- 发布标记（最后写）：/demo/project/docs/agent-team-board/discussions/${state.discId}/rounds/1/PUBLISH.json`,
+    '三件都完整写完才算发布；看板检测到发布标记后才会读取展示，半成品不会被读取。',
+  ].join('\n'));
+}
+
+// 对齐 scripts/lib/req-disc-store.mjs buildFinishPrompt 末行（缺陷态=现状）
+function buildFinishPrompt(reqId) {
+  return nl([
+    `请收尾需求 ${reqId} 的文档讨论（讨论编号 ${state.discId}，第 1 轮），在当前会话内按顺序完成：`,
+    '',
+    `1. 完整落盘纪要到 /demo/project/docs/agent-team-board/discussions/${state.discId}/rounds/1/minutes.md（六节：明确共识 / Agent 建议（待确认）/ 未决问题 / 原文引用 / 建议修改 / 后续行动）。`,
+    `2. 完整落盘说明修改草稿到 /demo/project/docs/agent-team-board/discussions/${state.discId}/rounds/1/readme-draft.json（结构略，与真实提示词一致）。`,
+    `3. 最后写发布标记 /demo/project/docs/agent-team-board/discussions/${state.discId}/rounds/1/PUBLISH.json。`,
+    '',
+    '看板只认发布标记与成套文件；不要直接修改 README.md、不要覆盖已归档纪要、不要改变需求状态。',
+  ].join('\n'));
+}
+
+/* ---------- toast ---------- */
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+/* ---------- 右键菜单（对齐真实交互：点外部/Esc/滚动关闭） ---------- */
+let menuEl = null;
+function closeMenu() { menuEl?.remove(); menuEl = null; }
+function openMenu(x, y, info) {
+  closeMenu();
+  const m = document.createElement('div');
+  m.className = 'ctx-menu';
+  m.setAttribute('role', 'menu');
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('role', 'menuitem');
+  b.textContent = '💬 讨论';
+  b.addEventListener('click', () => { closeMenu(); doCopy(info); });
+  m.appendChild(b);
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = `${x + r.width > innerWidth ? Math.max(8, x - r.width) : x}px`;
+  m.style.top = `${y + r.height > innerHeight ? Math.max(8, y - r.height) : y}px`;
+  menuEl = m;
+}
+document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); }, true);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuEl) { e.preventDefault(); closeMenu(); } }, true);
+window.addEventListener('scroll', closeMenu, true);
+
+/* ---------- 复制（模拟剪贴板；可模拟失败走手动复制弹窗） ---------- */
+function setClip(label, text) {
+  state.clip = { label, text };
+  const has = text.endsWith('\n');
+  $('#clipChip').textContent = `剪贴板（模拟）：已写入 ${text.length} 字符 · 末尾换行：${has ? '有 ⏎' : '无 ✗'}`;
+  $('#clipChip').className = 'chip ' + (has ? 'fixed' : 'defect');
+  $('#pasteBtn').disabled = false;
+}
+function doCopy(info) {
+  if (state.copyFail) {
+    toast('自动复制失败，请在弹出的文本框中手动复制', true);
+    copyBox('手动复制讨论引用', info.text);
+    setClip(info.label, info.text); // 演示：手动复制同文本，效果一致
+    return;
+  }
+  setClip(info.label, info.text);
+  toast(`已复制 引用：${info.label}`);
+}
+function copyBox(title, text) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-wrap';
+  const box = document.createElement('div');
+  box.className = 'modal';
+  const h = document.createElement('h3');
+  h.textContent = title;
+  const ta = document.createElement('textarea');
+  ta.rows = 8; ta.readOnly = true; ta.value = text;
+  const note = document.createElement('p');
+  note.className = 'muted';
+  note.textContent = `末尾换行：${text.endsWith('\n') ? '有 ⏎（粘贴后光标在新行）' : '无 ✗（粘贴后光标停在末行行尾）'}——手工 ⌘C / Ctrl+C 复制同一文本，结果一致。`;
+  const foot = document.createElement('div');
+  foot.className = 'foot';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn primary'; btn.textContent = '关闭';
+  foot.appendChild(btn);
+  box.append(h, ta, note, foot);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  btn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); window.removeEventListener('keydown', onKey, true); } };
+  window.addEventListener('keydown', onKey, true);
+  ta.focus(); ta.select();
+}
+
+/* ---------- 文档区渲染 + 右键 ---------- */
+function renderDoc() {
+  const v = $('#docView');
+  if (state.docState !== 'ready') {
+    v.innerHTML = `<p class="muted">${DOC_PLACEHOLDER[state.docState]}</p>`;
+    return;
+  }
+  v.innerHTML = '';
+  for (const b of DOC_BLOCKS) {
+    const el = document.createElement('div');
+    el.className = 'blk';
+    el.dataset.start = String(b.start);
+    el.dataset.end = String(b.end);
+    el.innerHTML = b.html;
+    v.appendChild(el);
+  }
+}
+$('#docView').addEventListener('contextmenu', (e) => {
+  if (state.docState !== 'ready') {
+    toast(`「${DOC_PLACEHOLDER[state.docState]}」状态：右键不弹讨论菜单（口径同现状，放行浏览器原生菜单）`, true);
+    return; // 不 preventDefault：演示原生菜单照常
+  }
+  e.preventDefault();
+  const sel = window.getSelection();
+  const selText = sel && !sel.isCollapsed && sel.toString().trim() && $('#docView').contains(sel.anchorNode)
+    ? sel.toString() : null;
+  let blk = e.target.closest('[data-start]');
+  if (!blk) { toast('落点未标注：放行原生菜单（宁缺勿错口径）', true); return; }
+  const item = ITEM[state.type];
+  const start = Number(blk.dataset.start), end = Number(blk.dataset.end);
+  const ref = {
+    label: `README.md ${start === end ? `第 ${start} 行` : `第 ${start}–${end} 行`}`,
+    text: buildDocRef({ id: item.id, name: 'README.md', path: item.path('README.md'), start, end, text: selText }),
+  };
+  openMenu(e.clientX, e.clientY, ref);
+});
+$('#docState').addEventListener('change', (e) => { state.docState = e.target.value; renderDoc(); });
+
+/* ---------- 会话区 ---------- */
+function renderPreview() {
+  const val = $('#agentInput').value;
+  const pv = $('#preview');
+  if (!val) { pv.innerHTML = '<span class="muted">（空）粘贴并输入问题后，这里展示用户按下发送前的完整消息。</span>'; return; }
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const withMark = (s) => esc(s).replace(/\n/g, '\n⏎');
+  const prompt = val.slice(0, state.promptEnd);
+  const rest = val.slice(state.promptEnd);
+  let restHtml;
+  if (rest) {
+    const sameLine = !rest.startsWith('\n') && prompt && !prompt.endsWith('\n');
+    restHtml = `<span class="${sameLine ? 'q-bad' : 'q-good'}">${withMark(rest)}</span><span class="caret">▏</span>`;
+  } else {
+    restHtml = `<span class="caret">${prompt ? '▏' : ''}</span>`;
+  }
+  pv.innerHTML = withMark(prompt) + restHtml;
+}
+$('#pasteBtn').addEventListener('click', () => {
+  if (!state.clip) return;
+  const ta = $('#agentInput');
+  ta.value += state.clip.text;   // 模拟粘贴（含/不含末尾换行，差异全部来自提示词本身）
+  state.promptEnd = ta.value.length;
+  toast('已粘贴提示词；请直接输入问题（演示用「模拟输入问题」）');
+  renderPreview();
+});
+$('#typeBtn').addEventListener('click', () => {
+  const q = $('#qInput').value || '（问题）';
+  const ta = $('#agentInput');
+  if (!ta.value) { toast('请先粘贴提示词，再模拟输入问题', true); return; }
+  ta.value += q;                 // 不插入换行：缺陷态连排同一行，修复态已在提示词末行后
+  renderPreview();
+});
+$('#clearBtn').addEventListener('click', () => { $('#agentInput').value = ''; state.promptEnd = 0; renderPreview(); });
+$('#agentInput').addEventListener('input', renderPreview);
+
+/* ---------- 文档讨论区块（需求专属；状态机简化版） ---------- */
+function discRender() {
+  const bar = $('#discBar'), panel = $('#discPanel');
+  const btn = (label, cls, fn, tip) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn ' + (cls || ''); b.textContent = label; b.title = tip || '';
+    b.addEventListener('click', fn); return b;
+  };
+  bar.innerHTML = '';
+  const st = document.createElement('span');
+  st.className = 'disc-state';
+  st.id = 'discState';
+  if (state.disc === 'idle') {
+    st.textContent = '尚未开始讨论';
+    bar.append(st, btn('开始讨论', 'primary', () => { state.disc = 'started'; toast('✓ 已创建讨论 ' + state.discId + '；请复制启动提示词到 Agent 新会话。'); discRender(); }, '创建唯一讨论编号并生成启动提示词'));
+  } else if (state.disc === 'started') {
+    st.textContent = `讨论中 · ${state.discId}（第 1 轮）`;
+    bar.append(
+      st,
+      btn('启动提示词', '', () => discPrompt('start'), '再次查看/复制启动提示词'),
+      btn('讨论完毕', 'primary', () => { state.disc = 'finished'; toast('已生成收尾提示词；请在原 Agent 会话执行。'); discPrompt('finish'); }, '生成收尾提示词'),
+    );
+  } else {
+    st.textContent = `等待纪要 · ${state.discId}（第 1 轮）`;
+    bar.append(st, btn('再次查看收尾提示词', '', () => discPrompt('finish')));
+  }
+  panel.innerHTML = '';
+}
+function discPrompt(kind) {
+  const panel = $('#discPanel');
+  panel.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'prompt-panel';
+  const t = document.createElement('p');
+  t.className = 'pt';
+  t.textContent = kind === 'start' ? '启动提示词 · 复制到 Agent 新会话' : '收尾提示词 · 复制到原 Agent 会话';
+  const chip = document.createElement('span');
+  chip.className = 'chip ' + (state.mode === 'fixed' ? 'fixed' : 'defect');
+  chip.textContent = state.mode === 'fixed' ? '末尾换行：有 ⏎（本单修复后）' : '末尾换行：无 ✗（当前代码现状）';
+  t.appendChild(chip);
+  const ta = document.createElement('textarea');
+  ta.rows = 8; ta.readOnly = true;
+  ta.setAttribute('aria-label', '可手工复制的提示词');
+  const text = kind === 'start' ? buildStartPrompt(ITEM.req.id) : buildFinishPrompt(ITEM.req.id);
+  ta.value = text;
+  const foot = document.createElement('p');
+  foot.className = 'ph';
+  foot.textContent = '复制不代表 Agent 已连接或成果已生成；请在 Agent 会话执行。';
+  const row = document.createElement('div');
+  row.className = 'row';
+  const copy = document.createElement('button');
+  copy.type = 'button'; copy.className = 'btn primary'; copy.textContent = '复制内容';
+  copy.addEventListener('click', () => {
+    if (state.copyFail) {
+      toast('自动复制失败，文本已选中，请按 ⌘C / Ctrl+C 手工复制。', true);
+      ta.focus(); ta.select();
+    } else {
+      toast('已复制。请粘贴到 Agent 会话；此操作不代表 Agent 已连接。');
+    }
+    setClip(`${state.discId} ${kind === 'start' ? '启动' : '收尾'}提示词`, text);
+  });
+  row.appendChild(copy);
+  wrap.append(t, ta, row, foot);
+  panel.appendChild(wrap);
+}
+
+/* ---------- 顶栏控件 ---------- */
+$$('#modeSeg button').forEach((b) => b.addEventListener('click', () => {
+  state.mode = b.dataset.mode;
+  $$('#modeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  renderModeNote();
+  if (state.clip) { toast('模式已切换；请重新「复制」以生成新模式的提示词'); }
+  if (state.disc !== 'idle') discPrompt(state.disc === 'idle' ? null : (state.disc === 'started' ? 'start' : 'finish'));
+}));
+$$('#typeSeg button').forEach((b) => b.addEventListener('click', () => {
+  state.type = b.dataset.type;
+  $$('#typeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  renderType();
+}));
+$('#failBtn').addEventListener('click', () => {
+  state.copyFail = !state.copyFail;
+  $('#failBtn').classList.toggle('on', state.copyFail);
+  $('#failBtn').setAttribute('aria-pressed', String(state.copyFail));
+  toast(state.copyFail ? '已开启「模拟自动复制失败」：复制将走手动复制弹窗' : '已关闭「模拟自动复制失败」');
+});
+$('#themeBtn').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+});
+
+function renderModeNote() {
+  $('#modeNote').innerHTML = state.mode === 'defect'
+    ? '当前：<b class="defect">缺陷态</b>——所有提示词末尾无换行（「文档讨论」区块＝当前真实代码现状）'
+    : '当前：<b class="fixed">修复态</b>——所有提示词末尾恰一个换行（期望目标）';
+}
+function renderType() {
+  const item = ITEM[state.type];
+  $('#itemId').textContent = item.id;
+  $('#itemTitle').textContent = item.title;
+  $('#discCard').style.display = state.type === 'req' ? '' : 'none';
+}
+
+/* ---------- 初始化 ---------- */
+renderDoc();
+discRender();
+renderModeNote();
+renderType();
+renderPreview();
+</script>
+</body>
+</html>

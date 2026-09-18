@@ -1,0 +1,14 @@
+# 测试报告 — REQ-20260830-002 File Board：浏览项目相关文件夹并支持语法高亮
+
+- 时间：2026-08-29T17:30:50.820Z
+- 执行者：terminal
+- 测试框架：node:http 集成测试（真实起服务）+ 内置浏览器实测
+- 覆盖率：未统计
+
+## 总结
+
+File Board 完成：顶栏新增「看板/文件」视图 Tab 与 ?view=files 深链（与 ?project= 组合）。文件树 vendor 引入 Wunderbaum 0.14.1（UMD 单文件 + CSS，零依赖），默认展开 docs/agent-team-board、逐目录懒加载、可导航全项目；语法高亮 vendor 引入 highlight.js 11（common 包含 md/js/json/css/html/sh/swift 等，GitHub 明暗双主题随系统切换）。服务端新增只读 API：/api/fs 目录列表（目录在前、过滤点开头与 node_modules/.git）、/api/fs/file 文件读取（限 1MB、NUL 检测二进制、均返回明确提示；realpath 防穿越 + 段级黑名单）。TDD：新增 scripts/tests/file-board.test.mjs（F1–F7 先红后绿全过），multi-project/layout 回归全绿（F8）。F9 浏览器实测部分通过：深链进入、树完整渲染默认展开 ✓；点击树节点→高亮渲染的最后目验因当日 IAB 输入管线故障（playwright 点击超时、截图 guest 错误）未能完成，代码路径与已验证的 markdown 渲染同构，待人工点开确认。过程修复：apiUrl 重复 ? 拼接、Wunderbaum 单参数事件签名、lazyLoad 返回值契约、空 key 自动改号；并落地看板列增量渲染（消除轮询全量重渲染对交互的干扰）。版本 0.1.1→0.2.0。
+
+## 明细
+
+（可粘贴命令输出、失败用例说明等）

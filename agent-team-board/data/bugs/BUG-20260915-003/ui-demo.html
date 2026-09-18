@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260915-003 · 挂起确认面板计数 / 差异 / Git 错误展示演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #dce0e6; --text: #24292f;
+    --muted: #6a737d; --accent: #0969da; --accent-contrast: #ffffff;
+    --ok: #1a7f37; --err: #cf222e; --warn: #9a6700; --warn-bg: #fff8c5;
+    --run-bg: #ddf4ff; --run-fg: #0969da; --chip-bg: #f0f2f5;
+    --hover: #f3f4f6; --code-bg: #f6f8fa; --shadow: 0 8px 24px rgba(20, 30, 50, .12);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181f; --panel: #1c2129; --border: #333a45; --text: #e2e6eb;
+    --muted: #9aa4b1; --accent: #4493f8; --accent-contrast: #0d1117;
+    --ok: #3fb950; --err: #f85149; --warn: #d29922; --warn-bg: #2a2410;
+    --run-bg: #122a44; --run-fg: #4493f8; --chip-bg: #2a303a;
+    --hover: #262c36; --code-bg: #161b22; --shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    padding: 20px clamp(12px, 4vw, 40px) 56px;
+  }
+
+  /* ---------- 顶部：标题 + 模式开关 ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .demo-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tag { background: var(--accent); color: var(--accent-contrast); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  h1 { font-size: 17px; margin: 0; }
+  .demo-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .mode-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .mode-btn { border: 0; background: transparent; color: var(--text); padding: 7px 14px; cursor: pointer; font-size: 13px; }
+  .mode-btn.active { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+  .mode-btn:not(.active):hover { background: var(--hover); }
+  .ghost-btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .ghost-btn:hover:not(:disabled) { background: var(--hover); }
+
+  .demo-hint { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+  .demo-hint b { color: var(--text); }
+
+  /* ---------- 演示控制器 ---------- */
+  .demo-panel { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .check input { accent-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .seg button.active { background: var(--run-bg); color: var(--run-fg); font-weight: 600; }
+
+  /* ---------- 任务页卡片（还原看板「待人工确认」置顶卡） ---------- */
+  .board { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .board-head { padding: 12px 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .confirm-card { padding: 12px 16px; }
+  .confirm-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .chip { font-size: 11px; border-radius: 10px; padding: 1px 8px; background: var(--run-bg); color: var(--run-fg); font-weight: 600; white-space: nowrap; }
+  .chip.type { background: var(--warn-bg); color: var(--warn); }
+  .cid { font-family: var(--mono); font-size: 12.5px; color: var(--accent); cursor: pointer; }
+  .confirm-title { font-size: 13px; }
+  .confirm-reason { margin: 8px 0 4px; font-size: 13px; }
+  .confirm-counts { margin: 2px 0; font-size: 13px; }
+  .confirm-counts .scope { color: var(--muted); font-size: 12px; }
+  .confirm-verify { margin: 4px 0; font-size: 13px; }
+  .confirm-verify.ok { color: var(--ok); }
+  .confirm-verify.bad { color: var(--err); }
+  .confirm-keep-note { margin: 2px 0; font-size: 12.5px; }
+  .confirm-acts { display: flex; gap: 8px; margin-top: 8px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
+
+  /* ---------- 侧拉面板 ---------- */
+  .overlay { position: fixed; inset: 0; background: rgba(10, 16, 26, .45); z-index: 40; }
+  :root[data-theme="dark"] .overlay { background: rgba(0, 0, 0, .6); }
+  .side-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(620px, 94vw);
+    background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow);
+    z-index: 41; display: flex; flex-direction: column;
+  }
+  .side-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .side-head h2 { font-size: 15px; margin: 0; }
+  .side-scope { padding: 8px 18px; border-bottom: 1px solid var(--border); background: var(--bg); font-size: 12.5px; color: var(--muted); }
+  .side-body { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
+  .side-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
+  .confirm-counts strong { font-weight: 600; }
+  .err-block { border: 1px solid var(--err); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: color-mix(in srgb, var(--err) 7%, var(--panel)); }
+  .err-block .summary { font-size: 13px; font-weight: 600; }
+  .err-block .actions { margin-top: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .err-note { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+  details.err-full, details.test-tail, details.diff-view { border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; background: var(--code-bg); }
+  details.err-full summary, details.test-tail summary, details.diff-view summary { padding: 6px 10px; cursor: pointer; font-size: 12.5px; color: var(--muted); user-select: none; }
+  details.err-full pre, details.test-tail pre, details.diff-view pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 12px; line-height: 1.55; overflow-x: auto; white-space: pre; }
+
+  .group-head { font-size: 12px; color: var(--muted); font-weight: 600; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .file-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12.5px; }
+  .file-table th, .file-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .file-table th { background: var(--bg); color: var(--muted); font-size: 12px; }
+  .file-table tr:last-child td { border-bottom: 0; }
+  .file-table td.path { font-family: var(--mono); font-size: 12px; word-break: break-all; max-width: 250px; }
+  .k-mod { color: var(--accent); }
+  .k-add { color: var(--ok); }
+  .k-del { color: var(--err); }
+  .st-in { color: var(--muted); }
+  .st-out { color: var(--err); font-weight: 600; }
+  .attr-select { font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); padding: 2px 4px; }
+  .empty-hint { color: var(--muted); font-size: 13px; padding: 8px 2px; margin: 0; }
+
+  .diff-box { margin-top: 10px; }
+  .diff-box .loading { color: var(--muted); font-size: 12.5px; padding: 6px 2px; }
+  .diff-box .fail { color: var(--err); font-size: 12.5px; padding: 6px 2px; }
+
+  .verify-ok { color: var(--ok); }
+  .verify-bad { color: var(--err); }
+  .verify-reason { margin: 2px 0; font-size: 12.5px; }
+
+  .field { display: block; margin-top: 12px; font-size: 13px; }
+  .field textarea { width: 100%; margin-top: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; padding: 6px 10px; resize: vertical; }
+
+  .scope-summary { margin: 12px 0 0; padding: 8px 12px; border: 1px dashed var(--border); border-radius: 8px; font-size: 12.5px; color: var(--muted); }
+  .scope-summary b { color: var(--text); }
+  .edit-msg { margin: 10px 0 0; font-size: 12.5px; white-space: pre-line; min-height: 18px; }
+  .edit-msg.err { color: var(--err); }
+  .edit-msg.ok { color: var(--ok); }
+
+  .panel-loading, .panel-error { padding: 40px 18px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  /* ---------- 状态一览 ---------- */
+  .states-help { margin-top: 22px; }
+  .states-help h2 { font-size: 15px; }
+  .states-help table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px; }
+  .states-help th, .states-help td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .states-help th { background: var(--bg); font-size: 12px; color: var(--muted); }
+  .states-help tr:last-child td { border-bottom: 0; }
+  code.inline { background: var(--chip-bg); border-radius: 4px; padding: 0 5px; font-size: 12px; font-family: var(--mono); }
+
+  /* ---------- Toast ---------- */
+  #toastBox { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 99; max-width: min(440px, 84vw); }
+  .toast { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: var(--shadow); padding: 9px 14px; font-size: 13px; animation: slide-in .18s ease-out; }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.err { border-left-color: var(--err); }
+  .toast.out { opacity: 0; transform: translateX(8px); transition: all .25s ease-in; }
+  @keyframes slide-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<header class="demo-top">
+  <div class="demo-title">
+    <span class="tag">BUG-20260915-003</span>
+    <h1>提交确认面板：计数与核验同源、待提交差异与完整 Git 错误展示</h1>
+  </div>
+  <div class="demo-controls">
+    <div class="mode-switch" role="group" aria-label="缺陷 / 修复模式切换">
+      <button type="button" id="modeBuggy" class="mode-btn active">当前（缺陷）</button>
+      <button type="button" id="modeFixed" class="mode-btn">修复后</button>
+    </div>
+    <button type="button" id="themeBtn" class="ghost-btn">🌙 深色</button>
+  </div>
+</header>
+
+<section class="demo-hint">
+  本页还原 Web 看板任务页「待人工确认」置顶卡片与右侧<b>挂起确认侧拉面板</b>（提交核验形态），现场取自
+  <b>BUG-20260914-020 自动提交失败挂起</b>（11 个路径未入库）。用右上开关在<b>缺陷现状</b>与<b>修复后</b>之间对比；
+  点击卡片「查看并确认」打开面板，配合下方选项体验加载 / 空态 / 读取失败 / 归属待确认 / 指纹拦截等状态。
+  文件与错误内容为演示示意数据，实际以现场核验为准。
+</section>
+
+<section class="demo-panel">
+  <div class="seg" role="group" aria-label="场景切换">
+    <button type="button" id="scnHeld" class="active">挂起现场（git add 失败 · 11 路径未入库）</button>
+    <button type="button" id="scnEmpty">已补交完成（空态）</button>
+  </div>
+  <label class="check"><input type="checkbox" id="detailFailChk"> 模拟面板详情读取失败</label>
+  <label class="check"><input type="checkbox" id="diffFailChk"> 模拟差异读取失败</label>
+  <label class="check"><input type="checkbox" id="fpChk"> 模拟确认时文件内容变化（指纹不符）</label>
+  <button type="button" id="reopenBtn" class="ghost-btn">重新打开面板</button>
+</section>
+
+<main class="board" aria-label="任务页 · 待人工确认区">
+  <div class="board-head">⚠ 待人工确认（1）——阻塞队列，确认后才继续</div>
+  <article class="confirm-card" id="confirmCard"><!-- JS 渲染 --></article>
+</main>
+
+<!-- 侧拉面板（挂起确认 · 提交核验形态） -->
+<div id="overlay" class="overlay" hidden></div>
+<aside id="sidePanel" class="side-panel" hidden role="dialog" aria-modal="true" aria-label="挂起确认面板">
+  <div class="side-head">
+    <h2 id="panelTitle">待人工确认提交 · BUG-20260914-020</h2>
+    <button type="button" id="panelClose" class="btn small" aria-label="关闭挂起确认面板">✕ 关闭</button>
+  </div>
+  <div class="side-scope" id="panelScope">核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列</div>
+  <div class="side-body" id="panelBody"><!-- JS 渲染：loading / error / form --></div>
+  <div class="side-foot" id="panelFoot" hidden><!-- JS 渲染操作键 --></div>
+</aside>
+
+<section class="states-help">
+  <h2>状态反馈一览</h2>
+  <table>
+    <thead><tr><th>状态</th><th>如何触发（本演示）</th><th>表现（缺陷 → 修复后差异）</th></tr></thead>
+    <tbody>
+      <tr><td>正常（挂起现场）</td><td>默认进入，点「查看并确认」</td><td>缺陷：计数 <code class="inline">已提交 0 组（补交 0 组）· 待人工 0 路径</code>、无文件清单与差异、错误截断到仓库路径；修复后：计数与文件表 / 核验同源（<code class="inline">待提交 11 个路径（本单可归属 8 · 归属待确认 3）</code>），按归属分组列出候选并逐个可看差异，Git 错误摘要可折叠、全文可展开 / 复制</td></tr>
+      <tr><td>面板加载</td><td>打开面板 / 切换模式或场景</td><td>显示「正在读取挂起详情…」，完成后进入表单（两模式一致，本 Bug 不改此态）</td></tr>
+      <tr><td>详情读取失败</td><td>勾选「模拟面板详情读取失败」后打开面板</td><td>显示「挂起详情读取失败：…」+「重试」；重试在勾选仍生效时继续失败，取消勾选后恢复</td></tr>
+      <tr><td>重新核验中 / 结果</td><td>点卡片或面板「重新核验」</td><td>按钮禁用并显示「正在核验提交与测试…」；缺陷：核验报「仍有 11 个本单路径未入库」与面板 0 计数矛盾；修复后：核验原因与计数同源（11 = 8 + 3），并可展开测试输出</td></tr>
+      <tr><td>差异查看</td><td>文件行点「查看差异」（修复后）</td><td>差异盒显示「正在读取差异…」后展示该文件工作区与基线差异（修改 / 新增 / 删除均有样例）；勾选「模拟差异读取失败」时显示错误 + 重试，不冒充无差异</td></tr>
+      <tr><td>归属待确认</td><td>修复后查看「归属待确认」分组（config.json 等全局文件）</td><td>每行须显式选择「计入本次补交 / 排除」；未处理完点「确认并继续」被红字拦截——全局文件不得静默整批归为本单</td></tr>
+      <tr><td>内容变化拦截</td><td>勾选「模拟确认时文件内容变化」后点「确认并继续」（修复后）</td><td>红字「工作区内容与挂起时指纹不符——请先重新核验」，确认键停用直至重新核验通过；缺陷模式无此拦截</td></tr>
+      <tr><td>确认成功 / 空态</td><td>切「已补交完成（空态）」或修复模式下完成确认</td><td>缺陷：空态仍显示误导性 0 计数、无说明；修复后：显示「无待提交文件：全部路径已入库」，计数变为补交后口径，主键变「已确认恢复」</td></tr>
+      <tr><td>保持挂起</td><td>填写处理说明后点「保持挂起」</td><td>提示「已保持挂起：现场与队列暂停保留」，说明回写卡片「保持挂起说明：…」（两模式一致，本 Bug 不改此行为）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div id="toastBox" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* BUG-20260915-003 可交互演示 —— 仅演示界面与状态反馈，不发起任何真实请求、不改任何仓库。
+   现场数据（11 路径、Git 错误）为按 README 登记现象构造的示意数据。 */
+
+const ITEM = { id: 'BUG-20260914-020', title: '已合并的版本计划不允许再使用 AI 完善按钮', waited: '已等待 26 分钟' };
+
+/* 11 个候选路径：8 本单可归属 + 3 归属待确认（全局 / 来源不明） */
+const FILES = [
+  { path: 'docs/agent-team-board/bugs/BUG-20260914-020/README.md', group: 'own', kind: '修改' },
+  { path: 'docs/agent-team-board/bugs/BUG-20260914-020/design.md', group: 'own', kind: '修改' },
+  { path: 'docs/agent-team-board/bugs/BUG-20260914-020/ui-demo.html', group: 'own', kind: '新增' },
+  { path: 'scripts/web/app.js', group: 'own', kind: '修改' },
+  { path: 'scripts/web/style.css', group: 'own', kind: '修改' },
+  { path: 'scripts/web/legacy-confirm.js', group: 'own', kind: '删除' },
+  { path: 'scripts/lib/confirm-store.mjs', group: 'own', kind: '修改' },
+  { path: 'scripts/tests/confirm-store.test.mjs', group: 'own', kind: '新增' },
+  { path: 'config.json', group: 'undetermined', kind: '修改' },
+  { path: 'dispatch/settings.json', group: 'undetermined', kind: '修改' },
+  { path: 'package-lock.json', group: 'undetermined', kind: '修改' },
+];
+const OWN = FILES.filter((f) => f.group === 'own');
+const UNDET = FILES.filter((f) => f.group === 'undetermined');
+
+const GIT_ERR_FULL = `$ git add -- docs/agent-team-board/bugs/BUG-20260914-020/README.md …(共 11 个路径)
+fatal: Unable to create '/Users/adichou/Documents/src/agent-team-board/.git/index.lock': File exists.
+
+另一个 git 进程似乎正在此仓库中运行（例如 git commit 打开的编辑器）。
+请确认所有进程已结束后再重试；若依旧失败，可能是早前 git 进程在此仓库中异常退出：
+请手动删除该文件后继续。`;
+
+const DIFFS = {
+  'docs/agent-team-board/bugs/BUG-20260914-020/README.md':
+`diff --git a/docs/agent-team-board/bugs/BUG-20260914-020/README.md b/docs/agent-team-board/bugs/BUG-20260914-020/README.md
+--- a/docs/agent-team-board/bugs/BUG-20260914-020/README.md
++++ b/docs/agent-team-board/bugs/BUG-20260914-020/README.md
+@@ -20,6 +20,9 @@
+ ## 验收说明
+ 
+ - 已合并版本计划的「AI 完善」入口改为…
++- 入口禁用时悬停提示合并单号与合并时间
++- 合并后仍有补充诉求时引导新建条目，不再复用已合并计划
++- 测试覆盖入口禁用与提示文案
+ `,
+  'docs/agent-team-board/bugs/BUG-20260914-020/ui-demo.html':
+`diff --git a/docs/agent-team-board/bugs/BUG-20260914-020/ui-demo.html b/docs/agent-team-board/bugs/BUG-20260914-020/ui-demo.html
+new file mode 100644
+--- /dev/null
++++ b/docs/agent-team-board/bugs/BUG-20260914-020/ui-demo.html
+@@ -0,0 +1,3 @@
++<!DOCTYPE html>
++<html lang="zh-CN"><head><meta charset="UTF-8"><title>按钮禁用态演示</title></head>
++<body>…（新增未跟踪文件的差异示例：全为新增行）</body></html>`,
+  'scripts/web/legacy-confirm.js':
+`diff --git a/scripts/web/legacy-confirm.js b/scripts/web/legacy-confirm.js
+deleted file mode 100644
+--- a/scripts/web/legacy-confirm.js
++++ /dev/null
+@@ -1,4 +0,0 @@
+-// 旧确认入口：已并入统一挂起确认面板（REQ-20260914-001）
+-export function legacyConfirm() { /* … */ }
+-…（删除文件的差异示例：全为删除行）`,
+  'config.json':
+`diff --git a/config.json b/config.json
+--- a/config.json
++++ b/config.json
+@@ -12,7 +12,7 @@
+-  "concurrency": 2,
++  "concurrency": 3,
+ （全局配置：改动来源不明，不能只因出现在工作区差集就归为本单）`,
+};
+function diffOf(p) {
+  return DIFFS[p] || `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1,1 +1,2 @@\n context\n-old line\n+new line\n+（演示差异：${p}）`;
+}
+
+const state = {
+  mode: 'buggy',            // 'buggy' 当前缺陷 | 'fixed' 修复后
+  scenario: 'held',         // 'held' 挂起现场 | 'empty' 已补交完成
+  open: false,
+  phase: 'form',            // 'loading' | 'error' | 'form'
+  busy: null,               // null | 'verify' | 'confirm'
+  confirmed: false,         // 已确认恢复（空态场景 / 确认成功后）
+  verify: null,             // { time, ok, reasons[], testTail }
+  attr: {},                 // 归属待确认选择：path -> 'include' | 'exclude'
+  diff: null,               // { phase:'loading'|'shown'|'error', path }
+  needsReverify: false,     // 指纹不符后要求先重新核验
+  fpConsumed: false,        // 指纹拦截被重新核验消化
+  keepNote: '',
+  theme: (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light',
+};
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const isFixed = () => state.mode === 'fixed';
+const nowTime = () => new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+function toast(msg, kind) {
+  const box = $('#toastBox');
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 3000);
+}
+
+/* ---------- 计数口径：本 Bug 的核心差异 ---------- */
+function countsLine() {
+  if (state.scenario === 'empty') {
+    return isFixed()
+      ? '已提交：<strong>1</strong> 组（补交 <strong>1</strong> 组）· 待提交：<strong>0</strong> 路径 <span class="scope">｜口径：与文件表 / 最近核验同源</span>'
+      : '已提交：0 组（补交 0 组）· 待人工：0 路径';
+  }
+  return isFixed()
+    ? `已提交：<strong>0</strong> 组（补交 <strong>0</strong> 组）· 待提交：<strong>${FILES.length}</strong> 个路径（本单可归属 ${OWN.length} · 归属待确认 ${UNDET.length}） <span class="scope">｜口径：与文件表 / 最近核验同源</span>`
+    : '已提交：0 组（补交 0 组）· 待人工：0 路径';
+}
+
+function reasonLine() {
+  if (isFixed()) {
+    return '自动提交在 git add 阶段失败：待人工核对后补交（未生成待人工清单，候选范围取自工作区差集快照，与文件表 / 核验同源）';
+  }
+  return '自动提交失败：git add /Users/adichou/Documents/src/agent-team-board/…（错误在此截断，无法判断实际原因）';
+}
+
+/* ---------- 任务页卡片 ---------- */
+function renderCard() {
+  const verifyLine = state.verify
+    ? `<p class="confirm-verify ${state.verify.ok ? 'ok' : 'bad'}">最近核验（${state.verify.time}）：${state.verify.ok ? '通过' : `未通过——${state.verify.reasons[0] || '见面板明细'}`}</p>`
+    : '';
+  $('#confirmCard').innerHTML = `
+    <header class="confirm-card-head">
+      <div>
+        <span class="chip">AI 开发</span>
+        <span class="chip type">待人工确认提交</span>
+        <span class="cid" role="button" title="跳转条目（演示）">${ITEM.id}</span>
+        <span class="confirm-title">${esc(ITEM.title)}</span>
+      </div>
+      <span class="muted small">${ITEM.waited}</span>
+    </header>
+    <p class="confirm-reason">${esc(reasonLine())}</p>
+    <p class="confirm-counts">${countsLine()}</p>
+    ${verifyLine}
+    ${state.keepNote ? `<p class="confirm-keep-note muted small">保持挂起说明：${esc(state.keepNote)}</p>` : ''}
+    <div class="confirm-acts">
+      <button type="button" class="btn small" data-open-panel>查看并确认</button>
+      <button type="button" class="btn small" data-card-verify${state.busy ? ' disabled' : ''}>${state.busy === 'verify' ? '正在核验提交与测试…' : '重新核验'}</button>
+    </div>`;
+  $('[data-open-panel]').addEventListener('click', openPanel);
+  $('[data-card-verify]').addEventListener('click', () => doVerify('card'));
+}
+
+/* ---------- 侧拉面板 ---------- */
+function openPanel() {
+  state.open = true;
+  $('#overlay').hidden = false;
+  $('#sidePanel').hidden = false;
+  loadPanelDetail();
+}
+
+function closePanel(force = false) {
+  if (state.busy && !force) return; // 操作进行中不可关闭
+  state.open = false;
+  state.diff = null;
+  $('#overlay').hidden = true;
+  $('#sidePanel').hidden = true;
+}
+
+function loadPanelDetail() {
+  state.phase = 'loading';
+  state.diff = null;
+  renderPanel();
+  setTimeout(() => {
+    if (!state.open) return;
+    if ($('#detailFailChk').checked) {
+      state.phase = 'error';
+      renderPanel();
+    } else {
+      state.phase = 'form';
+      renderPanel();
+    }
+  }, 700);
+}
+
+function renderPanel() {
+  const body = $('#panelBody');
+  const foot = $('#panelFoot');
+  $('#panelTitle').textContent = `待人工确认提交 · ${ITEM.id}`;
+  $('#panelScope').textContent = '核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列';
+  if (state.phase === 'loading') {
+    body.innerHTML = '<div class="panel-loading">正在读取挂起详情…</div>';
+    foot.hidden = true;
+    return;
+  }
+  if (state.phase === 'error') {
+    body.innerHTML = `<div class="panel-error">
+      <p style="color: var(--err)">挂起详情读取失败：/api/confirms/${ITEM.id} 503（演示：已勾选「模拟面板详情读取失败」）</p>
+      <p><button type="button" class="btn small" id="detailRetry">重试</button></p>
+    </div>`;
+    foot.hidden = true;
+    $('#detailRetry').addEventListener('click', loadPanelDetail);
+    return;
+  }
+  foot.hidden = false;
+
+  /* —— 错误区 —— */
+  let errBlock = '';
+  if (isFixed()) {
+    errBlock = `
+      <div class="err-block" role="alert">
+        <div class="summary">Git 失败摘要：git add 失败——.git/index.lock 已存在（疑似并发 git 进程占用仓库）</div>
+        <details class="err-full">
+          <summary>完整错误（点击展开 · 原始输出保留用于诊断）</summary>
+          <pre>${esc(GIT_ERR_FULL)}</pre>
+        </details>
+        <div class="actions">
+          <button type="button" class="btn small" id="copyErrBtn">复制完整错误</button>
+          <span class="muted small">摘要可折叠，全文可展开 / 复制</span>
+        </div>
+        <p class="err-note">登记前收到的截断错误无原始日志可回溯：信息不足，不据此推断具体原因（待确认）。</p>
+      </div>`;
+  } else {
+    errBlock = `
+      <div class="err-block" role="alert">
+        <div class="summary">失败原因（截断）：自动提交失败：git add /Users/adichou/Documents/src/agent-team-board/…</div>
+        <p class="err-note">错误在仓库路径处被截断，关键信息丢失，无法判断实际失败原因（缺陷：全文不可见、不可复制）。</p>
+      </div>`;
+  }
+
+  /* —— 文件表 —— */
+  let filesHtml = '';
+  if (isFixed()) {
+    if (state.scenario === 'empty' || state.confirmed) {
+      filesHtml = '<p class="empty-hint">无待提交文件：全部路径已入库（上次补交完成）。核验口径与计数一致。</p>';
+    } else {
+      const kindCls = (k) => (k === '修改' ? 'k-mod' : k === '新增' ? 'k-add' : 'k-del');
+      const row = (f) => {
+        const committed = state.confirmed || f.committed;
+        const attrSel = f.group === 'undetermined' ? `
+          <select class="attr-select" data-attr="${esc(f.path)}" aria-label="归属选择">
+            <option value="">待选择（归属待确认）</option>
+            <option value="include"${state.attr[f.path] === 'include' ? ' selected' : ''}>计入本次补交</option>
+            <option value="exclude"${state.attr[f.path] === 'exclude' ? ' selected' : ''}>排除（保持工作区）</option>
+          </select>` : '';
+        return `
+        <tr>
+          <td class="path" title="${esc(f.path)}">${esc(f.path)}</td>
+          <td><span class="${kindCls(f.kind)}">${f.kind}</span></td>
+          <td class="${committed ? 'st-in' : 'st-out'}">${committed ? '已入库' : '未提交'}</td>
+          <td>${committed ? '<span class="muted small">—</span>' : `<button type="button" class="btn small" data-diff="${esc(f.path)}">查看差异</button>`}</td>
+          <td>${attrSel}</td>
+        </tr>`;
+      };
+      const unresolved = UNDET.filter((f) => !state.attr[f.path]).length;
+      filesHtml = `
+        <div class="group-head">本单可归属（${OWN.length}）</div>
+        <table class="file-table"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th><th></th></tr></thead><tbody>${OWN.map(row).join('')}</tbody></table>
+        <div class="group-head">归属待确认（${UNDET.length}）——全局 / 来源不明，不得静默归为本单</div>
+        <table class="file-table"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th><th>归属处理</th></tr></thead><tbody>${UNDET.map(row).join('')}</tbody></table>
+        ${unresolved ? `<p class="small" style="color: var(--warn)">待核对：${unresolved} 个归属待确认路径尚未选择计入 / 排除。</p>` : ''}`;
+    }
+  } else {
+    filesHtml = state.scenario === 'held'
+      ? '<p class="empty-hint">（无待提交文件清单——缺陷：git add 失败未生成待人工清单时，未展示实际候选文件与差异，用户无法核对后确认）</p>'
+      : '<p class="empty-hint">（缺陷：0 计数无说明——无法区分「确实无待提交」与「范围未知待核对」，显示误导性的 0）</p>';
+  }
+
+  /* —— 差异盒 —— */
+  let diffBox = '';
+  if (state.diff) {
+    if (state.diff.phase === 'loading') diffBox = `<div class="diff-box"><p class="loading">正在读取差异…</p></div>`;
+    else if (state.diff.phase === 'error') diffBox = `<div class="diff-box"><p class="fail">差异读取失败：git diff HEAD -- ${esc(state.diff.path)} 退出码 128（演示：已勾选「模拟差异读取失败」——读取失败有明确错误，不冒充无差异）</p><button type="button" class="btn small" id="diffRetry">重试</button></div>`;
+    else diffBox = `<div class="diff-box"><details class="diff-view" open><summary>${esc(state.diff.path)}（工作区 vs Git 基线）</summary><pre>${esc(diffOf(state.diff.path))}</pre></details></div>`;
+  }
+
+  /* —— 核验行 —— */
+  let verifyHtml;
+  if (state.verify) {
+    const v = state.verify;
+    verifyHtml = `
+      <p class="confirm-verify ${v.ok ? 'verify-ok' : 'verify-bad'}">最近核验（${v.time}）：${v.ok ? '通过' : '未通过'}</p>
+      ${(v.reasons || []).map((r) => `<p class="verify-reason">· ${esc(r)}</p>`).join('')}
+      ${v.testTail ? `<details class="test-tail"><summary>测试输出（npm test 退出码 0）</summary><pre>${esc(v.testTail)}</pre></details>` : ''}`;
+  } else {
+    verifyHtml = '<p class="muted small">尚未核验：确认时将自动重新核验并运行测试</p>';
+  }
+
+  /* —— 确认范围摘要（修复后） —— */
+  let scopeSummary = '';
+  if (isFixed() && state.scenario === 'held' && !state.confirmed) {
+    const inc = UNDET.filter((f) => state.attr[f.path] === 'include').length;
+    const exc = UNDET.filter((f) => state.attr[f.path] === 'exclude').length;
+    const unresolved = UNDET.filter((f) => !state.attr[f.path]).length;
+    scopeSummary = `<p class="scope-summary">确认范围（提交前展示实际将提交的文件）：<b>本单可归属 ${OWN.length} 个</b> + 归属待确认已计入 <b>${inc}</b> 个 = 将补交 <b>${OWN.length + inc}</b> 个路径${exc ? `（排除 ${exc} 个）` : ''}${unresolved ? `；<b>${unresolved} 个归属待确认未处理</b>` : ''}</p>`;
+  }
+
+  body.innerHTML = `
+    <p class="confirm-reason">${esc(reasonLine())}</p>
+    <p class="confirm-counts">${countsLine()}</p>
+    ${errBlock}
+    ${filesHtml}
+    <div id="diffSlot">${diffBox}</div>
+    ${verifyHtml}
+    <label class="field">处理说明（保持挂起时记录；确认时可留空）
+      <textarea id="noteTa" rows="2" placeholder="如：已核对归属，整文件归本单">${esc(state.keepNote)}</textarea>
+    </label>
+    <p id="panelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+    ${scopeSummary}`;
+
+  /* —— 底部操作键 —— */
+  const busy = !!state.busy;
+  const resolved = state.confirmed || state.scenario === 'empty';
+  const confirmDisabled = busy || resolved || state.needsReverify;
+  foot.innerHTML = `
+    <button type="button" class="btn" id="footClose"${busy ? ' disabled' : ''}>关闭</button>
+    <button type="button" class="btn" id="footKeep"${busy || resolved ? ' disabled' : ''}>保持挂起</button>
+    <button type="button" class="btn" id="footVerify"${busy || resolved ? ' disabled' : ''}>${busy === 'verify' || busy === 'confirm' ? '正在核验提交与测试…' : '重新核验'}</button>
+    <button type="button" class="btn primary" id="footConfirm"${confirmDisabled ? ' disabled' : ''} title="${state.needsReverify ? '内容已变化：先「重新核验」核对最新差异' : resolved ? '已确认恢复' : '确认并继续：补交 + 运行测试，通过后恢复队列'}">${resolved ? '已确认恢复' : '确认并继续'}</button>`;
+
+  bindPanelActions();
+  restoreMsg();
+}
+
+let lastMsg = { text: '', err: false };
+function setMsg(text, err = false) {
+  lastMsg = { text, err };
+  const el = $('#panelMsg');
+  if (el) { el.textContent = text; el.className = 'edit-msg' + (err ? ' err' : ''); }
+}
+function restoreMsg() {
+  const el = $('#panelMsg');
+  if (el && lastMsg.text) { el.textContent = lastMsg.text; el.className = 'edit-msg' + (lastMsg.err ? ' err' : ''); }
+}
+
+function bindPanelActions() {
+  $('#footClose')?.addEventListener('click', () => closePanel());
+  $('#footKeep')?.addEventListener('click', doKeep);
+  $('#footVerify')?.addEventListener('click', () => doVerify('panel'));
+  $('#footConfirm')?.addEventListener('click', doConfirm);
+  $('#copyErrBtn')?.addEventListener('click', async () => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(GIT_ERR_FULL);
+      else { const ta = document.createElement('textarea'); ta.value = GIT_ERR_FULL; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+      toast('已复制完整 Git 错误（原始输出保留用于诊断）', 'ok');
+    } catch { toast('复制失败：浏览器未授予剪贴板权限（可手动选中展开区复制）', 'err'); }
+  });
+  for (const btn of document.querySelectorAll('[data-diff]')) {
+    btn.addEventListener('click', () => loadDiff(btn.dataset.diff));
+  }
+  $('#diffRetry')?.addEventListener('click', () => state.diff?.path && loadDiff(state.diff.path));
+  for (const sel of document.querySelectorAll('[data-attr]')) {
+    sel.value = state.attr[sel.dataset.attr] || '';
+    sel.addEventListener('change', () => {
+      state.attr[sel.dataset.attr] = sel.value;
+      renderPanel();
+    });
+  }
+  $('#noteTa')?.addEventListener('input', (e) => { state.keepNote = e.target.value; });
+}
+
+function loadDiff(path) {
+  state.diff = { phase: 'loading', path };
+  renderPanel();
+  setTimeout(() => {
+    if (!state.open) return;
+    state.diff = $('#diffFailChk').checked ? { phase: 'error', path } : { phase: 'shown', path };
+    renderPanel();
+  }, 600);
+}
+
+function doKeep() {
+  if (state.busy) return;
+  setMsg('已保持挂起：现场与队列暂停保留（取消队列须显式终止任务或恢复领取）');
+  toast(`已保持挂起 ${ITEM.id}`, 'ok');
+  renderCard(); // 卡片回写「保持挂起说明」
+}
+
+function doVerify(from) {
+  if (state.busy) return;
+  state.busy = 'verify';
+  if (state.open) renderPanel();
+  renderCard();
+  setTimeout(() => {
+    state.busy = null;
+    state.needsReverify = false;  // 重新核验后放行确认
+    state.fpConsumed = true;      // 指纹拦截被本次核验消化
+    if (state.scenario === 'empty' || state.confirmed) {
+      state.verify = { time: nowTime(), ok: true, reasons: ['提交完整：无未入库路径'], testTail: '> agent-team-board@1.0.0 test\n> node --test scripts/tests\n\n# pass 148\n# fail 0\n（演示尾部输出）' };
+      toast(`✓ ${ITEM.id} 核验通过：提交完整，测试通过`, 'ok');
+    } else {
+      state.verify = isFixed()
+        ? { time: nowTime(), ok: false, reasons: [
+            `仍有 ${FILES.length} 个候选路径未入库（本单可归属 ${OWN.length} · 归属待确认 ${UNDET.length}）——与面板计数同源`,
+            `归属待确认 ${UNDET.length} 个路径（config.json、dispatch/settings.json、package-lock.json）需人工选择计入 / 排除后才能确认补交范围`,
+          ], testTail: '> npm test\n\n# pass 148\n# fail 0\n（测试通过：未入库路径不影响测试，阻塞仅在提交完整性）' }
+        : { time: nowTime(), ok: false, reasons: [
+            `仍有 11 个本单路径未入库（含条目文档、业务文件及 config.json、dispatch/settings.json 等全局文件，归属待确认）`,
+          ], testTail: null };
+      toast(`核验未通过：${state.verify.reasons[0]}`, 'err');
+    }
+    if (state.open) { renderPanel(); setMsg('重新核验完成：只检查不改现场；确认补交请用「确认并继续」', false); }
+    renderCard();
+  }, 1100);
+}
+
+function doConfirm() {
+  if (state.busy || state.confirmed || state.scenario === 'empty') return;
+  if (isFixed()) {
+    const unresolved = UNDET.filter((f) => !state.attr[f.path]);
+    if (unresolved.length) {
+      setMsg(`确认被拦截：归属待确认项未处理（${unresolved.map((f) => f.path).join('、')}）——每个路径须显式选择「计入本次补交 / 排除」，全局文件不得静默整批归为本单`, true);
+      toast('归属待确认未处理：确认前先明确每个路径的归属', 'err');
+      return;
+    }
+    if ($('#fpChk').checked && !state.fpConsumed) {
+      state.needsReverify = true;
+      renderPanel();
+      setMsg('确认未通过：工作区内容与挂起时指纹不符（docs/agent-team-board/bugs/BUG-20260914-020/README.md 已变化）——请先「重新核验」核对最新差异后再确认', true);
+      toast('内容已变化：确认被拦截，须先重新核验', 'err');
+      return;
+    }
+  }
+  state.busy = 'confirm';
+  renderPanel();
+  renderCard();
+  setTimeout(() => {
+    state.busy = null;
+    if (isFixed()) {
+      const inc = UNDET.filter((f) => state.attr[f.path] === 'include').length;
+      state.confirmed = true;
+      state.verify = { time: nowTime(), ok: true, reasons: [`补交 ${OWN.length + inc} 个路径全部入库`], testTail: '> npm test\n\n# pass 148\n# fail 0' };
+      setMsg(`已确认恢复：补交 1 组提交（${OWN.length + inc} 个路径全部入库），核验通过，队列已恢复；条目验收仍走「确认完成」`, false);
+      toast(`✓ ${ITEM.id} 已确认恢复：队列继续`, 'ok');
+    } else {
+      setMsg('确认未通过，保持挂起：\n· 仍有 11 个本单路径未入库（与面板「待人工 0 路径」计数矛盾——缺陷：口径不一致且未展示待提交范围）', true);
+      toast('确认未通过：仍保持挂起', 'err');
+    }
+    renderPanel();
+    renderCard();
+  }, 1400);
+}
+
+/* ---------- 演示控制 ---------- */
+function setMode(mode) {
+  state.mode = mode;
+  state.attr = {};
+  state.verify = null;
+  state.needsReverify = false;
+  state.fpConsumed = false;
+  lastMsg = { text: '', err: false };
+  $('#modeBuggy').classList.toggle('active', mode === 'buggy');
+  $('#modeFixed').classList.toggle('active', mode === 'fixed');
+  renderCard();
+  if (state.open) loadPanelDetail();
+  toast(mode === 'fixed' ? '已切换到「修复后」：统一口径 + 差异 + 完整错误展示' : '已切换到「当前（缺陷）」：计数误导为 0、无清单无差异、错误截断');
+}
+
+function setScenario(scenario) {
+  state.scenario = scenario;
+  state.attr = {};
+  state.verify = null;
+  state.confirmed = false;
+  state.needsReverify = false;
+  state.fpConsumed = false;
+  lastMsg = { text: '', err: false };
+  $('#scnHeld').classList.toggle('active', scenario === 'held');
+  $('#scnEmpty').classList.toggle('active', scenario === 'empty');
+  renderCard();
+  if (state.open) loadPanelDetail();
+  toast(scenario === 'empty' ? '已切换到「已补交完成（空态）」：观察无待提交文件时的展示' : '已切换到「挂起现场」：git add 失败，11 个路径未入库');
+}
+
+$('#modeBuggy').addEventListener('click', () => setMode('buggy'));
+$('#modeFixed').addEventListener('click', () => setMode('fixed'));
+$('#scnHeld').addEventListener('click', () => setScenario('held'));
+$('#scnEmpty').addEventListener('click', () => setScenario('empty'));
+$('#reopenBtn').addEventListener('click', openPanel);
+$('#panelClose').addEventListener('click', () => closePanel());
+$('#overlay').addEventListener('click', () => closePanel());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.open) closePanel();
+});
+
+$('#themeBtn').addEventListener('click', () => {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  applyTheme();
+});
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  $('#themeBtn').textContent = state.theme === 'dark' ? '☀️ 浅色' : '🌙 深色';
+}
+
+/* ---------- 初始化 ---------- */
+applyTheme();
+renderCard();
+</script>
+</body>
+</html>

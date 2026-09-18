@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-016 演示 — 分支浏览搜索框与分支名同行</title>
+<style>
+  /* 主题变量：默认跟随系统深浅色，可经右上角按钮手动切换 */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #e2e5ea;
+    --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --info-bg: rgba(37, 99, 235, 0.1); --info-text: #1d4ed8;
+    --ok-bg: rgba(22, 163, 74, 0.12); --ok-text: #15803d;
+    --warn: #dc2626; --err-bg: rgba(220, 38, 38, 0.07);
+  }
+  html[data-theme="dark"] {
+    --bg: #10141b; --panel: #171c26; --border: #2a3140;
+    --text: #e5e9f0; --muted: #9aa3b2;
+    --primary: #3b82f6; --info-bg: rgba(59, 130, 246, 0.16); --info-text: #93b4f8;
+    --ok-bg: rgba(34, 197, 94, 0.16); --ok-text: #6ee7a0;
+    --warn: #f87171; --err-bg: rgba(248, 113, 113, 0.1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 18px;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  .demo-bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
+  }
+  .demo-bar .grp { display: flex; align-items: center; gap: 6px; }
+  .demo-bar label { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text); cursor: pointer;
+    padding: 4px 10px; font-size: 12.5px;
+  }
+  .seg button.on { background: var(--primary); color: #fff; }
+  select, .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 8px; font-size: 12.5px; cursor: pointer;
+  }
+  .btn.small { padding: 2px 9px; font-size: 12px; }
+  .btn.quiet { opacity: 0.85; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+  /* 复刻 .rel-split 双栏（style.css：minmax(280px,2fr) minmax(320px,3fr)） */
+  .split { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(320px, 3fr); gap: 12px; align-items: start; }
+  .list-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .detail-col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .tools { display: flex; gap: 8px; align-items: center; }
+  .group { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+  .group-head { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .branch { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+  .branch:hover { background: var(--info-bg); }
+  .branch.sel { background: var(--info-bg); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .branch .push { margin-left: auto; }
+  .st { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .st-run { background: var(--info-bg); color: var(--info-text); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  /* ===== 本单焦点：头部行与搜索行 ===== */
+  .log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .log-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .log-search input[type="search"] {
+    flex: 1 1 160px; min-width: 0; border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); border-radius: 6px; padding: 4px 8px; font-size: 12px;
+  }
+  .log-search input[type="search"]:disabled { opacity: 0.55; }
+  /* 期望修复后：搜索控件并入头部同一行 —— 输入框吃掉剩余宽度，右侧按钮跟随 */
+  .fixed .log-head { justify-content: flex-start; }
+  .fixed .log-head strong { flex: 0 1 auto; }
+  .fixed .log-head .head-search { flex: 1 1 120px; min-width: 120px; margin: 0 0 0 4px; }
+
+  .count { margin-bottom: 8px; color: var(--muted); }
+  ul.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  ul.log li { font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
+  ul.log code { font-size: 12px; color: var(--info-text); }
+  ul.log li .muted { margin-left: auto; }
+  ul.log mark { background: var(--info-bg); color: var(--info-text); border-radius: 3px; padding: 0 1px; }
+  .err { color: var(--warn); background: var(--err-bg); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .empty-detail { color: var(--muted); }
+  .pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; }
+  .pager button { min-width: 30px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; }
+  .pager button.on { background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; }
+  .pager .range { color: var(--muted); margin-left: auto; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(8px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 14px; font-size: 13px; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (max-width: 960px) { .split { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+  <h1>BUG-20260914-016 演示 — 分支浏览的搜索框上移与分支名同一行</h1>
+  <p class="sub">数据为模拟；布局与交互按 <code>scripts/web/build.js</code> <code>renderBranchesPane()</code> / <code>style.css</code> 现行为复刻。切换「缺陷现状 ↔ 期望修复后」对照头部行差异；右侧覆盖正常 / 空 / 加载 / 失败状态。</p>
+
+  <div class="demo-bar">
+    <div class="grp">
+      <label>布局对照</label>
+      <div class="seg" id="modeSeg" role="radiogroup" aria-label="布局对照模式">
+        <button type="button" data-mode="bug" class="on">缺陷现状（独立一行）</button>
+        <button type="button" data-mode="fixed">期望修复后（同一行）</button>
+      </div>
+    </div>
+    <div class="grp">
+      <label for="scenario">数据场景</label>
+      <select id="scenario">
+        <option value="normal">正常（有提交记录）</option>
+        <option value="empty">空分支（该分支暂无提交）</option>
+        <option value="fail">请求失败（读取报错）</option>
+      </select>
+    </div>
+    <div class="grp" style="margin-left:auto">
+      <button type="button" class="btn small quiet" id="themeBtn">🌓 深浅色切换</button>
+    </div>
+  </div>
+
+  <div class="split" id="board">
+    <!-- 左：分支列表（本单范围外，仅作上下文，交互可用） -->
+    <div class="list-col" aria-label="分支列表">
+      <div class="tools">
+        <button type="button" class="btn small" id="fetchBtn" title="fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致">⟳ 和远端同步</button>
+        <button type="button" class="btn small quiet" id="branchRefresh">刷新</button>
+      </div>
+      <div class="group"><div class="group-head">本地</div><div id="localBranches"></div></div>
+      <div class="group"><div class="group-head">远端</div><div id="remoteBranches"></div></div>
+    </div>
+
+    <!-- 右：提交记录面板（本单焦点：头部行 / 搜索行的排布） -->
+    <div class="detail-col" id="detail" aria-label="提交记录">
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
+  <div id="toast" role="status"></div>
+
+<script>
+(() => {
+  'use strict';
+  // ---------- 模拟数据 ----------
+  const BRANCHES = {
+    local: [{ name: 'dev', cur: true }, { name: 'main' }, { name: 'feature/build-branches' }],
+    remote: ['origin/dev'],
+  };
+  const RAW = {
+    dev: [
+      { h: 'a1f30c2e', s: 'fix(build): 分支浏览搜索框上移与分支名同一行（BUG-20260914-016）', a: 'refine-agent', d: '2026-09-14 20:01' },
+      { h: '9d77b014', s: 'feat(build): 和远端同步改为 fetch 后推送本地开发分支（BUG-20260914-011）', a: 'dev-agent', d: '2026-09-14 18:40' },
+      { h: 'c4e5a990', s: 'fix(build): 不为 main 渲染推送按钮（BUG-20260914-012）', a: 'dev-agent', d: '2026-09-14 16:12' },
+      { h: '77ba3f1c', s: 'feat(build): 提交记录分页补齐，替代 50 条静默截断（BUG-20260914-009）', a: 'dev-agent', d: '2026-09-14 11:05' },
+      { h: '3ac91de7', s: 'feat(build): 分支浏览内支持搜索提交说明 / 作者 / hash（REQ-20260914-002）', a: 'dev-agent', d: '2026-09-14 09:30' },
+      { h: 'e02f48ab', s: 'chore(board): refine 队列回执与自动转入计划联调', a: 'board', d: '2026-09-13 22:47' },
+      { h: 'b5816c39', s: 'docs(board): 补全 BUG-20260914-006 远端空态解释', a: 'refine-agent', d: '2026-09-13 19:20' },
+      { h: '4f9a2d55', s: 'feat(app): 构建模块版本计划 + 分支浏览子页（REQ-20260913-001）', a: 'dev-agent', d: '2026-09-13 14:02' },
+    ],
+    main: [
+      { h: '1c8e77a0', s: 'chore: 初始化看板仓库', a: 'adichou', d: '2026-09-09 10:00' },
+    ],
+    'feature/build-branches': [
+      { h: 'dd40e6b1', s: 'wip(build): 分支浏览布局调整草稿', a: 'dev-agent', d: '2026-09-13 21:15' },
+    ],
+    'origin/dev': null, // 远端跟踪引用：点击后按 dev 的只读快照展示
+  };
+  // 按场景派生当前分支的提交数据（不改动 RAW，空场景可反复切换）
+  function commitsOf(branch) {
+    if (state.scenario === 'empty') return [];
+    const src = branch === 'origin/dev' ? RAW.dev : RAW[branch];
+    return src ? src.slice() : [];
+  }
+  const commitsCache = {}; // idle 态展示用的最近一次快照
+  const commitsFor = (branch) => commitsCache[branch] || [];
+
+  // ---------- 状态 ----------
+  const state = {
+    mode: 'bug',            // bug = 缺陷现状；fixed = 期望修复后
+    scenario: 'normal',     // normal / empty / fail
+    branch: null,           // 当前选中分支
+    phase: 'idle',          // idle / loading / error
+    query: '',              // 已提交生效的关键词
+    draft: '',              // 输入框草稿（重渲染不丢字）
+    failMsg: '',
+  };
+  const LATENCY = 650;
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const mark = (text, q) => {
+    const t = esc(text);
+    if (!q) return t;
+    const i = t.toLowerCase().indexOf(q.toLowerCase());
+    if (i < 0) return t;
+    return t.slice(0, i) + '<mark>' + t.slice(i, i + q.length) + '</mark>' + t.slice(i + q.length);
+  };
+
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._h);
+    t._h = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ---------- 左侧分支列表 ----------
+  function renderBranches() {
+    $('#localBranches').innerHTML = BRANCHES.local.map((b) => `
+      <div class="branch${state.branch === b.name ? ' sel' : ''}" data-branch="${esc(b.name)}" role="button" tabindex="0">
+        <span>${esc(b.name)}</span>${b.cur ? '<span class="st st-run">当前</span>' : ''}
+        ${b.name !== 'main' ? '<button type="button" class="btn small quiet push" data-push="' + esc(b.name) + '" title="推送到远端">推送</button>' : ''}
+      </div>`).join('') || '<p class="hint small">（无其他本地分支）</p>';
+    $('#remoteBranches').innerHTML = BRANCHES.remote.map((n) => `
+      <div class="branch${state.branch === n ? ' sel' : ''}" data-branch="${esc(n)}" role="button" tabindex="0"><span>${esc(n)}</span></div>`).join('')
+      || '<p class="hint small">本地无远端跟踪分支：尚未与远端同步。</p>';
+  }
+
+  // ---------- 右侧提交记录面板（本单焦点） ----------
+  function searchRowHtml(loading, inHead) {
+    // 输入框 + 搜索 + 清除：缺陷现状独占一行；修复后并入头部行（class=head-search 吃剩余宽度）
+    return `
+      <div class="log-search${inHead ? ' head-search' : ''}" role="search">
+        <input type="search" id="logSearchInput" placeholder="搜提交说明 / 作者 / hash…" value="${esc(state.draft)}" aria-label="搜索提交记录"${loading ? ' disabled' : ''}>
+        <button type="button" class="btn small" id="logSearchGo"${loading ? ' disabled' : ''}>${loading ? '搜索中…' : '搜索'}</button>
+        ${state.query ? '<button type="button" class="btn small quiet" data-search-clear>清除</button>' : ''}
+      </div>`;
+  }
+
+  function logListHtml() {
+    if (state.phase === 'loading') return `<p class="muted">${state.query ? '搜索中…' : '加载提交记录中…'}</p>`;
+    if (state.phase === 'error') {
+      return `<p class="err" role="alert">提交记录读取失败：${esc(state.failMsg)} <button type="button" class="btn small" id="logRetry">重试</button></p>`;
+    }
+    const all = commitsFor(state.branch);
+    const q = state.query.trim();
+    const hits = q ? all.filter((c) => (c.s + ' ' + c.a + ' ' + c.h).toLowerCase().includes(q.toLowerCase())) : all;
+    if (q && !hits.length) {
+      return `<p class="muted small">没有匹配的提交（关键词：${esc(q)}）</p>
+        <p><button type="button" class="btn small quiet" data-search-clear>清除</button></p>`;
+    }
+    if (!all.length) return '<p class="muted small">该分支暂无提交</p>';
+    const countBar = q ? `<div class="count small" role="status">共 ${hits.length} 条匹配（关键词：${esc(q)}）</div>` : '';
+    const list = `<ul class="log">${hits.map((c) => `
+      <li><code>${mark(c.h, q)}</code> <span>${mark(c.s, q)}</span>
+        <span class="muted small">${mark(c.a, q)} · ${esc(c.d)}</span></li>`).join('')}</ul>`;
+    const pager = `<div class="pager"><button type="button" class="on">1</button><span class="range">第 1–${hits.length} 条 / 共 ${hits.length} 条</span></div>`;
+    return countBar + list + pager;
+  }
+
+  function renderDetail() {
+    const body = $('#detailBody');
+    const loading = state.phase === 'loading';
+    if (!state.branch) {
+      body.innerHTML = '<div class="empty-detail">点击左侧分支查看提交记录</div>';
+      return;
+    }
+    const head = `
+      <div class="log-head"><strong>${esc(state.branch)}</strong>
+        <button type="button" class="btn small quiet" id="logRefresh"${loading ? ' disabled' : ''}>刷新</button></div>`;
+    if (state.mode === 'bug') {
+      // 缺陷现状：分支名 + 刷新一行；搜索框另起一行（多占一行纵向空间）
+      body.innerHTML = head + searchRowHtml(loading, false) + logListHtml();
+    } else {
+      // 期望修复后：搜索框上移，与分支名同一行
+      body.innerHTML = `
+        <div class="log-head"><strong>${esc(state.branch)}</strong>
+          ${searchRowHtml(loading, true).replace('role="search"', 'role="search" data-inline="1"')}
+          <button type="button" class="btn small quiet" id="logRefresh"${loading ? ' disabled' : ''}>刷新</button></div>
+        ${logListHtml()}`;
+    }
+  }
+
+  function renderAll() {
+    document.body.classList.toggle('fixed', state.mode === 'fixed');
+    renderBranches();
+    renderDetail();
+  }
+
+  // ---------- 模拟异步取数（覆盖 正常 / 空 / 加载 / 失败） ----------
+  let loadSeq = 0;
+  function loadLog({ keepQuery = true } = {}) {
+    if (!state.branch) return;
+    if (!keepQuery) { state.query = ''; state.draft = ''; }
+    state.phase = 'loading';
+    state.failMsg = '';
+    renderDetail();
+    const seq = ++loadSeq;
+    setTimeout(() => {
+      if (seq !== loadSeq) return; // 旧请求迟到的返回丢弃
+      if (state.scenario === 'fail') {
+        state.phase = 'error';
+        state.failMsg = '模拟错误：git log 进程退出（exit 128）';
+      } else {
+        commitsCache[state.branch] = commitsOf(state.branch);
+        state.phase = 'idle';
+      }
+      renderDetail();
+    }, LATENCY);
+  }
+
+  function submitSearch() {
+    const v = ($('#logSearchInput')?.value ?? '').trim();
+    state.draft = v;
+    state.query = v;
+    loadLog({ keepQuery: true });
+  }
+
+  // ---------- 事件绑定（委托） ----------
+  $('#board').addEventListener('click', (e) => {
+    const push = e.target.closest('[data-push]');
+    if (push) { e.stopPropagation(); toast('演示环境：推送为模拟入口，不在本单范围'); return; }
+    const br = e.target.closest('[data-branch]');
+    if (br) { state.branch = br.dataset.branch; state.query = ''; state.draft = ''; loadLog({ keepQuery: false }); renderAll(); return; }
+    if (e.target.closest('#logSearchGo')) return submitSearch();
+    if (e.target.closest('[data-search-clear]')) {
+      state.query = ''; state.draft = '';
+      const i = $('#logSearchInput'); if (i) i.value = '';
+      loadLog({ keepQuery: false });
+      return;
+    }
+    if (e.target.closest('#logRefresh')) return loadLog();
+    if (e.target.closest('#logRetry')) return loadLog();
+    if (e.target.closest('#branchRefresh')) { toast('✓ 已刷新分支列表'); return; }
+    if (e.target.closest('#fetchBtn')) {
+      const b = $('#fetchBtn');
+      b.disabled = true; b.textContent = '同步中…';
+      setTimeout(() => { b.disabled = false; b.textContent = '⟳ 和远端同步'; toast('✓ 已同步远端（fetch --prune）'); }, LATENCY);
+    }
+  });
+  $('#board').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const br = e.target.closest('[data-branch]');
+    if (br && e.target === br) { state.branch = br.dataset.branch; state.query = ''; state.draft = ''; loadLog({ keepQuery: false }); renderAll(); }
+    if (e.target.id === 'logSearchInput') submitSearch();
+  });
+  $('#board').addEventListener('input', (e) => {
+    if (e.target.id === 'logSearchInput') state.draft = e.target.value; // 草稿回写，重渲染不丢字
+  });
+
+  $('#modeSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    state.mode = b.dataset.mode;
+    [...$('#modeSeg').children].forEach((x) => x.classList.toggle('on', x === b));
+    renderDetail();
+  });
+  $('#scenario').addEventListener('change', (e) => {
+    state.scenario = e.target.value;
+    if (state.branch) loadLog();
+  });
+  $('#themeBtn').addEventListener('click', () => {
+    const html = document.documentElement;
+    const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+    html.dataset.theme = next;
+    toast(next === 'dark' ? '已切换深色（演示）' : '已切换浅色（演示）');
+  });
+
+  // 初始：默认选中 dev 分支并加载，直观呈现头部两行 / 一行对照
+  state.branch = 'dev';
+  renderAll();
+  loadLog();
+})();
+</script>
+</body>
+</html>
