@@ -272,11 +272,16 @@ t('R7 任务模块回退：无批量 Commit 页签/面板/数据链路；快照�
 t('R8 已完成档快捷入口回退：无「▶ 开始 Commit」；done 档入口隐藏；accepted/planned 分支保留', () => {
   assert.ok(!appJs.includes('▶ 开始 Commit'), '不应再有「▶ 开始 Commit」文案');
   assert.ok(!appJs.includes("'done'\n          // BUG-20260911-005"), 'done 档快捷入口分支应移除');
-  // 绑定只按 accepted→refine / 其余→develop 导航
+  // REQ-20260917-001：绑定改为就地创建入口 laneQuickCreate（accepted→AI 分析 / planned→AI 开发
+  // 分支移入函数体），不再按档导航
   const bind = appJs.match(/\$\('#laneQuickEntry'\)\?\.addEventListener\('click',[^;]+;/);
   assert.ok(bind, '应保留快捷入口点击绑定');
-  assert.match(bind[0], /accepted/, '绑定含 accepted 分支');
+  assert.match(bind[0], /laneQuickCreate/, '绑定为就地创建入口 laneQuickCreate（REQ-20260917-001）');
   assert.doesNotMatch(bind[0], /commit/, '绑定不得再有 commit 分支');
+  const quickFn = appJs.match(/async function laneQuickCreate\(\)[\s\S]{0,800}/);
+  assert.ok(quickFn, '应存在 laneQuickCreate 函数');
+  assert.match(quickFn[0], /'accepted'/, '函数内保留 accepted→AI 分析分支');
+  assert.match(quickFn[0], /'planned'/, '函数内保留 planned→AI 开发分支');
   assert.match(appJs, /label: '▶ AI 分析'/, 'accepted 文案保留（REQ-20260914-005 去「开始」）');
   assert.match(appJs, /label: '▶ AI 开发'/, 'planned 文案保留（REQ-20260914-005 去「开始」）');
 });

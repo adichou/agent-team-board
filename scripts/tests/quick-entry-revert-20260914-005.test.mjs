@@ -2,10 +2,10 @@
 // REQ-20260914-005 回退 BUG-20260914-015 + 快捷入口按钮去「开始」 —— 回退契约与新文案测试
 // 覆盖 test-cases.md 用例 R1-R5（R6 由同步改词后的存量测试与全量套件守）：
 //   R1 服务端 /api/tasks/state 移除（404）
-//   R2 app.js 回退符号零残留 + quick.disabled = false 恢复
-//   R3 前端新文案恒可点（vm 模拟 DOM，沿用 lane-quick-entry-20260909-007 模式）
+//   R2 app.js 回退符号零残留 + REQ-20260917-001 就地创建禁用口径（进行中/无候选禁用）
+//   R3 前端文案与禁用（vm 模拟 DOM，沿用 lane-quick-entry-20260909-007 模式）
 //   R4 i18n 4 条执行中词条移除 + 3 个键改新词
-//   R5 index.html 静态节点 aria-label / 可见文案新词
+//   R5 index.html 静态节点 aria-label / 可见文案新词、title 就地创建新语义（REQ-20260917-001）
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -87,20 +87,25 @@ t('R1 服务端回退：GET /api/tasks/state 返回 404（已初始化与未初�
 
 // ---------- R2 app.js 源码契约：回退符号零残留 + 恒不禁用恢复 ----------
 
-t('R2 app.js 回退契约：taskRun / refreshTaskRunState / /api/tasks/state / 执行中文案零残留；quick.disabled = false 与「仅导航」注释恢复；poll() 不再调用运行态刷新', () => {
+t('R2 app.js 回退契约：taskRun / refreshTaskRunState / /api/tasks/state / 执行中文案零残留；REQ-20260917-001 起快捷入口禁用口径改为「创建进行中或无候选禁用」；poll() 不再调用运行态刷新', () => {
   for (const gone of ['state.taskRun', 'taskRun:', 'refreshTaskRunState', '/api/tasks/state', 'AI 分析中', 'AI 开发中']) {
     assert.ok(!source.includes(gone), `BUG-20260914-015 符号不得残留：${gone}`);
   }
   const syncFn = source.slice(source.indexOf('function syncAcceptance()'), source.indexOf('function syncAcceptance()') + 5000);
-  assert.match(syncFn, /quick\.disabled = false;\s*\/\/ 仅导航：批量操作进行中也不禁用，任务创建由面板内「启动」承接/, '应恢复恒不禁用与「仅导航」注释');
+  // REQ-20260917-001：快捷入口就地创建——批量操作进行中仍不禁用（互不相干），
+  // 禁用只看「创建请求进行中（laneQuick.pending）或无候选（!conf.ok）」
+  assert.match(syncFn, /quick\.disabled = state\.laneQuick\.pending \|\| !conf\.ok;/, '禁用口径：创建进行中或无候选禁用');
   const pollFn = source.slice(source.indexOf('async function poll()'), source.indexOf('async function poll()') + 4000);
   assert.ok(!pollFn.includes('refreshTaskRunState'), 'poll() 不得再调用 refreshTaskRunState');
   const swFn = source.slice(source.indexOf('async function switchProject('), source.indexOf('async function switchProject(') + 3000);
   assert.ok(!swFn.includes('taskRun'), 'switchProject() 不得残留 taskRun 重置');
-  // 新文案落入快捷入口配置（两条导航 title 沿用不变）
-  assert.ok(source.includes("{ label: '▶ AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' }"), '已接受档文案应为「▶ AI 分析」');
-  assert.ok(source.includes("{ label: '▶ AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' }"), '已计划档文案应为「▶ AI 开发」');
+  // 文案落入快捷入口配置（REQ-20260917-001 新语义 title：点击即创建任务并复制提示词，不跳任务页）
+  assert.ok(source.includes("'▶ AI 分析'"), '已接受档文案应为「▶ AI 分析」');
+  assert.ok(source.includes("'▶ AI 开发'"), '已计划档文案应为「▶ AI 开发」');
+  assert.ok(source.includes('点击即创建 AI 分析任务并复制主调度提示词（不跳转任务页）：范围为全部已接受未完善条目，与勾选无关'), '已接受档 title 应为就地创建语义');
+  assert.ok(source.includes('点击即创建 AI 开发任务并复制主调度提示词（不跳转任务页）：范围为已计划队列（最旧优先），与勾选无关'), '已计划档 title 应为就地创建语义');
   assert.ok(!source.includes('▶ 开始 AI 分析') && !source.includes('▶ 开始 AI 开发'), '旧文案不得残留');
+  assert.ok(!source.includes('进入任务模块 AI 分析面板') && !source.includes('进入任务模块 AI 开发面板'), '旧导航 title 不得残留');
 });
 
 // ---------- R3 前端行为（vm 模拟 DOM）：新文案、恒可点 ----------
@@ -157,15 +162,15 @@ function setup() {
 
 const hidden = (h, sel) => h.document.querySelector(sel).classList.contains('hidden');
 
-t('R3 前端新文案恒可点：已接受档「▶ AI 分析」、已计划档「▶ AI 开发」，四路批量 pending 均不禁用，title 为导航说明', () => {
+t('R3 前端文案与禁用口径（REQ-20260917-001）：有候选可点、title 为就地创建语义；四路批量 pending 均不禁用；无候选禁用并说明原因', () => {
   const h = setup();
   const btn = h.document.querySelector('#laneQuickEntry');
   h.run("state.reqFilter = 'accepted'");
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '已接受档显示');
   assert.equal(btn.textContent, '▶ AI 分析', '已接受档新文案');
-  assert.equal(btn.disabled, false, '已接受档恒可点');
-  assert.match(btn.title, /进入任务模块 AI 分析面板/, 'title 保持导航说明');
+  assert.equal(btn.disabled, false, '有候选可点');
+  assert.match(btn.title, /点击即创建 AI 分析任务并复制主调度提示词（不跳转任务页）/, 'title 为就地创建语义');
   for (const mod of ['acceptance', 'plan', 'impl', 'reject']) {
     h.state[mod].pending = true;
     h.run('syncAcceptance()');
@@ -176,8 +181,20 @@ t('R3 前端新文案恒可点：已接受档「▶ AI 分析」、已计划档�
   h.run('syncAcceptance()');
   assert.equal(hidden(h, '#laneQuickEntry'), false, '已计划档显示');
   assert.equal(btn.textContent, '▶ AI 开发', '已计划档新文案');
-  assert.equal(btn.disabled, false, '已计划档恒可点');
-  assert.match(btn.title, /进入任务模块 AI 开发面板/, 'title 保持导航说明');
+  assert.equal(btn.disabled, false, '有候选可点');
+  assert.match(btn.title, /点击即创建 AI 开发任务并复制主调度提示词（不跳转任务页）/, 'title 为就地创建语义');
+  // 无候选禁用：已接受条目均已完善 → 禁用并说明原因（对齐任务页「启动」口径）
+  h.state.board.items = [item('REQ-20990101-001', 'accepted', { refineState: 'refined' })];
+  h.run("state.reqFilter = 'accepted'");
+  h.run('syncAcceptance()');
+  assert.equal(btn.disabled, true, '无可完善候选应禁用');
+  assert.equal(btn.title, '暂无可完善候选：已接受条目均已完善（或尚无已接受条目）', 'title 说明禁用原因');
+  // 已计划档空队列 → 禁用并说明原因
+  h.state.board.items = [item('REQ-20990101-001', 'accepted')];
+  h.run("state.reqFilter = 'planned'");
+  h.run('syncAcceptance()');
+  assert.equal(btn.disabled, true, '已计划队列为空应禁用');
+  assert.equal(btn.title, '暂无已计划候选：请先在看板接受条目并「移入计划」', 'title 说明禁用原因');
 });
 
 // ---------- R4 i18n：4 条执行中词条移除 + 3 个键改新词 ----------
@@ -206,13 +223,14 @@ t('R4 i18n 回退与改词：「AI 分析中 / AI 开发中」及两条执行中
 
 // ---------- R5 index.html 静态节点 ----------
 
-t('R5 index.html 静态节点：可见文案「▶ AI 分析」、aria-label="AI 分析"、title 不变；旧文案不残留', () => {
+t('R5 index.html 静态节点：可见文案「▶ AI 分析」、aria-label="AI 分析"、title 为就地创建新语义（REQ-20260917-001）；旧文案不残留', () => {
   const btn = htmlSrc.match(/<button[^>]*id="laneQuickEntry"[^>]*>/);
   assert.ok(btn, '应存在 #laneQuickEntry 按钮');
   assert.match(btn[0], /aria-label="AI 分析"/, 'aria-label 应为新词');
-  assert.match(btn[0], /title="进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）"/, 'title 沿用不变');
+  assert.match(btn[0], /title="点击即创建 AI 分析任务并复制主调度提示词（不跳转任务页）：范围为全部已接受未完善条目，与勾选无关"/, 'title 为就地创建新语义');
   assert.ok(htmlSrc.includes('▶ AI 分析</button>'), '可见文案应为「▶ AI 分析」');
   assert.ok(!htmlSrc.includes('▶ 开始 AI 分析') && !htmlSrc.includes('aria-label="开始 AI 分析"'), '旧静态文案不得残留');
+  assert.ok(!htmlSrc.includes('进入任务模块 AI 分析面板'), '旧导航 title 不得残留');
 });
 
 let failed = 0;
