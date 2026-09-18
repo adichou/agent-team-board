@@ -782,8 +782,12 @@ const EN = {
   '输入框、文本域、下拉选择、contenteditable 及中文输入法组合输入期间不触发以上快捷键；带 Ctrl / ⌘ / Alt 的组合键与未列出的按键保留浏览器默认行为。快捷键只触发现有界面入口，不直接接受、计划、删除条目或启动批量任务。': 'These shortcuts do not fire while typing in inputs, textareas, selects, contenteditable, or during IME composition; combos with Ctrl / ⌘ / Alt and unlisted keys keep browser defaults. Shortcuts only trigger existing UI actions — they never accept, plan, delete items, or start batch tasks.',
   '运行环境': 'Environment',
   '运行配置': 'Run config',
-  '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）': 'Open the AI analysis panel: complete documents of accepted unrefined items in bulk (independent of checkboxes)',
-  '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务': 'Open the AI development panel: scoped to the planned queue (oldest first); "Start" inside the panel creates the task',
+  // REQ-20260917-001：需求页快捷入口从「导航到任务页」改为「就地创建任务并复制主调度提示词」——
+  // 两条旧导航 title 词条随之替换为新语义（有候选 / 无候选 4 条 + 复制失败指引 2 条）
+  '点击即创建 AI 分析任务并复制主调度提示词（不跳转任务页）：范围为全部已接受未完善条目，与勾选无关': 'Click to create an AI analysis task and copy the master dispatch prompt (no navigation to the Tasks page): scoped to all accepted unrefined items, independent of checkboxes',
+  '点击即创建 AI 开发任务并复制主调度提示词（不跳转任务页）：范围为已计划队列（最旧优先），与勾选无关': 'Click to create an AI development task and copy the master dispatch prompt (no navigation to the Tasks page): scoped to the planned queue (oldest first), independent of checkboxes',
+  '任务已创建，但复制失败：请到「任务」页 AI 分析面板「提示词」页签手动复制（不会产生新任务）': 'Task created, but copying failed: copy the prompt manually from the "Prompt" tab of the AI analysis panel on the Tasks page (no new task is created)',
+  '任务已创建，但复制失败：请到「任务」页 AI 开发面板「提示词」页签手动复制（不会产生新任务）': 'Task created, but copying failed: copy the prompt manually from the "Prompt" tab of the AI development panel on the Tasks page (no new task is created)',
   '进入项目任务': 'Open project tasks',
   '进度、队列与结果集中在这里': 'Progress, queues and results live here',
   '进行中': 'In progress',

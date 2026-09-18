@@ -266,6 +266,7 @@ const state = {
   search: { q: '', seq: 0, res: null, resQ: '', timer: null, loading: false, error: null }, // 模块搜索（REQ-20260906-015 起；REQ-20260907-004 移至第三行随模块解释；REQ-20260910-009 增 resQ 结果对应词与 error 持久失败态）
   banner: { initialized: false, layers: [], entriesByPath: {}, activeFile: null, refreshing: false }, // 文件横幅层栈（REQ-20260906-007）
   knownIds: null, // 当前项目已见条目 id 基线；null = 待首轮播种（REQ-20260908-017 起仅登记，不再驱动自动导航）
+  laneQuick: { pending: false }, // REQ-20260917-001：需求页快捷入口创建请求进行中（连点防重复，回执后复位）
   acceptance: { selected: new Set(), pending: false, message: '', failures: [] },
   impl: {        // 已计划条目多选（REQ-20260906-018；BUG-20260909-006 起勾选仅为「移出计划」服务，
     //          「进入批量开发」入口与勾选范围推送链路已移除，批量开发入口唯一收敛任务模块）
@@ -2426,26 +2427,42 @@ function syncAcceptance() {
     result.classList.toggle('hidden', !resultMods.some((m) => m.message));
     result.classList.toggle('err', resultMods.some((m) => m.failures.length > 0));
   }
-  // REQ-20260909-007：列表头常驻快捷入口（与勾选无关，仅导航不创建任务、不弹确认）——
-  // 已接受档「开始完善」→ 任务模块批量完善面板；已计划档「开始开发」→ 任务模块批量开发面板。
-  // REQ-20260911-010：已完成档的 Commit 快捷入口随批量 Commit 回退移除（本地提交唯一路径为
-  // 开发完成到待测试的自动提交，无需入口），done 档不再显示快捷入口。
-  // 口径：BUG-20260909-006 后批量开发入口唯一收敛任务模块，范围恒为已计划队列（勾选仅为「移出计划」服务）；
-  // 其余档不显示。随本函数每轮同步（切档即时、轮询只改控件态不重建容器，无闪烁）。
+  // REQ-20260909-007：列表头常驻快捷入口（与勾选无关）——REQ-20260917-001 起从「导航到任务页」
+  // 改为「就地创建任务并复制主调度提示词」（点击不切视图，详见 laneQuickCreate）。
+  // 已接受档「▶ AI 分析」作用于全部已接受未完善条目；已计划档「▶ AI 开发」作用于已计划队列
+  // （最旧优先）——范围与任务页「启动」面板口径一致，其余档不显示。
+  // 禁用口径对齐任务页「启动」（不靠创建接口报错兜底）：无候选禁用并在 title 说明原因；
+  // 创建请求进行中禁用（laneQuick.pending，连点不产生第二个任务）；批量操作进行中不禁用
+  // （快捷创建与批量接受/移入计划互不相干）。REQ-20260911-010：done 档不再显示快捷入口。
+  // 随本函数每轮同步（切档即时、轮询只改控件态不重建容器，无闪烁）。
   const quick = $('#laneQuickEntry');
   if (quick) {
+    const refineCands = (state.board?.items || []).filter((it) => it.status === 'accepted' && it.refineState !== 'refined');
+    const devCands = plannedQueue();
     const conf = lane === 'accepted'
-      ? { label: '▶ AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' }
+      ? {
+          label: '▶ AI 分析',
+          ok: refineCands.length > 0,
+          title: refineCands.length > 0
+            ? '点击即创建 AI 分析任务并复制主调度提示词（不跳转任务页）：范围为全部已接受未完善条目，与勾选无关'
+            : '暂无可完善候选：已接受条目均已完善（或尚无已接受条目）',
+        }
       : lane === 'planned'
-        ? { label: '▶ AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' }
+        ? {
+            label: '▶ AI 开发',
+            ok: devCands.length > 0,
+            title: devCands.length > 0
+              ? '点击即创建 AI 开发任务并复制主调度提示词（不跳转任务页）：范围为已计划队列（最旧优先），与勾选无关'
+              : '暂无已计划候选：请先在看板接受条目并「移入计划」',
+          }
         : null;
     quick.classList.toggle('hidden', !conf);
     if (conf) {
       if (quick.textContent !== conf.label) quick.textContent = conf.label;
       if (quick.title !== conf.title) quick.title = conf.title;
       quick.setAttribute('aria-label', conf.label);
+      quick.disabled = state.laneQuick.pending || !conf.ok;
     }
-    quick.disabled = false; // 仅导航：批量操作进行中也不禁用，任务创建由面板内「启动」承接
   }
   // REQ-20260908-027：成对全选 / 全不选入口，均只作用于当前筛选档（叠搜索范围）；批量进行中防误触。
   // REQ-20260910-008：单行工具栏下按控件粒度显隐（#selectRow 第二行已随两行结构取消）——
@@ -7138,11 +7155,35 @@ function renderRefinePanel() {
 // 完善执行记录渲染已由 REQ-20260908-026 的共用 runAttemptsHtml 承接（四列表格、最近 2 次尝试）；
 // BUG-20260908-018 的记录分页交互随 2 条展示上限移除——完整账本与计数不受影响。
 
+// REQ-20260917-001：需求模块快捷入口——就地创建任务并复制主调度提示词，不再跳转任务页。
+// 创建接口与任务页「启动」同一事实源（响应 prompt 即任务页「提示词」页签文本，不出现两份文本）；
+// 成功 toast 沿用任务页统一成功口径；重复启动由服务端 400 明确提示、前端如实展示不新建；
+// 与勾选无关（已接受档=全部已接受未完善，已计划档=已计划队列最旧优先）；
+// 请求进行中禁用（连点不产生第二个任务），回执后经 syncAcceptance 恢复按钮态。
+async function laneQuickCreate() {
+  const quick = $('#laneQuickEntry');
+  if (!quick || quick.disabled || state.laneQuick.pending) return;
+  if (state.reqFilter === 'accepted') {
+    state.laneQuick.pending = true;
+    quick.disabled = true;
+    try { await createRefineBatchAndCopy({ fromLane: true }); }
+    finally { state.laneQuick.pending = false; syncAcceptance(); }
+  } else if (state.reqFilter === 'planned') {
+    state.laneQuick.pending = true;
+    quick.disabled = true;
+    try { await createBatchAndCopy({ fromLane: true }); }
+    finally { state.laneQuick.pending = false; syncAcceptance(); }
+  }
+}
+
 // 启动完善任务（REQ-20260908-020 子代理模式）：创建任务并复制通用主调度提示词
 // REQ-20260909-011：去 Agent 化——不再选择/提交执行 Agent（提示词单一通用版，
 // 可在任意一种 Agent 会话粘贴执行；服务端忽略遗留的 mode 入参）
 // REQ-20260910-027：开发人员设置已移除——不再提交该值、无 localStorage 记忆回退
-async function createRefineBatchAndCopy() {
+async function createRefineBatchAndCopy(opts = {}) {
+  // REQ-20260917-001：fromLane = 需求页快捷入口就地创建——不切视图、不刷任务面板
+  // （面板打开时由轮询吸收新任务），复制失败指引指向任务页「提示词」页签
+  const fromLane = opts.fromLane === true;
   try {
     const res = await api('/api/refine/create', {
       method: 'POST',
@@ -7156,10 +7197,10 @@ async function createRefineBatchAndCopy() {
       const copied = await copyDispatchText(res.prompt);
       // REQ-20260908-026：统一成功口径——任务已创建、提示词已复制（复制成功 ≠ 执行中）
       if (copied) toast(`✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 ${res.counts.candidates}，子代理模式；状态：待启动）`);
+      else if (fromLane) toast('任务已创建，但复制失败：请到「任务」页 AI 分析面板「提示词」页签手动复制（不会产生新任务）', true);
       else toast('任务已创建，但复制失败：请展开提示词手动复制，或点「重新复制」（不会创建新任务）', true);
     }
-    state.refine.sig = '';
-    await refreshRefine();
+    if (!fromLane) { state.refine.sig = ''; await refreshRefine(); }
   } catch (e) {
     toast(e.message, true);
   }
@@ -7517,6 +7558,9 @@ async function createBatchAndCopy(opts = {}) {
   // BUG-20260909-006：列表勾选集合回退已移除——缺省即为已计划队列全量候选
   // REQ-20260913-003：去批次概念——重复启动由服务端 400 明确提示（同一时间只有一轮执行），
   // 不再存在排队/幂等返回分支；成功回执不携带批次号。
+  // REQ-20260917-001：opts.fromLane = 需求页快捷入口就地创建（不刷任务面板、复制失败
+  // 指引指向任务页「提示词」页签），详见 laneQuickCreate 注释。
+  const fromLane = opts.fromLane === true;
   const ids = (opts.ids && opts.ids.length) ? [...opts.ids] : null;
   try {
     const res = await api('/api/batch/create', {
@@ -7533,12 +7577,13 @@ async function createBatchAndCopy(opts = {}) {
       if (copied) {
         // REQ-20260908-026：统一成功口径——任务已创建、提示词已复制
         toast(`✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 ${res.counts.candidates}，受阻 ${res.counts.blocked}；状态：待启动）`);
+      } else if (fromLane) {
+        toast('任务已创建，但复制失败：请到「任务」页 AI 开发面板「提示词」页签手动复制（不会产生新任务）', true);
       } else {
         toast('任务已创建，但复制失败：请在下方选中提示词手动复制，或点「重新复制」（不会产生新任务）', true);
       }
     }
-    state.batchSig = '';
-    await refreshBatch();
+    if (!fromLane) { state.batchSig = ''; await refreshBatch(); }
   } catch (e) {
     toast(e.message, true);
   }
@@ -7794,7 +7839,8 @@ $('#selectNone').addEventListener('click', deselectOperable); // REQ-20260908-02
 // REQ-20260909-007：列表头常驻快捷入口（仅导航）——已接受档进批量完善、已计划档进批量开发子面板；
 // REQ-20260911-010：已完成档「开始 Commit」入口已随批量 Commit 回退移除（done 档入口隐藏，不进此绑定）；
 // 点击不创建任务、不弹确认（创建仍由面板内「启动」承接）
-$('#laneQuickEntry')?.addEventListener('click', () => gotoRuns(state.reqFilter === 'accepted' ? 'refine' : 'develop'));
+// REQ-20260917-001：快捷入口就地创建任务并复制主调度提示词（不切视图），禁用态防护见 laneQuickCreate
+$('#laneQuickEntry')?.addEventListener('click', laneQuickCreate);
 $('#mask').addEventListener('click', closeDrawer);
 // REQ-20260914-001：挂起确认面板头部关闭 / 错误重试（表单内按钮随渲染动态绑定）
 $('#confirmPanelClose')?.addEventListener('click', () => { if (!confirmSide.busy) closeConfirmPanel(); });
