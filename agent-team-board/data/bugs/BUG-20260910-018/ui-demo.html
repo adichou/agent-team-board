@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BUG-20260910-018 演示 · 排序下拉与搜索框平齐（缺陷对照）</title>
+<style>
+  /* ---------- 主题变量（深色默认，可切浅色） ---------- */
+  :root {
+    --bg: #14171c; --panel: #1b1f26; --panel-2: #222733;
+    --border: #2e3440; --text: #e6e9ef; --muted: #8b93a3;
+    --accent: #4f8cff; --warn: #e5a13c; --danger: #e06c5f; --ok: #57b676;
+  }
+  body.theme-light {
+    --bg: #f4f6fa; --panel: #ffffff; --panel-2: #eef1f6;
+    --border: #d4dae4; --text: #24292f; --muted: #6b7280;
+    --accent: #2f6fed; --warn: #b26a00; --danger: #c2402f; --ok: #2f855a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    min-height: 100vh;
+  }
+  .demo-note {
+    max-width: 980px; width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; color: var(--muted); font-size: 12.5px;
+  }
+  .demo-note strong { color: var(--text); }
+  .demo-note .bug { color: var(--danger); }
+  .demo-note .fix { color: var(--ok); }
+
+  /* ---------- 演示控制条（非生产界面的一部分） ---------- */
+  .demo-controls {
+    max-width: 980px; width: 100%; display: flex; flex-wrap: wrap; align-items: center;
+    gap: 8px 14px; background: var(--panel); border: 1px dashed var(--border);
+    border-radius: 10px; padding: 10px 14px; font-size: 12.5px;
+  }
+  .demo-controls .grp { display: inline-flex; align-items: center; gap: 6px; }
+  .demo-controls label { color: var(--muted); }
+  .demo-controls button {
+    font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .demo-controls button.active { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+  .demo-controls input[type="range"] { accent-color: var(--accent); }
+  .demo-controls .width-val { min-width: 52px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 模拟应用外壳（宽度由滑块控制，模拟窗口宽度） ---------- */
+  .app-shell {
+    width: 860px; max-width: 100%; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0,0,0,.25);
+  }
+  .app-header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  .app-brand { font-weight: 600; margin-right: 6px; }
+  .view-tab {
+    font: inherit; font-size: 13px; padding: 4px 12px; cursor: pointer;
+    background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px;
+  }
+  .view-tab.active { color: var(--text); border-color: var(--border); background: var(--panel-2); }
+
+  /* ---------- 第三行：模块副标题 + 定位控件组（本 Bug 主角） ---------- */
+  .page-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 18px; }
+  .module-sub { margin: 0; color: var(--muted); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+
+  /* 定位组 —— 缺陷现状：flex-wrap:wrap（空间不足时排序下拉换行堆叠，不再左右相邻）；
+     修复后期望：组内不换行，排序下拉与搜索框恒左右相邻（排序左、搜索右），搜索收缩让位 */
+  .locate-group {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    min-width: 0; max-width: 100%; margin-left: auto;
+  }
+  .app-shell.mode-fixed .locate-group { flex-wrap: nowrap; }
+
+  /* 排序下拉 —— 缺陷现状：height 24px（矮一截）；修复后期望：与搜索组显式等高 32px */
+  .sort-select {
+    height: 24px; padding: 0 4px; font-size: 12px; font-family: inherit;
+    color: var(--muted); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; flex: none;
+  }
+  .sort-select:hover { color: var(--text); border-color: var(--muted); }
+  .app-shell.mode-fixed .sort-select { height: 32px; padding: 0 8px; }
+
+  /* 搜索组：胶囊造型，渲染高约 31-32px（12.5px 字号 + 上下 padding 6px） */
+  .global-search {
+    display: flex; align-items: center; gap: 4px; height: 32px;
+    border: 1px solid var(--border); background: var(--panel);
+    border-radius: 99px; padding: 0 10px; transition: border-color .15s ease;
+    flex: 0 1 380px; min-width: 150px;
+  }
+  .app-shell.mode-fixed .global-search { flex: 1 1 220px; min-width: 120px; }
+  .global-search:focus-within { border-color: var(--accent); }
+  .gs-icon { color: var(--muted); font-size: 14px; flex: none; user-select: none; }
+  .search-scope {
+    flex: none; font-size: 11.5px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 99px; padding: 1px 8px; white-space: nowrap;
+  }
+  .search-input {
+    appearance: none; border: none; outline: none; background: transparent;
+    color: var(--text); font: inherit; font-size: 12.5px; min-width: 0; flex: 1; padding: 6px 2px;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-clear {
+    appearance: none; flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border: none; border-radius: 50%; background: transparent;
+    color: var(--muted); font: inherit; font-size: 12px; line-height: 1; cursor: pointer;
+  }
+  .search-clear:hover { background: var(--panel-2); color: var(--text); }
+  .kbd-hint {
+    flex: none; font: 11px ui-monospace, Menlo, monospace; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 5px; padding: 0 5px;
+  }
+  .hidden { display: none !important; }
+
+  /* 对齐参考线（仅演示用：标出两控件的上下边缘，肉眼核对是否等高平齐） */
+  .app-shell.show-guide .locate-group { outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 6px; }
+  .app-shell.show-guide .sort-select { outline: 1px dashed color-mix(in srgb, var(--danger) 60%, transparent); outline-offset: 2px; }
+  .app-shell.show-guide .global-search { outline: 1px dashed color-mix(in srgb, var(--ok) 60%, transparent); outline-offset: 2px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; vertical-align: middle; margin-right: 4px; }
+  .legend .lg-sort { border-color: var(--danger); }
+  .legend .lg-search { border-color: var(--ok); }
+
+  /* ---------- 搜索反馈条（正常 / 空 / 加载 / 失败；位置在定位组下方） ---------- */
+  .hits-strip {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 0 18px 10px; padding: 7px 12px; font-size: 12.5px;
+    border: 1px solid var(--border); border-radius: 9px; background: var(--panel);
+  }
+  .hits-strip .hits-title { color: var(--muted); }
+  .hits-strip .hits-title b { color: var(--text); font-weight: 600; }
+  .hits-strip.is-fail { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+  .hits-strip.is-fail .hits-title { color: var(--danger); }
+  .hits-btn {
+    font: inherit; font-size: 12px; padding: 2px 10px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 7px; background: var(--panel-2); color: var(--text);
+  }
+  .hits-btn:hover { border-color: var(--muted); }
+  .hits-btn:focus-visible, .search-clear:focus-visible, .sort-select:focus-visible, .search-input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+
+  /* ---------- 示例列表与状态块 ---------- */
+  .req-list { list-style: none; margin: 0 18px 16px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .req-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 9px;
+  }
+  .req-id { font: 12px ui-monospace, Menlo, monospace; color: var(--accent); flex: none; }
+  .req-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .req-meta { flex: none; color: var(--muted); font-size: 11.5px; }
+  .state-block {
+    margin: 0 18px 16px; padding: 26px 12px; text-align: center; color: var(--muted);
+    border: 1px dashed var(--border); border-radius: 9px; font-size: 13px;
+  }
+  .state-block.fail { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+  .spin { display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--muted); border-top-color: transparent; animation: spin .8s linear infinite;
+    vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .demo-foot { max-width: 980px; width: 100%; color: var(--muted); font-size: 12px; }
+
+  /* ---------- 窄宽度（≤720px 模拟窗口）：副标题与定位组分行、组独占整行 ---------- */
+  .app-shell.narrow .page-head .locate-group { flex: 1 1 100%; margin-left: 0; }
+</style>
+</head>
+<body class="theme-dark">
+  <div class="demo-note">
+    <strong>BUG-20260910-018 演示（离线单文件 · 示例数据）：</strong>
+    排序下拉与搜索框平齐。<span class="bug">「缺陷现状」＝下拉 24px 高矮不齐 + 组内 wrap 在较窄宽度换行堆叠（不再左右相邻）</span>；
+    <span class="fix">「修复后期望」＝两控件左右相邻（排序左、搜索右）且显式等高 32px、组内不换行</span>。
+    拖动宽度滑块可在缺陷模式下复现堆叠；布局与验收口径以条目 README 文字为准，极窄宽度是否允许换行为待确认项。
+  </div>
+
+  <div class="demo-controls">
+    <span class="grp">
+      <label>对照</label>
+      <button type="button" id="btnBug" class="active">缺陷现状</button>
+      <button type="button" id="btnFixed">修复后期望</button>
+      <button type="button" id="btnGuide" title="标出排序下拉与搜索框上下边缘，核对等高平齐">参考线</button>
+    </span>
+    <span class="grp">
+      <label>宽度</label>
+      <input type="range" id="widthRange" min="340" max="960" value="860" step="10" />
+      <span class="width-val" id="widthVal">860px</span>
+    </span>
+    <span class="grp">
+      <label>状态</label>
+      <button type="button" data-status="normal" class="active">正常</button>
+      <button type="button" data-status="empty">空</button>
+      <button type="button" data-status="loading">加载</button>
+      <button type="button" data-status="fail">失败</button>
+    </span>
+    <span class="grp">
+      <label>主题</label>
+      <button type="button" id="btnTheme">切换深浅色</button>
+    </span>
+  </div>
+
+  <div class="app-shell mode-bug" id="appShell">
+    <header class="app-header">
+      <span class="app-brand">ATB · 示例项目</span>
+      <button type="button" class="view-tab active" data-view="status">需求</button>
+      <button type="button" class="view-tab" data-view="runs">任务</button>
+    </header>
+
+    <!-- 第三行：模块副标题 + 定位控件组（排序下拉 → 搜索框） -->
+    <section class="page-head">
+      <p class="module-sub" id="moduleSub">需求 · 六档状态列表，示例数据</p>
+      <div class="locate-group" id="locateGroup">
+        <select id="reqSort" class="sort-select" title="列表排序（更新 / 创建 / 单号）" aria-label="列表排序">
+          <option value="updated-desc">最新更新</option>
+          <option value="updated-asc">最早更新</option>
+          <option value="created-desc">最新创建</option>
+          <option value="created-asc">最早创建</option>
+          <option value="id-asc">单号</option>
+        </select>
+        <div class="global-search module-search" title="搜索当前模块">
+          <span class="gs-icon" aria-hidden="true">⌕</span>
+          <span class="search-scope" id="searchScope">需求</span>
+          <input id="searchInput" class="search-input" type="search" placeholder="搜需求 / Bug / 文档…" autocomplete="off" enterkeyhint="search" aria-label="搜索当前模块" aria-describedby="searchScope" />
+          <button type="button" id="searchClear" class="search-clear hidden" aria-label="清除搜索" title="清空搜索并恢复模块内容">✕</button>
+          <kbd class="kbd-hint" aria-hidden="true">/</kbd>
+        </div>
+      </div>
+    </section>
+
+    <!-- 统一搜索反馈条：正常 / 空 / 加载 / 失败（保持在定位组下方） -->
+    <section id="searchFeedback" class="hits-strip hidden" role="region" aria-live="polite" aria-label="搜索结果反馈"></section>
+
+    <main>
+      <ul class="req-list" id="reqList"></ul>
+      <div class="state-block hidden" id="loadingBlock"><span class="spin"></span>搜索中…（演示模拟）</div>
+      <div class="state-block fail hidden" id="failBlock">搜索失败：服务暂不可用（演示模拟）</div>
+    </main>
+  </div>
+
+  <div class="legend hidden" id="guideLegend">
+    <span><i class="lg-sort"></i>排序下拉边缘（缺陷模式 24px）</span>
+    <span><i class="lg-search"></i>搜索框边缘（约 32px）</span>
+    <span>开启「参考线」后虚线不齐＝高矮不齐；修复模式下两条虚线应上下对齐</span>
+  </div>
+
+  <p class="demo-foot">
+    交互：排序下拉可切换五档排序；搜索支持输入过滤（250ms 防抖）、✕ / Esc 清空、非输入态按 <b>/</b> 聚焦；
+    切到「任务」模块时排序下拉隐藏（仅需求模块可见），回需求恢复。缺陷模式 + 较窄宽度可看到排序下拉换行叠到搜索框上方（REQ-20260910-025 附件截图形态）。
+    示例条目标题为示意，不代表真实看板数据。
+  </p>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 示例数据（标题为示意） ---------- */
+  var REQ_ITEMS = [
+    { id: 'REQ-20260910-016', title: '排序菜单放到搜索框左侧（定位组）', created: '09-10 15:11', updated: '09-10 16:40' },
+    { id: 'REQ-20260910-009', title: '模块搜索范围标签常显 + 显式清除按钮', created: '09-10 11:20', updated: '09-10 14:05' },
+    { id: 'REQ-20260908-027', title: '批量操作叠加当前搜索范围', created: '09-08 10:00', updated: '09-09 09:12' },
+    { id: 'REQ-20260908-002', title: '五档列表共用排序键并记忆偏好', created: '09-08 09:30', updated: '09-08 19:45' },
+    { id: 'REQ-20260907-004', title: '模块副标题行与当前模块搜索框', created: '09-07 16:00', updated: '09-07 18:20' }
+  ];
+  var RUN_ITEMS = [
+    { id: 'run-20260910-2114', title: 'refine 完善批次（示例）', created: '09-10 21:14', updated: '09-10 21:40' },
+    { id: 'run-20260910-1602', title: 'dev 开发批次（示例）', created: '09-10 16:02', updated: '09-10 16:55' },
+    { id: 'run-20260909-0915', title: 'refine 完善批次（示例）', created: '09-09 09:15', updated: '09-09 11:30' }
+  ];
+
+  var state = {
+    view: 'status',          // status=需求模块 / runs=任务模块
+    sortKey: 'updated-desc', // 排序偏好（演示内记忆，刷新还原）
+    query: '',
+    status: 'normal'         // normal / empty / loading / fail（演示模拟）
+  };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+  var shell = $('#appShell'), list = $('#reqList'), feedback = $('#searchFeedback');
+  var input = $('#searchInput'), clearBtn = $('#searchClear'), sortSel = $('#reqSort');
+  var loadingBlock = $('#loadingBlock'), failBlock = $('#failBlock');
+  var SEARCH_DEBOUNCE_MS = 250, debounceTimer = null;
+
+  function items() { return state.view === 'status' ? REQ_ITEMS : RUN_ITEMS; }
+
+  function sorted(filtered) {
+    var arr = filtered.slice();
+    var t = function (s) { return '2026-' + s; }; // 示例时间统一按当年排序
+    if (state.sortKey === 'id-asc') arr.sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+    else if (state.sortKey === 'updated-desc') arr.sort(function (a, b) { return t(b.updated).localeCompare(t(a.updated)) || (a.id < b.id ? -1 : 1); });
+    else if (state.sortKey === 'updated-asc') arr.sort(function (a, b) { return t(a.updated).localeCompare(t(b.updated)) || (a.id < b.id ? -1 : 1); });
+    else if (state.sortKey === 'created-desc') arr.sort(function (a, b) { return t(b.created).localeCompare(t(a.created)) || (a.id < b.id ? -1 : 1); });
+    else arr.sort(function (a, b) { return t(a.created).localeCompare(t(b.created)) || (a.id < b.id ? -1 : 1); });
+    return arr;
+  }
+
+  function filteredItems() {
+    var q = state.query.trim().toLowerCase();
+    var src = items().filter(function (it) {
+      return !q || it.id.toLowerCase().indexOf(q) >= 0 || it.title.toLowerCase().indexOf(q) >= 0;
+    });
+    return sorted(src);
+  }
+
+  /* ---------- 排序下拉显隐口径：仅需求模块可见（沿用生产 syncReqSortVisibility 行为） ---------- */
+  function syncSortVisibility() {
+    sortSel.classList.toggle('hidden', state.view !== 'status');
+  }
+
+  /* ---------- 渲染列表与反馈条（正常 / 空 / 加载 / 失败） ---------- */
+  function renderList() {
+    var shown = state.status === 'normal';
+    loadingBlock.classList.toggle('hidden', state.status !== 'loading');
+    failBlock.classList.toggle('hidden', state.status !== 'fail');
+    list.classList.toggle('hidden', !shown);
+    if (!shown) return;
+    var data = filteredItems();
+    list.innerHTML = '';
+    data.forEach(function (it) {
+      var li = document.createElement('li');
+      li.className = 'req-item';
+      var id = document.createElement('span'); id.className = 'req-id'; id.textContent = it.id;
+      var ti = document.createElement('span'); ti.className = 'req-title'; ti.textContent = it.title;
+      var me = document.createElement('span'); me.className = 'req-meta'; me.textContent = '更新 ' + it.updated;
+      li.append(id, ti, me);
+      list.appendChild(li);
+    });
+  }
+
+  function renderFeedback() {
+    var q = state.query.trim();
+    var scope = state.view === 'status' ? '需求' : '任务';
+    feedback.className = 'hits-strip';
+    feedback.innerHTML = '';
+    if (state.status === 'loading') {
+      feedback.classList.remove('hidden');
+      feedback.classList.add('is-loading');
+      feedback.innerHTML = '<span class="hits-title"><span class="spin"></span>搜索中…' + (q ? '（“' + esc(q) + '”）' : '') + '</span>';
+      return;
+    }
+    if (state.status === 'fail') {
+      feedback.classList.remove('hidden');
+      feedback.classList.add('is-fail');
+      feedback.innerHTML = '<span class="hits-title">搜索失败：服务暂不可用' + (q ? '，关键词“' + esc(q) + '”与排序偏好已保留' : '') + '</span>';
+      var retry = document.createElement('button');
+      retry.type = 'button'; retry.className = 'hits-btn'; retry.textContent = '重试';
+      retry.addEventListener('click', function () { setStatus('normal'); });
+      feedback.appendChild(retry);
+      return;
+    }
+    if (state.status === 'empty') {
+      feedback.classList.remove('hidden');
+      feedback.innerHTML = '<span class="hits-title">无匹配结果：“' + esc(q || '…') + '”在 <b>' + scope + '</b> 范围内无命中（排序与关键词已保留）</span>';
+      var clear = document.createElement('button');
+      clear.type = 'button'; clear.className = 'hits-btn'; clear.textContent = '清空关键词';
+      clear.addEventListener('click', function () { setQuery(''); input.focus(); });
+      feedback.appendChild(clear);
+      return;
+    }
+    // normal：有关键词才出命中反馈，未输入时隐藏（沿用生产口径）
+    if (q) {
+      feedback.classList.remove('hidden');
+      feedback.innerHTML = '<span class="hits-title">“<b>' + esc(q) + '</b>” 命中 <b>' + filteredItems().length + '</b> 项 · 范围 ' + scope + '</span>';
+    } else {
+      feedback.classList.add('hidden');
+    }
+  }
+
+  function esc(s) {
+    return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+
+  function render() {
+    syncSortVisibility();
+    clearBtn.classList.toggle('hidden', !state.query);
+    $('#searchScope').textContent = state.view === 'status' ? '需求' : '任务';
+    input.placeholder = state.view === 'status' ? '搜需求 / Bug / 文档…' : '搜任务、编号或执行器…';
+    $('#moduleSub').textContent = state.view === 'status'
+      ? '需求 · 六档状态列表，示例数据'
+      : '任务 · 批量执行批次，示例数据';
+    renderList();
+    renderFeedback();
+  }
+
+  /* ---------- 交互：排序 / 搜索 / 模块 ---------- */
+  sortSel.addEventListener('change', function () {
+    state.sortKey = sortSel.value; // 切换即按新序重排，不清空关键词
+    render();
+  });
+
+  input.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () { // 250ms 防抖
+      state.query = input.value;
+      if (state.status === 'empty' && !state.query.trim()) state.status = 'normal';
+      render();
+    }, SEARCH_DEBOUNCE_MS);
+  });
+
+  clearBtn.addEventListener('click', function () { setQuery(''); input.focus(); });
+  input.addEventListener('keydown', function (e) { // Esc 清空并把焦点交还输入框
+    if (e.key === 'Escape') { setQuery(''); }
+  });
+
+  function setQuery(v) {
+    state.query = v; input.value = v;
+    if (state.status === 'empty' && !v.trim()) state.status = 'normal';
+    render();
+  }
+
+  document.addEventListener('keydown', function (e) { // 非输入态按 / 聚焦搜索框
+    if (e.key === '/' && !/input|select|textarea/i.test(document.activeElement.tagName)) {
+      e.preventDefault(); input.focus();
+    }
+  });
+
+  document.querySelectorAll('.view-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      state.view = tab.dataset.view;
+      document.querySelectorAll('.view-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+      render(); // 切任务模块隐藏排序下拉；回需求恢复当前排序
+    });
+  });
+
+  /* ---------- 演示控制：缺陷 / 修复对照、参考线、宽度、状态、主题 ---------- */
+  function setMode(mode) {
+    shell.classList.toggle('mode-fixed', mode === 'fixed');
+    shell.classList.toggle('mode-bug', mode === 'bug');
+    $('#btnFixed').classList.toggle('active', mode === 'fixed');
+    $('#btnBug').classList.toggle('active', mode === 'bug');
+  }
+  $('#btnBug').addEventListener('click', function () { setMode('bug'); });
+  $('#btnFixed').addEventListener('click', function () { setMode('fixed'); });
+  $('#btnGuide').addEventListener('click', function () {
+    shell.classList.toggle('show-guide');
+    this.classList.toggle('active');
+    $('#guideLegend').classList.toggle('hidden');
+  });
+
+  var range = $('#widthRange'), widthVal = $('#widthVal');
+  function applyWidth() {
+    var w = Number(range.value);
+    shell.style.width = w + 'px';
+    widthVal.textContent = w + 'px';
+    shell.classList.toggle('narrow', w <= 720); // 模拟 ≤720px 窄窗口断点
+  }
+  range.addEventListener('input', applyWidth);
+  applyWidth();
+
+  function setStatus(s) {
+    state.status = s;
+    document.querySelectorAll('[data-status]').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.status === s);
+    });
+    render();
+  }
+  document.querySelectorAll('[data-status]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.dataset.status === 'empty' && !state.query.trim()) {
+        // 空结果演示需要关键词：无词时自动代入一个示例词
+        setQuery('不存在的关键词');
+      }
+      setStatus(b.dataset.status);
+    });
+  });
+
+  $('#btnTheme').addEventListener('click', function () {
+    document.body.classList.toggle('theme-light');
+    document.body.classList.toggle('theme-dark');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

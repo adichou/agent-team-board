@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-011 演示 · 全局入口迁移（对照缺陷 / 修复后）</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --line:#d8dce2; --ink:#24292f; --muted:#6a737d; --brand:#3b82f6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); }
+  .stage { position:relative; height:420px; overflow:hidden; border:1px solid var(--line); border-radius:10px; background:#fff; display:flex; flex-direction:column; }
+  .topbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
+  .logo { font-weight:700; }
+  .topbar .right { margin-left:auto; display:flex; gap:8px; }
+  .btn { border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; }
+  .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .mods { display:flex; gap:2px; padding:6px 12px; border-bottom:1px solid var(--line); background:#fbfcfd; flex-wrap:wrap; }
+  .mods button { border:0; background:transparent; padding:6px 10px; cursor:pointer; font:inherit; color:var(--muted); border-radius:6px; }
+  .mods button.on { background:#e7effe; color:#1d4ed8; font-weight:600; }
+  .main { flex:1; padding:12px; color:var(--muted); }
+  .overlay { position:absolute; inset:0; background:rgba(0,0,0,.28); display:none; }
+  .overlay.show { display:block; }
+  .panel { position:absolute; top:0; right:0; bottom:0; width:min(380px,86%); background:#fff; border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(0,0,0,.12); transform:translateX(100%); transition:transform .18s ease; display:flex; flex-direction:column; }
+  .panel.show { transform:translateX(0); }
+  .p-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .p-head b { flex:1; }
+  .p-note { padding:6px 14px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
+  .p-filter { display:flex; gap:6px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .p-filter input { flex:1; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font:inherit; }
+  .p-body { flex:1; overflow:auto; padding:10px 14px; }
+  .grp h4 { margin:8px 0 6px; font-size:13px; }
+  .row { display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; }
+  .row .id { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); }
+  .row .name { flex:1; font-size:13px; }
+  .p-empty { text-align:center; color:var(--muted); padding:24px 8px; }
+  .ctrl { position:absolute; left:0; right:0; bottom:0; z-index:5; display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:8px 12px; background:#fff; border-top:1px solid var(--line); }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button { border:0; background:transparent; padding:5px 10px; cursor:pointer; font:inherit; }
+  .seg button.on { background:var(--brand); color:#fff; }
+  .hint { font-size:12px; color:var(--muted); }
+  h1 { font-size:16px; margin:12px 0 4px; padding:0 4px; }
+  .sub { font-size:12px; color:var(--muted); margin:0 0 10px; padding:0 4px; }
+  .wrap { max-width:760px; margin:0 auto; padding:14px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>全局模块入口 —— 缺陷现象 / 修复后状态对照</h1>
+    <p class="sub">对应条目 BUG-20260910-004（说明文档完善补充的界面演示；面板宽度、遮罩/Escape 规则等以开发定案为准，条目内标注待确认）</p>
+    <div class="stage">
+      <div class="topbar">
+        <span class="logo">Status Board</span>
+        <span style="color:var(--muted);font-size:12px">当前项目：agent-team-board</span>
+        <span class="right">
+          <button type="button" class="btn" id="manageBtn">管理项目</button>
+          <button type="button" class="btn primary" id="globalEntry" style="display:none">全局</button>
+        </span>
+      </div>
+      <div class="mods" id="mods">
+        <button type="button" class="on">看板</button>
+        <button type="button">任务</button>
+        <button type="button" id="globalNav" style="display:none">全局</button>
+        <button type="button">文件</button>
+        <button type="button">设置</button>
+      </div>
+      <div class="main" id="mainView">项目工作区（示意）——全局数据不属于任何项目，入口层级见下方控制条切换。</div>
+
+      <div class="overlay" id="overlay"></div>
+      <aside class="panel" id="panel" aria-label="全局任务面板">
+        <div class="p-head">
+          <b>全局任务</b>
+          <button type="button" class="btn" id="panelClose">关闭</button>
+        </div>
+        <div class="p-note">跨项目查看批量完善 / 批量开发 / 批量 commit 的运行中与最近批次。</div>
+        <div class="p-filter">
+          <input id="q" placeholder="搜索任务 / 批次" aria-label="搜索">
+          <button type="button" class="btn" id="retryBtn">重试</button>
+        </div>
+        <div class="p-body" id="pbody"></div>
+      </aside>
+
+      <div class="ctrl">
+        <span class="seg" id="modeSeg">
+          <button type="button" data-mode="defect" class="on">缺陷现象</button>
+          <button type="button" data-mode="fixed">修复后状态</button>
+        </span>
+        <span class="seg" id="dataSeg">
+          <button type="button" data-data="ok" class="on">正常数据</button>
+          <button type="button" data-data="empty">无匹配</button>
+          <button type="button" data-data="fail">读取失败</button>
+        </span>
+        <span class="hint" id="hint"></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+  var mode = 'defect', data = 'ok';
+  var el = function (id) { return document.getElementById(id); };
+  var tasks = [
+    { g: 'agent-team-board', id: 'REQ-20260910-011', name: '批量完善调度提示词优化', batch: '开发 · 进行中' },
+    { g: 'agent-team-board', id: 'BUG-20260910-009', name: '搜索不过滤批量面板', batch: '开发 · 已完成' },
+    { g: 'site-builder', id: 'REQ-20260909-031', name: '站点导出流水线', batch: '完善 · 进行中' }
+  ];
+  function apply() {
+    el('globalEntry').style.display = mode === 'fixed' ? '' : 'none';
+    el('globalNav').style.display = mode === 'defect' ? '' : 'none';
+    closePanel();
+    el('hint').textContent = mode === 'defect'
+      ? '缺陷态：「全局」位于项目模块导航第二行，与项目入口并排；点击后整页切换主视图。'
+      : '修复态：「全局」入口在顶栏「管理项目」右侧，点击弹出右侧全局面板（遮罩 + 关闭 + 搜索），不切换主视图。';
+  }
+  function openPanel() {
+    if (mode !== 'fixed') { el('mainView').textContent = '全局视图（缺陷态：全局作为主视图占用整个工作区，与项目模块并列——示意）'; return; }
+    el('overlay').classList.add('show'); el('panel').classList.add('show'); render();
+  }
+  function closePanel() { el('overlay').classList.remove('show'); el('panel').classList.remove('show'); }
+  function render() {
+    var q = el('q').value.trim();
+    var body = el('pbody');
+    if (data === 'fail') { body.innerHTML = '<div class="p-empty">读取失败：该项目区域数据加载失败（示意），可重试；其余项目不受影响。</div>'; return; }
+    var list = q ? tasks.filter(function (t) { return (t.id + t.name).indexOf(q) >= 0; }) : tasks;
+    if (!list.length) { body.innerHTML = '<div class="p-empty">无匹配任务</div>'; return; }
+    var byG = {};
+    list.forEach(function (t) { (byG[t.g] = byG[t.g] || []).push(t); });
+    body.innerHTML = Object.keys(byG).map(function (g) {
+      return '<div class="grp"><h4>' + g + '</h4>' + byG[g].map(function (t) {
+        return '<div class="row"><span class="id">' + t.id + '</span><span class="name">' + t.name + '<br><span class="hint">' + t.batch + '</span></span><button type="button" class="btn" onclick="jump()">进入项目任务</button></div>';
+      }).join('') + '</div>';
+    }).join('');
+  }
+  window.jump = function () { closePanel(); el('hint').textContent = '已跳转到对应项目任务并关闭面板（示意）。'; };
+  el('globalEntry').addEventListener('click', openPanel);
+  el('globalNav').addEventListener('click', openPanel);
+  el('panelClose').addEventListener('click', closePanel);
+  el('overlay').addEventListener('click', closePanel);
+  el('retryBtn').addEventListener('click', function () { data = 'ok'; mark(el('dataSeg'), 'ok'); render(); });
+  el('q').addEventListener('input', render);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanel(); });
+  el('modeSeg').addEventListener('click', function (e) { if (e.target.dataset.mode) { mode = e.target.dataset.mode; mark(this, mode); apply(); } });
+  el('dataSeg').addEventListener('click', function (e) { if (e.target.dataset.data) { data = e.target.dataset.data; mark(this, data); if (el('panel').classList.contains('show')) render(); } });
+  el('manageBtn').addEventListener('click', function () { el('hint').textContent = '「管理项目」为既有顶栏按钮（示意）。'; });
+  function mark(seg, val) {
+    [].forEach.call(seg.querySelectorAll('button'), function (b) { b.classList.toggle('on', (b.dataset.mode || b.dataset.data) === val); });
+  }
+  apply();
+</script>
+</body>
+</html>

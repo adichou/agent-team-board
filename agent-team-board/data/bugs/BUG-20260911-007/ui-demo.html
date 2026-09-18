@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260911-007 演示 — 批量完善执行中但全局任务面板不显示</title>
+<style>
+  /* ---------- 主题变量（深浅色适配，默认深色贴近截图） ---------- */
+  :root[data-theme="dark"] {
+    --bg: #16181d; --bg-soft: #1d2026; --bg-panel: #1a1d23; --bg-hover: #262a32;
+    --fg: #e6e9ef; --fg-muted: #9aa3b2; --fg-faint: #6b7480;
+    --line: #2c313a; --accent: #7c8cf8; --accent-fg: #ffffff;
+    --chip-bg: #232730; --ok: #3fb27f; --warn: #d9a428; --err: #e06c5f;
+    --skeleton: linear-gradient(90deg, #232730 25%, #2c313a 50%, #232730 75%);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f6f8; --bg-soft: #ffffff; --bg-panel: #ffffff; --bg-hover: #eef0f4;
+    --fg: #23272f; --fg-muted: #5b6472; --fg-faint: #8a92a0;
+    --line: #dde1e8; --accent: #5566f0; --accent-fg: #ffffff;
+    --chip-bg: #eef0f4; --ok: #2e9e6b; --warn: #b8860b; --err: #d15446;
+    --skeleton: linear-gradient(90deg, #e8eaee 25%, #f3f4f7 50%, #e8eaee 75%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--fg); min-height: 100vh;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--bg-soft); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { font-weight: 700; letter-spacing: .5px; }
+  .sel {
+    background: var(--chip-bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 10px;
+  }
+  .topbar .grow { flex: 1; }
+  .btn {
+    background: var(--chip-bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 12px;
+  }
+  .btn:hover { background: var(--bg-hover); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .btn.small { padding: 2px 8px; font-size: 12px; border-radius: 6px; }
+
+  /* ---------- 演示控制条（非产品 UI） ---------- */
+  .demo-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 8px 16px; border-bottom: 1px dashed var(--line);
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg)); font-size: 13px;
+  }
+  .demo-bar .tag {
+    font-weight: 700; color: var(--warn); border: 1px solid var(--warn);
+    border-radius: 6px; padding: 1px 8px; font-size: 12px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    background: transparent; color: var(--fg-muted); border: none; padding: 4px 10px; font-size: 12px;
+  }
+  .seg button.on { background: var(--accent); color: var(--accent-fg); }
+  .demo-note { color: var(--fg-faint); font-size: 12px; }
+
+  /* ---------- 主工作区占位 ---------- */
+  .main { padding: 24px 16px; color: var(--fg-faint); max-width: 860px; }
+  .main h2 { color: var(--fg-muted); font-size: 15px; margin-bottom: 8px; }
+  .placeholder-card {
+    border: 1px dashed var(--line); border-radius: 10px; padding: 16px;
+    background: var(--bg-soft); font-size: 13px; color: var(--fg-muted);
+  }
+  .placeholder-card b { color: var(--fg); }
+
+  /* ---------- 全局任务面板（右侧） ---------- */
+  .panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 92vw);
+    background: var(--bg-panel); border-left: 1px solid var(--line);
+    display: flex; flex-direction: column; z-index: 20;
+    box-shadow: -12px 0 32px rgba(0,0,0,.28);
+  }
+  .panel.hidden { display: none; }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 { font-size: 15px; flex: 1; }
+  .search {
+    display: flex; align-items: center; gap: 8px; margin: 10px 14px 4px;
+    background: var(--chip-bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px;
+  }
+  .search input {
+    flex: 1; background: transparent; border: none; outline: none; color: var(--fg); font: inherit;
+  }
+  .panel-body { flex: 1; overflow-y: auto; padding: 10px 14px 20px; }
+
+  .summary { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; margin-bottom: 10px; }
+  .summary .detail { color: var(--fg-muted); }
+  .summary .detail b { color: var(--warn); }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+  .filters .sep { width: 1px; height: 16px; background: var(--line); margin: 0 2px; }
+  .chip-btn {
+    background: var(--chip-bg); color: var(--fg-muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 10px; font-size: 12px;
+  }
+  .chip-btn.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+  .group { margin-bottom: 14px; }
+  .group-head {
+    display: flex; align-items: baseline; gap: 8px; padding: 4px 0 6px;
+    border-bottom: 1px solid var(--line); margin-bottom: 8px; font-size: 13px;
+  }
+  .group-head .name { font-weight: 700; }
+  .group-head .muted { color: var(--fg-muted); font-size: 12px; }
+
+  .task {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    margin-bottom: 10px; background: var(--bg-soft); cursor: pointer;
+  }
+  .task:hover { background: var(--bg-hover); }
+  .task-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .st-chip { border-radius: 6px; padding: 1px 8px; font-size: 12px; color: #fff; }
+  .st-prepared { background: var(--fg-faint); }
+  .st-running { background: var(--ok); }
+  .st-paused { background: var(--warn); }
+  .st-needs_attention { background: var(--err); }
+  .kind-chip {
+    background: color-mix(in srgb, var(--accent) 18%, var(--chip-bg));
+    color: var(--fg); border-radius: 6px; padding: 1px 8px; font-size: 12px;
+  }
+  .kind-chip.blank {
+    border: 1px dashed var(--err); color: var(--err); background: transparent;
+  }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--fg-muted); }
+  .task-top .enter { margin-left: auto; }
+  .task-mid { margin: 6px 0; font-size: 13px; }
+  .task-mid .link { color: var(--accent); cursor: pointer; text-decoration: underline; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .task-mid .title { color: var(--fg-muted); margin: 0 6px; }
+  .task-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--fg-muted); }
+  .task-meta b { color: var(--fg); }
+
+  .notice {
+    border: 1px solid var(--line); border-left: 3px solid var(--fg-faint);
+    background: var(--bg-soft); border-radius: 8px; padding: 10px 12px;
+    font-size: 13px; color: var(--fg-muted); margin-bottom: 10px;
+  }
+  .notice.warn { border-left-color: var(--err); color: var(--fg); }
+
+  .empty-card {
+    border: 1px dashed var(--line); border-radius: 10px; padding: 22px;
+    text-align: center; color: var(--fg-muted);
+  }
+  .empty-card h2 { font-size: 15px; margin-bottom: 6px; color: var(--fg); }
+
+  .skeleton-row {
+    height: 64px; border-radius: 10px; margin-bottom: 10px;
+    background: var(--skeleton); background-size: 200% 100%;
+    animation: shimmer 1.2s infinite linear;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  .panel-foot { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--fg-faint); font-size: 12px; }
+
+  /* 缺陷标注（演示用高亮，非产品 UI） */
+  .defect-mark { color: var(--err); font-size: 12px; }
+  .summary .conflict { color: var(--err); font-weight: 700; }
+
+  /* toast */
+  #toast {
+    position: fixed; right: 500px; bottom: 24px; z-index: 50;
+    background: var(--fg); color: var(--bg); border-radius: 8px; padding: 8px 14px;
+    font-size: 13px; max-width: 380px; opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  #toast.show { opacity: .96; }
+</style>
+</head>
+<body>
+  <!-- 顶栏：模拟看板（项目选择器 / 管理项目 / 全局入口） -->
+  <header class="topbar">
+    <span class="brand">Status Board</span>
+    <select class="sel" aria-label="项目选择器">
+      <option>agent-team-board</option>
+      <option>jav-library</option>
+      <option>cili_search</option>
+    </select>
+    <span class="grow"></span>
+    <button class="btn" id="btnTheme" type="button">深浅色</button>
+    <button class="btn" id="btnManage" type="button">管理项目</button>
+    <button class="btn primary" id="btnGlobal" type="button" aria-expanded="false">全局</button>
+  </header>
+
+  <!-- 演示控制（非产品 UI） -->
+  <div class="demo-bar">
+    <span class="tag">演示控制（非产品 UI）</span>
+    <span>模式</span>
+    <span class="seg" id="segMode">
+      <button type="button" data-v="defect" class="on">缺陷现象</button>
+      <button type="button" data-v="fixed">期望修复</button>
+    </span>
+    <span>场景</span>
+    <span class="seg" id="segScenario">
+      <button type="button" data-v="normal" class="on">正常</button>
+      <button type="button" data-v="empty">空</button>
+      <button type="button" data-v="loading">加载</button>
+      <button type="button" data-v="error">失败</button>
+    </span>
+    <span>批次状态</span>
+    <span class="seg" id="segBatch">
+      <button type="button" data-v="running" class="on">执行中</button>
+      <button type="button" data-v="prepared">待启动</button>
+      <button type="button" data-v="paused">已暂停</button>
+      <button type="button" data-v="finished">收尾移出</button>
+    </span>
+    <button class="btn small" id="btnPoll" type="button">自动刷新（模拟 2s 轮询）</button>
+    <span class="demo-note" id="demoHint"></span>
+  </div>
+
+  <!-- 主工作区占位 -->
+  <main class="main">
+    <h2>主工作区（占位）</h2>
+    <div class="placeholder-card">
+      模拟看板任意模块页面。点击顶栏 <b>「全局」</b> 打开右侧全局任务面板——缺陷模式下可复现：
+      项目内「任务 → 批量完善」明明显示 <b>RFB-20260910-023 执行中</b>，
+      全局面板汇总却显示「执行中 1」且「全部 + 批量完善」筛选下 <b>0 匹配</b>。
+    </div>
+  </main>
+
+  <!-- 全局任务面板 -->
+  <aside class="panel hidden" id="globalPanel" aria-label="全局任务面板">
+    <div class="panel-head">
+      <h2>全局任务</h2>
+      <span class="muted" style="color:var(--fg-muted);font-size:12px;">跨项目批量任务</span>
+      <button class="btn small" id="btnClose" type="button">关闭</button>
+    </div>
+    <div class="search">
+      <span aria-hidden="true">🔍</span>
+      <input id="globalSearchInput" type="text" placeholder="搜索项目 / 批次号 / 当前条目 / 会话（前端过滤）" aria-label="全局任务搜索">
+    </div>
+    <div class="panel-body" id="globalPanelBody"></div>
+    <div class="panel-foot">数据随看板轮询自动刷新（2 秒）；「暂停 / 终止 / 删除」等操作请点击任务进入对应项目的任务模块执行。（演示：数据全为模拟）</div>
+  </aside>
+
+  <div id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ============ BUG-20260911-007 交互演示 ============
+ * 对照展示：缺陷现象（执行中的批量完善批次 RFB-20260910-023 在全局任务面板 0 匹配、
+ * 汇总却计「执行中 1」）与期望修复（任务行正常显示、筛选命中、可跳转）。
+ * 全部数据为本地模拟，不请求网络，不执行任何写操作。 */
+
+var STATUS_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'running', label: '执行中' },
+  { key: 'prepared', label: '待启动' },
+  { key: 'paused', label: '已暂停' },
+  { key: 'needs_attention', label: '待核对' }
+];
+var KIND_FILTERS = [
+  { key: 'all', label: '全部类型' },
+  { key: 'develop', label: '批量开发' },
+  { key: 'refine', label: '批量完善' }
+];
+var KIND_LABEL = { develop: '批量开发', refine: '批量完善' };
+var STATUS_LABEL = { prepared: '待启动', running: '执行中', paused: '已暂停', needs_attention: '待核对' };
+
+// 演示状态：mode 缺陷/期望；scenario 正常/空/加载/失败；batchStatus 批次账本状态
+var demo = {
+  mode: 'defect',
+  scenario: 'normal',
+  batchStatus: 'running',
+  statusFilter: 'all',
+  kindFilter: 'refine', // 贴近截图：用户停在「批量完善」档
+  q: '',
+  pollTick: 0,
+  lastData: null, // 失败场景保留上一次数据（与产品口径一致）
+  panelOpen: false
+};
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function fmtTime(iso) {
+  var d = new Date(iso);
+  function p(n) { return (n < 10 ? '0' : '') + n; }
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+}
+
+/* ---------- 模拟数据：/api/batch/global 的返回形态 ---------- */
+function buildData() {
+  // 收尾（finished）批次不属于「在工作」口径，从 tasks 移出
+  var tasks = [];
+  if (demo.batchStatus !== 'finished') {
+    var running = demo.batchStatus === 'running';
+    // 轮换当前条目，模拟轮询期间子代理推进
+    var cur = running
+      ? (demo.pollTick % 2 === 0
+          ? { itemId: 'BUG-20260911-007', title: '明明存在批量完善队列在执行中，但是在全局任务界面却没有显示', owner: 'refine-023-33' }
+          : { itemId: 'BUG-20260911-005', title: '已完成档「开始 Commit」快捷入口', owner: 'refine-023-31' })
+      : null;
+    var base = {
+      batchId: 'RFB-20260910-023',
+      status: demo.batchStatus,
+      abortRequested: false,
+      aborted: false,
+      createdAt: '2026-09-10T12:20:48+08:00',
+      lastActivityAt: new Date().toISOString(),
+      current: cur,
+      counts: { done: 34, failed: 0, interrupted: 0, remaining: running ? 4 : 5, total: 38 }
+    };
+    if (demo.mode === 'defect') {
+      // 缺陷模拟：旧口径简报缺失 kind 字段（服务常驻进程旧于前端时的返回形态）
+      // —— 汇总计数不依赖 kind（仍计「执行中 1」），类型筛选 t.kind==='refine' 失败 → 0 匹配
+      base.kind = undefined;
+    } else {
+      // 期望形态：kind 正常为 'refine'
+      base.kind = 'refine';
+    }
+    tasks.push(base);
+  }
+  return {
+    projects: [
+      { root: '/Users/adichou/Documents/src/agent-team-board', name: 'agent-team-board', status: 'ok', error: null, tasks: tasks },
+      { root: '/Users/adichou/Documents/src/jav-library', name: 'jav-library', status: 'ok', error: null, tasks: [] },
+      { root: '/Users/adichou/Documents/src/cili_search', name: 'cili_search', status: 'ok', error: null, tasks: [] }
+    ]
+  };
+}
+
+/* ---------- 过滤与汇总（复刻产品口径：汇总按全量、匹配数按筛选后） ---------- */
+function statusKey(t) { return t.aborted ? 'aborted' : (t.status || 'prepared'); }
+function countsParts(t) {
+  var c = t.counts || {};
+  return {
+    doneLabel: '已完成', done: c.done || 0,
+    abnormal: (c.failed || 0) + (c.interrupted || 0),
+    remaining: c.remaining || 0, total: c.total || 0
+  };
+}
+function taskMatches(t, p, q) {
+  if (!q) return true;
+  var cur = t.current || {};
+  return [p.name, p.root, t.batchId, cur.itemId, cur.title, cur.owner]
+    .some(function (x) { return String(x || '').toLowerCase().indexOf(q) !== -1; });
+}
+function summaryText(projects) {
+  var tasks = [];
+  projects.forEach(function (p) { tasks = tasks.concat(p.tasks || []); });
+  var by = { running: 0, prepared: 0, paused: 0, needs_attention: 0, queued: 0 };
+  tasks.forEach(function (t) {
+    if (t.queued && t.status === 'prepared') by.queued++;
+    else if (by[t.status] != null) by[t.status]++;
+  });
+  return '执行中 <b>' + by.running + '</b> · 待启动 <b>' + by.prepared +
+    '</b> · 排队中 <b>' + by.queued + '</b> · 已暂停 <b>' + by.paused +
+    '</b> · 待核对 <b>' + by.needs_attention + '</b>';
+}
+
+/* ---------- 任务行渲染 ---------- */
+function taskRowHtml(t, p) {
+  var st = statusKey(t);
+  var cnt = countsParts(t);
+  var cur = t.current;
+  var kindKnown = KIND_LABEL[t.kind] != null;
+  var kindChip = kindKnown
+    ? '<span class="kind-chip">' + esc(KIND_LABEL[t.kind]) + '</span>'
+    : '<span class="kind-chip blank" title="聚合返回缺失/未知 kind（旧口径简报）——期望修复后兜底展示并留诊断线索">' +
+      (t.kind ? esc(t.kind) : '类型缺失') + '</span>';
+  return '' +
+    '<article class="task" data-project="' + esc(p.name) + '" data-batch="' + esc(t.batchId) + '" ' +
+    'title="点击进入该项目任务模块（批量完善 · ' + esc(t.batchId) + '）">' +
+      '<div class="task-top">' +
+        '<span class="st-chip s-' + esc(st) + '">' + esc(STATUS_LABEL[st] || st) + '</span>' +
+        kindChip +
+        '<span class="cid">' + esc(t.batchId) + '</span>' +
+        '<button class="btn small enter" type="button">进入项目任务</button>' +
+      '</div>' +
+      '<div class="task-mid">' +
+        (cur
+          ? '<span style="color:var(--fg-muted)">当前：</span>' +
+            '<span class="link" data-item="' + esc(cur.itemId) + '">' + esc(cur.itemId) + '</span>' +
+            '<span class="title">' + esc(cur.title) + '</span>' +
+            '<span style="color:var(--fg-muted);font-size:12px">子代理会话 ' + esc(cur.owner) + '</span>'
+          : '<span style="color:var(--fg-muted);font-size:12px">待启动：请在对应项目的 Agent 会话粘贴调度提示词后登记运行</span>') +
+      '</div>' +
+      '<div class="task-meta">' +
+        '<span>' + cnt.doneLabel + ' <b>' + cnt.done + '</b></span>' +
+        '<span>异常 <b>' + cnt.abnormal + '</b></span>' +
+        '<span>待处理 <b>' + cnt.remaining + '</b></span>' +
+        '<span>共 ' + cnt.total + '</span>' +
+        '<span>创建 ' + fmtTime(t.createdAt) + '</span>' +
+        '<span>活动 ' + fmtTime(t.lastActivityAt) + '</span>' +
+      '</div>' +
+    '</article>';
+}
+
+/* ---------- 面板渲染 ---------- */
+function renderPanel() {
+  var body = document.getElementById('globalPanelBody');
+  if (!demo.panelOpen) return;
+
+  // 场景：加载（首载骨架）/ 空（无注册项目）/ 失败（错误条 + 保留上次数据）/ 正常
+  if (demo.scenario === 'loading') {
+    body.innerHTML = '<div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div>';
+    return;
+  }
+  if (demo.scenario === 'empty') {
+    body.innerHTML =
+      '<div class="empty-card"><h2>尚无注册项目</h2>' +
+      '<p>全局总览聚合所有已注册项目的批量任务。请先在顶栏「＋ 新建」旁的项目选择器打开 / 注册项目。</p></div>';
+    return;
+  }
+  var data = buildData();
+  var showError = null;
+  if (demo.scenario === 'error') {
+    showError = '模拟：聚合接口请求失败（网络中断）';
+  }
+  var projects = data.projects || [];
+  var q = demo.q.trim().toLowerCase();
+
+  var filtered = projects.map(function (p) {
+    var matched = (p.tasks || []).filter(function (t) {
+      return (demo.statusFilter === 'all' || statusKey(t) === demo.statusFilter)
+        && (demo.kindFilter === 'all' || t.kind === demo.kindFilter)
+        && taskMatches(t, p, q);
+    });
+    return { p: p, matched: matched };
+  });
+  var taskTotal = filtered.reduce(function (n, x) { return n + x.matched.length; }, 0);
+  var hasTasks = projects.some(function (p) { return (p.tasks || []).length > 0; });
+
+  var groupsHtml = filtered.map(function (x) {
+    if (!x.matched.length) return '';
+    var p = x.p;
+    return '<section class="group"><header class="group-head">' +
+      '<span class="name">' + esc(p.name) + '</span>' +
+      '<span class="muted" title="' + esc(p.root) + '">' + esc(p.root) + '</span>' +
+      '<span class="muted">' + x.matched.length + ' 个任务</span></header>' +
+      x.matched.map(function (t) { return taskRowHtml(t, p); }).join('') +
+      '</section>';
+  }).join('');
+
+  // 缺陷模式的矛盾标注（演示用，产品中不存在）
+  var defectNote = (demo.mode === 'defect' && hasTasks)
+    ? '<div class="notice warn"><span class="defect-mark">缺陷矛盾：</span>汇总计「执行中 1」（不依赖 kind），' +
+      '但筛选后 ' + taskTotal + ' 匹配——任务行 kind 缺失时「批量完善」档命中不了。切换类型档「全部类型」可见一行「类型缺失」行。</div>'
+    : '';
+
+  body.innerHTML =
+    (showError ? '<div class="notice warn">刷新失败，正在重试：' + esc(showError) + '（已保留上一次数据）</div>' : '') +
+    '<div class="summary">' +
+      '<span>' + projects.length + ' 个项目 · <b>' + taskTotal + '</b> 个在工作的批量任务</span>' +
+      '<span class="detail">' + summaryText(projects) + '</span>' +
+    '</div>' +
+    '<nav class="filters" aria-label="全局任务筛选">' +
+      STATUS_FILTERS.map(function (f) {
+        return '<button type="button" class="chip-btn' + (demo.statusFilter === f.key ? ' on' : '') +
+          '" data-sf="' + f.key + '">' + f.label + '</button>';
+      }).join('') +
+      '<span class="sep"></span>' +
+      KIND_FILTERS.map(function (f) {
+        return '<button type="button" class="chip-btn' + (demo.kindFilter === f.key ? ' on' : '') +
+          '" data-kf="' + f.key + '">' + f.label + '</button>';
+      }).join('') +
+    '</nav>' +
+    defectNote +
+    (hasTasks
+      ? (groupsHtml || '<div class="notice">当前筛选与搜索下没有匹配的任务。</div>')
+      : '<div class="empty-card"><h2>所有项目的批量任务均已收尾</h2><p>到各项目的任务模块（「任务」页签）可启动新的批量开发 / 批量完善任务；新任务登记运行后会自动出现在这里。</p></div>');
+
+  bindPanel(body);
+}
+
+function bindPanel(body) {
+  // 筛选 chips：纯前端过滤
+  Array.prototype.forEach.call(body.querySelectorAll('[data-sf]'), function (b) {
+    b.addEventListener('click', function () { demo.statusFilter = b.getAttribute('data-sf'); renderPanel(); });
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-kf]'), function (b) {
+    b.addEventListener('click', function () { demo.kindFilter = b.getAttribute('data-kf'); renderPanel(); });
+  });
+  // 任务行：模拟跳转（仅导航提示，不执行写操作）
+  Array.prototype.forEach.call(body.querySelectorAll('.task'), function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.hasAttribute && e.target.hasAttribute('data-item')) return; // 条目链接单独处理
+      toast('进入项目任务模块：' + row.getAttribute('data-project') + ' · 批量完善（仅模拟导航）');
+    });
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('.enter'), function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toast('进入项目任务模块：批量完善 · ' + b.closest('.task').getAttribute('data-batch') + '（仅模拟导航）');
+    });
+  });
+  Array.prototype.forEach.call(body.querySelectorAll('[data-item]'), function (l) {
+    l.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toast('打开条目抽屉：' + l.getAttribute('data-item') + '（仅模拟导航）');
+    });
+  });
+}
+
+/* ---------- 面板开合与入口 ---------- */
+function openPanel() {
+  demo.panelOpen = true;
+  document.getElementById('globalPanel').classList.remove('hidden');
+  document.getElementById('btnGlobal').setAttribute('aria-expanded', 'true');
+  renderPanel();
+}
+function closePanel() {
+  demo.panelOpen = false;
+  document.getElementById('globalPanel').classList.add('hidden');
+  document.getElementById('btnGlobal').setAttribute('aria-expanded', 'false');
+}
+
+/* ---------- 事件接线 ---------- */
+document.getElementById('btnGlobal').addEventListener('click', function () {
+  demo.panelOpen ? closePanel() : openPanel();
+});
+document.getElementById('btnClose').addEventListener('click', closePanel);
+document.getElementById('btnManage').addEventListener('click', function () {
+  toast('「管理项目」面板与本 Bug 无关（占位）');
+});
+document.getElementById('btnTheme').addEventListener('click', function () {
+  var root = document.documentElement;
+  var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+});
+
+function bindSeg(id, fn) {
+  var seg = document.getElementById(id);
+  Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      fn(b.getAttribute('data-v'));
+    });
+  });
+}
+bindSeg('segMode', function (v) {
+  demo.mode = v;
+  updateHint();
+  renderPanel();
+});
+bindSeg('segScenario', function (v) {
+  demo.scenario = v;
+  if (!demo.panelOpen) openPanel();
+  renderPanel();
+});
+bindSeg('segBatch', function (v) {
+  demo.batchStatus = v;
+  renderPanel();
+});
+document.getElementById('btnPoll').addEventListener('click', function () {
+  // 模拟 2 秒轮询：推进当前条目 / 更新活动时间；缺陷模式下任务行依旧不出现（复现「轮询也不显示」）
+  demo.pollTick++;
+  if (!demo.panelOpen) openPanel();
+  renderPanel();
+  toast(demo.mode === 'defect'
+    ? '轮询完成：汇总仍「执行中 1」，列表依旧 0 匹配（缺陷持续）'
+    : '轮询完成：当前条目与活动时间已更新');
+});
+
+var searchInput = document.getElementById('globalSearchInput');
+searchInput.addEventListener('input', function () {
+  demo.q = searchInput.value;
+  renderPanel();
+});
+
+function updateHint() {
+  document.getElementById('demoHint').textContent = demo.mode === 'defect'
+    ? '缺陷：执行中的 RFB-20260910-023 未出现在「全部 + 批量完善」筛选（模拟 kind 缺失的旧口径简报）'
+    : '期望：任务行正常显示、筛选命中、可点击跳转；切换批次状态观察汇总联动';
+}
+
+/* 初始：直接打开面板，默认停留在截图的「全部 + 批量完善」筛选档 */
+updateHint();
+openPanel();
+</script>
+</body>
+</html>

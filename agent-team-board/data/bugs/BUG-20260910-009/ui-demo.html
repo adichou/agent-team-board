@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260910-009 界面演示 · 任务模块搜索不过滤批量完善/批量开发面板</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --panel: #ffffff; --panel-2: #f8fafc; --text: #1f2328; --muted: #66707b;
+    --line: #d9dfe5; --accent: #2b6ed9; --accent-soft: #e8f0fe; --ok: #1a7f37; --ok-soft: #e6f4ea;
+    --warn: #9a6700; --warn-soft: #fff3d6; --bad: #cf222e; --bad-soft: #ffebe9; --info-soft: #ddf4ff;
+    --chip-bd: #c9d2da; --kbd-bd: #c9d2da;
+  }
+  html[data-theme="dark"] {
+    --bg: #0f1318; --panel: #161b22; --panel-2: #1b222b; --text: #e6edf3; --muted: #8b949e;
+    --line: #2d333b; --accent: #6ea8fe; --accent-soft: #16233a; --ok: #3fb950; --ok-soft: #12261e;
+    --warn: #d29922; --warn-soft: #2d2306; --bad: #f85149; --bad-soft: #3a1418; --info-soft: #0c2d44;
+    --chip-bd: #3d444d; --kbd-bd: #3d444d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--accent); }
+  .hidden { display: none !important; }
+
+  /* ---------- 演示控制台（非产品 UI） ---------- */
+  .demo-bar { background: var(--panel-2); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  .demo-bar h1 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 6px; }
+  .demo-row > b { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 4px 12px; font-size: 12.5px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .demo-note { margin-top: 8px; padding: 7px 10px; border-radius: 8px; font-size: 12.5px; border: 1px dashed var(--line); background: var(--panel); }
+  .demo-note.bug { border-color: var(--bad); background: var(--bad-soft); }
+  .demo-note.fixed { border-color: var(--ok); background: var(--ok-soft); }
+
+  /* ---------- 产品骨架（近似真实布局） ---------- */
+  .app { max-width: 1080px; margin: 0 auto; padding: 0 16px 48px; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+  .topbar .brand { font-weight: 700; }
+  .proj { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+  .topbar .spacer { flex: 1; }
+  .icon-btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font-size: 12px; color: var(--text); }
+
+  .module-nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 0 4px; }
+  .module-nav button { border: 0; background: transparent; padding: 8px 14px; color: var(--muted); border-bottom: 2px solid transparent; }
+  .module-nav button.active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+
+  .page-head { display: flex; align-items: center; gap: 16px; padding: 12px 4px; }
+  .module-sub { margin: 0; color: var(--muted); font-size: 13px; }
+  .global-search { margin-left: auto; display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  .search-scope { font-size: 12px; color: var(--muted); border-right: 1px solid var(--line); padding-right: 8px; }
+  .search-input { border: 0; outline: none; background: transparent; color: var(--text); width: 230px; font: inherit; }
+  .search-clear { border: 0; background: transparent; color: var(--muted); padding: 0 3px; }
+  .kbd-hint { font-size: 11px; color: var(--muted); border: 1px solid var(--kbd-bd); border-radius: 4px; padding: 0 5px; }
+
+  .hits-strip { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 12px; margin: 0 4px 14px; }
+  .hits-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .hits-title { font-weight: 600; }
+  .hits-note { color: var(--muted); font-size: 12.5px; }
+
+  .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 12.5px; color: var(--text); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .btn.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
+  .btn.small { padding: 1px 8px; font-size: 12px; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  /* 任务面板 */
+  .runs-view { padding: 0 4px; }
+  .batch-drawer { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px 18px; }
+  .drawer-head .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+  .drawer-head .tab, .task-subtabs .tab { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-bottom: 2px solid transparent; font-size: 13px; }
+  .drawer-head .tab.active, .task-subtabs .tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+  .drawer-body { padding-top: 12px; }
+  .task-subtabs { display: flex; gap: 2px; margin: 10px 0 4px; border-bottom: 1px solid var(--line); }
+
+  .notice { border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 6px; padding: 7px 10px; margin: 8px 0; font-size: 12.5px; }
+  .notice.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .notice.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+
+  .batch-stats { font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+  .field-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
+  .field-inline input[type="text"] { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 3px 8px; }
+  .dep-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+
+  .task-queue, .task-records { margin-top: 14px; }
+  .task-queue .dep-toolbar, .task-records .dep-toolbar { margin: 0 0 6px; }
+  .task-queue-list, .batch-queue-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .task-queue-item, .batch-queue-item { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .task-queue-item:last-child, .batch-queue-item:last-child { border-bottom: 0; }
+  .dep-title { font-size: 13px; }
+  .chip { display: inline-block; border: 1px solid var(--chip-bd); border-radius: 999px; padding: 0 8px; font-size: 11.5px; line-height: 18px; color: var(--text); background: var(--panel-2); }
+  .chip.refine-lack { border-style: dashed; color: var(--muted); }
+  .chip.batch-st { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+  .chip.batch-st.prepared { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .chip.rs-done { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+  .chip.rs-failed { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+  .chip.rs-interrupted { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+  .chip.kind-chip { color: var(--muted); }
+
+  .batch-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 18px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: var(--panel-2); }
+  .meta-grid label { display: block; font-size: 11.5px; color: var(--muted); }
+  .meta-grid span { font-size: 13px; }
+  .batch-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+
+  .attempt-table-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: auto; }
+  .attempt-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .attempt-table th, .attempt-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .attempt-table th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  .attempt-table tr:last-child td { border-bottom: 0; }
+  .batch-prompt { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+
+  /* toast */
+  .toast { position: fixed; right: 18px; bottom: 18px; background: var(--bad); color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: 0; transform: translateY(8px); transition: all .25s; pointer-events: none; max-width: 70vw; }
+  .toast.show { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+
+<!-- ========== 演示控制（非产品 UI，仅用于对照缺陷与修复后行为） ========== -->
+<div class="demo-bar">
+  <h1>演示控制 · BUG-20260910-009 任务模块搜索不过滤批量完善/批量开发面板（静态 mock，无网络请求）</h1>
+  <div class="demo-row">
+    <b>对照模式</b>
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="bug" class="on">缺陷现状（不过滤）</button>
+      <button type="button" data-mode="fixed">修复后（前端过滤）</button>
+    </span>
+    <b>任务场景</b>
+    <span class="seg" id="phaseSeg">
+      <button type="button" data-phase="start" class="on">启动态（无进行中任务）</button>
+      <button type="button" data-phase="run">运行态（进行中批次）</button>
+    </span>
+    <b>状态模拟</b>
+    <button type="button" class="btn" id="failToggle">模拟数据加载失败：关</button>
+    <button type="button" class="btn" id="themeToggle">深浅色切换</button>
+  </div>
+  <div class="demo-note bug" id="demoNote">缺陷现状：输入关键词后，下方面板列表不发生任何过滤。</div>
+</div>
+
+<div class="app">
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <span class="brand">Agent Team Board</span>
+    <span class="proj">~/Documents/src/agent-team-board</span>
+    <span class="spacer"></span>
+    <button type="button" class="icon-btn">管理项目</button>
+    <button type="button" class="icon-btn">全局</button>
+  </div>
+
+  <!-- 模块导航（REQ-20260907-004 第二行） -->
+  <nav class="module-nav" aria-label="模块导航">
+    <button type="button">讨论</button>
+    <button type="button">需求</button>
+    <button type="button" class="active">任务</button>
+    <button type="button">文件</button>
+    <button type="button" style="margin-left:auto">设置</button>
+  </nav>
+
+  <!-- 第三行：副标题 + 当前模块搜索框 -->
+  <section class="page-head">
+    <p class="module-sub">进度、队列与结果集中在这里</p>
+    <div class="global-search" title="搜索当前模块">
+      <span aria-hidden="true">⌕</span>
+      <span class="search-scope">任务</span>
+      <input id="searchInput" class="search-input" type="search" placeholder="搜任务、编号或执行器…" autocomplete="off" enterkeyhint="search" aria-label="在任务中搜索">
+      <button type="button" id="searchClear" class="search-clear hidden" aria-label="清除搜索" title="清空搜索并恢复模块内容">✕</button>
+      <kbd class="kbd-hint" aria-hidden="true">/</kbd>
+    </div>
+  </section>
+
+  <!-- 统一搜索反馈条（REQ-20260910-009） -->
+  <section id="searchFeedback" class="hits-strip hidden" role="region" aria-live="polite" aria-label="搜索结果反馈">
+    <div class="hits-head">
+      <span class="hits-title" id="hitsTitle"></span>
+      <span class="hits-note" id="hitsNote">关键词在下方面板内前端过滤（编号 / 标题 / 执行器），不发请求</span>
+      <button type="button" class="btn small" id="hitsClear">清除搜索</button>
+    </div>
+  </section>
+
+  <!-- 任务模块 -->
+  <section class="runs-view" aria-label="任务">
+    <aside class="batch-drawer" aria-label="任务面板">
+      <header class="drawer-head">
+        <nav class="tabs batch-modes">
+          <button type="button" class="tab active" id="tabRefine">批量完善</button>
+          <button type="button" class="tab" id="tabDevelop">批量开发</button>
+        </nav>
+      </header>
+      <div class="drawer-body" id="drawerBody"><p class="muted">加载中…</p></div>
+    </aside>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= mock 数据（字段口径对齐产品：itemId / title / owner / batchId / reasons） ================= */
+const DATA = {
+  refineStart: {
+    candidates: [
+      { id: 'BUG-20260910-009', title: '任务模块搜索不过滤批量完善/批量开发面板', reasons: ['缺复现步骤', '缺期望结果'] },
+      { id: 'REQ-20260910-021', title: '设置模块导出看板快照', reasons: ['缺验收标准'] },
+      { id: 'REQ-20260910-022', title: '讨论搜索支持按发起人过滤', reasons: ['缺描述', '缺界面展示'] },
+      { id: 'BUG-20260910-011', title: '文件预览大图关闭后滚动位置丢失', reasons: ['缺复现步骤'] },
+      { id: 'REQ-20260910-023', title: '全局任务面板支持批次号跳转', reasons: ['缺验收标准', '缺界面展示'] },
+    ],
+  },
+  refineRun: {
+    batch: { id: 'RFB-20260910-023', status: '执行中', developer: '张三',
+      current: { itemId: 'REQ-20260910-022', title: '讨论搜索支持按发起人过滤', owner: 'refine-023-3' } },
+    candidates: [
+      { id: 'BUG-20260910-009', title: '任务模块搜索不过滤批量完善/批量开发面板', reasons: ['缺复现步骤', '缺期望结果'] },
+      { id: 'REQ-20260910-021', title: '设置模块导出看板快照', reasons: ['缺验收标准'] },
+      { id: 'REQ-20260910-023', title: '全局任务面板支持批次号跳转', reasons: ['缺验收标准', '缺界面展示'] },
+    ],
+    records: [
+      { itemId: 'BUG-20260910-007', title: '咨询单附件超限失败无提示', result: 'done', resultLabel: '已处理', attempt: 1, owner: 'refine-023-1', summary: '补现象/复现/期望/验收 + ui-demo.html' },
+      { itemId: 'REQ-20260910-011', title: '列表排序记忆改为全局', result: 'failed', resultLabel: '异常', attempt: 2, owner: 'refine-023-2', reason: '文档缺界面展示，已回执失败' },
+      { itemId: 'BUG-20260910-004', title: '全局入口位置迁移后回放失效', result: 'done', resultLabel: '已处理', attempt: 1, owner: 'refine-023-1', summary: '补全四节文档' },
+      { itemId: 'REQ-20260910-008', title: '详情页文档锚点跳转', result: 'done', resultLabel: '已处理', attempt: 1, owner: 'refine-023-2', summary: '补描述与验收标准' },
+    ],
+  },
+  devStart: {
+    pending: [
+      { id: 'REQ-20260910-012', title: '搜索反馈条空态文案统一' },
+      { id: 'REQ-20260910-016', title: '文件模块横幅加载骨架' },
+      { id: 'BUG-20260910-013', title: '讨论图片灯箱手势缩放' },
+      { id: 'REQ-20260910-018', title: '设置页运行参数表单校验' },
+    ],
+  },
+  devRun: {
+    batch: { id: 'batch-20260910-018', status: '执行中', developer: '李四',
+      current: { itemId: 'REQ-20260910-016', title: '文件模块横幅加载骨架', owner: 'zcode-dev-0918-2' } },
+    queuedBatches: [
+      { batchId: 'batch-20260910-019', status: 'prepared', statusLabel: '待启动', queuePosition: 1, total: 3, developer: '张三' },
+      { batchId: 'batch-20260910-020', status: 'prepared', statusLabel: '待启动', queuePosition: 2, total: 2, developer: null },
+    ],
+    pending: [
+      { id: 'BUG-20260910-013', title: '讨论图片灯箱手势缩放' },
+      { id: 'REQ-20260910-018', title: '设置页运行参数表单校验' },
+      { id: 'REQ-20260910-025', title: '看板列表键盘导航' },
+    ],
+    records: [
+      { itemId: 'REQ-20260910-012', title: '搜索反馈条空态文案统一', result: 'done', resultLabel: '已处理', attempt: 1, owner: 'zcode-dev-0918-1', summary: '实现完成，测试全绿' },
+      { itemId: 'BUG-20260910-013', title: '讨论图片灯箱手势缩放', result: 'failed', resultLabel: '异常', attempt: 2, owner: 'zcode-dev-0918-2', reason: '实现与官方手势冲突，待人工核对' },
+      { itemId: 'REQ-20260910-010', title: '看板列表虚拟滚动', result: 'done', resultLabel: '已处理', attempt: 1, owner: 'zcode-dev-0918-1', summary: '实现 + 回归测试' },
+    ],
+  },
+};
+const PROMPT_TEXT = '【主调度提示词（演示 mock）】\n你是批量任务的调度会话：逐项领取待处理条目，派发子代理执行；子代理只改条目文档，不改业务源码；收到回执后继续领取下一项，直到队列清空。';
+const PANES = [
+  { key: 'overview', label: '概况' }, { key: 'queue', label: '队列' },
+  { key: 'prompt', label: '提示词' }, { key: 'records', label: '记录' },
+];
+
+/* ================= 演示状态 ================= */
+const S = {
+  mode: 'bug',        // bug = 缺陷现状（面板不过滤）；fixed = 修复后（前端过滤）
+  panel: 'refine',    // 批量完善 / 批量开发
+  phase: 'start',     // 启动态 / 运行态
+  pane: 'overview',   // 运行态二级页签
+  q: '',
+  failSim: false,
+  loading: false,
+  failed: false,
+  lastGoodBody: null,
+  stats: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const shortTitle = (t) => (String(t || '').length > 14 ? String(t).slice(0, 14) + '…' : String(t || ''));
+
+/* 前端过滤：编号 / 标题 / 执行器（owner）；排队批次另匹配批次号与开发人员。
+   S.mode === 'bug'（缺陷现状）：面板不消费关键词，恒返回全量——这正是要演示的缺陷 */
+function hitList(items, q, extra = []) {
+  const ql = (q || '').trim().toLowerCase();
+  if (!ql || S.mode === 'bug') return { list: items, filtered: false };
+  const fields = (it) => [it.id, it.itemId, it.title, it.owner, ...extra.map((k) => it[k])];
+  const list = items.filter((it) => fields(it).some((x) => String(x || '').toLowerCase().includes(ql)));
+  return { list, filtered: true };
+}
+
+/* ================= 列表渲染（对齐产品 pendingQueueHtml / runAttemptsHtml 的最近 2 条口径） ================= */
+function queueHtml(items, action) {
+  const { list, filtered } = hitList(items, S.q);
+  const total = items.length;
+  let head, rows, empty;
+  if (filtered) {
+    head = `命中 ${list.length} / 共 ${total}${total - list.length ? ` · ${total - list.length} 条被搜索过滤` : ''}`;
+    rows = list.slice(-2).reverse();
+    empty = list.length ? '' : '<p class="muted small" style="margin:2px 0 0">没有匹配的待处理条目，清空搜索恢复。</p>';
+  } else {
+    rows = items.slice(-2).reverse();
+    head = `最近 ${rows.length} 条 / 共 ${total} 条`;
+    empty = total ? '' : '<p class="muted small" style="margin:2px 0 0">暂无待处理条目。</p>';
+  }
+  const lis = rows.map((x) => `
+    <li class="task-queue-item">
+      <span class="cid">${esc(x.id)}</span>
+      <span class="dep-title" title="${esc(x.title || '')}">${esc(shortTitle(x.title))}</span>
+      ${(x.reasons || []).length ? `<span>${x.reasons.map((r) => `<span class="chip refine-lack" title="缺失原因">${esc(r)}</span>`).join(' ')}</span>` : ''}
+      <span class="muted small">${esc(action)}</span>
+    </li>`).join('');
+  return `
+    <section class="task-queue">
+      <div class="dep-toolbar"><span class="muted small">待处理队列</span><span class="muted small">${head}</span></div>
+      ${total || filtered ? `<ul class="task-queue-list">${lis}</ul>${empty}${!filtered && total > 2 ? '<p class="muted small" style="margin:2px 0 0">仅显示最近 2 条；其余条目仍在本轮处理范围内，实际领取顺序不变。</p>' : ''}` : empty}
+    </section>`;
+}
+
+function recordsHtml(records) {
+  const { list, filtered } = hitList(records, S.q);
+  const total = records.length;
+  const head = filtered
+    ? `命中 ${list.length} / 共 ${total}${total - list.length ? ` · ${total - list.length} 条被搜索过滤` : ''}`
+    : `最近 ${Math.min(2, total)} 条 / 共 ${total} 条`;
+  const rows = (filtered ? list : list.slice(0, 2)).map((r) => `
+    <tr>
+      <td><span class="chip kind-chip">${r.itemId.startsWith('BUG') ? 'Bug' : '需求'}</span> <span class="cid">${esc(r.itemId)}</span> <span class="small">${esc(shortTitle(r.title))}</span><div class="muted small">执行器 ${esc(r.owner)}</div></td>
+      <td><span class="chip rs-${esc(r.result)}">${esc(r.resultLabel)}</span>${r.summary ? `<div class="muted small">${esc(shortTitle(r.summary))}</div>` : ''}${r.reason ? `<div class="muted small">${esc(shortTitle(r.reason))}</div>` : ''}</td>
+      <td>第 ${r.attempt} 次</td>
+      <td>${['failed', 'interrupted'].includes(r.result) ? '<button type="button" class="btn small" disabled title="演示：按钮行为不在本 Bug 范围">重新执行</button>' : '—'}</td>
+    </tr>`).join('');
+  const body = filtered && !list.length
+    ? '<tr><td colspan="4" class="muted small">没有匹配的执行记录，清空搜索恢复。</td></tr>'
+    : (rows || '<tr><td colspan="4" class="muted small">暂无执行记录</td></tr>');
+  return `
+    <section class="task-records">
+      <div class="dep-toolbar"><span class="muted small">本轮处理记录</span><span class="muted small">${head}</span></div>
+      <div class="attempt-table-wrap"><table class="attempt-table">
+        <thead><tr><th>需求 / Bug</th><th>执行状态</th><th>次数</th><th>操作</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </section>`;
+}
+
+function queuedBatchesHtml(batches) {
+  const { list, filtered } = hitList(batches, S.q, ['batchId', 'developer']);
+  const head = filtered
+    ? `命中 ${list.length} / 共 ${batches.length}${batches.length - list.length ? ` · ${batches.length - list.length} 条被搜索过滤` : ''}`
+    : `共 ${batches.length} 个排队批次`;
+  const lis = list.map((b) => `
+    <li class="batch-queue-item">
+      <span class="chip batch-st ${esc(b.status)}">${esc(b.statusLabel)}</span>
+      <span class="cid">${esc(b.batchId)}</span>
+      <span class="muted small">第 ${b.queuePosition} 位 · ${b.total} 项 · 开发人员 ${esc(b.developer || '未指定')}</span>
+      <button type="button" class="btn danger small" disabled title="演示：按钮行为不在本 Bug 范围">删除</button>
+    </li>`).join('');
+  const empty = filtered && !list.length
+    ? '<p class="muted small" style="margin:2px 0 0">没有匹配的排队批次，清空搜索恢复。</p>'
+    : (!batches.length ? '<p class="muted small" style="margin:2px 0 0">暂无排队批次。</p>' : '');
+  return `
+    <section class="batch-queue">
+      <div class="dep-toolbar"><span class="muted small">排队批次（当前批次结束后同一调度会话自动接续）：</span><span class="muted small">${head}</span></div>
+      ${lis ? `<ul class="batch-queue-list">${lis}</ul>` : ''}${empty}
+    </section>`;
+}
+
+/* ================= 面板渲染 ================= */
+function overviewHtml(d) {
+  const b = d.batch, cur = b.current;
+  return `
+    <div class="batch-status-line">
+      <span class="chip batch-st">${esc(b.status)}</span>
+      <span class="cid">${esc(b.id)}</span>
+      <span class="muted small">创建 2026-09-10 12:29 · 开发人员 ${esc(b.developer || '未指定')}</span>
+    </div>
+    <section class="meta-grid">
+      <div><label>当前条目</label><span><span class="cid">${esc(cur.itemId)}</span> ${esc(shortTitle(cur.title))}</span></div>
+      <div><label>子代理会话（执行器）</label><span>${esc(cur.owner)}</span></div>
+      <div><label>开始时间</label><span>2026-09-10 12:41</span></div>
+      <div><label>最近回执</label><span class="small">补全四节文档</span></div>
+    </section>
+    <p class="muted small">概况区统计为全量账面口径，不随搜索过滤（仅「队列」「记录」页签列表过滤）。</p>
+    <div class="batch-actions">
+      <button type="button" class="btn warn" disabled title="演示：按钮行为不在本 Bug 范围">暂停后续领取</button>
+      <button type="button" class="btn danger" disabled title="演示：按钮行为不在本 Bug 范围">终止任务</button>
+    </div>`;
+}
+
+function paneShell(panes) {
+  const tabs = PANES.map((p) => `<button type="button" class="tab task-pane-tab${S.pane === p.key ? ' active' : ''}" data-pane="${p.key}">${p.label}</button>`).join('');
+  return `<nav class="tabs task-subtabs">${tabs}</nav>
+    ${PANES.map((p) => `<section class="task-pane${S.pane === p.key ? '' : ' hidden'}">${panes[p.key] || ''}</section>`).join('')}`;
+}
+
+function panelData() {
+  return DATA[(S.panel === 'refine' ? 'refine' : 'dev') + (S.phase === 'start' ? 'Start' : 'Run')];
+}
+
+function buildBody() {
+  const d = panelData();
+  if (S.phase === 'start') {
+    if (S.panel === 'refine') {
+      const n = d.candidates.length;
+      return `
+        <section class="batch-create">
+          <p class="muted small" style="margin:0 0 6px">批量完善：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明。</p>
+          <div class="batch-stats">候选：已接受未完善 <b>${n}</b> 项（每轮实时读取）</div>
+          <label class="field-inline">开发人员 <input type="text" placeholder="如 张三（可留空，仅展示与命名用）"></label>
+          <div class="dep-toolbar"><button type="button" class="btn primary" ${n ? '' : 'disabled'}>启动</button>
+          <span class="muted small">启动 = 创建任务并复制主调度提示词</span></div>
+        </section>
+        ${queueHtml(d.candidates, '待完善')}`;
+    }
+    return `
+      <section class="batch-create">
+        <div class="batch-stats">已计划候选 <b>${d.pending.length}</b> · 受依赖阻塞 <b>0</b>（最旧优先，实时读取）</div>
+      </section>
+      ${queueHtml(d.pending, '待开发')}`;
+  }
+  if (S.panel === 'refine') {
+    return paneShell({
+      overview: overviewHtml(d),
+      queue: queueHtml(d.candidates, '待完善'),
+      prompt: `<div class="dep-toolbar"><span class="muted small">主调度提示词：</span><button type="button" class="btn" disabled>重新复制</button></div><pre class="batch-prompt">${esc(PROMPT_TEXT)}</pre>`,
+      records: recordsHtml(d.records),
+    });
+  }
+  return paneShell({
+    overview: overviewHtml(d),
+    queue: `${queuedBatchesHtml(d.queuedBatches)}${queueHtml(d.pending, '待开发')}`,
+    prompt: `<div class="dep-toolbar"><span class="muted small">主调度提示词：</span><button type="button" class="btn" disabled>重新复制</button></div><pre class="batch-prompt">${esc(PROMPT_TEXT)}</pre>`,
+    records: recordsHtml(d.records),
+  });
+}
+
+/* 统计各列表命中数（演示注脚用；缺陷模式下同时用于说明“未生效”） */
+function computeStats() {
+  const d = panelData();
+  const ql = (S.q || '').trim().toLowerCase();
+  if (!ql) return null;
+  const count = (arr, extra = []) => hitList(arr, S.q, extra).list.length;
+  const st = { q: S.q };
+  if (S.panel === 'refine') {
+    st.queue = { hit: count(d.candidates), total: d.candidates.length, label: '待完善队列' };
+    if (S.phase === 'run') st.records = { hit: count(d.records), total: d.records.length, label: '处理记录' };
+  } else {
+    st.queue = { hit: count(S.phase === 'start' ? d.pending : d.pending), total: d.pending.length, label: '待开发队列' };
+    if (S.phase === 'run') {
+      st.batches = { hit: hitList(d.queuedBatches, S.q, ['batchId', 'developer']).list.length, total: d.queuedBatches.length, label: '排队批次' };
+      st.records = { hit: count(d.records), total: d.records.length, label: '处理记录' };
+    }
+  }
+  return st;
+}
+
+/* ================= 渲染与交互 ================= */
+function renderDrawer() {
+  const body = $('drawerBody');
+  if (S.loading) { body.innerHTML = '<p class="muted">加载中…</p>'; return; }
+  let html = '';
+  if (S.failed) {
+    html += `<div class="notice warn">任务面板数据加载失败：模拟错误（演示）。列表保留上次成功内容，可点击重试。
+      <button type="button" class="btn small" id="retryBtn">重试</button></div>`;
+  }
+  const content = buildBody();
+  S.lastGoodBody = content;
+  body.innerHTML = html + content;
+  body.querySelectorAll('.task-pane-tab').forEach((b) => b.addEventListener('click', () => { S.pane = b.dataset.pane; renderDrawer(); }));
+  body.querySelector('#retryBtn')?.addEventListener('click', () => loadPanel());
+}
+
+function renderFeedback() {
+  const strip = $('searchFeedback');
+  const input = $('searchInput');
+  $('searchClear').classList.toggle('hidden', !(input.value || '').trim());
+  if (!S.q) { strip.classList.add('hidden'); return; }
+  strip.classList.remove('hidden');
+  $('hitsTitle').innerHTML = `「${esc(S.q)}」<span class="muted small">· 任务</span>`;
+  // 产品文案与真实实现一致（修复后口径成真）；缺陷模式下该文案与实际行为不符——由演示注脚点出
+  $('hitsNote').textContent = '关键词在下方面板内前端过滤（编号 / 标题 / 执行器），不发请求';
+}
+
+function renderDemoNote() {
+  const el = $('demoNote');
+  const st = computeStats();
+  const where = `${S.panel === 'refine' ? '批量完善' : '批量开发'} · ${S.phase === 'start' ? '启动态' : '运行态'}`;
+  if (!st) {
+    el.className = 'demo-note ' + (S.mode === 'bug' ? 'bug' : 'fixed');
+    el.textContent = (S.mode === 'bug'
+      ? '缺陷现状（未输入关键词）：在上方搜索框输入条目编号 / 标题 / 执行器试试——面板列表不会过滤。'
+      : '修复后（未输入关键词）：输入条目编号 / 标题 / 执行器试试——「队列」「记录」列表即时前端过滤，清空恢复全量。') + `（当前场景：${where}）`;
+    return;
+  }
+  const parts = [st.queue, st.batches, st.records].filter(Boolean)
+    .map((x) => `${x.label} ${x.hit}/${x.total}`).join(' · ');
+  if (S.mode === 'bug') {
+    el.className = 'demo-note bug';
+    el.textContent = `缺陷现象：关键词「${st.q}」已输入，若过滤生效应命中——${parts}；但下方列表纹丝不动（应为「${where}」的全量内容），反馈条却宣称「在下方面板内前端过滤」。`;
+  } else {
+    el.className = 'demo-note fixed';
+    el.textContent = `修复后：关键词「${st.q}」前端过滤生效——${parts}（场景：${where}）；无命中的列表显示「清空搜索恢复」空态，清空即恢复全量。`;
+  }
+}
+
+function renderAll() {
+  $('tabRefine').classList.toggle('active', S.panel === 'refine');
+  $('tabDevelop').classList.toggle('active', S.panel === 'develop');
+  renderDrawer();
+  renderFeedback();
+  renderDemoNote();
+}
+
+/* 面板数据加载（模拟 2s 轮询拉取：加载态 → 成功 / 失败态） */
+let loadTimer = null;
+function loadPanel() {
+  clearTimeout(loadTimer);
+  S.loading = true; S.failed = false;
+  renderDrawer();
+  loadTimer = setTimeout(() => {
+    S.loading = false;
+    if (S.failSim) {
+      S.failed = true;
+      showToast('任务面板数据加载失败：模拟错误（演示）');
+      const body = $('drawerBody');
+      body.innerHTML = `<div class="notice warn">任务面板数据加载失败：模拟错误（演示）。
+        <button type="button" class="btn small" id="retryBtn">重试</button></div>${S.lastGoodBody || '<p class="muted">（尚无已加载内容）</p>'}`;
+      body.querySelector('#retryBtn')?.addEventListener('click', () => loadPanel());
+    } else {
+      renderAll();
+    }
+  }, 400);
+}
+
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* 搜索：250ms 防抖，纯前端（不发请求） */
+let searchTimer = null;
+const input = $('searchInput');
+input.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    S.q = input.value.trim();
+    renderAll(); // 修复后：列表随关键词即时收窄/恢复；缺陷模式：文案变但列表不动
+  }, 250);
+});
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { clearSearch(); }
+});
+function clearSearch() {
+  clearTimeout(searchTimer);
+  input.value = '';
+  S.q = '';
+  renderAll();
+  input.focus();
+}
+$('searchClear').addEventListener('click', clearSearch);
+$('hitsClear').addEventListener('click', clearSearch);
+
+/* 非输入态按 / 聚焦搜索框（REQ-20260910-007） */
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== input && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) {
+    e.preventDefault();
+    input.focus();
+  }
+});
+
+/* 一级页签 / 场景切换 */
+$('tabRefine').addEventListener('click', () => { S.panel = 'refine'; S.pane = 'overview'; loadPanel(); });
+$('tabDevelop').addEventListener('click', () => { S.panel = 'develop'; S.pane = 'overview'; loadPanel(); });
+document.querySelectorAll('#phaseSeg button').forEach((b) => b.addEventListener('click', () => {
+  if (b.dataset.phase === S.phase) return;
+  S.phase = b.dataset.phase; S.pane = 'overview';
+  document.querySelectorAll('#phaseSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  loadPanel();
+}));
+
+/* 对照模式切换（缺陷现状 / 修复后）：只改列表过滤行为，搜索反馈条文案保持产品口径 */
+document.querySelectorAll('#modeSeg button').forEach((b) => b.addEventListener('click', () => {
+  S.mode = b.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  renderAll();
+}));
+
+/* 失败模拟与主题 */
+$('failToggle').addEventListener('click', () => {
+  S.failSim = !S.failSim;
+  $('failToggle').textContent = `模拟数据加载失败：${S.failSim ? '开' : '关'}`;
+  if (S.failSim) showToast('已开启失败模拟：下一次面板加载将失败并保留旧内容');
+  else loadPanel();
+});
+$('themeToggle').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = cur;
+});
+
+/* 初始加载 */
+loadPanel();
+</script>
+</body>
+</html>

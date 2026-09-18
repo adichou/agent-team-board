@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260913-003 演示：Bug 单文档右键「讨论」菜单（缺陷 / 期望对照）</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2329; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #2563eb; --accent-ink: #ffffff;
+    --ok-bg: #e8f7ee; --ok-ink: #166534; --warn-bg: #fdf2e3; --warn-ink: #92400e;
+    --chip-bg: #eef1f5; --menu-bg: #ffffff; --menu-shadow: 0 6px 24px rgba(15, 23, 42, .18);
+    --code-bg: #f3f4f6; --sel: rgba(37, 99, 235, .18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16181d; --panel: #1f232a; --ink: #e7eaf0; --muted: #9aa3af;
+      --line: #333a45; --accent: #4f8bff; --accent-ink: #0b1220;
+      --ok-bg: #14321f; --ok-ink: #7ee2a8; --warn-bg: #3a2a12; --warn-ink: #f5c26b;
+      --chip-bg: #2a303a; --menu-bg: #262c36; --menu-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+      --code-bg: #14171c; --sel: rgba(79, 139, 255, .28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16181d; --panel: #1f232a; --ink: #e7eaf0; --muted: #9aa3af;
+    --line: #333a45; --accent: #4f8bff; --accent-ink: #0b1220;
+    --ok-bg: #14321f; --ok-ink: #7ee2a8; --warn-bg: #3a2a12; --warn-ink: #f5c26b;
+    --chip-bg: #2a303a; --menu-bg: #262c36; --menu-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    --code-bg: #14171c; --sel: rgba(79, 139, 255, .28);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 20px 16px 60px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .ctrl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ctrl > label { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--ink); padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .note b { color: var(--ink); }
+  /* 抽屉模拟 */
+  .drawer { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-width: 860px; overflow: hidden; }
+  .drawer-head { padding: 12px 16px 8px; border-bottom: 1px solid var(--line); }
+  .card-top { display: flex; align-items: center; gap: 10px; }
+  .id-chip { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--chip-bg); border-radius: 6px; padding: 2px 8px; }
+  .icon-btn { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 14px; cursor: default; }
+  .drawer-head h2 { font-size: 15px; margin: 8px 0 2px; font-weight: 600; }
+  .tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tab { border: 0; background: transparent; color: var(--muted); padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .drawer-body { padding: 14px 18px 18px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .meta-grid label { display: block; font-size: 12px; color: var(--muted); }
+  /* 文档渲染区（模拟 #docView） */
+  .md { outline: none; }
+  .md [data-start] { position: relative; border-radius: 4px; }
+  .md [data-start]:hover { background: var(--sel); cursor: text; }
+  .md [data-start]:hover::after {
+    content: attr(data-range);
+    position: absolute; right: 0; top: -18px; font-size: 11px; color: var(--muted);
+    background: var(--chip-bg); border-radius: 4px; padding: 1px 6px; pointer-events: none;
+  }
+  .md h1 { font-size: 16px; } .md h2 { font-size: 14px; margin: 14px 0 6px; }
+  .md p { margin: 6px 0; }
+  .md pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; font-size: 12.5px; }
+  .md table { border-collapse: collapse; font-size: 13px; }
+  .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; }
+  .doc-state { color: var(--muted); }
+  .doc-state .retry { margin-left: 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+  ::selection { background: var(--sel); }
+  /* 右键菜单（模拟 doc-ctx-menu） */
+  .doc-ctx-menu { position: fixed; z-index: 60; background: var(--menu-bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--menu-shadow); padding: 4px; min-width: 120px; }
+  .doc-ctx-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font-size: 13px; padding: 7px 12px; border-radius: 6px; cursor: pointer; }
+  .doc-ctx-item:hover { background: var(--chip-bg); }
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 80; max-width: 80vw; }
+  #toast.show { opacity: 1; }
+  #toast.err { background: #b91c1c; color: #fff; }
+  /* 手动复制兜底弹层 */
+  #copyMask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 70; }
+  #copyMask.show { display: flex; }
+  #copyBox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; width: min(520px, 92vw); }
+  #copyBox h3 { margin: 0 0 8px; font-size: 14px; }
+  #copyBox textarea { width: 100%; height: 120px; font: 12px/1.5 ui-monospace, Menlo, monospace; background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  #copyBox .row { text-align: right; margin-top: 10px; }
+  #copyBox .row button { border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 6px; padding: 5px 14px; cursor: pointer; }
+  /* 引用预览 */
+  #refPreview pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 12px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; min-height: 52px; margin: 8px 0 0; }
+  .state-ok { color: var(--ok-ink); background: var(--ok-bg); border-radius: 6px; padding: 1px 8px; font-size: 12px; }
+  footer { max-width: 860px; color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <h1>BUG-20260913-003 演示：Bug 单文档右键「讨论」菜单</h1>
+  <p class="sub">单文件演示（内联 CSS/JS，无外网依赖）；对照需求单既有能力（REQ-20260909-014）与 Bug 单现状。数据均为示例。</p>
+
+  <div class="panel controls">
+    <div class="ctrl"><label>对照模式</label>
+      <span class="seg" id="modeSeg">
+        <button type="button" data-v="defect" class="on">① 缺陷现状</button>
+        <button type="button" data-v="expected">② 期望修复后</button>
+      </span>
+    </div>
+    <div class="ctrl"><label>条目归属</label>
+      <span class="seg" id="ownerSeg">
+        <button type="button" data-v="standalone" class="on">独立 Bug</button>
+        <button type="button" data-v="nested">归属需求 Bug</button>
+      </span>
+    </div>
+    <div class="ctrl"><label>文档状态</label>
+      <span class="seg" id="docStateSeg">
+        <button type="button" data-v="ok" class="on">正常</button>
+        <button type="button" data-v="loading">加载中</button>
+        <button type="button" data-v="missing">尚未创建</button>
+        <button type="button" data-v="error">加载失败</button>
+      </span>
+    </div>
+    <div class="ctrl"><label><input type="checkbox" id="failCopy"> 模拟复制失败（演示手动复制兜底）</label></div>
+    <div class="ctrl"><button type="button" class="tab" id="themeBtn" style="border:1px solid var(--line);border-radius:6px">🌓 深浅色</button></div>
+    <p class="note" id="modeNote"></p>
+  </div>
+
+  <div class="drawer">
+    <div class="drawer-head">
+      <div class="card-top">
+        <span class="id-chip" id="idChip">BUG-20260913-003</span>
+        <span class="state-ok">accepted</span>
+        <button class="icon-btn" title="演示占位（真实抽屉为关闭按钮）">✕</button>
+      </div>
+      <h2 id="drawerTitle">示例 Bug：任务列表的排序按钮与搜索框没有对齐（演示数据）</h2>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button type="button" class="tab" data-tab="info">基本信息</button>
+      <button type="button" class="tab active" data-tab="README.md">说明</button>
+      <button type="button" class="tab" data-tab="design.md">设计</button>
+      <button type="button" class="tab" data-tab="test-cases.md">测试用例</button>
+      <button type="button" class="tab" data-tab="disc">讨论纪要</button>
+    </nav>
+    <div class="drawer-body" id="body"></div>
+  </div>
+
+  <div class="panel" style="max-width:860px;margin-top:14px">
+    <b style="font-size:13px">引用预览（演示辅助：真实实现只写入剪贴板并 toast，不展示面板）</b>
+    <pre id="refPreview">（在「期望修复后」模式的文档内容上右键 → 点「💬 讨论」后，这里展示将复制到剪贴板的完整引用文本）</pre>
+  </div>
+
+  <footer>
+    本页为模拟界面，仅用于 BUG-20260913-003 的缺陷现象与期望效果对照：①缺陷现状——Bug 单文档右键不弹「讨论」菜单（当前 app.js onDocCtxMenu 显式排除 Bug 单）；②期望修复后——同口径弹出菜单并复制引用，且路径按 Bug 单真实磁盘位置拼装（独立：docs/agent-team-board/bugs/&lt;编号&gt;/；归属：docs/agent-team-board/requirements/&lt;REQ 编号&gt;/bugs/&lt;编号&gt;/）。悬停内容块显示源码行范围徽标、引用预览面板、失败模拟与文档状态切换均为演示辅助，不是新增业务功能；空态 / 失败文案为示意，以真实实现为准。演示不替代真实页面验收。
+  </footer>
+
+  <div id="toast"></div>
+  <div id="copyMask">
+    <div id="copyBox">
+      <h3>手动复制讨论引用（自动复制失败兜底）</h3>
+      <textarea id="copyText" readonly></textarea>
+      <div class="row"><button type="button" id="copyClose">关闭</button></div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  var ITEM_ID = 'BUG-20260913-003';
+  var DEMO_PARENT = 'REQ-20260910-012'; // 归属演示用的示例父需求（示例数据）
+  var state = { mode: 'defect', owner: 'standalone', docState: 'ok', tab: 'README.md' };
+
+  // ---------- 示例文档（源码行范围为示例数据，与真实条目无关） ----------
+  var DOCS = {
+    'README.md': [
+      { kind: 'heading', start: 1, end: 1, html: '<h1>示例 Bug：任务列表的排序按钮与搜索框没有对齐</h1>' },
+      { kind: 'heading', start: 3, end: 3, html: '<h2>现象</h2>' },
+      { kind: 'para', start: 4, end: 4, html: '<p>打开任务模块后，头部工具行的排序按钮与搜索框上下错位，窄窗口下还会换行堆叠。</p>' },
+      { kind: 'heading', start: 6, end: 6, html: '<h2>复现步骤</h2>' },
+      { kind: 'list', start: 7, end: 9, html: '<ol><li>打开任务模块。</li><li>把窗口缩到 720px 以下。</li><li>观察列表头部的工具行。</li></ol>' },
+      { kind: 'heading', start: 11, end: 11, html: '<h2>期望行为</h2>' },
+      { kind: 'para', start: 12, end: 12, html: '<p>排序按钮与搜索框同一行右对齐，高度一致，不换行堆叠。</p>' }
+    ],
+    'design.md': [
+      { kind: 'heading', start: 1, end: 1, html: '<h1>设计（示例数据）</h1>' },
+      { kind: 'heading', start: 3, end: 3, html: '<h2>方案</h2>' },
+      { kind: 'para', start: 4, end: 4, html: '<p>工具行改为 flex 布局并统一高度：</p>' },
+      { kind: 'fence', start: 6, end: 8, html: '<pre><code>.toolbar { display: flex; align-items: center; gap: 12px; }</code></pre>' },
+      { kind: 'heading', start: 10, end: 10, html: '<h2>风险</h2>' },
+      { kind: 'para', start: 11, end: 11, html: '<p>窄屏仍可能换行，修复后需回归验证。</p>' }
+    ],
+    'test-cases.md': [
+      { kind: 'heading', start: 1, end: 1, html: '<h1>测试用例（示例数据）</h1>' },
+      { kind: 'table', start: 3, end: 5, html: '<table><tr><th>用例</th><th>步骤</th><th>预期</th></tr><tr><td>对齐</td><td>窗口缩到 720px</td><td>同一行右对齐</td></tr></table>' },
+      { kind: 'list', start: 7, end: 8, html: '<ul><li>桌面宽度复核</li><li>窄屏回归</li></ul>' }
+    ]
+  };
+
+  var body = document.getElementById('body');
+
+  // ---------- 渲染 ----------
+  function render() {
+    var t = state.tab;
+    if (t === 'info') { renderInfo(); return; }
+    if (t === 'disc') { renderDisc(); return; }
+    renderDoc();
+  }
+
+  function renderInfo() {
+    body.innerHTML =
+      '<div class="meta-grid">' +
+      '<div><label>状态</label><span class="state-ok">accepted</span></div>' +
+      '<div><label>类型</label><span>Bug</span></div>' +
+      '<div><label>归属</label><span>' + (state.owner === 'nested' ? DEMO_PARENT + '（演示）' : '—（独立 Bug）') + '</span></div>' +
+      '<div><label>磁盘位置</label><span style="font-family:ui-monospace,Menlo,monospace;font-size:12px">' + itemDir() + '/</span></div>' +
+      '<div><label>认领者</label><span>—</span></div>' +
+      '<div><label>创建</label><span>2026-09-13（演示）</span></div>' +
+      '</div>' +
+      '<p class="note">「磁盘位置」随上方「条目归属」开关变化——这正是引用文本里文档路径必须区分的两种拼法（见 README 期望行为第 3 条）。</p>';
+  }
+
+  function renderDisc() {
+    body.innerHTML =
+      '<p class="doc-state">Bug 单暂不支持关联讨论；如需讨论请到「讨论」模块发起。</p>' +
+      '<p class="note">以上为看板现状文案（app.js 渲染口径）。需求单「讨论纪要」页签内还有成套「文档讨论」区块（REQ-20260909-003，仅需求单挂载）——是否同步开放 Bug 单为待确认，不在本单标题口径内。</p>';
+  }
+
+  function itemDir() {
+    return state.owner === 'nested'
+      ? 'docs/agent-team-board/requirements/' + DEMO_PARENT + '/bugs/' + ITEM_ID
+      : 'docs/agent-team-board/bugs/' + ITEM_ID;
+  }
+
+  function renderDoc() {
+    var name = state.tab;
+    var view = '<article id="docView" class="md"></article>';
+    if (state.docState === 'loading') {
+      body.innerHTML = view;
+      document.getElementById('docView').innerHTML = '<p class="doc-state">加载中…（演示示意）</p>';
+      return;
+    }
+    if (state.docState === 'missing') {
+      body.innerHTML = view;
+      document.getElementById('docView').innerHTML = '<p class="doc-state">尚未创建，开发阶段补充。（真实空态文案口径）</p>';
+      return;
+    }
+    if (state.docState === 'error') {
+      body.innerHTML = view;
+      var v = document.getElementById('docView');
+      v.innerHTML = '<p class="doc-state">文档加载失败。（演示示意）<button type="button" class="retry" id="retryBtn">重试</button></p>';
+      document.getElementById('retryBtn').addEventListener('click', function () {
+        setDocState('loading');
+        setTimeout(function () { setDocState('ok'); toast('已恢复（演示）'); }, 600);
+      });
+      return;
+    }
+    var blocks = DOCS[name];
+    body.innerHTML = view;
+    var docView = document.getElementById('docView');
+    blocks.forEach(function (b) {
+      var tpl = document.createElement('template');
+      tpl.innerHTML = b.html.trim();
+      var el = tpl.content.firstElementChild;
+      el.dataset.start = b.start; el.dataset.end = b.end; el.dataset.kind = b.kind;
+      el.dataset.range = name + ' 第 ' + b.start + (b.start === b.end ? ' 行' : '–' + b.end + ' 行');
+      docView.appendChild(el);
+    });
+  }
+
+  // ---------- 页签 / 开关 ----------
+  document.getElementById('tabs').addEventListener('click', function (e) {
+    var btn = e.target.closest('.tab'); if (!btn) return;
+    state.tab = btn.dataset.tab;
+    document.querySelectorAll('#tabs .tab').forEach(function (b) { b.classList.toggle('active', b === btn); });
+    if (state.tab !== 'info' && state.tab !== 'disc' && state.docState !== 'ok') setDocState('ok');
+    render();
+  });
+
+  function bindSeg(id, key, after) {
+    document.getElementById(id).addEventListener('click', function (e) {
+      var btn = e.target.closest('button'); if (!btn) return;
+      state[key] = btn.dataset.v;
+      document.querySelectorAll('#' + id + ' button').forEach(function (b) { b.classList.toggle('on', b === btn); });
+      if (after) after();
+      render();
+    });
+  }
+  bindSeg('modeSeg', 'mode', modeNote);
+  bindSeg('ownerSeg', 'owner');
+  bindSeg('docStateSeg', 'docState');
+
+  function setDocState(v) {
+    state.docState = v;
+    document.querySelectorAll('#docStateSeg button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); });
+  }
+
+  function modeNote() {
+    document.getElementById('modeNote').innerHTML = state.mode === 'defect'
+      ? '<b>① 缺陷现状：</b>在文档内容上右键——不弹「💬 讨论」菜单（仅浏览器原生右键）。对应 app.js onDocCtxMenu 入口对 Bug 单直接 return。'
+      : '<b>② 期望修复后：</b>在文档内容上选中文字（或直接落在某块上）右键 → 弹「💬 讨论」→ 点击复制引用；文档未就绪（加载中 / 空态 / 失败）时不弹，与需求单口径一致。';
+  }
+  modeNote();
+
+  // ---------- 选区 → 源行映射（口径同 app.js resolveDocSelection / docSelLines，演示简化） ----------
+  function blockElFromNode(node) {
+    var el = node && node.nodeType === 3 ? node.parentElement : node;
+    if (!el || !el.closest) return null;
+    var b = el.closest('[data-start]');
+    return (b && document.getElementById('docView') && document.getElementById('docView').contains(b)) ? b : null;
+  }
+
+  function resolveSelection(sel) {
+    var view = document.getElementById('docView');
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    var r = sel.getRangeAt(0);
+    var sEl = blockElFromNode(r.startContainer), eEl = blockElFromNode(r.endContainer);
+    if (!sEl || !eEl) return null;
+    var text = sel.toString();
+    if (!text.trim()) return null;
+    var kind = sEl.dataset.kind;
+    if (sEl === eEl && (kind === 'para' || kind === 'fence')) {
+      var before = r.cloneRange();
+      before.selectNodeContents(sEl);
+      before.setEnd(r.startContainer, r.startOffset);
+      var off = kind === 'fence' ? 1 : 0; // 围栏渲染文本不含首行 ```
+      var start = Number(sEl.dataset.start) + off + (before.toString().split('\n').length - 1);
+      var end = Math.min(Number(sEl.dataset.end) - off, start + text.split('\n').length - 1);
+      return { start: start, end: end, text: text };
+    }
+    return { start: Math.min(Number(sEl.dataset.start), Number(eEl.dataset.start)),
+             end: Math.max(Number(sEl.dataset.end), Number(eEl.dataset.end)), text: text };
+  }
+
+  // ---------- 引用组装（口径同 app.js buildDocRef） ----------
+  function buildRef(ref) {
+    var name = state.tab;
+    var path = itemDir() + '/' + name;
+    var lines = [
+      ITEM_ID + ' / ' + name + ' ' + (ref.start === ref.end ? '第 ' + ref.start + ' 行' : '第 ' + ref.start + '–' + ref.end + ' 行'),
+      '文档：' + path
+    ];
+    if (ref.text != null && ref.text !== '') lines.push('原文：', ref.text);
+    return lines.join('\n');
+  }
+
+  // ---------- 右键菜单（模拟 openDocCtxMenu / closeDocCtxMenu） ----------
+  var menuEl = null, menuInfo = null, cleanup = null;
+
+  function closeMenu() {
+    if (cleanup) { cleanup(); cleanup = null; }
+    if (menuEl) { menuEl.remove(); menuEl = null; }
+    menuInfo = null;
+  }
+
+  function openMenu(x, y, info) {
+    closeMenu();
+    menuInfo = info;
+    menuEl = document.createElement('div');
+    menuEl.className = 'doc-ctx-menu';
+    menuEl.setAttribute('role', 'menu');
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'doc-ctx-item'; btn.setAttribute('role', 'menuitem');
+    btn.textContent = '💬 讨论';
+    btn.addEventListener('click', onDiscuss);
+    menuEl.appendChild(btn);
+    document.body.appendChild(menuEl);
+    var rect = menuEl.getBoundingClientRect();
+    menuEl.style.left = (x + rect.width > window.innerWidth ? Math.max(8, x - rect.width) : x) + 'px';
+    menuEl.style.top = (y + rect.height > window.innerHeight ? Math.max(8, y - rect.height) : y) + 'px';
+    var onDown = function (e) { if (menuEl && !menuEl.contains(e.target)) closeMenu(); };
+    var onKey = function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); } };
+    var onScroll = function () { closeMenu(); };
+    document.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    cleanup = function () {
+      document.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }
+
+  function onDiscuss() {
+    var info = menuInfo;
+    closeMenu();
+    if (!info) return;
+    var ok = copyPlain(info.text);
+    if (ok) { toast('已复制 引用：' + info.name + ' ' + info.rangeLabel); }
+    else { toast('自动复制失败，请在弹出的文本框中手动复制', true); manualCopy(info.text); }
+    document.getElementById('refPreview').textContent = info.text + '\n\n（演示辅助预览——真实实现仅写剪贴板 + toast' + (ok ? '）' : '，此处同时演示手动复制兜底弹层）');
+  }
+
+  function copyPlain(text) {
+    if (document.getElementById('failCopy').checked) return false; // 演示：模拟失败
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(function () { manualCopy(text); });
+        return true;
+      }
+    } catch (e) { /* 走降级 */ }
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  function manualCopy(text) {
+    var mask = document.getElementById('copyMask');
+    document.getElementById('copyText').value = text;
+    mask.classList.add('show');
+  }
+  document.getElementById('copyClose').addEventListener('click', function () {
+    document.getElementById('copyMask').classList.remove('show');
+  });
+
+  // ---------- 文档级 contextmenu（对照 onDocCtxMenu 的类型门槛） ----------
+  document.addEventListener('contextmenu', function (e) {
+    var view = document.getElementById('docView');
+    var inDoc = view && e.target && e.target.closest && view.contains(e.target);
+    if (state.tab === 'info' || state.tab === 'disc' || !inDoc) return; // 文档区外：放行原生
+    if (e.target.closest('a, img')) return; // 链接 / 图片：放行原生（真实口径）
+    if (state.mode === 'defect') {
+      // 缺陷现状：类型门槛直接 return——不拦截、不弹自定义菜单
+      toast('缺陷现状：Bug 单文档右键不弹「讨论」菜单（仅浏览器原生右键）');
+      return;
+    }
+    // 期望修复后：文档未就绪态不弹菜单（与需求单口径一致）
+    if (state.docState !== 'ok') { toast('文档未就绪（' + stateDocLabel() + '）：不弹「讨论」菜单'); return; }
+    e.preventDefault();
+    var name = state.tab;
+    var sel = window.getSelection();
+    var ref = resolveSelection(sel);
+    var rangeLabel;
+    if (!ref) {
+      var pointEl = e.target.closest('[data-start]');
+      if (!pointEl) return; // 落点未标注：放行原生（真实口径）
+      ref = { start: Number(pointEl.dataset.start), end: Number(pointEl.dataset.end), text: null };
+    }
+    rangeLabel = ref.start === ref.end ? '第 ' + ref.start + ' 行' : '第 ' + ref.start + '–' + ref.end + ' 行';
+    openMenu(e.clientX, e.clientY, { name: name, rangeLabel: rangeLabel, text: buildRef(ref) });
+  });
+
+  function stateDocLabel() {
+    return { loading: '加载中', missing: '尚未创建', error: '加载失败' }[state.docState] || state.docState;
+  }
+
+  // ---------- toast / 主题 ----------
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ''; }, 2600);
+  }
+
+  var root = document.documentElement;
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = prefersDark ? 'dark' : 'light';
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

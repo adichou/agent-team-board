@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260912-004 操作提示「已」叠字 · 交互演示</title>
+<!--
+  本演示由条目完善阶段生成，对应 README「界面展示」节。
+  单文件、内联 CSS/JS、无外网依赖、无构建步骤，浏览器直接打开即可交互。
+  演示的是看板前端操作提示条（toast）的缺陷现象与修复后预期状态，
+  真实问题位置：scripts/web/i18n.js 泛化词条 '✓ ◇ 已◇'（反向正则 ^✓ (.+?) (.+?)$ 自匹配）
+  + scripts/web/app.js 每 2 秒轮询触发整页重翻译。演示中的「重放翻译」即模拟一次整页翻译重放。
+-->
+<style>
+  :root {
+    --bg: #171923; --panel: #1e2230; --panel2: #232839; --line: #333a52;
+    --text: #e8eaf2; --muted: #9aa1b5; --accent: #7aa2f7; --ok: #38b26a;
+    --toast-bg: #f2f3f7; --toast-text: #1c2030; --err-bg: #d64545; --err-text: #fff;
+    --chip: #2a3046;
+  }
+  html[data-theme="light"] {
+    --bg: #f4f5f9; --panel: #ffffff; --panel2: #eef0f6; --line: #d8dce8;
+    --text: #1c2030; --muted: #667089; --accent: #3b5bdb; --ok: #2f9e57;
+    --toast-bg: #1c2030; --toast-text: #f2f3f7; --err-bg: #c92f2f; --err-text: #fff;
+    --chip: #e3e7f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .topbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted); padding: 6px 14px;
+    cursor: pointer; font-size: 13px;
+  }
+  .seg button.on { background: var(--accent); color: #fff; }
+  button.act {
+    border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+  }
+  button.act:hover { border-color: var(--accent); }
+  button.act:disabled { opacity: .5; cursor: not-allowed; }
+  label.toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
+  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .statusline {
+    font-size: 12.5px; color: var(--muted); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 4px;
+  }
+  .statusline b { color: var(--text); }
+  /* 模拟看板舞台 */
+  .stage { position: relative; min-height: 300px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px; overflow: hidden; }
+  .stage .lanehead { font-size: 12px; color: var(--muted); letter-spacing: 1px; margin-bottom: 8px; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; max-width: 340px; }
+  .card .id { font-size: 12px; color: var(--accent); }
+  .card .title { font-size: 13.5px; margin-top: 2px; }
+  /* toast：页面顶部居中悬浮，形态对齐真实看板 */
+  .toastwrap { position: absolute; top: 14px; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; }
+  #toast {
+    pointer-events: auto; display: flex; align-items: center; gap: 12px;
+    background: var(--toast-bg); color: var(--toast-text);
+    border-radius: 999px; padding: 10px 10px 10px 18px; font-size: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35); max-width: 92%;
+  }
+  #toast.err { background: var(--err-bg); color: var(--err-text); }
+  #toast .toast-act {
+    border: 1px solid currentColor; background: transparent; color: inherit;
+    border-radius: 999px; padding: 3px 12px; font-size: 13px; cursor: pointer;
+  }
+  #toast .spinner {
+    width: 14px; height: 14px; border: 2px solid rgba(127,127,127,.35); border-top-color: currentColor;
+    border-radius: 50%; animation: spin 0.9s linear infinite; flex: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+  /* 空态占位 */
+  #emptyHint {
+    position: absolute; top: 18px; left: 0; right: 0; display: flex; justify-content: center;
+    color: var(--muted); font-size: 12px;
+  }
+  #emptyHint span { background: var(--chip); border-radius: 999px; padding: 4px 12px; }
+  /* 对照卡 */
+  .compare { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .cmp { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .cmp .tag { font-size: 11px; border-radius: 4px; padding: 1px 6px; margin-right: 6px; }
+  .cmp.bad .tag { background: var(--err-bg); color: var(--err-text); }
+  .cmp.good .tag { background: var(--ok); color: #fff; }
+  .cmp .demo { margin-top: 6px; display: inline-flex; align-items: center; gap: 10px;
+    background: var(--toast-bg); color: var(--toast-text); border-radius: 999px; padding: 6px 8px 6px 14px;
+    font-size: 12.5px; max-width: 100%; overflow: hidden; white-space: nowrap; }
+  .cmp .demo .toast-act { border: 1px solid currentColor; border-radius: 999px; padding: 1px 9px; font-size: 11.5px; }
+  pre.wire {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; font-size: 11.5px; line-height: 1.5; overflow-x: auto; color: var(--muted);
+  }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .pollflash { color: var(--accent); }
+</style>
+</head>
+<body>
+  <h1>BUG-20260912-004 · 操作提示「已」叠字（i18n 重复翻译）</h1>
+  <p class="sub">对照演示「缺陷现象」与「修复后预期」。绿色成功提示带「撤销」按钮时停留 8 秒，普通提示 3.2 秒自动消失——与真实看板一致。</p>
+
+  <div class="topbar">
+    <span class="seg" role="group" aria-label="形态切换">
+      <button type="button" id="modeBug" class="on">缺陷现象（修复前）</button>
+      <button type="button" id="modeFix">修复后预期</button>
+    </span>
+    <button type="button" class="act" id="btnTheme">切换深/浅色</button>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>控制台</h2>
+      <div class="btnrow">
+        <button type="button" class="act" id="btnDone">确认完成（带撤销）</button>
+        <button type="button" class="act" id="btnAccept">接受（带撤销）</button>
+        <button type="button" class="act" id="btnPlan">移入计划（进行中→成功）</button>
+        <button type="button" class="act" id="btnPlain">成功（无撤销）</button>
+        <button type="button" class="act" id="btnErr">模拟失败</button>
+        <button type="button" class="act" id="btnClear">清除提示</button>
+      </div>
+      <div class="btnrow">
+        <button type="button" class="act" id="btnReplay">重放翻译 1 遍</button>
+        <label class="toggle"><input type="checkbox" id="chkPoll"> 模拟看板轮询（每 2 秒重放翻译一遍）</label>
+        <span id="pollMark" class="pollflash hidden">● 本遍已重放</span>
+      </div>
+      <div class="statusline" id="status">提示未显示（空态） · 翻译重放 <b>0</b> 遍</div>
+      <p class="note">
+        「重放翻译」模拟看板每 2 秒轮询重渲染触发的整页翻译。缺陷形态下，每次重放都会给
+        「✓ 条目号 已…」提示多叠一个「已」——因为 i18n 泛化词条 <code>'✓ ◇ 已◇'</code> 的反向正则
+        <code>^✓ (.+?) (.+?)$</code> 会命中它自己译出的中文文案（自匹配）。修复后形态下，翻译层对
+        已含中文且未命中词条的文本保持原样（词典「未命中保持原文」降级口径），文案恒定。切换形态会把
+        当前提示重置为原始文案，便于对比。
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>状态对照（静态示意）</h2>
+      <div class="compare">
+        <div class="cmp bad">
+          <span class="tag">缺陷</span>停留数秒后「已」连叠
+          <div class="demo"><span>✓ BUG-20260912-004 已已已已确认完成</span><span class="toast-act">撤销</span></div>
+        </div>
+        <div class="cmp good">
+          <span class="tag">预期</span>文案恒定不叠字
+          <div class="demo"><span>✓ BUG-20260912-004 已确认完成</span><span class="toast-act">撤销</span></div>
+        </div>
+        <div class="cmp">
+          <span class="tag">失败态</span>红色提示、无撤销、3.2 秒消失
+          <div class="demo"><span>状态流转被服务端拒绝（示例）</span></div>
+        </div>
+        <div class="cmp">
+          <span class="tag">空态</span>无提示时区域整体不占视觉焦点
+          <div class="demo" style="color: var(--muted); background: var(--chip);"><span>（当前无操作提示）</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage" id="stage" style="margin-top:14px;">
+    <div id="emptyHint"><span>当前无操作提示（空态）</span></div>
+    <div class="toastwrap">
+      <div id="toast" class="hidden" role="status" aria-live="polite"></div>
+    </div>
+    <div class="lanehead">── 待测试 ──（模拟看板背景，仅作舞台）</div>
+    <div class="card">
+      <div class="id">BUG-20260912-004</div>
+      <div class="title">操作提示出现多个已，请定位</div>
+    </div>
+    <pre class="wire" style="margin-top:14px;">
+布局线框（ASCII 示意，可选补充）：
+┌──────────────────────────────────────────────┐
+│            〔页面顶部 · 居中悬浮〕             │
+│      ╭──────────────────────────────╮        │
+│      │ ✓ 条目号 已确认完成   (撤销)  │        │  ← 操作提示条 toast
+│      ╰──────────────────────────────╯        │
+│                                              │
+│   ── 待接受 ──   ── 开发中 ──   ── 待测试 ──  │
+│    ┌───────┐       ┌───────┐                │
+│    │ 条目卡 │       │ 条目卡 │                │
+│    └───────┘       └───────┘                │
+└──────────────────────────────────────────────┘
+交互：成功操作弹提示；可回退操作附「撤销」按钮（8 秒窗口）；
+失败为红色提示；无提示时仅空态占位，不遮挡看板。</pre>
+  </div>
+
+<script>
+'use strict';
+/* ---------- 形态切换 ---------- */
+var mode = 'bug'; // 'bug' = 修复前缺陷形态；'fix' = 修复后预期形态
+var modeBug = document.getElementById('modeBug');
+var modeFix = document.getElementById('modeFix');
+function setMode(next) {
+  mode = next;
+  modeBug.classList.toggle('on', mode === 'bug');
+  modeFix.classList.toggle('on', mode === 'fix');
+  if (cur) { cur.textEl.textContent = cur.base; } // 切换形态时把当前提示重置为原始文案，便于对照
+  passes = 0;
+  updateStatus();
+}
+modeBug.addEventListener('click', function () { setMode('bug'); });
+modeFix.addEventListener('click', function () { setMode('fix'); });
+
+/* ---------- 深浅色 ---------- */
+document.getElementById('btnTheme').addEventListener('click', function () {
+  var html = document.documentElement;
+  html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+/* ---------- toast：对齐真实组件的契约 ---------- */
+var toastEl = document.getElementById('toast');
+var emptyHint = document.getElementById('emptyHint');
+var hideTimer = null;
+var cur = null; // { base, textEl }
+function hideToast() {
+  clearTimeout(hideTimer);
+  toastEl.classList.add('hidden');
+  toastEl.replaceChildren();
+  cur = null;
+  emptyHint.classList.remove('hidden');
+  updateStatus();
+}
+// 有 action：文本 span + 按钮，停留 8 秒；无 action：纯文本，3.2 秒；err：红色失败形态
+function showToast(msg, opts) {
+  opts = opts || {};
+  clearTimeout(hideTimer);
+  toastEl.classList.remove('hidden');
+  toastEl.classList.toggle('err', !!opts.err);
+  toastEl.replaceChildren();
+  var textEl = document.createElement('span');
+  textEl.textContent = msg;
+  cur = { base: msg, textEl: textEl };
+  if (opts.action) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-act';
+    btn.textContent = opts.action.label;
+    btn.addEventListener('click', function () { hideToast(); opts.action.run(); });
+    toastEl.appendChild(textEl);
+    toastEl.appendChild(btn);
+    hideTimer = setTimeout(hideToast, 8000);
+  } else if (opts.sticky) {
+    toastEl.appendChild(textEl); // 进行中：不自动消失，由后续提示接替
+  } else {
+    toastEl.appendChild(textEl);
+    hideTimer = setTimeout(hideToast, 3200);
+  }
+  emptyHint.classList.add('hidden');
+  updateStatus();
+}
+
+/* ---------- 翻译重放：复刻 i18n.js 的自匹配机制 ---------- */
+var passes = 0;
+var statusEl = document.getElementById('status');
+var pollMark = document.getElementById('pollMark');
+// 与 scripts/web/i18n.js 中泛化词条 '✓ ◇ 已◇': '✓ $1 $2' 的反向编译结果一致
+var BUG_RE = /^✓ (.+?) (.+?)$/;
+function replayPass() {
+  passes++;
+  if (cur && mode === 'bug') {
+    var s = cur.textEl.textContent;
+    if (BUG_RE.test(s)) cur.textEl.textContent = s.replace(BUG_RE, '✓ $1 已$2');
+  }
+  // 修复后形态：翻译层不再自匹配（未命中保持原文），文案恒定
+  pollMark.classList.add('hidden');
+  updateStatus();
+}
+function updateStatus() {
+  if (!cur) {
+    statusEl.innerHTML = '提示未显示（空态） · 翻译重放 <b>' + passes + '</b> 遍';
+    return;
+  }
+  var n = (cur.textEl.textContent.match(/已/g) || []).length;
+  statusEl.innerHTML = '当前提示：<b></b> ·「已」×<b>' + n + '</b> · 翻译重放 <b>' + passes + '</b> 遍';
+  statusEl.querySelectorAll('b')[0].textContent = cur.textEl.textContent;
+}
+
+/* ---------- 动作（文案取自真实看板） ---------- */
+var ID = 'BUG-20260912-004';
+function undoRun() {
+  showToast('↩ 已撤销 ' + ID + '，状态已回退'); // 实测不受缺陷影响的文案
+}
+document.getElementById('btnDone').addEventListener('click', function () {
+  showToast('✓ ' + ID + ' 已确认完成', { action: { label: '撤销', run: undoRun } });
+});
+document.getElementById('btnAccept').addEventListener('click', function () {
+  showToast('✓ ' + ID + ' 已接受', { action: { label: '撤销', run: undoRun } });
+});
+document.getElementById('btnPlan').addEventListener('click', function () {
+  showToast('正在移入计划 0 / 1…', { sticky: true }); // 进行中形态（示例）
+  setTimeout(function () {
+    showToast('✓ ' + ID + ' 已移入计划', { action: { label: '撤销', run: undoRun } });
+  }, 1000);
+});
+document.getElementById('btnPlain').addEventListener('click', function () {
+  showToast('✓ ' + ID + ' 标题与描述已更新'); // 无撤销：3.2 秒自动消失
+});
+document.getElementById('btnErr').addEventListener('click', function () {
+  showToast('模拟失败：状态流转被服务端拒绝（示例）', { err: true });
+});
+document.getElementById('btnClear').addEventListener('click', hideToast);
+
+/* ---------- 轮询模拟 ---------- */
+var chkPoll = document.getElementById('chkPoll');
+var pollTimer = null;
+chkPoll.addEventListener('change', function () {
+  clearInterval(pollTimer);
+  if (chkPoll.checked) {
+    pollTimer = setInterval(function () {
+      replayPass();
+      pollMark.classList.remove('hidden');
+      setTimeout(function () { pollMark.classList.add('hidden'); }, 600);
+    }, 2000);
+  }
+});
+document.getElementById('btnReplay').addEventListener('click', replayPass);
+
+updateStatus();
+</script>
+</body>
+</html>

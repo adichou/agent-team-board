@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260913-004 演示 · 版本操作按钮迁入列表卡片 + 文案改「AI 完善」</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dde3; --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --primary-weak: #e8effd; --ok: #15803d; --ok-bg: #e7f6ec;
+    --run: #b45309; --run-bg: #fdf1e0; --fail: #b91c1c; --fail-bg: #fdeaea;
+    --warn-bg: #fff7e6; --warn-border: #e2b93b; --shadow: 0 8px 28px rgba(15, 23, 42, .18);
+  }
+  html[data-theme="dark"] {
+    --bg: #14171d; --panel: #1d222b; --border: #333a46; --text: #e5e9f0; --muted: #97a1af;
+    --primary: #5b8cf5; --primary-weak: #24304a; --ok: #4ade80; --ok-bg: #17301f;
+    --run: #f0b45c; --run-bg: #38290f; --fail: #f27b7b; --fail-bg: #3a1a1a;
+    --warn-bg: #33290f; --warn-border: #a3842c; --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  button { font: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 7px; padding: 4px 11px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.small { padding: 2px 8px; font-size: 12.5px; border-radius: 6px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示控制台（仅演示用） ---------- */
+  .console { border: 1px dashed var(--warn-border); background: var(--warn-bg); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .console .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .console .lbl { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 4px 12px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  select { font: inherit; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+    color: var(--text); padding: 3px 6px; }
+  .sel-line { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px 2px; transition: color .2s; }
+  .sel-line b { color: var(--text); }
+  .sel-line.flash { color: var(--primary); font-weight: 600; }
+
+  /* ---------- 模拟构建模块「版本计划」页签 ---------- */
+  .mock { border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+    padding: 14px; max-width: 1060px; }
+  .bld-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .bld-tabs .tab { border: 1px solid var(--border); border-radius: 999px; padding: 3px 14px;
+    background: transparent; color: var(--muted); }
+  .bld-tabs .tab.on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .bld-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .rel-split { display: grid; grid-template-columns: 340px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 760px) { .rel-split { grid-template-columns: 1fr; } }
+  .rel-list { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+  .rel-card { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; cursor: pointer; }
+  .rel-card:hover { border-color: var(--primary); }
+  .rel-card.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .rel-card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rel-card .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .rel-card .row-acts { margin-left: auto; display: inline-flex; gap: 6px; }
+  .st { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .st-mute { background: var(--bg); color: var(--muted); }
+  .st-run  { background: var(--run-bg); color: var(--run); }
+  .st-ok   { background: var(--ok-bg); color: var(--ok); }
+  .st-fail { background: var(--fail-bg); color: var(--fail); }
+  .rel-detail { border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-height: 220px; }
+  .rel-detail-head h3 { margin: 0 0 2px; font-size: 15px; }
+  .rel-acts { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border);
+    padding-top: 10px; margin-top: 10px; }
+  .bld-items { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .bld-items-head { display: flex; align-items: center; justify-content: space-between; }
+  .bld-item-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 9px; font-size: 13px; }
+  .bld-item-row .bld-item-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bld-item-row select { font-size: 12px; }
+  .rel-empty, .rel-center { padding: 46px 10px; text-align: center; color: var(--muted); }
+  .demo-note { margin-top: 10px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 8px; }
+  .merge-note { margin: 8px 0 0; }
+  .form-err { color: var(--fail); background: var(--fail-bg); border-radius: 6px; padding: 5px 9px; font-size: 12.5px; }
+
+  /* ---------- 弹窗 ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 22, .45); display: flex;
+    align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: min(620px, 100%); max-height: 88vh; overflow: auto; padding: 14px 16px; }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal .body { font-size: 13px; }
+  .modal .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .prompt-box, .answer-box { margin: 8px 0; }
+  textarea { width: 100%; font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; resize: vertical; }
+  .copy-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .preview { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: 12.5px; }
+  .preview div { margin: 2px 0; }
+  .confirm-ul { margin: 6px 0; padding-left: 20px; }
+  .confirm-ul li { margin: 3px 0; font-size: 13px; }
+  .field { display: block; font-size: 12.5px; color: var(--muted); }
+  .field textarea { margin-top: 4px; }
+
+  /* ---------- toast ---------- */
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); border-radius: 8px; padding: 7px 16px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 90; max-width: 80vw; }
+  #toast.show { opacity: 1; }
+  .spin { display: inline-block; animation: r 1s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <h1>BUG-20260913-004 · 版本操作按钮迁入左侧列表卡片 + 文案改「AI 完善」</h1>
+  <p class="sub">构建模块「版本计划」页签交互演示。所有版本号 / 条目 / commit 均为示例数据；演示仅用于对照说明，不替代真实页面验收。</p>
+
+  <div class="console" aria-label="演示控制台">
+    <span class="grp"><span class="lbl">对照</span>
+      <span class="seg" id="fixSeg">
+        <button type="button" data-fix="before">缺陷现状（修复前）</button>
+        <button type="button" data-fix="after" class="on">期望效果（修复后）</button>
+      </span>
+    </span>
+    <span class="grp"><span class="lbl">场景</span>
+      <select id="sceneSel">
+        <option value="ok">正常</option>
+        <option value="empty">空列表</option>
+        <option value="loading">加载中</option>
+        <option value="error">加载失败</option>
+      </select>
+    </span>
+    <span class="grp"><span class="lbl">状态演示</span>
+      <select id="verSel" aria-label="选择版本"></select>
+      <select id="statusSel" aria-label="切换状态">
+        <option value="draft">计划中 draft</option>
+        <option value="merging">合并中 merging</option>
+        <option value="merged">已合并 merged</option>
+        <option value="failed">失败 failed</option>
+      </select>
+      <button type="button" class="btn small" id="applyStatus">应用</button>
+    </span>
+    <span class="grp">
+      <button type="button" class="btn small" id="themeBtn">🌙 深色</button>
+      <button type="button" class="btn small" id="resetBtn">重置演示</button>
+    </span>
+  </div>
+  <p class="sel-line" id="selLine">当前选中：<b>无</b>（点击左侧版本卡片选中）</p>
+
+  <div class="mock">
+    <nav class="bld-tabs" aria-label="构建子页签">
+      <button type="button" class="tab on">版本计划</button>
+      <button type="button" class="tab" onclick="toast('演示未覆盖「分支浏览」页签')">分支浏览</button>
+    </nav>
+    <div id="bldBody"></div>
+  </div>
+
+  <div id="modalRoot"></div>
+  <div id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ---------- 示例数据（与真实实现同口径：状态标签 / 按钮禁用规则 / 解析错误文案） ---------- */
+const STATUS_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', failed: '失败' };
+const STATUS_CLS = { draft: 'st-mute', merging: 'st-run', merged: 'st-ok', failed: 'st-fail' };
+
+const SEED = () => ([
+  { id: 'BLD-20260913-001', name: 'v20260913-01 · 登录与看板修复', description: '修复看板列表排序记忆与抽屉显示问题', status: 'draft', mergeError: '',
+    items: [
+      { itemId: 'REQ-20260912-101', title: '需求列表排序偏好记忆', commit: 'e3f0a1b2c3d4e5f60718293a4b5c6d7e8f901234' },
+      { itemId: 'BUG-20260912-088', title: '抽屉页签遮挡长标题', commit: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456' },
+      { itemId: 'BUG-20260912-090', title: '深色模式筛选条对比度不足', commit: '9f8e7d6c5b4a3210fedcba9876543210abcdef01' },
+    ] },
+  { id: 'BLD-20260912-002', name: 'v20260912-02 · 批量完善优化', description: '', status: 'failed',
+    mergeError: 'git merge 失败：CONFLICT (content): Merge conflict in scripts/web/app.js',
+    items: [{ itemId: 'REQ-20260911-020', title: '批量完善回执汇总视图', commit: '77aa88bb99cc00dd112233445566778899aabbcc' }] },
+  { id: 'BLD-20260911-003', name: 'v20260911-03 · 构建模块首版', description: '版本计划 + 分支浏览与同步', status: 'merging', mergeError: '',
+    items: [
+      { itemId: 'REQ-20260913-001', title: '构建模块（版本管理与分支浏览）', commit: '55cc66dd77ee88ff00112233445566778899aabb' },
+      { itemId: 'BUG-20260913-002', title: '分支列表未区分当前分支', commit: '33ee44ff55aa66bb7788990011223344556677aa' },
+    ] },
+  { id: 'BLD-20260910-004', name: 'v20260910-01 · 收敛看板通知', description: '通知去重与静默时段', status: 'merged', mergeError: '',
+    items: [{ itemId: 'REQ-20260910-011', title: '条目接受免确认', commit: '11aa22bb33cc44dd55ee66ff00778899aabbccdd' }] },
+]);
+
+const state = {
+  fix: 'after',            // before=缺陷现状 | after=期望效果
+  scene: 'ok',             // ok | empty | loading | error
+  versions: SEED(),
+  selVerId: null,
+  mergeBusy: false,
+  answer: null,            // { verId, text, parsed, error, copied, busy }
+  mergeConfirm: null,      // { verId }
+  mergeTimer: null,
+};
+
+/* ---------- 工具 ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const short = (h) => String(h || '').slice(0, 8);
+const verOf = (id) => state.versions.find((v) => v.id === id);
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function flashSelLine() {
+  const el = $('#selLine'); el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 900);
+}
+
+/* 与真实 build.js buildPrompt 同口径 */
+function buildPrompt(v) {
+  const lines = [];
+  lines.push(`请为看板版本 ${v.id} 生成「版本名称」与「版本描述」。`);
+  lines.push(`当前信息：名称「${v.name || '（空）'}」；描述「${v.description || '（空）'}」。`);
+  lines.push('关联条目：');
+  for (const it of v.items) lines.push(`- ${it.itemId} ${it.title}（commit ${short(it.commit)}）`);
+  lines.push('请综合以上条目给出更完整的版本名称与描述；只按以下格式回答，不要附加其他内容：');
+  lines.push('版本名称：<一行>');
+  lines.push('版本描述：<可多行>');
+  return lines.join('\n');
+}
+/* 与真实 build.js parseAnswer 同口径 */
+function parseAnswer(text) {
+  const raw = String(text || '');
+  const nameM = raw.match(/(?:^|\n)\s*版本名称\s*[:：]\s*(.*)/);
+  if (!nameM) return { ok: false, error: '未解析到「版本名称：」行：请检查回答是否按提示词约定格式（版本名称：… / 版本描述：…），或关闭弹窗改用手动编辑。' };
+  const descM = raw.match(/(?:^|\n)\s*版本描述\s*[:：]\s*\n?([\s\S]*)/);
+  return { ok: true, name: nameM[1].trim(), description: descM ? descM[1].replace(/\s+$/, '') : '' };
+}
+
+/* ---------- 渲染 ---------- */
+function statusChip(status) {
+  return `<span class="st ${STATUS_CLS[status] || 'st-mute'}">${esc(STATUS_LABEL[status] || status)}</span>`;
+}
+
+function cardActsHtml(v) {
+  /* 修复后：每张卡片自带操作按钮（禁用口径与原详情底部一致） */
+  if (state.fix !== 'after') return '';
+  const merging = v.status === 'merging';
+  const lockMerge = merging || v.status === 'merged' || state.mergeBusy;
+  const mergeTitle = v.status === 'merged' ? '已合并入 main' : (merging || state.mergeBusy) ? '合并中，请勿重复触发' : '确认后授权合并计划';
+  return `<span class="row-acts">
+    <button type="button" class="btn small" data-act="answer" data-ver="${esc(v.id)}" ${merging ? 'disabled' : ''}
+      title="${merging ? '合并中，暂不可完善' : '复制提示词给 Agent，回答直接粘贴回弹窗自动解析'}">AI 完善</button>
+    <button type="button" class="btn small primary" data-act="merge" data-ver="${esc(v.id)}" ${lockMerge ? `disabled title="${mergeTitle}"` : `title="${mergeTitle}"`}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
+  </span>`;
+}
+
+function renderVersionList() {
+  if (!state.versions.length) {
+    return '<div class="rel-empty">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
+  }
+  return state.versions.map((v) => `
+    <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
+      <div class="t"><strong>${esc(v.name || v.id)}</strong> ${statusChip(v.status)}${cardActsHtml(v)}</div>
+      <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 2026-09-13 19:0${(v.id.charCodeAt(v.id.length - 1) % 9) + 1}</div>
+    </div>`).join('');
+}
+
+function renderDetail(v) {
+  if (!v) return '<div class="rel-detail rel-center">点击左侧版本查看详情</div>';
+  const lockItems = ['merging', 'merged'].includes(v.status);
+  const itemRows = v.items.map((it) => `
+    <div class="bld-item-row">
+      <span>${esc(it.itemId)}</span>
+      <span class="bld-item-title" title="${esc(it.title)}">${esc(it.title)}</span>
+      <select ${lockItems ? 'disabled' : ''}><option>${esc(short(it.commit))}</option></select>
+      ${it.merged || v.status === 'merged' ? '<span class="st st-ok" title="已合并入 main">✓</span>' : ''}
+      ${v.status === 'failed' && !it.merged ? '<span class="st st-fail" title="合并失败">✕</span>' : ''}
+      <button type="button" class="btn small" ${lockItems ? 'disabled title="合并中/已合并状态锁定条目增删"' : 'title="移出该条目（演示未覆盖）"'}>移出</button>
+    </div>`).join('');
+  const mergeState = v.status === 'merging'
+    ? '<p class="muted small merge-note">合并中，请稍候……（执行中已禁用重复触发与条目编辑）</p>'
+    : v.status === 'failed' && v.mergeError
+      ? `<p class="form-err merge-note" role="alert">合并失败：${esc(v.mergeError)}（可重试，只补未合并条目）</p>` : '';
+  /* 修复前：两个按钮渲染在详情底部（缺陷现状）；修复后：按移动口径不再重复渲染 */
+  const foot = state.fix === 'before' ? `
+    <footer class="rel-acts">
+      <button type="button" class="btn" data-act="answer" data-ver="${esc(v.id)}" ${v.status === 'merging' ? 'disabled' : ''}
+        title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析">提示词与回答回填</button>
+      <button type="button" class="btn primary" data-act="merge" data-ver="${esc(v.id)}"
+        ${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? `disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
+    </footer>` : `
+    <p class="demo-note">演示对照：修复后按「移动」口径，操作按钮已上移至左侧列表卡片，详情底部不再重复渲染（避免双入口状态漂移）。</p>`;
+  return `
+    <div class="rel-detail">
+      <div class="rel-detail-head">
+        <h3>${esc(v.name || v.id)} ${statusChip(v.status)}</h3>
+        <p class="muted small">${esc(v.id)} · 目标分支 main · 来源分支 feature/${esc(short(v.items[0]?.commit || 'main'))} · 更新 2026-09-13 19:05</p>
+      </div>
+      <p class="muted small" style="margin:6px 0">描述：${v.description ? esc(v.description) : '（无描述）'}</p>
+      <div class="bld-items">
+        <div class="bld-items-head"><strong>关联条目与 commit</strong>
+          <button type="button" class="btn small" ${lockItems ? 'disabled title="合并中/已合并状态锁定条目增删"' : 'onclick="toast(\'演示未覆盖「添加条目」面板\')"'}>＋ 添加条目</button>
+        </div>
+        ${itemRows}
+      </div>
+      ${mergeState}
+      ${foot}
+    </div>`;
+}
+
+function renderBody() {
+  const body = $('#bldBody');
+  if (state.scene === 'loading') {
+    body.innerHTML = '<div class="rel-center"><span class="spin">◐</span> 正在读取构建状态…</div>';
+    return;
+  }
+  if (state.scene === 'error') {
+    body.innerHTML = `<div class="rel-center"><p class="form-err" style="display:inline-block">构建状态读取失败（示例：500）</p>
+      <p><button type="button" class="btn" id="retryLoad">重试</button></p></div>`;
+    $('#retryLoad').addEventListener('click', () => { state.scene = 'ok'; syncSceneSel(); render(); });
+    return;
+  }
+  body.innerHTML = `
+    <div class="bld-toolbar"><button type="button" class="btn primary" onclick="toast('演示未覆盖「新建版本」面板')">＋ 新建版本</button></div>
+    <div class="rel-split">
+      <div class="rel-list" aria-label="版本列表">${renderVersionList()}</div>
+      ${renderDetail(verOf(state.selVerId))}
+    </div>`;
+  bindBody();
+}
+
+function renderModals() {
+  const root = $('#modalRoot');
+  let html = '';
+  if (state.answer) {
+    const v = verOf(state.answer.verId);
+    const a = state.answer;
+    html += `
+    <div class="modal-wrap" data-close="answer" role="dialog" aria-label="AI 完善">
+      <div class="modal" onclick="event.stopPropagation()">
+        <h3>${state.fix === 'after' ? 'AI 完善' : '提示词与回答回填'}（${esc(v?.id || '')}）</h3>
+        <div class="body">
+          <p class="muted small">上段：复制提示词交给 Agent；下段：把回答粘贴回来，解析预览后应用——全程无需关闭本弹窗。</p>
+          <div class="prompt-box">
+            <textarea rows="7" readonly id="promptText">${esc(v ? buildPrompt(v) : '')}</textarea>
+            <div class="copy-row">
+              <button type="button" class="btn small primary" id="copyPromptBtn">复制提示词</button>
+              ${a.copied ? '<span class="muted small">已复制 ✓</span>' : ''}
+            </div>
+          </div>
+          <div class="answer-box">
+            <label class="field">Agent 回答（粘贴后点「解析并预览」）
+              <textarea rows="5" id="answerText" placeholder="版本名称：…&#10;版本描述：…">${esc(a.text)}</textarea></label>
+            <div class="copy-row">
+              <button type="button" class="btn small" id="sampleBtn">填入示例回答（演示）</button>
+              <button type="button" class="btn small" id="parseBtn">解析并预览</button>
+            </div>
+            ${a.error ? `<p class="form-err" role="alert" style="margin-top:6px">${esc(a.error)}</p>` : ''}
+            ${a.parsed ? `<div class="preview">
+              <div><span class="muted">名称</span>：${esc(v?.name || '（空）')} → <strong>${esc(a.parsed.name)}</strong></div>
+              <div><span class="muted">描述</span>：${esc(v?.description || '（空）')} → <strong>${esc(a.parsed.description || '（空）')}</strong></div>
+            </div>` : ''}
+          </div>
+        </div>
+        <div class="foot">
+          <button type="button" class="btn" id="answerCloseBtn">关闭</button>
+          <button type="button" class="btn primary" id="applyBtn" ${!a.parsed ? 'disabled title="先解析出预览再应用"' : ''}>应用</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  if (state.mergeConfirm) {
+    const v = verOf(state.mergeConfirm.verId);
+    if (v) html += `
+    <div class="modal-wrap" data-close="merge" role="dialog" aria-label="合并入 main 确认">
+      <div class="modal" onclick="event.stopPropagation()">
+        <h3>合并入 main 确认（${esc(v.id)}）</h3>
+        <div class="body">
+          <p>将把以下提交逐条合并入 <strong>main</strong>（--no-ff，在临时工作树执行，不影响当前分支与未提交改动）：</p>
+          <ul class="confirm-ul">${v.items.map((it) => `<li>${esc(it.itemId)} ${esc(short(it.commit))} ${esc(it.title)}</li>`).join('')}</ul>
+          <p class="muted small">确认即授权本合并计划；合并中不可重复触发或增删条目。</p>
+        </div>
+        <div class="foot">
+          <button type="button" class="btn" id="mergeCancelBtn">取消</button>
+          <button type="button" class="btn primary" id="mergeGoBtn">确认合并</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  root.innerHTML = html;
+  bindModals();
+}
+
+function render() {
+  renderBody();
+  renderModals();
+  const sv = verOf(state.selVerId);
+  $('#selLine').innerHTML = `当前选中：<b>${sv ? esc(sv.id) : '无'}</b>（点击左侧版本卡片选中；修复后模式下点卡片按钮不改变选中）`;
+  renderVerOptions();
+}
+
+function renderVerOptions() {
+  const sel = $('#verSel');
+  const prev = sel.value;
+  sel.innerHTML = state.versions.map((v) => `<option value="${esc(v.id)}">${esc(v.id)}（${STATUS_LABEL[v.status]}）</option>`).join('');
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  $('#statusSel').disabled = state.scene !== 'ok' || !state.versions.length;
+  $('#verSel').disabled = $('#statusSel').disabled;
+  $('#applyStatus').disabled = $('#statusSel').disabled;
+  const v = verOf(sel.value);
+  if (v) $('#statusSel').value = v.status;
+}
+
+/* ---------- 交互 ---------- */
+function openAnswer(verId) { state.answer = { verId, text: '', parsed: null, error: '', copied: false, busy: false }; render(); }
+function openMergeConfirm(verId) { if (state.mergeBusy) return; state.mergeConfirm = { verId }; render(); }
+
+function actOn(verId, act) {
+  const v = verOf(verId);
+  if (!v) return;
+  if (state.fix === 'after' && state.selVerId !== verId) flashSelLine(); // 演示：按钮操作不改变选中
+  if (act === 'answer') openAnswer(verId);
+  else openMergeConfirm(verId);
+}
+
+function bindBody() {
+  const list = $('.rel-list');
+  list?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-act]')) return; // 按钮点击交给全局委托，不触发卡片选中
+    const card = e.target.closest('[data-ver-id]');
+    if (card?.dataset.verId) { state.selVerId = card.dataset.verId; render(); }
+  });
+}
+
+/* 操作按钮（列表卡片 + 修复前详情底部）统一委托：#bldBody 持久存在，只绑一次避免重复触发 */
+$('#bldBody').addEventListener('click', (e) => {
+  const actBtn = e.target.closest('[data-act]');
+  if (actBtn && !actBtn.disabled) actOn(actBtn.dataset.ver, actBtn.dataset.act);
+});
+
+function bindModals() {
+  $('#copyPromptBtn')?.addEventListener('click', async () => {
+    const text = $('#promptText')?.value || '';
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* file:// 或无权限时走兜底 */ }
+    if (!ok) { const ta = $('#promptText'); ta.focus(); ta.select(); }
+    state.answer.copied = true; render();
+    toast(ok ? '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方' : '已全选提示词文本：请按 Ctrl/⌘+C 手动复制');
+  });
+  $('#sampleBtn')?.addEventListener('click', () => {
+    const v = verOf(state.answer.verId); if (!v) return;
+    $('#answerText').value = `版本名称：${v.name}（AI 完善）\n版本描述：本版本包含 ${v.items.length} 个条目：${v.items.map((i) => i.title).join('、')}；统一收敛相关修复与体验优化。`;
+  });
+  $('#parseBtn')?.addEventListener('click', () => {
+    const r = parseAnswer($('#answerText').value);
+    if (!r.ok) { Object.assign(state.answer, { parsed: null, error: r.error }); }
+    else { Object.assign(state.answer, { parsed: { name: r.name, description: r.description }, error: '' }); }
+    render();
+  });
+  $('#applyBtn')?.addEventListener('click', () => {
+    const v = verOf(state.answer.verId); const p = state.answer?.parsed;
+    if (!v || !p) return;
+    if (p.name) v.name = p.name;
+    if (p.description || p.description === '') v.description = p.description;
+    state.answer = null; render();
+    toast(`✓ 已应用（${v.id} 名称与描述已更新）`);
+  });
+  $('#answerCloseBtn')?.addEventListener('click', () => { state.answer = null; render(); });
+  $('#mergeCancelBtn')?.addEventListener('click', () => { state.mergeConfirm = null; render(); });
+  $('#mergeGoBtn')?.addEventListener('click', () => {
+    const v = verOf(state.mergeConfirm?.verId); if (!v) return;
+    state.mergeConfirm = null; state.mergeBusy = true; v.status = 'merging'; v.mergeError = ''; render();
+    clearTimeout(state.mergeTimer);
+    state.mergeTimer = setTimeout(() => {
+      state.mergeBusy = false; v.status = 'merged'; render();
+      toast(`✓ 已合并入 main（${v.id}）`);
+    }, 1600);
+  });
+  for (const wrap of document.querySelectorAll('.modal-wrap')) {
+    wrap.addEventListener('click', (e) => {
+      if (e.target !== wrap) return;
+      if (wrap.dataset.close === 'answer') state.answer = null;
+      if (wrap.dataset.close === 'merge') state.mergeConfirm = null;
+      render();
+    });
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (state.answer) { state.answer = null; render(); return; }
+  if (state.mergeConfirm) { state.mergeConfirm = null; render(); }
+});
+
+/* ---------- 控制台 ---------- */
+function syncSceneSel() { $('#sceneSel').value = state.scene; }
+$('#fixSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fix]'); if (!b) return;
+  state.fix = b.dataset.fix; state.answer = null; state.mergeConfirm = null;
+  for (const x of $('#fixSeg').children) x.classList.toggle('on', x === b);
+  render();
+});
+$('#sceneSel').addEventListener('change', (e) => { state.scene = e.target.value; render(); });
+$('#applyStatus').addEventListener('click', () => {
+  const v = verOf($('#verSel').value); if (!v) return;
+  v.status = $('#statusSel').value; v.mergeError = v.status === 'failed' ? 'git merge 失败：CONFLICT (content): Merge conflict in scripts/web/app.js（示例）' : '';
+  render();
+  toast(`演示：${v.id} 状态已切换为「${STATUS_LABEL[v.status]}」——注意卡片按钮可用性 / 文案随之变化`);
+});
+$('#themeBtn').addEventListener('click', () => {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  $('#themeBtn').textContent = dark ? '🌙 深色' : '☀️ 浅色';
+});
+$('#resetBtn').addEventListener('click', () => {
+  clearTimeout(state.mergeTimer);
+  state.versions = SEED(); state.selVerId = null; state.answer = null;
+  state.mergeConfirm = null; state.mergeBusy = false; state.scene = 'ok';
+  syncSceneSel(); render(); toast('演示已重置');
+});
+if (matchMedia?.('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.dataset.theme = 'dark';
+  $('#themeBtn').textContent = '☀️ 浅色';
+}
+
+render();
+</script>
+</body>
+</html>

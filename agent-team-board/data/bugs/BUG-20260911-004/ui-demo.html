@@ -1,0 +1,53 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>概览返回状态演示</title><style>
+:root{--bg:#f3f5fa;--card:#fff;--line:#dbe1ee;--ink:#263247;--muted:#64748b;--err:#b42318;--accent:#2458c8;--ok:#1a7f37}
+@media(prefers-color-scheme:dark){:root{--bg:#161a22;--card:#1f2530;--line:#39435664;--ink:#e3e8f2;--muted:#9aa6bb;--err:#ff8f85;--accent:#7aa5f8;--ok:#6fd58e}}
+body{font:16px system-ui;background:var(--bg);color:var(--ink);margin:0}
+main{max-width:960px;margin:32px auto;padding:24px}
+header,article,section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin:12px 0}
+button,select{font:inherit;padding:9px;margin:4px;border:1px solid var(--muted);border-radius:7px;background:var(--card);color:var(--ink);cursor:pointer}
+button[aria-current=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.cards article{margin:0}
+.hint{color:var(--muted)}
+.error{color:var(--err)}
+.ok{color:var(--ok)}
+#content{min-height:240px}
+button:focus-visible,select:focus-visible{outline:3px solid #e59a12}
+label{display:inline-block;margin-right:12px}
+@media(max-width:600px){.cards{grid-template-columns:1fr}main{margin:0;padding:12px}}
+</style><main><h1>营销 · 概览返回</h1><p class="hint">BUG-20260911-004 · 全部为本地示例数据，不代表真实营销结果</p>
+<header>
+<p><label>对比模式 <select id="mode"><option value="fixed">期望修复</option><option value="bug">缺陷现象</option></select></label>
+<label>数据状态 <select id="phase"><option value="normal">正常</option><option value="empty">空</option><option value="loading">加载</option><option value="error">失败</option></select></label></p>
+<p><button id="leave">路径 B：离开营销（去需求看板）</button><button id="reload">模拟 Cmd+R</button></p>
+<p class="hint">路径 A：点击下方营销页签往返；路径 B：离开营销模块再返回。缺陷模式下两条路径返回概览都会空白。</p>
+<p id="feedback" role="status" aria-live="polite"></p>
+</header>
+<nav aria-label="营销页签"></nav>
+<section id="content" aria-live="polite"></section>
+</main><script>
+const tabs=['概览','定位与定价','渠道与行动','效果与复盘'];
+let tab=0,blank=false,away=false;
+const mode=document.querySelector('#mode'),phase=document.querySelector('#phase'),content=document.querySelector('#content'),feedback=document.querySelector('#feedback'),nav=document.querySelector('nav');
+function say(t,cls){feedback.textContent=t;feedback.className=cls||''}
+function overviewHtml(){return '<div class="cards"><article>阶段<h2>验证</h2></article><article>阶段目标<h2>验证用户需求</h2></article><article>主指标<h2>访谈完成数</h2></article></div><article><h2>定位摘要</h2><p>目标受众：小型研发团队</p><p>痛点：任务进度不透明</p><p>差异点：统一需求与缺陷记录</p></article><article><h2>当前定价</h2><p>示例 v1 · 订阅 · CNY · 月付</p></article><article><h2>下一步</h2><p>补充证据，更新阶段目标与主指标。</p></article>'}
+function render(){
+  if(away){nav.innerHTML='';content.innerHTML='<h2>需求看板（其他模块占位）</h2><p class="hint">已离开营销模块。点击下方按钮返回。</p><p><button data-action="back">返回营销 · 概览</button></p>';say('已离开营销模块。');return}
+  nav.innerHTML=tabs.map((t,i)=>'<button data-tab="'+i+'" aria-current="'+(tab===i)+'">'+t+'</button>').join('');
+  if(tab!==0){content.innerHTML='<h2>'+tabs[tab]+'</h2><p class="hint">示例页签。点击「概览」检查返回后的内容。</p>';say('当前在「'+tabs[tab]+'」。');return}
+  if(blank){content.innerHTML='';say('模拟缺陷：返回概览内容空白，Cmd+R 后恢复。','error');return}
+  if(phase.value==='loading'){content.innerHTML='<h2>正在读取营销档案…</h2><p><button data-action="complete">模拟加载完成</button></p>';say('加载中：应有明确加载反馈。');return}
+  if(phase.value==='error'){content.innerHTML='<h2 class="error">营销档案读取失败</h2><p>模拟网络错误，请重试。</p><p><button data-action="retry">重试</button></p>';say('失败：显示错误与重试入口，不伪装成无数据。','error');return}
+  if(phase.value==='empty'){content.innerHTML='<h2>尚未建立营销档案</h2><p>为当前项目建立营销档案。</p><p><button data-action="init">初始化营销档案（模拟）</button></p>';say('空：仅真正无档案时显示初始化引导。');return}
+  content.innerHTML=overviewHtml();say('期望：返回概览无需整页刷新，数据保持可见。','ok');
+}
+function bugArmed(){return mode.value==='bug'&&phase.value==='normal'}
+nav.onclick=e=>{const t=e.target.dataset.tab;if(!t)return;const next=Number(t);if(next===0&&tab!==0&&bugArmed())blank=true;tab=next;render()};
+content.onclick=e=>{const a=e.target.dataset.action;if(!a)return;
+  if(a==='back'){if(bugArmed())blank=true;away=false;tab=0;render();return}
+  phase.value='normal';blank=false;render();say('模拟读取成功，概览内容已恢复。','ok')};
+mode.onchange=phase.onchange=()=>{blank=false;render()};
+document.querySelector('#leave').onclick=()=>{away=true;render()};
+document.querySelector('#reload').onclick=()=>{away=false;tab=0;blank=false;phase.value='normal';content.innerHTML='<h2>正在读取营销档案…</h2>';say('模拟刷新：重新读取中…');setTimeout(()=>{render();say('模拟刷新完成：概览数据恢复。','ok')},600)};
+render();
+</script></html>

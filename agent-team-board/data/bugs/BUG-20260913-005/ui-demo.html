@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260913-005 演示 · 版本回填弹窗补「去新建 XX 会话」入口</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dde3; --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --primary-weak: #e8effd; --ok: #15803d; --ok-bg: #e7f6ec;
+    --fail: #b91c1c; --fail-bg: #fdeaea;
+    --warn-bg: #fff7e6; --warn-border: #e2b93b; --shadow: 0 8px 28px rgba(15, 23, 42, .18);
+    --link: #2563eb;
+  }
+  html[data-theme="dark"] {
+    --bg: #14171d; --panel: #1d222b; --border: #333a46; --text: #e5e9f0; --muted: #97a1af;
+    --primary: #5b8cf5; --primary-weak: #24304a; --ok: #4ade80; --ok-bg: #17301f;
+    --fail: #f27b7b; --fail-bg: #3a1a1a;
+    --warn-bg: #33290f; --warn-border: #a3842c; --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+    --link: #7aa2f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h3 { font-size: 15px; margin: 0 0 10px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  button { font: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 7px; padding: 4px 11px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12.5px; border-radius: 6px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  a { color: var(--link); }
+  textarea, select { font: inherit; border: 1px solid var(--border); border-radius: 7px;
+    background: var(--panel); color: var(--text); padding: 6px 8px; width: 100%; }
+  textarea[readonly] { color: var(--muted); background: color-mix(in srgb, var(--panel) 92%, var(--bg)); }
+
+  /* ---------- 演示控制台（仅演示用，非真实界面） ---------- */
+  .console { border: 1px dashed var(--warn-border); background: var(--warn-bg); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; }
+  .console .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .console .lbl { font-size: 12px; color: var(--muted); }
+  .console select { width: auto; padding: 3px 6px; border-radius: 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 4px 12px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .clip-line { font-size: 12.5px; color: var(--muted); margin: 0 0 12px 2px; min-height: 18px; }
+  .clip-line b { color: var(--text); }
+  .clip-line code { background: color-mix(in srgb, var(--panel) 80%, var(--bg));
+    border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; word-break: break-all; }
+
+  /* ---------- 模拟构建模块「版本计划」页签 ---------- */
+  .mock { border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+    padding: 14px; max-width: 1060px; }
+  .bld-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .bld-tabs .tab { border: 1px solid var(--border); border-radius: 999px; padding: 3px 14px;
+    background: transparent; color: var(--muted); }
+  .bld-tabs .tab.on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .bld-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .rel-split { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 760px) { .rel-split { grid-template-columns: 1fr; } }
+  .rel-list { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+  .rel-card { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; cursor: pointer; }
+  .rel-card.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .rel-card .t { font-weight: 600; display: flex; gap: 8px; align-items: center; }
+  .rel-card .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .st { font-size: 11.5px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .st-mute { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
+  .st-ok   { background: var(--ok-bg); color: var(--ok); }
+  .st-fail { background: var(--fail-bg); color: var(--fail); }
+  .rel-detail { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
+  .rel-detail-head { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .rel-detail-head p { margin: 2px 0 0; }
+  .bld-desc-block { margin: 6px 0 10px; font-size: 13px; }
+  .bld-items-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .bld-item-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 9px; margin-bottom: 6px; font-size: 13px; }
+  .bld-item-row code { font-size: 12px; color: var(--muted); }
+  .bld-item-row .tt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rel-acts { display: flex; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+  /* ---------- 回填弹窗 ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(15, 23, 42, .42); display: none;
+    align-items: flex-start; justify-content: center; padding: 6vh 14px; z-index: 50; overflow: auto; }
+  .modal-wrap.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: 640px; max-width: 100%; padding: 14px 16px; }
+  .modal-body .hint { margin: 0 0 10px; }
+  .bld-prompt-box { border: 1px solid var(--border); border-radius: 9px; padding: 9px 10px; margin-bottom: 12px; }
+  .prompt-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+  .ws-entry-link { color: var(--link); text-decoration: underline; cursor: pointer; }
+  .ws-entry-link.is-off { color: var(--muted); text-decoration: line-through; cursor: not-allowed; }
+  .ws-entry-state { font-size: 12.5px; }
+  .ws-retry { color: var(--link); text-decoration: underline; cursor: pointer; }
+  .bld-answer-box label { display: block; font-size: 13px; margin-bottom: 4px; }
+  .rel-form-err { color: var(--fail); background: var(--fail-bg); border-radius: 7px;
+    padding: 6px 9px; font-size: 12.5px; margin: 8px 0 0; }
+  .bld-preview { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font-size: 13px; margin-top: 8px; background: color-mix(in srgb, var(--panel) 92%, var(--bg)); }
+  .bld-preview > div { margin: 2px 0; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 10px;
+    border-top: 1px solid var(--border); }
+
+  /* ---------- toast ---------- */
+  .toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 99;
+    display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .toast { background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 14px; font-size: 12.5px; box-shadow: var(--shadow); max-width: 92vw; }
+  .toast.err { border-color: var(--fail); color: var(--fail); background: var(--fail-bg); }
+</style>
+</head>
+<body>
+  <h1>BUG-20260913-005 演示 · 版本「提示词与回答回填」补「去新建 XX 会话」入口</h1>
+  <p class="sub">模拟构建模块「版本计划」页签与回填弹窗。左：缺陷现状（复制后无会话入口）；右：期望修复（同批量任务口径，先复制后跳深链）。均为示例数据，深链只展示不真实跳转。</p>
+
+  <div class="console">
+    <div class="grp"><span class="lbl">修复对照</span>
+      <span class="seg" id="fixSeg">
+        <button type="button" data-fix="off">修复前（缺陷）</button>
+        <button type="button" data-fix="on" class="on">修复后（期望）</button>
+      </span>
+    </div>
+    <div class="grp"><span class="lbl">客户端探测状态</span>
+      <select id="probeSel">
+        <option value="ok">正常（已检测到）</option>
+        <option value="probing">检测中（加载态）</option>
+        <option value="failed">检测失败（可重试）</option>
+        <option value="no-zcode">未检测到 Zcode</option>
+        <option value="no-codex">未检测到 Codex</option>
+        <option value="no-project">未选择项目</option>
+      </select>
+    </div>
+    <div class="grp">
+      <button type="button" class="btn small" id="themeBtn">🌙 深色</button>
+      <button type="button" class="btn small" id="resetBtn">重置演示</button>
+    </div>
+  </div>
+  <p class="clip-line" id="clipLine">虚拟剪贴板 / 深链：（尚未复制。真实实现写系统剪贴板并请求打开深链；演示仅展示内容，不真实跳转）</p>
+
+  <div class="mock">
+    <div class="bld-tabs">
+      <button type="button" class="tab on">版本计划</button>
+      <button type="button" class="tab" disabled title="演示范围外">分支浏览</button>
+    </div>
+    <div class="bld-toolbar"><button type="button" class="btn small" disabled title="演示范围外">＋ 新建版本</button></div>
+    <div class="rel-split">
+      <div class="rel-list" id="verList"></div>
+      <div class="rel-detail" id="verDetail"></div>
+    </div>
+  </div>
+
+  <div class="modal-wrap" id="answerWrap">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="提示词与回答回填">
+      <h3 id="amTitle">提示词与回答回填</h3>
+      <div class="modal-body">
+        <p class="hint muted small">上段：复制提示词交给 Agent；下段：把回答粘贴回来，解析预览后应用——全程无需关闭本弹窗。</p>
+        <div class="bld-prompt-box">
+          <textarea class="bld-prompt-text" rows="7" readonly id="promptText"></textarea>
+          <div class="prompt-acts">
+            <button type="button" class="btn small primary" id="copyBtn">复制提示词</button>
+            <span class="small muted" id="copiedMark" hidden>已复制 ✓</span>
+            <span id="sessionLinks"></span>
+          </div>
+        </div>
+        <div class="bld-answer-box">
+          <label class="field">Agent 回答（粘贴后点「解析并预览」）
+            <textarea rows="5" id="answerInput" placeholder="版本名称：…&#10;版本描述：…"></textarea></label>
+          <div id="parseOut"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" id="closeBtn">关闭</button>
+        <button type="button" class="btn" id="parseBtn">解析并预览</button>
+        <button type="button" class="btn primary" id="applyBtn" disabled>应用</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+/* 演示数据（示例，非真实条目） */
+const VERSIONS = [
+  { id: 'BLD-20260913-001', name: 'v0.4.0', desc: '版本计划示例', status: 'draft', statusLabel: '计划中', statusCls: 'st-mute',
+    items: [ { itemId: 'REQ-20260913-001', commit: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0', title: '构建模块：版本管理与分支浏览' },
+             { itemId: 'BUG-20260913-004', commit: 'b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1', title: '版本操作按钮迁入列表卡片' } ] },
+  { id: 'BLD-20260913-002', name: 'v0.3.1', desc: '上一版本示例', status: 'merged', statusLabel: '已合并', statusCls: 'st-ok',
+    items: [ { itemId: 'BUG-20260912-001', commit: 'c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2', title: 'Git 状态 i18n 修正' } ] },
+  { id: 'BLD-20260913-003', name: 'v0.3.2-rc', desc: '合并失败示例', status: 'failed', statusLabel: '失败', statusCls: 'st-fail',
+    items: [ { itemId: 'REQ-20260910-015', commit: 'd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3', title: '开源许可选型' } ] },
+];
+
+const state = {
+  fix: true,            // true=修复后（期望）；false=修复前（缺陷）
+  probe: 'ok',          // ok | probing | failed | no-zcode | no-codex | no-project
+  selId: 'BLD-20260913-001',
+  copied: false,
+  parsed: null,
+  parseError: null,
+  busy: false,
+  clipShown: false,
+};
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const short = (h) => String(h).slice(0, 7);
+const PROJECT = 'agent-team-board（示例项目）';
+
+/* 与真实实现 buildPrompt(build.js 84–94 行) 同口径 */
+function buildPrompt(v) {
+  const lines = [];
+  lines.push(`请为看板版本 ${v.id} 生成「版本名称」与「版本描述」。`);
+  lines.push(`当前信息：名称「${v.name || '（空）'}」；描述「${v.description || '（空）'}」。`);
+  lines.push('关联条目：');
+  for (const it of v.items) lines.push(`- ${it.itemId} ${it.title}（commit ${short(it.commit)}）`);
+  lines.push('请综合以上条目给出更完整的版本名称与描述；只按以下格式回答，不要附加其他内容：');
+  lines.push('版本名称：<一行>');
+  lines.push('版本描述：<可多行>');
+  return lines.join('\n');
+}
+
+/* 与真实实现 parseAnswer(build.js 97–109 行) 同口径（含错误文案） */
+function parseAnswer(text) {
+  const raw = String(text || '');
+  const nameM = raw.match(/(?:^|\n)\s*版本名称\s*[:：]\s*(.*)/);
+  if (!nameM) {
+    return { ok: false, error: '未解析到「版本名称：」行：请检查回答是否按提示词约定格式（版本名称：… / 版本描述：…），或关闭弹窗改用手动编辑。' };
+  }
+  const descM = raw.match(/(?:^|\n)\s*版本描述\s*[:：]\s*\n?([\s\S]*)/);
+  return { ok: true, name: nameM[1].trim(), description: descM ? descM[1].replace(/\s+$/, '') : '' };
+}
+
+function toast(msg, err = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (err ? ' err' : '');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3400);
+}
+
+function setClip(text) {
+  state.clipShown = true;
+  $('#clipLine').innerHTML = '虚拟剪贴板 / 深链：<b>已写入</b> <code>' + esc(text) + '</code>';
+}
+
+function showDeepLink(url) {
+  const prev = $('#clipLine').innerHTML;
+  $('#clipLine').innerHTML = prev + ' &nbsp;→&nbsp; <b>请求打开深链</b> <code>' + esc(url) + '</code>';
+}
+
+/* ---------- 版本列表与详情 ---------- */
+function selVersion() { return VERSIONS.find((v) => v.id === state.selId); }
+
+function renderList() {
+  $('#verList').innerHTML = VERSIONS.map((v) => `
+    <div class="rel-card ${v.id === state.selId ? 'on' : ''}" data-ver="${v.id}">
+      <div class="t"><span>${esc(v.name || '（未命名）')}</span><span class="st ${v.statusCls}">${v.statusLabel}</span></div>
+      <div class="meta">${esc(v.id)} · ${v.items.length} 条目 · 更新 2026-09-13</div>
+    </div>`).join('');
+  for (const el of $('#verList').querySelectorAll('[data-ver]')) {
+    el.addEventListener('click', () => { state.selId = el.dataset.ver; renderList(); renderDetail(); });
+  }
+}
+
+function renderDetail() {
+  const v = selVersion();
+  $('#verDetail').innerHTML = `
+    <div class="rel-detail-head">
+      <div><h3>${esc(v.name || '（未命名）')}</h3>
+      <p class="muted small">${esc(v.id)} · 目标分支 main · 更新 2026-09-13</p></div>
+      <span class="st ${v.statusCls}">${v.statusLabel}</span>
+    </div>
+    <div class="bld-desc-block"><span class="muted small">描述</span>：${esc(v.desc || '（空）')}</div>
+    <div class="bld-items">
+      <div class="bld-items-head"><strong>关联条目与 commit</strong>
+        <button type="button" class="btn small" disabled title="演示范围外">＋ 添加条目</button></div>
+      ${v.items.map((it) => `<div class="bld-item-row"><span class="tt">${esc(it.itemId)} ${esc(it.title)}</span><code>${short(it.commit)}</code></div>`).join('')}
+    </div>
+    <div class="rel-acts">
+      <button type="button" class="btn" id="openAnswerBtn">提示词与回答回填</button>
+      <button type="button" class="btn primary" id="mergeBtn">合并入 main</button>
+    </div>`;
+  $('#openAnswerBtn').addEventListener('click', openAnswerModal);
+  $('#mergeBtn').addEventListener('click', () => toast('本演示聚焦回填弹窗：合并流程对照见 BUG-20260913-004 演示'));
+}
+
+/* ---------- 会话入口（参照 app.js newSessionLinksHtml 口径） ---------- */
+function sessionLinksHtml() {
+  if (!state.fix) return ''; // 修复前（缺陷）：整个入口区不存在
+  const probe = state.probe;
+  if (probe === 'failed') {
+    return '<span class="ws-entry-state muted small">客户端检测失败：无法确认本机 Zcode / Codex 是否可用</span>'
+      + '<a class="ws-retry" href="#" id="wsRetry" title="重新检测本机 Zcode / Codex 客户端（只读存在性检查）">重新检测</a>'
+      + '<span class="ws-entry-state muted small">或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词</span>';
+  }
+  if (probe === 'probing') return '<span class="ws-entry-state muted small">正在检测本机 Agent 客户端…</span>';
+  const noProject = probe === 'no-project';
+  const zcodeOff = probe === 'no-zcode';
+  const codexOff = probe === 'no-codex';
+  const cfg = [
+    { agent: 'zcode', label: '去新建 Zcode 会话', off: zcodeOff, url: `zcode://workspace/open?path=${encodeURIComponent(PROJECT)}`,
+      okTitle: `自动复制本弹窗版本提示词后打开 Zcode（${PROJECT}）：深链只打开工作区，会话需手动新建并粘贴提示词`,
+      missingTitle: '未检测到 ZCode.app（zcode:// 深链宿主）：可能未安装或装在非默认路径；可直接打开 Zcode 手动新建会话并粘贴提示词' },
+    { agent: 'codex', label: '去新建 Codex 会话', off: codexOff, url: `codex://threads/new?path=${encodeURIComponent(PROJECT)}`,
+      okTitle: `自动复制本弹窗版本提示词后打开 Codex 新会话（${PROJECT}）：深链不传提示词，不会自动发送，请粘贴发送`,
+      missingTitle: '未检测到 ChatGPT.app（codex:// 深链宿主）：可能未安装或装在非默认路径；可直接打开 ChatGPT 手动新建会话并粘贴提示词' },
+  ];
+  return cfg.map((c) => {
+    if (c.off) return `<a class="ws-entry-link is-off" aria-disabled="true" href="#" data-session="${c.agent}" title="${esc(c.missingTitle)}">${c.label}<span class="small muted">（未检测到）</span></a>`;
+    if (noProject) return `<a class="ws-entry-link is-off" aria-disabled="true" href="#" data-session="${c.agent}" title="未选择项目：请先在顶栏选择项目后再新建会话">${c.label}</a>`;
+    return `<a class="ws-entry-link" href="#" data-session="${c.agent}" data-url="${esc(c.url)}" title="${esc(c.okTitle)}">${c.label}</a>`;
+  }).join(' ');
+}
+
+function bindSessionLinks() {
+  const retry = $('#wsRetry');
+  if (retry) retry.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    state.probe = 'probing';
+    renderLinks();
+    setTimeout(() => { state.probe = 'ok'; renderLinks(); toast('✓ 重新检测完成：本机 Zcode / Codex 客户端均可用'); }, 700);
+  });
+  for (const el of document.querySelectorAll('[data-session]')) {
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const agent = el.dataset.session;
+      const offTitle = el.getAttribute('title');
+      if (el.classList.contains('is-off')) { toast(offTitle || '该入口当前不可用', true); return; }
+      goSession(agent, el.dataset.url);
+    });
+  }
+}
+
+/* 与真实实现 copyPromptAndOpenSession 口径一致：先复制（虚拟剪贴板），复制完成后才请求打开深链 */
+async function goSession(agent, url) {
+  const v = selVersion();
+  const label = agent === 'codex' ? 'Codex 新会话' : 'Zcode 工作区';
+  const text = buildPrompt(v);
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); copied = true; }
+  } catch { /* file:// 或无权限：演示中仍以虚拟剪贴板展示 */ }
+  setClip(text);
+  showDeepLink(url);
+  markCopied();
+  state.probe = state.probe; // 状态不变
+  toast(`✓ 已复制提示词并请求打开 ${label}（${PROJECT}）：请在新建会话中粘贴发送，回答粘贴回本弹窗`);
+  void copied;
+}
+
+function markCopied() {
+  state.copied = true;
+  $('#copiedMark').hidden = false;
+}
+
+/* ---------- 回填弹窗 ---------- */
+function renderLinks() {
+  const box = $('#sessionLinks');
+  box.innerHTML = sessionLinksHtml();
+  bindSessionLinks();
+}
+
+function renderParseOut() {
+  const out = $('#parseOut');
+  if (state.parseError) {
+    out.innerHTML = `<p class="rel-form-err" role="alert">${esc(state.parseError)}</p>`;
+    $('#applyBtn').disabled = true;
+    return;
+  }
+  if (state.parsed) {
+    const v = selVersion();
+    out.innerHTML = `<div class="bld-preview">
+      <div><span class="muted small">名称</span>：${esc(v.name || '（空）')} → <strong>${esc(state.parsed.name)}</strong></div>
+      <div><span class="muted small">描述</span>：${esc(v.desc || '（空）')} → <strong>${esc(state.parsed.description || '（空）')}</strong></div>
+    </div>`;
+    $('#applyBtn').disabled = state.busy;
+  } else {
+    out.innerHTML = '';
+    $('#applyBtn').disabled = true;
+  }
+}
+
+function openAnswerModal() {
+  const v = selVersion();
+  state.copied = false; state.parsed = null; state.parseError = null; state.busy = false;
+  $('#amTitle').textContent = `提示词与回答回填（${v.id}）`;
+  $('#promptText').value = buildPrompt(v);
+  $('#answerInput').value = '';
+  $('#copiedMark').hidden = true;
+  renderLinks();
+  renderParseOut();
+  $('#answerWrap').classList.add('open');
+}
+
+function closeAnswerModal() {
+  $('#answerWrap').classList.remove('open');
+}
+
+function bindModal() {
+  $('#copyBtn').addEventListener('click', async () => {
+    const text = $('#promptText').value;
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); ok = true; }
+    } catch { /* 降级为虚拟剪贴板展示 */ }
+    setClip(text);
+    markCopied();
+    // 既有行为零回归：复制按钮 toast 两种模式同为现状文案
+    toast(ok ? '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方'
+             : '剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制（已同步展示到虚拟剪贴板行）', !ok);
+    if (state.fix) toast('提示：点右侧「去新建 XX 会话」可自动复制并请求打开客户端');
+  });
+  $('#parseBtn').addEventListener('click', () => {
+    const r = parseAnswer($('#answerInput').value);
+    if (!r.ok) { state.parsed = null; state.parseError = r.error; }
+    else { state.parsed = r; state.parseError = null; }
+    renderParseOut();
+  });
+  $('#applyBtn').addEventListener('click', () => {
+    if (!state.parsed || state.busy) return;
+    const v = selVersion();
+    v.name = state.parsed.name;
+    v.desc = state.parsed.description;
+    closeAnswerModal();
+    renderList(); renderDetail();
+    toast('✓ 已应用回填：版本名称与描述已更新');
+  });
+  $('#closeBtn').addEventListener('click', closeAnswerModal);
+  $('#answerWrap').addEventListener('click', (ev) => { if (ev.target === $('#answerWrap')) closeAnswerModal(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && $('#answerWrap').classList.contains('open')) closeAnswerModal(); });
+}
+
+/* ---------- 演示控制台 ---------- */
+function renderConsole() {
+  for (const b of $('#fixSeg').querySelectorAll('button')) b.classList.toggle('on', (b.dataset.fix === 'on') === state.fix);
+  $('#probeSel').value = state.probe;
+  $('#themeBtn').textContent = document.documentElement.dataset.theme === 'dark' ? '☀️ 浅色' : '🌙 深色';
+}
+
+function bindConsole() {
+  for (const b of $('#fixSeg').querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      state.fix = b.dataset.fix === 'on';
+      renderConsole();
+      if ($('#answerWrap').classList.contains('open')) renderLinks();
+      toast(state.fix
+        ? '已切换到修复后（期望）：弹窗上段出现「去新建 XX 会话」入口'
+        : '已切换到修复前（缺陷）：弹窗上段只有「复制提示词」，无会话入口');
+    });
+  }
+  $('#probeSel').addEventListener('change', (ev) => {
+    state.probe = ev.target.value;
+    if ($('#answerWrap').classList.contains('open')) renderLinks();
+    const names = { ok: '正常', probing: '检测中', failed: '检测失败', 'no-zcode': '未检测到 Zcode', 'no-codex': '未检测到 Codex', 'no-project': '未选择项目' };
+    toast(`客户端探测状态切换为：${names[state.probe]}（打开回填弹窗查看入口区变化）`);
+  });
+  $('#themeBtn').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = cur;
+    renderConsole();
+  });
+  $('#resetBtn').addEventListener('click', () => {
+    state.fix = true; state.probe = 'ok'; state.selId = 'BLD-20260913-001';
+    state.copied = false; state.parsed = null; state.parseError = null;
+    VERSIONS[0].name = 'v0.4.0'; VERSIONS[0].desc = '版本计划示例';
+    closeAnswerModal(); renderConsole(); renderList(); renderDetail();
+    $('#clipLine').textContent = '虚拟剪贴板 / 深链：（尚未复制。真实实现写系统剪贴板并请求打开深链；演示仅展示内容，不真实跳转）';
+    toast('演示已重置');
+  });
+}
+
+bindConsole();
+renderConsole();
+renderList();
+renderDetail();
+bindModal();
+</script>
+</body>
+</html>

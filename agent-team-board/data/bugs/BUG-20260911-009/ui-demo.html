@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260911-009 · 禁用态按钮无视觉反馈 · 交互演示</title>
+<style>
+  /* 配色取自 scripts/web/style.css（浅色 :root / 深色 prefers-color-scheme） */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --warn: #dc2626;
+    --ok-bg: #ecfdf5; --ok-text: #047857; --info-bg: #eff6ff; --info-text: #1d4ed8;
+    --shadow: 0 1px 3px rgba(20, 30, 50, 0.08), 0 4px 14px rgba(20, 30, 50, 0.06);
+    --done: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --primary: #3b82f6; --warn: #f87171;
+      --ok-bg: #052e1c; --ok-text: #6ee7b7; --info-bg: #0b1d3a; --info-text: #93c5fd;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+      --done: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 80px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 14px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ---------- 按钮：复刻 style.css .btn / .btn.primary 基础样式 ---------- */
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); border-radius: 8px; padding: 7px 14px; font-size: 13px;
+    font-weight: 550; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { filter: brightness(1.04); border-color: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  /* ⚠️ 现状（缺陷）：下面没有任何通用 .btn:disabled 规则——body.mode-buggy 时保持现状复刻 */
+  /* ✅ 修复：仅当切换到「修复后」模式，才挂上这条通用禁用态规则（即本 Bug 的修复内容） */
+  body.mode-fixed .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* 既有上下文禁用样式（style.css 行 429，修复不得回退）——两种模式下都始终生效 */
+  .sel-group .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ---------- 模式 / 状态切换（分段控件） ---------- */
+  .seg-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 12px; }
+  .seg-row:last-child { margin-bottom: 0; }
+  .seg-label { font-size: 12px; color: var(--muted); min-width: 7em; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: none; background: var(--panel); color: var(--muted);
+    padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; }
+
+  /* ---------- 演示面板：复刻批量开发「概况」页签结构 ---------- */
+  .batch-status-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip {
+    display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12px;
+    background: var(--done); color: #fff;
+  }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .notice { border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 8px 0; }
+  .notice.ok { background: var(--ok-bg); color: var(--ok-text); }
+  .notice.info { background: var(--info-bg); color: var(--info-text); }
+  .drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .reason-line { color: var(--muted); font-size: 12px; margin: -4px 0 8px; }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px 16px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 8px;
+  }
+  .meta-grid label { display: block; color: var(--muted); font-size: 11px; }
+  .stats-line { color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+  /* ---------- 计数对照 / 同口径按钮 ---------- */
+  .counters { display: flex; gap: 24px; flex-wrap: wrap; }
+  .counters b { font-size: 20px; font-family: ui-monospace, Menlo, monospace; }
+  .last-action { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 1.2em; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .note-line { margin: 10px 0 0; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(16px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    box-shadow: var(--shadow); border-radius: 8px; padding: 10px 18px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- 线框（可选补充） ---------- */
+  pre.wire { font-size: 12px; line-height: 1.4; overflow-x: auto; color: var(--muted); margin: 8px 0 0; }
+</style>
+</head>
+<body class="mode-buggy">
+<div class="wrap">
+  <h1>BUG-20260911-009 · 禁用态按钮无视觉反馈，点击看似无响应</h1>
+  <p class="sub">交互演示 · 单文件 / 无外网依赖 · 界面结构与配色取自 scripts/web/app.js 与 scripts/web/style.css · 面板数据为演示数据</p>
+
+  <div class="card" role="group" aria-label="演示控制">
+    <h2>演示控制</h2>
+    <div class="seg-row">
+      <span class="seg-label">修复模式（对照）</span>
+      <span class="seg" id="segMode">
+        <button type="button" data-mode="buggy" aria-pressed="true">缺陷现状</button>
+        <button type="button" data-mode="fixed" aria-pressed="false">修复后</button>
+      </span>
+    </div>
+    <div class="seg-row">
+      <span class="seg-label">面板状态</span>
+      <span class="seg" id="segPanel">
+        <button type="button" data-panel="loading" aria-pressed="false">加载中</button>
+        <button type="button" data-panel="normal" aria-pressed="false">正常 · 有已计划候选</button>
+        <button type="button" data-panel="empty" aria-pressed="true">空态 · 无已计划候选</button>
+      </span>
+    </div>
+    <p class="muted small note-line">默认停在缺陷场景：批次已结束 + 无已计划候选。试着点击下方「启动新一轮」——按钮看着能点，点了却毫无反应。</p>
+  </div>
+
+  <div class="card">
+    <h2>批量开发面板 · 概况页签（演示复刻）</h2>
+    <div id="panelLoading" hidden>
+      <p class="muted">加载中…</p>
+    </div>
+    <div id="panelBody">
+      <div class="batch-status-line">
+        <span class="chip">已结束</span>
+        <span class="cid">batch-20260908-011</span>
+        <span class="muted small">子代理模式 · 创建 09-08 14:32（演示数据）</span>
+      </div>
+      <div class="notice ok">本批范围已处理完毕</div>
+      <div class="notice info" id="stateHint" hidden></div>
+      <div class="drawer-actions" id="actionsArea">
+        <button type="button" class="btn primary" id="demoBatchNext" title="">启动新一轮</button>
+      </div>
+      <p class="reason-line" id="reasonLine" hidden></p>
+      <section class="meta-grid">
+        <div><label>当前条目</label><span id="metaCurrent">本轮已结束</span></div>
+        <div><label>子代理会话</label><span>—</span></div>
+        <div><label>开始时间</label><span>—</span></div>
+        <div><label>耗时</label><span>—</span></div>
+        <div><label>最后活动</label><span>09-11 09:38（演示数据）</span></div>
+      </section>
+      <div class="stats-line">已回执 3 · 异常 0 · 执行中 0 · 待处理 0 / 共 3（演示数据）</div>
+    </div>
+    <pre class="wire">┌─ 概况 ────────────────────────────────────────┐
+│ [已结束] batch-20260908-011  子代理模式·创建…  │
+│ (ok) 本批范围已处理完毕                        │
+│ [ 启动新一轮 ]   ← 空态时 disabled（缺陷无视觉）│
+│ 当前条目: 本轮已结束   子代理会话: —  …        │
+│ 已回执 3 · 异常 0 · 执行中 0 · 待处理 0 / 共 3 │
+└───────────────────────────────────────────────┘</pre>
+  </div>
+
+  <div class="card">
+    <h2>点击反馈对照（证明「确实点了、但从未触发」）</h2>
+    <div class="counters">
+      <div>按钮区按压 <b id="cntDown">0</b><br><span class="muted small">pointerdown（容器层计数）</span></div>
+      <div>按钮 click 触发 <b id="cntClick">0</b><br><span class="muted small">禁用 button 不派发 click</span></div>
+    </div>
+    <p class="last-action" id="lastAction">尚无操作。</p>
+    <p class="muted small">说明：浏览器对 disabled 原生按钮不派发 click（app.js 绑定的监听器不会执行、不弹 toast）；缺陷模式下外观与可点击一致，用户只能靠悬停 title 才知道原因。</p>
+    <p><button type="button" class="btn" id="resetCounters">重置计数</button></p>
+  </div>
+
+  <div class="card">
+    <h2>同口径受影响按钮（均按「禁用 + title 说明」渲染，随上方模式切换）</h2>
+    <div class="btn-row">
+      <button type="button" class="btn primary" disabled title="暂无已计划候选：请先在看板接受条目并「移入计划」">启动</button>
+      <button type="button" class="btn primary" disabled title="暂无可完善候选：已接受条目均已完善（或尚无已接受条目）">启动新一轮（完善）</button>
+      <button type="button" class="btn primary" disabled title="暂无已完成候选：请先人工确认条目完成（done）">启动新一轮（Commit）</button>
+    </div>
+    <p class="muted small note-line">分别对应 app.js 中的 #devStart、#refineNext、#commitNext（title 文案取自源码）。悬停可查看各自原因。</p>
+    <h2 style="margin-top:16px">既有上下文禁用样式（不得回退）</h2>
+    <div class="btn-row sel-group">
+      <button type="button" class="btn" disabled title="style.css 行 429：.sel-group .btn:disabled">选择组内按钮（既有样式）</button>
+    </div>
+    <p class="muted small note-line">`.sel-group .btn:disabled`（style.css 行 429）、`.card-accept-btn:disabled`（行 510）、`.shot-x:disabled`（行 932）、`.refine-badge:disabled`（行 1906）等上下文规则在两种模式下均保持原样——通用 `.btn:disabled` 是补齐而非覆盖。</p>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  var state = { mode: 'buggy', panel: 'empty' };
+  var TITLE_OK = '以已计划队列（最旧优先）重建任务并复制提示词';
+  var TITLE_EMPTY = '暂无已计划候选：请先在看板接受条目并「移入计划」';
+  var REASON_EMPTY = '暂无已计划候选：请先在看板接受条目并「移入计划」';
+  var HINT_NORMAL = '已计划候选 2 · 受依赖阻塞 0（演示数据）——「启动新一轮」可点击。';
+  var HINT_EMPTY = '已计划候选 0 · 受依赖阻塞 0（演示数据）——「启动新一轮」被禁用（disabled）。';
+
+  var el = function (id) { return document.getElementById(id); };
+  var btn = el('demoBatchNext');
+  var cntDown = 0, cntClick = 0, toastTimer = null;
+
+  function render() {
+    document.body.className = state.mode === 'fixed' ? 'mode-fixed' : 'mode-buggy';
+
+    el('panelLoading').hidden = state.panel !== 'loading';
+    el('panelBody').hidden = state.panel === 'loading';
+
+    var empty = state.panel === 'empty';
+    btn.disabled = empty;
+    btn.title = empty ? TITLE_EMPTY : TITLE_OK;
+    el('metaCurrent').textContent = empty ? '本轮已结束' : '等待领取下一项';
+
+    var hint = el('stateHint');
+    hint.hidden = state.panel === 'loading';
+    hint.textContent = empty ? HINT_EMPTY : HINT_NORMAL;
+
+    // 可选增强：仅修复模式下，空态就近展示可读原因文字，不再只依赖悬停 title
+    var reason = el('reasonLine');
+    reason.hidden = !(state.mode === 'fixed' && empty);
+    reason.textContent = '原因：' + REASON_EMPTY;
+
+    // 分段控件高亮
+    document.querySelectorAll('#segMode button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode));
+    });
+    document.querySelectorAll('#segPanel button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.panel === state.panel));
+    });
+  }
+
+  function log(text) { el('lastAction').textContent = text; }
+
+  function toast(text) {
+    var t = el('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1800);
+  }
+
+  el('segMode').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-mode]');
+    if (!b) return;
+    state.mode = b.dataset.mode;
+    render();
+    log('已切换到「' + (state.mode === 'fixed' ? '修复后' : '缺陷现状') + '」模式。');
+  });
+
+  el('segPanel').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-panel]');
+    if (!b) return;
+    state.panel = b.dataset.panel;
+    render();
+    log('面板状态已切换：' + b.textContent + '。');
+  });
+
+  // 容器层 pointerdown：禁用 button 不派发 click，但 pointerdown 会冒泡到容器——用于证明按压确实发生
+  el('actionsArea').addEventListener('pointerdown', function () {
+    cntDown++;
+    el('cntDown').textContent = String(cntDown);
+    if (btn.disabled) {
+      log('按压第 ' + cntDown + ' 次落在禁用按钮上：click 计数未变（' + cntClick + '）——' +
+        (state.mode === 'buggy' ? '缺陷模式：外观无任何变化，看似「点了没反应」。' : '修复模式：按钮呈禁用态，一眼可辨不可点。'));
+    }
+  });
+
+  btn.addEventListener('click', function () {
+    if (btn.disabled) return; // 保险：禁用态绝不触发动作（禁用语义不变）
+    cntClick++;
+    el('cntClick').textContent = String(cntClick);
+    log('第 ' + cntClick + ' 次 click 触发：创建任务并复制调度提示词（演示行为，真实实现见 app.js）。');
+    toast('已创建新任务并复制调度提示词（演示）');
+  });
+
+  el('resetCounters').addEventListener('click', function () {
+    cntDown = 0; cntClick = 0;
+    el('cntDown').textContent = '0';
+    el('cntClick').textContent = '0';
+    log('计数已重置。');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-008 界面演示 · 版本面板口径重复提示</title>
+<style>
+  /* 配色取自 scripts/web/style.css（--bg/--panel/--text/--muted/--border/--primary/--warn 等） */
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --primary: #2563eb; --primary-soft: rgba(37,99,235,.12);
+    --warn: #dc2626; --ok-text: #047857; --mark: rgba(220,38,38,.14); --mark-edge: #dc2626;
+    --chip-mute: #64748b; --chip-ok: #16a34a; --mask: rgba(20,30,50,.45);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    --primary: #60a5fa; --primary-soft: rgba(96,165,250,.15);
+    --warn: #f87171; --ok-text: #4ade80; --mark: rgba(248,113,113,.16); --mark-edge: #f87171;
+    --chip-mute: #94a3b8; --chip-ok: #4ade80; --mask: rgba(4,8,14,.6);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; color: inherit; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+
+  /* ---------- 演示顶栏（真实界面没有这一条，仅为本演示的控制台） ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
+  .demo-top h1 { font-size: 14px; margin: 0 8px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; padding: 5px 12px; cursor: pointer; color: var(--muted); }
+  .seg button.on { background: var(--primary); color: #fff; font-weight: 600; }
+  .demo-top .lbl { color: var(--muted); font-size: 12.5px; }
+  .demo-note { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+
+  /* 面板状态切换条 */
+  .state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 8px 16px; border-bottom: 1px dashed var(--border); background: var(--bg); }
+  .state-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .state-bar label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; }
+
+  /* ---------- 构建模块（还原 view=build 的版本计划页） ---------- */
+  .build-view { max-width: 1060px; margin: 0 auto; padding: 14px 18px 28px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 7px 14px; cursor: pointer; color: var(--muted); }
+  .tabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .split { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .card, .detail { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .vlist { display: flex; flex-direction: column; gap: 10px; }
+  .vcard { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; background: var(--panel); }
+  .vcard:hover { border-color: var(--primary); }
+  .vcard.sel { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+  .vcard .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .chip.mute { color: var(--chip-mute); border: 1px solid var(--chip-mute); }
+  .chip.ok { color: var(--chip-ok); border: 1px solid var(--chip-ok); }
+  .vcard .meta, .detail .meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .detail h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .desc-block { margin: 10px 0; }
+  .items-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .item-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13.5px; flex-wrap: wrap; }
+  .item-id { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .commits-sel { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: inherit; padding: 3px 6px; }
+
+  .btn { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .btn.primary:disabled, .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .icon-btn { background: transparent; border: 0; font-size: 16px; cursor: pointer; color: var(--muted); padding: 2px 6px; border-radius: 6px; }
+  .icon-btn:hover { background: var(--bg); color: var(--text); }
+
+  /* ---------- 右侧侧拉面板（还原 rel-panel / rel-panel-mask） ---------- */
+  .mask { position: fixed; inset: 0; background: var(--mask); z-index: 60; }
+  .panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw);
+    background: var(--panel); border-left: 1px solid var(--border); box-shadow: var(--shadow);
+    z-index: 61; display: flex; flex-direction: column; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .panel-head h3 { margin: 0; font-size: 15px; }
+  .scope { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+  .panel-body { flex: 1; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .panel-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .panel-foot .primary { margin-left: auto; }
+  .err { color: var(--warn); font-size: 13px; }
+  .empty { padding: 4px 2px; }
+
+  /* 重复口径标注：①头部 / ②正文，仅「缺陷现状 + 空态·无 done」时点亮 */
+  .rule-mark { border-radius: 4px; padding: 0 3px; transition: background .2s; }
+  .dup .rule-mark { background: var(--mark); box-shadow: inset 0 -1px 0 var(--mark-edge); }
+  .badge { display: inline-block; min-width: 16px; text-align: center; font-size: 10.5px; line-height: 14px;
+    border-radius: 999px; border: 1px solid var(--mark-edge); color: var(--warn); margin-right: 4px; vertical-align: 1px; }
+  .dup .rule-mark .badge { background: var(--mark-edge); color: #fff; }
+  .dup-note { color: var(--warn); font-size: 12.5px; margin: -4px 2px 0; }
+  .ok-note { color: var(--ok-text); font-size: 12.5px; margin: -4px 2px 0; }
+  .fix-only, .defect-only { display: none; }
+  html[data-mode="fixed"] .fix-only { display: block; }
+  html[data-mode="defect"] .defect-only { display: block; }
+
+  /* 候选区 */
+  .pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cand { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .cand.off { opacity: .6; }
+  .cand-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .field input { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); padding: 5px 9px; font: inherit; }
+
+  /* 对比说明 */
+  .compare { max-width: 1060px; margin: 6px auto 30px; padding: 0 18px; }
+  .compare .card p { margin: 6px 0; }
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 8px 16px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 90; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+  <!-- 演示控制台：缺陷/修复对比 + 深浅色（真实界面无此栏） -->
+  <div class="demo-top">
+    <h1>BUG-20260914-008 · 版本面板口径重复提示 演示</h1>
+    <span class="lbl">对比</span>
+    <div class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on">缺陷现状</button>
+      <button type="button" data-mode="fixed">期望修复后</button>
+    </div>
+    <span class="lbl">主题</span>
+    <div class="seg" id="themeSeg">
+      <button type="button" data-theme="dark" class="on">深色</button>
+      <button type="button" data-theme="light">浅色</button>
+    </div>
+    <span class="demo-note">截图为深色「添加条目」面板；点「＋ 新建版本」或详情「＋ 添加条目」体验</span>
+  </div>
+
+  <!-- 候选区状态切换（模拟后端不同数据状态） -->
+  <div class="state-bar">
+    <span class="lbl">候选接口状态：</span>
+    <label><input type="radio" name="pstate" value="normal" checked> 正常（有候选）</label>
+    <label><input type="radio" name="pstate" value="nodone"> 空态 · 无 done 条目<span class="muted">（缺陷触发态）</span></label>
+    <label><input type="radio" name="pstate" value="occupied"> 空态 · done 均已被占用</label>
+    <label><input type="radio" name="pstate" value="loading"> 加载中</label>
+    <label><input type="radio" name="pstate" value="error"> 加载失败</label>
+  </div>
+
+  <main class="build-view">
+    <nav class="tabs" aria-label="构建子页签">
+      <button type="button" class="on">版本计划</button>
+      <button type="button" id="tabBranch">分支浏览</button>
+    </nav>
+    <div id="paneVersion">
+      <div class="toolbar"><button type="button" class="btn primary" id="newBtn">＋ 新建版本</button></div>
+      <div class="split">
+        <div class="vlist" id="vlist" aria-label="版本列表"></div>
+        <div class="detail" id="detail"></div>
+      </div>
+    </div>
+    <div id="paneBranch" class="card" style="display:none">
+      <p class="muted">分支浏览与本 Bug 无关——演示聚焦「版本计划」的两个选单面板。</p>
+    </div>
+  </main>
+
+  <section class="compare">
+    <div class="card">
+      <strong>对照说明</strong>
+      <p><span class="badge">①</span>面板头部副标题：常驻口径「仅已完成（done）且未纳入任何版本的需求单 / Bug 单…」（新建 / 添加两面板各自文案）。</p>
+      <p><span class="badge">②</span>缺陷现状（空态 · 无 done 条目时）：正文空态整段重复同一口径——同屏出现两次（红色标注处）。</p>
+      <p>期望修复后：口径仅在头部 ① 出现一次，正文空态精简为「暂无可纳入版本的条目」（示意文案，最终以开发定稿为准）；「done 均已被占用」空态文案（BUG-20260914-004）保持不变。</p>
+    </div>
+  </section>
+
+  <!-- 侧拉面板（JS 按状态渲染进 #panelHost） -->
+  <div id="panelHost"></div>
+  <div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* 与 scripts/web/build.js 同源的文案（口径逐字一致） */
+const TEXT = {
+  create: {
+    title: '新建版本',
+    scopeHead: '仅已完成（done）且未纳入任何版本的需求单 / Bug 单',
+    scopeTail: '可纳入版本；全选只纳入有 commit 候选的条目',
+    foot: '创建版本计划',
+  },
+  add: {
+    title: '添加条目',
+    scopeHead: '仅已完成（done）且未纳入任何版本的需求单 / Bug 单',
+    scopeTail: '可加入本版本（已纳入版本的条目不再出现）',
+    foot: '添加所选条目',
+  },
+  emptyNoDone: '暂无可纳入版本的条目：仅已完成（done）且未纳入其他版本的需求单 / Bug 单会出现在候选中',
+  emptyNoDoneFixed: '暂无可纳入版本的条目',
+  emptyOccupied: '已完成的条目均已纳入版本计划：可从「计划中 / 失败」版本移出条目，或删除版本后重新纳入',
+  loading: '正在读取条目…',
+};
+const CANDIDATES = [
+  { id: 'REQ-20260914-001', title: '修复看板空态文案', commits: ['a1b2c3d4e5f60718293a4b5c6d7e8f9011223344', '0f9e8d7c6b5a4938271605f4e3d2c1b0a9988776'] },
+  { id: 'BUG-20260914-006', title: '合并按钮禁用态提示', commits: ['9f8e7d6c5b4a39281706f5e4d3c2b1a098765432'] },
+  { id: 'REQ-20260914-010', title: '演示条目（未关联提交）', commits: [] },
+];
+const VERSIONS = [
+  { id: 'BLD-20260914-001', name: '版本 20260914-1200', status: 'draft', n: 2, at: '2026-09-14 12:00',
+    desc: '演示用版本计划（draft）。', items: [['REQ-20260913-002', 'a1b2c3d4'], ['BUG-20260913-003', '0f9e8d7c']] },
+  { id: 'BLD-20260913-002', name: '版本 20260913-0900', status: 'merged', n: 5, at: '2026-09-13 09:00',
+    desc: '已合并入 main 的历史版本。', items: [['REQ-20260912-004', '11223344']] },
+];
+const STATUS_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', failed: '失败' };
+const STATUS_CLS = { draft: 'mute', merging: 'mute', merged: 'ok', failed: 'mute' };
+const short = (h) => String(h || '').slice(0, 8);
+
+const S = {
+  mode: 'defect',
+  pstate: 'normal',        // normal | nodone | occupied | loading | error
+  panel: null,             // { kind:'create'|'add', phase:'loading'|'ready'|'error', picked:Set, name:'' }
+  selVer: VERSIONS[0].id,
+  timer: null,
+};
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---------- 版本列表 / 详情 ---------- */
+function renderVersions() {
+  $('#vlist').innerHTML = VERSIONS.map((v) => `
+    <div class="vcard${v.id === S.selVer ? ' sel' : ''}" data-ver="${v.id}" role="button" tabindex="0">
+      <div class="t"><strong>${v.name}</strong> <span class="chip ${STATUS_CLS[v.status]}">${STATUS_LABEL[v.status]}</span></div>
+      <div class="meta">${v.id} · ${v.n} 个关联单 · 更新 ${v.at}</div>
+    </div>`).join('');
+  $$('#vlist .vcard').forEach((el) => {
+    const pick = () => { S.selVer = el.dataset.ver; renderVersions(); renderDetail(); };
+    el.addEventListener('click', pick);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+  });
+}
+function renderDetail() {
+  const v = VERSIONS.find((x) => x.id === S.selVer);
+  const lock = ['merging', 'merged'].includes(v.status);
+  $('#detail').innerHTML = `
+    <h3>${v.name} <span class="chip ${STATUS_CLS[v.status]}">${STATUS_LABEL[v.status]}</span></h3>
+    <p class="meta">${v.id} · 目标分支 main · 更新 ${v.at}</p>
+    <div class="desc-block"><span class="muted small">描述</span><br>${v.desc}</div>
+    <div class="items-head"><strong>关联条目与 commit</strong>
+      <button type="button" class="btn small" id="addItem" ${lock ? 'disabled title="合并中/已合并状态锁定条目增删"' : ''}>＋ 添加条目</button></div>
+    ${v.items.map(([id, c]) => `
+      <div class="item-row"><span class="item-id">${id}</span><span>演示条目</span>
+        <select class="commits-sel" ${lock ? 'disabled' : ''}><option>${short(c)}</option></select>
+        <button type="button" class="btn small" ${lock ? 'disabled' : ''}>移出</button></div>`).join('')}
+    <p class="muted small" style="margin-top:8px">演示数据：点「＋ 添加条目」打开选单面板（截图场景）。</p>`;
+  $('#addItem')?.addEventListener('click', () => openPanel('add'));
+}
+
+/* ---------- 侧拉面板 ---------- */
+function openPanel(kind) {
+  S.panel = { kind, phase: 'loading', picked: new Set(), name: '' };
+  renderPanel();
+  // 模拟候选接口往返：600ms 后进入所选状态（loading 态则停留）
+  clearTimeout(S.timer);
+  S.timer = setTimeout(() => {
+    if (!S.panel) return;
+    if (S.pstate === 'error') S.panel.phase = 'error';
+    else if (S.pstate !== 'loading') S.panel.phase = 'ready';
+    renderPanel();
+  }, 600);
+}
+function closePanel() {
+  clearTimeout(S.timer);
+  S.panel = null;
+  renderPanel();
+}
+
+function scopeHtml(kind) {
+  const t = TEXT[kind];
+  return `<span class="rule-mark"><span class="badge">①</span>仅已完成（done）且未纳入任何版本的需求单 / Bug 单</span>${t.scopeTail}`;
+}
+function emptyHtml() {
+  if (S.pstate === 'occupied') {
+    return `<p class="muted empty">${TEXT.emptyOccupied}</p>
+      <p class="ok-note">「均已被占用」空态（BUG-20260914-004）：修复前后均保持此文案，不与「无 done 条目」混用。</p>`;
+  }
+  if (S.mode === 'defect') {
+    return `<p class="muted empty">暂无可纳入版本的条目：<span class="rule-mark"><span class="badge">②</span>仅已完成（done）且未纳入其他版本的需求单 / Bug 单会出现在候选中</span></p>
+      <p class="dup-note">↑ 缺陷：②整段重复了头部 ① 的口径——同一规则同屏出现两次。</p>`;
+  }
+  return `<p class="muted empty">${TEXT.emptyNoDoneFixed}</p>
+    <p class="ok-note">✓ 修复后：口径仅头部 ① 一处，正文只留简短空态（示意文案，最终以开发定稿为准）。</p>`;
+}
+function normalHtml() {
+  const p = S.panel;
+  const skipped = CANDIDATES.filter((c) => !c.commits.length).length;
+  const picked = CANDIDATES.filter((c) => c.commits.length && p.picked.has(c.id)).length;
+  const rows = CANDIDATES.map((c) => {
+    const sel = c.commits.length > 0;
+    return `<label class="cand${sel ? '' : ' off'}">
+      <input type="checkbox" data-cand="${c.id}" ${p.picked.has(c.id) ? 'checked' : ''} ${sel ? '' : 'disabled'}>
+      <span class="cand-title" title="${c.id} ${c.title}">${c.id} ${c.title}</span>
+      ${sel ? `<select class="commits-sel" data-sel="${c.id}" ${p.picked.has(c.id) ? '' : 'disabled'}>${c.commits.map((h) => `<option value="${h}">${short(h)}</option>`).join('')}</select>`
+        : '<span class="muted small">暂无关联提交（先完成开发提交）</span>'}
+    </label>`;
+  }).join('');
+  return `
+    <div class="pick-bar">
+      <button type="button" class="btn small" id="pickAll">全选</button>
+      <button type="button" class="btn small" id="pickNone">全不选</button>
+      <span class="muted small">已选 ${picked} 项${skipped ? ` · ${skipped} 个条目暂无关联提交将被跳过` : ''}</span>
+    </div>
+    ${rows}
+    ${p.kind === 'create' ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）
+      <input id="newName" value="${p.name}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}`;
+}
+
+function renderPanel() {
+  const host = $('#panelHost');
+  const p = S.panel;
+  if (!p) { host.innerHTML = ''; return; }
+  const t = TEXT[p.kind];
+  const dupCls = (S.mode === 'defect' && S.pstate === 'nodone' && p.phase === 'ready') ? ' dup' : '';
+  let body;
+  if (p.phase === 'loading') body = `<p class="muted">${TEXT.loading}</p>`;
+  else if (p.phase === 'error') body = `<p class="err" role="alert">读取候选失败：演示模拟的接口错误（500）
+    <button type="button" class="btn small" id="retry">重试</button></p>`;
+  else if (S.pstate === 'normal') body = normalHtml();
+  else body = emptyHtml();
+
+  host.innerHTML = `
+    <div class="mask" id="mask"></div>
+    <aside class="panel${dupCls}" role="dialog" aria-label="${t.title}">
+      <header class="panel-head">
+        <div><h3>${t.title}</h3><p class="scope">${scopeHtml(p.kind)}</p></div>
+        <button type="button" class="icon-btn" id="closeBtn" aria-label="关闭面板">✕</button>
+      </header>
+      <div class="panel-body">${body}</div>
+      <footer class="panel-foot"><button type="button" class="btn primary" id="submitBtn" ${p.phase !== 'ready' || S.pstate !== 'normal' ? 'disabled' : ''}>${t.foot}</button></footer>
+    </aside>`;
+
+  $('#closeBtn').addEventListener('click', closePanel);
+  $('#mask').addEventListener('click', closePanel);
+  $('#retry')?.addEventListener('click', () => {
+    p.phase = 'loading'; renderPanel();
+    clearTimeout(S.timer);
+    S.timer = setTimeout(() => { if (S.panel) { p.phase = S.pstate === 'error' ? 'error' : 'ready'; renderPanel(); } }, 600);
+  });
+  if (p.phase === 'ready' && S.pstate === 'normal') {
+    $('#pickAll')?.addEventListener('click', () => {
+      CANDIDATES.forEach((c) => { if (c.commits.length) p.picked.add(c.id); });
+      renderPanel();
+    });
+    $('#pickNone')?.addEventListener('click', () => { p.picked.clear(); renderPanel(); });
+    $$('#panelHost input[data-cand]').forEach((cb) => cb.addEventListener('change', () => {
+      cb.checked ? p.picked.add(cb.dataset.cand) : p.picked.delete(cb.dataset.cand);
+      renderPanel();
+    }));
+    $('#newName')?.addEventListener('input', (e) => { p.name = e.target.value; });
+    $('#submitBtn').addEventListener('click', () => {
+      const btn = $('#submitBtn');
+      btn.disabled = true; btn.textContent = '提交中…';
+      setTimeout(() => { toast(`演示：${p.picked.size ? `已选 ${p.picked.size} 项，` : ''}实际项目会调用 /api/build 接口并刷新版本`); closePanel(); }, 500);
+    });
+  }
+}
+
+/* ---------- 全局事件 ---------- */
+$('#modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.mode = b.dataset.mode;
+  document.documentElement.dataset.mode = S.mode;
+  $$('#modeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  renderPanel();
+});
+$('#themeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.documentElement.dataset.theme = b.dataset.theme;
+  $$('#themeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+});
+$$('input[name="pstate"]').forEach((r) => r.addEventListener('change', () => {
+  S.pstate = r.value;
+  if (S.panel) { S.panel.phase = 'loading'; renderPanel(); clearTimeout(S.timer);
+    S.timer = setTimeout(() => { if (S.panel) { S.panel.phase = S.pstate === 'error' ? 'error' : (S.pstate === 'loading' ? 'loading' : 'ready'); renderPanel(); } }, 600); }
+}));
+$('#newBtn').addEventListener('click', () => openPanel('create'));
+$('#tabBranch').addEventListener('click', () => {
+  $('#paneVersion').style.display = 'none';
+  $('#paneBranch').style.display = '';
+  toast('分支浏览与本 Bug 无关，已返回版本计划');
+  setTimeout(() => { $('#paneBranch').style.display = 'none'; $('#paneVersion').style.display = ''; }, 1200);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.panel) closePanel(); });
+
+renderVersions();
+renderDetail();
+document.documentElement.dataset.mode = 'defect';
+</script>
+</body>
+</html>

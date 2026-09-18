@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-002 演示 · 版本计划选单无法全选 / 全不选</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1c2436; --border: #2a3450;
+    --text: #dbe2f4; --muted: #8b96b3; --link: #6ea8fe;
+    --ok: #4ade80; --err: #f87171; --err-bg: rgba(220, 38, 38, 0.10); --err-border: rgba(248, 113, 113, 0.35);
+    --info: #7dd3fc;
+    --primary: #3b82f6; --danger: #ef4444;
+    --chip-mute: #8b96b3; --chip-ok: #4ade80; --chip-run: #7dd3fc; --chip-fail: #f87171;
+    --mask: rgba(6, 10, 20, 0.55);
+  }
+  html[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef1f8; --border: #d4dae8;
+    --text: #1f2740; --muted: #5f6a85; --link: #1d66d0;
+    --ok: #15803d; --err: #b91c1c; --err-bg: rgba(220, 38, 38, 0.08); --err-border: rgba(185, 28, 28, 0.35);
+    --info: #0369a1;
+    --primary: #2563eb; --danger: #dc2626;
+    --chip-mute: #5f6a85; --chip-ok: #15803d; --chip-run: #0369a1; --chip-fail: #b91c1c;
+    --mask: rgba(30, 40, 60, 0.35);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 16px 80px; }
+  a { color: var(--link); }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .sub code { background: var(--panel2); border-radius: 5px; padding: 1px 6px; }
+
+  /* ===== 演示控制面板 ===== */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  .demo-group { display: flex; align-items: center; gap: 8px; }
+  .lbl { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+  .seg button { appearance: none; border: 0; background: transparent; color: var(--muted); padding: 5px 14px; cursor: pointer; font-size: 12.5px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .seg button.on.bugmode { background: var(--danger); }
+  .ghost-btn { appearance: none; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .observe { border-radius: 10px; padding: 9px 13px; font-size: 12.5px; margin-bottom: 14px; border: 1px solid; }
+  .observe.bug { background: var(--err-bg); border-color: var(--err-border); color: var(--text); }
+  .observe.fixed { background: rgba(34, 197, 94, 0.08); border-color: rgba(74, 222, 128, 0.35); color: var(--text); }
+  .observe b { color: var(--err); }
+  .observe.fixed b { color: var(--ok); }
+
+  /* ===== 看板模拟（构建页） ===== */
+  .board { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .board-head { display: flex; align-items: center; gap: 10px; background: var(--panel); padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 700; font-size: 13px; }
+  .brand .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; background: var(--primary); margin-right: 6px; vertical-align: 0; }
+  .navtabs { display: flex; gap: 4px; margin-left: 8px; }
+  .navtab { appearance: none; border: 0; border-radius: 8px; background: transparent; color: var(--muted); padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .navtab.on { background: var(--panel2); color: var(--text); font-weight: 600; }
+  .subtabs { display: flex; gap: 16px; padding: 8px 14px 0; background: var(--panel); }
+  .subtab { appearance: none; background: none; border: 0; color: var(--muted); padding: 6px 2px 8px; cursor: pointer; font-size: 12.5px; border-bottom: 2px solid transparent; }
+  .subtab.on { color: var(--text); border-bottom-color: var(--primary); font-weight: 600; }
+  .toolbar { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 14px; background: var(--panel); }
+  .split { display: grid; grid-template-columns: 340px 1fr; gap: 0; background: var(--panel); }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+  .vlist { border-right: 1px solid var(--border); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .vcard { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; cursor: pointer; background: var(--panel2); }
+  .vcard.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .vcard .t { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .vcard .meta { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .chip { border-radius: 99px; padding: 1px 9px; font-size: 11px; border: 1px solid; white-space: nowrap; }
+  .chip.mute { color: var(--chip-mute); border-color: var(--border); }
+  .chip.ok { color: var(--chip-ok); border-color: rgba(74, 222, 128, .4); }
+  .chip.run { color: var(--chip-run); border-color: rgba(125, 211, 252, .4); }
+  .chip.fail { color: var(--chip-fail); border-color: rgba(248, 113, 113, .4); }
+
+  .detail { padding: 14px 16px; }
+  .detail h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .detail .meta { color: var(--muted); font-size: 11.5px; margin: 2px 0 10px; }
+  .desc-block { margin-bottom: 12px; }
+  .desc-block .cap { color: var(--muted); font-size: 11.5px; display: block; margin-bottom: 2px; }
+  .items-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .item-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .item-row .id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--link); white-space: nowrap; }
+  .item-row .ttl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-row .ttl.empty { color: var(--muted); }
+  .btn { appearance: none; border-radius: 8px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); padding: 5px 14px; cursor: pointer; font-size: 12.5px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12px; }
+  .btn.quiet { background: transparent; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+  select.h { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 3px 6px; font-size: 12px; max-width: 130px; }
+  select.h:disabled { opacity: .45; }
+
+  /* ===== 侧拉面板 ===== */
+  .mask { position: fixed; inset: 0; background: var(--mask); display: none; z-index: 40; }
+  .mask.show { display: block; }
+  .spanel { position: fixed; top: 0; right: -460px; width: 440px; max-width: 94vw; height: 100%; background: var(--panel); border-left: 1px solid var(--border); z-index: 41; display: flex; flex-direction: column; transition: right .18s ease; box-shadow: -12px 0 32px rgba(0,0,0,.28); }
+  .spanel.show { right: 0; }
+  .sp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+  .sp-head h3 { margin: 0 0 2px; font-size: 14.5px; }
+  .sp-head .scope { color: var(--muted); font-size: 11.5px; margin: 0; }
+  .icon-btn { appearance: none; background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font-size: 13px; line-height: 1; }
+  .sp-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .pick-bar .cnt { color: var(--muted); font-size: 12px; }
+  .cand { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 9px; margin-bottom: 6px; }
+  .cand.off { opacity: .6; }
+  .cand input[type="checkbox"] { accent-color: var(--primary); width: 15px; height: 15px; flex: none; cursor: pointer; }
+  .cand input[type="checkbox"]:disabled { cursor: not-allowed; }
+  .cand .cid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; white-space: nowrap; }
+  .cand .cttl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .cand .nocommit { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .field { display: block; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .field input { width: 100%; margin-top: 4px; background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; }
+  .sp-err { color: var(--err); background: var(--err-bg); border: 1px solid var(--err-border); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; margin: 10px 0 0; }
+  .sp-empty { color: var(--muted); font-size: 12.5px; margin: 8px 0; }
+  .sp-foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+  .sp-foot .btn.primary { min-width: 140px; }
+
+  /* ===== toast ===== */
+  .toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
+  .toast { background: var(--panel2); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 9px; padding: 8px 13px; font-size: 12.5px; max-width: 380px; box-shadow: 0 6px 18px rgba(0,0,0,.25); animation: pop .16s ease; }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.err { border-left-color: var(--err); }
+  @keyframes pop { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .footnote { color: var(--muted); font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260914-002 · 版本计划选单「全选 / 全不选」失效演示</h1>
+  <p class="sub">缺陷：<code>scripts/web/build.js</code> 中 <code>pickAll()</code> 只更新内部勾选集合、不重渲染——「全选」在候选含无提交条目时只弹 toast 界面不动，「全不选」任何情况下界面都不动；勾选集合与界面显示错位。切换下方开关对照「缺陷现状 / 修复后」。</p>
+
+  <div class="demo-bar">
+    <div class="demo-group"><span class="lbl">对照模式</span>
+      <div class="seg" id="segMode">
+        <button data-mode="bug" class="on bugmode">缺陷现状</button>
+        <button data-mode="fixed">修复后</button>
+      </div>
+    </div>
+    <div class="demo-group"><span class="lbl">面板入口</span>
+      <div class="seg" id="segPanel">
+        <button data-panel="create" class="on">＋ 新建版本</button>
+        <button data-panel="add">添加条目（详情内）</button>
+      </div>
+    </div>
+    <div class="demo-group"><span class="lbl">候选构成</span>
+      <div class="seg" id="segComp">
+        <button data-comp="mixed" class="on">含无提交条目</button>
+        <button data-comp="all">全部有提交</button>
+        <button data-comp="empty">空候选</button>
+        <button data-comp="error">读取失败</button>
+      </div>
+    </div>
+    <div class="demo-group"><button class="ghost-btn" id="themeBtn">浅色 / 深色</button></div>
+  </div>
+
+  <div class="observe bug" id="observe"></div>
+
+  <!-- ===== 构建页模拟 ===== -->
+  <div class="board">
+    <div class="board-head">
+      <span class="brand"><span class="dot"></span>Agent Team Board</span>
+      <div class="navtabs">
+        <button class="navtab">需求</button>
+        <button class="navtab on">构建</button>
+        <button class="navtab">任务</button>
+        <button class="navtab">设置</button>
+      </div>
+    </div>
+    <div class="subtabs">
+      <button class="subtab on">版本计划</button>
+      <button class="subtab">分支浏览</button>
+    </div>
+    <div class="toolbar"><button class="btn primary" id="mockNewBtn">＋ 新建版本</button></div>
+    <div class="split">
+      <div class="vlist" id="vlist"></div>
+      <div class="detail" id="detail"></div>
+    </div>
+  </div>
+  <p class="footnote">演示为独立 mock：交互与文案按 <code>scripts/web/build.js</code> 既有行为 1:1 模拟（含「已选 N 项」计数、无提交条目跳过提示、提交校验文案），不访问任何接口。</p>
+</div>
+
+<div class="mask" id="mask"></div>
+<aside class="spanel" id="spanel" role="dialog" aria-label="条目选单面板">
+  <header class="sp-head">
+    <div>
+      <h3 id="spTitle">新建版本</h3>
+      <p class="scope" id="spScope"></p>
+    </div>
+    <button class="icon-btn" id="spClose" aria-label="关闭面板">✕</button>
+  </header>
+  <div class="sp-body" id="spBody"></div>
+  <footer class="sp-foot"><button class="btn primary" id="spSubmit">创建版本计划</button></footer>
+</aside>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, el = document) => el.querySelector(s);
+
+  /* ---------- 演示数据（mock） ---------- */
+  const H = (c) => c.repeat(40);
+  const COMMITS = {
+    a: '9af23ce1', b: '3d71b029', c: 'c40e8d7f', d: '77b1f6a3', e: '0e5c94b2',
+  };
+  const CANDIDATES = [
+    { itemId: 'REQ-20260913-005', title: '批量完善和批量开发的文案改为 AI 分析', commits: [H('a'), H('b')] },
+    { itemId: 'BUG-20260913-005', title: '构建模块提示词缺少去新建会话入口', commits: [H('c')] },
+    { itemId: 'REQ-20260913-003', title: '批量任务去掉批次概念，每次启动到结束就实算', commits: [] },
+    { itemId: 'REQ-20260913-006', title: 'AI 完善界面支持针对 AI 回答再编辑', commits: [H('d')] },
+  ];
+  const IN_VERSION = ['REQ-20260913-001']; // 已在本版本中的条目（添加面板候选剔除）
+
+  let versions = [
+    { id: 'BLD-20260914-001', name: '版本 20260914-10', status: 'draft', count: 1, updated: '2026-09-14 10:12' },
+    { id: 'BLD-20260913-002', name: 'v0.9 稳定版', status: 'merged', count: 4, updated: '2026-09-13 18:40' },
+    { id: 'BLD-20260913-001', name: '版本 20260913-09', status: 'failed', count: 2, updated: '2026-09-13 09:05' },
+  ];
+  const detailItems = [
+    { itemId: 'REQ-20260913-001', title: '构建模块：版本管理与分支浏览', commit: COMMITS.e },
+  ];
+  let seq = 1;
+
+  const STATUS = { draft: ['计划中', 'mute'], merging: ['合并中', 'run'], merged: ['已合并', 'ok'], failed: ['失败', 'fail'] };
+  const chip = (st) => `<span class="chip ${STATUS[st][1]}">${STATUS[st][0]}</span>`;
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  /* ---------- 演示控制 ---------- */
+  const demo = { mode: 'bug', panel: 'create', comp: 'mixed' };
+  const panel = { open: false, picked: new Set(), commits: {}, name: '', busy: false, error: null, phase: 'idle' }; // phase: idle|loading|ready|error
+
+  function observeText() {
+    if (demo.mode === 'bug') {
+      return '<b>缺陷现状</b>：点「全选」只弹 toast，复选框 / 「已选 N 项」计数 / commit 下拉全部不动（仅当候选全部有提交时「全选」才碰巧正常）；点「全不选」无任何反应。此时直接提交会把看似未勾选的条目<b>悄悄提交成功</b>；手动点任意一条复选框会<b>突然全部勾上</b>。';
+    }
+    return '<b>修复后</b>：点「全选」有 commit 候选的条目立即勾选、计数同步、commit 下拉解禁（无提交条目仍跳过并提示）；点「全不选」立即清空。界面勾选态与提交内容始终一致。';
+  }
+  function refreshObserve() {
+    const el = $('#observe');
+    el.className = 'observe ' + (demo.mode === 'bug' ? 'bug' : 'fixed');
+    el.innerHTML = observeText();
+  }
+
+  function bindSeg(id, key, after) {
+    $(id).addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      for (const x of $(id).querySelectorAll('button')) x.classList.toggle('on', x === b);
+      demo[key] = b.dataset[key === 'mode' ? 'mode' : key === 'panel' ? 'panel' : 'comp'];
+      if (after) after();
+    });
+  }
+  bindSeg('#segMode', 'mode', refreshObserve);
+  bindSeg('#segPanel', 'panel');
+  bindSeg('#segComp', 'comp');
+  $('#themeBtn').addEventListener('click', () => {
+    const html = document.documentElement;
+    html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+
+  /* ---------- toast（模拟 window.toast） ---------- */
+  function toast(msg, kind) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = msg;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3800);
+  }
+
+  /* ---------- 看板渲染 ---------- */
+  let selVer = versions[0].id;
+  function renderBoard() {
+    $('#vlist').innerHTML = versions.map((v) => `
+      <div class="vcard${v.id === selVer ? ' sel' : ''}" data-ver="${esc(v.id)}">
+        <div class="t"><span>${esc(v.name)}</span>${chip(v.status)}</div>
+        <div class="meta">${esc(v.id)} · ${v.count} 个关联单 · 更新 ${esc(v.updated)}</div>
+      </div>`).join('');
+    for (const el of document.querySelectorAll('[data-ver]')) {
+      el.addEventListener('click', () => { selVer = el.dataset.ver; renderBoard(); });
+    }
+    const v = versions.find((x) => x.id === selVer) || versions[0];
+    $('#detail').innerHTML = `
+      <h3>${esc(v.name)} ${chip(v.status)}</h3>
+      <p class="meta">${esc(v.id)} · 目标分支 main · 更新 ${esc(v.updated)}</p>
+      <div class="desc-block"><span class="cap">描述</span><span style="color:var(--muted)">（无描述，点击补充）</span></div>
+      <div class="items-head"><strong>关联条目与 commit</strong>
+        <button class="btn small" id="mockAddBtn">＋ 添加条目</button></div>
+      <div id="detailItems">${detailItems.map((it) => `
+        <div class="item-row"><span class="id">${esc(it.itemId)}</span>
+          <span class="ttl${it.title ? '' : ' empty'}">${esc(it.title || '')}</span>
+          <select class="h" disabled><option>${esc(it.commit)}</option></select>
+          <button class="btn small quiet" data-rm="${esc(it.itemId)}">移出</button></div>`).join('')}
+        ${detailItems.length ? '' : '<p class="sp-empty">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}
+      </div>`;
+    $('#mockAddBtn').addEventListener('click', () => openPanel('add'));
+    for (const el of document.querySelectorAll('[data-rm]')) {
+      el.addEventListener('click', () => {
+        const i = detailItems.findIndex((x) => x.itemId === el.dataset.rm);
+        if (i >= 0) { detailItems.splice(i, 1); const vv = versions.find((x) => x.id === selVer); vv.count = detailItems.length; vv.updated = now(); renderBoard(); toast('✓ 已移出条目', 'ok'); }
+      });
+    }
+  }
+  const now = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+  /* ---------- 面板：严格按 build.js 行为模拟 ---------- */
+  function candidates() {
+    let list = CANDIDATES.slice();
+    if (demo.comp === 'all') list = list.map((x) => x.commits.length ? x : { ...x, commits: [H('b')] });
+    if (demo.comp === 'empty') list = [];
+    if (demo.panel === 'add') list = list.filter((x) => !IN_VERSION.includes(x.itemId) && x.itemId !== detailItems.find((d) => d.itemId === x.itemId)?.itemId);
+    return list;
+  }
+  const selectable = (list) => list.filter((x) => x.commits.length > 0);
+
+  function openPanel(which) {
+    demo.panel = which;
+    for (const x of $('#segPanel').querySelectorAll('button')) x.classList.toggle('on', x.dataset.panel === which);
+    panel.open = true; panel.picked = new Set(); panel.commits = {}; panel.busy = false; panel.error = null;
+    panel.phase = 'loading';
+    $('#spTitle').textContent = which === 'create' ? '新建版本' : '添加条目';
+    $('#spScope').textContent = which === 'create'
+      ? '仅已完成（done）的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目'
+      : '仅已完成（done）的需求单 / Bug 单可加入本版本（已在本版本中的条目不再出现）';
+    $('#spSubmit').textContent = which === 'create' ? '创建版本计划' : '添加所选条目';
+    $('#mask').classList.add('show'); $('#spanel').classList.add('show');
+    renderPanel();
+    setTimeout(() => {
+      if (!panel.open) return;
+      if (demo.comp === 'error') { panel.phase = 'error'; renderPanel(); return; }
+      panel.phase = 'ready';
+      for (const it of selectable(candidates())) panel.commits[it.itemId] = it.commits[0];
+      renderPanel();
+    }, 700);
+  }
+  function closePanel() { panel.open = false; $('#mask').classList.remove('show'); $('#spanel').classList.remove('show'); }
+
+  // 重渲染（模拟 build.js render()：以内部 picked 集合为准重建 DOM）
+  function renderPanel() {
+    const body = $('#spBody');
+    if (panel.phase === 'loading') {
+      body.innerHTML = '<p class="sp-empty">正在读取条目…</p>';
+      $('#spSubmit').disabled = true;
+      return;
+    }
+    if (panel.phase === 'error') {
+      body.innerHTML = `<p class="sp-err" role="alert">读取失败（500） <button class="btn small" id="spRetry">重试</button></p>`;
+      $('#spSubmit').disabled = true;
+      $('#spRetry').addEventListener('click', () => {
+        panel.phase = 'loading'; panel.error = null; renderPanel();
+        setTimeout(() => {
+          if (!panel.open) return;
+          panel.phase = 'ready';
+          for (const it of selectable(candidates())) panel.commits[it.itemId] = it.commits[0];
+          renderPanel();
+        }, 700);
+      });
+      return;
+    }
+    const list = candidates();
+    if (!list.length) {
+      body.innerHTML = '<p class="sp-empty">暂无可纳入版本的条目：仅已完成（done）的需求单 / Bug 单会出现在候选中</p>';
+      $('#spSubmit').disabled = false;
+      return;
+    }
+    const skipped = list.length - selectable(list).length;
+    const rows = list.map((it) => {
+      const ok = it.commits.length > 0;
+      const checked = panel.picked.has(it.itemId);
+      const commitSel = ok
+        ? `<select class="h" data-commit="${esc(it.itemId)}"${checked ? '' : ' disabled'}>${it.commits.map((h) => `<option value="${esc(h)}"${panel.commits[it.itemId] === h ? ' selected' : ''}>${esc(h.slice(0, 8))}</option>`).join('')}</select>`
+        : '<span class="nocommit">暂无关联提交（先完成开发提交）</span>';
+      return `<label class="cand${ok ? '' : ' off'}">
+        <input type="checkbox" data-pick="${esc(it.itemId)}"${checked ? ' checked' : ''}${ok ? '' : ' disabled'}>
+        <span class="cid">${esc(it.itemId)}</span><span class="cttl" title="${esc(it.title)}">${esc(it.title)}</span>${commitSel}
+      </label>`;
+    }).join('');
+    body.innerHTML = `
+      <div class="pick-bar">
+        <button type="button" class="btn small" id="pickAll">全选</button>
+        <button type="button" class="btn small" id="pickNone">全不选</button>
+        <span class="cnt">已选 ${panel.picked.size} 项${skipped ? ` · ${skipped} 个条目暂无关联提交将被跳过` : ''}</span>
+      </div>
+      ${rows}
+      ${demo.panel === 'create' ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）<input id="newName" value="${esc(panel.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}
+      ${panel.error ? `<p class="sp-err" role="alert">${esc(panel.error)}</p>` : ''}`;
+    $('#spSubmit').disabled = panel.busy;
+    $('#newName')?.addEventListener('input', (e) => { panel.name = e.target.value; });
+
+    // —— 绑定：单条勾选（pickItem：更新集合后重渲染 → 界面同步，与真实实现一致）
+    for (const el of body.querySelectorAll('[data-pick]')) {
+      el.addEventListener('change', () => {
+        if (el.checked) panel.picked.add(el.dataset.pick); else panel.picked.delete(el.dataset.pick);
+        renderPanel();
+      });
+    }
+    for (const el of body.querySelectorAll('[data-commit]')) {
+      el.addEventListener('change', () => { panel.commits[el.dataset.commit] = el.value; });
+    }
+    // —— 全选（bug 模式 1:1 复刻 build.js #bldPickAll：skipped>0 时只 toast 不渲染）
+    $('#pickAll').addEventListener('click', () => {
+      const sel = selectable(candidates());
+      for (const it of sel) panel.picked.add(it.itemId);
+      const skipped = candidates().length - sel.length;
+      if (demo.mode === 'bug') {
+        if (skipped) toast(`已全选有 commit 候选的条目；${skipped} 个条目暂无关联提交已跳过`); // ← 缺陷：缺 render()
+        else renderPanel();
+      } else {
+        renderPanel();
+        if (skipped) toast(`已全选有 commit 候选的条目；${skipped} 个条目暂无关联提交已跳过`);
+      }
+    });
+    // —— 全不选（bug 模式 1:1 复刻 build.js #bldPickNone：清集合后无任何渲染）
+    $('#pickNone').addEventListener('click', () => {
+      panel.picked.clear();
+      if (demo.mode === 'fixed') renderPanel(); // ← 修复：补上渲染
+    });
+  }
+
+  // —— 提交（1:1 复刻 submitCreate / submitAdd：以内部 picked 为准）
+  $('#spSubmit').addEventListener('click', () => {
+    if (panel.phase !== 'ready') return;
+    const items = [...panel.picked];
+    if (!items.length) {
+      panel.error = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）';
+      renderPanel(); // 真实实现此分支会重渲染：此刻复选框才被“归位”清掉
+      return;
+    }
+    panel.busy = true; panel.error = null;
+    renderPanel(); // busy 重渲染会同步界面（真实实现同样如此）
+    setTimeout(() => {
+      if (demo.panel === 'create') {
+        const id = `BLD-20260914-${String(++seq).padStart(3, '0')}`;
+        const stamp = now().replace(/-|:/g, '').replace(' ', '-').slice(0, 15);
+        versions.unshift({ id, name: panel.name.trim() || `版本 ${stamp}`, status: 'draft', count: items.length, updated: now() });
+        selVer = id;
+        toast('✓ 版本计划已创建', 'ok');
+      } else {
+        for (const id of items) {
+          const c = CANDIDATES.find((x) => x.itemId === id);
+          detailItems.push({ itemId: id, title: c?.title || '', commit: (panel.commits[id] || '').slice(0, 8) });
+        }
+        const v = versions.find((x) => x.id === selVer); v.count = detailItems.length; v.updated = now();
+        toast('✓ 已添加条目', 'ok');
+      }
+      closePanel(); renderBoard();
+    }, 500);
+  });
+
+  $('#mockNewBtn').addEventListener('click', () => openPanel('create'));
+  $('#spClose').addEventListener('click', closePanel);
+  $('#mask').addEventListener('click', closePanel);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && panel.open) closePanel(); });
+
+  refreshObserve();
+  renderBoard();
+})();
+</script>
+</body>
+</html>

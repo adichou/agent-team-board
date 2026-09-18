@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-005 · 分支浏览「同步远端」按钮文案演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #dce0e6; --text: #24292f;
+    --muted: #6a737d; --accent: #0969da; --accent-contrast: #ffffff;
+    --ok: #1a7f37; --err: #cf222e; --run-bg: #ddf4ff; --run-fg: #0969da;
+    --chip-bg: #f0f2f5; --hover: #f3f4f6; --shadow: 0 8px 24px rgba(20, 30, 50, .12);
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181f; --panel: #1c2129; --border: #333a45; --text: #e2e6eb;
+    --muted: #9aa4b1; --accent: #4493f8; --accent-contrast: #0d1117;
+    --ok: #3fb950; --err: #f85149; --run-bg: #122a44; --run-fg: #4493f8;
+    --chip-bg: #2a303a; --hover: #262c36; --shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    padding: 20px clamp(12px, 4vw, 40px) 48px;
+  }
+
+  /* ---------- 顶部：标题 + 模式开关 ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .demo-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tag { background: var(--accent); color: var(--accent-contrast); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  h1 { font-size: 17px; margin: 0; }
+  .demo-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .mode-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .mode-btn { border: 0; background: transparent; color: var(--text); padding: 7px 14px; cursor: pointer; font-size: 13px; }
+  .mode-btn.active { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+  .mode-btn:not(.active):hover { background: var(--hover); }
+  .ghost-btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .ghost-btn:hover { background: var(--hover); }
+
+  .demo-hint { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+  .demo-hint b { color: var(--text); }
+
+  /* ---------- 演示控制器 ---------- */
+  .demo-panel { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .check input { accent-color: var(--accent); }
+
+  /* ---------- 还原看板：构建 → 分支浏览 ---------- */
+  .board { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .tabs { display: flex; gap: 4px; padding: 10px 14px 0; border-bottom: 1px solid var(--border); }
+  .tab { border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; }
+  .tab.active { background: var(--bg); color: var(--text); font-weight: 600; border-color: var(--border); position: relative; top: 1px; }
+  .tab:not(.active):hover { color: var(--text); background: var(--hover); }
+
+  .split { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; min-height: 380px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+
+  .branch-list { border-right: 1px solid var(--border); padding: 12px; overflow-y: auto; }
+  @media (max-width: 720px) { .branch-list { border-right: 0; border-bottom: 1px solid var(--border); } }
+  .branch-tools { display: flex; gap: 8px; margin-bottom: 12px; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .btn.quiet { border-color: transparent; color: var(--muted); }
+  .btn.quiet:hover:not(:disabled) { color: var(--text); }
+
+  .group-head { font-size: 12px; color: var(--muted); font-weight: 600; margin: 10px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .branch { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; cursor: pointer; }
+  .branch:hover { background: var(--hover); }
+  .branch.sel { background: var(--run-bg); outline: 1px solid var(--run-fg); }
+  .branch .name { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .branch.remote .name { color: var(--muted); }
+  .chip { font-size: 11px; border-radius: 10px; padding: 1px 8px; background: var(--run-bg); color: var(--run-fg); font-weight: 600; white-space: nowrap; }
+  .empty-hint { color: var(--muted); font-size: 12px; padding: 6px 9px; margin: 0; }
+  .muted { color: var(--muted); }
+  .pad { padding: 24px 14px; }
+
+  .commit-panel { display: flex; flex-direction: column; }
+  .commit-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .commit-head strong { font-size: 14px; }
+  .log-body { padding: 8px 16px; overflow-y: auto; flex: 1; }
+  .log-item { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+  .log-item code { background: var(--chip-bg); border-radius: 5px; padding: 1px 7px; font-size: 12px; }
+  .log-item .subject { font-size: 13px; }
+  .log-item .meta { color: var(--muted); font-size: 12px; width: 100%; }
+
+  /* ---------- 状态一览 ---------- */
+  .states-help { margin-top: 22px; }
+  .states-help h2 { font-size: 15px; }
+  .states-help table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px; }
+  .states-help th, .states-help td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .states-help th { background: var(--bg); font-size: 12px; color: var(--muted); }
+  .states-help tr:last-child td { border-bottom: 0; }
+  code.inline { background: var(--chip-bg); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+
+  /* ---------- Toast ---------- */
+  #toastBox { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 99; max-width: min(420px, 84vw); }
+  .toast { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: var(--shadow); padding: 9px 14px; font-size: 13px; animation: slide-in .18s ease-out; }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.err { border-left-color: var(--err); }
+  .toast.out { opacity: 0; transform: translateX(8px); transition: all .25s ease-in; }
+  @keyframes slide-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<header class="demo-top">
+  <div class="demo-title">
+    <span class="tag">BUG-20260914-005</span>
+    <h1>分支浏览「同步远端」按钮文案改为「和远端同步」</h1>
+  </div>
+  <div class="demo-controls">
+    <div class="mode-switch" role="group" aria-label="文案模式切换">
+      <button type="button" id="modeBuggy" class="mode-btn active">当前（缺陷）</button>
+      <button type="button" id="modeFixed" class="mode-btn">修复后</button>
+    </div>
+    <button type="button" id="themeBtn" class="ghost-btn">🌙 深色</button>
+  </div>
+</header>
+
+<section class="demo-hint">
+  本页还原 Web 看板「构建 → <b>分支浏览</b>」子页签（左分支列表 / 右提交记录）。用右上开关在
+  <b>当前文案「⟳ 同步远端」（缺陷）</b>与<b>修复后文案「⟳ 和远端同步」</b>之间切换对比；
+  勾选下方选项可体验同步成功 / 失败、空远端空态等状态反馈。
+</section>
+
+<section class="demo-panel">
+  <label class="check"><input type="checkbox" id="failChk"> 模拟同步失败</label>
+  <label class="check"><input type="checkbox" id="emptyChk"> 空远端分支（演示空态提示）</label>
+  <button type="button" id="reloadBtn" class="ghost-btn">↻ 重新加载分支列表</button>
+</section>
+
+<main class="board">
+  <nav class="tabs" aria-label="构建子页签">
+    <button type="button" class="tab">版本计划</button>
+    <button type="button" class="tab active">分支浏览</button>
+  </nav>
+  <div class="split">
+    <aside class="branch-list" aria-label="分支列表">
+      <div class="branch-tools">
+        <button type="button" id="fetchBtn" class="btn small" title="fetch --all --prune：拉取远端最新并清理失效引用">⟳ 同步远端</button>
+        <button type="button" id="refreshBtn" class="btn small quiet">刷新</button>
+      </div>
+      <div id="branchTree"></div>
+    </aside>
+    <section class="commit-panel" aria-label="提交记录">
+      <div class="commit-head">
+        <strong id="logTitle">提交记录</strong>
+        <button type="button" id="logRefresh" class="btn small quiet" hidden>刷新</button>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </section>
+  </div>
+</main>
+
+<section class="states-help">
+  <h2>状态反馈一览</h2>
+  <table>
+    <thead><tr><th>状态</th><th>如何触发（本演示）</th><th>表现</th></tr></thead>
+    <tbody>
+      <tr><td>正常</td><td>默认进入</td><td>同步按钮可点，文案随模式：<code class="inline">⟳ 同步远端</code>（缺陷）/ <code class="inline">⟳ 和远端同步</code>（修复后）；悬停提示不变</td></tr>
+      <tr><td>加载</td><td>点「刷新」/「重新加载分支列表」</td><td>左栏显示「加载分支中…」，完成后回到分支列表</td></tr>
+      <tr><td>同步中</td><td>点同步按钮</td><td>按钮禁用、文案变「同步中…」（两模式一致，本 Bug 不改此态）；完成后自动刷新列表与选中分支提交记录</td></tr>
+      <tr><td>同步成功</td><td>未勾「模拟同步失败」时点同步</td><td>toast「✓ 已同步远端（fetch --prune）」，按钮恢复可点</td></tr>
+      <tr><td>同步失败</td><td>勾选「模拟同步失败」后点同步</td><td>错误 toast「✕ 同步远端失败：…」，按钮恢复可点、可重试</td></tr>
+      <tr><td>空态（无远端分支）</td><td>勾选「空远端分支」</td><td>远端分组显示「（无远端分支：先「同步远端 / 和远端同步」或推送本地分支）」——提示中对按钮的指称随模式同步切换（修复后不应残留旧名）</td></tr>
+      <tr><td>空态（未选分支）</td><td>初始进入 / 未点击任何分支</td><td>右侧显示「点击左侧分支查看提交记录」</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div id="toastBox" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* BUG-20260914-005 可交互演示 —— 仅演示文案与状态反馈，不发起任何真实网络请求。 */
+
+const state = {
+  mode: 'buggy',        // 'buggy'（当前缺陷文案） | 'fixed'（修复后文案）
+  syncBusy: false,      // 同步执行中（按钮禁用 + 「同步中…」）
+  failFetch: false,     // 模拟同步失败
+  emptyRemote: false,   // 空远端分支（空态提示）
+  branchesPhase: 'idle',// idle | loading
+  logBranch: null,
+  logPhase: 'idle',     // idle | loading
+  theme: (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light',
+};
+
+const LOCAL_BRANCHES = [
+  { name: 'main', current: true },
+  { name: 'dev', current: false },
+  { name: 'feature/board-demo', current: false },
+];
+const REMOTE_BRANCHES = ['origin/main', 'origin/dev'];
+
+const COMMITS = {
+  main: [
+    { h: '9f31c0a2', s: 'chore: release v1.4.0', a: 'release-bot', d: '2026-09-12 18:20' },
+    { h: '4b8e77d1', s: 'Merge branch \'dev\' into main', a: 'adichou', d: '2026-09-12 18:18' },
+    { h: 'c02f5a9e', s: 'feat: 版本计划合并入 main（临时工作树）', a: 'adichou', d: '2026-09-11 21:02' },
+  ],
+  dev: [
+    { h: '7a4b93cc', s: 'fix: 分支列表空态提示指称统一', a: 'refine-agent', d: '2026-09-13 10:41' },
+    { h: '1d6f20be', s: 'feat: 版本删除确认弹窗（按状态差异化提示）', a: 'adichou', d: '2026-09-12 15:37' },
+    { h: 'e58a31f0', s: 'refactor: 构建模块前端拆分 build.js', a: 'adichou', d: '2026-09-10 09:12' },
+  ],
+  'feature/board-demo': [
+    { h: 'b93e4172', s: 'wip: 分支浏览演示数据', a: 'refine-agent', d: '2026-09-13 16:05' },
+  ],
+  'origin/main': [
+    { h: '9f31c0a2', s: 'chore: release v1.4.0', a: 'release-bot', d: '2026-09-12 18:20' },
+  ],
+  'origin/dev': [
+    { h: '7a4b93cc', s: 'fix: 分支列表空态提示指称统一', a: 'refine-agent', d: '2026-09-13 10:41' },
+    { h: '1d6f20be', s: 'feat: 版本删除确认弹窗（按状态差异化提示）', a: 'adichou', d: '2026-09-12 15:37' },
+  ],
+};
+
+/* ---------- 文案口径：本 Bug 的核心差异 ---------- */
+function syncLabel() {
+  if (state.syncBusy) return '同步中…';
+  return state.mode === 'fixed' ? '⟳ 和远端同步' : '⟳ 同步远端';
+}
+function emptyRemoteHint() {
+  const name = state.mode === 'fixed' ? '和远端同步' : '同步远端';
+  return `（无远端分支：先「${name}」或推送本地分支）`;
+}
+
+/* ---------- Toast（对照看板 window.toast 的成功 / 失败口径） ---------- */
+function toast(msg, kind) {
+  const box = document.getElementById('toastBox');
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 2600);
+}
+
+/* ---------- 渲染 ---------- */
+function render() {
+  // 同步按钮（缺陷 / 修复后的唯一文案差异点）
+  const btn = document.getElementById('fetchBtn');
+  btn.textContent = syncLabel();
+  btn.disabled = state.syncBusy;
+  btn.title = 'fetch --all --prune：拉取远端最新并清理失效引用';
+
+  // 分支列表
+  const tree = document.getElementById('branchTree');
+  if (state.branchesPhase === 'loading') {
+    tree.innerHTML = '<p class="muted pad">加载分支中…</p>';
+  } else {
+    const local = LOCAL_BRANCHES.map((b) => `
+      <div class="branch${state.logBranch === b.name ? ' sel' : ''}" data-branch="${b.name}">
+        <span class="name">${b.name}</span>
+        ${b.current ? '<span class="chip">当前</span>' : `<button type="button" class="btn small quiet" data-push="${b.name}" title="推送到远端">推送</button>`}
+      </div>`).join('');
+    const remote = state.emptyRemote
+      ? `<p class="empty-hint">${emptyRemoteHint()}</p>`
+      : REMOTE_BRANCHES.map((r) => `
+      <div class="branch remote${state.logBranch === r ? ' sel' : ''}" data-branch="${r}">
+        <span class="name">${r}</span>
+      </div>`).join('');
+    tree.innerHTML = `
+      <div class="group-head">本地</div>${local}
+      <div class="group-head">远端</div>${remote}`;
+  }
+
+  // 右侧提交记录
+  const title = document.getElementById('logTitle');
+  const body = document.getElementById('logBody');
+  const logRefresh = document.getElementById('logRefresh');
+  logRefresh.hidden = !state.logBranch;
+  title.textContent = state.logBranch || '提交记录';
+  if (!state.logBranch) {
+    body.innerHTML = '<p class="muted pad">点击左侧分支查看提交记录</p>';
+  } else if (state.logPhase === 'loading') {
+    body.innerHTML = '<p class="muted pad">加载提交记录中…</p>';
+  } else {
+    const commits = COMMITS[state.logBranch] || [];
+    body.innerHTML = commits.length
+      ? commits.map((c) => `<div class="log-item"><code>${c.h}</code><span class="subject">${c.s}</span><span class="meta">${c.a} · ${c.d}</span></div>`).join('')
+      : '<p class="empty-hint pad">该分支暂无提交</p>';
+  }
+
+  // 模式开关按钮态
+  document.getElementById('modeBuggy').classList.toggle('active', state.mode === 'buggy');
+  document.getElementById('modeFixed').classList.toggle('active', state.mode === 'fixed');
+}
+
+/* ---------- 交互 ---------- */
+function doFetch() {
+  if (state.syncBusy) return;
+  state.syncBusy = true;
+  render();
+  setTimeout(() => {
+    state.syncBusy = false;
+    if (state.failFetch) {
+      toast('✕ 同步远端失败：无法访问远程仓库（演示：已勾选「模拟同步失败」）', 'err');
+    } else {
+      toast('✓ 已同步远端（fetch --prune）', 'ok');
+      loadBranches(false); // 成功后自动刷新分支列表（与看板 doFetch 行为一致）
+    }
+    render();
+  }, 900);
+}
+
+function loadBranches(silent) {
+  state.branchesPhase = 'loading';
+  render();
+  setTimeout(() => {
+    state.branchesPhase = 'idle';
+    render();
+    if (!silent && state.logBranch) selectBranch(state.logBranch); // 刷新选中分支提交记录
+  }, 600);
+}
+
+function selectBranch(branch) {
+  state.logBranch = branch;
+  state.logPhase = 'loading';
+  render();
+  setTimeout(() => { state.logPhase = 'idle'; render(); }, 450);
+}
+
+/* ---------- 事件绑定 ---------- */
+document.getElementById('fetchBtn').addEventListener('click', doFetch);
+document.getElementById('refreshBtn').addEventListener('click', () => loadBranches(true));
+document.getElementById('reloadBtn').addEventListener('click', () => loadBranches(true));
+document.getElementById('logRefresh').addEventListener('click', () => state.logBranch && selectBranch(state.logBranch));
+
+document.getElementById('branchTree').addEventListener('click', (e) => {
+  const pushBtn = e.target.closest('[data-push]');
+  if (pushBtn) {
+    const b = pushBtn.dataset.push;
+    toast(`✓ 已推送 ${b} → origin/${b}（演示，非本 Bug 范畴）`, 'ok');
+    return;
+  }
+  const row = e.target.closest('[data-branch]');
+  if (row) selectBranch(row.dataset.branch);
+});
+
+document.getElementById('modeBuggy').addEventListener('click', () => {
+  state.mode = 'buggy'; render();
+  toast('已切换到「当前（缺陷）」：按钮文案为「⟳ 同步远端」');
+});
+document.getElementById('modeFixed').addEventListener('click', () => {
+  state.mode = 'fixed'; render();
+  toast('已切换到「修复后」：按钮文案为「⟳ 和远端同步」');
+});
+
+document.getElementById('failChk').addEventListener('change', (e) => {
+  state.failFetch = e.target.checked;
+  toast(state.failFetch ? '已开启：点击同步按钮将演示失败反馈' : '已关闭：点击同步按钮将演示成功反馈');
+});
+document.getElementById('emptyChk').addEventListener('change', (e) => {
+  state.emptyRemote = e.target.checked;
+  render();
+  toast(state.emptyRemote ? '已开启：远端分组显示空态提示（注意提示中对按钮的指称随文案模式变化）' : '已关闭：恢复显示远端分支');
+});
+
+document.getElementById('themeBtn').addEventListener('click', () => {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  applyTheme();
+});
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  document.getElementById('themeBtn').textContent = state.theme === 'dark' ? '☀️ 浅色' : '🌙 深色';
+}
+
+/* ---------- 初始化 ---------- */
+applyTheme();
+loadBranches(true);
+</script>
+</body>
+</html>

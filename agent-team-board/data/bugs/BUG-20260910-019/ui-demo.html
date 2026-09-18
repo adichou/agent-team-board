@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-019 演示 · 全选 / 全不选使用更标准的图标</title>
+<style>
+  /* ---------- 主题变量（取自 scripts/web/style.css 深浅色口径，纯离线） ---------- */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --chip-req: #4f46e5; --chip-bug: #e11d48; --primary: #2563eb; --warn: #dc2626;
+  }
+  [data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e6ebf3; --muted: #8b98ad;
+    --border: #2a3446; --shadow: 0 1px 3px rgba(0,0,0,.4);
+    --chip-req: #6366f1; --chip-bug: #fb7185; --primary: #3b82f6; --warn: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 18px;
+  }
+  .demo-head h1 { font-size: 16px; margin: 0 0 2px; }
+  .demo-head .sub { color: var(--muted); margin: 0 0 12px; font-size: 12px; }
+  /* ---------- 控制条 ---------- */
+  .ctrlbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .ctrl-label { font-size: 12px; color: var(--muted); flex: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    appearance: none; border: none; background: transparent; color: var(--muted);
+    font: inherit; font-size: 12px; padding: 5px 10px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; font-weight: 600; }
+  .seg.warnseg button[aria-pressed="true"] { background: var(--warn); }
+  .ghost {
+    appearance: none; background: var(--panel); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .ghost:hover { color: var(--text); border-color: var(--muted); }
+  /* ---------- 面板 ---------- */
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .panel h2 { font-size: 13px; margin: 0 0 8px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .badge { display: inline-block; font-size: 11px; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0 6px; margin-left: 8px; vertical-align: 1px; }
+  .badge.defect { color: var(--warn); border-color: var(--warn); }
+  .badge.fixed { color: var(--primary); border-color: var(--primary); }
+  /* ---------- 字形渲染不稳定对照 ---------- */
+  .font-demo { width: 100%; border-collapse: collapse; }
+  .font-demo th, .font-demo td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; font-size: 12px; }
+  .font-demo th { color: var(--muted); font-weight: 600; background: rgba(127,140,170,.06); }
+  .font-demo td.stack { color: var(--muted); font-size: 11.5px; }
+  .glyph-cell { display: inline-flex; gap: 8px; align-items: center; }
+  .glyph-btn {
+    appearance: none; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; min-width: 26px; min-height: 24px; padding: 3px 5px; cursor: default;
+  }
+  .glyph-btn.g11 { font-size: 11px; line-height: 1; } /* BUG-20260910-017 降字号口径 */
+  .same-mark { color: var(--primary); }
+  .diff-mark { color: var(--warn); }
+  /* ---------- 看板演示区（复刻 scripts/web/style.css 的口径） ---------- */
+  .board-wrap {
+    display: flex; flex-direction: column; background: rgba(127,140,170,.05);
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px 12px;
+  }
+  .req-caption { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 2px 4px 8px; border-bottom: 1px solid var(--border); flex: none; }
+  .caption-actions { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; margin-left: auto; flex: none; }
+  .sel-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .sel-count { font-size: 12px; color: var(--muted); }
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 550; cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { filter: brightness(1.04); border-color: var(--muted); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.warn { background: transparent; border-color: var(--warn); color: var(--warn); }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn.quiet { background: transparent; }
+  .btn.icon-act { padding: 3px 5px; font-size: 13px; line-height: 1; min-width: 26px; min-height: 24px; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
+  .btn.icon-act.icon-check { font-size: 11px; } /* 缺陷形态：BUG-20260910-017 的降字号修补 */
+  .btn.icon-act svg { display: block; }
+  .search-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; }
+  .search-row input {
+    flex: 0 1 240px; appearance: none; border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12px;
+  }
+  .search-row input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .list { display: flex; flex-direction: column; gap: 6px; padding: 8px 2px 2px; }
+  .req-row {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 12px; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow);
+  }
+  .req-row .main { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; }
+  .cid { font-weight: 650; font-size: 12.5px; white-space: nowrap; }
+  .chip { font-size: 11px; color: #fff; border-radius: 6px; padding: 0 6px; line-height: 18px; flex: none; }
+  .chip.req { background: var(--chip-req); }
+  .chip.bug { background: var(--chip-bug); }
+  .rtitle { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .accept-check { width: 15px; height: 15px; accent-color: var(--primary); flex: none; cursor: pointer; }
+  .empty-card { padding: 26px 10px; text-align: center; color: var(--muted); font-size: 12.5px; }
+  .loading-card { padding: 22px 10px; text-align: center; color: var(--muted); font-size: 12.5px; }
+  .spinner {
+    display: inline-block; width: 16px; height: 16px; vertical-align: -3px; margin-right: 8px;
+    border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .batch-result { font-size: 12px; margin: 8px 4px 0; overflow-wrap: anywhere; }
+  .batch-result .ok { color: var(--muted); }
+  .batch-result .fail-list { margin: 4px 0 0; padding-left: 0; list-style: none; color: var(--warn); }
+  .batch-result .fail-list li { font-size: 12px; }
+  .focus-note { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  code { background: rgba(127,140,170,.14); border-radius: 4px; padding: 0 4px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="demo-head">
+  <h1>BUG-20260910-019 · 全选 / 全不选使用更标准的图标</h1>
+  <p class="sub">单文件离线演示 · 演示数据与加载 / 失败反馈均为模拟，不写入看板 · 图标「修复后」形态为示意（自绘内联 SVG），最终方案待开发确认</p>
+</div>
+
+<div class="ctrlbar">
+  <span class="ctrl-label">图标形态</span>
+  <div class="seg warnseg" id="modeSeg" role="group" aria-label="图标形态">
+    <button type="button" data-mode="defect" aria-pressed="true">缺陷现状（☑ / ☐ 字形）</button>
+    <button type="button" data-mode="fixed" aria-pressed="false">修复后（标准图标 · 示意）</button>
+  </div>
+  <span class="ctrl-label">档位</span>
+  <div class="seg" id="laneSeg" role="group" aria-label="档位">
+    <button type="button" data-lane="submitted" aria-pressed="true">待接受</button>
+    <button type="button" data-lane="accepted" aria-pressed="false">已接受</button>
+    <button type="button" data-lane="planned" aria-pressed="false">已计划</button>
+    <button type="button" data-lane="developing" aria-pressed="false">开发中</button>
+  </div>
+  <span class="ctrl-label">状态</span>
+  <div class="seg" id="stateSeg" role="group" aria-label="状态">
+    <button type="button" data-state="normal" aria-pressed="true">正常</button>
+    <button type="button" data-state="empty" aria-pressed="false">空</button>
+    <button type="button" data-state="loading" aria-pressed="false">加载</button>
+    <button type="button" data-state="fail" aria-pressed="false">失败</button>
+  </div>
+  <button type="button" class="ghost" id="themeBtn">深色主题</button>
+</div>
+
+<!-- ① 根因直观对照：字形渲染随字体回退漂移，SVG 图标恒定 -->
+<section class="panel">
+  <h2>为什么「不标准」：字形 vs 图标的渲染稳定性<span class="badge defect">缺陷根因直观对照</span></h2>
+  <table class="font-demo">
+    <thead>
+      <tr>
+        <th>字体栈（模拟不同系统 / 浏览器回退）</th>
+        <th>缺陷现状：☑ / ☐ 文字字形（11px）</th>
+        <th>修复后（示意）：内联 SVG 图标</th>
+      </tr>
+    </thead>
+    <tbody id="fontRows"></tbody>
+  </table>
+  <p class="hint">同一对 ☑ / ☐ 字形在不同字体栈下线宽、方框、勾形各不相同（产品无法控制用户环境的字体回退链）；内联 SVG 图标在任何字体栈下恒定一致。注：各环境实际回退链不同，本表仅示意漂移现象。</p>
+</section>
+
+<!-- ② 主演示区：完整工具栏 + 列表交互 -->
+<section class="panel">
+  <h2>看板工具栏演示<span id="modeBadge" class="badge defect">当前：缺陷形态</span></h2>
+  <div class="board-wrap">
+    <div class="req-caption" id="caption">
+      <span id="reqCount" class="sel-count" aria-live="polite"></span>
+      <span id="selectBtns"></span>
+      <div class="caption-actions">
+        <div class="sel-group" id="selGroup" role="group" aria-label="批量操作" hidden>
+          <span class="sel-count" id="selCount">已选 0 项</span>
+          <button type="button" class="btn primary small hidden" id="btnAccept" disabled>接受所选</button>
+          <button type="button" class="btn primary small hidden" id="btnPlanAdd" disabled title="移入计划（排入开发计划）：勾选的已接受条目逐条置为已计划">移入计划</button>
+          <button type="button" class="btn warn small hidden" id="btnPlanReject" disabled title="驳回待接受（退回待接受）：勾选的已接受条目逐条退回待接受">驳回待接受</button>
+          <button type="button" class="btn warn small hidden" id="btnPlanRemove" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
+        </div>
+        <button type="button" class="btn small primary" id="laneQuickEntry">▶ 开始完善</button>
+      </div>
+    </div>
+    <div class="search-row">
+      <input type="search" id="dmSearch" placeholder="搜索本档条目（全选仅作用于可见项，叠搜索范围）" aria-label="搜索">
+      <span class="sel-count">非选择档（开发中）不显示全选 / 全不选与批量动作</span>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="batch-result" id="batchResult" hidden></div>
+  </div>
+  <p class="focus-note" id="noteLine"></p>
+  <p class="hint">交互契约（与产品一致）：全选仅勾选当前档内「可见」的可操作条目（叠搜索范围，所见即所选）；全不选仅清当前档勾选，其他档保留（可切档验证）；任一批量进行中全选 / 全不选 / 复选框禁用防误触；「接受中… / 移出中… / 驳回中… / 移入中…」为进行中文案。</p>
+</section>
+
+<script>
+'use strict';
+/* ============ 演示数据（模拟；类型 req / bug 对应产品 chip 色） ============ */
+const seedItems = [
+  { id: 'REQ-20260910-021', type: 'req', title: '看板列表支持按认领者筛选', lane: 'submitted' },
+  { id: 'BUG-20260910-015', type: 'bug', title: '详情抽屉长标题溢出', lane: 'submitted' },
+  { id: 'REQ-20260910-018', type: 'req', title: '批量动作结果支持一键复制失败清单', lane: 'submitted' },
+  { id: 'REQ-20260910-022', type: 'req', title: '已完成档分页加载', lane: 'accepted' },
+  { id: 'BUG-20260910-016', type: 'bug', title: '深色主题下 chip 对比度不足', lane: 'accepted' },
+  { id: 'REQ-20260908-027', type: 'req', title: '选择功能混乱，需要重构', lane: 'accepted' },
+  { id: 'BUG-20260910-017', type: 'bug', title: '全选和全不选的图标尺寸要跟其他操作图标按钮的样式一样', lane: 'accepted' },
+  { id: 'REQ-20260910-026', type: 'req', title: '全选和全不选使用图标，去掉文字', lane: 'planned' },
+  { id: 'BUG-20260909-008', type: 'bug', title: '不支持选择的列表，去掉全选和全不选按钮', lane: 'planned' },
+  { id: 'REQ-20260910-008', type: 'req', title: '选择区域布局优化', lane: 'developing' },
+  { id: 'BUG-20260910-007', type: 'bug', title: '操作按钮去掉中文，全部用图标表示', lane: 'developing' }
+];
+const LANE_LABEL = { submitted: '待接受', accepted: '已接受', planned: '已计划', developing: '开发中' };
+const SELECTABLE = ['submitted', 'accepted', 'planned']; // BUG-20260909-008：非选择档无选择控件
+
+const state = {
+  mode: 'defect',        // defect=☑/☐ 字形；fixed=标准 SVG 图标（示意）
+  lane: 'submitted',
+  uiState: 'normal',     // normal / empty / loading / fail
+  theme: 'light',
+  search: '',
+  items: seedItems.map((x) => ({ ...x })),
+  selected: { submitted: new Set(), accepted: new Set(), planned: new Set(), developing: new Set() },
+  pending: false
+};
+
+/* ============ 图标资产：缺陷形态 = Unicode 字形；修复形态 = 自绘内联 SVG（示意） ============ */
+const SVG_ALL = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5"/><polyline points="4.6 8.3 6.9 10.6 11.4 5.3"/></svg>';
+const SVG_NONE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5"/></svg>';
+function iconHtml(kind) {
+  if (state.mode === 'fixed') return kind === 'all' ? SVG_ALL : SVG_NONE;
+  return kind === 'all' ? '☑' : '☐'; // 现状：U+2611 / U+2610 投票框字形
+}
+
+/* ============ ① 字形漂移对照表 ============ */
+const FONT_STACKS = [
+  { label: '系统默认（sans-serif 栈）', css: '-apple-system, "PingFang SC", "Segoe UI", sans-serif' },
+  { label: '衬线（Serif 栈）', css: 'Georgia, "Songti SC", "Times New Roman", serif' },
+  { label: '等宽（Monospace 栈）', css: 'Menlo, "SF Mono", Consolas, monospace' },
+  { label: '手写（Cursive 栈）', css: '"Comic Sans MS", "Xingkai SC", cursive' }
+];
+function renderFontRows() {
+  const tbody = document.getElementById('fontRows');
+  tbody.innerHTML = FONT_STACKS.map(function (f) {
+    const glyphCell = '<span class="glyph-btn g11" style="font-family:' + f.css.replace(/"/g, '&quot;') + '" aria-hidden="true">☑</span>' +
+      '<span class="glyph-btn g11" style="font-family:' + f.css.replace(/"/g, '&quot;') + '" aria-hidden="true">☐</span>' +
+      '<span class="diff-mark" title="随字体栈变化的字形（示意漂移）">← 漂移</span>';
+    const svgCell = '<span class="glyph-btn">' + SVG_ALL + '</span><span class="glyph-btn">' + SVG_NONE + '</span>' +
+      '<span class="same-mark" title="SVG 不随字体栈变化">← 恒定</span>';
+    return '<tr><td class="stack">' + f.label + '</td><td>' + glyphCell + '</td><td>' + svgCell + '</td></tr>';
+  }).join('');
+}
+
+/* ============ ② 看板渲染 ============ */
+const $ = (id) => document.getElementById(id);
+function visibleItems() {
+  const kw = state.search.trim().toLowerCase();
+  return state.items.filter((it) => it.lane === state.lane && (!kw || it.id.toLowerCase().includes(kw) || it.title.toLowerCase().includes(kw)));
+}
+function laneSelectable() { return SELECTABLE.includes(state.lane); }
+
+function renderCaption() {
+  const btns = $('selectBtns');
+  const badge = $('modeBadge');
+  badge.textContent = state.mode === 'defect' ? '当前：缺陷形态' : '当前：修复后形态（示意）';
+  badge.className = 'badge ' + (state.mode === 'defect' ? 'defect' : 'fixed');
+
+  if (!laneSelectable()) { // BUG-20260909-008：非选择档整体隐藏
+    btns.innerHTML = '';
+    $('selGroup').hidden = true;
+    $('laneQuickEntry').hidden = true;
+    $('reqCount').textContent = '当前档「' + LANE_LABEL[state.lane] + '」为非选择档：无全选 / 全不选与批量动作';
+    return;
+  }
+  $('laneQuickEntry').hidden = false;
+  $('laneQuickEntry').textContent = state.lane === 'accepted' ? '▶ 开始完善' : (state.lane === 'planned' ? '▶ 开始开发' : '▶ 开始完善');
+  $('laneQuickEntry').title = state.lane === 'planned' ? '进入任务模块批量开发面板（演示内仅示意，不导航）' : '进入任务模块批量完善面板（演示内仅示意，不导航）';
+
+  const vis = visibleItems();
+  const operable = vis; // 本演示中当前档可见条目均可操作
+  const checkedCnt = [...state.selected[state.lane]].filter((id) => state.items.some((it) => it.id === id && it.lane === state.lane)).length;
+  const noOperable = state.uiState === 'empty' || operable.length === 0;
+  const iconCls = 'btn small quiet icon-act' + (state.mode === 'defect' ? ' icon-check' : '');
+  btns.innerHTML =
+    '<button type="button" id="dmSelectAll" class="' + iconCls + '" aria-label="全选" title="全选：仅勾选当前筛选档内可见的可操作条目（待接受 / 已接受 / 已计划；叠搜索范围）"' + ((noOperable || state.pending || state.uiState === 'loading') ? ' disabled' : '') + '>' + iconHtml('all') + '</button>' +
+    '<button type="button" id="dmSelectNone" class="' + iconCls + '" aria-label="全不选" title="全不选：仅取消当前筛选档的勾选"' + ((checkedCnt === 0 || state.pending || state.uiState === 'loading') ? ' disabled' : '') + '>' + iconHtml('none') + '</button>';
+
+  $('dmSelectAll').addEventListener('click', selectAllVisible);   // REQ-20260908-027：所见即所选
+  $('dmSelectNone').addEventListener('click', deselectCurrentLane); // 仅清当前档
+
+  // 批量动作组：零选择整组隐藏（REQ-20260910-008：不改变行结构）
+  const selCnt = checkedCnt;
+  $('selGroup').hidden = selCnt === 0;
+  $('selCount').textContent = '已选 ' + selCnt + ' 项';
+  const map = { submitted: ['btnAccept'], accepted: ['btnPlanAdd', 'btnPlanReject'], planned: ['btnPlanRemove'] };
+  ['btnAccept', 'btnPlanAdd', 'btnPlanReject', 'btnPlanRemove'].forEach((id) => { const b = $(id); b.hidden = true; b.disabled = state.pending; });
+  (map[state.lane] || []).forEach((id) => { $(id).hidden = false; });
+
+  const hints = [];
+  if (state.uiState === 'empty' || operable.length === 0) hints.push('搜索命中 0 项');
+  else if (state.search.trim()) hints.push('搜索命中 ' + operable.length + ' 项');
+  $('reqCount').textContent = hints.join(' · ');
+}
+
+function rowActs(it) {
+  // 卡片操作图标（BUG-20260910-007 口径，⧉ / ✎ / 🗑 均为产品现状 Unicode 字形，供视觉重量对照）
+  let acts = '<button type="button" class="btn small quiet icon-act" aria-label="复制单号" title="复制单号（演示无动作）">⧉</button>';
+  if (it.lane === 'submitted') acts = '<button type="button" class="btn small quiet icon-act" aria-label="接受" title="接受（演示无动作）">✓</button><button type="button" class="btn small quiet icon-act" aria-label="修改" title="修改（演示无动作）">✎</button><button type="button" class="btn small quiet icon-act" aria-label="删除" title="删除（演示无动作）">🗑</button>' + acts;
+  return '<span class="row-acts">' + acts + '</span>';
+}
+
+function renderList() {
+  const list = $('list');
+  if (state.uiState === 'loading') {
+    list.innerHTML = '<div class="loading-card"><span class="spinner" aria-hidden="true"></span>列表加载中…（选择控件已禁用，加载完成后自动返回正常态）</div>';
+    return;
+  }
+  if (state.uiState === 'empty') {
+    list.innerHTML = '<div class="empty-card">当前档为空：没有可勾选的可操作条目，全选已禁用、全不选零勾选禁用。<br>（产品口径：列表呈现空态说明，工具栏不留空占位）</div>';
+    return;
+  }
+  const vis = visibleItems();
+  if (vis.length === 0) {
+    list.innerHTML = '<div class="empty-card">搜索无命中：全选禁用（无可操作项）、全不选禁用（零勾选）。</div>';
+    return;
+  }
+  list.innerHTML = vis.map((it) => {
+    const checked = laneSelectable() && state.selected[it.lane].has(it.id);
+    const cb = laneSelectable()
+      ? '<input type="checkbox" class="accept-check" data-id="' + it.id + '" aria-label="选择 ' + it.id + '"' + (checked ? ' checked' : '') + ((state.pending || state.uiState === 'loading') ? ' disabled' : '') + '>'
+      : '';
+    return '<div class="req-row">' + cb +
+      '<span class="main"><span class="cid">' + it.id + '</span><span class="chip ' + it.type + '">' + (it.type === 'req' ? 'REQ' : 'BUG') + '</span><span class="rtitle">' + it.title + '</span></span>' +
+      rowActs(it) + '</div>';
+  }).join('');
+  if (laneSelectable()) list.querySelectorAll('.accept-check').forEach((cb) => cb.addEventListener('change', (e) => {
+    const id = e.target.getAttribute('data-id');
+    if (e.target.checked) state.selected[state.lane].add(id); else state.selected[state.lane].delete(id);
+    renderCaption();
+  }));
+}
+
+function renderBatchResult() {
+  const box = $('batchResult');
+  if (!box.dataset.keep || box.dataset.keep !== '1') box.hidden = true;
+}
+
+function renderNote() {
+  const lines = [];
+  lines.push(state.mode === 'defect'
+    ? '缺陷形态：两按钮为 ☑ / ☐ 投票框<b>文字字形</b>，渲染随系统字体回退链漂移（见上方对照表），且被迫降字号至 11px 对齐视觉尺寸（BUG-20260910-017 修补）。'
+    : '修复后（示意）：两按钮改用标准复选框语汇的<b>内联 SVG 图标</b>——带勾方框=全选、空方框=全不选，跨字体恒定；最终形态待开发确认。');
+  if (laneSelectable()) {
+    const other = SELECTABLE.filter((l) => l !== state.lane)
+      .map((l) => LANE_LABEL[l] + ' 档已勾 ' + state.selected[l].size + ' 项').join('、');
+    lines.push('跨档保留（BUG-20260907-016）：' + (other || '其他档暂无勾选') + '——切到其他档勾选后再回来「全不选」，其他档不受影响。');
+  }
+  $('noteLine').innerHTML = lines.join('<br>');
+}
+
+function renderAll() { renderCaption(); renderList(); renderBatchResult(); renderNote(); }
+
+/* ============ 交互：全选 / 全不选 / 批量 ============ */
+function selectAllVisible() { // 仅当前档可见可操作条目（叠搜索范围）
+  visibleItems().forEach((it) => state.selected[state.lane].add(it.id));
+  renderAll();
+}
+function deselectCurrentLane() { // 仅清当前档，其他档保留
+  state.selected[state.lane].clear();
+  renderAll();
+}
+function setPending(label) {
+  state.pending = true;
+  ['btnAccept', 'btnPlanAdd', 'btnPlanReject', 'btnPlanRemove'].forEach((id) => { if (!$(id).hidden) { $(id).dataset.orig = $(id).textContent; $(id).textContent = label; $(id).disabled = true; } });
+  renderCaption(); renderList();
+}
+function clearPending() {
+  state.pending = false;
+  ['btnAccept', 'btnPlanAdd', 'btnPlanReject', 'btnPlanRemove'].forEach((id) => { if ($(id).dataset.orig) { $(id).textContent = $(id).dataset.orig; delete $(id).dataset.orig; } });
+  renderAll();
+}
+function runBatch(kind, doing, done, move) {
+  const ids = [...state.selected[state.lane]];
+  if (!ids.length || state.pending) return;
+  setPending(doing);
+  setTimeout(() => {
+    const okIds = [], failIds = [];
+    ids.forEach((id, i) => {
+      const fail = state.uiState === 'fail' && i % 2 === 0; // 「失败」状态：模拟部分失败
+      if (fail) failIds.push(id);
+      else { okIds.push(id); move(id); }
+    });
+    state.selected[state.lane].clear();
+    clearPending();
+    const box = $('batchResult');
+    box.dataset.keep = '1';
+    box.hidden = false;
+    let html = '<span class="ok">' + done + '：成功 ' + okIds.length + ' 项' + (failIds.length ? '，失败 ' + failIds.length + ' 项（失败原因就地保留，可读清单如下）' : '') + '</span>';
+    if (failIds.length) html += '<ul class="fail-list">' + failIds.map((id) => '<li>' + id + '：演示模拟失败——服务端返回 409（条目正被其他会话流转），未回滚其他成功项</li>').join('') + '</ul>';
+    box.innerHTML = html;
+    renderAll();
+  }, 700);
+}
+$('btnAccept').addEventListener('click', () => runBatch('accept', '接受中…', '接受所选', (id) => { const it = state.items.find((x) => x.id === id); if (it) it.lane = 'accepted'; }));
+$('btnPlanAdd').addEventListener('click', () => runBatch('planAdd', '移入中…', '移入计划', (id) => { const it = state.items.find((x) => x.id === id); if (it) it.lane = 'planned'; }));
+$('btnPlanReject').addEventListener('click', () => runBatch('planReject', '驳回中…', '驳回待接受', (id) => { const it = state.items.find((x) => x.id === id); if (it) it.lane = 'submitted'; }));
+$('btnPlanRemove').addEventListener('click', () => runBatch('planRemove', '移出中…', '移出计划', (id) => { const it = state.items.find((x) => x.id === id); if (it) it.lane = 'accepted'; }));
+$('laneQuickEntry').addEventListener('click', () => { $('batchResult').hidden = false; $('batchResult').dataset.keep = '1'; $('batchResult').innerHTML = '<span class="ok">「' + $('laneQuickEntry').textContent + '」在产品中仅导航进入任务模块对应面板（与勾选无关、批量进行中不禁用）；演示内不跳转。</span>'; });
+
+/* ============ 控制条 ============ */
+function bindSeg(segId, attr, fn) {
+  $(segId).querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    $(segId).querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+    fn(b.dataset[attr]);
+  }));
+}
+bindSeg('modeSeg', 'mode', (v) => { state.mode = v; renderAll(); });
+bindSeg('laneSeg', 'lane', (v) => { state.lane = v; $('batchResult').dataset.keep = ''; renderAll(); });
+bindSeg('stateSeg', 'state', (v) => {
+  if (v === 'loading') { // 加载为瞬态：禁用期间不可操作，约 900ms 后自动返回正常
+    state.uiState = 'loading'; renderAll();
+    setTimeout(() => { state.uiState = 'normal'; renderAll(); }, 900);
+  } else { state.uiState = v; $('batchResult').dataset.keep = ''; renderAll(); }
+});
+$('themeBtn').addEventListener('click', () => {
+  state.theme = state.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', state.theme);
+  $('themeBtn').textContent = state.theme === 'light' ? '深色主题' : '浅色主题';
+});
+$('dmSearch').addEventListener('input', (e) => { state.search = e.target.value; renderAll(); });
+
+renderFontRows();
+renderAll();
+</script>
+</body>
+</html>

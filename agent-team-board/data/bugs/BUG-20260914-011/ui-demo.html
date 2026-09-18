@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260914-011 演示 · 「和远端同步」应为先 fetch 再 push，确保本地与远端记录一致</title>
+<style>
+  /* 配色沿用 scripts/web/style.css 的明暗两套变量（prefers-color-scheme 自动适配） */
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --text: #1b2434;
+    --muted: #66748c;
+    --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20, 30, 50, 0.08), 0 4px 14px rgba(20, 30, 50, 0.06);
+    --primary: #2563eb;
+    --warn: #dc2626;
+    --ok-bg: #ecfdf5;
+    --ok-text: #047857;
+    --info-bg: #eff6ff;
+    --info-text: #1d4ed8;
+    --warn-bg: #fef2f2;
+    --warn-text: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b;
+      --panel: #161d29;
+      --text: #e5eaf3;
+      --muted: #8b98ad;
+      --border: #263041;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+      --primary: #3b82f6;
+      --warn: #f87171;
+      --ok-bg: #052e1c;
+      --ok-text: #6ee7b7;
+      --info-bg: #0b1d3a;
+      --info-text: #93c5fd;
+      --warn-bg: #3b1113;
+      --warn-text: #fca5a5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 20px 16px 90px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示页框架 ---------- */
+  .demo-head { max-width: 1020px; margin: 0 auto 14px; }
+  .demo-head h1 { font-size: 17px; margin: 0 0 4px; }
+  .demo-head .meta { font-size: 12.5px; }
+
+  .demo-controls {
+    max-width: 1020px; margin: 0 auto 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 12px 14px;
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+  }
+  .demo-controls label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  select {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 13px; padding: 5px 12px; cursor: pointer;
+    background: var(--panel); color: var(--muted); border: none;
+  }
+  .seg button.on-defect { background: var(--warn); color: #fff; }
+  .seg button.on-fixed { background: var(--primary); color: #fff; }
+
+  .observe {
+    max-width: 1020px; margin: 0 auto 14px; padding: 10px 14px;
+    background: var(--info-bg); color: var(--info-text);
+    border-radius: 10px; font-size: 13px;
+  }
+  .observe strong { display: block; margin-bottom: 2px; }
+
+  /* ---------- 模拟看板：构建模块 ---------- */
+  .board {
+    max-width: 1020px; margin: 0 auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .board-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600;
+  }
+  .board-head .chip { font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 9px; background: var(--warn); color: #fff; }
+  .rel-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); }
+  .rel-tab {
+    font: inherit; font-size: 13.5px; padding: 7px 14px; cursor: pointer;
+    background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted);
+  }
+  .rel-tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+
+  .rel-split { display: flex; min-height: 400px; }
+  .rel-list { width: 46%; border-right: 1px solid var(--border); padding: 12px 14px; overflow-y: auto; }
+  .rel-detail { flex: 1; padding: 12px 16px; overflow-y: auto; }
+  @media (max-width: 700px) { .rel-split { flex-direction: column; } .rel-list { width: 100%; border-right: none; border-bottom: 1px solid var(--border); } }
+
+  .bld-branch-tools { display: flex; gap: 8px; margin-bottom: 12px; }
+  .bld-branch-group { margin-bottom: 14px; }
+  .bld-group-head { font-size: 12px; color: var(--muted); letter-spacing: 0.4px; margin-bottom: 6px; }
+  .bld-branch {
+    display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 7px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .bld-branch:hover { background: var(--info-bg); }
+  .bld-branch.sel { border-color: var(--primary); background: var(--info-bg); }
+  .bld-branch span { flex: 1; }
+  .bld-cur-badge { font-size: 11px; font-weight: 600; border-radius: 99px; padding: 1px 8px; background: var(--primary); color: #fff; }
+  .bld-remote-hint { padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-text); font-size: 12.5px; }
+  .bld-main-hint { padding: 8px 10px; border-radius: 8px; background: var(--info-bg); color: var(--info-text); font-size: 12.5px; margin-top: 6px; }
+
+  .bld-log { list-style: none; margin: 0; padding: 0; }
+  .bld-log li { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; padding: 6px 4px; border-bottom: 1px dashed var(--border); }
+  .bld-log li code { background: var(--info-bg); color: var(--info-text); }
+
+  /* ---------- 一致性对照 + 终端 ---------- */
+  .compare {
+    max-width: 1020px; margin: 14px auto 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+  .compare .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 10px 14px; font-size: 13px;
+  }
+  .compare h3 { margin: 0 0 8px; font-size: 13.5px; }
+  .cmp-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .cmp-row .name { width: 110px; font-weight: 600; }
+  .tag { font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 1px 9px; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok-text); }
+  .tag.bad { background: var(--warn-bg); color: var(--warn-text); }
+  .term {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; white-space: pre-wrap; color: var(--muted); margin: 0;
+  }
+  .term b { color: var(--text); font-weight: 600; }
+
+  /* ---------- 推送确认弹窗 ---------- */
+  .rel-modal-wrap {
+    position: fixed; inset: 0; background: rgba(10, 16, 28, 0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+  }
+  .rel-modal {
+    width: min(420px, calc(100vw - 40px)); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 16px;
+  }
+  .rel-modal h3 { margin: 0 0 10px; font-size: 15px; }
+  .rel-modal .field { display: block; font-size: 13px; margin-bottom: 10px; }
+  .rel-modal select { width: 100%; margin-top: 4px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+  .btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 12px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn.small { font-size: 12.5px; padding: 3px 10px; }
+  .btn.quiet { background: transparent; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+
+  /* ---------- toast ---------- */
+  .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; max-width: min(420px, calc(100vw - 32px)); }
+  .toast {
+    padding: 9px 13px; border-radius: 9px; font-size: 13px; box-shadow: var(--shadow);
+    background: var(--panel); border: 1px solid var(--border); color: var(--ok-text);
+  }
+  .toast.err { color: var(--warn-text); border-color: var(--warn); }
+
+  .guide-empty { padding: 40px 24px; text-align: center; }
+  .note-line { margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="demo-head">
+  <h1>BUG-20260914-011 ·「和远端同步」应为先 fetch、再 push，确保本地与远端记录一模一样</h1>
+  <div class="meta muted">演示数据为模拟。布局 / 交互按 <code>scripts/web/build.js</code> <code>renderBranchesPane()</code> / <code>doFetch()</code> 现行为复刻；「期望修复后」按本单期望行为呈现（推送范围等口径以开发阶段 design.md 落定为准）。</div>
+</div>
+
+<div class="demo-controls">
+  <label>对照模式
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on-defect">缺陷现状（仅 fetch）</button>
+      <button type="button" data-mode="expected">期望修复后（fetch + push）</button>
+    </span>
+  </label>
+  <label>场景
+    <select id="scenarioSel">
+      <option value="ahead">本地领先 · 远端为空（本仓库现状）</option>
+      <option value="synced">已同步稳态 · 两边一致</option>
+      <option value="remote-ahead">远端领先 · 推送将被拒</option>
+      <option value="nongit">非 git 仓库（引导空态）</option>
+    </select>
+  </label>
+  <button type="button" class="btn small" id="resetBtn">重置演示</button>
+</div>
+
+<div class="observe" id="observeBox">
+  <strong>观察要点</strong>
+  <span id="observeText"></span>
+</div>
+
+<div class="board" id="board"></div>
+
+<div class="compare">
+  <div class="card">
+    <h3>本地 ↔ 远端记录一致性（同步语义的核心）</h3>
+    <div id="compareBody"></div>
+  </div>
+  <div class="card">
+    <h3>终端对照 <code>git ls-remote origin</code>（远端实际引用）</h3>
+    <pre class="term" id="termBody"></pre>
+    <div class="note-line muted small">界面「远端」分组读取的是本地远端跟踪引用（<code>git branch -r</code>）；只有真正推送后，远端才会出现本地分支。</div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<div id="modalHost"></div>
+
+<script>
+'use strict';
+
+/* ================= 模拟数据 ================= */
+
+const COMMITS = {
+  dev: [
+    { short: '1509fc1', subject: 'doc: 分支浏览「无远端分支」空态缺解释 BUG-20260914-006', author: 'atb', date: '09-14' },
+    { short: 'b7225d0', subject: 'doc: 回退批量 Commit 的相关功能 REQ-20260911-010', author: 'atb', date: '09-13' },
+    { short: '31c8e04', subject: 'fix: 同步按钮文案更名 BUG-20260914-005', author: 'atb', date: '09-13' },
+    { short: '9a01bd7', subject: 'feat: 构建模块分支浏览 REQ-20260913-001', author: 'atb', date: '09-12' },
+    { short: '（……共 53 条提交，略）', subject: '', author: '', date: '' },
+  ],
+  main: [
+    { short: 'b7225d0', subject: 'doc: 回退批量 Commit 的相关功能 REQ-20260911-010', author: 'atb', date: '09-13' },
+  ],
+  'origin/dev': [
+    { short: '31c8e04', subject: 'fix: 同步按钮文案更名 BUG-20260914-005', author: 'atb', date: '09-13' },
+    { short: '9a01bd7', subject: 'feat: 构建模块分支浏览 REQ-20260913-001', author: 'atb', date: '09-12' },
+  ],
+  'origin/dev-ahead': [
+    { short: 'e77ff32', subject: '外部提交：远端多出的一条提交（本地没有）', author: 'other', date: '09-14' },
+    { short: '31c8e04', subject: 'fix: 同步按钮文案更名 BUG-20260914-005', author: 'atb', date: '09-13' },
+    { short: '9a01bd7', subject: 'feat: 构建模块分支浏览 REQ-20260913-001', author: 'atb', date: '09-12' },
+  ],
+  'origin/main': [
+    { short: 'b7225d0', subject: 'doc: 回退批量 Commit 的相关功能 REQ-20260911-010', author: 'atb', date: '09-13' },
+  ],
+};
+
+// 各场景初始快照：remote = 本地远端跟踪引用（界面「远端」分组）；lsRemote = 远端仓库真实引用
+const SCENARIOS = {
+  ahead: {
+    current: 'dev',
+    local: ['dev', 'main'],
+    remote: [],
+    lsRemote: [],
+    remoteSynced: false,
+    devTip: '1509fc1',
+    remoteDevTip: null,
+    mainTip: 'b7225d0',
+    remoteMainTip: null,
+  },
+  synced: {
+    current: 'dev',
+    local: ['dev', 'main'],
+    remote: ['origin/dev', 'origin/main'],
+    lsRemote: ['origin/dev', 'origin/main'],
+    remoteSynced: true,
+    devTip: '1509fc1', remoteDevTip: '1509fc1',
+    mainTip: 'b7225d0', remoteMainTip: 'b7225d0',
+  },
+  'remote-ahead': {
+    current: 'dev',
+    local: ['dev', 'main'],
+    remote: ['origin/dev', 'origin/main'],
+    lsRemote: ['origin/dev', 'origin/main'],
+    remoteSynced: false,
+    devTip: '31c8e04', remoteDevTip: 'e77ff32',
+    mainTip: 'b7225d0', remoteMainTip: 'b7225d0',
+  },
+  nongit: { current: null, local: [], remote: [], lsRemote: [], remoteSynced: false },
+};
+
+/* ================= 演示状态 ================= */
+
+let mode = 'defect';           // defect | expected
+let scenario = 'ahead';
+let S = null;                  // 当前快照（可变副本）
+let syncBusy = false;
+let pushBusy = false;
+let pushConfirm = null;        // { branch }
+let selected = null;           // 右侧提交记录所选分支
+let timers = [];
+
+function snapshot() {
+  const src = SCENARIOS[scenario];
+  S = JSON.parse(JSON.stringify(src));
+  syncBusy = false; pushBusy = false; pushConfirm = null;
+  selected = scenario === 'nongit' ? null : (S.current || null);
+}
+function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+const $ = (sel, el) => (el || document).querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(msg, err) {
+  const box = document.createElement('div');
+  box.className = 'toast' + (err ? ' err' : '');
+  box.textContent = msg;
+  $('#toasts').appendChild(box);
+  setTimeout(() => box.remove(), 4600);
+}
+
+/* ================= 一致性对照 ================= */
+
+function cmpTag(localTip, remoteTip) {
+  if (remoteTip == null) return '<span class="tag bad">不一致：远端无此分支</span>';
+  if (localTip !== remoteTip) return '<span class="tag bad">不一致：指向不同提交</span>';
+  return '<span class="tag ok">一致</span>';
+}
+
+function renderCompare() {
+  if (scenario === 'nongit') {
+    $('#compareBody').innerHTML = '<p class="muted small">项目不是 git 仓库，无分支记录可比。</p>';
+    $('#termBody').innerHTML = '<span class="muted">fatal: not a git repository</span>';
+    return;
+  }
+  $('#compareBody').innerHTML = `
+    <div class="cmp-row"><span class="name">dev</span><span class="muted small">本地 @ ${esc(S.devTip)}</span>${cmpTag(S.devTip, S.remoteDevTip)}</div>
+    <div class="cmp-row"><span class="name">main</span><span class="muted small">本地 @ ${esc(S.mainTip)}</span>${cmpTag(S.mainTip, S.remoteMainTip)}</div>
+    <div class="cmp-row muted small" style="padding-top:6px">「一模一样」= 每个本地分支在远端都有同名分支，且指向同一提交。</div>`;
+  $('#termBody').innerHTML = S.lsRemote.length
+    ? S.lsRemote.map((r) => {
+        const tip = r === 'origin/dev' ? S.remoteDevTip : S.remoteMainTip;
+        return `<b>${esc(tip)}</b>\trefs/heads/${esc(r.replace(/^origin\//, ''))}`;
+      }).join('\n')
+    : '<span class="muted">（空——远端仓库没有任何引用）</span>';
+}
+
+/* ================= 分支浏览渲染 ================= */
+
+function renderBranchPane() {
+  const btnLabel = syncBusy ? '同步中…' : '⟳ 和远端同步';
+  const btnTitle = mode === 'defect'
+    ? 'fetch --all --prune：拉取远端最新并清理失效引用'
+    : '先 fetch --all --prune 拉取远端最新，再推送本地分支，使本地与远端记录一致';
+  const tools = `
+    <div class="bld-branch-tools">
+      <button type="button" class="btn small" id="bldFetchBtn" ${syncBusy ? 'disabled' : ''} title="${esc(btnTitle)}">${esc(btnLabel)}</button>
+      <button type="button" class="btn small quiet" id="bldBranchRefresh">刷新</button>
+    </div>`;
+
+  let list = '';
+  const cur = S.current
+    ? `<div class="bld-branch bld-cur${selected === S.current ? ' sel' : ''}" data-branch="${esc(S.current)}"><span><strong>${esc(S.current)}</strong></span><span class="bld-cur-badge">当前</span></div>`
+    : '';
+  const others = S.local.filter((x) => x !== S.current).map((x) => `
+    <div class="bld-branch${selected === x ? ' sel' : ''}" data-branch="${esc(x)}"><span>${esc(x)}</span>
+      <button type="button" class="btn small quiet" data-push="${esc(x)}" title="推送到远端（现状：独立手动入口）">推送</button></div>`).join('');
+  list = `
+    <div class="bld-branch-group"><div class="bld-group-head">本地</div>${cur}${others || ''}</div>
+    <div class="bld-branch-group"><div class="bld-group-head">远端</div>${S.remote.map((x) => `
+      <div class="bld-branch${selected === x ? ' sel' : ''}" data-branch="${esc(x)}"><span>${esc(x)}</span></div>`).join('')
+      || remoteEmptyHint()}</div>`;
+
+  const log = renderLog();
+  return `
+    <div class="rel-split">
+      <div class="rel-list" aria-label="分支列表">${tools}${list}</div>
+      <div class="rel-detail" aria-label="提交记录">
+        <div class="bld-log-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <strong>${esc(selected || '提交记录')}</strong>
+          ${selected ? '<button type="button" class="btn small quiet" id="bldLogRefresh">刷新</button>' : ''}
+        </div>
+        ${log}
+      </div>
+    </div>`;
+}
+
+function remoteEmptyHint() {
+  // 对齐 BUG-20260914-006 落地后的空态口径（已配置远端 + 本会话同步成功仍空 → 远端仓库为空）
+  if (S.remoteSynced) {
+    return `<div class="bld-remote-hint"><strong>远端仓库尚无任何分支（从未推送）。</strong>
+      <span>刚才的同步已成功——列表仍为空说明远端仓库本身就是空的。可在上方「本地」分组对分支点「推送」，首推将建立上游跟踪。</span></div>`;
+  }
+  return '<p class="muted small">本地无远端跟踪分支：尚未与远端同步，可点上方「⟳ 和远端同步」拉取；若同步后仍为空，说明远端仓库尚无任何分支（从未推送）。</p>';
+}
+
+function renderLog() {
+  if (!selected) return '<div class="muted">点击左侧分支查看提交记录</div>';
+  let key = selected;
+  if (selected === 'origin/dev') key = scenario === 'remote-ahead' && S.remoteDevTip === 'e77ff32' ? 'origin/dev-ahead' : 'origin/dev';
+  const commits = COMMITS[key] || [];
+  if (!commits.length) return '<p class="muted small">该分支暂无提交</p>';
+  return `<ul class="bld-log">${commits.map((c) => `<li>
+    <code>${esc(c.short)}</code> <span>${esc(c.subject)}</span>
+    <span class="muted small">${esc(c.author ? c.author + ' · ' : '')}${esc(c.date)}</span></li>`).join('')}</ul>`;
+}
+
+function renderNongitGuide() {
+  return `
+    <div class="guide-empty">
+      <p><strong>当前项目不是 git 仓库</strong></p>
+      <p class="muted small">构建模块的分支浏览 / 版本计划需要 git 仓库。<br>可到「设置 → Git 工作流」执行 <code>atb init</code>（幂等）初始化后再来。</p>
+    </div>`;
+}
+
+function renderPushConfirm() {
+  if (!pushConfirm) return '';
+  const b = pushConfirm.branch;
+  const hasUp = S.remote.includes(`origin/${b}`);
+  return `
+    <div class="rel-modal-wrap" id="bldPushWrap" role="dialog" aria-label="推送分支确认">
+      <div class="rel-modal">
+        <h3>推送分支 ${esc(b)}</h3>
+        <div>
+          <label class="field">目标远端
+            <select class="bld-push-remote"><option>origin</option></select></label>
+          <p class="muted small">${hasUp
+            ? `该分支已有远端分支：本次推送将更新 origin/${esc(b)}。`
+            : '该分支尚未建立上游跟踪：首推将加 -u 建立跟踪。'}</p>
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn" id="bldPushCancel">取消</button>
+          <button type="button" class="btn primary" id="bldPushGo" ${pushBusy ? 'disabled' : ''}>${pushBusy ? '推送中…' : '确认推送'}</button>
+        </footer>
+      </div>
+    </div>`;
+}
+
+function render() {
+  const board = $('#board');
+  if (scenario === 'nongit') {
+    board.innerHTML = `
+      <div class="board-head">构建</div>
+      <div class="rel-tabs"><button type="button" class="rel-tab">版本计划</button><button type="button" class="rel-tab active">分支浏览</button></div>
+      ${renderNongitGuide()}`;
+    $('#modalHost').innerHTML = '';
+  } else {
+    board.innerHTML = `
+      <div class="board-head">构建 <span class="chip">${mode === 'defect' ? '缺陷现状：同步只 fetch' : '期望修复后：fetch + push'}</span></div>
+      <div class="rel-tabs"><button type="button" class="rel-tab">版本计划</button><button type="button" class="rel-tab active">分支浏览</button></div>
+      ${renderBranchPane()}`;
+    $('#modalHost').innerHTML = renderPushConfirm();
+    bindBoard();
+  }
+  renderCompare();
+  renderObserve();
+}
+
+function renderObserve() {
+  const base = {
+    defect: '缺陷现状：点「⟳ 和远端同步」只执行 fetch——toast 报「✓ 已同步远端」但本地提交不上传，下方一致性对照与 git ls-remote 可见两边记录仍不一致；要上传只能逐分支点「推送」。',
+    expected: '期望修复后：同一按钮先 fetch 再推送本地分支——toast 汇总两步结果，远端分组出现 origin/* 分支，一致性对照转「一致」，git ls-remote 出现真实引用。推送失败（如远端领先被拒）会明确列出失败分支与原因。',
+  }[mode];
+  const extra = {
+    ahead: '当前场景：本地 dev（53 条提交）/ main 领先，远端仓库为空——正是登记本单时的仓库状态。',
+    synced: '当前场景：两边已一致。缺陷现状与期望修复都「看起来正常」——本场景验证稳态幂等（再次同步不应报错、无副作用）。',
+    'remote-ahead': '当前场景：origin/dev 比本地 dev 多一条外部提交。期望修复后推送 dev 会被拒（non-fast-forward）——验证失败反馈可分辨、不静默、不自动 pull / 强推。',
+    nongit: '当前场景：非 git 仓库引导空态——验证错误路径不因语义调整回归。',
+  }[scenario];
+  $('#observeText').textContent = base + ' ' + extra;
+}
+
+/* ================= 交互：同步（本单核心） ================= */
+
+function doSync() {
+  if (syncBusy) return;
+  syncBusy = true;
+  render();
+
+  const finishFetchOnly = () => {
+    S.remoteSynced = true; // BUG-20260914-006 口径：本会话已成功 fetch
+    syncBusy = false;
+    toast('✓ 已同步远端（fetch --prune）');
+    render();
+  };
+  const doPushAll = () => {
+    // 期望行为（演示按「推送全部本地分支」口径呈现；最终范围以 design.md 为准）
+    const failed = [];
+    const changed = [];
+    for (const b of S.local) {
+      const tip = b === 'dev' ? S.devTip : S.mainTip;
+      const remoteTip = b === 'dev' ? S.remoteDevTip : S.remoteMainTip;
+      if (scenario === 'remote-ahead' && b === 'dev') { failed.push('dev'); continue; } // 远端领先 → non-fast-forward 被拒
+      if (remoteTip === tip) continue; // up-to-date
+      if (b === 'dev') S.remoteDevTip = tip; else S.remoteMainTip = tip;
+      if (!S.lsRemote.includes(`origin/${b}`)) S.lsRemote.push(`origin/${b}`);
+      if (!S.remote.includes(`origin/${b}`)) S.remote.push(`origin/${b}`);
+      changed.push(b);
+    }
+    syncBusy = false;
+    S.remoteSynced = true;
+    if (failed.length) {
+      toast(`✕ 同步完成（有失败）：fetch 成功；推送 dev 失败：non-fast-forward（远端领先，请人工处理后再推送）`, true);
+    } else if (changed.length) {
+      toast(`✓ 已同步：fetch 完成，已推送 ${changed.join('、')} → origin`);
+    } else {
+      toast('✓ 已同步：fetch 完成，远端与本地一致（无更新）');
+    }
+    render();
+  };
+
+  if (mode === 'defect') {
+    later(finishFetchOnly, 900);
+  } else {
+    later(doPushAll, 1500); // fetch(≈0.7s) + push(≈0.8s) 的合并执行期
+  }
+}
+
+/* ================= 交互：推送（现状独立入口，保留对照） ================= */
+
+function doPushGo() {
+  if (!pushConfirm || pushBusy) return;
+  pushBusy = true;
+  render();
+  later(() => {
+    const b = pushConfirm.branch;
+    pushConfirm = null; pushBusy = false;
+    const tip = b === 'dev' ? S.devTip : S.mainTip;
+    if (b === 'dev') S.remoteDevTip = tip; else S.remoteMainTip = tip;
+    if (!S.lsRemote.includes(`origin/${b}`)) S.lsRemote.push(`origin/${b}`);
+    if (!S.remote.includes(`origin/${b}`)) S.remote.push(`origin/${b}`);
+    S.remoteSynced = true;
+    toast(`✓ 已推送 ${b} → origin/${b}`);
+    render();
+  }, 900);
+}
+
+/* ================= 事件绑定 ================= */
+
+function bindBoard() {
+  $('#bldFetchBtn')?.addEventListener('click', doSync);
+  $('#bldBranchRefresh')?.addEventListener('click', () => {
+    toast('已刷新分支列表');
+    render();
+  });
+  $('#bldLogRefresh')?.addEventListener('click', () => {
+    toast('已刷新提交记录');
+    render();
+  });
+  document.querySelectorAll('[data-branch]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-push]')) return;
+      selected = el.dataset.branch;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-push]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (pushBusy) return;
+      pushConfirm = { branch: el.dataset.push };
+      render();
+    });
+  });
+  $('#bldPushCancel')?.addEventListener('click', () => { pushConfirm = null; render(); });
+  $('#bldPushGo')?.addEventListener('click', doPushGo);
+}
+
+$('#modeSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  mode = btn.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach((b) => {
+    b.className = b === btn ? (mode === 'defect' ? 'on-defect' : 'on-fixed') : '';
+  });
+  clearTimers();
+  snapshot();
+  render();
+});
+
+$('#scenarioSel').addEventListener('change', (e) => {
+  scenario = e.target.value;
+  clearTimers();
+  snapshot();
+  render();
+});
+
+$('#resetBtn').addEventListener('click', () => {
+  clearTimers();
+  snapshot();
+  toast('已重置演示');
+  render();
+});
+
+/* ================= 启动 ================= */
+snapshot();
+render();
+</script>
+</body>
+</html>

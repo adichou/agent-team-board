@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260911-006 演示 · 全局任务加入批量 Commit 任务状态</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --line: #dce0e6; --text: #1f2430; --muted: #6b7280;
+    --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --info: #0891b2;
+    --chipbg: #eef1f5; --hover: #f0f4fa; --skel: #e2e6ec;
+  }
+  [data-theme="dark"] {
+    --bg: #101418; --panel: #1a2027; --line: #2c343e; --text: #e6e9ee; --muted: #98a1ad;
+    --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --info: #22d3ee;
+    --chipbg: #232b34; --hover: #202a35; --skel: #242c36;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  b { font-weight: 600; }
+  code { background: var(--chipbg); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .center { text-align: center; }
+
+  /* ---- 顶栏（模拟看板） ---- */
+  .topbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .topbar .brand { font-weight: 700; margin-right: 6px; }
+  .topbar select {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 8px; font-size: 13px;
+  }
+  .btn {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+  }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  /* ---- 演示控制条 ---- */
+  .controlbar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg);
+    position: sticky; top: 47px; z-index: 4;
+  }
+  .controlbar fieldset { border: 1px dashed var(--line); border-radius: 8px; padding: 4px 10px; margin: 0; display: flex; gap: 10px; align-items: center; }
+  .controlbar legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .controlbar label { font-size: 13px; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+  .controlbar select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 13px; }
+
+  /* ---- 主工作区占位 ---- */
+  .workspace { padding: 28px 16px 60px; max-width: 720px; }
+  .placeholder {
+    background: var(--panel); border: 1px dashed var(--line); border-radius: 12px;
+    padding: 26px; color: var(--muted);
+  }
+  .placeholder h2 { margin: 0 0 6px; color: var(--text); font-size: 16px; }
+  .placeholder ul { margin: 8px 0 0; padding-left: 20px; }
+
+  /* ---- 全局任务面板（右侧贴边通高） ---- */
+  .gpanel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw);
+    background: var(--panel); border-left: 1px solid var(--line);
+    box-shadow: -12px 0 32px rgba(0,0,0,.12); z-index: 20;
+    display: flex; flex-direction: column;
+  }
+  .gpanel.hidden { display: none; }
+  .gpanel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
+  .gpanel-head h2 { margin: 0; font-size: 17px; }
+  .icon-btn {
+    background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer;
+    border-radius: 8px; padding: 4px 8px;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--text); }
+  .gpanel-tools { display: flex; align-items: center; gap: 10px; padding: 0 16px 10px; border-bottom: 1px solid var(--line); }
+  .gpanel-scope { margin: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .search-input {
+    flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; font-size: 13px;
+  }
+  .gpanel-body { flex: 1; overflow-y: auto; padding: 12px 16px 24px; }
+  .gwrap > * + * { margin-top: 10px; }
+
+  .gsummary { margin: 0; font-size: 13px; }
+  .gfilters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .fchip {
+    background: var(--chipbg); color: var(--text); border: none; border-radius: 999px;
+    padding: 3px 12px; font-size: 12px; cursor: pointer;
+  }
+  .fchip.active { background: var(--accent); color: #fff; }
+  .gsep { width: 1px; height: 16px; background: var(--line); margin: 0 2px; }
+
+  .pgroup { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .pgroup-head {
+    display: flex; align-items: baseline; gap: 10px; padding: 8px 12px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .pname { font-weight: 600; }
+  .gtask { padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .gtask:last-child { border-bottom: none; }
+  .gtask:hover { background: var(--hover); }
+  .gtask-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .chip { border-radius: 999px; padding: 2px 10px; font-size: 12px; background: var(--chipbg); }
+  .chip.st-running { background: var(--ok); color: #fff; }
+  .chip.st-prepared { background: var(--chipbg); color: var(--muted); }
+  .chip.st-paused { background: var(--warn); color: #fff; }
+  .chip.st-finished { background: var(--chipbg); color: var(--muted); }
+  .chip.kind { background: var(--accent); color: #fff; }
+  .flag { font-size: 12px; color: var(--warn); }
+  .cid { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .gtask-top .enter { margin-left: auto; }
+  .gtask-mid { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cid.link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .ttl { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gtask-meta { margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .gtask-meta b { color: var(--text); }
+
+  .note { border-radius: 10px; padding: 9px 12px; font-size: 13px; border: 1px solid var(--line); background: var(--bg); }
+  .note.warn { border-color: var(--warn); color: var(--warn); background: transparent; }
+  .note.bad { border-color: var(--bad); }
+  .note.good { border-color: var(--ok); }
+  .note .btn { margin-left: 6px; }
+
+  .emptycard { border: 1px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); }
+  .emptycard h3 { margin: 0 0 8px; color: var(--text); }
+
+  .skel-row { height: 66px; border-radius: 10px; background: linear-gradient(90deg, var(--skel) 25%, var(--hover) 50%, var(--skel) 75%); background-size: 200% 100%; animation: shine 1.1s infinite; margin-bottom: 10px; }
+  @keyframes shine { to { background-position: -200% 0; } }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 16px);
+    background: var(--text); color: var(--bg); border-radius: 10px; padding: 9px 16px;
+    font-size: 13px; max-width: 88vw; opacity: 0; pointer-events: none; transition: all .22s; z-index: 30;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">Status Board（模拟）</span>
+  <select aria-label="切换项目看板">
+    <option>agent-team-board</option>
+    <option>ios-reader-app</option>
+  </select>
+  <div class="top-actions">
+    <button type="button" class="btn" title="初始化、导入或移出项目">管理项目</button>
+    <button type="button" class="btn" id="btnGlobal" title="全部项目的批量任务（跨项目总览）"
+            aria-haspopup="dialog" aria-expanded="false" aria-controls="gpanel">全局</button>
+    <button type="button" class="btn">快捷键 ?</button>
+    <button type="button" class="btn primary">＋ 新建</button>
+  </div>
+</header>
+
+<div class="controlbar">
+  <fieldset>
+    <legend>模式对照</legend>
+    <label><input type="radio" name="mode" value="defect" checked> 缺陷现象（当前行为）</label>
+    <label><input type="radio" name="mode" value="fixed"> 期望修复</label>
+  </fieldset>
+  <label class="small muted">commit 批次状态
+    <select id="commitStatus" aria-label="切换模拟 commit 批次状态">
+      <option value="prepared">待启动</option>
+      <option value="running" selected>执行中</option>
+      <option value="paused">已暂停</option>
+      <option value="finished">已结束（收尾移出）</option>
+    </select>
+  </label>
+  <label class="small muted">场景
+    <select id="scenario" aria-label="切换面板状态场景">
+      <option value="normal" selected>正常</option>
+      <option value="empty">空（无注册项目）</option>
+      <option value="loading">加载（骨架占位）</option>
+      <option value="error">失败（保留上次数据）</option>
+    </select>
+  </label>
+  <button type="button" class="btn small" id="themeBtn">深浅色切换</button>
+</div>
+
+<main class="workspace">
+  <div class="placeholder">
+    <h2>当前项目模块内容（占位）</h2>
+    <p>本演示只模拟与 BUG-20260911-006 相关的界面：顶栏「全局」入口与右侧全局任务面板。点击顶栏「全局」可开合面板（Esc 关闭）。</p>
+    <ul>
+      <li>缺陷模式：聚合口径不含批量 Commit——面板看不到 <code>CMT-20260911-001</code>，搜索批次号也无结果。</li>
+      <li>期望模式：commit 任务成行展示（状态 / 当前条目 / 已提交计数），可筛选、可搜索、点击仅导航进入任务模块「批量 Commit」页签。</li>
+    </ul>
+  </div>
+</main>
+
+<aside id="gpanel" class="gpanel hidden" role="dialog" aria-label="全局任务（跨项目）">
+  <header class="gpanel-head">
+    <h2>全局任务</h2>
+    <button type="button" id="gClose" class="icon-btn" aria-label="关闭全局任务面板" title="关闭全局任务（Esc）">✕</button>
+  </header>
+  <div class="gpanel-tools">
+    <p class="gpanel-scope" title="不随顶栏项目选择变化">跨项目批量任务</p>
+    <input id="gSearch" class="search-input" type="search" placeholder="搜项目 / 批次号 / 条目编号…"
+           autocomplete="off" enterkeyhint="search" aria-label="搜索全局任务（跨项目）">
+    <button type="button" class="btn small" id="gRefresh" title="模拟一轮 2 秒轮询拉取">刷新</button>
+  </div>
+  <div id="gbody" class="gpanel-body" aria-label="全局任务列表"></div>
+</aside>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* BUG-20260911-006 演示脚本 —— 全局任务面板加入批量 Commit 任务状态
+   全部数据为模拟，不调用服务、不执行 Git。 */
+
+// ---------- 模拟数据 ----------
+var COMMIT_BATCH = 'CMT-20260911-001';
+
+var state = {
+  mode: 'defect',        // defect = 缺陷现象（当前行为）；fixed = 期望修复
+  scenario: 'normal',    // normal | empty | loading | error
+  commitStatus: 'running', // commit 批次模拟状态：prepared | running | paused | finished
+  statusFilter: 'all',
+  kindFilter: 'all',
+  q: '',
+  theme: 'light',
+  open: true,
+  loading: false,
+};
+
+function baseData() {
+  return {
+    projects: [
+      {
+        name: 'agent-team-board',
+        root: '/Users/demo/src/agent-team-board',
+        status: 'ok',
+        error: null,
+        tasks: [
+          {
+            kind: 'commit',
+            batchId: COMMIT_BATCH,
+            status: state.commitStatus,
+            queued: false,
+            pauseRequested: state.commitStatus === 'paused',
+            current: state.commitStatus === 'running' ? {
+              itemId: 'BUG-20260911-005',
+              title: '已完成列表添加「开始 Commit」按钮',
+              owner: 'agent-commit-001-2',
+            } : null,
+            counts: { committed: 2, failed: 1, interrupted: 0, remaining: 3, total: 6 },
+            createdAt: '2026-09-11 09:12',
+            lastActivityAt: '2026-09-11 10:03',
+          },
+          {
+            kind: 'refine',
+            batchId: 'RFB-20260910-023',
+            status: 'running',
+            queued: false,
+            pauseRequested: false,
+            current: { itemId: 'REQ-20260910-027', title: '移除开发人员设置', owner: 'agent-refine-023-05' },
+            counts: { done: 12, failed: 1, interrupted: 0, remaining: 5, total: 18 },
+            createdAt: '2026-09-10 16:40',
+            lastActivityAt: '2026-09-11 09:58',
+          },
+        ],
+      },
+      {
+        name: 'ios-reader-app',
+        root: '/Users/demo/src/ios-reader-app',
+        status: 'ok',
+        error: null,
+        tasks: [
+          {
+            kind: 'develop',
+            batchId: 'DEV-20260911-001',
+            status: 'running',
+            queued: false,
+            pauseRequested: false,
+            current: { itemId: 'REQ-20260910-018', title: '阅读器深浅色跟随系统', owner: 'agent-dev-001-3' },
+            counts: { reported: 2, failed: 0, blocked: 0, interrupted: 0, remaining: 3, total: 5 },
+            createdAt: '2026-09-11 08:20',
+            lastActivityAt: '2026-09-11 10:01',
+          },
+          {
+            kind: 'develop',
+            batchId: 'DEV-20260911-002',
+            status: 'prepared',
+            queued: true,
+            pauseRequested: false,
+            current: null,
+            counts: { reported: 0, failed: 0, blocked: 0, interrupted: 0, remaining: 4, total: 4 },
+            createdAt: '2026-09-11 08:30',
+            lastActivityAt: '2026-09-11 08:30',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// ---------- 词表与工具 ----------
+var KIND_LABEL = { develop: '批量开发', refine: '批量完善', commit: '批量 Commit' };
+var STATUS_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'running', label: '执行中' },
+  { key: 'prepared', label: '待启动' },
+  { key: 'paused', label: '已暂停' },
+  { key: 'needs_attention', label: '待核对' },
+];
+
+function kindFilters() {
+  var list = [
+    { key: 'all', label: '全部类型' },
+    { key: 'develop', label: '批量开发' },
+    { key: 'refine', label: '批量完善' },
+  ];
+  if (state.mode === 'fixed') list.push({ key: 'commit', label: '批量 Commit' });
+  return list;
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function statusLabel(t) {
+  if (t.queued && t.status === 'prepared') return '排队中';
+  var L = { prepared: '待启动', running: '执行中', paused: '已暂停', finished: '已结束' };
+  return L[t.status] || t.status;
+}
+
+function statusKey(t) { return t.status || 'prepared'; }
+
+// 模拟服务端聚合：缺陷模式 = /api/batch/global 不返回 commit 批次；
+// 期望模式 = 返回（finished / aborted 的批次同样不出现——收尾移出口径）
+function visibleTasks(p) {
+  var tasks = p.tasks.slice();
+  if (state.mode === 'defect') tasks = tasks.filter(function (t) { return t.kind !== 'commit'; });
+  if (state.commitStatus === 'finished') tasks = tasks.filter(function (t) { return t.kind !== 'commit'; });
+  return tasks;
+}
+
+function countsParts(t) {
+  var c = t.counts || {};
+  if (t.kind === 'refine') {
+    return { doneLabel: '已完成', done: c.done || 0, abnormal: (c.failed || 0) + (c.interrupted || 0), remaining: c.remaining || 0, total: c.total || 0 };
+  }
+  if (t.kind === 'commit') {
+    return { doneLabel: '已提交', done: c.committed || 0, abnormal: (c.failed || 0) + (c.interrupted || 0), remaining: c.remaining || 0, total: c.total || 0 };
+  }
+  return { doneLabel: '已上报', done: c.reported || 0, abnormal: (c.failed || 0) + (c.blocked || 0) + (c.interrupted || 0), remaining: c.remaining || 0, total: c.total || 0 };
+}
+
+function taskMatches(t, p) {
+  var q = state.q;
+  if (!q) return true;
+  var cur = t.current || {};
+  return [p.name, p.root, t.batchId, cur.itemId, cur.title, cur.owner]
+    .some(function (x) { return String(x || '').toLowerCase().indexOf(q) !== -1; });
+}
+
+function toast(msg) {
+  var el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function () { el.classList.remove('show'); }, 2600);
+}
+
+// ---------- 渲染 ----------
+function summaryLine(projects) {
+  var by = { running: 0, prepared: 0, paused: 0, needs_attention: 0, queued: 0 };
+  projects.forEach(function (p) {
+    visibleTasks(p).forEach(function (t) {
+      if (t.queued && t.status === 'prepared') by.queued++;
+      else if (by[t.status] != null) by[t.status]++;
+    });
+  });
+  return '执行中 <b>' + by.running + '</b> · 待启动 <b>' + by.prepared + '</b> · 排队中 <b>' + by.queued +
+    '</b> · 已暂停 <b>' + by.paused + '</b> · 待核对 <b>' + by.needs_attention + '</b>';
+}
+
+function taskRowHtml(t, p) {
+  var st = statusKey(t);
+  var cnt = countsParts(t);
+  var cur = t.current;
+  return '<article class="gtask" data-kind="' + esc(t.kind) + '" data-batch="' + esc(t.batchId) + '" data-project="' + esc(p.name) + '">' +
+    '<div class="gtask-top">' +
+      '<span class="chip st-' + esc(st) + '">' + esc(statusLabel(t)) + '</span>' +
+      (t.pauseRequested ? '<span class="flag">已请求暂停</span>' : '') +
+      '<span class="chip kind">' + esc(KIND_LABEL[t.kind] || t.kind) + '</span>' +
+      '<span class="cid">' + esc(t.batchId) + '</span>' +
+      '<button type="button" class="btn small enter">进入项目任务</button>' +
+    '</div>' +
+    '<div class="gtask-mid">' + (cur
+      ? '<span class="muted">当前：</span><span class="cid link cur-item" data-item="' + esc(cur.itemId) + '" role="button">' + esc(cur.itemId) + '</span>' +
+        '<span class="ttl" title="' + esc(cur.title) + '">' + esc(cur.title) + '</span>' +
+        '<span class="muted small">子代理会话 ' + esc(cur.owner) + '</span>'
+      : '<span class="muted small">待启动：请在对应项目的 Agent 会话粘贴调度提示词后登记运行</span>') +
+    '</div>' +
+    '<div class="gtask-meta">' +
+      '<span>' + cnt.doneLabel + ' <b>' + cnt.done + '</b></span>' +
+      '<span>异常 <b>' + cnt.abnormal + '</b></span>' +
+      '<span>待处理 <b>' + cnt.remaining + '</b></span>' +
+      '<span class="muted small">共 ' + cnt.total + '</span>' +
+      '<span>创建 ' + esc(t.createdAt) + '</span>' +
+      '<span>活动 ' + esc(t.lastActivityAt) + '</span>' +
+    '</div>' +
+  '</article>';
+}
+
+function chipsHtml() {
+  function chip(f, cur, attr) {
+    return '<button type="button" class="fchip' + (cur === f.key ? ' active' : '') + '" ' + attr + '="' + esc(f.key) + '">' + esc(f.label) + '</button>';
+  }
+  return '<nav class="gfilters" aria-label="全局任务筛选">' +
+    STATUS_FILTERS.map(function (f) { return chip(f, state.statusFilter, 'data-sfilter'); }).join('') +
+    '<span class="gsep" aria-hidden="true"></span>' +
+    kindFilters().map(function (f) { return chip(f, state.kindFilter, 'data-kfilter'); }).join('') +
+  '</nav>';
+}
+
+function modeNoteHtml() {
+  if (state.mode === 'defect') {
+    return '<div class="note bad"><b>缺陷点（当前行为）：</b>项目 agent-team-board 实际存在批量 Commit 任务 ' + COMMIT_BATCH +
+      '（状态可用上方「commit 批次状态」控件切换），但 <code>/api/batch/global</code> 聚合只读批量开发 / 批量完善账本——该任务在面板中不可见，汇总行不计入，搜索批次号无结果，类型筛选也没有「批量 Commit」档。</div>';
+  }
+  return '<div class="note good"><b>期望修复后：</b>聚合同时返回「在工作」的 commit 批次（unfinishedCommitBatches，排除已终止）——任务行展示状态、当前条目与「已提交」计数；类型筛选与搜索生效；点击行仅导航进入任务模块「批量 Commit」页签；批次已结束 / 终止后随轮询移出（把上方「commit 批次状态」切到「已结束」验证：行与汇总计数同步消失）。</div>';
+}
+
+function renderPanel() {
+  var body = document.getElementById('gbody');
+  if (!body || !state.open) return;
+
+  // 加载：骨架占位（场景「加载」或瞬时刷新）
+  if (state.scenario === 'loading' || state.loading) {
+    body.innerHTML = '<div class="gwrap">' +
+      '<div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div>' +
+      '<p class="muted small center">加载中…（真实实现为面板打开 / 2 秒轮询首载时的骨架占位，不阻塞关闭）</p></div>';
+    return;
+  }
+
+  // 空：无注册项目
+  if (state.scenario === 'empty') {
+    body.innerHTML = '<div class="gwrap"><div class="emptycard"><h3>尚无注册项目</h3>' +
+      '<p>全局总览聚合所有已注册项目的批量任务。请先在顶栏「＋ 新建」旁的项目选择器打开 / 注册项目，或运行 <code>atb serve</code> 在项目内初始化看板。</p></div></div>';
+    return;
+  }
+
+  var data = baseData();
+  var projects = data.projects;
+
+  var banner = '';
+  if (state.scenario === 'error') {
+    banner = '<div class="note warn"><b>全局任务加载失败：模拟网络错误（ECONNREFUSED）。</b>正在随轮询自动重试；也可刷新页面重试。以下为上次成功拉取的数据（保留显示，不抹掉）。</div>';
+  }
+
+  var filtered = projects.map(function (p) {
+    var tasks = visibleTasks(p).filter(function (t) {
+      if (state.statusFilter !== 'all' && statusKey(t) !== state.statusFilter) return false;
+      if (state.kindFilter !== 'all' && t.kind !== state.kindFilter) return false;
+      return taskMatches(t, p);
+    });
+    return { p: p, tasks: tasks };
+  });
+
+  var anyShown = filtered.some(function (g) { return g.tasks.length; });
+  var groupsHtml = filtered.map(function (g) {
+    if (!g.tasks.length) return '';
+    return '<section class="pgroup"><header class="pgroup-head"><span class="pname" title="' + esc(g.p.root) + '">' + esc(g.p.name) + '</span>' +
+      '<span class="muted small">' + g.tasks.length + ' 个在展示的任务</span></header>' +
+      g.tasks.map(function (t) { return taskRowHtml(t, g.p); }).join('') + '</section>';
+  }).join('');
+
+  var noMatch = '';
+  if (!anyShown) {
+    var hasFilter = state.statusFilter !== 'all' || state.kindFilter !== 'all' || state.q;
+    noMatch = hasFilter
+      ? '<div class="note">没有匹配的任务' +
+        (state.mode === 'defect' && state.q === COMMIT_BATCH.toLowerCase()
+          ? '——缺陷点：搜索该 commit 批次号永远无结果（服务端聚合未返回该任务）' : '') +
+        '。<button type="button" class="btn small" id="gClear">清空筛选与搜索</button></div>'
+      : '<div class="note">所有注册项目当前均无「在工作」的批量任务。</div>';
+  }
+
+  body.innerHTML =
+    '<div class="gwrap">' +
+      '<p class="gsummary">' + summaryLine(projects) + '</p>' +
+      banner +
+      chipsHtml() +
+      (groupsHtml || '') + noMatch +
+      modeNoteHtml() +
+      '<p class="muted small center">本页为离线演示：数据均为模拟，不调用服务、不执行 Git。</p>' +
+    '</div>';
+}
+
+function renderAll() {
+  var panel = document.getElementById('gpanel');
+  var btn = document.getElementById('btnGlobal');
+  if (state.open) {
+    panel.classList.remove('hidden');
+    btn.setAttribute('aria-expanded', 'true');
+    renderPanel();
+  } else {
+    panel.classList.add('hidden');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function simulateFetch() {
+  // 模拟一次轮询拉取：短暂骨架 → 重渲染（失败场景保持错误条）
+  state.loading = true;
+  renderPanel();
+  setTimeout(function () {
+    state.loading = false;
+    renderPanel();
+  }, 600);
+}
+
+// ---------- 事件绑定 ----------
+function bindOnce() {
+  document.getElementById('btnGlobal').addEventListener('click', function () {
+    state.open = !state.open;
+    renderAll();
+    if (state.open) simulateFetch();
+  });
+  document.getElementById('gClose').addEventListener('click', function () {
+    state.open = false;
+    renderAll();
+    document.getElementById('btnGlobal').focus();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && state.open) {
+      state.open = false;
+      renderAll();
+      document.getElementById('btnGlobal').focus();
+    }
+  });
+
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      state.mode = r.value;
+      if (state.kindFilter === 'commit' && state.mode === 'defect') state.kindFilter = 'all';
+      renderPanel();
+    });
+  });
+  document.getElementById('commitStatus').addEventListener('change', function (e) {
+    state.commitStatus = e.target.value;
+    renderPanel();
+    toast('已把 ' + COMMIT_BATCH + ' 切换为「' + statusLabel({ status: state.commitStatus, queued: false }) +
+      '」——观察全局任务面板（期望修复模式）中的行与汇总变化');
+  });
+  document.getElementById('scenario').addEventListener('change', function (e) {
+    state.scenario = e.target.value;
+    renderPanel();
+  });
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    state.theme = state.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', state.theme);
+  });
+  document.getElementById('gRefresh').addEventListener('click', function () {
+    toast('模拟一轮 2 秒轮询拉取：/api/batch/global（只读，不触发核对 / 锁）');
+    simulateFetch();
+  });
+
+  var input = document.getElementById('gSearch');
+  var t = null;
+  input.addEventListener('input', function () {
+    clearTimeout(t);
+    t = setTimeout(function () {
+      state.q = input.value.trim().toLowerCase();
+      renderPanel();
+    }, 180);
+  });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      clearTimeout(t);
+      state.q = input.value.trim().toLowerCase();
+      renderPanel();
+    }
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      if (input.value) { input.value = ''; state.q = ''; renderPanel(); }
+    }
+  });
+
+  // 面板内容事件委托：筛选 chips、行跳转、当前条目、清空筛选
+  document.getElementById('gbody').addEventListener('click', function (e) {
+    var sf = e.target.closest('[data-sfilter]');
+    if (sf) { state.statusFilter = sf.getAttribute('data-sfilter'); renderPanel(); return; }
+    var kf = e.target.closest('[data-kfilter]');
+    if (kf) { state.kindFilter = kf.getAttribute('data-kfilter'); renderPanel(); return; }
+    if (e.target.closest('#gClear')) {
+      state.statusFilter = 'all'; state.kindFilter = 'all'; state.q = '';
+      var inp = document.getElementById('gSearch'); if (inp) inp.value = '';
+      renderPanel(); return;
+    }
+    var cur = e.target.closest('.cur-item');
+    if (cur) {
+      e.stopPropagation();
+      toast('打开条目抽屉：' + cur.getAttribute('data-item') + '（演示：仅导航，无实际跳转）');
+      return;
+    }
+    var row = e.target.closest('.gtask');
+    if (row) {
+      var kind = row.getAttribute('data-kind');
+      var label = KIND_LABEL[kind] || kind;
+      toast('进入项目任务：' + row.getAttribute('data-project') + ' · ' + label + ' · ' + row.getAttribute('data-batch') +
+        '（仅导航：不创建任务、不执行 Git）');
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  bindOnce();
+  renderAll();
+});
+</script>
+</body>
+</html>

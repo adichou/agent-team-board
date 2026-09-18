@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260914-004 演示 · 已纳入版本的条目不应再出现在版本候选列表中</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1c2436; --border: #2a3450;
+    --text: #dbe2f4; --muted: #8b96b3; --link: #6ea8fe;
+    --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+    --err-bg: rgba(220, 38, 38, 0.10); --err-border: rgba(248, 113, 113, 0.35);
+    --ok-bg: rgba(34, 197, 94, 0.08); --ok-border: rgba(74, 222, 128, 0.35);
+    --info: #7dd3fc;
+    --primary: #3b82f6; --danger: #ef4444;
+    --chip-mute: #8b96b3; --chip-ok: #4ade80; --chip-run: #7dd3fc; --chip-fail: #f87171;
+    --mask: rgba(6, 10, 20, 0.55);
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  }
+  html[data-theme="light"] {
+    --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef1f8; --border: #d4dae8;
+    --text: #1f2740; --muted: #5f6a85; --link: #1d66d0;
+    --ok: #15803d; --err: #b91c1c; --warn: #b45309;
+    --err-bg: rgba(220, 38, 38, 0.08); --err-border: rgba(185, 28, 28, 0.35);
+    --ok-bg: rgba(34, 197, 94, 0.07); --ok-border: rgba(21, 128, 61, 0.35);
+    --info: #0369a1;
+    --primary: #2563eb; --danger: #dc2626;
+    --chip-mute: #5f6a85; --chip-ok: #15803d; --chip-run: #0369a1; --chip-fail: #b91c1c;
+    --mask: rgba(30, 40, 60, 0.35);
+    --shadow: 0 8px 30px rgba(30, 40, 60, 0.18);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 18px 16px 90px; }
+  a { color: var(--link); }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .sub code { background: var(--panel2); border-radius: 5px; padding: 1px 6px; }
+
+  /* ===== 演示控制面板 ===== */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  .demo-group { display: flex; align-items: center; gap: 8px; }
+  .lbl { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 99px; overflow: hidden; }
+  .seg button { appearance: none; border: 0; background: transparent; color: var(--muted); padding: 5px 14px; cursor: pointer; font-size: 12.5px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .seg button.on.bugmode { background: var(--danger); }
+  .ghost-btn { appearance: none; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .ghost-btn:hover { border-color: var(--primary); }
+  .observe { border-radius: 10px; padding: 9px 13px; font-size: 12.5px; margin-bottom: 14px; border: 1px solid; }
+  .observe.bug { background: var(--err-bg); border-color: var(--err-border); }
+  .observe.fixed { background: var(--ok-bg); border-color: var(--ok-border); }
+  .observe b { color: var(--err); }
+  .observe.fixed b { color: var(--ok); }
+  .observe ul { margin: 4px 0 0; padding-left: 18px; }
+  .observe li { margin: 1px 0; }
+
+  /* ===== 看板模拟（构建页） ===== */
+  .board { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .board-head { display: flex; align-items: center; gap: 10px; background: var(--panel); padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 700; font-size: 13px; }
+  .brand .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; background: var(--primary); margin-right: 6px; vertical-align: 0; }
+  .navtabs { display: flex; gap: 4px; margin-left: 8px; }
+  .navtab { appearance: none; border: 0; border-radius: 8px; background: transparent; color: var(--muted); padding: 4px 12px; cursor: default; font-size: 12.5px; }
+  .navtab.on { background: var(--panel2); color: var(--text); font-weight: 600; }
+  .subtabs { display: flex; gap: 16px; padding: 8px 14px 0; background: var(--panel); }
+  .subtab { appearance: none; background: none; border: 0; color: var(--muted); padding: 6px 2px 8px; cursor: default; font-size: 12.5px; border-bottom: 2px solid transparent; }
+  .subtab.on { color: var(--text); border-bottom-color: var(--primary); font-weight: 600; }
+  .toolbar { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 14px; background: var(--panel); }
+  .split { display: grid; grid-template-columns: 330px 1fr; gap: 0; background: var(--panel); }
+  @media (max-width: 880px) { .split { grid-template-columns: 1fr; } .vlist { border-right: 0 !important; border-bottom: 1px solid var(--border); } }
+  .vlist { border-right: 1px solid var(--border); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow: auto; }
+  .vcard { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; cursor: pointer; background: var(--panel2); }
+  .vcard.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .vcard .t { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .vcard .meta { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .card-acts { display: flex; gap: 6px; margin-top: 7px; }
+  .chip { border-radius: 99px; padding: 1px 9px; font-size: 11px; border: 1px solid; white-space: nowrap; }
+  .chip.mute { color: var(--chip-mute); border-color: var(--border); }
+  .chip.ok { color: var(--chip-ok); border-color: rgba(74, 222, 128, .4); }
+  .chip.run { color: var(--chip-run); border-color: rgba(125, 211, 252, .4); }
+  .chip.fail { color: var(--chip-fail); border-color: rgba(248, 113, 113, .4); }
+
+  .detail { padding: 14px 16px; min-height: 380px; }
+  .detail h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .detail .meta { color: var(--muted); font-size: 11.5px; margin: 2px 0 10px; }
+  .desc-block { margin-bottom: 12px; }
+  .desc-block .cap { color: var(--muted); font-size: 11.5px; display: block; margin-bottom: 2px; }
+  .items-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .item-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .item-id { font-weight: 600; white-space: nowrap; }
+  .item-title { color: var(--muted); flex: 1; min-width: 120px; }
+  .dup-badge { border: 1px solid var(--err-border); background: var(--err-bg); color: var(--err); border-radius: 99px; font-size: 11px; padding: 1px 8px; white-space: nowrap; }
+  .item-row.has-dup { background: var(--err-bg); border-radius: 8px; padding: 6px 8px; border-top-color: transparent; }
+  .empty-mini { color: var(--muted); font-size: 12.5px; padding: 8px 2px; }
+
+  /* ===== 按钮 ===== */
+  .btn { appearance: none; border: 1px solid var(--border); background: var(--panel2); color: var(--text); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 12.5px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn.small { padding: 3px 10px; font-size: 12px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.quiet { background: transparent; color: var(--muted); }
+  .icon-btn { appearance: none; border: 0; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+  .icon-btn:hover { background: var(--panel2); color: var(--text); }
+
+  select { appearance: none; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 3px 8px; font-size: 12px; max-width: 130px; }
+  select:disabled { opacity: .5; }
+  input[type="text"] { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font-size: 12.5px; width: 100%; }
+
+  /* ===== 侧拉选单面板 ===== */
+  .panel-mask { position: absolute; inset: 0; background: var(--mask); border-radius: 12px; }
+  .side-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(430px, 92%); background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: var(--shadow); }
+  .board { position: relative; }
+  .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .panel-head h3 { margin: 0; font-size: 14.5px; }
+  .panel-scope { color: var(--muted); font-size: 11.5px; margin: 3px 0 0; }
+  .panel-body { flex: 1; overflow: auto; padding: 12px 14px; }
+  .panel-foot { padding: 10px 14px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+  .pick-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .pick-bar .cnt { color: var(--muted); font-size: 12px; }
+  .cand { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .cand input[type="checkbox"] { accent-color: var(--primary); width: 15px; height: 15px; flex: none; }
+  .cand .cand-title { flex: 1; min-width: 150px; }
+  .cand .cand-title .id { font-weight: 600; }
+  .cand .no-commit { color: var(--muted); font-size: 11.5px; }
+  .occupied-note { border-left: 3px solid var(--ok-border); background: var(--ok-bg); border-radius: 6px; padding: 6px 10px; font-size: 12px; margin-bottom: 8px; color: var(--muted); }
+  .occupied-note b { color: var(--ok); }
+  .panel-err { border: 1px solid var(--err-border); background: var(--err-bg); color: var(--err); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; margin: 8px 0; display: flex; align-items: center; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+  .field { display: block; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .field input { margin-top: 4px; }
+  .loading-row { color: var(--muted); padding: 6px 2px; }
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== toast ===== */
+  .toast-box { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 60; align-items: center; }
+  .toast { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px; font-size: 12.5px; box-shadow: var(--shadow); animation: pop .18s ease-out; max-width: 80vw; }
+  .toast.ok { border-color: rgba(74, 222, 128, .5); }
+  .toast.err { border-color: var(--err-border); color: var(--err); }
+  @keyframes pop { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .foot-note { color: var(--muted); font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260914-004 · 已纳入版本的条目不应再出现在版本候选列表中</h1>
+  <p class="sub">构建页 → 版本计划：演示「＋ 新建版本」与「＋ 添加条目」候选列表对<b>已占用条目</b>的处理。对照 <code>scripts/web/build.js</code> <code>openCreatePanel / openAddPanel</code> 与 <code>scripts/server.mjs</code> <code>/api/build/candidates</code> 的现状实现。</p>
+
+  <div class="demo-bar">
+    <div class="demo-group">
+      <span class="lbl">模式</span>
+      <div class="seg" id="modeSeg">
+        <button data-mode="bug" class="on bugmode">缺陷现状</button>
+        <button data-mode="fixed">期望修复</button>
+      </div>
+    </div>
+    <div class="demo-group">
+      <span class="lbl">面板场景</span>
+      <div class="seg" id="sceneSeg">
+        <button data-scene="normal" class="on">正常</button>
+        <button data-scene="loading">加载中</button>
+        <button data-scene="error">读取失败</button>
+        <button data-scene="empty">空态</button>
+      </div>
+    </div>
+    <div class="demo-group">
+      <button class="ghost-btn" id="themeBtn">浅色 / 深色</button>
+      <button class="ghost-btn" id="resetBtn">重置演示数据</button>
+    </div>
+  </div>
+
+  <div class="observe bug" id="observe"></div>
+
+  <div class="board">
+    <div class="board-head">
+      <span class="brand"><span class="dot"></span>Agent Team Board</span>
+      <div class="navtabs">
+        <span class="navtab">看板</span><span class="navtab on">构建</span><span class="navtab">发布</span>
+      </div>
+    </div>
+    <div class="subtabs">
+      <span class="subtab on">版本计划</span><span class="subtab">分支浏览</span>
+    </div>
+    <div class="toolbar"><button class="btn primary" id="newVerBtn">＋ 新建版本</button></div>
+    <div class="split">
+      <div class="vlist" id="vlist"></div>
+      <div class="detail" id="detail"></div>
+    </div>
+    <div id="panelHost"></div>
+  </div>
+
+  <p class="foot-note">说明：演示为界面行为模拟，不执行真实 git 合并。「合并入 main」按钮仅提示重复纳入的后果口径：已在 main 的提交再合并返回 Already up to date、仍记成功（见 <code>scripts/lib/build-git.mjs</code>）。</p>
+</div>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+'use strict';
+/* ===== 演示数据（样例，非真实看板数据） ===== */
+const HASHES = [
+  '3f9c12ab4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a',
+  '8e2d44c10f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c',
+  'c71a09e3d4c5b6a7988071625344556677889900',
+  '55b8f0d2a1b2c3d4e5f60718293a4b5c6d7e8f9',
+];
+const seedItems = () => ([
+  { id: 'REQ-20260913-018', title: '批量执行轮次支持暂停与恢复', commits: [HASHES[0], HASHES[1]] },
+  { id: 'BUG-20260913-001', title: '未完成条目不应出现在版本候选中', commits: [HASHES[2]] },
+  { id: 'REQ-20260912-040', title: '导出报表性能优化', commits: [] },
+  { id: 'REQ-20260914-002', title: '构建选单全选交互修复', commits: [HASHES[3]] },
+]);
+const STATUS_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', failed: '失败' };
+const STATUS_CLS = { draft: 'mute', merging: 'run', merged: 'ok', failed: 'fail' };
+
+const state = {
+  mode: 'bug',        // bug = 缺陷现状 | fixed = 期望修复
+  scene: 'normal',    // normal | loading | error | empty（影响下一次打开的面板）
+  items: seedItems(),
+  versions: [
+    { id: 'BLD-20260914-001', name: '版本 20260914-1130', status: 'draft', items: ['REQ-20260913-018'] },
+    { id: 'BLD-20260914-002', name: '版本 20260914-1235', status: 'draft', items: [] },
+  ],
+  selVerId: 'BLD-20260914-002',
+  panel: null,        // { kind:'create'|'add', verId, phase:'loading'|'error'|'ready', picked:Set, commits:{}, name, err }
+  loadTimer: null,
+};
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const short = (h) => String(h || '').slice(0, 8);
+const verSeq = () => state.versions.length + 1;
+
+function occupiedCount(itemId) {
+  return state.versions.filter((v) => v.items.includes(itemId)).length;
+}
+function occupiedIn(itemId, exceptVerId) {
+  return state.versions.some((v) => v.id !== exceptVerId && v.items.includes(itemId));
+}
+function itemById(id) { return state.items.find((x) => x.id === id); }
+
+/* 候选口径：bug 现状 = 仅 done（演示条目均为 done），不查占用；fixed = 排除已纳入任何版本的条目 */
+function candidatesFor(kind, verId) {
+  let list = state.items;
+  if (kind === 'add') {
+    const v = state.versions.find((x) => x.id === verId);
+    const have = new Set(v ? v.items : []);
+    list = list.filter((x) => !have.has(x.id)); // 两口径都排除本版本已有（现状即如此）
+  }
+  if (state.mode === 'fixed') {
+    list = list.filter((x) => occupiedCount(x.id) === 0); // 修复口径：排除已纳入任何版本的条目
+  }
+  return list;
+}
+
+function toast(msg, cls) {
+  const box = $('#toastBox');
+  const t = document.createElement('div');
+  t.className = 'toast ' + (cls || '');
+  t.textContent = msg;
+  box.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; }, 2600);
+  setTimeout(() => t.remove(), 3000);
+}
+
+/* ===== 观察框 ===== */
+function renderObserve() {
+  const el = $('#observe');
+  if (state.mode === 'bug') {
+    el.className = 'observe bug';
+    el.innerHTML = '<b>缺陷现状：</b>已纳入「版本 20260914-1130」的 <b>REQ-20260913-018</b> 仍出现在「＋ 新建版本」与「＋ 添加条目」候选中，勾选提交即造成同一单挂在多个版本。'
+      + '<ul><li>把 REQ-20260913-018 加入「版本 20260914-1235」试试——提交成功，详情行出现红色「已同时关联 2 个版本」标记；</li>'
+      + '<li>点卡片上「合并入 main」查看重复合并的后果说明；</li>'
+      + '<li>「AI 完善」后果：两个版本的提示词都会把该条目列为关联条目。</li></ul>';
+  } else {
+    el.className = 'observe fixed';
+    el.innerHTML = '<b>期望修复：</b>已纳入任何版本（计划中 / 合并中 / 已合并 / 失败）的条目不再出现在任何候选列表。'
+      + '<ul><li>「＋ 新建版本」与「＋ 添加条目」候选中均没有 REQ-20260913-018（本演示中它已被 BLD-20260914-001 占用）；</li>'
+      + '<li>占用可释放：选中 BLD-20260914-001，在详情里把该条目「移出」——它立即回到候选列表（删除版本同理）；</li>'
+      + '<li>候选顶部出现绿色提示行，说明被排除的占用条目（界面展示细节，文案待确认）。</li></ul>';
+  }
+}
+
+/* ===== 版本列表 / 详情 ===== */
+function chip(st) { return `<span class="chip ${STATUS_CLS[st] || 'mute'}">${STATUS_LABEL[st] || st}</span>`; }
+
+function renderVersions() {
+  const box = $('#vlist');
+  if (!state.versions.length) {
+    box.innerHTML = '<div class="empty-mini">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
+    return;
+  }
+  box.innerHTML = state.versions.map((v) => `
+    <div class="vcard${v.id === state.selVerId ? ' sel' : ''}" data-ver="${esc(v.id)}" role="button" tabindex="0">
+      <div class="t"><strong>${esc(v.name || v.id)}</strong> ${chip(v.status)}</div>
+      <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单</div>
+      <div class="card-acts">
+        <button class="btn small" data-merge="${esc(v.id)}">合并入 main</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderDetail() {
+  const v = state.versions.find((x) => x.id === state.selVerId);
+  const box = $('#detail');
+  if (!v) { box.innerHTML = '<div class="empty-mini">点击左侧版本查看详情</div>'; return; }
+  const rows = v.items.map((id) => {
+    const it = itemById(id);
+    const dup = occupiedCount(id);
+    return `
+    <div class="item-row${dup > 1 ? ' has-dup' : ''}" data-item="${esc(id)}">
+      <span class="item-id">${esc(id)}</span>
+      <span class="item-title">${esc(it ? it.title : '')}</span>
+      <select disabled><option>${esc(short(it && it.commits[0]))}</option></select>
+      ${dup > 1 ? `<span class="dup-badge" title="同一单被多个版本关联，合并时同一 commit 会被合并两次">已同时关联 ${dup} 个版本</span>` : ''}
+      <button class="btn small quiet" data-remove="${esc(id)}" title="移出该条目（连同 commit 关联）">移出</button>
+    </div>`;
+  }).join('');
+  box.innerHTML = `
+    <h3>${esc(v.name || v.id)} ${chip(v.status)}</h3>
+    <div class="meta">${esc(v.id)} · 目标分支 main · 更新时间 —</div>
+    <div class="desc-block"><span class="cap">版本描述</span><span style="color:var(--muted)">（无描述，点击补充）</span></div>
+    <div class="items-head"><strong>关联条目与 commit</strong><button class="btn small" id="addItemBtn">＋ 添加条目</button></div>
+    ${rows || '<p class="empty-mini">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}`;
+}
+
+/* ===== 侧拉面板 ===== */
+function openPanel(kind) {
+  clearTimeout(state.loadTimer);
+  const verId = kind === 'add' ? state.selVerId : null;
+  state.panel = { kind, verId, phase: 'loading', picked: new Set(), commits: {}, name: '', err: null };
+  renderPanel();
+  if (state.scene === 'loading') return; // 保持加载态（模拟接口未返回）
+  state.loadTimer = setTimeout(() => {
+    if (!state.panel || state.panel.phase !== 'loading') return;
+    if (state.scene === 'error') { state.panel.phase = 'error'; renderPanel(); return; }
+    state.panel.phase = 'ready';
+    const cands = state.scene === 'empty' ? [] : candidatesFor(kind, verId);
+    state.panel.candidates = cands;
+    for (const it of cands) if (it.commits.length) state.panel.commits[it.id] = it.commits[0];
+    renderPanel();
+  }, 550);
+}
+
+function panelScope(p) {
+  if (p.kind === 'create') {
+    return state.mode === 'fixed'
+      ? '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目'
+      : '仅已完成（done）的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目';
+  }
+  return state.mode === 'fixed'
+    ? '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已在本版本或其他版本中的条目不再出现）'
+    : '仅已完成（done）的需求单 / Bug 单可加入本版本（已在本版本中的条目不再出现）';
+}
+
+function renderPanel() {
+  const host = $('#panelHost');
+  const p = state.panel;
+  if (!p) { host.innerHTML = ''; return; }
+  const title = p.kind === 'create' ? '新建版本' : '添加条目';
+  const footLabel = p.kind === 'create' ? '创建版本计划' : '添加所选条目';
+  let body = '';
+  if (p.phase === 'loading') {
+    body = '<div class="loading-row"><span class="spin"></span>正在读取条目…</div>';
+  } else if (p.phase === 'error') {
+    body = `<div class="panel-err">读取候选失败：看板服务暂不可用（模拟）
+      <button class="btn small" id="panelRetry">重试</button></div>`;
+  } else {
+    const cands = p.candidates || [];
+    const occupiedHint = state.mode === 'fixed' && p.kind === 'create'
+      ? `<div class="occupied-note">已排除 <b>${state.items.filter((x) => occupiedCount(x.id) > 0).length}</b> 个已纳入其他版本的条目（如 REQ-20260913-018 → BLD-20260914-001）</div>` : '';
+    if (!cands.length) {
+      body = occupiedHint + (state.scene === 'empty'
+        ? (state.mode === 'fixed'
+            ? '<div class="empty-mini">暂无可纳入版本的条目：已完成（done）且未纳入其他版本的条目为空</div>'
+            : '<div class="empty-mini">暂无可纳入版本的条目：仅已完成（done）的需求单 / Bug 单会出现在候选中</div>')
+        : '<div class="empty-mini">暂无可纳入版本的条目：仅已完成（done）的需求单 / Bug 单会出现在候选中</div>');
+    } else {
+      const skipped = cands.filter((x) => !x.commits.length).length;
+      const rows = cands.map((it) => {
+        const sel = it.commits.length > 0;
+        const checked = p.picked.has(it.id);
+        const commitSel = sel
+          ? `<select data-commit="${esc(it.id)}"${checked ? '' : 'disabled'}>${it.commits.map((h) => `<option value="${esc(h)}"${p.commits[it.id] === h ? ' selected' : ''}>${esc(short(h))}</option>`).join('')}</select>`
+          : '<span class="no-commit">暂无关联提交（先完成开发提交）</span>';
+        return `<label class="cand">
+          <input type="checkbox" data-pick="${esc(it.id)}"${checked ? ' checked' : ''}${sel ? '' : ' disabled'}>
+          <span class="cand-title"><span class="id">${esc(it.id)}</span> ${esc(it.title)}</span>${commitSel}
+        </label>`;
+      }).join('');
+      body = occupiedHint + `
+        <div class="pick-bar">
+          <button class="btn small" id="pickAll">全选</button>
+          <button class="btn small" id="pickNone">全不选</button>
+          <span class="cnt">已选 ${p.picked.size} 项${skipped ? ` · ${skipped} 个条目暂无关联提交将被跳过` : ''}</span>
+        </div>
+        ${rows}
+        ${p.kind === 'create' ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）<input type="text" id="verName" value="${esc(p.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}
+        ${p.err ? `<div class="panel-err">${esc(p.err)}</div>` : ''}`;
+    }
+  }
+  host.innerHTML = `
+    <div class="panel-mask" id="panelMask"></div>
+    <aside class="side-panel" role="dialog" aria-label="${esc(title)}">
+      <div class="panel-head">
+        <div><h3>${esc(title)}</h3><p class="panel-scope">${esc(panelScope(p))}</p></div>
+        <button class="icon-btn" id="panelClose" aria-label="关闭面板">✕</button>
+      </div>
+      <div class="panel-body">${body}</div>
+      <div class="panel-foot"><button class="btn primary" id="panelSubmit" ${p.phase !== 'ready' ? 'disabled' : ''}>${esc(footLabel)}</button></div>
+    </aside>`;
+}
+
+function submitPanel() {
+  const p = state.panel;
+  if (!p || p.phase !== 'ready') return;
+  const ids = [...p.picked];
+  if (!ids.length) {
+    p.err = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）';
+    renderPanel();
+    return;
+  }
+  const dupIds = ids.filter((id) => occupiedIn(id, p.kind === 'add' ? p.verId : null));
+  if (p.kind === 'create') {
+    const name = (p.name || '').trim() || `版本 20260914-1${30 + verSeq()}`;
+    const id = `BLD-20260914-${String(verSeq()).padStart(3, '0')}`;
+    state.versions.push({ id, name, status: 'draft', items: ids });
+    state.selVerId = id;
+    state.panel = null;
+    renderAll();
+    toast('✓ 版本计划已创建' + (dupIds.length ? `（注意：${dupIds.join('、')} 已同时关联其他版本）` : ''), dupIds.length ? 'err' : 'ok');
+    if (dupIds.length && state.mode === 'bug') toast('缺陷后果：同一 commit 将在两个版本合并时被合并两次（第二次 Already up to date 仍记成功）', 'err');
+  } else {
+    const v = state.versions.find((x) => x.id === p.verId);
+    v.items.push(...ids);
+    state.panel = null;
+    renderAll();
+    toast('✓ 已添加条目' + (dupIds.length ? `（${dupIds.join('、')} 已同时关联其他版本）` : ''), dupIds.length ? 'err' : 'ok');
+  }
+}
+
+/* ===== 渲染总入口 ===== */
+function renderAll() {
+  renderObserve();
+  renderVersions();
+  renderDetail();
+  renderPanel();
+}
+
+/* ===== 事件委托 ===== */
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.closest('#modeSeg')) {
+    state.mode = t.dataset.mode;
+    document.querySelectorAll('#modeSeg button').forEach((b) => b.classList.toggle('on', b === t));
+    if (state.panel && state.panel.phase === 'ready') {
+      const cands = candidatesFor(state.panel.kind, state.panel.verId);
+      state.panel.candidates = cands;
+      state.panel.picked = new Set([...state.panel.picked].filter((id) => cands.some((x) => x.id === id)));
+      for (const it of cands) if (it.commits.length && !state.panel.commits[it.id]) state.panel.commits[it.id] = it.commits[0];
+    }
+    renderAll();
+    return;
+  }
+  if (t.closest('#sceneSeg')) {
+    state.scene = t.dataset.scene;
+    document.querySelectorAll('#sceneSeg button').forEach((b) => b.classList.toggle('on', b === t));
+    toast(`场景已切换：下次打开面板按「${{ normal: '正常', loading: '加载中（保持读取态）', error: '读取失败（可重试）', empty: '空态' }[state.scene]}」展示`);
+    return;
+  }
+  if (t.id === 'themeBtn') {
+    const html = document.documentElement;
+    html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+    return;
+  }
+  if (t.id === 'resetBtn') {
+    state.items = seedItems();
+    state.versions = [
+      { id: 'BLD-20260914-001', name: '版本 20260914-1130', status: 'draft', items: ['REQ-20260913-018'] },
+      { id: 'BLD-20260914-002', name: '版本 20260914-1235', status: 'draft', items: [] },
+    ];
+    state.selVerId = 'BLD-20260914-002';
+    state.panel = null;
+    renderAll();
+    toast('已重置演示数据');
+    return;
+  }
+  if (t.id === 'newVerBtn') { openPanel('create'); return; }
+  if (t.id === 'addItemBtn') { openPanel('add'); return; }
+  if (t.id === 'panelClose' || t.id === 'panelMask') { clearTimeout(state.loadTimer); state.panel = null; renderPanel(); return; }
+  if (t.id === 'panelRetry') {
+    state.panel.phase = 'loading';
+    renderPanel();
+    state.loadTimer = setTimeout(() => {
+      if (!state.panel || state.panel.phase !== 'loading') return;
+      state.panel.phase = 'ready';
+      const cands = candidatesFor(state.panel.kind, state.panel.verId);
+      state.panel.candidates = cands;
+      for (const it of cands) if (it.commits.length) state.panel.commits[it.id] = it.commits[0];
+      renderPanel();
+      toast('✓ 候选读取成功（重试成功）', 'ok');
+    }, 550);
+    return;
+  }
+  if (t.id === 'panelSubmit') { submitPanel(); return; }
+  if (t.id === 'pickAll') {
+    for (const it of state.panel.candidates || []) if (it.commits.length) state.panel.picked.add(it.id);
+    renderPanel(); return;
+  }
+  if (t.id === 'pickNone') { state.panel.picked.clear(); renderPanel(); return; }
+  if (t.dataset.merge) {
+    const v = state.versions.find((x) => x.id === t.dataset.merge);
+    const dups = v ? v.items.filter((id) => occupiedCount(id) > 1) : [];
+    toast(dups.length
+      ? `「${v.name}」包含已同时关联其他版本的条目（${dups.join('、')}）：合并时这些 commit 会被再次合并——已在 main 的提交返回 Already up to date 仍记成功，产生冗余合并记录（演示不执行真实合并）`
+      : '演示不执行真实合并：确认框将列出本版本 commit 清单，逐条 merge --no-ff 合并入 main', dups.length ? 'err' : 'ok');
+    return;
+  }
+  if (t.dataset.remove) {
+    const id = t.dataset.remove;
+    for (const v of state.versions) {
+      const i = v.items.indexOf(id);
+      if (i !== -1 && v.id === state.selVerId) v.items.splice(i, 1);
+    }
+    renderAll();
+    toast(`✓ 已移出条目 ${id}` + (state.mode === 'fixed' ? '（占用已释放，重新出现在候选列表）' : ''), 'ok');
+    return;
+  }
+  const card = t.closest('.vcard');
+  if (card && !t.dataset.merge) { state.selVerId = card.dataset.ver; renderAll(); }
+});
+
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.type === 'checkbox' && el.dataset.pick) {
+    if (el.checked) state.panel.picked.add(el.dataset.pick);
+    else state.panel.picked.delete(el.dataset.pick);
+    renderPanel();
+    return;
+  }
+  if (el.tagName === 'SELECT' && el.dataset.commit) {
+    state.panel.commits[el.dataset.commit] = el.value;
+    return;
+  }
+  if (el.id === 'verName') { state.panel.name = el.value; }
+});
+
+renderAll();
+</script>
+</body>
+</html>

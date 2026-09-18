@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-020 演示 · 看板整页空白不渲染（app.js 语法错误）</title>
+<style>
+  /* ---------- 主题变量（口径取自 scripts/web/style.css 深浅色，纯离线单文件） ---------- */
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --ok: #16a34a; --warn: #dc2626; --info: #2563eb;
+    --chip-req: #4f46e5; --chip-bug: #e11d48;
+    --soft: rgba(127,140,170,.08); --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+  }
+  [data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e6ebf3; --muted: #8b98ad;
+    --border: #2a3446; --primary: #3b82f6; --ok: #4ade80; --warn: #f87171; --info: #60a5fa;
+    --chip-req: #6366f1; --chip-bug: #fb7185;
+    --soft: rgba(139,152,173,.10); --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif; padding: 18px; }
+  h1, h2, h3, h4, p { margin: 0; }
+  button { font: inherit; }
+
+  /* ---------- 演示头 + 控制条 ---------- */
+  .demo-head h1 { font-size: 16px; margin-bottom: 2px; }
+  .demo-head .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .ctrlbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .ctrl-label { font-size: 12px; color: var(--muted); flex: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button { appearance: none; border: none; background: transparent; color: var(--muted); font-size: 12px; padding: 5px 10px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; font-weight: 600; }
+  .seg.warnseg button[aria-pressed="true"] { background: var(--warn); }
+  .ghost { appearance: none; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .ghost:hover { color: var(--text); border-color: var(--muted); }
+
+  /* ---------- 看板复刻（顶栏 / 副标题行 / 内容区） ---------- */
+  .board { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .topbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand .logo { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, var(--primary), var(--chip-req)); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+  .brand h1 { font-size: 14px; }
+  .brand .path { display: block; color: var(--muted); font-size: 11px; }
+  .poll { color: var(--muted); font-size: 11px; }
+  .module-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+  .view-tab { appearance: none; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 8px; padding: 4px 12px; font-size: 12.5px; cursor: pointer; }
+  .view-tab.active { color: var(--primary); border-color: var(--primary); background: var(--soft); font-weight: 600; }
+  .board[data-scenario="defect"] .view-tab { cursor: not-allowed; }
+  .top-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+  .project-sel { appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 4px 8px; font-size: 12px; max-width: 140px; }
+  .btn { appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 11.5px; }
+
+  .page-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 14px; background: var(--bg); }
+  .module-sub { color: var(--muted); font-size: 12px; }
+  .locate-group { display: flex; gap: 6px; align-items: stretch; }
+  .sort-select { appearance: none; border: 1px solid var(--border); background: var(--panel); color: var(--muted); border-radius: 8px; padding: 0 6px; font-size: 12px; }
+  .search-box { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 0 8px; height: 30px; min-width: 240px; }
+  .search-box .scope { color: var(--primary); font-size: 11.5px; border: 1px solid var(--border); border-radius: 99px; padding: 0 6px; background: var(--soft); flex: none; }
+  .search-box input { appearance: none; border: none; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; outline: none; width: 100%; }
+  .search-box input::placeholder { color: var(--muted); }
+  .kbd-hint { border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font-size: 10.5px; padding: 0 4px; background: var(--soft); flex: none; }
+
+  .content { min-height: 340px; padding: 0; display: flex; }
+
+  /* 缺陷态：内容区整片空白（DOM 里所有 section[id] 带 hidden，无人渲染） */
+  .blank-note { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .blank-note .demo-tag { border: 1px dashed var(--border); color: var(--muted); font-size: 12px; border-radius: 10px; padding: 14px 18px; text-align: center; max-width: 430px; }
+  .blank-note .demo-tag b { color: var(--warn); }
+
+  /* 需求视图：左缘纵向筛选条 + 卡片列表（宽屏并排，窄屏折行） */
+  .req-view { display: flex; flex: 1; min-width: 0; }
+  .filter-bar { display: flex; flex-direction: column; gap: 8px; padding: 14px 10px; width: 64px; flex: none; border-right: 1px solid var(--border); }
+  .filter-chip { appearance: none; writing-mode: vertical-rl; text-orientation: mixed; display: flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 10px; min-height: 76px; padding: 10px 5px; font-size: 12px; font-weight: 550; cursor: pointer; }
+  .filter-chip.active { color: var(--primary); border-color: var(--primary); background: var(--soft); }
+  .filter-count { opacity: .72; }
+  .req-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+  .req-row { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; }
+  .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--muted); }
+  .cid.req { color: var(--chip-req); } .cid.bug { color: var(--chip-bug); }
+  .refine-badge { appearance: none; border-radius: 99px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 10.5px; padding: 0 7px; cursor: default; }
+  .refine-badge.rf-doing { color: var(--info); border-color: var(--info); }
+  .card-title { font-weight: 600; margin-top: 3px; font-size: 13px; }
+  .card-meta { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .list-note { color: var(--muted); font-size: 11px; }
+
+  /* 营销视图（复刻 marketing.js 概览结构，profile 为本仓真实数据） */
+  .mkt-view { flex: 1; min-width: 0; padding: 12px 14px; }
+  .mkt-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 12px; }
+  .mkt-tab { border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .mkt-tab.active { color: var(--primary); border-color: var(--primary); background: var(--panel); font-weight: 600; }
+  .mkt-ai-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .mkt-ai-row .muted { color: var(--muted); font-size: 11.5px; }
+  .mkt-cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+  .mkt-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+  .mkt-card-label { color: var(--muted); font-size: 12px; }
+  .mkt-card-value { margin-top: 4px; font-size: 17px; font-weight: 600; }
+  .mkt-card-hint { margin-top: 2px; color: var(--muted); font-size: 12px; }
+  .mkt-summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+  .mkt-block { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; min-width: 0; }
+  .mkt-block h4 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .mkt-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12.5px; }
+  .mkt-dl dt { color: var(--muted); white-space: nowrap; }
+  .mkt-dl dd { margin: 0; }
+  .mkt-runs { margin-top: 12px; width: 100%; }
+  .muted { color: var(--muted); } .muted.small { font-size: 11.5px; }
+  .mkt-phase { max-width: 560px; margin: 48px auto; text-align: center; }
+  .empty-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; text-align: center; }
+  .empty-card h2 { font-size: 14px; margin-bottom: 6px; }
+  .empty-card p { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .notice { border-radius: 8px; border: 1px solid var(--border); padding: 6px 10px; font-size: 12px; margin: 10px 0; }
+  .notice.err { color: var(--warn); border-color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 模拟控制台（node --check / boot 链路对照） ---------- */
+  .console { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-top: 14px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; overflow: hidden; }
+  .console .con-head { padding: 5px 10px; border-bottom: 1px solid var(--border); color: var(--muted); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .console .con-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; color: var(--muted); white-space: pre-wrap; }
+  .console .err { color: var(--warn); }
+  .console .okc { color: var(--ok); }
+  .console .dim { opacity: .75; }
+
+  /* ---------- 轻提示 toast ---------- */
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 16px); background: var(--panel); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 10px; padding: 8px 14px; font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; max-width: min(560px, 90vw); z-index: 9; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: var(--warn); color: var(--warn); }
+
+  @media (max-width: 760px) {
+    .mkt-cards, .mkt-summary { grid-template-columns: minmax(0,1fr); }
+    .req-view { flex-direction: row; }
+    .top-actions { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="demo-head">
+  <h1>BUG-20260910-020 · 看板整页空白不渲染（app.js 语法错误）</h1>
+  <p class="sub">对照缺陷形态与修复后期望形态：同一份静态 index.html 骨架，差别只在 app.js 能否解析执行。营销档案数据取自本仓真实 profile（阶段=探索、intro 已从 README 生成，定价未设定）；需求列表为示意数据。</p>
+</header>
+
+<div class="ctrlbar">
+  <span class="ctrl-label">情景：</span>
+  <div class="seg warnseg" id="segScenario" role="group" aria-label="情景切换">
+    <button type="button" data-v="defect" aria-pressed="true">缺陷形态（现状）</button>
+    <button type="button" data-v="fixed" aria-pressed="false">修复后（期望）</button>
+  </div>
+  <span class="ctrl-label">营销模块状态：</span>
+  <div class="seg" id="segMkt" role="group" aria-label="营销模块状态">
+    <button type="button" data-v="ready" aria-pressed="true">正常</button>
+    <button type="button" data-v="loading" aria-pressed="false">加载</button>
+    <button type="button" data-v="error" aria-pressed="false">读取失败</button>
+    <button type="button" data-v="empty" aria-pressed="false">未初始化</button>
+  </div>
+  <button type="button" class="ghost" id="btnDeepLink" title="模拟浏览器打开 …?project=<项目根>&view=marketing">模拟深链 view=marketing</button>
+  <button type="button" class="ghost" id="btnTheme">深浅色</button>
+</div>
+
+<!-- ======================= 看板复刻 ======================= -->
+<div class="board" id="board" data-scenario="defect" data-view="status">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▦</span>
+      <span>
+        <h1>智能体团队看板</h1>
+        <span class="path">docs/agent-team-board</span>
+      </span>
+    </div>
+    <span class="poll" title="轮询状态">●</span>
+    <nav class="module-nav" aria-label="模块导航" id="moduleNav">
+      <button type="button" class="view-tab" data-view="oncall">讨论</button>
+      <button type="button" class="view-tab active" data-view="status">需求</button>
+      <button type="button" class="view-tab" data-view="runs">任务</button>
+      <button type="button" class="view-tab" data-view="files">文件</button>
+      <button type="button" class="view-tab" data-view="marketing">营销</button>
+      <button type="button" class="view-tab" data-view="settings">设置</button>
+    </nav>
+    <div class="top-actions">
+      <select class="project-sel" title="切换项目看板"><option>agent-team-board</option></select>
+      <button type="button" class="btn">管理项目</button>
+      <button type="button" class="btn">全局</button>
+      <button type="button" class="btn">快捷键 ?</button>
+      <button type="button" class="btn primary">＋ 新建</button>
+    </div>
+  </header>
+
+  <section class="page-head">
+    <p class="module-sub" id="moduleSub">从想法到验收，跟进每一项工作</p>
+    <div class="locate-group">
+      <select class="sort-select" title="列表排序（更新 / 创建 / 单号）" id="reqSort">
+        <option>最新更新</option><option>最早更新</option><option>最新创建</option><option>最早创建</option><option>单号</option>
+      </select>
+      <div class="search-box">
+        <span aria-hidden="true">⌕</span>
+        <span class="scope" id="searchScope">需求</span>
+        <input type="search" placeholder="搜需求 / Bug / 文档…" aria-label="搜索当前模块" id="searchInput">
+        <kbd class="kbd-hint">/</kbd>
+      </div>
+    </div>
+  </section>
+
+  <main class="content" id="content"><!-- 状态切换渲染区 --></main>
+</div>
+
+<!-- ======================= 模拟控制台 ======================= -->
+<div class="console">
+  <div class="con-head">
+    <span>控制台对照（$ 为终端命令，其余为浏览器控制台）</span>
+    <span class="dim" id="conState">情景：缺陷形态</span>
+  </div>
+  <div class="con-body" id="conBody"></div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const board = $('#board'), content = $('#content'), toastEl = $('#toast');
+  const state = { scenario: 'defect', view: 'status', mkt: 'ready' };
+  let toastTimer = null, mktFakeTimer = null;
+
+  function toast(msg, isErr) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  /* ---------- 数据（营销 profile 为本仓真实档案；需求列表为示意） ---------- */
+  const PROFILE = {
+    stageLabel: '探索', stageHint: '探索 / 验证 / 上线 / 增长', stageGoal: null, metric: null,
+    audience: null, pain: null, diff: null, pricingSet: false,
+    intro: 'ZCode 插件：需求 / Bug 的文件化管理 + Agent TDD 开发流程 + 本地网页状态板。',
+  };
+  const MODULE_SUB = {
+    status: '从想法到验收，跟进每一项工作',
+    marketing: '项目营销档案：定位、证据与定价版本',
+    oncall: '开放式讨论，看板沉淀成果',
+    runs: '进度、队列与结果集中在这里',
+    files: '项目资料与源码，专注阅读',
+    settings: '',
+  };
+  const FILTERS = [
+    ['submitted', '待接受', 3], ['accepted', '已接受', 2], ['planned', '已计划', 1],
+    ['developing', '开发中', 0], ['confirming', '待测试', 0], ['done', '已完成', 5],
+  ];
+  const REQ_ROWS = [
+    { id: 'REQ-20260910-019', kind: 'req', filter: 'planned', title: '营销模块：概览 / 定位与定价 / 渠道与行动 / 效果与复盘', meta: '已计划 · 2026-09-10 更新', badge: '' },
+    { id: 'REQ-20260910-022', kind: 'req', filter: 'accepted', title: 'project-growth 工作流：AI 任务面板 / 草稿采纳 / 运行记录', meta: '已接受 · 2026-09-10 更新', badge: '未完善' },
+    { id: 'BUG-20260910-020', kind: 'bug', filter: 'accepted', title: '看板整页空白不渲染：app.js 批量任务改动引入语法错误', meta: '已接受 · 2026-09-10 更新', badge: '完善中' },
+  ];
+
+  /* ---------- 渲染 ---------- */
+  function reqViewHtml(activeFilter) {
+    const chips = FILTERS.map(([k, label, n]) =>
+      `<button type="button" class="filter-chip${k === activeFilter ? ' active' : ''}" data-filter="${k}">${label} <span class="filter-count">${n}</span></button>`).join('');
+    const rows = REQ_ROWS.filter((r) => r.filter === activeFilter).map((r) => `
+      <article class="req-row" data-id="${r.id}">
+        <div class="card-top">
+          <span class="cid ${r.kind}">${r.id}</span>
+          ${r.badge ? `<span class="refine-badge${r.badge === '完善中' ? ' rf-doing' : ''}">${r.badge}</span>` : ''}
+        </div>
+        <div class="card-title">${r.title}</div>
+        <div class="card-meta">${r.meta}（示意数据）</div>
+      </article>`).join('');
+    return `<div class="req-view">
+      <nav class="filter-bar" aria-label="按状态筛选需求">${chips}</nav>
+      <div class="req-list">${rows || '<p class="list-note">该档位暂无条目（示意）</p>'}</div>
+    </div>`;
+  }
+
+  function mktOverviewHtml() {
+    return `
+      <div class="mkt-ai-row">
+        <button type="button" class="btn small" data-ai="positioning">✦ 梳理定位</button>
+        <button type="button" class="btn small" data-ai="pricing">✦ 分析定价</button>
+        <span class="muted">复制提示词到外部 Agent 会话执行，回执经统一 CLI 写入；界面不自动运行模型。</span>
+      </div>
+      <div class="mkt-cards">
+        <div class="mkt-card"><p class="mkt-card-label">阶段</p><p class="mkt-card-value">${PROFILE.stageLabel}</p><p class="mkt-card-hint">${PROFILE.stageHint}</p></div>
+        <div class="mkt-card"><p class="mkt-card-label">阶段目标</p><p class="mkt-card-value">—</p></div>
+        <div class="mkt-card"><p class="mkt-card-label">主指标</p><p class="mkt-card-value">—</p></div>
+      </div>
+      <div class="mkt-summary">
+        <section class="mkt-block">
+          <h4>定位摘要</h4>
+          <dl class="mkt-dl">
+            <dt>目标受众</dt><dd class="muted">未填写</dd>
+            <dt>痛点</dt><dd class="muted">未填写</dd>
+            <dt>差异点</dt><dd class="muted">未填写</dd>
+          </dl>
+        </section>
+        <section class="mkt-block">
+          <h4>当前定价</h4>
+          <p class="muted">未设定。在「定位与定价」页保存定价方案后，显式点击「设为当前方案」。</p>
+        </section>
+        <section class="mkt-block">
+          <h4>下一步</h4>
+          <p class="muted">先完成定位与证据，再保存第一个定价候选并显式设为当前方案。</p>
+        </section>
+      </div>
+      <section class="mkt-block mkt-runs" aria-label="AI 运行记录">
+        <h4>AI 运行记录（agent-runs）</h4>
+        <p class="muted small">暂无运行记录：从各页右上角 AI 入口复制任务提示词后，这里会登记任务并显示「尚未收到结果」。</p>
+        <p class="muted small" style="margin-top:6px">回执由外部 Agent 会话经统一 CLI 写入（atb growth receipt）；相同任务重复回执幂等，过期输入与跨项目写入被拒绝。</p>
+      </section>`;
+  }
+
+  function mktViewHtml() {
+    const tabs = [['overview', '概览'], ['positioning', '定位与定价'], ['channels', '渠道与行动'], ['review', '效果与复盘']]
+      .map(([k, l]) => `<button type="button" class="mkt-tab${k === 'overview' ? ' active' : ''}" data-mkt-tab="${k}">${l}</button>`).join('');
+    let pane = '';
+    if (state.mkt === 'loading') {
+      pane = `<div class="mkt-phase"><p class="muted"><span class="spinner"></span>正在加载营销档案…</p></div>`;
+    } else if (state.mkt === 'error') {
+      pane = `<div class="mkt-phase">
+        <div class="empty-card">
+          <h2>营销档案读取失败</h2>
+          <p class="notice err">读取失败（演示示意：服务端返回异常）</p>
+          <button type="button" class="btn" id="mktRetry">重试</button>
+        </div>
+      </div>`;
+    } else if (state.mkt === 'empty') {
+      pane = `<div class="mkt-phase">
+        <div class="empty-card">
+          <h2>尚未建立营销档案</h2>
+          <p>为当前项目建立营销档案：定位、证据与定价版本管理。初始化由你显式触发，会读取项目 README 生成简介草稿（仅作起点，不代表市场需求已被验证）。</p>
+          <button type="button" class="btn primary" id="mktInit">初始化营销档案</button>
+        </div>
+      </div>`;
+    } else {
+      pane = mktOverviewHtml();
+    }
+    return `<div class="mkt-view">
+      <nav class="mkt-tabs" aria-label="营销页签">${tabs}</nav>
+      <div class="mkt-pane">${pane}</div>
+    </div>`;
+  }
+
+  function render() {
+    board.dataset.scenario = state.scenario;
+    board.dataset.view = state.view;
+    // 顶栏页签高亮与副标题 / 搜索范围
+    $$('.view-tab').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+    $('#moduleSub').textContent = MODULE_SUB[state.view] || '';
+    $('#searchScope').textContent = state.view === 'marketing' ? '营销' : '需求';
+    $('#reqSort').style.visibility = state.view === 'status' && state.scenario === 'fixed' ? 'visible' : 'hidden';
+    if (state.scenario === 'defect') {
+      // 缺陷形态：boot() 未执行——所有 section[id] 保持 hidden，内容区 DOM 为空
+      content.innerHTML = `<div class="blank-note">
+        <div class="demo-tag">内容区 <b>整片空白</b>（演示标注）<br>
+        DOM 里所有 section[id] 均带 hidden 类：app.js 解析失败，<b>boot() 不执行</b>，无人渲染视图、无人移除 hidden、无人绑定事件。<br>
+        顶栏 / 页签 / 搜索框只是 index.html 的静态标记。</div>
+      </div>`;
+    } else if (state.view === 'marketing') {
+      content.innerHTML = mktViewHtml();
+    } else {
+      content.innerHTML = reqViewHtml('accepted');
+    }
+    renderConsole();
+  }
+
+  /* ---------- 控制台对照 ---------- */
+  function renderConsole() {
+    const body = $('#conBody');
+    $('#conState').textContent = state.scenario === 'defect' ? '情景：缺陷形态（语法错误未修复）' : '情景：修复后（期望）';
+    if (state.scenario === 'defect') {
+      body.innerHTML = `
+        <span><span class="dim">$</span> node --check scripts/web/app.js</span>
+        <span class="err">SyntaxError: Unexpected token ','（app.js:5637）</span>
+        <span class="dim">↳ 真实病灶在 5612 行：嵌套模板字符串闭合反引号被误写为单引号，连锁错位后于 5637 行报错</span>
+        <span class="dim">GET /api/board 200 · GET /api/marketing/state 200（数据层正常，空白非数据问题）</span>
+        <span class="err">app.js 整文件解析失败 → boot() 未执行：setView / 渲染 / 事件绑定全部没有发生</span>`;
+    } else {
+      body.innerHTML = `
+        <span><span class="dim">$</span> node --check scripts/web/app.js</span>
+        <span class="okc">（无输出，语法检查通过）</span>
+        <span class="okc">boot() → poll()（/api/board、/api/marketing/state 均正常）→ setView('${state.view === 'marketing' ? 'marketing' : 'status'}')</span>
+        <span class="dim">深链 view=marketing 生效：#marketingView 移除 hidden 并渲染概览；事件全部绑定</span>`;
+    }
+  }
+
+  /* ---------- 交互 ---------- */
+  function setScenario(v) {
+    state.scenario = v;
+    $$('#segScenario button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    if (v === 'defect') {
+      state.view = 'status'; // 深链不生效：停在默认模块
+      toast('缺陷形态：即使 URL 带 view=marketing，boot() 未执行，setView 不发生，页面停在默认「需求」且列表为空', true);
+    } else {
+      state.view = 'marketing'; // 修复后按深链进入营销
+      toast('修复后：node --check 通过，boot() → setView(\'marketing\')，营销概览正常渲染');
+    }
+    render();
+  }
+
+  $('#segScenario').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    setScenario(b.dataset.v);
+  });
+
+  $('#segMkt').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (state.scenario === 'defect') { toast('缺陷形态下 app.js 未执行，营销视图根本不渲染——请先切到「修复后」情景', true); return; }
+    state.mkt = b.dataset.v;
+    $$('#segMkt button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === state.mkt)));
+    if (state.view !== 'marketing') { state.view = 'marketing'; }
+    render();
+    toast(`营销模块状态：${{ ready: '正常（档案已建立）', loading: '加载中', error: '读取失败（可重试）', empty: '未初始化（空态引导）' }[state.mkt]}`);
+  });
+
+  $('#moduleNav').addEventListener('click', (e) => {
+    const b = e.target.closest('.view-tab'); if (!b) return;
+    const v = b.dataset.view;
+    if (state.scenario === 'defect') {
+      toast(`「${b.textContent}」点击无效：app.js 语法错误 → 事件未绑定，页签只是 index.html 静态标记`, true);
+      return;
+    }
+    if (v !== 'status' && v !== 'marketing') { toast('本演示仅还原「需求」与「营销」两个模块视图（其余模块与本 Bug 无关）'); return; }
+    state.view = v;
+    render();
+    toast(`模块切换：${v === 'marketing' ? '营销（概览渲染，数据取自 /api/marketing/state）' : '需求（boot() → setView(\'status\') 回归）'}`);
+  });
+
+  $('#btnDeepLink').addEventListener('click', () => {
+    if (state.scenario === 'defect') {
+      state.view = 'status'; render();
+      toast('打开 …?view=marketing：页面停留在默认「需求」模块，页签高亮不变，列表为空——深链失效（缺陷形态）', true);
+    } else {
+      state.view = 'marketing'; render();
+      toast('打开 …?view=marketing：boot() 读取 URL 深链 → setView(\'marketing\')，营销概览渲染（修复后）');
+    }
+  });
+
+  // 内容区事件委托：筛选 chips / AI 入口 / 重试 / 初始化（状态反馈演示）
+  content.addEventListener('click', (e) => {
+    const chip = e.target.closest('.filter-chip');
+    if (chip) {
+      $$('.filter-chip', content).forEach((c) => c.classList.toggle('active', c === chip));
+      const label = chip.textContent.trim().replace(/\s+\d+$/, '');
+      $('.req-list', content).innerHTML = reqRowsFor(chip.dataset.filter) || '<p class="list-note">该档位暂无条目（示意）</p>';
+      toast(`筛选切换到「${label}」：列表按档位过滤（示意数据）`);
+      return;
+    }
+    const ai = e.target.closest('[data-ai]');
+    if (ai) { toast('AI 入口：打开 project-growth 任务面板复制提示词（演示省略面板内部）'); return; }
+    const tab = e.target.closest('[data-mkt-tab]');
+    if (tab && tab.dataset.mktTab !== 'overview') { toast('本演示只还原「概览」页签，其余页签与本 Bug 无关'); return; }
+    if (e.target.closest('#mktRetry')) {
+      toast('重试中…'); state.mkt = 'loading';
+      $$('#segMkt button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === 'loading')));
+      render();
+      clearTimeout(mktFakeTimer);
+      mktFakeTimer = setTimeout(() => {
+        state.mkt = 'ready';
+        $$('#segMkt button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === 'ready')));
+        render(); toast('重试成功：营销档案读取恢复（状态反馈：加载 → 正常）');
+      }, 900);
+      return;
+    }
+    if (e.target.closest('#mktInit')) {
+      const btn = $('#mktInit', content); btn.disabled = true; btn.textContent = '正在建立…';
+      clearTimeout(mktFakeTimer);
+      mktFakeTimer = setTimeout(() => {
+        state.mkt = 'ready';
+        $$('#segMkt button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.v === 'ready')));
+        render(); toast('营销档案已建立：读取 README 生成简介草稿，进入概览（状态反馈：空态 → 正常）');
+      }, 900);
+    }
+  });
+
+  function reqRowsFor(filter) {
+    return REQ_ROWS.filter((r) => r.filter === filter).map((r) => `
+      <article class="req-row">
+        <div class="card-top"><span class="cid ${r.kind}">${r.id}</span>${r.badge ? `<span class="refine-badge${r.badge === '完善中' ? ' rf-doing' : ''}">${r.badge}</span>` : ''}</div>
+        <div class="card-title">${r.title}</div>
+        <div class="card-meta">${r.meta}（示意数据）</div>
+      </article>`).join('');
+  }
+
+  // 搜索框（修复后输入可见反馈；缺陷态输入无任何反应）
+  $('#searchInput').addEventListener('input', (e) => {
+    if (state.scenario === 'defect') return; // 无绑定反应
+    toast(`搜索「${e.target.value || '（空）'}」：随模块解释（${state.view === 'marketing' ? '营销档案' : '需求 / Bug / 文档'}，演示仅示意）`);
+  });
+
+  $('#btnTheme').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme || 'light';
+    document.documentElement.dataset.theme = cur === 'light' ? 'dark' : 'light';
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

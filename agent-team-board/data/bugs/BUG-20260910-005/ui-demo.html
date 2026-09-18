@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260910-011 演示 · 「去新建 XX 会话」入口（对照缺陷 / 修复后）</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --line:#d8dce2; --ink:#24292f; --muted:#6a737d; --brand:#3b82f6; --ok:#1e7e34; --warn:#b45309; --err:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); padding:20px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:12px; margin:0 0 14px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel); }
+  .seg button { border:0; background:transparent; padding:6px 12px; cursor:pointer; font:inherit; }
+  .seg button.on { background:var(--brand); color:#fff; }
+  .hint { font-size:12px; color:var(--muted); }
+  .panel { max-width:640px; margin:0 auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .head { display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .tabs { display:flex; gap:2px; }
+  .tabs button { border:0; border-bottom:2px solid transparent; background:transparent; padding:6px 10px; cursor:pointer; font:inherit; color:var(--muted); }
+  .tabs button.on { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
+  .links { display:flex; gap:12px; }
+  .links a { color:var(--brand); text-decoration:underline; cursor: pointer; }
+  .links a[aria-disabled="true"] { color:var(--muted); text-decoration:none; cursor:not-allowed; }
+  .state-line { font-size:12px; margin-left:auto; }
+  .body { padding:14px; }
+  .prompt-box { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .prompt-box h4 { margin:0 0 6px; font-size:13px; }
+  .prompt-box pre { margin:0; white-space:pre-wrap; font-size:12px; color:var(--muted); }
+  .legacy-row { display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--line); background:#fbfcfd; }
+  .legacy-row .btn { border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 10px; cursor:pointer; font:inherit; font-size:12px; }
+  .msg { max-width:640px; margin:10px auto 0; font-size:12px; color:var(--muted); min-height:18px; }
+</style>
+</head>
+<body>
+  <h1>「去新建 XX 会话」入口 —— 缺陷现象 / 修复后状态对照</h1>
+  <p class="sub">对应条目 BUG-20260910-005（说明文档完善补充的界面演示；真实唤起结果与 Zcode 新会话协议以条目验收为准，本页为示意）</p>
+
+  <div class="bar">
+    <span class="seg" id="modeSeg">
+      <button type="button" data-mode="defect" class="on">缺陷现象</button>
+      <button type="button" data-mode="fixed">修复后状态</button>
+    </span>
+    <span class="seg" id="detSeg">
+      <button type="button" data-det="both" class="on">两端可用</button>
+      <button type="button" data-det="one">仅一端可用</button>
+      <button type="button" data-det="none">未检测到</button>
+      <button type="button" data-det="loading">检测中</button>
+      <button type="button" data-det="fail">探测失败</button>
+    </span>
+  </div>
+  <p class="hint" id="hint">缺陷态：顶部只有「批量完善 / 批量开发」两个页签，会话入口在提示词分区底部的「打开 Zcode 工作区 / 打开 Codex 工作区」按钮。</p>
+
+  <div class="panel">
+    <div class="head">
+      <span class="tabs" id="tabs">
+        <button type="button" class="on">批量完善</button>
+        <button type="button">批量开发</button>
+      </span>
+      <span class="links" id="links" style="display:none">
+        <a id="lkZ" title="">去新建 Zcode 会话</a>
+        <a id="lkC" title="">去新建 Codex 会话</a>
+      </span>
+      <span class="state-line" id="stateLine"></span>
+    </div>
+    <div class="body">
+      <div class="prompt-box">
+        <h4>主调度提示词</h4>
+        <pre>你是当前项目的批量调度员，只负责派发与接收短回执……（复制后在当前项目的 Agent 会话发送；导航不自动发送提示词）</pre>
+      </div>
+    </div>
+    <div class="legacy-row" id="legacyRow">
+      <button type="button" class="btn">打开 Zcode 工作区</button>
+      <button type="button" class="btn">打开 Codex 工作区</button>
+    </div>
+  </div>
+  <p class="msg" id="msg"></p>
+
+<script>
+  var mode = 'defect', det = 'both';
+  var el = function (id) { return document.getElementById(id); };
+  var project = '/Users/demo/src/agent-team-board';
+  function apply() {
+    el('links').style.display = mode === 'fixed' ? '' : 'none';
+    el('legacyRow').style.display = mode === 'defect' ? '' : 'none';
+    var lkZ = el('lkZ'), lkC = el('lkC'), line = el('stateLine');
+    function setLink(a, ok, agent, scheme) {
+      if (ok) { a.setAttribute('aria-disabled', 'false'); a.title = agent + ' · ' + project; a.onclick = function () { msg('已请求打开 ' + agent + ' 新会话（' + scheme + '，示意）——浏览器无法确认启动结果，不宣称创建成功。'); }; }
+      else { a.setAttribute('aria-disabled', 'true'); a.title = det === 'none' ? '未检测到 ' + agent + ' 客户端' : (det === 'loading' ? '正在检测…' : '探测失败，可重试或手动打开'); a.onclick = function () { msg('入口不可触发：' + a.title + '。'); }; }
+    }
+    if (det === 'loading') {
+      line.textContent = '正在检测可用客户端…'; line.style.color = 'var(--warn)';
+      setLink(lkZ, false, 'Zcode'); setLink(lkC, false, 'Codex');
+    } else if (det === 'none') {
+      line.textContent = '未检测到 Zcode / Codex 客户端'; line.style.color = 'var(--muted)';
+      setLink(lkZ, false, 'Zcode'); setLink(lkC, false, 'Codex');
+    } else if (det === 'fail') {
+      line.textContent = '探测失败（未知结果不等于未安装）'; line.style.color = 'var(--err)';
+      setLink(lkZ, false, 'Zcode'); setLink(lkC, false, 'Codex');
+    } else {
+      line.textContent = '已检测可用客户端 · 当前项目：' + project; line.style.color = 'var(--ok)';
+      setLink(lkZ, det === 'both', 'Zcode', 'zcode://threads/new?path=' + project);
+      setLink(lkC, true, 'Codex', 'codex://threads/new?path=' + project);
+    }
+    el('hint').textContent = mode === 'defect'
+      ? '缺陷态：顶部无会话入口，底部为「打开 XX 工作区」旧按钮（仅打开工作区，不创建会话）。'
+      : '修复态：「去新建 XX 会话」链接位于「批量开发」页签旁，携带当前项目目录；底部旧按钮移除。';
+  }
+  function msg(s) { el('msg').textContent = s; }
+  el('tabs').addEventListener('click', function (e) {
+    if (e.target.tagName === 'BUTTON') {
+      [].forEach.call(this.querySelectorAll('button'), function (b) { b.classList.toggle('on', b === e.target); });
+      msg('页签切换不改变选中状态，也不触发会话导航（示意）。');
+    }
+  });
+  document.querySelectorAll('#legacyRow .btn').forEach(function (b) {
+    b.addEventListener('click', function () { msg('缺陷态旧入口：仅打开工作区，不进入新会话创建流程（示意）。'); });
+  });
+  el('modeSeg').addEventListener('click', function (e) { if (e.target.dataset.mode) { mode = e.target.dataset.mode; mark(this, e.target.dataset.mode); apply(); } });
+  el('detSeg').addEventListener('click', function (e) { if (e.target.dataset.det) { det = e.target.dataset.det; mark(this, e.target.dataset.det); apply(); } });
+  function mark(seg, val) {
+    [].forEach.call(seg.querySelectorAll('button'), function (b) { b.classList.toggle('on', (b.dataset.mode || b.dataset.det) === val); });
+  }
+  apply();
+</script>
+</body>
+</html>

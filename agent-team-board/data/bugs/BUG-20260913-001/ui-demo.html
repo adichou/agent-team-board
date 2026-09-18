@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>版本创建候选范围 · 缺陷对照演示 · BUG-20260913-001</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --panel-2:#f0f2f5; --border:#d9dee5; --border-soft:#e7eaef;
+    --text:#1f2328; --muted:#6a737d; --primary:#2563eb; --primary-weak:#e8effd;
+    --ok:#1a7f37; --ok-weak:#e2f5e8; --warn:#9a6700; --warn-weak:#fff3d6;
+    --err:#cf222e; --err-weak:#ffebe9; --chip:#eef1f4; --shadow:0 8px 28px rgba(20,30,50,.14);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  html[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1d242e; --border:#30363d; --border-soft:#252c35;
+    --text:#e6edf3; --muted:#8b949e; --primary:#4d8dff; --primary-weak:#17263f;
+    --ok:#3fb950; --ok-weak:#12301c; --warn:#d29922; --warn-weak:#33290e;
+    --err:#f85149; --err-weak:#3d1416; --chip:#21262d; --shadow:0 8px 28px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif}
+  button{font:inherit;color:inherit;cursor:pointer}
+  input,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:5px 8px}
+  input:focus,select:focus{outline:2px solid var(--primary);outline-offset:1px}
+  h1,h2,h3{margin:0}
+  .hidden{display:none !important}
+  .muted{color:var(--muted)}
+  .small{font-size:12px}
+  .mono{font-family:var(--mono);font-size:12px}
+
+  /* ── 顶栏 ── */
+  .topbar{display:flex;align-items:center;gap:16px;padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo-badge{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:var(--primary-weak);color:var(--primary);font-size:17px}
+  .brand h1{font-size:16px}
+  .demo-badge{font-size:11px;color:var(--warn);border:1px solid var(--warn);border-radius:99px;padding:0 8px}
+  .module-nav{display:flex;gap:4px;background:var(--panel-2);border-radius:8px;padding:3px}
+  .view-tab{border:0;background:transparent;border-radius:6px;padding:5px 14px;color:var(--muted)}
+  .view-tab.active{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .top-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .btn{border:1px solid var(--border);background:var(--panel);border-radius:6px;padding:5px 12px}
+  .btn:hover{border-color:var(--muted)}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.small{padding:3px 10px;font-size:13px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .seg{display:flex;background:var(--panel-2);border-radius:8px;padding:3px;gap:3px}
+  .seg button{border:0;background:transparent;border-radius:6px;padding:4px 12px;color:var(--muted)}
+  .seg button.active{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .seg button.active.fix{color:var(--ok)}
+  .seg button.active.bug{color:var(--err)}
+
+  /* ── 说明条 ── */
+  .mode-strip{display:flex;gap:10px;align-items:flex-start;margin:14px 18px 0;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--panel);flex-wrap:wrap}
+  .mode-strip.bug{border-color:var(--err);background:var(--err-weak)}
+  .mode-strip.fix{border-color:var(--ok);background:var(--ok-weak)}
+  .mode-strip .tag{flex:none;font-weight:700;border-radius:6px;padding:1px 8px;font-size:12px}
+  .mode-strip.bug .tag{background:var(--err);color:#fff}
+  .mode-strip.fix .tag{background:var(--ok);color:#fff}
+  .scenario{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap}
+
+  /* ── 模块头 ── */
+  .page-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px 6px;flex-wrap:wrap}
+  .page-head p{margin:0;color:var(--muted)}
+
+  main{padding:0 18px 40px}
+  .split{display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start}
+  @media (max-width:860px){.split{grid-template-columns:1fr}}
+  .col-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px}
+  .ver-card{border:1px solid var(--border-soft);border-radius:8px;padding:8px 10px;margin-bottom:8px;cursor:pointer}
+  .ver-card:hover{border-color:var(--muted)}
+  .ver-card.sel{border-color:var(--primary);background:var(--primary-weak)}
+  .ver-card .t{display:flex;align-items:center;gap:8px;font-weight:600}
+  .ver-card .meta{color:var(--muted);font-size:12px;margin-top:2px}
+  .st{display:inline-flex;align-items:center;border-radius:99px;padding:0 8px;font-size:11px;font-weight:600;line-height:18px}
+  .st-mute{background:var(--chip);color:var(--muted)}
+  .st-ok{background:var(--ok-weak);color:var(--ok)}
+  .st-run{background:var(--warn-weak);color:var(--warn)}
+  .st-wait{background:var(--chip);color:var(--text)}
+  .st-bug{background:var(--err-weak);color:var(--err)}
+
+  .rel-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .kv{margin:10px 0;color:var(--muted);font-size:13px}
+  .bld-items-head{display:flex;align-items:center;justify-content:space-between;margin:12px 0 6px}
+  .item-row{display:flex;align-items:center;gap:10px;border:1px solid var(--border-soft);border-radius:8px;padding:6px 10px;margin-bottom:6px;flex-wrap:wrap}
+  .item-row .id{font-family:var(--mono);font-size:12px;flex:none}
+  .item-row .title{flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rel-acts{display:flex;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid var(--border-soft)}
+  .empty{color:var(--muted);padding:26px 10px;text-align:center}
+
+  /* ── 侧拉面板（新建版本） ── */
+  .mask{position:fixed;inset:0;background:rgba(8,12,20,.42);z-index:40}
+  .side-panel{position:fixed;top:0;right:0;bottom:0;width:min(480px,94vw);background:var(--panel);border-left:1px solid var(--border);box-shadow:var(--shadow);z-index:50;display:flex;flex-direction:column}
+  .side-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
+  .side-head h3{font-size:15px}
+  .side-head p{margin:2px 0 0;color:var(--muted);font-size:12px}
+  .icon-btn{border:0;background:transparent;font-size:15px;color:var(--muted);padding:2px 6px}
+  .icon-btn:hover{color:var(--text)}
+  .side-body{flex:1;overflow:auto;padding:12px 16px}
+  .pick-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .cand{display:flex;align-items:center;gap:8px;border:1px solid var(--border-soft);border-radius:8px;padding:7px 10px;margin-bottom:6px}
+  .cand.off{opacity:.55}
+  .cand input[type=checkbox]{width:15px;height:15px;accent-color:var(--primary)}
+  .cand .c-id{font-family:var(--mono);font-size:12px;flex:none}
+  .cand .c-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cand select{max-width:150px;font-family:var(--mono);font-size:12px;padding:2px 6px}
+  .field{display:block;margin-top:14px}
+  .field span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .field input{width:100%}
+  .form-err{color:var(--err);background:var(--err-weak);border:1px solid var(--err);border-radius:8px;padding:6px 10px;margin-top:12px;font-size:13px}
+  .side-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+  .panel-note{margin-top:12px;font-size:12px;color:var(--muted);border-top:1px dashed var(--border);padding-top:8px}
+
+  /* ── toast ── */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);background:var(--text);color:var(--bg);border-radius:8px;padding:7px 16px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:90}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .foot-note{margin:18px 18px 0;color:var(--muted);font-size:12px}
+  code{font-family:var(--mono);font-size:12px;background:var(--chip);border-radius:4px;padding:1px 5px}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo-badge">📋</span>
+    <h1>Agent Team Board · 构建模块</h1>
+    <span class="demo-badge">BUG-20260913-001 界面演示</span>
+  </div>
+  <nav class="module-nav" aria-label="模块导航">
+    <button class="view-tab" type="button">需求</button>
+    <button class="view-tab active" type="button">构建</button>
+    <button class="view-tab" type="button">任务</button>
+    <button class="view-tab" type="button">设置</button>
+  </nav>
+  <div class="top-actions">
+    <div class="seg" role="tablist" aria-label="修复前后对照">
+      <button type="button" id="modeBefore" class="bug">修复前（现状）</button>
+      <button type="button" id="modeAfter" class="fix">修复后（期望）</button>
+    </div>
+    <button type="button" class="btn small" id="themeBtn">深色</button>
+  </div>
+</header>
+
+<div class="mode-strip bug" id="modeStrip">
+  <span class="tag" id="modeTag">缺陷现象</span>
+  <span id="modeDesc"></span>
+  <span class="scenario">
+    <span class="muted small">演示场景：</span>
+    <button type="button" class="btn small" data-sc="normal">正常</button>
+    <button type="button" class="btn small" data-sc="empty">空态（无可纳入条目）</button>
+    <button type="button" class="btn small" data-sc="error">读取失败</button>
+    <button type="button" class="btn small" id="resetBtn">重置演示</button>
+  </span>
+</div>
+
+<div class="page-head">
+  <p>构建 · 版本计划——从需求单 / Bug 单创建版本并为每条选择 commit，合并入 main</p>
+  <button type="button" class="btn primary" id="newBtn">＋ 新建版本</button>
+</div>
+
+<main>
+  <div class="split">
+    <section class="col-card" aria-label="版本列表">
+      <h3 style="font-size:14px;margin-bottom:8px">版本计划</h3>
+      <div id="verList"></div>
+    </section>
+    <section class="col-card" aria-label="版本详情">
+      <div id="verDetail"></div>
+    </section>
+  </div>
+</main>
+
+<div id="panelWrap"></div>
+<div id="toast" role="status"></div>
+
+<p class="foot-note">
+  演示数据为虚构，仅用于对照说明缺陷现象与期望修复后状态；交互范式（侧拉面板 / 全选全不选 / commit 下拉 / toast）与真实构建模块一致。
+  候选行内标注了状态徽标以便说明问题——当前真实界面的候选行不显示状态标识（这也是现象的一部分：看不出哪些是未完成条目）。
+  修复实现方式（后端 <code>/api/build/candidates</code> 过滤或前端过滤）以开发阶段 design.md 为准。
+</p>
+
+<script>
+'use strict';
+/* ---------- 演示数据（虚构） ---------- */
+const ITEMS = [
+  { id:'REQ-20260908-021', title:'看板导出报表', status:'done', statusLabel:'已完成',
+    commits:['a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0'] },
+  { id:'BUG-20260910-014', title:'已完成档提交状态不随轮询刷新', status:'done', statusLabel:'已完成',
+    commits:['c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2','f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6e'] },
+  { id:'REQ-20260912-007', title:'批量执行队列与断点续跑', status:'in-progress', statusLabel:'开发中',
+    commits:['e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4'] },
+  { id:'REQ-20260913-001', title:'构建模块：版本管理 + 分支浏览', status:'in-progress', statusLabel:'开发中',
+    commits:['9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b'] },
+  { id:'BUG-20260912-003', title:'提交索引偶发丢失', status:'planned', statusLabel:'已计划',
+    commits:['7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f'] },
+  { id:'BUG-20260913-002', title:'版本列表搜索不生效', status:'submitted', statusLabel:'待接受',
+    commits:[] },
+];
+const short = (h) => String(h || '').slice(0, 8);
+
+/* ---------- 状态 ---------- */
+const state = {
+  mode: 'before',            // before=修复前（现状） | after=修复后（期望）
+  scenario: 'normal',        // normal | empty | error
+  panel: null,               // { phase:'loading'|'ready'|'empty'|'error', picked:Set, commits:{}, name:'', error:null }
+  versions: [
+    { id:'VER-20260913-0930', name:'v0.9 冲刺收尾', statusLabel:'计划中', items:[
+      { id:'REQ-20260908-021', title:'看板导出报表', commit:'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0' },
+    ]},
+  ],
+  selVer: 'VER-20260913-0930',
+};
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ---------- 候选口径（核心对照点） ---------- */
+function candidates() {
+  if (state.scenario === 'empty') return [];
+  // 修复前（现状）：/api/build/candidates 返回全部看板条目，不按状态过滤
+  // 修复后（期望）：仅保留已完成（done）的需求单 / Bug 单
+  return state.mode === 'before' ? ITEMS : ITEMS.filter((x) => x.status === 'done');
+}
+const selectable = (list) => list.filter((x) => (x.commits || []).length > 0);
+
+/* ---------- 说明条 ---------- */
+function renderModeStrip() {
+  const strip = $('#modeStrip');
+  strip.className = 'mode-strip ' + (state.mode === 'before' ? 'bug' : 'fix');
+  $('#modeTag').textContent = state.mode === 'before' ? '缺陷现象' : '期望修复后';
+  $('#modeDesc').textContent = state.mode === 'before'
+    ? '现状：「＋ 新建版本」候选列出看板全部条目——未完成（待接受 / 已计划 / 开发中）条目只要有关联 commit 即可勾选并纳入版本。'
+    : '期望：候选仅包含已完成（done）的需求单 / Bug 单，其他状态条目一律不出现、不可纳入版本。';
+  $('#modeBefore').classList.toggle('active', state.mode === 'before');
+  $('#modeAfter').classList.toggle('active', state.mode === 'after');
+}
+
+/* ---------- 版本列表与详情 ---------- */
+function renderVersions() {
+  $('#verList').innerHTML = state.versions.map((v) => `
+    <div class="ver-card${v.id === state.selVer ? ' sel' : ''}" data-ver="${esc(v.id)}" role="button" tabindex="0">
+      <div class="t"><strong>${esc(v.name || v.id)}</strong><span class="st st-mute">${esc(v.statusLabel)}</span></div>
+      <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单</div>
+    </div>`).join('') || '<div class="empty">暂无版本计划</div>';
+  const v = state.versions.find((x) => x.id === state.selVer);
+  $('#verDetail').innerHTML = !v ? '<div class="empty">点击左侧版本查看详情</div>' : `
+    <div class="rel-detail-head">
+      <h3 style="font-size:15px">${esc(v.name || v.id)} <span class="st st-mute">${esc(v.statusLabel)}</span></h3>
+      <span class="muted small mono">${esc(v.id)}</span>
+    </div>
+    <p class="kv">目标分支 main · 合并入 main 前弹确认框（演示略）</p>
+    <div class="bld-items-head"><strong>关联条目与 commit</strong></div>
+    ${v.items.map((it) => `
+      <div class="item-row">
+        <span class="id">${esc(it.id)}</span>
+        <span class="title" title="${esc(it.title)}">${esc(it.title)}</span>
+        <span class="mono muted">${esc(short(it.commit))}</span>
+      </div>`).join('') || '<div class="empty small">暂无条目</div>'}
+    <div class="rel-acts">
+      <button type="button" class="btn" disabled title="演示略">提示词与回答回填</button>
+      <button type="button" class="btn primary" disabled title="演示略">合并入 main</button>
+    </div>`;
+  document.querySelectorAll('[data-ver]').forEach((el) => el.addEventListener('click', () => {
+    state.selVer = el.dataset.ver; renderVersions();
+  }));
+}
+
+/* ---------- 新建版本侧拉面板 ---------- */
+function openPanel() {
+  state.panel = { phase: 'loading', picked: new Set(), commits: {}, name: '', error: null };
+  renderPanel();
+  setTimeout(() => {
+    if (!state.panel) return;
+    if (state.scenario === 'error') { state.panel.phase = 'error'; }
+    else {
+      const list = candidates();
+      if (!list.length) { state.panel.phase = 'empty'; }
+      else {
+        state.panel.phase = 'ready';
+        for (const it of selectable(list)) state.panel.commits[it.id] = it.commits[0];
+      }
+    }
+    renderPanel();
+  }, 600);
+}
+function closePanel() { state.panel = null; renderPanel(); }
+
+function renderPanel() {
+  const p = state.panel;
+  if (!p) { $('#panelWrap').innerHTML = ''; return; }
+  let body = '';
+  if (p.phase === 'loading') body = '<p class="muted">正在读取条目…</p>';
+  else if (p.phase === 'error') body = `
+    <p class="form-err" role="alert">候选读取失败（演示：接口超时）
+      <button type="button" class="btn small" id="pnlRetry" style="margin-left:8px">重试</button></p>`;
+  else if (p.phase === 'empty') body = `<div class="empty">${
+    state.mode === 'after'
+      ? '暂无可纳入版本的条目：仅已完成的需求 / Bug 可纳入版本。'
+      : '候选为空（演示：看板暂无任何条目）。'}</div>`;
+  else {
+    const list = candidates();
+    const sel = selectable(list);
+    const skipped = list.length - sel.length;
+    body = `
+      <div class="pick-bar">
+        <button type="button" class="btn small" id="pnlAll">全选</button>
+        <button type="button" class="btn small" id="pnlNone">全不选</button>
+        <span class="muted small">已选 ${p.picked.size} 项${skipped ? ` · ${skipped} 个条目暂无关联提交将被跳过` : ''}</span>
+      </div>
+      ${list.map((it) => {
+        const can = (it.commits || []).length > 0;
+        const done = it.status === 'done';
+        return `<label class="cand${can ? '' : ' off'}">
+          <input type="checkbox" data-pick="${esc(it.id)}" ${p.picked.has(it.id) ? 'checked' : ''}${can ? '' : ' disabled'}>
+          <span class="c-id">${esc(it.id)}</span>
+          <span class="c-title" title="${esc(it.title)}">${esc(it.title)}</span>
+          <span class="st ${done ? 'st-ok' : it.status === 'submitted' ? 'st-wait' : 'st-run'}">${esc(it.statusLabel)}</span>
+          ${can
+            ? `<select data-commit="${esc(it.id)}"${p.picked.has(it.id) ? '' : ' disabled'}>
+                ${(it.commits || []).map((h) => `<option value="${esc(h)}"${p.commits[it.id] === h ? ' selected' : ''}>${esc(short(h))}</option>`).join('')}
+              </select>`
+            : '<span class="muted small">暂无关联提交（先完成开发提交）</span>'}
+        </label>`;
+      }).join('')}
+      <label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）
+        <input id="pnlName" value="${esc(p.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>
+      ${p.error ? `<p class="form-err" role="alert">${esc(p.error)}</p>` : ''}
+      <p class="panel-note">${
+        state.mode === 'before'
+          ? '现状口径：以上列表来自全部看板条目（含未完成），仅按「有无关联 commit」决定可否勾选。'
+          : '期望口径：仅已完成（done）的需求 / Bug 进入候选；全选只作用于可见候选。'}</p>`;
+  }
+  $('#panelWrap').innerHTML = `
+    <div class="mask" id="pnlMask"></div>
+    <aside class="side-panel" role="dialog" aria-label="新建版本">
+      <header class="side-head">
+        <div><h3>新建版本</h3><p>选择需求单 / Bug 单并指定 commit；全选只纳入有 commit 候选的条目</p></div>
+        <button type="button" class="icon-btn" id="pnlClose" aria-label="关闭面板">✕</button>
+      </header>
+      <div class="side-body">${body}</div>
+      <footer class="side-foot">
+        <button type="button" class="btn primary" id="pnlCreate" ${p.phase === 'ready' ? '' : 'disabled'}>创建版本计划</button>
+      </footer>
+    </aside>`;
+
+  $('#pnlClose').addEventListener('click', closePanel);
+  $('#pnlMask').addEventListener('click', closePanel);
+  $('#pnlRetry')?.addEventListener('click', () => { state.scenario = 'normal'; openPanel(); });
+  $('#pnlAll')?.addEventListener('click', () => { for (const it of selectable(candidates())) p.picked.add(it.id); renderPanel(); });
+  $('#pnlNone')?.addEventListener('click', () => { p.picked.clear(); renderPanel(); });
+  document.querySelectorAll('[data-pick]').forEach((el) => el.addEventListener('change', () => {
+    if (el.checked) p.picked.add(el.dataset.pick); else p.picked.delete(el.dataset.pick);
+    renderPanel();
+  }));
+  document.querySelectorAll('[data-commit]').forEach((el) => el.addEventListener('change', () => {
+    p.commits[el.dataset.commit] = el.value; renderPanel();
+  }));
+  $('#pnlName')?.addEventListener('input', (e) => { p.name = e.target.value; });
+  $('#pnlCreate')?.addEventListener('click', () => {
+    if (!p.picked.size) { p.error = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）'; renderPanel(); return; }
+    const items = [...p.picked].map((id) => ({ id, commit: p.commits[id] }));
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const v = {
+      id: `VER-${stamp}`,
+      name: p.name.trim() || `版本 ${stamp}`,
+      statusLabel: '计划中',
+      items: items.map((x) => {
+        const src = ITEMS.find((i) => i.id === x.id);
+        return { id: x.id, title: src ? src.title : '', commit: x.commit || (src?.commits || [])[0] || '' };
+      }),
+    };
+    state.versions.unshift(v);
+    state.selVer = v.id;
+    closePanel();
+    toast(`✓ 版本计划已创建${state.mode === 'before' && items.some((x) => { const s = ITEMS.find((i) => i.id === x.id); return s && s.status !== 'done'; }) ? '（注意：纳入了未完成条目——即缺陷现象）' : ''}`);
+    renderVersions();
+  });
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+/* ---------- 全局控件 ---------- */
+$('#newBtn').addEventListener('click', openPanel);
+$('#modeBefore').addEventListener('click', () => { state.mode = 'before'; if (state.panel && state.panel.phase === 'ready') openPanel(); renderModeStrip(); renderPanel(); });
+$('#modeAfter').addEventListener('click', () => { state.mode = 'after'; if (state.panel && state.panel.phase === 'ready') openPanel(); renderModeStrip(); renderPanel(); });
+document.querySelectorAll('[data-sc]').forEach((b) => b.addEventListener('click', () => {
+  state.scenario = b.dataset.sc;
+  if (state.panel) openPanel();
+}));
+$('#resetBtn').addEventListener('click', () => {
+  state.mode = 'before'; state.scenario = 'normal'; state.panel = null;
+  state.versions = [{
+    id: 'VER-20260913-0930', name: 'v0.9 冲刺收尾', statusLabel: '计划中',
+    items: [{ id: 'REQ-20260908-021', title: '看板导出报表', commit: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0' }],
+  }];
+  state.selVer = 'VER-20260913-0930';
+  renderModeStrip(); renderVersions(); renderPanel();
+});
+$('#themeBtn').addEventListener('click', () => {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? '' : 'dark';
+  $('#themeBtn').textContent = dark ? '深色' : '浅色';
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.panel) closePanel(); });
+
+renderModeStrip();
+renderVersions();
+</script>
+</body>
+</html>
