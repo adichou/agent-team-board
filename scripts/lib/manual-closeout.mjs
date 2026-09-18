@@ -12,8 +12,8 @@
 //     声明「待人工确认提交」挂起（任务页呈现 + waitingDevelopConfirm 项目级防呆），
 //     上报本身不受阻断、条目照常进入待测试——与批量通道 finishRun 的挂起口径一致。
 // 分层约束：core 不能引用 confirm-store（既有依赖方向 confirm-store → git-flow → core），
-// 故本编排独立成模块，由 CLI 在 core.report 成功后调用——与 REQ-20260914-007 管理记录
-// 提交（mgt-commit，atb status done 后 CLI 编排）同一模式。
+// 故本编排独立成模块，由 CLI 在 core.report 成功后调用（历史上与 REQ-20260914-007 管理记录
+// 提交的 CLI 编排同一模式；该闭环已随 BUG-20260918-002 下线）。
 
 import * as gitFlow from './git-flow.mjs';
 import * as confirmStore from './confirm-store.mjs';

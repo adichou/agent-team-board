@@ -73,7 +73,7 @@ agent-team-board/
 | 分组 | 模块 | 职责 |
 | ---- | ---- | ---- |
 | 核心数据层 | core.mjs | 状态机、编号、O_EXCL 原子认领锁；CLI 与 server 共用的事实源访问层 |
-| | git-flow.mjs、manual-closeout.mjs、commit-store.mjs、mgt-commit.mjs | dev 分支工作流；report 后按认领快照自动收口提交；提交规范校验与提交索引；done 后条目留痕与版本结果自动提交 |
+| | git-flow.mjs、manual-closeout.mjs、commit-store.mjs | dev 分支工作流；report 后按认领快照自动收口提交；提交规范校验与提交索引（确认完成不再触发管理记录提交，BUG-20260918-002 下线） |
 | 批量与派发 | batch.mjs、dispatch-store.mjs、dispatch.mjs、scheduler.mjs、execution-verifier.mjs | 批量开发批次与执行账本、run 账本、派发构造纯函数、Codex 后台自动派发调度、完成证据核对 |
 | | codex-adapter.mjs、codex-preflight.mjs、codex-model-config.mjs、task-settings.mjs | codex exec 进程适配、派发前静态检查、模型/推理档位配置解析、任务类型×Agent 四路子代理配置 |
 | | refine-store.mjs、refine-states.mjs、hold-store.mjs、hold-states.mjs、confirm-store.mjs、confirm-states.mjs | 批量完善三态索引；待人工决策三段闭环；自动提交不完整 / AI 分析挂起确认 |
