@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260917-003 演示 — 挂起确认「归属待确认」缺批量计入/排除操作</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --panel-2: #fafbfc; --border: #e2e5ea;
+    --text: #1f2328; --muted: #6a737d; --link: #0969da;
+    --ok-text: #1a7f1a; --ok-bg: rgba(26, 137, 23, 0.12);
+    --danger: #d9480f; --err-bg: rgba(220, 38, 38, 0.08);
+    --warn: #b45309; --warn-bg: rgba(217, 119, 6, 0.12);
+    --info-text: #0969da; --info-bg: rgba(9, 105, 218, 0.10);
+    --btn: #ffffff; --btn-border: #d0d7de; --primary: #1f6feb; --primary-text: #ffffff;
+    --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2129; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --link: #58a6ff;
+    --ok-text: #3fb950; --ok-bg: rgba(63, 185, 80, 0.18);
+    --danger: #f85149; --err-bg: rgba(248, 81, 73, 0.12);
+    --warn: #d29922; --warn-bg: rgba(187, 128, 9, 0.2);
+    --info-text: #58a6ff; --info-bg: rgba(88, 166, 255, 0.16);
+    --btn: #21262d; --btn-border: #30363d; --primary: #238636; --primary-text: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  header.top { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header.top h1 { margin: 0 0 4px; font-size: 17px; }
+  header.top .sub { color: var(--muted); font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--btn-border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; }
+  .seg button.active { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--btn-border);
+    background: var(--btn); color: var(--text); padding: 4px 12px; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  button.small { padding: 2px 8px; font-size: 12px; border-radius: 5px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  label.ctl { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  select, textarea { font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--btn-border); border-radius: 5px; padding: 3px 6px; }
+  .clicks { font-size: 13px; padding: 3px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
+  main { padding: 16px 20px 60px; max-width: 860px; }
+  .note { font-size: 13px; color: var(--muted); margin: 8px 0 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .hold-area-head { font-weight: 600; margin-bottom: 8px; }
+  .card .reason { margin: 4px 0; font-size: 13px; }
+  .card .meta { color: var(--muted); font-size: 12px; }
+  .card .acts { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  /* 侧拉面板 */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; }
+  .overlay.open { display: block; }
+  .side-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 94vw);
+    background: var(--panel); border-left: 1px solid var(--border); display: none;
+    flex-direction: column; z-index: 10; }
+  .side-panel.open { display: flex; }
+  .sp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .sp-head h3 { margin: 0; font-size: 15px; }
+  .sp-scope { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .icon-btn { border: 1px solid var(--btn-border); background: var(--btn); border-radius: 6px;
+    width: 28px; height: 28px; line-height: 1; }
+  .sp-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .sp-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 16px;
+    border-top: 1px solid var(--border); background: var(--panel-2); flex-wrap: wrap; }
+  .sp-body p { margin: 6px 0; font-size: 13px; }
+  .counts { font-size: 12px; color: var(--muted); }
+  .group-head { font-size: 13px; font-weight: 600; margin: 12px 0 4px; padding: 4px 8px;
+    background: var(--panel-2); border-left: 3px solid var(--primary); border-radius: 4px; }
+  .group-head.undet { border-left-color: var(--warn); }
+  .batch-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0;
+    padding: 6px 8px; border: 1px dashed var(--btn-border); border-radius: 8px; background: var(--info-bg); }
+  .batch-bar .tag { font-size: 12px; color: var(--info-text); font-weight: 600; }
+  .batch-bar .design-opt { font-size: 12px; color: var(--muted); }
+  table.files { width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0; }
+  table.files th, table.files td { border: 1px solid var(--border); padding: 3px 6px; text-align: left; word-break: break-all; }
+  table.files th { background: var(--panel-2); }
+  td.path { font-family: var(--mono); font-size: 11px; max-width: 240px; }
+  .k-add { color: var(--ok-text); } .k-mod { color: var(--info-text); } .k-del { color: var(--danger); }
+  .st-out { color: var(--warn); font-weight: 600; } .st-in { color: var(--muted); }
+  .unresolved { margin: 6px 0 0; font-size: 12px; color: var(--warn); }
+  .scope-summary { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 6px; }
+  .msg { font-size: 13px; min-height: 20px; }
+  .msg.err { color: var(--danger); background: var(--err-bg); border-radius: 6px; padding: 4px 8px; }
+  .msg.ok { color: var(--ok-text); background: var(--ok-bg); border-radius: 6px; padding: 4px 8px; }
+  .verify.ok { color: var(--ok-text); } .verify.bad { color: var(--danger); }
+  textarea#note { width: 100%; margin-top: 2px; }
+  details.diffbox { border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin: 6px 0; font-size: 12px; }
+  details.diffbox pre { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; margin: 4px 0;
+    background: var(--panel-2); padding: 6px; border-radius: 4px; }
+  .btn-guide { font-size: 12px; color: var(--muted); }
+  .loading { color: var(--muted); padding: 30px 0; text-align: center; }
+  .empty { color: var(--muted); font-size: 13px; }
+  .err-block { background: var(--err-bg); border: 1px solid var(--danger); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>BUG-20260917-003 演示 — 挂起确认「归属待确认」缺批量计入 / 排除操作</h1>
+  <p class="sub">对照「缺陷现状」（只能逐项下拉，358 项须逐个点）与「期望修复后」（组头批量操作 + 逐项覆盖保留）。数据为演示模拟，非真实条目。</p>
+  <div class="toolbar">
+    <div class="seg" id="modeSeg" role="group" aria-label="模式切换">
+      <button type="button" data-mode="bug" class="active">缺陷现状</button>
+      <button type="button" data-mode="fixed">期望修复后</button>
+    </div>
+    <div class="seg" id="stateSeg" role="group" aria-label="面板状态切换">
+      <button type="button" data-state="normal" class="active">正常</button>
+      <button type="button" data-state="loading">加载</button>
+      <button type="button" data-state="error">失败</button>
+      <button type="button" data-state="empty">空</button>
+    </div>
+    <label class="ctl">归属待确认路径数
+      <select id="scaleSel">
+        <option value="12">12 个</option>
+        <option value="60">60 个</option>
+        <option value="358" selected>358 个（BUG-20260917-001 现场）</option>
+      </select>
+    </label>
+    <span class="clicks" id="clickCounter" title="统计本次会话中归属下拉的人工点击选择次数">下拉点击次数：0</span>
+    <button type="button" id="themeBtn" class="small">深浅色切换</button>
+  </div>
+  <p class="legend">操作路径：任务页挂起卡片 →「查看并确认」打开右侧面板 → 处理「归属待确认」分组 → 「确认并继续」。</p>
+</header>
+
+<main>
+  <section class="card" id="holdCard">
+    <div class="hold-area-head">⚠ 待人工确认（1）——阻塞队列，确认后才继续</div>
+    <article>
+      <p class="reason"><strong>提交挂起 · REQ-20260916-002</strong>（develop）</p>
+      <p class="meta">已等待 6 分钟 · 挂起原因：report 收口时自动提交存在归属不明路径（pendingManual），须人工逐路径显式选择计入 / 排除。</p>
+      <div class="acts">
+        <button type="button" class="small" id="openPanelBtn">查看并确认</button>
+        <button type="button" class="small" id="cardVerifyBtn">重新核验</button>
+      </div>
+    </article>
+  </section>
+  <p class="note">提示：切换「缺陷现状 / 期望修复后」可对照两种形态；「归属待确认」行的下拉在任何模式下都可逐项选择（修复后批量只是效率工具，逐项覆盖能力保留）。</p>
+</main>
+
+<div class="overlay" id="overlay"></div>
+<aside class="side-panel" id="panel" role="dialog" aria-label="挂起确认">
+  <div class="sp-head">
+    <div>
+      <h3 id="panelTitle">提交挂起 · REQ-20260916-002</h3>
+      <p class="sp-scope">核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列</p>
+    </div>
+    <button type="button" class="icon-btn" id="closeBtn" aria-label="关闭挂起确认面板">✕</button>
+  </div>
+  <div class="sp-body" id="panelBody"></div>
+  <div class="sp-foot" id="panelFoot">
+    <button type="button" id="cancelBtn">关闭</button>
+    <button type="button" id="keepBtn" title="保持挂起：暂不处理，处理说明留档，现场与队列暂停保留">保持挂起</button>
+    <button type="button" id="verifyBtn" title="重新核验：只检查不改现场（重算候选路径并运行测试）">重新核验</button>
+    <button type="button" class="primary" id="continueBtn" title="确认并继续：授权补交选中文件、复验测试，通过后恢复队列">确认并继续</button>
+  </div>
+</aside>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- 状态 ----------
+  var state = {
+    mode: 'bug',        // bug=缺陷现状 fixed=期望修复后
+    view: 'normal',     // normal | loading | error | empty
+    scale: 358,
+    clicks: 0,
+    busy: false,
+    attr: {},           // path -> 'include' | 'exclude'（模拟 confirmSide.attr，面板重开重置）
+    verifiedAt: null
+  };
+  var $ = function (s) { return document.querySelector(s); };
+
+  // ---------- 主题（默认跟随系统） ----------
+  function applyTheme() {
+    var dark = localStorage.getItem('demo-theme') === 'dark'
+      || (!localStorage.getItem('demo-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  }
+  applyTheme();
+  $('#themeBtn').addEventListener('click', function () {
+    var cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('demo-theme', cur);
+    applyTheme();
+  });
+
+  // ---------- 模拟数据 ----------
+  function buildData() {
+    var own = [
+      { path: 'scripts/web/app.js', kind: '修改' },
+      { path: 'scripts/web/i18n.js', kind: '修改' },
+      { path: 'scripts/tests/bug-20260917-003.test.mjs', kind: '新增' }
+    ];
+    var undet = [];
+    var n = state.scale;
+    for (var i = 0; i < n; i++) {
+      if (i % 3 === 0) undet.push({ path: 'dist/web/assets/chunk-' + String(i + 1).padStart(3, '0') + '-' + hash(i) + '.js', kind: '新增', dir: 'dist/web/assets/' });
+      else if (i % 3 === 1) undet.push({ path: 'dist/web/pkg/board-' + hash(i + 7) + '.tgz', kind: '新增', dir: 'dist/web/pkg/' });
+      else undet.push({ path: 'agent-team-board/data/req/REQ-2026091' + (i % 10) + '-0' + ((i % 9) + 1) + '.md', kind: '修改', dir: 'agent-team-board/data/req/' });
+    }
+    if (n >= 12) undet.push({ path: 'package-lock.json', kind: '修改', dir: '（根目录）' });
+    return { own: own, undet: undet };
+  }
+  function hash(seed) {
+    var s = (seed * 2654435761 % 4294967296).toString(16);
+    return s.padStart(8, '0').slice(0, 6);
+  }
+  function dirs(list) {
+    var m = {};
+    list.forEach(function (f) { m[f.dir || '（根目录）'] = (m[f.dir || '（根目录）'] || 0) + 1; });
+    return Object.keys(m).map(function (k) { return { dir: k, count: m[k] }; });
+  }
+
+  // ---------- 统计 ----------
+  function stats() {
+    var d = buildData();
+    var inc = 0, exc = 0;
+    d.undet.forEach(function (f) {
+      var v = state.attr[f.path];
+      if (v === 'include') inc++; else if (v === 'exclude') exc++;
+    });
+    return { own: d.own.length, total: d.undet.length, inc: inc, exc: exc, unresolved: d.undet.length - inc - exc, data: d };
+  }
+
+  // ---------- 渲染 ----------
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function rowHtml(f, withAttr) {
+    var sel = '';
+    if (withAttr) {
+      var v = state.attr[f.path] || '';
+      sel = '<td><select data-attr="' + esc(f.path) + '" aria-label="归属选择"' + (state.busy ? ' disabled' : '') + '>'
+        + '<option value=""' + (v ? '' : ' selected') + '>待选择（归属待确认）</option>'
+        + '<option value="include"' + (v === 'include' ? ' selected' : '') + '>计入本次补交</option>'
+        + '<option value="exclude"' + (v === 'exclude' ? ' selected' : '') + '>排除（保持工作区）</option>'
+        + '</select></td>';
+    }
+    return '<tr><td class="path" title="' + esc(f.path) + '">' + esc(f.path) + '</td>'
+      + '<td><span class="k-' + (f.kind === '新增' ? 'add' : f.kind === '删除' ? 'del' : 'mod') + '">' + f.kind + '</span></td>'
+      + '<td class="st-out">未提交</td>'
+      + '<td><button type="button" class="small" data-diff="' + esc(f.path) + '">查看差异</button></td>'
+      + sel + '</tr>';
+  }
+  function render() {
+    var body = $('#panelBody');
+    var foot = $('#panelFoot');
+    if (state.view === 'loading') {
+      body.innerHTML = '<p class="loading">正在读取挂起详情…</p>';
+      setBusy(true); return;
+    }
+    if (state.view === 'error') {
+      body.innerHTML = '<div class="err-block" role="alert"><p>挂起详情读取失败：模拟的网络错误（演示）</p>'
+        + '<button type="button" class="small" id="retryBtn">重试</button></div>';
+      setBusy(true);
+      body.querySelector('#retryBtn').addEventListener('click', function () {
+        setState('loading');
+        setTimeout(function () { setState('normal'); }, 700);
+      });
+      return;
+    }
+    setBusy(state.busy);
+    var s = stats();
+    if (state.view === 'empty') {
+      body.innerHTML = '<p class="empty">无待提交文件：全部路径已入库。核验口径与计数一致。</p>'
+        + '<p class="counts">已提交：4 组（补交 1 组）· 确认范围：本单可归属 0 个 + 归属待确认已计入 0 个 = 将补交 0 个路径</p>';
+      return;
+    }
+    var ownTable = '<div class="group-head">本单可归属（' + s.data.own.length + '）</div>'
+      + '<table class="files"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th></tr></thead><tbody>'
+      + s.data.own.map(function (f) { return rowHtml(f, false); }).join('') + '</tbody></table>';
+    // 批量条：仅期望修复后模式渲染（本 Bug 的核心对照点）
+    var batchBar = '';
+    if (state.mode === 'fixed') {
+      var dirOpts = dirs(s.data.undet).map(function (d) {
+        return '<option value="' + esc(d.dir) + '">排除目录 ' + esc(d.dir) + '（' + d.count + ' 个）</option>';
+      }).join('');
+      batchBar = '<div class="batch-bar"><span class="tag">批量操作（期望修复后）</span>'
+        + '<button type="button" class="small" data-batch="include"' + (state.busy ? ' disabled' : '') + '>全部计入</button>'
+        + '<button type="button" class="small" data-batch="exclude"' + (state.busy ? ' disabled' : '') + '>全部排除</button>'
+        + '<span class="design-opt">设计选项（是否采纳待确认）：</span>'
+        + '<select id="dirSel" aria-label="按目录批量排除">' + dirOpts + '</select>'
+        + '<button type="button" class="small" data-batch-dir>排除所选目录</button>'
+        + '</div>';
+    } else {
+      batchBar = '<div class="batch-bar" style="background:var(--err-bg)"><span class="tag" style="color:var(--danger)">缺陷现状</span>'
+        + '<span class="design-opt">无任何批量操作入口——' + s.total + ' 个路径只能逐项下拉选择（见右上「下拉点击次数」），中途关闭面板已选项还会被重置。</span></div>';
+    }
+    var undetTable = '<div class="group-head undet">归属待确认（' + s.total + '）——全局 / 来源不明，不得静默归为本单</div>'
+      + batchBar
+      + '<table class="files"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th><th>归属处理</th></tr></thead><tbody>'
+      + s.data.undet.map(function (f) { return rowHtml(f, true); }).join('') + '</tbody></table>';
+    var verify = state.verifiedAt
+      ? '<p class="verify ok">最近核验（' + state.verifiedAt + '）：通过</p>'
+      : '<p class="verify bad">尚未核验：确认时将自动重新核验并运行测试</p>';
+    body.innerHTML =
+      '<p>report 收口时自动提交存在归属不明路径（pendingManual ' + s.total + ' 个），须人工显式选择计入 / 排除。</p>'
+      + '<p class="counts">已提交：2 组（补交 0 组）· 待提交：本单可归属 ' + s.own + ' + 归属待确认 ' + s.total + '</p>'
+      + ownTable + undetTable
+      + '<p class="unresolved' + (s.unresolved ? '' : ' hidden') + '" id="unresolvedHint">待核对：' + s.unresolved + ' 个归属待确认路径尚未选择计入 / 排除。</p>'
+      + '<div id="diffBox"></div>'
+      + verify
+      + '<label class="btn-guide" style="display:block">处理说明（保持挂起时记录；确认时可留空）'
+      + '<textarea id="note" rows="2" placeholder="如：已核对归属，整文件归本单"></textarea></label>'
+      + '<p class="msg" id="panelMsg" role="status" aria-live="polite"></p>'
+      + '<p class="scope-summary" id="scopeSummary"></p>'
+      + '<p class="btn-guide">保持挂起＝暂不处理 · 重新核验＝只检查不改现场 · 确认并继续＝授权补交选中文件＋复验测试＋恢复队列</p>';
+    updateSummary();
+    bindRows();
+  }
+  function updateSummary() {
+    var s = stats();
+    var el = $('#scopeSummary'); var hint = $('#unresolvedHint');
+    if (el) {
+      var text = '确认范围（提交前展示实际将提交的文件）：本单可归属 ' + s.own + ' 个 + 归属待确认已计入 ' + s.inc + ' 个 = 将补交 ' + (s.own + s.inc) + ' 个路径';
+      if (s.exc) text += '（排除 ' + s.exc + ' 个）';
+      if (s.unresolved > 0) text += '；' + s.unresolved + ' 个归属待确认未处理（须逐项选择计入 / 排除才能确认）';
+      el.textContent = text;
+    }
+    if (hint) {
+      hint.textContent = s.unresolved > 0 ? '待核对：' + s.unresolved + ' 个归属待确认路径尚未选择计入 / 排除。' : '';
+      hint.classList.toggle('hidden', s.unresolved === 0);
+    }
+  }
+  function msg(text, isErr) {
+    var el = $('#panelMsg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'msg' + (isErr ? ' err' : text ? ' ok' : '');
+  }
+  function setBusy(b) {
+    state.busy = b;
+    ['keepBtn', 'verifyBtn', 'continueBtn'].forEach(function (id) {
+      var el = $('#' + id); if (el) el.disabled = b;
+    });
+  }
+
+  // ---------- 交互 ----------
+  function bumpClicks() {
+    state.clicks++;
+    $('#clickCounter').textContent = '下拉点击次数：' + state.clicks;
+  }
+  function bindRows() {
+    var body = $('#panelBody');
+    Array.prototype.forEach.call(body.querySelectorAll('select[data-attr]'), function (sel) {
+      sel.addEventListener('change', function () {
+        bumpClicks(); // 逐项点击计数：缺陷模式下 358 项 = 358 次点击
+        if (sel.value) state.attr[sel.dataset.attr] = sel.value;
+        else delete state.attr[sel.dataset.attr];
+        updateSummary();
+      });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('button[data-diff]'), function (btn) {
+      btn.addEventListener('click', function () {
+        var box = $('#diffBox');
+        box.innerHTML = '<details open class="diffbox"><summary>' + esc(btn.dataset.diff) + '（工作区 vs Git 基线）</summary>'
+          + '<pre>@@ 模拟差异 @@\n- 旧内容（演示）\n+ 新内容（演示）</pre></details>';
+      });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('button[data-batch]'), function (btn) {
+      btn.addEventListener('click', function () {
+        // 批量 = 把组内全部未入库行显式置为对应值（等价逐项显式选择的效率工具）
+        stats().data.undet.forEach(function (f) { state.attr[f.path] = btn.dataset.batch; });
+        render();
+        msg(btn.dataset.batch === 'include' ? '已全部计入：' + stats().total + ' 个路径置为「计入本次补交」，可逐项覆盖' : '已全部排除：' + stats().total + ' 个路径置为「排除（保持工作区）」，可逐项覆盖');
+      });
+    });
+    var dirBtn = body.querySelector('button[data-batch-dir]');
+    if (dirBtn) dirBtn.addEventListener('click', function () {
+      var dir = $('#dirSel').value;
+      var n = 0;
+      stats().data.undet.forEach(function (f) { if ((f.dir || '（根目录）') === dir) { state.attr[f.path] = 'exclude'; n++; } });
+      render();
+      msg('已按目录排除 ' + dir + '：' + n + ' 个路径置为「排除（保持工作区）」（设计选项演示，是否采纳待确认）');
+    });
+  }
+
+  // 面板开合（重开重置归属选择，模拟 confirmSide.attr 重建）
+  function openPanel() {
+    state.attr = {};
+    $('#overlay').classList.add('open');
+    $('#panel').classList.add('open');
+    render();
+    if (state.view === 'loading') setTimeout(function () { if (state.view === 'loading') setState('normal'); }, 900);
+  }
+  function closePanel() {
+    $('#overlay').classList.remove('open');
+    $('#panel').classList.remove('open');
+  }
+  $('#openPanelBtn').addEventListener('click', openPanel);
+  $('#closeBtn').addEventListener('click', closePanel);
+  $('#cancelBtn').addEventListener('click', closePanel);
+  $('#overlay').addEventListener('click', closePanel);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanel(); });
+
+  // 确认并继续：未处理完拦截（缺陷与修复后口径一致，修复不弱化拦截）
+  $('#continueBtn').addEventListener('click', function () {
+    if (state.busy) return;
+    var s = stats();
+    if (s.unresolved > 0) {
+      var paths = s.data.undet.filter(function (f) { return !state.attr[f.path]; }).map(function (f) { return f.path; });
+      var shown = paths.slice(0, 5).join('、') + (paths.length > 5 ? ' 等 ' + paths.length + ' 个' : '');
+      msg('确认被拦截：归属待确认项未处理（' + shown + '）——每个路径须显式选择「计入本次补交 / 排除」，全局文件不得静默整批归为本单', true);
+      return;
+    }
+    setBusy(true); render();
+    var btn = $('#continueBtn'); btn.textContent = '正在核验提交与测试…';
+    setTimeout(function () {
+      state.verifiedAt = new Date().toLocaleTimeString('zh-CN');
+      setBusy(false); render();
+      msg('已确认并继续：include 显式携带计入 ' + s.inc + ' 个路径，补交完成、测试复验通过，队列已恢复');
+      $('#continueBtn').textContent = '已确认恢复';
+      setTimeout(function () { $('#continueBtn').textContent = '确认并继续'; }, 2500);
+    }, 1200);
+  });
+  // 重新核验：只检查不改现场
+  function reverify() {
+    if (state.busy) return;
+    setBusy(true); render();
+    $('#verifyBtn').textContent = '正在核验提交与测试…';
+    setTimeout(function () {
+      state.verifiedAt = new Date().toLocaleTimeString('zh-CN');
+      setBusy(false); render();
+      msg('重新核验完成：只检查不改现场，「最近核验」已刷新');
+      $('#verifyBtn').textContent = '重新核验';
+    }, 1000);
+  }
+  $('#verifyBtn').addEventListener('click', reverify);
+  $('#cardVerifyBtn').addEventListener('click', function () {
+    msg(''); reverifyFromCard();
+  });
+  function reverifyFromCard() {
+    state.verifiedAt = new Date().toLocaleTimeString('zh-CN');
+    var b = $('#cardVerifyBtn'); b.textContent = '正在核验提交与测试…'; b.disabled = true;
+    setTimeout(function () { b.textContent = '重新核验'; b.disabled = false; }, 900);
+  }
+  // 保持挂起
+  $('#keepBtn').addEventListener('click', function () {
+    if (state.busy) return;
+    msg('已保持挂起：现场与队列暂停保留（取消队列须显式终止任务或恢复领取）');
+  });
+
+  // ---------- 顶栏控件 ----------
+  Array.prototype.forEach.call(document.querySelectorAll('#modeSeg button'), function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.dataset.mode;
+      Array.prototype.forEach.call(document.querySelectorAll('#modeSeg button'), function (x) { x.classList.toggle('active', x === b); });
+      if ($('#panel').classList.contains('open')) { state.attr = {}; render(); msg(''); }
+    });
+  });
+  function setState(v) {
+    state.view = v;
+    Array.prototype.forEach.call(document.querySelectorAll('#stateSeg button'), function (x) { x.classList.toggle('active', x.dataset.state === v); });
+    if ($('#panel').classList.contains('open')) render();
+    if (v === 'loading') setTimeout(function () { if (state.view === 'loading') setState('normal'); }, 900);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#stateSeg button'), function (b) {
+    b.addEventListener('click', function () { setState(b.dataset.state); });
+  });
+  $('#scaleSel').addEventListener('change', function () {
+    state.scale = parseInt(this.value, 10);
+    state.attr = {};
+    if ($('#panel').classList.contains('open')) render();
+  });
+})();
+</script>
+</body>
+</html>
