@@ -3310,6 +3310,17 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+/* BUG-20260917-003 归属待确认批量条：全部计入 / 全部排除（显式选择的效率工具） */
+.confirm-batch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+.confirm-batch-bar .btn.small { padding: 1px 8px; }
+.confirm-batch-label { font-size: 11px; color: var(--muted); }
+.confirm-batch-hint { font-size: 11px; color: var(--muted); }
 .confirm-files .cfile-path { font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace); font-size: 11px; max-width: 230px; }
 .confirm-files .chg.k-add { color: var(--accent, #2f9e44); }
 .confirm-files .chg.k-del { color: var(--danger, #d9480f); }
