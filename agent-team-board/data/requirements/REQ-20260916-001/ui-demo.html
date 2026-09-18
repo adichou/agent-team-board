@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260916-001 界面演示 · AI 开发任务概括阻塞展示与人工确认、文档自动提交</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #24292f; --muted: #6a737d;
+    --line: #d8dee4; --accent: #0969da; --accent-ink: #ffffff;
+    --ok: #1a7f37; --warn: #9a6700; --err: #cf222e; --info: #0969da;
+    --ok-bg: #dafbe1; --warn-bg: #fff8c5; --err-bg: #ffebe9; --info-bg: #ddf4ff; --chip-bg: #eff2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e;
+      --line: #30363d; --accent: #388bfd; --accent-ink: #ffffff;
+      --ok: #3fb950; --warn: #d29922; --err: #f85149; --info: #58a6ff;
+      --ok-bg: #12261e; --warn-bg: #241d10; --err-bg: #2d1416; --info-bg: #0d1d2d; --chip-bg: #21262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  .hidden { display: none; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  header.demo-head { padding: 14px 20px 6px; }
+  header.demo-head h1 { font-size: 16px; margin: 0 0 2px; }
+  header.demo-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .app { max-width: 1060px; margin: 0 auto; padding: 10px 20px 70px; }
+  /* 演示控制台 */
+  .console { background: var(--panel); border: 1px dashed var(--line); border-radius: 8px;
+    padding: 10px 14px; margin: 14px 0; font-size: 13px; }
+  .console summary { cursor: pointer; font-weight: 600; }
+  .console .row { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; align-items: center; }
+  .console label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .console .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-wrap: wrap; }
+  .console .seg button { border: none; background: none; color: var(--muted); padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+  .console .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  .hint { color: var(--muted); font-size: 12px; }
+  /* 任务面板（概况示意） */
+  .task-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .pane-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+  .pane-tab { border: 1px solid transparent; border-bottom: none; background: none; color: var(--muted);
+    padding: 5px 12px; border-radius: 6px 6px 0 0; cursor: default; font-size: 13px; }
+  .pane-tab.active { background: var(--panel); border-color: var(--line); color: var(--ink); font-weight: 600; }
+  .pane-tab[disabled] { opacity: .55; }
+  .status-line { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .chip { border-radius: 999px; padding: 1px 10px; font-size: 12px; white-space: nowrap; background: var(--chip-bg); color: var(--muted); }
+  .chip.run { color: var(--info); background: var(--info-bg); }
+  .chip.done-ok { color: var(--ok); background: var(--ok-bg); }
+  .chip.done-warn { color: var(--err); background: var(--err-bg); font-weight: 700; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  /* 阻塞统计（固定展示，可点击） */
+  .blk-stats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-left: auto; }
+  .blk-stat { border: 1px solid var(--line); background: none; color: var(--ink); border-radius: 6px;
+    padding: 3px 11px; cursor: pointer; font-size: 12.5px; font-weight: 600; }
+  .blk-stat.warn { border-color: color-mix(in srgb, var(--err) 55%, transparent); color: var(--err); background: var(--err-bg); }
+  .blk-stat.ask { border-color: color-mix(in srgb, var(--warn) 55%, transparent); color: var(--warn); background: var(--warn-bg); }
+  .blk-stat.zero, .blk-stat.loading { color: var(--muted); cursor: default; font-weight: 400; }
+  .blk-stat:disabled { opacity: .5; cursor: not-allowed; }
+  .blk-stat .caret { display: inline-block; transition: transform .12s; font-size: 10px; }
+  .blk-stat[aria-expanded="true"] .caret { transform: rotate(90deg); }
+  .notice { border-radius: 6px; padding: 6px 10px; margin: 8px 0; font-size: 12.5px; }
+  .notice.ok { background: var(--ok-bg); }
+  .notice.warn { background: var(--warn-bg); }
+  .notice.err { background: var(--err-bg); }
+  .notice.info { background: var(--info-bg); }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px 14px; margin: 10px 0; }
+  .meta-grid label { display: block; color: var(--muted); font-size: 11.5px; }
+  .meta-grid span { font-size: 13px; }
+  .cid { color: var(--accent); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .stats-line { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .stats-line b { color: var(--ink); }
+  .stats-line .abn { color: var(--err); }
+  /* 阻塞列表 */
+  .blk-list { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .blk-list h3 { margin: 0; padding: 7px 12px; font-size: 13px; background: var(--chip-bg);
+    display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .blk-item { padding: 9px 12px; border-top: 1px solid var(--line); display: grid;
+    grid-template-columns: minmax(210px, 1.2fr) minmax(260px, 2fr) auto; gap: 6px 14px; align-items: start; }
+  .blk-item .reason { word-break: break-word; overflow-wrap: anywhere; }
+  .blk-item .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .blk-item .st { font-size: 12px; }
+  .st.open-ask { color: var(--warn); font-weight: 600; }
+  .st.open-dep { color: var(--muted); }
+  .st.resume { color: var(--info); font-weight: 600; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px;
+    padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 50%, transparent); color: var(--warn); }
+  .btn.small { padding: 2px 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .skeleton { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--chip-bg), var(--line), var(--chip-bg));
+    background-size: 200% 100%; animation: pulse 1.1s ease-in-out infinite; margin: 8px 0; }
+  @keyframes pulse { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .empty-note { color: var(--muted); padding: 12px; }
+  /* 侧拉面板 */
+  .side-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 40; }
+  .side { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 92vw); background: var(--panel);
+    border-left: 1px solid var(--line); z-index: 41; display: flex; flex-direction: column;
+    box-shadow: -6px 0 24px rgba(0,0,0,.14); }
+  .side-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .side-head h2 { font-size: 14px; margin: 0; flex: 1; }
+  .side-body { padding: 12px 16px; overflow-y: auto; flex: 1; }
+  .side-foot { border-top: 1px solid var(--line); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .q-block { margin: 0 0 12px; }
+  .q-block .q { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .q-block textarea { width: 100%; min-height: 54px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--ink); padding: 6px 9px; font: 13px/1.5 inherit; resize: vertical; }
+  .q-block textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .doc-links { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  pre.ro { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+    overflow-wrap: anywhere; max-height: 300px; overflow: auto; }
+  .diff-file { margin: 10px 0 4px; font-weight: 600; font-size: 12.5px; word-break: break-all; }
+  .dl { display: block; white-space: pre-wrap; word-break: break-word; }
+  .dl.add { color: var(--ok); }
+  .dl.del { color: var(--err); }
+  .dl.hunk { color: var(--muted); }
+  .phase-badge { border-radius: 999px; padding: 2px 11px; font-size: 12px; font-weight: 600; background: var(--chip-bg); color: var(--muted); }
+  .phase-badge.busy { background: var(--info-bg); color: var(--info); }
+  .phase-badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .phase-badge.err { background: var(--err-bg); color: var(--err); }
+  .foot-note { flex-basis: 100%; color: var(--muted); font-size: 11.5px; }
+  .commit-files { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12.5px; }
+  .commit-files li { padding: 2px 0; }
+  .kbd-hint { color: var(--muted); font-size: 11.5px; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* toast */
+  .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; max-width: 440px; }
+  .toast { border-radius: 8px; padding: 9px 13px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    border: 1px solid var(--line); background: var(--panel); animation: slidein .18s ease-out; }
+  .toast.ok { background: var(--ok-bg); }
+  .toast.warn { background: var(--warn-bg); }
+  .toast.err { background: var(--err-bg); }
+  @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  footer.demo-foot { margin-top: 14px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 720px) {
+    .blk-item { grid-template-columns: 1fr; }
+    .blk-item .acts { justify-content: flex-start; }
+    .side { width: 100vw; }
+  }
+</style>
+</head>
+<body>
+<header class="demo-head">
+  <h1>REQ-20260916-001 界面演示 · AI 开发任务概括阻塞展示 + 人工确认 + 文档自动提交</h1>
+  <p>单文件演示，数据均为虚构示例；点击只改变本地演示状态，不发真实请求、不读写文件、不执行 Git 操作、不修改任何条目状态。</p>
+</header>
+<div class="app">
+
+  <details class="console" open>
+    <summary>演示控制台（切换概括场景、blocker 读取结果与确认链路结果）</summary>
+    <div class="row">
+      <span class="hint">概括场景：</span>
+      <span class="seg" id="segScene">
+        <button data-scene="running" class="on">运行中 · 有阻塞</button>
+        <button data-scene="finished">已结束 · 仍有阻塞</button>
+        <button data-scene="none">已结束 · 无阻塞</button>
+        <button data-scene="loading">加载中</button>
+        <button data-scene="error">读取失败</button>
+      </span>
+    </div>
+    <div class="row">
+      <span class="hint">blocker 读取：</span>
+      <span class="seg" id="segBlocker">
+        <button data-blk="ok" class="on">正常</button>
+        <button data-blk="missing">文件缺失</button>
+        <button data-blk="readFail">读取失败</button>
+        <button data-blk="noAccess">无权访问</button>
+        <button data-blk="escape">路径越界（拒绝）</button>
+      </span>
+      <span class="hint">确认链路：</span>
+      <span class="seg" id="segFlow">
+        <button data-flow="ok" class="on">全部成功</button>
+        <button data-flow="saveFail">保存失败</button>
+        <button data-flow="commitFail">提交失败（文档已落盘）</button>
+      </span>
+    </div>
+    <div class="row"><span class="hint">提示：点击概况右上「⛔ 阻塞 N 项」展开列表 → 「查看 blocker」打开只读侧栏 → 对信息缺失条目「人工确认」逐项作答、存草稿、看差异预览后「确认决策并提交文档」；Esc 关闭侧栏。</span></div>
+  </details>
+
+  <section class="task-panel" aria-label="AI 开发任务概括（概况页签示意）">
+    <div class="pane-tabs" aria-label="任务页签（演示仅概况可看）">
+      <button class="pane-tab active">概况</button>
+      <button class="pane-tab" disabled title="演示仅呈现概况分区">队列</button>
+      <button class="pane-tab" disabled title="演示仅呈现概况分区">提示词</button>
+      <button class="pane-tab" disabled title="演示仅呈现概况分区">记录</button>
+    </div>
+    <div id="summaryArea"></div>
+    <div id="blockList" class="blk-list hidden"></div>
+  </section>
+
+  <footer class="demo-foot">
+    覆盖：界面布局（运行状态旁固定阻塞计数、展开列表、双侧栏）· 交互行为（计数展开、blocker 只读查看与重试、路径越界拒绝、逐项作答、草稿保存/恢复、差异预览、取消、确认提交防重复、失败分阶段重试）· 状态反馈（待确认/草稿/正在保存文档/正在提交/已提交（短提交号）/保存失败/提交失败；决策已确认 · 待人工复工；概括正常/空/加载/失败；深浅色跟随系统）。数据去重口径：同条目多轮阻塞计 1 项，列表逐轮展示、历史轮次在 blocker 中保留。
+  </footer>
+</div>
+
+<div class="side-backdrop hidden" id="backdrop"></div>
+
+<!-- blocker 只读侧栏 -->
+<aside class="side hidden" id="blockerSide" role="dialog" aria-modal="true" aria-label="blocker 只读查看">
+  <div class="side-head">
+    <h2>blocker 只读查看 · <span class="cid" id="blkSideRun"></span></h2>
+    <button class="btn small" id="blkSideClose">关闭</button>
+  </div>
+  <div class="side-body" id="blkSideBody"></div>
+  <div class="side-foot"><span class="foot-note">路径由服务端解析并限定在当前项目运行目录内，拒绝路径穿越与项目外访问；内容以转义文本只读渲染。</span></div>
+</aside>
+
+<!-- 人工确认侧栏 -->
+<aside class="side hidden" id="confirmSide" role="dialog" aria-modal="true" aria-label="人工确认与文档提交">
+  <div class="side-head">
+    <h2>人工确认 · <span class="cid" id="cfSideId"></span></h2>
+    <span class="phase-badge" id="cfPhase">待确认</span>
+    <button class="btn small" id="cfClose">关闭</button>
+  </div>
+  <div class="side-body" id="cfBody"></div>
+  <div class="side-foot" id="cfFoot"></div>
+</aside>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ---------- 演示数据（全部虚构） ---------- */
+const COMMIT_SHA = 'a1b2c3d';
+const BLOCKERS = [
+  {
+    id: 'REQ-20260916-010', title: '示例：多平台分发向导与覆盖率报告',
+    run: 'run-20260916-4012', batch: 'batch-20260916-118', rounds: ['第 1 轮 run-20260916-3971', '第 2 轮 run-20260916-4012'],
+    kind: '信息缺失', waited: '2 天 3 小时', confirmable: true,
+    reason: '缺人工确认：首批支持平台范围与覆盖率统计口径（行/分支、阈值）未在 README 明确，无法替人工决定向导步骤裁剪与统计接入。',
+  },
+  {
+    id: 'REQ-20260916-012', title: '示例：导出看板为 Markdown 报表',
+    run: 'run-20260916-4108', batch: 'batch-20260916-118', rounds: ['第 1 轮 run-20260916-4108'],
+    kind: '依赖', waited: '1 天 6 小时', confirmable: false,
+    reason: '依赖前置条目 REQ-20260916-005（报表数据接口）未完成：非决策类阻塞，无人工确认入口，前置条目人工验收后自动解除。',
+  },
+];
+const QUESTIONS = [
+  { key: 'q1', label: '1. 首批支持的平台范围是哪些？（iOS / iPadOS / macOS / visionOS…）', short: '平台范围' },
+  { key: 'q2', label: '2. 覆盖率以行覆盖还是分支覆盖为准？验收阈值是多少？', short: '覆盖率口径' },
+];
+const BLOCKER_TEXTS = [
+  [
+    '# blocked 回执 · run-20260916-4012（第 2 轮）',
+    '- 条目：REQ-20260916-010 多平台分发向导与覆盖率报告',
+    '- 批次：batch-20260916-118 · 子代理 dev-3（示例）',
+    '- 回执时间：2026-09-16 21:04（已等待 2 天 3 小时）',
+    '- 类型：信息缺失（需人工决策）',
+    '',
+    '原因（≤200 字）：向导需按首批平台范围裁剪步骤并接入覆盖率统计；平台清单与覆盖率口径未明确，无法替人工决定。',
+    '',
+    '待人工确认问题：',
+    '1. 首批支持的平台范围是哪些？',
+    '2. 覆盖率以行覆盖还是分支覆盖为准？阈值是多少？',
+    '',
+    '已完成：向导骨架与数据模型（未提交，工作区保留）。',
+    '下一步：收到逐项答案后继续实施；答案将写入条目 README/design 并留痕。',
+    '',
+    '历史轮次（同条目去重计 1 项阻塞）：',
+    '- 第 1 轮 run-20260916-3971（2026-09-16 09:12，同因，重试后仍缺决策）',
+    '- 第 2 轮 run-20260916-4012（本轮）',
+  ].join('\n'),
+  [
+    '# blocked 回执 · run-20260916-4108（第 1 轮）',
+    '- 条目：REQ-20260916-012 导出看板为 Markdown 报表',
+    '- 批次：batch-20260916-118 · 子代理 dev-2（示例）',
+    '- 回执时间：2026-09-17 06:31（已等待 1 天 6 小时）',
+    '- 类型：依赖（非决策类）',
+    '',
+    '原因（≤200 字）：依赖前置条目 REQ-20260916-005（报表数据接口）未完成，无法开始实施；继续处理队列中其他条目。',
+    '',
+    '解除条件：前置条目人工验收完成后自动解除，无需人工确认决策。',
+    '历史轮次（同条目去重计 1 项阻塞）：',
+    '- 第 1 轮 run-20260916-4108（本轮）',
+  ].join('\n'),
+];
+const blockerPath = (i) => `agent-team-board/dispatch/runs/${BLOCKERS[i].run}/blocker.md`;
+
+/* ---------- 演示状态 ---------- */
+const S = {
+  scene: 'running',          // running | finished | none | loading | error
+  blockerState: 'ok',        // ok | missing | readFail | noAccess
+  flow: 'ok',                // ok | saveFail | commitFail
+  expanded: false,
+  blockerOpen: false,
+  confirmOpen: false,
+  answers: { q1: '', q2: '' },
+  draft: false,
+  phase: 'idle',             // idle | saving | committing | committed | saveFailed | commitFailed
+  confirmed: false,          // 信息缺失条目确认完成（待人工复工）
+  busy: false,               // 确认链路进行中（防重复）
+  retryingSummary: false,
+};
+const $ = (s) => document.querySelector(s);
+const el = (id) => document.getElementById(id);
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- toast ---------- */
+function toast(msg, kind) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.textContent = msg;
+  el('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 5200);
+}
+
+/* ---------- 计数（按条目去重；阻塞含待复工，待确认不含已确认） ---------- */
+const pendingCount = () => BLOCKERS.filter((b) => b.confirmable && !S.confirmed).length;
+const blockedCount = () => (S.scene === 'none' ? 0 : BLOCKERS.length);
+
+/* ---------- 概况渲染 ---------- */
+function sceneChip() {
+  if (S.scene === 'running') return '<span class="chip run">运行中</span>';
+  if (S.scene === 'finished') return '<span class="chip done-warn">已结束 · 仍有 2 项阻塞</span>';
+  if (S.scene === 'none') return '<span class="chip done-ok">已结束</span>';
+  return '';
+}
+function renderSummary() {
+  const area = el('summaryArea');
+  if (S.retryingSummary) {
+    area.innerHTML = '<div class="skeleton" style="max-width:420px"></div><div class="skeleton" style="max-width:640px"></div><div class="skeleton" style="max-width:540px"></div>';
+    return;
+  }
+  if (S.scene === 'loading') {
+    area.innerHTML = '<div class="skeleton" style="max-width:380px"></div><div class="skeleton" style="max-width:620px"></div><div class="skeleton" style="max-width:500px"></div><p class="muted small">概况加载中…阻塞统计与列表加载完成前不可操作，避免旧数据被误认为新结果。</p>';
+    return;
+  }
+  if (S.scene === 'error') {
+    area.innerHTML = `
+      <div class="status-line"><span class="chip">概况读取失败</span></div>
+      <div class="notice err">概括数据读取失败：接口超时（示例）。阻塞数量未知，不能当作「阻塞 0 项」展示。</div>
+      <button class="btn primary small" id="sumRetry">重试读取概况</button>`;
+    el('blockList').classList.add('hidden');
+    return;
+  }
+  const running = S.scene === 'running';
+  const pend = pendingCount(), blk = blockedCount();
+  const blkStats = blk
+    ? `<button class="blk-stat warn" id="statBlk" aria-expanded="${S.expanded}"><span class="caret">▶</span> ⛔ 阻塞 ${blk} 项</button>` +
+      (pend ? `<button class="blk-stat ask" id="statAsk" aria-expanded="${S.expanded}"><span class="caret">▶</span> ❓ 待人工确认 ${pend} 项</button>` : '')
+    : '<span class="blk-stat zero">阻塞 0 项</span>';
+  const notices = [];
+  if (S.scene === 'finished') notices.push('<div class="notice warn">本轮已处理完毕——但仍有 2 项阻塞未解决：批次结束不等于阻塞解除或需求完成，详情见下方阻塞列表。</div>');
+  if (S.scene === 'none') notices.push('<div class="notice ok">本轮已处理完毕：无未解决阻塞。</div>');
+  if (S.confirmed) notices.push(`<div class="notice info">${esc(BLOCKERS[0].id)} 决策已确认 · 待人工复工：请沿用现有复工入口恢复实施；确认动作不自动重启执行、不改变条目状态。</div>`);
+  area.innerHTML = `
+    <div class="status-line">
+      ${sceneChip()}
+      <span class="muted small">单代理模式 · 创建 2026-09-16 18:40（示例）</span>
+      <span class="blk-stats">${blkStats}</span>
+    </div>
+    ${notices.join('')}
+    <section class="meta-grid">
+      <div><label>当前条目</label><span>${running ? '<span class="cid">REQ-20260916-014</span> 示例：报表数据接口收敛' : '本轮已结束'}</span></div>
+      <div><label>子代理会话</label><span>${running ? 'dev-3' : '—'}</span></div>
+      <div><label>开始时间</label><span>${running ? '2026-09-18 09:12' : '2026-09-16 18:41'}</span></div>
+      <div><label>耗时</label><span>${running ? '已用时 2 小时 11 分' : '1 天 20 小时（累计）'}</span></div>
+      <div><label>最后活动</label><span>2026-09-18 11:23</span></div>
+    </section>
+    <p class="stats-line">已上报 <b>3</b> · 异常 <b class="abn">2</b>（失败 0 · 受阻 2 · 中断 0）· 进行中 <b>${running ? 1 : 0}</b> · 剩余 <b>${running ? 1 : 0}</b> · 总计 <b>6</b> · 受阻待处理 <b class="abn">${blk}</b>${S.confirmed ? '（含待复工 1）' : ''}</p>`;
+  const sb = el('statBlk'), sa = el('statAsk');
+  if (sb) sb.addEventListener('click', () => { S.expanded = !S.expanded; render(); });
+  if (sa) sa.addEventListener('click', () => { S.expanded = true; render(); });
+}
+
+/* ---------- 阻塞列表渲染 ---------- */
+function stateLabel(b) {
+  if (b.confirmable) return S.confirmed ? '<span class="st resume">决策已确认 · 待人工复工</span>' : '<span class="st open-ask">未解决 · 待人工确认</span>';
+  return '<span class="st open-dep">未解决 · 等待依赖完成</span>';
+}
+function renderList() {
+  const box = el('blockList');
+  if (!S.expanded || S.scene === 'error') { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  if (S.scene === 'loading') {
+    box.innerHTML = '<h3>阻塞列表（2 项 · 读取中）</h3><div style="padding:4px 12px 12px"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton" style="max-width:70%"></div></div>';
+    return;
+  }
+  const items = S.scene === 'none' ? [] : BLOCKERS;
+  if (!items.length) {
+    box.innerHTML = '<h3>阻塞列表（0 项）</h3><p class="empty-note">阻塞 0 项：当前项目、当前概括对应批次无未解决阻塞条目。</p>';
+    return;
+  }
+  box.innerHTML = `<h3>阻塞列表（${blockedCount()} 项 · 按条目去重，展开保留各轮次）</h3>` + items.map((b, i) => `
+    <div class="blk-item">
+      <div>
+        <div><span class="cid">${esc(b.id)}</span> ${esc(b.title)}</div>
+        <div class="muted small mono">${esc(b.run)} · 批次 ${esc(b.batch)} · ${esc(b.kind)} · 已等待 ${esc(b.waited)}</div>
+        <div class="muted small mono" style="overflow-wrap:anywhere">轮次（共 ${b.rounds.length} 轮 · 按条目去重计 1 项）：${b.rounds.map((r) => esc(r)).join('；')}</div>
+        <div class="st">${stateLabel(b)}</div>
+      </div>
+      <div class="reason small">${esc(b.reason)}</div>
+      <div class="acts">
+        <button class="btn small" data-open-blocker="${i}">查看 blocker</button>
+        ${b.confirmable && !S.confirmed
+          ? `<button class="btn small primary" data-open-confirm="${i}">人工确认</button>`
+          : b.confirmable
+            ? `<button class="btn small" disabled title="决策已确认：等待人工复工，无需再次确认">人工确认</button>`
+            : `<button class="btn small" disabled title="依赖类阻塞无人工确认入口：需前置条目完成后自动解除">人工确认</button>`}
+      </div>
+    </div>`).join('');
+  for (const btn of box.querySelectorAll('[data-open-blocker]')) {
+    btn.addEventListener('click', () => openBlockerSide(Number(btn.dataset.openBlocker)));
+  }
+  for (const btn of box.querySelectorAll('[data-open-confirm]')) {
+    btn.addEventListener('click', () => openConfirmSide());
+  }
+}
+
+/* ---------- blocker 侧栏 ---------- */
+let blockerIdx = 0;
+function openBlockerSide(i) {
+  blockerIdx = i;
+  S.blockerOpen = true;
+  el('blkSideRun').textContent = BLOCKERS[i].run;
+  el('backdrop').classList.remove('hidden');
+  el('blockerSide').classList.remove('hidden');
+  renderBlockerSide('loading');
+  setTimeout(() => renderBlockerSide(S.blockerState === 'ok' ? 'ok' : S.blockerState), 650);
+}
+function closeBlockerSide() {
+  S.blockerOpen = false;
+  el('blockerSide').classList.add('hidden');
+  syncBackdrop();
+}
+function renderBlockerSide(state) {
+  const body = el('blkSideBody');
+  const b = BLOCKERS[blockerIdx];
+  const path = `<p class="muted small mono" style="margin:0 0 8px">文件：${esc(blockerPath(blockerIdx))}<br>对应运行：${esc(b.run)}（只读）</p>`;
+  if (state === 'loading') {
+    body.innerHTML = path + '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton" style="max-width:70%"></div><p class="muted small">正在读取 blocker…</p>';
+    return;
+  }
+  const fail = (cls, text, why) => `
+    ${path}
+    <div class="notice ${cls}">${text}</div>
+    <p class="muted small">${why}</p>
+    <button class="btn small" id="blkRetry">重试读取</button>`;
+  if (state === 'missing') {
+    body.innerHTML = fail('warn', 'blocker 不存在：该运行未生成详情文件（回执仅含 reason）。', '缺失按「无法查看详情」反馈并计入阻塞，不当作无阻塞；原因仍可在阻塞列表查看。');
+  } else if (state === 'escape') {
+    body.innerHTML = fail('err', '已拒绝：路径越界——请求路径（示例 ../…/项目外文件）解析后位于当前项目运行目录之外。', '服务端解析并规范化路径后校验归属当前项目运行目录，拒绝 ../ 穿越与符号链接越界；越界按明确失败反馈并保留阻塞计数，不当作无阻塞，修正路径后可重试。');
+  } else if (state === 'readFail') {
+    body.innerHTML = fail('err', '读取失败：文件系统 I/O 错误（示例）。', '失败保留阻塞计数，可重试；重试不会把读取错误伪装成空内容。');
+  } else if (state === 'noAccess') {
+    body.innerHTML = fail('err', '无权访问：当前服务身份对该文件无读取权限（示例）。', '显示具体原因并允许重试；路径限定当前项目运行目录，项目外路径会被服务端拒绝。');
+  } else {
+    body.innerHTML = path + `<pre class="ro" tabindex="0">${esc(BLOCKER_TEXTS[blockerIdx])}</pre>`;
+  }
+  const r = el('blkRetry');
+  if (r) r.addEventListener('click', async () => {
+    renderBlockerSide('loading');
+    await delay(600);
+    S.blockerState = 'ok'; // 演示：重试成功（实际以真实读取结果为准）
+    syncSeg('segBlocker', 'blk', 'ok');
+    renderBlockerSide('ok');
+    toast('blocker 重试成功（演示：读取结果以实际为准）', 'ok');
+  });
+}
+
+/* ---------- 人工确认侧栏 ---------- */
+function openConfirmSide() {
+  S.confirmOpen = true;
+  el('cfSideId').textContent = BLOCKERS[0].id + ' ' + BLOCKERS[0].title;
+  el('backdrop').classList.remove('hidden');
+  el('confirmSide').classList.remove('hidden');
+  renderConfirmSide();
+}
+function closeConfirmSide() {
+  S.confirmOpen = false;
+  el('confirmSide').classList.add('hidden');
+  syncBackdrop();
+}
+function missingKeys() { return QUESTIONS.filter((q) => !S.answers[q.key].trim()).map((q) => q.short); }
+function phaseMeta() {
+  switch (S.phase) {
+    case 'saving': return { text: '正在保存文档…', cls: 'busy' };
+    case 'committing': return { text: '正在提交…', cls: 'busy' };
+    case 'committed': return { text: `已提交（${COMMIT_SHA}）`, cls: 'ok' };
+    case 'saveFailed': return { text: '保存失败', cls: 'err' };
+    case 'commitFailed': return { text: '提交失败 · 文档已落盘', cls: 'err' };
+    default: return S.draft ? { text: '草稿', cls: '' } : { text: '待确认', cls: '' };
+  }
+}
+function diffPreviewHtml() {
+  const a1 = S.answers.q1.trim() || '（未答）';
+  const a2 = S.answers.q2.trim() || '（未答）';
+  const dl = (t, s) => `<span class="dl ${t}">${t === 'add' ? '+' : t === 'del' ? '-' : '@@'} ${esc(s)}</span>`;
+  return `
+    <div class="diff-file">agent-team-board/data/requirements/REQ-20260916-010/README.md（修改 · 仅待决段落）</div>
+    <pre class="ro" tabindex="0">${dl('hunk', '@@ 待人工确认 @@')}${dl('del', '平台范围与覆盖率口径：待确认（阻塞实施）')}${dl('add', '1. 首批支持平台：' + a1 + '（人工确认 · 2026-09-18）')}${dl('add', '2. 覆盖率口径：' + a2 + '（人工确认 · 2026-09-18）')}${dl('add', '- 来源：run-20260916-4012 人工确认，答案原文留痕 decisions.md')}</pre>
+    <div class="diff-file">agent-team-board/data/requirements/REQ-20260916-010/design.md（不存在时创建）</div>
+    <pre class="ro" tabindex="0">${dl('add', '## 人工决策（新增）')}${dl('add', '- 首批平台与覆盖率口径同 README；记录问题/答案、运行 run-20260916-4012、时间 2026-09-18')}</pre>
+    <div class="diff-file">agent-team-board/data/requirements/REQ-20260916-010/decisions.md（已有留痕 · 追加一行）</div>
+    <pre class="ro" tabindex="0">${dl('add', '| 2026-09-18 | run-20260916-4012 | 平台范围 / 覆盖率口径 | ' + a1 + ' / ' + a2 + ' | 人工 |')}</pre>
+    <p class="muted small" style="margin:6px 0 0">预览按当前草稿实时生成；无关段落不产生差异。提交文件白名单仅含以上 3 个文档路径。</p>`;
+}
+function renderConfirmSide() {
+  const pm = phaseMeta();
+  el('cfPhase').textContent = pm.text;
+  el('cfPhase').className = 'phase-badge ' + pm.cls;
+  const done = S.phase === 'committed';
+  const busy = S.busy;
+  el('cfBody').innerHTML = `
+    <p class="muted small" style="margin:0 0 10px">原问题来自 blocked 回执 <span class="mono">${esc(BLOCKERS[0].run)}</span>（第 2 轮，历史 2 轮保留）；逐项作答后确认，未答完整可存草稿但不能提交。</p>
+    ${QUESTIONS.map((q) => `
+      <div class="q-block">
+        <div class="q">${esc(q.label)}</div>
+        <textarea data-q="${q.key}" ${done || busy ? 'disabled' : ''} placeholder="输入决策答案…">${esc(S.answers[q.key])}</textarea>
+      </div>`).join('')}
+    <div class="doc-links">
+      <button class="btn small" disabled title="演示环境不打开真实文件">打开 README.md</button>
+      <button class="btn small" disabled title="演示环境不打开真实文件；design.md 不存在时将创建">打开 design.md</button>
+      <button class="btn small" disabled title="演示环境不打开真实文件">decisions.md 留痕</button>
+    </div>
+    <details ${S.draft || done ? '' : 'open'}>
+      <summary class="small" style="cursor:pointer">差异预览（将写入的文档差异 · 提交前可见）</summary>
+      <div id="cfDiff">${diffPreviewHtml()}</div>
+    </details>
+    ${done ? `
+      <div class="notice ok" style="margin-top:10px">文档保存并提交成功：短提交号 <b class="mono">${COMMIT_SHA}</b>（示例）· 不自动 push。</div>
+      <ul class="commit-files">
+        <li>✓ README.md（修改）</li>
+        <li>✓ design.md（新建）</li>
+        <li>✓ decisions.md（留痕追加）</li>
+      </ul>
+      <p class="muted small">提交树仅含以上已批准差异：不含业务源码、状态文件、执行账本或其他条目；同文件你的未提交修改不被夹带、覆盖或丢弃。下一步：<b>人工复工</b>（沿用现有复工入口），确认动作不自动重启实施。</p>` : ''}`;
+  for (const ta of el('cfBody').querySelectorAll('textarea')) {
+    ta.addEventListener('input', () => {
+      S.answers[ta.dataset.q] = ta.value;
+      const diff = el('cfDiff'); // 只刷新差异预览与底栏，不重渲 textarea（保持输入焦点）
+      if (diff) diff.innerHTML = diffPreviewHtml();
+      renderCfFoot();
+    });
+  }
+  renderCfFoot();
+}
+function renderCfFoot() {
+  const done = S.phase === 'committed';
+  const busy = S.busy;
+  const miss = missingKeys();
+  const confirmLabel = S.phase === 'saveFailed' ? '重试保存并继续' : S.phase === 'commitFailed' ? '重试提交（文档已落盘）' : '确认决策并提交文档';
+  el('cfFoot').innerHTML = `
+    <button class="btn small" id="cfDraft" ${done || busy ? 'disabled' : ''}>保存草稿</button>
+    <button class="btn small" id="cfCancel" ${busy ? 'disabled' : ''}>取消</button>
+    <button class="btn small primary" id="cfGo" ${done || busy || miss.length ? 'disabled' : ''} ${miss.length && !busy ? `title="缺答案：${esc(miss.join('、'))}——未答完整不能提交确认"` : ''}>${confirmLabel}</button>
+    <span class="foot-note">「确认决策并提交文档」仅确认实施边界：不自动接受 / 置计划 / 认领 / 确认完成 / 重启执行；不 push。</span>`;
+  el('cfDraft').addEventListener('click', () => {
+    S.draft = true;
+    const m = missingKeys();
+    if (m.length) toast(`草稿已保存（缺 ${m.join('、')}）：保存草稿不解除阻塞，可稍后继续`, 'warn');
+    else toast('草稿已保存：答案齐备，可核对差异预览后提交', 'ok');
+    renderConfirmSide();
+  });
+  el('cfCancel').addEventListener('click', () => { toast('已取消：答案与草稿保留在本次会话，可重新打开继续（演示内有效）', 'warn'); closeConfirmSide(); });
+  el('cfGo').addEventListener('click', () => runConfirm(S.phase === 'commitFailed' ? 'commit' : 'save'));
+}
+
+/* ---------- 确认链路（保存 → 提交，失败分阶段重试） ---------- */
+async function runConfirm(fromStage) {
+  if (S.busy) return;
+  const miss = missingKeys();
+  if (miss.length) { toast(`缺答案：${miss.join('、')}——未答完整不能提交确认`, 'err'); return; }
+  S.busy = true;
+  if (fromStage === 'save') {
+    S.phase = 'saving'; renderConfirmSide();
+    await delay(950);
+    if (S.flow === 'saveFail') {
+      S.busy = false; S.phase = 'saveFailed'; renderConfirmSide();
+      toast('保存失败：目标文档基线已变化（并发修改），答案已保留——不能确认旧版本，请重试或重新核对差异', 'err');
+      return;
+    }
+  }
+  S.phase = 'committing'; renderConfirmSide();
+  await delay(1050);
+  S.busy = false;
+  if (S.flow === 'commitFail') {
+    S.phase = 'commitFailed'; renderConfirmSide();
+    toast('提交失败：Git 索引无法隔离（示例）——文档已落盘但未提交，未全部处理完成；重试只处理提交阶段，不重复写决策', 'err');
+    return;
+  }
+  S.phase = 'committed'; S.confirmed = true;
+  renderConfirmSide(); render();
+  toast(`已提交（${COMMIT_SHA}）：仅包含本条目 3 个已确认文档差异，不 push；阻塞计数保持（含待复工 1），待确认清零`, 'ok');
+}
+
+/* ---------- 控制台 / 视图同步 ---------- */
+function syncSeg(segId, attr, val) {
+  for (const b of el(segId).querySelectorAll('button')) b.classList.toggle('on', b.dataset[attr] === val);
+}
+function syncBackdrop() {
+  el('backdrop').classList.toggle('hidden', S.blockerOpen || S.confirmOpen);
+}
+function render() {
+  syncSeg('segScene', 'scene', S.scene);
+  syncSeg('segBlocker', 'blk', S.blockerState);
+  syncSeg('segFlow', 'flow', S.flow);
+  renderSummary();
+  renderList();
+  syncBackdrop();
+}
+el('segScene').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  S.scene = btn.dataset.scene;
+  if (S.scene !== 'none') S.expanded = S.expanded; else S.expanded = false;
+  render();
+});
+el('segBlocker').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  S.blockerState = btn.dataset.blk;
+  if (S.blockerOpen) renderBlockerSide(S.blockerState === 'ok' ? 'ok' : S.blockerState);
+  render();
+});
+el('segFlow').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  S.flow = btn.dataset.flow;
+  render();
+});
+el('blkSideClose').addEventListener('click', closeBlockerSide);
+el('cfClose').addEventListener('click', closeConfirmSide);
+el('backdrop').addEventListener('click', () => { closeBlockerSide(); closeConfirmSide(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeBlockerSide(); closeConfirmSide(); }
+});
+document.addEventListener('click', async (e) => {
+  const r = e.target.closest('#sumRetry');
+  if (!r) return;
+  S.retryingSummary = true; renderSummary();
+  await delay(900);
+  S.retryingSummary = false; S.scene = 'running';
+  render();
+  toast('概况重试成功（演示）：阻塞统计已恢复', 'ok');
+});
+
+render();
+</script>
+</body>
+</html>
