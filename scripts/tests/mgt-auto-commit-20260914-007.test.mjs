@@ -1,21 +1,15 @@
 #!/usr/bin/env node
-// REQ-20260914-007 人工确认完成和版本合并成功后自动提交管理文件 —— 端到端测试
+// REQ-20260914-007 人工确认完成和版本合并成功后自动提交管理文件 —— 该闭环已随
+// BUG-20260918-002 整体下线（新目录架构下条目状态变更不需要同步提交到 git），本文件
+// 按新口径改写为其回归承载：
+//   · 确认完成（API / CLI）只做状态流转：不采集基线、不执行任何 git add/commit，
+//     响应与详情不带 mgtCommit，runtime/commits/mgt/ 账本不写，留痕文档留在工作区；
+//   · 提交纪律自然成立：无关脏文件 / 用户预先暂存内容 / 其他条目未跟踪资料原样保留；
+//   · 版本合并入口维持 REQ-20260916-007 取消口径：响应无 mgtCommit、无版本管理提交；
+//   · 重试通道下线：/api/mgt-commit/retry 对 item / version 一律 404，CLI atb mgt retry 非零退出；
+//   · 前端源契约：无反馈块 / 无重试绑定 / 无 .mgt 样式 / 词典无相关词条。
 // 用法：node scripts/tests/mgt-auto-commit-20260914-007.test.mjs
-// 覆盖（见条目 test-cases.md P1–P10；REQ-20260916-007 新口径）：
-//   · 确认完成入口自动提交本次确有刷新的 decisions.md / confirmations.md（status.json
-//     已迁 runtime/status/ 被忽略，不再提交；无刷新 → noop）；
-//   · 提交纪律：路径限定、不夹带无关脏文件 / 其他条目 / 未跟踪需求资料 / 预先暂存内容；
-//   · 目标文件已暂存（无法安全分离）→ 不提交、pendingManual 明确报告、暂存状态不破坏；
-//   · 版本合并入口：version.json 自动入库整体取消（REQ-20260916-007：版本账本属应用
-//     数据本地留存，runtime/ 忽略；「同内容双分支提交」机制废弃）；
-//   · 当前分支即 main：原地路径限定提交；
-//   · 幂等：成功后重试 noop 不制造空提交；重试只补交管理记录不重放业务操作；
-//   · 失败反馈：身份缺失 → failed（原因 / 未提交文件 / 建议），账本持久化、详情刷新仍可见，
-//     重试成功后清除失败提示；
-//   · CLI：atb status <ID> done --json 携带 mgtCommit；atb mgt retry 补交；
-//   · 串行（锁被占明确失败）与非 git 项目 skipped；
-//   · 前端源契约：反馈块结构、重试绑定、样式沿用现有主题变量。
-// 模式对齐 auto-commit-pre-dirty-20260913-006（真实 git 临时仓库）与 batch-serve（HTTP 服务）。
+// 模式沿用真实 git 临时仓库 + HTTP 服务（batch-serve 同款）。
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -28,6 +22,7 @@ import * as core from '../lib/core.mjs';
 import * as holdStore from '../lib/hold-store.mjs';
 import * as buildStore from '../lib/build-store.mjs';
 import * as gitFlow from '../lib/git-flow.mjs';
+import '../web/i18n.js';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ATB = path.join(pluginRoot, 'scripts', 'atb.mjs');
@@ -43,13 +38,9 @@ function git(root, args) {
   return r;
 }
 
-function atb(args, cwd, env = process.env) {
-  const r = spawnSync(process.execPath, [ATB, ...args, '--dir', cwd], { encoding: 'utf8', timeout: 90_000, env });
+function atb(args, cwd) {
+  const r = spawnSync(process.execPath, [ATB, ...args, '--dir', cwd], { encoding: 'utf8', timeout: 90_000 });
   return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
-}
-
-function jsonOf(r) {
-  return JSON.parse(r.out.split('\n').filter(Boolean).pop());
 }
 
 // atb --json 输出为多行 pretty JSON：取最后一个顶层对象（\n{ 起到末尾）
@@ -81,12 +72,12 @@ function req(port, method, pathname, body) {
   });
 }
 
-async function bootServer(proj, { env = {} } = {}) {
+async function bootServer(proj) {
   const port = 31000 + Math.floor(Math.random() * 20000);
   const reg = path.join(os.tmpdir(), `atb-mgt-reg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.json`);
   const server = spawn(process.execPath, [SERVER], {
     cwd: proj,
-    env: { ...process.env, ATB_PORT: String(port), ATB_REGISTRY: reg, ...env },
+    env: { ...process.env, ATB_PORT: String(port), ATB_REGISTRY: reg },
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   try {
@@ -109,7 +100,7 @@ function mkTmp(tag) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `atb-mgt-${tag}-`)));
 }
 
-// 带本地身份的 git 项目（main 起步）：服务端 git 提交可直接成功
+// 带本地身份的 git 项目（main 起步）
 function mkProject(tag) {
   const root = mkTmp(tag);
   git(root, ['init', '-q', '-b', 'main']);
@@ -122,156 +113,93 @@ function mkProject(tag) {
   return root;
 }
 
-// 条目推进到 in-progress（claim 由 worker 占用），并把条目目录入库（干净基线）
-function mkInProgressItem(dataDir, title, type = 'requirement') {
-  const x = core.createItem(dataDir, { type, title });
+// 条目推进到 in-progress（claim 由 worker 占用）；holdAnswered 时补一轮已作答的待人工决策
+// （decisions.md 随确认完成闭环再次刷新——旧机制唯一可提交内容的来源）
+function mkInProgressItem(dataDir, title, { holdAnswered = false } = {}) {
+  const x = core.createItem(dataDir, { type: 'requirement', title });
   core.setStatus(dataDir, x.id, 'accepted', { by: 'human' });
   core.setStatus(dataDir, x.id, 'planned', { by: 'human' });
   core.claim(dataDir, x.id, 'w1');
+  if (holdAnswered) {
+    holdStore.declareHold(dataDir, x.id, { questions: ['口径确认？'], reason: '确认', by: 'w1' });
+    holdStore.answerHold(dataDir, x.id, { answers: [{ q: 'q1', text: '按本单口径' }], by: 'human' });
+  }
   return x;
 }
 
-const commitItemBaseline = (root, dataDir, id) => {
-  git(root, ['add', path.relative(root, path.join(dataDir, 'data', 'requirements', id))
-    || path.relative(root, path.join(dataDir, 'data', 'bugs', id))]);
+function commitItemBaseline(root, dataDir, id) {
+  git(root, ['add', path.relative(root, path.join(dataDir, 'data', 'requirements', id))]);
   git(root, ['commit', '-q', '-m', 'chore: 条目基线入库']);
-};
+}
 
+const headOf = (root) => git(root, ['rev-parse', 'HEAD']).stdout.trim();
 const subjectsOn = (root, ref, keyword) =>
   git(root, ['log', ref, '--format=%s']).stdout.split('\n').filter(Boolean).filter((s) => s.includes(keyword));
+const mgtStateFile = (dataDir, id) => path.join(dataDir, 'runtime', 'commits', 'mgt', `item-${id}.json`);
 
-const mgtStateFile = (dataDir, kind, id) => path.join(dataDir, 'runtime', 'commits', 'mgt', `${kind}-${id}.json`);
+// ---------- R1 确认完成入口：只做状态流转（含 hold 闭环刷新 decisions.md 场景） ----------
 
-// ---------- P1 确认完成入口（API，含 decisions.md 随闭环刷新） ----------
-
-t('P1 确认完成：本次确有刷新的 decisions.md 自动提交（status.json 已迁 runtime 不再提交）；账本与详情接口可见', async () => {
-  const root = mkProject('p1');
+t('R1 确认完成不提交：响应/详情无 mgtCommit、HEAD 不变、账本不写、留痕留在工作区', async () => {
+  const root = mkProject('r1');
   const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, '确认完成自动提交管理记录');
+  const item = mkInProgressItem(dataDir, '确认完成不再自动提交', { holdAnswered: true });
   commitItemBaseline(root, dataDir, item.id);
-  // 主流闭环：先作答待人工决策（decisions.md 因此已脏——历史管理写入），再确认完成（随闭环再次刷新）
-  holdStore.declareHold(dataDir, item.id, { questions: ['是否采用方案 A？'], reason: '方案确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '采用方案 A' }], by: 'human' });
+  const headBefore = headOf(root);
 
   const { server, port } = await bootServer(root);
   try {
     const r = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
     assert.equal(r.status, 200, `确认完成应成功：${JSON.stringify(r.json)}`);
-    assert.equal(r.json.status, 'done', '业务操作成功：条目已完成');
-    const mgt = r.json.mgtCommit;
-    assert.ok(mgt, '响应应携带可识别的 mgtCommit 提交结果');
-    assert.equal(mgt.status, 'committed', `应提交成功：${mgt && mgt.reason}`);
-    assert.equal(mgt.subject, `doc: 人工确认完成 ${item.id}`);
-    assert.equal(mgt.commits.length, 1);
-    assert.match(mgt.commits[0].hash, /^[0-9a-f]{40}$/);
-    assert.ok(mgt.commits[0].short && mgt.commits[0].short.length <= 12, '应提供短 SHA');
-    const paths = mgt.files.map((f) => f.path);
-    assert.ok(!paths.some((p) => p.endsWith('status.json')), 'status.json 已迁 runtime（应用数据），不应再入提交目标');
-    assert.ok(paths.some((p) => p.endsWith(`${item.id}/decisions.md`)), '本次确有刷新的 decisions.md 应一并纳入');
-
-    // git 侧：说明过规范核验；管理文件不再遗留未提交
-    const { validateCommitSubject } = await import('../lib/commit-store.mjs');
-    assert.equal(validateCommitSubject(mgt.subject, item.id), null, '提交说明须过规范核验');
-    const subjects = subjectsOn(root, 'HEAD', item.id);
-    assert.equal(subjects.length, 1);
-    assert.equal(subjects[0], mgt.subject);
+    assert.equal(r.json.status, 'done', '业务状态流转成功');
+    assert.equal(r.json.mgtCommit, undefined, '响应不应携带 mgtCommit 提交结果');
+    assert.equal(headOf(root), headBefore, '不得产生任何 git 提交');
+    assert.equal(subjectsOn(root, 'HEAD', item.id).length, 0, '提交说明不得出现单号');
+    assert.ok(!fs.existsSync(mgtStateFile(dataDir, item.id)), 'runtime/commits/mgt/ 账本不应写入');
     const st = git(root, ['status', '--porcelain', '-uall']).stdout;
-    assert.ok(!st.includes(item.id), '条目管理文件不应再遗留为未提交状态');
-
-    // 账本持久化 + 详情接口（刷新后仍可见）
-    const ledger = JSON.parse(fs.readFileSync(mgtStateFile(dataDir, 'item', item.id), 'utf8'));
-    assert.equal(ledger.status, 'committed');
+    assert.ok(st.includes(`${item.id}/decisions.md`), '闭环刷新的 decisions.md 留在工作区（随既有通道入库）');
     const detail = await req(port, 'GET', `/api/item/${item.id}`);
     assert.equal(detail.status, 200);
-    assert.equal(detail.json.mgtCommit.status, 'committed', '条目详情应返回持久化的提交状态');
-    assert.equal(detail.json.mgtCommit.commits[0].hash, mgt.commits[0].hash);
-    // 账本目录被忽略，不受跟踪文件反复变脏
-    assert.ok(git(root, ['check-ignore', path.relative(root, mgtStateFile(dataDir, 'item', item.id))]).status === 0,
-      'runtime/commits/mgt/ 账本应被根 .gitignore 忽略（runtime/ 整目录）');
+    assert.equal(detail.json.mgtCommit, undefined, '条目详情不附带管理提交状态');
   } finally {
     server.kill();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-// ---------- P2 提交纪律（不夹带） ----------
+// ---------- R2 提交纪律（不触碰用户工作区） ----------
 
-t('P2 提交纪律：仅含目标路径；无关脏文件 / 其他条目未跟踪目录 / 预先暂存内容不被夹带，暂存状态不被破坏', async () => {
-  const root = mkProject('p2');
+t('R2 工作区原样：无关脏文件 / 预先暂存内容 / 其他条目未跟踪资料不被触碰', async () => {
+  const root = mkProject('r2');
   const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, '提交纪律单');
+  const item = mkInProgressItem(dataDir, '工作区纪律单', { holdAnswered: true });
   commitItemBaseline(root, dataDir, item.id);
-  // REQ-20260916-007：status.json 不再是目标文件——须有刷新的管理留痕（hold 闭环）才有可提交内容
-  holdStore.declareHold(dataDir, item.id, { questions: ['范围确认？'], reason: '确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '按本单范围' }], by: 'human' });
-  // 无关已跟踪脏文件（业务源码）
+  // 无关已跟踪脏文件（业务源码）+ 用户预先暂存内容 + 其他条目未跟踪需求资料
   fs.mkdirSync(path.join(root, 'src'), { recursive: true });
   fs.writeFileSync(path.join(root, 'src', 'app.js'), 'v1\n');
   git(root, ['add', '.']);
   git(root, ['commit', '-q', '-m', 'chore: 源码基线']);
   fs.appendFileSync(path.join(root, 'src', 'app.js'), '用户未提交改动\n');
-  // 用户预先暂存的内容（另一文件）
   fs.writeFileSync(path.join(root, 'staged.txt'), '用户暂存内容\n');
   git(root, ['add', 'staged.txt']);
-  // 其他条目未跟踪需求资料
   const other = core.createItem(dataDir, { type: 'bug', title: '其他条目' });
   const otherDir = path.join(dataDir, 'data', 'bugs', other.id);
 
   const { server, port } = await bootServer(root);
   try {
     const r = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
-    assert.equal(r.json.mgtCommit.status, 'committed');
-    const mgtPath = `agent-team-board/data/requirements/${item.id}`;
-    // 提交仅含目标路径（本次刷新的 decisions.md）；无 .gitignore 收纳（忽略规则已极简化为根级一条）
-    const show = git(root, ['show', '--name-only', '--format=', r.json.mgtCommit.commits[0].hash]).stdout;
-    const committed = show.split('\n').filter(Boolean);
-    assert.ok(committed.includes(`${mgtPath}/decisions.md`), `应含 decisions.md：${committed}`);
-    assert.ok(committed.every((p) => p === `${mgtPath}/decisions.md`),
-      `只应含本条目管理留痕文档：${committed}`);
-
+    assert.equal(r.json.status, 'done');
+    assert.equal(r.json.mgtCommit, undefined);
     const st = git(root, ['status', '--porcelain', '-uall']).stdout;
     assert.match(st, /M\s+src\/app\.js/, '无关已跟踪脏改动应保留在工作区');
     assert.match(st, /A\s+staged\.txt/, '用户预先暂存状态应原样保留');
-    assert.ok(st.includes(path.relative(root, otherDir)), '其他条目未跟踪需求资料不应被夹带');
+    assert.ok(st.includes(path.relative(root, otherDir)), '其他条目未跟踪需求资料不应被触碰');
   } finally {
     server.kill();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-// ---------- P3 目标文件已暂存：无法安全分离 → 待人工 ----------
-
-t('P3 目标文件操作前已暂存：整操作不提交、pendingManual 明确报告待人工处理、暂存状态不被破坏', async () => {
-  const root = mkProject('p3');
-  const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, '暂存冲突单');
-  commitItemBaseline(root, dataDir, item.id);
-  holdStore.declareHold(dataDir, item.id, { questions: ['边界口径？'], reason: '确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '按保守口径' }], by: 'human' });
-  // decisions.md 被用户预先暂存（无法安全分离的其他变更）
-  git(root, ['add', path.relative(root, path.join(dataDir, 'data', 'requirements', item.id, 'decisions.md'))]);
-
-  const { server, port } = await bootServer(root);
-  try {
-    const r = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
-    assert.equal(r.json.status, 'done', '提交失败不得伪装成功，也不得撤销业务操作：条目保持已完成');
-    const mgt = r.json.mgtCommit;
-    assert.equal(mgt.status, 'failed', '应明确报告失败（待人工处理）');
-    assert.ok(mgt.pendingManual.some((p) => p.endsWith('decisions.md')), `应列出待人工文件：${mgt.pendingManual}`);
-    assert.ok(mgt.reason && mgt.reason.includes('人工'), 'reason 应说明待人工处理');
-    assert.ok(mgt.advice, '应携带可执行处理建议');
-    assert.equal(subjectsOn(root, 'HEAD', item.id).length, 0, '不得强行整文件提交');
-    const st = git(root, ['status', '--porcelain', '-uall']).stdout;
-    // 暂存条目保留（A/AM/MM 任一暂存位形态），操作刷新体现在工作区（未被提交）
-    assert.match(st, new RegExp(`[AM][MD]\\s+agent-team-board/data/requirements/${item.id}/decisions\\.md`),
-      '暂存内容保留，操作刷新体现在工作区（未被提交）');
-  } finally {
-    server.kill();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// ---------- P4 / P5 版本合并入口 ----------
+// ---------- R3 版本合并入口（REQ-20260916-007 取消口径维持） ----------
 
 async function mkVersionProject(tag, { onMain = false } = {}) {
   const root = mkProject(tag);
@@ -279,8 +207,6 @@ async function mkVersionProject(tag, { onMain = false } = {}) {
   if (!onMain) {
     gitFlow.ensureDevWorkflow(root); // main + dev，当前 dev（main 在根提交幂等补建）
   } else {
-    // initData 已把工作区切到 dev（未出生 main 改名路径）：显式在基线提交补建 main 并切回，
-    // 模拟「当前分支即 main」的仓库形态
     git(root, ['branch', 'main']);
     git(root, ['switch', '-q', 'main']);
   }
@@ -297,222 +223,91 @@ async function mkVersionProject(tag, { onMain = false } = {}) {
   return { root, dataDir, item, v };
 }
 
-t('P4 版本合并：version.json 自动入库取消（REQ-20260916-007）——响应不带 mgtCommit、无版本管理提交、账本本地留存于 runtime', async () => {
-  const { root, dataDir, item, v } = await mkVersionProject('p4');
-  const verRel = path.relative(root, path.join(dataDir, 'runtime', 'builds', 'versions', v.id, 'version.json'));
+t('R3 版本合并无管理提交：合并响应/详情不带 mgtCommit、无版本管理提交（main 上同口径）', async () => {
+  const { root, dataDir, item, v } = await mkVersionProject('r3', { onMain: true });
   const { server, port } = await bootServer(root);
   try {
     const r = await req(port, 'POST', '/api/build/version/merge', { id: v.id });
     assert.equal(r.status, 200, `合并应成功：${JSON.stringify(r.json).slice(0, 200)}`);
     assert.equal(r.json.version.status, 'merged');
-    assert.equal(r.json.mgtCommit, undefined, '版本入库取消：合并响应不应再携带 mgtCommit');
+    assert.equal(r.json.mgtCommit, undefined, '合并响应不应携带 mgtCommit');
     assert.equal(subjectsOn(root, 'HEAD', '版本合并记录').length, 0, '不得产生版本管理提交');
     assert.equal(subjectsOn(root, 'HEAD', v.id).length, 0, '版本号不得出现在提交说明');
-    // 版本账本本地留存于 runtime（被忽略，不进版本控制），合并结果可读
-    assert.ok(fs.existsSync(path.join(root, verRel)), 'version.json 应本地保留在 runtime');
-    assert.equal(git(root, ['check-ignore', verRel]).status, 0, 'runtime 版本账本应被忽略');
-    const ver = JSON.parse(fs.readFileSync(path.join(root, verRel), 'utf8'));
-    assert.equal(ver.status, 'merged', '本地账本应为最终合并结果');
-    // 版本状态接口不再透出 mgtCommit（version 类账本下线）
+    assert.equal(subjectsOn(root, 'HEAD', item.id).filter((s) => s.startsWith('doc:')).length, 0, '确认完成后的条目也不再有 doc 管理提交');
     const state = await req(port, 'GET', '/api/build/state');
     const vs = state.json.versions.find((x) => x.id === v.id);
-    assert.equal(vs.mgtCommit, undefined, 'build/state 不应再附版本管理提交状态');
+    assert.equal(vs.mgtCommit, undefined, 'build/state 不附版本管理提交状态');
   } finally {
     server.kill();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-t('P5 version 重试入口下线：/api/mgt-commit/retry 拒绝 kind=version；在 main 上的合并同样无版本提交', async () => {
-  const { root, dataDir, v } = await mkVersionProject('p5', { onMain: true });
+// ---------- R4 重试通道下线（API + CLI） ----------
+
+t('R4 重试通道下线：/api/mgt-commit/retry 对 item / version 一律 404；atb mgt retry 非零退出', async () => {
+  const root = mkProject('r4');
+  const dataDir = core.dataDirFrom(root);
+  const item = mkInProgressItem(dataDir, '重试下线单', { holdAnswered: true });
+  commitItemBaseline(root, dataDir, item.id);
   const { server, port } = await bootServer(root);
   try {
-    const r = await req(port, 'POST', '/api/build/version/merge', { id: v.id });
-    assert.equal(r.json.version.status, 'merged');
-    assert.equal(r.json.mgtCommit, undefined, '在 main 上同样无版本管理提交');
-    assert.equal(git(root, ['branch', '--show-current']).stdout.trim(), 'main');
-    const rt = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'version', id: v.id });
-    assert.equal(rt.status, 400, 'version 重试应被拒绝（已随应用数据分离下线）');
-    const cli = atb(['mgt', 'retry', 'version', v.id], root);
-    assert.notEqual(cli.code, 0, 'CLI version 重试应报错退出');
+    const rItem = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'item', id: item.id });
+    assert.equal(rItem.status, 404, 'item 重试接口应已下线（未知接口统一 404）');
+    const rVer = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'version', id: 'BLD-20260918-001' });
+    assert.equal(rVer.status, 404, 'version 重试接口同样下线');
   } finally {
     server.kill();
-    fs.rmSync(root, { recursive: true, force: true });
   }
+  const cli = atb(['mgt', 'retry', 'item', item.id], root);
+  assert.notEqual(cli.code, 0, 'CLI mgt 子命令应已下线（非零退出）');
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-// ---------- P6 幂等（重试不重复提交 / noop 不制造空提交） ----------
+// ---------- R5 CLI 可识别结果 ----------
 
-t('P6 幂等：成功后重试 → 已同步（noop）不制造空提交；无账本的重复确认完成被状态机拒绝、不重放业务操作', async () => {
-  const root = mkProject('p6');
+t('R5 CLI：atb status done --json 无 mgtCommit、输出无管理提交行、不产生提交', async () => {
+  const root = mkProject('r5');
   const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, '幂等单');
+  const item = mkInProgressItem(dataDir, 'CLI 新口径单', { holdAnswered: true });
   commitItemBaseline(root, dataDir, item.id);
-  holdStore.declareHold(dataDir, item.id, { questions: ['口径？'], reason: '确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '按既定口径' }], by: 'human' });
-  const { server, port } = await bootServer(root);
-  try {
-    const r1 = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
-    assert.equal(r1.json.mgtCommit.status, 'committed');
-    const before = subjectsOn(root, 'HEAD', item.id).length;
-    // 重复确认完成：状态机拒绝（业务操作不重放）
-    const r2 = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
-    assert.equal(r2.status, 403, '已完成条目再次确认完成应被状态机拒绝');
-    // 重试只补交管理记录：全部已入库 → noop
-    const rt = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'item', id: item.id });
-    assert.equal(rt.status, 200);
-    assert.equal(rt.json.mgtCommit.status, 'noop', '无新变化应视为已同步');
-    assert.equal(subjectsOn(root, 'HEAD', item.id).length, before, '不得制造空提交或重复提交');
-  } finally {
-    server.kill();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// ---------- P7 失败反馈与重试（身份缺失 → 持久可见 → 重试成功清除） ----------
-
-t('P7 失败与重试：身份缺失 → failed 带原因 / 未提交文件 / 建议，条目保持 done；账本持久化刷新仍可见；重试只补交管理记录并清除失败提示', async () => {
-  const root = mkProject('p7');
-  const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, '失败重试单');
-  commitItemBaseline(root, dataDir, item.id);
-  holdStore.declareHold(dataDir, item.id, { questions: ['重试口径？'], reason: '确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '按建议重试' }], by: 'human' });
-  // 抹掉可用身份：user.useConfigOnly=true 且无 user.name/email（git 不再自动探测，
-  // commit 以「请告知你是谁」失败）→ 服务端管理提交失败
-  git(root, ['config', '--unset', 'user.email']);
-  git(root, ['config', '--unset', 'user.name']);
-  git(root, ['config', 'user.useConfigOnly', 'true']);
-  // 全局 / 系统配置对服务进程置空（本机全局可能已有身份）：只剩「本地无身份 + 禁止自动探测」
-  const { server, port } = await bootServer(root, {
-    env: { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-  });
-  try {
-    const r = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
-    assert.equal(r.json.status, 'done', '业务操作成功不受提交失败影响');
-    const mgt = r.json.mgtCommit;
-    assert.equal(mgt.status, 'failed');
-    assert.ok(mgt.reason && mgt.reason.length > 0, '失败原因应可识别');
-    assert.ok(mgt.files.length && mgt.files.some((f) => f.path.endsWith('decisions.md')), '应列出未提交文件');
-    assert.ok(mgt.advice, '应携带处理建议');
-    assert.equal(subjectsOn(root, 'HEAD', item.id).length, 0, '失败时不得产生提交');
-    // 账本持久化：详情接口（等价页面刷新 / 服务重启后）仍可见失败提示
-    const d1 = await req(port, 'GET', `/api/item/${item.id}`);
-    assert.equal(d1.json.mgtCommit.status, 'failed', '失败提示刷新后仍可见');
-
-    // 补齐身份后重试：只补交管理记录（不重放确认完成），成功后清除失败提示
-    git(root, ['config', 'user.email', 't@example.com']);
-    git(root, ['config', 'user.name', 't']);
-    git(root, ['config', '--unset', 'user.useConfigOnly']);
-    const rt = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'item', id: item.id });
-    assert.equal(rt.status, 200);
-    assert.equal(rt.json.mgtCommit.status, 'committed', `重试应成功：${JSON.stringify(rt.json).slice(0, 200)}`);
-    assert.equal(rt.json.mgtCommit.subject, `doc: 人工确认完成 ${item.id}`);
-    assert.equal(subjectsOn(root, 'HEAD', item.id).length, 1, '只补一次管理提交');
-    const d2 = await req(port, 'GET', `/api/item/${item.id}`);
-    assert.equal(d2.json.mgtCommit.status, 'committed', '重试成功后失败提示被清除');
-    assert.ok(!git(root, ['status', '--porcelain', '-uall']).stdout.includes(item.id), '管理文件不再遗留');
-  } finally {
-    server.kill();
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// ---------- P8 CLI 可识别结果 ----------
-
-t('P8 CLI：atb status done --json 携带 mgtCommit；atb mgt retry 补交并输出结果', async () => {
-  const root = mkProject('p8');
-  const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, 'CLI 结果单');
-  commitItemBaseline(root, dataDir, item.id);
-  holdStore.declareHold(dataDir, item.id, { questions: ['CLI 口径？'], reason: '确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '按 CLI 输出' }], by: 'human' });
+  const headBefore = headOf(root);
   const r = atb(['status', item.id, 'done', '--json'], root);
   assert.equal(r.code, 0, `CLI 应成功：${r.err}`);
   const st = jsonOfAtb(r);
   assert.equal(st.status, 'done');
-  assert.equal(st.mgtCommit.status, 'committed', 'CLI 结果应可识别提交状态');
-  assert.equal(st.mgtCommit.subject, `doc: 人工确认完成 ${item.id}`);
-  assert.match(r.out, /管理记录已提交/, '人读输出应提示管理记录提交结果');
-  assert.equal(subjectsOn(root, 'HEAD', item.id).length, 1);
-
-  // CLI 重试：人为制造未入库（回退提交）后经 mgt retry 补交
-  git(root, ['reset', '-q', '--soft', 'HEAD~1']);
-  const rt = atb(['mgt', 'retry', 'item', item.id, '--json'], root);
-  assert.equal(rt.code, 0, `重试应成功：${rt.err}`);
-  assert.equal(jsonOfAtb(rt).mgtCommit.status, 'committed');
-  assert.equal(subjectsOn(root, 'HEAD', item.id).length, 1, '重试补交后说明仍带单号');
-  // 无账目可重试时明确报错
-  const none = atb(['mgt', 'retry', 'item', 'REQ-19990101-001'], root);
-  assert.notEqual(none.code, 0, '无可重试记录应非零退出');
+  assert.equal(st.mgtCommit, undefined, '--json 不应包含 mgtCommit');
+  assert.ok(!r.out.includes('管理记录'), `人读输出不应含管理提交相关行：${r.out}`);
+  assert.equal(headOf(root), headBefore, 'CLI 确认完成不得产生提交');
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-// ---------- P9 串行与非 git 边界 ----------
+// ---------- R6 前端源契约（原 P10 新口径：全面收敛） ----------
 
-t('P9 边界：管理提交经文件锁串行（锁被占返回明确 failed）；非 git 项目 skipped 不影响业务流转', async () => {
-  const root = mkProject('p9');
-  const dataDir = core.dataDirFrom(root);
-  const item = mkInProgressItem(dataDir, '锁与非 git 单');
-  commitItemBaseline(root, dataDir, item.id);
-  holdStore.declareHold(dataDir, item.id, { questions: ['锁口径？'], reason: '确认', by: 'w1' });
-  holdStore.answerHold(dataDir, item.id, { answers: [{ q: 'q1', text: '按锁串行' }], by: 'human' });
-  const { server, port } = await bootServer(root);
-  try {
-    // 先确认完成（产生可重试账本），再人为占住管理提交锁 → 重试应明确失败
-    const r = await req(port, 'POST', `/api/item/${item.id}/status`, { to: 'done' });
-    assert.equal(r.json.mgtCommit.status, 'committed');
-    git(root, ['reset', '-q', '--soft', 'HEAD~1']); // 制造待补交状态
-    const lockDir = path.join(dataDir, 'runtime', '.locks');
-    fs.mkdirSync(lockDir, { recursive: true });
-    fs.writeFileSync(path.join(lockDir, 'mgt-git-write.lock'), JSON.stringify({ owner: 'other', at: new Date().toISOString() }));
-    const busy = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'item', id: item.id });
-    assert.equal(busy.json.mgtCommit.status, 'failed');
-    assert.ok(busy.json.mgtCommit.reason.includes('锁'), '锁冲突应可识别');
-    fs.rmSync(path.join(lockDir, 'mgt-git-write.lock'), { force: true });
-    const okr = await req(port, 'POST', '/api/mgt-commit/retry', { kind: 'item', id: item.id });
-    assert.equal(okr.json.mgtCommit.status, 'committed');
-  } finally {
-    server.kill();
-    fs.rmSync(root, { recursive: true, force: true });
+t('R6 前端与词典：无反馈块 / 无重试绑定 / 无 .mgt 样式 / 无相关词条', async () => {
+  const read = (p) => fs.readFileSync(path.join(pluginRoot, p), 'utf8');
+  const app = read('scripts/web/app.js');
+  const build = read('scripts/web/build.js');
+  const css = read('scripts/web/style.css');
+
+  assert.ok(!app.includes('mgtCommit'), 'app.js 不应使用 mgtCommit 数据');
+  assert.ok(!app.includes('data-mgt-retry'), 'app.js 不应再有重试按钮绑定标记');
+  assert.ok(!app.includes('/api/mgt-commit/retry'), 'app.js 不应再调用补交接口');
+  assert.ok(!build.includes('mgtCommit'), 'build.js 不应使用 mgtCommit 数据');
+  assert.ok(!build.includes('data-ver-mgt-retry'), 'build.js 不应再有版本侧重试绑定');
+  assert.ok(!build.includes('/api/mgt-commit/retry'), 'build.js 不应再调用补交接口');
+  assert.ok(!/\.mgt\b/.test(css), 'style.css 无 .mgt 反馈块样式');
+  assert.ok(!/mgt-spin/.test(css), 'style.css 无残留动画');
+
+  const I = globalThis.ATBI18N;
+  assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
+  const { EN, EN_DYNAMIC } = I._dict;
+  for (const k of [
+    '管理记录提交：提交中…', '✓ 管理记录提交：已同步 · 无新变化', '⚠ 操作已成功，管理记录提交失败',
+    '管理记录未自动提交', '重试提交', '⚠ 操作已成功，管理记录提交失败：◇', '重试提交失败：◇',
+  ]) {
+    assert.ok(!(k in EN) && !(k in EN_DYNAMIC), `词典不应残留管理提交词条：${k}`);
   }
-
-  // 非 git 项目：业务流转不受影响，mgt 返回 skipped（ initData 本身会建仓——移除 .git 构造）
-  const plain = mkTmp('p9nogit');
-  core.initData(plain);
-  fs.rmSync(path.join(plain, '.git'), { recursive: true, force: true });
-  const dataDir2 = core.dataDirFrom(plain);
-  const item2 = mkInProgressItem(dataDir2, '非 git 单');
-  const { server: s2, port: p2 } = await bootServer(plain);
-  try {
-    const r = await req(p2, 'POST', `/api/item/${item2.id}/status`, { to: 'done' });
-    assert.equal(r.status, 200);
-    assert.equal(r.json.status, 'done', '非 git 项目确认完成不受影响');
-    assert.equal(r.json.mgtCommit.status, 'skipped', '应明确返回 skipped 而非伪装成功');
-    assert.ok(r.json.mgtCommit.reason);
-  } finally {
-    s2.kill();
-    fs.rmSync(plain, { recursive: true, force: true });
-  }
-});
-
-// ---------- P10 前端源契约 ----------
-
-t('P10 前端：两入口渲染管理记录提交反馈块，失败含原因 / 文件 / 建议 / 重试按钮并绑定 /api/mgt-commit/retry；样式沿用主题变量', () => {
-  const app = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'app.js'), 'utf8');
-  const build = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'build.js'), 'utf8');
-  const css = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'style.css'), 'utf8');
-
-  assert.match(app, /mgtCommit/, '条目详情应使用 mgtCommit 数据');
-  assert.match(app, /管理记录提交/, '应渲染「管理记录提交」反馈块');
-  assert.match(app, /data-mgt-retry/, '重试按钮应有可绑定标记');
-  assert.match(app, /api\/mgt-commit\/retry/, '重试应调用补交接口');
-  assert.match(app, /提交中/, '提交中应显示进度提示');
-  assert.match(build, /mgtCommit/, '版本详情应使用 mgtCommit 数据');
-  assert.match(build, /管理记录提交/, '版本合并结果区应渲染反馈块');
-  assert.match(build, /api\/mgt-commit\/retry/, '版本侧重试应调用补交接口');
-  assert.match(css, /\.mgt\b/, '反馈块样式类');
-  assert.match(css, /\.mgt\.(failed|submitting|success)/, '状态化样式');
-  assert.match(css, /\.mgt[^{]*\{[^}]*(--ok|--warn|--inprogress)/, '样式应沿用现有主题变量');
 });
 
 let failed = 0;
