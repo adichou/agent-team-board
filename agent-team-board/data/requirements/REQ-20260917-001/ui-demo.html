@@ -324,16 +324,12 @@ el('quickEntry').addEventListener('click', async () => {
   if (S.oldMode) { setView('runs'); toast('旧行为：已跳转任务页——还需在面板内再点「启动」才能复制提示词（本需求移除该多余一跳）', 'warn'); return; }
   if (S.scene === 'empty') { toast(noCandidateReason(S.lane), 'warn'); return; }
   if (S.busy) return;
-  // 已有进行中一轮
+  // 已有进行中一轮：两侧统一服务端拒绝（REQ-20260913-003 去批次化后无幂等返回路径）
   if (S.scene === 'active') {
-    if (kind === 'refine') {
-      const text = samplePrompt(kind);
-      const ok = await writeClipboard(text);
-      if (ok) { showPrompt(text, '剪贴板内容（幂等返回的既有任务提示词 · 示例）'); toast('未新建完善任务：已有未结束的完善任务（幂等返回），已复制其提示词', 'warn'); }
-      else toast('未新建完善任务，且复制失败：请到任务页「提示词」页签手动复制', 'err');
-    } else {
-      toast('已有进行中的任务：同一时间只有一轮执行，无需重复启动；如需重开请先完成或终止当前任务', 'err');
-    }
+    const msg = kind === 'refine'
+      ? '已有进行中的完善任务（执行中）：同一时间只有一轮执行，无需重复启动；如需重开请先完成、恢复或终止当前任务'
+      : '已有进行中的任务（执行中）：同一时间只有一轮执行，无需重复启动；如需重开请先完成或终止当前任务';
+    toast(msg, 'err');
     return;
   }
   // 正常路径：请求进行中 → 创建任务 + 复制
@@ -344,7 +340,7 @@ el('quickEntry').addEventListener('click', async () => {
   S.busy = false; S.taskCreated = true; render();
   if (copied) {
     showPrompt(text, '剪贴板内容（' + kindName + '主调度提示词 · 示例）');
-    toast('✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 2；状态：待启动）——已停留在需求页', 'ok');
+    toast('✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 2，子代理模式；状态：待启动）——已停留在需求页', 'ok');
   } else {
     showPrompt(text, '复制失败 · 请全选手动复制（' + kindName + '主调度提示词 · 示例）');
     toast('任务已创建，但复制失败：剪贴板不可用，请在上方全选手动复制，或到任务页「提示词」页签复制', 'err');
