@@ -19,6 +19,10 @@ import {
 // REQ-20260914-001 挂起确认账本（执行层索引，不写 status.json）——claim 项目级挂起防呆钩子。
 // confirm-states 自包含（不 import core），此处引用无循环依赖。
 import { waitingDevelopConfirm } from './confirm-states.mjs';
+// BUG-20260916-003：确认完成自动关闭该条目名下仍处 blocked 终态的批次 run（留痕不抹除）。
+// 与 git-flow 同款调用期依赖（batch 顶层不取本模块值，本模块仅在 setStatus 内调用），
+// ESM 循环导入可安全加载。
+import { cancelBlockedRunsWithItemDone } from './batch.mjs';
 
 // REQ-20260916-007 目录布局：项目根 agent-team-board/ 板根，下分 data/（用户数据）与
 // runtime/（应用数据）。DATA_REL_DIR 语义 = 板根相对路径（server wouldWrite 与错误提示口径）。
@@ -910,6 +914,11 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
     // 手工实施占用同步释放（BUG-20260906-002，幂等：report 已释放则无操作）
     releaseLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`));
     releaseImplLockForManual(dataDir, id);
+    // BUG-20260916-003：自动关闭该条目名下仍处 blocked 终态的批次 run（账本留痕）；
+    // 失败不阻断人工确认完成——batchState 读时口径（条目已 done）仍兜底计数归零。
+    try {
+      cancelBlockedRunsWithItemDone(dataDir, id, { by: by || actor() });
+    } catch { /* 账本留痕失败：读时口径兜底，不回滚状态流转 */ }
     note = note || '人工确认完成';
   }
   if (from === 'done' && to === 'in-progress') {

@@ -5411,6 +5411,13 @@ const ATTEMPT_RESULT_LABEL = {
   reported: '已处理', done: '已处理', failed: '异常', blocked: '受阻', interrupted: '已中断',
   skipped: '已出局', 'in-flight': '处理中', reserved: '处理中', running: '处理中', queued: '排队中',
 };
+// BUG-20260916-003：已取消的受阻回执标注（后端 listRuns 的 cancelled.kind）——
+// item-done = 随条目确认完成关闭（有留痕）；item-done-legacy = 条目已完成的存量未标记回执。
+// chip 保持「受阻」形态（不抹除回执历史），标注行说明取消原因。
+const CANCELLED_NOTE_LABEL = {
+  'item-done': '已取消（随条目完成关闭）',
+  'item-done-legacy': '已取消（条目已完成）',
+};
 // REQ-20260909-010：完善后自动流转结果的可读标注（仅 refine 运行携带 autoPlan 字段时渲染，
 // develop 记录无该字段不受影响；文案与 refine-store.autoPlanResultText 同口径）
 function autoPlanNoteOf(plan) {
@@ -5444,7 +5451,10 @@ function runAttemptsHtml(records, total, kind, q = '') {
   const hidden = all.length - shown.length;
   const n = Math.max(Number(total ?? all.length), all.length);
   const recent = shown.slice(0, 2); // 记录本身最新在前
-  const retryable = (r) => ['failed', 'interrupted', 'blocked'].includes(r.result);
+  // BUG-20260916-003：已取消的受阻回执不再提供「重新执行」——其条目已 done，续接/重建
+  // 必然报「均不可入队」，是死路；保留 failed / interrupted / 未取消 blocked 的既有入口。
+  const retryable = (r) => ['failed', 'interrupted', 'blocked'].includes(r.result) && !r.cancelled;
+  const cancelledNote = (r) => (r.cancelled ? (CANCELLED_NOTE_LABEL[r.cancelled.kind] || '已取消') : '');
   const rows = recent.map((r) => `
     <tr>
       <td>
@@ -5454,6 +5464,7 @@ function runAttemptsHtml(records, total, kind, q = '') {
       </td>
       <td>
         <span class="chip rs-${esc(r.result)}">${esc(ATTEMPT_RESULT_LABEL[r.result] || r.result)}</span>
+        ${cancelledNote(r) ? `<div class="muted small" title="${esc(cancelledNote(r))}">${esc(cancelledNote(r))}</div>` : ''}
         ${r.summary ? `<div class="muted small" title="${esc(r.summary)}">${esc(shortOwner(String(r.summary)))}</div>` : ''}
         ${r.reason ? `<div class="muted small" title="${esc(r.reason)}">${esc(shortOwner(String(r.reason)))}</div>` : ''}
         ${r.autoPlan && autoPlanNoteOf(r.autoPlan) ? `<div class="muted small" title="${esc(autoPlanNoteOf(r.autoPlan))}">${esc(shortOwner(autoPlanNoteOf(r.autoPlan)))}</div>` : ''}

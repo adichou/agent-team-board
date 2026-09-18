@@ -372,6 +372,9 @@ const EN = {
   '已加载设置': 'Settings loaded',
   '已加载设置（未配置，按默认生效）': 'Settings loaded (unset; defaults apply)',
   '已取消，项目列表未变更。': 'Cancelled; the project list is unchanged.',
+  // BUG-20260916-003 任务面板处理记录：已取消的受阻回执标注（'已取消' 通用词条另有收录）
+  '已取消（随条目完成关闭）': 'Canceled (closed with item completion)',
+  '已取消（条目已完成）': 'Canceled (item completed)',
   '已处理': 'Processed',
   '已复制 ✓': 'Copied ✓',
   '已复制提示词；请在当前项目的 Agent 会话粘贴发送': 'Prompt copied; paste and send it in an Agent session of this project',

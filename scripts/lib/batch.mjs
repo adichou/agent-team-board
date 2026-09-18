@@ -377,6 +377,23 @@ const FINAL_OR_SKIP = (phase) => FINAL_RUN_PHASES.has(phase) || phase === 'skipp
 // REQ-20260908-020：skipped（任务终止出局）同为终态——计入 counts.skipped 且不再算待处理。
 // REQ-20260908-026：retryItems 标记「异常/已中断记录已重新执行」——该条目回到待处理
 // （不计入异常终态计数），下一轮 next 重新领取并产生新执行尝试（保留原记录）。
+// BUG-20260916-003：blocked 终态的「已取消」口径——写时留痕（run.cancelled，随条目
+// 确认完成关闭，见 cancelBlockedRunsWithItemDone）或条目当前已 done（存量未标记兜底）
+// 均不再计入受阻；finalByItem 终态占位不变（done 条目不在候选池，remaining / next 不受影响）。
+function itemIsDone(dataDir, itemId) {
+  try {
+    return readStatus(resolveItemDir(dataDir, itemId).dir).status === 'done';
+  } catch {
+    return false; // 条目不可读：按未完成处理，保持计数口径保守
+  }
+}
+
+function blockedRunCancelled(dataDir, r) {
+  if (r.phase !== 'blocked') return false;
+  if (r.cancelled) return true;
+  return itemIsDone(dataDir, r.itemId); // 存量兜底：修复前已 done 的历史 run 没机会补标记
+}
+
 function batchState(dataDir, batch) {
   const runs = batchRuns(dataDir, batch.batchId);
   const retryItems = new Set(Object.keys(batch.retryItems || {}));
@@ -403,6 +420,7 @@ function batchState(dataDir, batch) {
   }
   for (const r of finalByItem.values()) {
     if (retryItems.has(r.itemId)) continue; // 重新排队待处理：不占终态计数
+    if (blockedRunCancelled(dataDir, r)) continue; // BUG-20260916-003：已取消的受阻回执不再计数
     if (r.phase === 'reported') counts.reported++;
     else if (r.phase === 'blocked') counts.blocked++;
     else if (r.phase === 'failed') counts.failed++;
@@ -830,6 +848,104 @@ export function retryRun(dataDir, runId) {
   };
 }
 
+// ---------- 续接（BUG-20260916-002）：blocked 终态记录 + 条目仍被原 owner 认领 ----------
+
+// 该条目当前是否存在在途（非终态）运行：全量扫描运行账本（跨批次，与 nextItem 在途保护同口径）。
+// 排除 manual-<itemId> 手动 /dev 归因记录（BUG-20260915-007：executor='manual'、batchId=null，
+// 承载认领快照周期而非执行占用；续接流程本身按同 owner 续认复用该周期）。
+function itemInFlightRun(dataDir, itemId) {
+  const dir = runsDir(dataDir);
+  if (!fs.existsSync(dir)) return null;
+  for (const n of fs.readdirSync(dir)) {
+    const r = readJson(path.join(dir, n, 'run.json'));
+    if (r && r.itemId === itemId && r.executor !== 'manual'
+      && !FINAL_OR_SKIP(r.phase) && r.phase !== 'interrupted') return r;
+  }
+  return null;
+}
+
+// 续接提示词（BUG-20260916-002）：任务记录「重新执行」对 blocked 终态记录的承接——
+// 条目业务状态未被 blocked 回执改变（仍 in-progress、原 owner 持有）时，不走普通新批次
+// 重建入队（createBatch scoped 候选只收 planned 且未认领，必然报「均不可入队」），而是生成
+// 续接提示词：新执行代理沿用原 owner 幂等续认（core.claim 对 in-progress 同 owner 放行），
+// 按单项 /dev 流程继续实施、测试、上报。不新建 run 账目、不改人工管理的业务状态。
+// 返回：{ ok:true, prompt,… } 或 { ok:false, fallback:'none'|'rebuild', message }——
+// fallback=none（在途防线）由前端直接展示指引；fallback=rebuild 维持既有重建路径与报错口径。
+export function continueRun(dataDir, runId, { projectRoot = null, atbPath = ATB_PATH } = {}) {
+  const run = getRun(dataDir, runId);
+  // 防线优先（防双执行）：该条目存在在途（非终态）运行 → 不得生成续接提示词
+  const inflight = itemInFlightRun(dataDir, run.itemId);
+  if (inflight) {
+    return {
+      ok: false, fallback: 'none',
+      message: `${run.itemId} 已有在途执行（${inflight.runId}，owner ${inflight.owner}）：不得重复派发造成双执行，请先核对旧子代理是否结束`,
+    };
+  }
+  if (run.phase !== 'blocked') {
+    return {
+      ok: false, fallback: 'rebuild',
+      message: `运行 ${runId} 结果为 ${run.phase}（非受阻记录）：续接仅适用于 blocked 回执的记录，请走原「重新执行」路径`,
+    };
+  }
+  const { dir } = resolveItemDir(dataDir, run.itemId);
+  const st = readStatus(dir);
+  if (st.status !== 'in-progress' || st.owner !== run.owner) {
+    return {
+      ok: false, fallback: 'rebuild',
+      message: `${run.itemId} 当前为 ${st.status}${st.owner ? `（由 ${st.owner} 认领）` : ''}：不满足续接条件（须仍为 in-progress 且由原认领身份 ${run.owner} 持有），请按原路径处理`,
+    };
+  }
+  const root0 = projectRoot || getBatch(dataDir, run.batchId).projectRoot;
+  const workerSpecPath = path.join(dispatchDir(dataDir), 'worker-spec.md');
+  const prompt = [
+    '你是本项目的单项续接执行代理，只负责一项，完成后即结束；不得派发新的子代理。',
+    '本提示词由任务记录「重新执行」对受阻（blocked）记录生成：条目仍由原认领身份持有（in-progress），请沿用原认领身份续认后继续实施，不走普通新批次入队。',
+    '',
+    `项目根：${root0}`,
+    `条目：${run.itemId} ${st.title || ''}`,
+    `原认领身份（owner）：${run.owner}`,
+    `条目文档：${path.join(dir, 'README.md')}、${path.join(dir, 'design.md')}（Bug 必读引入来源节）`,
+    `执行规范：${workerSpecPath}（事实源 skills/agent-team-board/worker-spec.md，派发时已复制到数据目录）`,
+    '',
+    '执行步骤：',
+    '1. 开工前核对：确认旧 worker 已停止且无活动 worker——后端已核验该条目无在途运行，旧子代理会话是否已停止请与人工确认后再继续。',
+    '2. 以原认领身份幂等续认（同 owner 放行补锁，不改动业务状态）：',
+    `   node ${atbPath} claim ${run.itemId} --by ${run.owner}`,
+    '3. 按单项 /dev 流程继续实施：读条目 README.md 与 design.md → TDD（测试先红后绿，npm test 全量通过）→ 收口上报（report 不带 --run，由系统按认领快照自动收口提交）：',
+    `   node ${atbPath} report ${run.itemId} --coverage <N> --framework <框架> --summary "<要点>" --by ${run.owner}`,
+    '',
+    '红线（必须遵守）：',
+    '- 不走普通新批次入队（不 batch next / batch create）；',
+    '- 不复用终态旧运行、不新建 run 账目、不 run receipt；',
+    '- 不代替人工接受条目或确认完成（accepted / planned / done 仅限人工）；',
+    '- 不修改人工管理的业务状态（不退回已计划、不清除认领身份）。',
+  ].join('\n');
+  return { ok: true, runId, itemId: run.itemId, title: st.title || '', owner: run.owner, prompt };
+}
+
+// ---------- 已取消回执（BUG-20260916-003） ----------
+
+// 条目人工确认完成（in-progress → done）时自动关闭其名下仍处 blocked 终态的批次 run：
+// 账本留痕（run.cancelled 记录取消时间 / 路径 / 操作者），phase 保持 'blocked' 不改写——
+// 回执历史原样保留，只是叠加取消标记；batchState 计数（checkBatch / batchSummary /
+// batchBrief 与面板受阻口径）经 blockedRunCancelled 不再计入。幂等：已标记的 run 跳过。
+// 只处理批次账本（batchId 非空）：manual-<ID> 归因记录（executor='manual'）与
+// codex-exec 运行（各有独立口径）不改写。由 core.setStatus 在 done 流转时调用；
+// 留痕失败不阻断人工确认完成（读时口径按条目 done 兜底）。
+export function cancelBlockedRunsWithItemDone(dataDir, itemId, { by = null, note = '随条目完成关闭' } = {}) {
+  const dir = runsDir(dataDir);
+  if (!fs.existsSync(dir)) return { cancelled: [] };
+  const cancelled = [];
+  for (const name of fs.readdirSync(dir)) {
+    const r = readJson(path.join(dir, name, 'run.json'));
+    if (!r || r.itemId !== itemId || !r.batchId || r.phase !== 'blocked' || r.cancelled) continue;
+    r.cancelled = { at: nowIso(), kind: 'item-done', by: by || actor(), note };
+    saveRun(dataDir, r);
+    cancelled.push(r.runId);
+  }
+  return { cancelled };
+}
+
 // ---------- 回执与核对协议 ----------
 
 function buildReceipt(run, { result, reportRef, reason, safeToContinue }) {
@@ -1199,6 +1315,13 @@ export function listRuns(dataDir, batchId, { offset = 0, limit = 20 } = {}) {
     owner: r.owner,
     // REQ-20260908-020：skipped（终止出局）原样透出，其余非终态映射 in-flight
     result: FINAL_RUN_PHASES.has(r.phase) || r.phase === 'interrupted' || r.phase === 'skipped' ? r.phase : 'in-flight',
+    // BUG-20260916-003：已取消的受阻回执透出标注（写时留痕优先；条目已 done 的存量
+    // 未标记 run 就地识别为 legacy），供面板展示「已取消（…）」并收敛「重新执行」入口。
+    cancelled: r.phase === 'blocked'
+      ? (r.cancelled
+        ? { kind: r.cancelled.kind || 'item-done', at: r.cancelled.at || null }
+        : (itemIsDone(dataDir, r.itemId) ? { kind: 'item-done-legacy', at: null } : null))
+      : null,
     reason: r.reason || null,
     reportRef: r.reportRef || null,
     at: r.finishedAt || r.createdAt,
