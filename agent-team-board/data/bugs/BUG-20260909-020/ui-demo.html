@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260909-020 演示 — app 版本无法按住标题栏移动窗口</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --panel: #ffffff; --border: #e2e4e9; --text: #1f2430; --muted: #6b7280;
+    --accent: #4f46e5; --desk: #e5e7f0; --deskdot: #c9cddd; --ok: #16a34a; --warn: #d97706; --bad: #dc2626;
+    --skeleton: #e8e9ee;
+  }
+  html[data-theme="dark"] {
+    --bg: #17181d; --panel: #21232a; --border: #34363f; --text: #e7e9ee; --muted: #9aa0ac;
+    --desk: #101116; --deskdot: #2b2d36; --skeleton: #2c2e37;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 18px 18px 32px; }
+
+  header.demo-head h1 { font-size: 18px; margin: 0 0 4px; }
+  header.demo-head p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+
+  /* ---------- 控制条 ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .ctl-label { font-size: 12px; color: var(--muted); }
+  button.tool { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  button.tool:hover { border-color: var(--accent); }
+
+  /* ---------- 演示桌面 ---------- */
+  .desktop { position: relative; height: 560px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--desk);
+    background-image: radial-gradient(var(--deskdot) 1.2px, transparent 1.2px); background-size: 18px 18px;
+    overflow: hidden; }
+  .verdict { position: absolute; top: 10px; right: 12px; z-index: 5; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); }
+  .verdict.bad { color: var(--bad); border-color: var(--bad); }
+  .verdict.ok { color: var(--ok); border-color: var(--ok); }
+
+  /* ---------- 模拟窗口 ---------- */
+  .win { position: absolute; width: min(860px, calc(100% - 48px)); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 18px 40px rgba(0,0,0,.22);
+    display: flex; flex-direction: column; overflow: hidden; }
+  .win.max { width: calc(100% - 24px); height: calc(100% - 24px); }
+  .win.shake { animation: shake .35s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 50%{transform:translateX(6px)} 75%{transform:translateX(-4px)} }
+
+  /* 浏览器直连形态的浏览器栏 */
+  .browser-bar { display: none; align-items: center; gap: 10px; padding: 7px 12px 7px 82px; border-bottom: 1px solid var(--border); background: var(--panel); flex: none; }
+  .browser-bar .addr { flex: 1; max-width: 420px; margin: 0 auto; text-align: center; font-size: 12px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 12px; font-family: ui-monospace, Menlo, monospace; }
+  .win[data-env="browser"] .browser-bar { display: flex; }
+
+  /* 交通灯（原生能力，两种形态都可用，不参与缺陷） */
+  .lights { position: absolute; top: 12px; left: 13px; z-index: 6; display: flex; gap: 8px; }
+  .lights span { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
+  .lights .l-red { background: #ff5f57; } .lights .l-yel { background: #febc2e; } .lights .l-grn { background: #28c840; }
+  .win[data-env="browser"] .lights { top: 10px; }
+
+  /* 看板顶栏（视觉标题栏；app 形态下交通灯让位 78px） */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 10px 18px 10px 18px; border-bottom: 1px solid var(--border); flex: none; position: relative; }
+  .win[data-env="app"] .topbar { padding-left: 78px; }
+  .win.dragzone .topbar { cursor: default; } /* 拖动区由 JS 控制 cursor */
+  .topbar.grabbable { cursor: grab; } .topbar.grabbable:active { cursor: grabbing; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; user-select: none; }
+  .logo-badge { position: relative; flex: none; display: inline-flex; }
+  .logo { width: 34px; height: 34px; display: grid; place-items: center; font-size: 17px; color: #fff;
+    background: linear-gradient(135deg, #4f46e5, #0ea5e9); border-radius: 9px; }
+  .poll { position: absolute; top: -4px; right: -6px; font-size: 10px; color: var(--ok); }
+  .poll.off { color: var(--muted); }
+  .brand-text { min-width: 0; }
+  .brand-text h1 { margin: 0; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .path { display: block; color: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+  .top-actions select { font-size: 12px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); max-width: 150px; }
+  .btn { font-size: 13px; padding: 5px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .module-nav { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); flex: none; }
+  .module-nav button { border: 0; background: transparent; color: var(--muted); font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .module-nav button.active { background: var(--accent); color: #fff; }
+
+  .win-body { flex: 1; min-height: 240px; padding: 12px 14px; overflow: auto; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+  .row .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted); flex: none; }
+  .row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { flex: none; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .chip.done { color: var(--ok); border-color: var(--ok); }
+  .chip.doing { color: var(--accent); border-color: var(--accent); }
+  .state-card { border: 1px dashed var(--border); border-radius: 10px; padding: 26px 16px; text-align: center; color: var(--muted); margin-top: 26px; }
+  .state-card.off { color: var(--bad); border-color: var(--bad); }
+  .skel { height: 14px; border-radius: 6px; background: var(--skeleton); margin-bottom: 10px; }
+  .skel.w60 { width: 60%; } .skel.w35 { width: 35%; }
+
+  /* 拖动提示气泡 / 最小化 dock / 关闭遮罩 */
+  .hint { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 9;
+    background: rgba(0,0,0,.78); color: #fff; font-size: 12px; padding: 6px 14px; border-radius: 999px;
+    opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap; }
+  .hint.show { opacity: 1; }
+  .dock-chip { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 8;
+    display: none; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 16px; font-size: 13px; cursor: pointer; box-shadow: 0 8px 20px rgba(0,0,0,.18); }
+  .dock-chip.show { display: inline-flex; }
+  .closed-mask { position: absolute; inset: 0; z-index: 10; display: none; place-items: center; background: rgba(0,0,0,.04); }
+  .closed-mask.show { display: grid; }
+  .closed-mask .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; text-align: center; }
+  .closed-mask .card p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+
+  /* ---------- 日志 ---------- */
+  .log { margin-top: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .log h2 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+  .log ul { list-style: none; margin: 0; padding: 0; max-height: 150px; overflow: auto; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .log li { padding: 2px 0; border-bottom: 1px dashed var(--border); color: var(--muted); }
+  .log li b { color: var(--text); font-weight: 600; }
+  .note { margin-top: 10px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo-head">
+    <h1>BUG-20260909-020 演示 — app 版本无法按住标题栏进行移动</h1>
+    <p>对照「缺陷现状 / 修复后期望」：按住顶栏（避开右侧控件与交通灯）拖动，观察窗口是否移动。交通灯为原生能力，两种形态下均可用。</p>
+  </header>
+
+  <div class="controls">
+    <span class="ctl-label">形态</span>
+    <div class="seg" id="segMode">
+      <button data-v="bug" class="on">缺陷现状（app）</button>
+      <button data-v="fixed">修复后期望（app）</button>
+    </div>
+    <span class="ctl-label">环境</span>
+    <div class="seg" id="segEnv">
+      <button data-v="app" class="on">桌面壳 app</button>
+      <button data-v="browser">浏览器直连</button>
+    </div>
+    <span class="ctl-label">数据</span>
+    <div class="seg" id="segData">
+      <button data-v="normal" class="on">正常</button>
+      <button data-v="empty">空</button>
+      <button data-v="offline">离线</button>
+    </div>
+    <button class="tool" id="btnReload">⟳ 重新加载页面（模拟 Cmd-R）</button>
+    <button class="tool" id="btnTheme">◐ 深 / 浅色</button>
+  </div>
+
+  <div class="desktop" id="desktop">
+    <div class="verdict bad" id="verdict">缺陷现状 · 全页无拖动区</div>
+    <div class="win" id="win" data-env="app">
+      <div class="browser-bar"><span class="addr">127.0.0.1:8888 — 智能体团队看板</span></div>
+      <div class="lights" title="交通灯（原生能力，本缺陷不影响）">
+        <span class="l-red" id="lRed" title="关闭窗口"></span>
+        <span class="l-yel" id="lYel" title="最小化"></span>
+        <span class="l-grn" id="lGrn" title="缩放 / 还原"></span>
+      </div>
+      <header class="topbar" id="topbar">
+        <div class="brand">
+          <span class="logo-badge"><span class="logo">▦</span><span class="poll" id="pollDot" title="实时连接：每 2 秒自动刷新">●</span></span>
+          <div class="brand-text">
+            <h1>智能体团队看板</h1>
+            <span class="path" id="pathText">/Users/…/src/agent-team-board</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <select id="projSel" title="切换项目看板（拖动区不误伤交互）">
+            <option value="atb">agent-team-board</option>
+            <option value="demo">demo-project</option>
+          </select>
+          <button class="btn primary" id="btnNew">＋ 新建</button>
+        </div>
+      </header>
+      <nav class="module-nav">
+        <button type="button">讨论</button><button type="button" class="active">需求</button>
+        <button type="button">任务</button><button type="button">文件</button><button type="button">设置</button>
+      </nav>
+      <div class="win-body" id="winBody"></div>
+    </div>
+    <div class="hint" id="hint"></div>
+    <div class="dock-chip" id="dockChip"><span>▦</span> Agent Team Board · 已最小化 — 点击恢复</div>
+    <div class="closed-mask" id="closedMask">
+      <div class="card">
+        <p>窗口已关闭（红交通灯为原生能力，与缺陷无关）</p>
+        <button class="btn primary" id="btnReopen">重新打开窗口</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="log">
+    <h2>操作日志</h2>
+    <ul id="logList"></ul>
+  </div>
+  <p class="note">说明：本页为缺陷现状与修复后期望的交互示意（模拟窗口在演示桌面内移动），非真实 Electron 窗口；「浏览器直连」形态下顶栏不可拖是符合预期的——修复的拖动区仅注入 Electron 壳层窗口，web 业务代码零改动。最终修复方案以开发阶段 design.md 为准。</p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { mode: 'bug', env: 'app', data: 'normal', reloading: false,
+                maximized: false, minimized: false, closed: false };
+
+  var desktop = $('desktop'), win = $('win'), topbar = $('topbar');
+  var browserBar = win.querySelector('.browser-bar');
+
+  /* ---------- 日志与提示 ---------- */
+  function log(msg) {
+    var li = document.createElement('li');
+    var t = new Date();
+    var hh = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
+    li.innerHTML = '<b>' + hh + '</b> ' + msg;
+    $('logList').insertBefore(li, $('logList').firstChild);
+  }
+  var hintTimer = null;
+  function hint(msg) {
+    var h = $('hint'); h.textContent = msg; h.classList.add('show');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () { h.classList.remove('show'); }, 2000);
+  }
+
+  /* ---------- 模拟窗口定位 ---------- */
+  function place(x, y) {
+    var dw = desktop.clientWidth, dh = desktop.clientHeight;
+    var ww = win.offsetWidth, wh = win.offsetHeight;
+    x = Math.max(-ww + 120, Math.min(x, dw - 120));
+    y = Math.max(0, Math.min(y, dh - 44));
+    win.style.left = x + 'px'; win.style.top = y + 'px';
+  }
+  function recentre() {
+    place((desktop.clientWidth - win.offsetWidth) / 2, Math.max(16, (desktop.clientHeight - win.offsetHeight) / 2 - 8));
+  }
+  window.addEventListener('resize', function () { if (!state.maximized) { clampNow(); } });
+  function clampNow() {
+    var x = parseFloat(win.style.left) || 0, y = parseFloat(win.style.top) || 0;
+    place(x, y);
+  }
+
+  /* ---------- 主题 ---------- */
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    $('btnTheme').textContent = theme === 'dark' ? '☀ 浅色' : '◐ 深色';
+  }
+  applyTheme(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  $('btnTheme').addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+    log('切换外观：' + (cur === 'dark' ? '浅色' : '深色'));
+  });
+
+  /* ---------- 判定徽标与顶栏手感 ---------- */
+  function refreshChrome() {
+    win.setAttribute('data-env', state.env);
+    var v = $('verdict');
+    var dragOnTopbar = state.mode === 'fixed' && state.env === 'app';
+    topbar.classList.toggle('grabbable', dragOnTopbar);
+    browserBar.style.cursor = 'grab';
+    if (state.env === 'browser') {
+      v.textContent = state.mode === 'fixed' ? '修复后期望 · 浏览器直连：由浏览器标题栏移动（拖动区仅注入壳层）' : '浏览器直连 · 窗口由浏览器标题栏移动（不受缺陷影响）';
+      v.className = 'verdict ok';
+    } else if (state.mode === 'fixed') {
+      v.textContent = '修复后期望 · 顶栏为拖动区（右侧控件除外）';
+      v.className = 'verdict ok';
+    } else {
+      v.textContent = '缺陷现状 · 全页无拖动区（-webkit-app-region 零声明）';
+      v.className = 'verdict bad';
+    }
+  }
+
+  /* ---------- 数据状态渲染 ---------- */
+  var ROWS = [
+    ['REQ-20260905-001', '为看板增加 Electron 桌面壳（内嵌现有 Node 服务）', '进行中', 'doing'],
+    ['BUG-20260905-003', 'Electron 壳窗口交通灯与看板顶栏文字重叠', '进行中', 'doing'],
+    ['REQ-20260907-004', '看板整体布局优化：统一导航、三类新建入口与列表工作区', '进行中', 'doing'],
+    ['REQ-20260903-002', '≤640px 竖屏布局适配', '已完成', 'done'],
+    ['REQ-20260906-009', '顶栏实时状态点（叠加于 logo 右上角）', '已完成', 'done']
+  ];
+  function renderBody() {
+    var body = $('winBody'), poll = $('pollDot');
+    if (state.reloading) {
+      body.innerHTML = '<div class=\"skel\"></div><div class=\"skel w60\"></div><div class=\"skel w35\"></div><div class=\"skel\"></div><div class=\"skel w60\"></div>';
+      poll.textContent = '●'; poll.className = 'poll'; poll.title = '连接中…';
+      return;
+    }
+    poll.className = 'poll' + (state.data === 'offline' ? ' off' : '');
+    if (state.data === 'offline') {
+      poll.textContent = '○'; poll.title = '服务离线：数据停止刷新';
+      body.innerHTML = '<div class=\"state-card off\">○ 服务离线：数据停止刷新，轮询将在服务恢复后继续</div>';
+    } else if (state.data === 'empty') {
+      poll.textContent = '●'; poll.title = '实时连接：每 2 秒自动刷新';
+      body.innerHTML = '<div class=\"state-card\">当前项目尚未初始化看板<br>初始化后此处展示需求 / Bug 条目列表</div>';
+    } else {
+      poll.textContent = '●'; poll.title = '实时连接：每 2 秒自动刷新';
+      body.innerHTML = ROWS.map(function (r) {
+        return '<div class=\"row\"><span class=\"id\">' + r[0] + '</span><span class=\"t\">' + r[1] + '</span><span class=\"chip ' + r[3] + '\">' + r[2] + '</span></div>';
+      }).join('');
+    }
+  }
+
+  /* ---------- 分段控件 ---------- */
+  function bindSeg(id, key, label) {
+    $(id).addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      state[key] = b.dataset.v;
+      $(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      log('切换' + label + '：' + b.textContent);
+      refreshChrome(); renderBody();
+      if (state.minimized || state.closed) restoreWin(false);
+    });
+  }
+  bindSeg('segMode', 'mode', '形态');
+  bindSeg('segEnv', 'env', '环境');
+  bindSeg('segData', 'data', '数据');
+
+  /* ---------- 重新加载 ---------- */
+  $('btnReload').addEventListener('click', function () {
+    if (state.reloading) return;
+    if (state.closed) { hint('窗口已关闭，请先重新打开'); return; }
+    state.reloading = true; renderBody();
+    log('Cmd-R 重载：页面加载中…（拖动区样式随 did-finish-load 重新注入）');
+    setTimeout(function () {
+      state.reloading = false; renderBody();
+      log('重载完成：' + (state.mode === 'fixed' && state.env === 'app' ? '顶栏拖动区依然生效' : (state.env === 'app' ? '仍无可拖区，窗口依旧无法移动' : '浏览器形态不受影响')));
+      hint(state.mode === 'fixed' && state.env === 'app' ? '重载完成：顶栏仍可拖动' : '重载完成');
+    }, 900);
+  });
+
+  /* ---------- 顶栏 / 浏览器栏拖动 ---------- */
+  function inInteractive(el) { return !!el.closest('.top-actions, .lights, select, button'); }
+  function dragTarget(t) {
+    if (inInteractive(t)) return null;
+    if (t.closest('.browser-bar')) return 'browser';
+    if (t.closest('.topbar')) return 'topbar';
+    return null;
+  }
+  topbar.addEventListener('pointerdown', onDown);
+  browserBar.addEventListener('pointerdown', onDown);
+  function onDown(e) {
+    if (state.reloading || state.minimized || state.closed) return;
+    var zone = dragTarget(e.target);
+    if (!zone) return; /* 交互控件：不进入拖动，保持原生点击 */
+    var canDrag = zone === 'browser' || (zone === 'topbar' && state.mode === 'fixed' && state.env === 'app');
+    if (!canDrag) {
+      win.classList.remove('shake'); void win.offsetWidth; win.classList.add('shake');
+      hint(zone === 'topbar' ? '窗口未移动 —— 无可拖区（-webkit-app-region 缺失）' : '窗口未移动');
+      log('按住' + (zone === 'topbar' ? '顶栏' : '浏览器标题栏') + '拖动：窗口未移动（' + (zone === 'topbar' ? '页面无拖动区' : '异常') + '）');
+      return;
+    }
+    if (state.maximized) { /* 从最大化拖出：还原尺寸并让栏留在指针下 */
+      win.classList.remove('max'); state.maximized = false;
+      place(e.clientX - desktop.getBoundingClientRect().left - win.offsetWidth / 2,
+            e.clientY - desktop.getBoundingClientRect().top - 18);
+      log('拖动最大化窗口：还原尺寸后继续拖动');
+    }
+    var rect = win.getBoundingClientRect(), drect = desktop.getBoundingClientRect();
+    var offX = e.clientX - rect.left, offY = e.clientY - rect.top;
+    win.style.transition = 'none';
+    function onMove(ev) {
+      place(ev.clientX - drect.left - offX, ev.clientY - drect.top - offY);
+      ev.preventDefault();
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      log('按住' + (zone === 'topbar' ? '顶栏' : '浏览器标题栏') + '拖动：窗口已移动');
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    e.preventDefault();
+  }
+
+  /* ---------- 交通灯（原生能力，始终可用） ---------- */
+  $('lRed').addEventListener('click', function () {
+    state.closed = true; $('closedMask').classList.add('show');
+    log('红交通灯：关闭窗口（原生能力，不受缺陷影响）');
+  });
+  $('btnReopen').addEventListener('click', function () {
+    state.closed = false; $('closedMask').classList.remove('show'); recentre();
+    log('重新打开窗口');
+  });
+  $('lYel').addEventListener('click', function () {
+    state.minimized = true; win.style.display = 'none'; $('dockChip').classList.add('show');
+    log('黄交通灯：最小化到 dock（原生能力，不受缺陷影响）');
+  });
+  $('dockChip').addEventListener('click', function () { restoreWin(true); });
+  function restoreWin(logIt) {
+    state.minimized = false; win.style.display = '';
+    $('dockChip').classList.remove('show');
+    if (logIt) log('从 dock 恢复窗口');
+  }
+  $('lGrn').addEventListener('click', function () {
+    state.maximized = !state.maximized;
+    win.classList.toggle('max', state.maximized);
+    if (state.maximized) { win.style.left = '12px'; win.style.top = '12px'; }
+    else recentre();
+    log('绿交通灯：' + (state.maximized ? '最大化' : '还原') + '（原生能力，不受缺陷影响）');
+  });
+
+  /* ---------- 顶栏交互控件（验证拖动区不误伤） ---------- */
+  $('btnNew').addEventListener('click', function () {
+    hint('「＋ 新建」可点击 —— 拖动区不误伤交互');
+    log('点击「＋ 新建」：入口保持可点击（no-drag）');
+  });
+  $('projSel').addEventListener('change', function (e) {
+    var label = e.target.options[e.target.selectedIndex].text;
+    $('pathText').textContent = e.target.value === 'atb' ? '/Users/…/src/agent-team-board' : '/Users/…/src/demo-project';
+    log('切换项目：' + label + '（select 可正常展开）');
+  });
+
+  /* ---------- 初始化 ---------- */
+  refreshChrome(); renderBody(); recentre();
+  log('演示就绪：当前形态 = 缺陷现状（app），尝试按住顶栏拖动');
+})();
+</script>
+</body>
+</html>

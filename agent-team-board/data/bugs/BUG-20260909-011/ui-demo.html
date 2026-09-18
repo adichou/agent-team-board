@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260909-011 界面演示 — 删除设置页「运行参数」分区</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e3e6ea; --text: #24292f;
+    --muted: #6a737d; --primary: #1f6feb; --err: #cf222e;
+    --info-bg: #ddf4ff; --ok-bg: #dafbe1; --warn-bg: #fff8c5; --err-bg: #ffebe9;
+  }
+  html.dark {
+    --bg: #0d1117; --card: #161b22; --line: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --primary: #4493f8;
+    --info-bg: #122d42; --ok-bg: #12261e; --warn-bg: #2d2506; --err-bg: #3d1719;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+  input, select { font: inherit; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .demo-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 16px; background: #24292f; color: #fff; }
+  .demo-top .title { font-weight: 600; }
+  .demo-top .title .small { display: block; font-weight: 400; opacity: .75; }
+  .demo-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .mode-switch { display: inline-flex; border: 1px solid #ffffff55; border-radius: 8px; overflow: hidden; }
+  .mode-switch button { border: 0; background: transparent; color: #ffffffaa; padding: 6px 14px; }
+  .mode-switch button.active { background: #fff; color: #24292f; font-weight: 600; }
+  .tool { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #ffffffcc; }
+  .tool input { accent-color: #f85149; }
+  .tool.minor input { accent-color: #3fb950; }
+  #darkBtn { border: 1px solid #ffffff55; background: transparent; color: #fff; border-radius: 6px; padding: 4px 10px; }
+
+  main { max-width: 880px; margin: 0 auto; padding: 14px 16px 48px; }
+  .demo-note { background: var(--info-bg); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+
+  .viewnav { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; flex-wrap: wrap; }
+  .viewnav button { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 14px; color: var(--muted); }
+  .viewnav button.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .panel h4 { margin: 0 0 10px; font-size: 14px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; }
+  td input[type="checkbox"] { width: 15px; height: 15px; vertical-align: middle; }
+
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin: 4px 14px 4px 0; }
+  input[type="text"], input[type="number"] { padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); width: auto; }
+  input[type="number"] { width: 84px; }
+  select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); }
+  input:disabled, select:disabled { opacity: .45; cursor: not-allowed; }
+
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 4px 12px; color: var(--text); }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .dep-toolbar { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 13px; background: var(--err-bg); color: var(--text); }
+  .notice.warn { background: var(--warn-bg); }
+  .notice.info { background: var(--info-bg); }
+  .skeleton { border-radius: 8px; padding: 18px 12px; text-align: center; color: var(--muted); background: color-mix(in srgb, var(--line) 35%, var(--card)); }
+  .empty { padding: 22px 0; text-align: center; color: var(--muted); }
+
+  #toast { position: fixed; right: 18px; bottom: 18px; max-width: 420px; border-radius: 8px; padding: 9px 14px; font-size: 13px; background: #24292f; color: #fff; box-shadow: 0 4px 14px #0006; }
+  #toast.err { background: #a40e26; }
+
+  .fixed-tag { display: inline-block; margin-left: 8px; font-size: 11px; border-radius: 999px; padding: 1px 8px; background: var(--ok-bg); color: #1a7f37; border: 1px solid #1a7f3755; }
+  html.dark .fixed-tag { color: #56d364; }
+</style>
+</head>
+<body>
+<header class="demo-top">
+  <div class="title">BUG-20260909-011 界面演示：删除设置页「运行参数」配置分区
+    <span class="small">本页为文档配套演示（验收口径示意，非已实现效果）；无外网依赖，交互均在本地完成</span>
+  </div>
+  <div class="demo-tools">
+    <div class="mode-switch" role="tablist">
+      <button id="modeNow" class="active" type="button">现状（缺陷）</button>
+      <button id="modeFixed" type="button">修复后（期望）</button>
+    </div>
+    <label class="tool"><input type="checkbox" id="failLoad"> 模拟设置加载失败</label>
+    <label class="tool"><input type="checkbox" id="failTasks"> 模拟任务设置加载失败</label>
+    <label class="tool"><input type="checkbox" id="failSave"> 模拟保存失败</label>
+    <label class="tool minor"><input type="checkbox" id="failRun" checked> 预填「允许非 Git」等演示值</label>
+    <button id="darkBtn" type="button">深浅色</button>
+  </div>
+</header>
+
+<main>
+  <div class="demo-note" id="demoNote">当前为<b>现状（缺陷）</b>：设置页在「批量任务」分区之下仍渲染「运行参数」分区（CLI 路径、单项时限、网络重试、重启后自动继续、允许非 Git 项目执行 + 保存按钮）。切换右上角模式可对照修复后状态。</div>
+
+  <nav class="viewnav">
+    <button type="button">需求</button>
+    <button type="button">Bug</button>
+    <button type="button">讨论</button>
+    <button type="button">任务</button>
+    <button type="button" class="active">设置</button>
+    <button type="button">资料</button>
+  </nav>
+
+  <div id="settingsPage">
+    <div class="notice err hidden" id="pageErr">设置加载失败：演示用网络错误 <button type="button" class="btn small" id="stRetry">重试</button></div>
+
+    <!-- 批量任务分区：两模式下均保留 -->
+    <section class="panel" id="tsPanel">
+      <h4>批量任务</h4>
+      <div id="tsBody"></div>
+    </section>
+
+    <!-- 运行参数分区：仅现状模式渲染，修复后删除 -->
+    <section class="panel" id="runPanel">
+      <h4>运行参数 <span class="fixed-tag hidden" id="removedTag">修复后：整分区删除</span></h4>
+      <div id="runBody"></div>
+    </section>
+  </div>
+</main>
+
+<div id="toast" class="hidden"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (sel) { return document.querySelector(sel); };
+  var mode = 'now'; // now = 现状（缺陷）；fixed = 修复后（期望）
+  var toastTimer = null;
+
+  // 演示状态：批量任务设置（agents 可见列表 / 模型来源 / 完善流转开关）
+  var st = {
+    loading: true,
+    error: null,
+    saved: {
+      refine: { codex: true, zcode: true },   // true = 未隐藏（可见）
+      develop: { codex: true, zcode: true },
+      autoPlan: false
+    },
+    dirty: false
+  };
+  // 演示状态：运行参数（仅现状模式展示；修复后该分区删除，值不再有界面入口）
+  var run = { cliPath: '', timeoutMin: 60, retries: 2, resumeAfterRestart: false, allowNonGit: false };
+
+  function toast(msg, isErr) {
+    var t = $('#toast');
+    t.textContent = msg;
+    t.className = isErr ? 'err' : '';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = 'hidden'; }, 2600);
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  // ---------- 批量任务分区 ----------
+  function kindTitle(kind) { return kind === 'refine' ? '批量完善' : '批量开发'; }
+
+  function tsTableHtml(kind, dis) {
+    var rows = ['codex', 'zcode'].map(function (a) {
+      var visible = st.saved[kind][a];
+      return '<tr>'
+        + '<td>' + (a === 'codex' ? 'Codex' : 'Zcode') + '</td>'
+        + '<td><input type="checkbox" data-hidden="' + kind + '.' + a + '"' + (visible ? '' : ' checked') + (dis ? ' disabled' : '') + ' aria-label="在' + kindTitle(kind) + '启动选项中隐藏 ' + (a === 'codex' ? 'Codex' : 'Zcode') + '"></td>'
+        + '<td><select data-src="' + kind + '.' + a + '"' + (dis ? ' disabled' : '') + '><option value="follow">跟随主调度会话</option><option value="manual">手动指定</option></select></td>'
+        + '<td><input type="text" data-model="' + kind + '.' + a + '" placeholder="模型名（手动时填写）" size="14" disabled></td>'
+        + '</tr>';
+    }).join('');
+    return '<div class="small muted" style="margin-bottom:4px">' + kindTitle(kind) + '</div>'
+      + '<table><thead><tr><th>Agent</th><th>是否隐藏</th><th>模型来源</th><th>手动模型</th></tr></thead><tbody>' + rows + '</tbody></table>'
+      + '<div class="notice warn hidden" data-empty="' + kind + '" style="margin-top:8px">' + kindTitle(kind) + '两类 Agent 已全部隐藏：任务将无可用执行 Agent，启动会被禁止。可在下方取消勾选恢复。</div>';
+  }
+
+  function renderTs() {
+    var body = $('#tsBody');
+    if (st.loading) {
+      body.innerHTML = '<div class="skeleton">正在加载任务设置…（加载中编辑与保存禁用，避免未加载完成就覆盖配置）</div>';
+      return;
+    }
+    if (st.error) {
+      body.innerHTML = '<div class="notice err">任务设置加载失败：' + esc(st.error) + ' <button type="button" class="btn small" id="tsRetry">重试</button></div>';
+      return;
+    }
+    var dis = '';
+    body.innerHTML = tsTableHtml('refine', false) + '<div style="height:10px"></div>' + tsTableHtml('develop', false)
+      + '<div class="field-inline" style="margin-top:8px"><input type="checkbox" id="tsAutoPlan"' + (st.saved.autoPlan ? ' checked' : '') + '> 完善完成后自动转入计划（默认手动）</div>'
+      + '<div class="dep-toolbar"><button type="button" class="btn primary" id="tsSave">保存批量任务设置</button>'
+      + '<span class="muted small" id="tsStatus" role="status">' + (st.dirty ? '有未保存的更改' : '已加载设置') + '</span></div>';
+  }
+
+  // ---------- 运行参数分区（仅现状模式） ----------
+  function renderRun() {
+    var panel = $('#runPanel'), body = $('#runBody');
+    if (mode === 'fixed') { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    $('#removedTag').classList.add('hidden');
+    var dis = st.loading ? ' disabled' : '';
+    body.innerHTML =
+      '<label class="field-inline">CLI 路径 <input type="text" id="stCliPath" placeholder="自动探测（PATH / ChatGPT.app 内置）" size="30" value="' + esc(run.cliPath) + '"' + dis + '></label>'
+      + '<label class="field-inline">单项时限（分钟） <input type="number" id="stTimeout" min="5" max="240" value="' + run.timeoutMin + '"' + dis + '></label>'
+      + '<label class="field-inline">网络重试次数 <input type="number" id="stRetries" min="0" max="3" value="' + run.retries + '"' + dis + '></label>'
+      + '<label class="field-inline" title="服务重启后核对通过时自动恢复取单（默认关闭）"><input type="checkbox" id="stResumeRestart"' + (run.resumeAfterRestart ? ' checked' : '') + dis + '> 重启后自动继续</label>'
+      + '<label class="field-inline" title="允许 Codex 在此项目没有 Git 仓库时执行"><input type="checkbox" id="stAllowNonGit"' + (run.allowNonGit ? ' checked' : '') + dis + '> 允许非 Git 项目执行</label>'
+      + '<div class="dep-toolbar"><button type="button" class="btn primary" id="stSave"' + dis + '>保存设置</button>'
+      + '<span class="muted small">不在此收集任何密钥；沿用本机 codex 登录与模型配置。</span></div>';
+  }
+
+  // ---------- 加载流程（两阶段渲染） ----------
+  function enterSettings(retryFromError) {
+    st.loading = true; st.error = null; st.dirty = false;
+    $('#pageErr').classList.add('hidden');
+    renderTs(); renderRun();
+    setTimeout(function () {
+      st.loading = false;
+      if ($('#failLoad').checked && !retryFromError) {
+        $('#pageErr').classList.remove('hidden');
+        renderTs(); renderRun();
+        return;
+      }
+      if ($('#failTasks').checked) st.error = '演示用读取失败';
+      renderTs(); renderRun();
+    }, 900);
+  }
+
+  // ---------- 事件绑定（委托） ----------
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+    if (el.id === 'stRetry') { enterSettings(true); return; }
+    if (el.id === 'tsRetry') {
+      st.loading = true; st.error = null; renderTs(); renderRun();
+      setTimeout(function () {
+        st.loading = false;
+        if ($('#failTasks').checked) st.error = '演示用读取失败';
+        renderTs(); renderRun();
+      }, 900);
+      return;
+    }
+    if (el.id === 'tsSave') {
+      el.disabled = true; el.textContent = '保存中…';
+      var status = $('#tsStatus');
+      setTimeout(function () {
+        var fail = $('#failSave').checked;
+        if (status) status.textContent = fail ? '保存失败：演示用提交错误（草稿已保留，可重试）' : '已保存，仅对后续启动的任务生效';
+        toast(fail ? '保存失败：演示用提交错误' : '✓ 已保存批量任务设置', fail);
+        st.dirty = false;
+        el.disabled = false; el.textContent = '保存批量任务设置';
+      }, 700);
+      return;
+    }
+    if (el.id === 'stSave') {
+      // 现状模式：读取五个控件并 POST /api/dispatch/settings（演示仅本地反馈）
+      var c = $('#stCliPath'), t = $('#stTimeout'), r = $('#stRetries');
+      run.cliPath = c ? c.value : run.cliPath;
+      run.timeoutMin = t ? (Number(t.value) || 60) : run.timeoutMin;
+      run.retries = r ? (Number(r.value) || 0) : run.retries;
+      run.resumeAfterRestart = !!$('#stResumeRestart').checked;
+      run.allowNonGit = !!$('#stAllowNonGit').checked;
+      el.disabled = true; el.textContent = '保存中…';
+      setTimeout(function () {
+        var fail = $('#failSave').checked;
+        toast(fail ? '保存失败：演示用提交错误' : '✓ 已保存项目设置（用于后续新执行）', fail);
+        el.disabled = false; el.textContent = '保存设置';
+      }, 600);
+      return;
+    }
+    if (el.closest('.mode-switch')) {
+      mode = el.id === 'modeFixed' ? 'fixed' : 'now';
+      $('#modeNow').classList.toggle('active', mode === 'now');
+      $('#modeFixed').classList.toggle('active', mode === 'fixed');
+      var note = $('#demoNote');
+      if (mode === 'fixed') {
+        note.innerHTML = '当前为<b>修复后（期望）</b>：「运行参数」分区整体删除（标题、五个控件、保存按钮与密钥说明），设置页仅保留「批量任务」；删除后无空卡片 / 空标题残留，加载中不再出现被禁用的运行参数控件。<b>底层配置与派发行为是否联动调整属待确认项，本演示不呈现。</b>';
+      } else {
+        note.innerHTML = '当前为<b>现状（缺陷）</b>：设置页在「批量任务」分区之下仍渲染「运行参数」分区（CLI 路径、单项时限、网络重试、重启后自动继续、允许非 Git 项目执行 + 保存按钮）。切换右上角模式可对照修复后状态。';
+      }
+      enterSettings(true);
+      return;
+    }
+    if (el.id === 'darkBtn') {
+      document.documentElement.classList.toggle('dark');
+      return;
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.dataset && el.dataset.hidden) {
+      var parts = el.dataset.hidden.split('.');
+      st.saved[parts[0]][parts[1]] = !el.checked;
+      st.dirty = true;
+      var status = $('#tsStatus'); if (status) status.textContent = '有未保存的更改';
+      var hint = document.querySelector('[data-empty="' + parts[0] + '"]');
+      if (hint) {
+        var allHidden = ['codex', 'zcode'].every(function (a) {
+          var box = document.querySelector('[data-hidden="' + parts[0] + '.' + a + '"]');
+          return box && box.checked;
+        });
+        hint.classList.toggle('hidden', !allHidden);
+      }
+      return;
+    }
+    if (el.id === 'tsAutoPlan') {
+      st.saved.autoPlan = el.checked; st.dirty = true;
+      var s2 = $('#tsStatus'); if (s2) s2.textContent = '有未保存的更改';
+      return;
+    }
+    if (el.dataset && el.dataset.src) {
+      var p = el.dataset.src.split('.');
+      var input = document.querySelector('[data-model="' + p[0] + '.' + p[1] + '"]');
+      if (input) input.disabled = el.value !== 'manual';
+      st.dirty = true;
+      var s3 = $('#tsStatus'); if (s3) s3.textContent = '有未保存的更改';
+      return;
+    }
+    // 现状模式：运行参数草稿修改不弹提示，仅保存时反馈（对齐现有行为：stStatus 只服务批量任务）
+  });
+
+  // 演示值开关：预填「允许非 Git」等，便于观察现状分区控件
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'failRun') return;
+    run.cliPath = e.target.checked ? '/opt/homebrew/bin/codex' : '';
+    run.timeoutMin = e.target.checked ? 90 : 60;
+    run.retries = e.target.checked ? 3 : 2;
+    run.resumeAfterRestart = e.target.checked;
+    run.allowNonGit = e.target.checked;
+    if (mode === 'now') enterSettings(true);
+  });
+
+  enterSettings(false);
+})();
+</script>
+</body>
+</html>

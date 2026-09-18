@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260909-010 演示 · 新建单带截图后详情不显示（现状 / 期望对照）</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea; --ink: #1f2329; --muted: #8a919c;
+    --brand: #3370ff; --ok: #2ea463; --bad: #d83931; --warn: #c27a05; --code-bg: #f2f3f5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font: 13px/1.65 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh; display: flex; flex-direction: column;
+  }
+  code { background: var(--code-bg); border-radius: 3px; padding: 1px 5px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* ---------- 演示控制条（仅演示用，非看板真实界面） ---------- */
+  .demo-bar {
+    background: #1f2b3d; color: #e8edf5; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    position: sticky; top: 0; z-index: 30;
+  }
+  .demo-bar h1 { font-size: 13px; font-weight: 600; margin-right: 4px; }
+  .demo-bar h1 .tag { font-weight: 400; opacity: .75; font-size: 11px; }
+  .seg { display: inline-flex; border: 1px solid #46536b; border-radius: 6px; overflow: hidden; }
+  .seg button {
+    background: transparent; color: #c3cddd; border: 0; padding: 5px 12px; font-size: 12px; white-space: nowrap;
+  }
+  .seg button + button { border-left: 1px solid #46536b; }
+  .seg button.on { background: var(--brand); color: #fff; }
+  .demo-bar .hint { font-size: 11px; opacity: .7; }
+  .demo-bar .grow { flex: 1; }
+  .btn-primary { background: var(--brand); border: 0; color: #fff; border-radius: 6px; padding: 6px 14px; font-size: 12px; }
+  .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+  /* ---------- 舞台：左列表 + 右详情 ---------- */
+  .stage { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 12px; padding: 12px 16px; align-items: start; }
+  @media (max-width: 1020px) { .stage { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .card-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-head .sub { font-weight: 400; color: var(--muted); font-size: 11px; }
+
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer;
+  }
+  .row:last-child { border-bottom: 0; }
+  .row:hover { background: #f7f9fc; }
+  .row .cid { font: 11px/1.4 ui-monospace, Menlo, monospace; color: var(--brand); }
+  .row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .st { font-size: 11px; border-radius: 10px; padding: 1px 8px; }
+  .st.s-submitted { background: #f0f2f5; color: #5c6470; }
+  .row.cur { background: #eef3ff; }
+
+  /* ---------- 详情抽屉 ---------- */
+  .drawer .head { padding: 12px 14px 8px; }
+  .drawer .head .top { display: flex; align-items: center; gap: 8px; }
+  .drawer .head .cid { font: 12px ui-monospace, Menlo, monospace; color: var(--brand); }
+  .icon-btn { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+  .icon-btn:hover { background: var(--code-bg); color: var(--ink); }
+  .drawer h2 { font-size: 15px; margin-top: 2px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 10px; }
+  .tab { border: 0; background: transparent; padding: 7px 12px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--brand); }
+  .pane { padding: 12px 16px; min-height: 240px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+  .meta-grid label { display: block; color: var(--muted); font-size: 11px; }
+  .md h3 { font-size: 13px; margin: 14px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .md h3:first-child { margin-top: 2px; }
+  .md p { margin: 6px 0; }
+  .md .muted { color: var(--muted); }
+  .doc-shot { display: block; max-width: 100%; margin: 8px 0; border: 1px solid var(--line); border-radius: 8px; cursor: zoom-in; }
+  .shot-fail { color: var(--muted); font-size: 12px; background: var(--code-bg); border-radius: 6px; padding: 6px 10px; margin: 8px 0; }
+  .shot-fail b { color: var(--bad); font-weight: 600; }
+  .notice { border-radius: 6px; padding: 8px 10px; margin: 10px 0; font-size: 12px; }
+  .notice.ok { background: #e9f7ef; color: var(--ok); }
+  .notice.bad { background: #fdeceb; color: var(--bad); }
+  .notice.info { background: #eef3ff; color: #3370ff; }
+
+  /* ---------- 机制日志 ---------- */
+  .log-wrap { padding: 0 16px 16px; }
+  .log { background: #10161f; color: #9fb0c8; border-radius: 10px; padding: 10px 12px; font: 11px/1.8 ui-monospace, Menlo, monospace; max-height: 170px; overflow: auto; }
+  .log .l { white-space: pre-wrap; word-break: break-all; }
+  .log .l.create { color: #7fb0ff; }
+  .log .l.drop { color: #ff8f85; }
+  .log .l.ok { color: #6fd5a0; }
+  .log .l.muted { color: #5d6b7f; }
+
+  /* ---------- 新建弹窗 ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(15, 20, 30, .45); display: flex; align-items: center; justify-content: center; z-index: 60; }
+  .modal { width: 520px; max-width: calc(100vw - 32px); background: var(--panel); border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.25); }
+  .modal h3 { font-size: 14px; padding: 14px 18px 0; }
+  .modal-body { padding: 10px 18px 4px; }
+  .f-row { margin-bottom: 12px; }
+  .f-row > label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .f-row input[type=text], .f-row textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; background: #fff; color: var(--ink);
+  }
+  .f-row textarea { height: 58px; resize: none; }
+  .f-row input:focus, .f-row textarea:focus { outline: 2px solid #bcd0ff; border-color: var(--brand); }
+  .f-row .err { color: var(--bad); font-size: 11px; min-height: 16px; margin-top: 2px; }
+  .shot-block { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; }
+  .shot-head { display: flex; align-items: center; gap: 8px; }
+  .shot-head .cnt { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .btn-shot { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; font-size: 12px; }
+  .btn-shot:disabled { opacity: .5; cursor: not-allowed; }
+  .shot-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .shot-item { width: 108px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+  .shot-item img { display: block; width: 100%; height: 58px; object-fit: cover; }
+  .shot-item .meta { display: flex; align-items: center; gap: 4px; padding: 3px 6px; font-size: 10px; color: var(--muted); }
+  .shot-item .meta span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shot-item .x { border: 0; background: transparent; color: var(--muted); font-size: 11px; padding: 0 2px; }
+  .shot-item .x:hover { color: var(--bad); }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 18px 16px; }
+  .btn { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px 14px; font-size: 12px; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  /* ---------- lightbox / toast ---------- */
+  .lightbox { position: fixed; inset: 0; background: rgba(10, 14, 20, .82); display: flex; align-items: center; justify-content: center; z-index: 80; cursor: zoom-out; }
+  .lightbox img { max-width: 92vw; max-height: 88vh; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .toast {
+    position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); background: #243042; color: #eef2f8;
+    border-radius: 8px; padding: 8px 16px; font-size: 12px; z-index: 90; box-shadow: 0 8px 24px rgba(0,0,0,.3); max-width: 80vw;
+  }
+  .toast.err { background: #5c2620; color: #ffd9d4; }
+</style>
+</head>
+<body>
+
+<header class="demo-bar">
+  <h1>BUG-20260909-010 演示 <span class="tag">（演示控制，非看板真实功能）</span></h1>
+  <div class="seg" id="sceneSeg" role="tablist" aria-label="场景切换">
+    <button type="button" data-scene="defectA" class="on">现状 A：附件被丢弃</button>
+    <button type="button" data-scene="defectB">现状 B：端点缺失占位</button>
+    <button type="button" data-scene="expected">期望：修复后</button>
+  </div>
+  <button type="button" class="btn-primary" id="replayBtn">⟳ 重放创建流程</button>
+  <span class="grow"></span>
+  <span class="hint">左侧行点击开详情 · 截图点击放大 · 页签首次激活有加载态 · Esc 关闭弹窗/放大层</span>
+</header>
+
+<main class="stage">
+  <section class="card" aria-label="条目列表">
+    <div class="card-head">需求 <span class="sub">共 <span id="listCount">3</span> 条</span></div>
+    <div id="listBox"></div>
+  </section>
+
+  <section class="card drawer" id="drawerCard" aria-label="详情抽屉">
+    <div id="drawerBody"><div class="pane muted" style="color:var(--muted)">选择左侧列表中的条目查看详情</div></div>
+  </section>
+</main>
+
+<div class="log-wrap">
+  <div class="card-head" style="border:1px solid var(--line);border-radius:10px 10px 0 0;background:#fff">机制日志 <span class="sub">按当前场景打印请求与落盘行为</span></div>
+  <div class="log" id="logBox" role="log"></div>
+</div>
+
+<!-- 新建弹窗（含 REQ-20260909-009 截图区块的形态复刻） -->
+<div class="modal-wrap hidden" id="modalWrap">
+  <form class="modal" id="newForm">
+    <h3>新建条目</h3>
+    <div class="modal-body">
+      <div class="f-row"><label>类型</label>
+        <select id="fType" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;background:#fff">
+          <option value="req">需求</option><option value="bug">Bug</option>
+        </select>
+      </div>
+      <div class="f-row"><label>标题</label><input type="text" id="fTitle" placeholder="填写标题"></div>
+      <div class="f-row"><label>描述</label><textarea id="fDesc" placeholder="验收标准、现象与复现步骤等（可留空，后续补充）"></textarea></div>
+      <div class="f-row" id="fShotRow">
+        <label>截图（可选，png/jpg/gif/webp 等，单张 ≤ 8MB，最多 9 张）</label>
+        <div class="shot-block">
+          <div class="shot-head">
+            <button type="button" class="btn-shot" id="fShotPick">＋ 添加截图（演示用假图）</button>
+            <span class="cnt" id="fShotCount">0 / 9</span>
+          </div>
+          <div class="f-row" style="margin:4px 0 0"><div class="err" id="fShotError"></div></div>
+          <div class="shot-list" id="fShotList"></div>
+          <div class="hint" id="fShotEmpty" style="font-size:11px;color:var(--muted);margin-top:6px">尚无截图；点上方按钮或直接 ⌘V 粘贴（演示页仅按钮）</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn" id="fCancel">取消</button>
+      <button type="submit" class="btn primary" id="fSubmit">创建</button>
+    </div>
+  </form>
+</div>
+
+<div class="lightbox hidden" id="lightbox" title="点击任意处关闭"><img alt="放大查看"></div>
+<div class="toast hidden" id="toast"></div>
+
+<script>
+/* ================= 演示数据与假截图（内联 SVG data URI，无外网依赖） ================= */
+function svgShot(label, sub, tone) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="560" height="300">
+    <rect width="560" height="300" fill="${tone}"/>
+    <rect x="14" y="14" width="150" height="24" rx="5" fill="#ffffff33"/>
+    <rect x="14" y="52" width="532" height="222" rx="8" fill="#ffffff22"/>
+    <rect x="34" y="80" width="200" height="14" rx="4" fill="#ffffffaa"/>
+    <rect x="34" y="106" width="340" height="10" rx="3" fill="#ffffff66"/>
+    <rect x="34" y="126" width="300" height="10" rx="3" fill="#ffffff55"/>
+    <rect x="34" y="158" width="492" height="88" rx="6" fill="#ffffff18"/>
+    <text x="280" y="150" font-family="PingFang SC, sans-serif" font-size="17" fill="#fff" text-anchor="middle">${label}</text>
+    <text x="280" y="174" font-family="PingFang SC, sans-serif" font-size="11" fill="#ffffffcc" text-anchor="middle">${sub}</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+const FAKE_SHOTS = [
+  { name: '列表截图.png', src: svgShot('（模拟）看板列表', 'REQ-20260909-009 交付后列表形态', '#3b5bdb') },
+  { name: '弹窗截图.png', src: svgShot('（模拟）新建弹窗', '描述下方已出现截图区块', '#0c8599') },
+  { name: '详情截图.png', src: svgShot('（模拟）详情抽屉', '说明页签应内联显示截图', '#e8590c') },
+];
+
+let scene = 'defectA';           // defectA | defectB | expected
+let seq = 0;                     // 重放创建的编号
+let items = [
+  { id: 'REQ-20990909-001', title: '带截图的示例需求', status: 'submitted', shots: [0, 1], created: true },
+  { id: 'BUG-20990909-002', title: '带截图的示例 Bug', status: 'submitted', shots: [2], created: true },
+  { id: 'REQ-20990909-003', title: '纯文字单（无截图，空态对照）', status: 'submitted', shots: [], created: true },
+];
+let openId = null, curTab = null;
+const docCache = {};             // [itemId + ':' + tab] -> 已加载（模拟 REQ-20260909-006 docCache）
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function log(msg, cls = '') {
+  const box = $('#logBox');
+  const div = document.createElement('div');
+  div.className = 'l ' + cls;
+  div.textContent = '[' + new Date().toTimeString().slice(0, 8) + '] ' + msg;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+let toastTimer = null;
+function toast(msg, isErr = false) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.toggle('err', isErr);
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+}
+
+/* ================= 列表 ================= */
+function renderList() {
+  $('#listCount').textContent = items.length;
+  $('#listBox').innerHTML = items.map((it) => `
+    <div class="row${it.id === openId ? ' cur' : ''}" data-id="${esc(it.id)}">
+      <span class="cid">${esc(it.id)}</span>
+      <span class="t">${esc(it.title)}</span>
+      <span class="st s-submitted">待接受</span>
+    </div>`).join('');
+  for (const r of $('#listBox').querySelectorAll('.row')) {
+    r.addEventListener('click', () => openDrawer(r.dataset.id));
+  }
+}
+
+/* ================= 详情抽屉（页签式，REQ-20260909-006 形态） ================= */
+function openDrawer(id, wantTab) {
+  openId = id; curTab = wantTab || 'info';
+  renderList();
+  renderDrawerShell();
+  activateTab(curTab, true);
+}
+
+function renderDrawerShell() {
+  const it = items.find((x) => x.id === openId);
+  $('#drawerBody').innerHTML = `
+    <div class="head">
+      <div class="top"><span class="cid">${esc(it.id)}</span><button type="button" class="icon-btn" id="drawerClose" title="关闭" aria-label="关闭">✕</button></div>
+      <h2>${esc(it.title)}</h2>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="详情分页">
+      ${['info', 'README.md', 'design.md', 'test-cases.md', 'disc'].map((t) => tabBtn(t)).join('')}
+    </nav>
+    <div class="pane" id="pane"></div>`;
+  $('#drawerClose').addEventListener('click', () => { openId = null; renderList(); $('#drawerBody').innerHTML = '<div class="pane" style="color:var(--muted)">选择左侧列表中的条目查看详情</div>'; });
+  for (const b of $('#drawerBody').querySelectorAll('.tab')) b.addEventListener('click', () => activateTab(b.dataset.tab));
+}
+function tabBtn(t) {
+  const label = { info: '基本信息', 'README.md': '说明', 'design.md': '设计', 'test-cases.md': '测试用例', disc: '讨论纪要' }[t];
+  return `<button type="button" class="tab${t === curTab ? ' active' : ''}" data-tab="${t}" role="tab" aria-selected="${t === curTab}">${label}</button>`;
+}
+
+function activateTab(tab, force) {
+  if (tab !== 'info' && tab !== 'disc') {
+    const key = openId + ':' + tab;
+    if (!force && docCache[key]) { fillDoc(tab, docCache[key]); return; }
+    curTab = tab; renderDrawerShell();
+    $('#pane').innerHTML = '<p class="muted" style="color:var(--muted)">加载中…</p>';
+    log(`GET /api/item/${openId}/doc/${tab === 'README.md' ? 'readme' : tab} → 渲染 README（marked）`, 'muted');
+    setTimeout(() => { docCache[key] = true; fillDoc(tab, key); }, 380);   // 加载态：模拟首次请求
+    return;
+  }
+  curTab = tab; renderDrawerShell();
+  $('#pane').innerHTML = tab === 'info' ? infoHtml() : '<p class="muted" style="color:var(--muted)">Bug 单暂不支持关联讨论；如需讨论请到「讨论」模块发起。</p>';
+}
+function infoHtml() {
+  const it = items.find((x) => x.id === openId);
+  return `
+    <div class="meta-grid">
+      <div><label>状态</label><span class="st s-submitted">待接受</span></div>
+      <div><label>类型</label><span>${it.id.startsWith('BUG') ? 'Bug' : '需求'}</span></div>
+      <div><label>认领者</label><span>—</span></div>
+      <div><label>创建</label><span>2026-09-09 13:34</span></div>
+    </div>
+    <div class="notice info">未入计划。可点「移入计划」排入开发计划。</div>`;
+}
+
+function fillDoc(tab, key) {
+  curTab = tab; renderDrawerShell();
+  const pane = $('#pane');
+  pane.classList.add('md');
+  if (tab === 'README.md') { pane.innerHTML = readmeHtml(); linkupDocImages(pane); }
+  else pane.innerHTML = '<p class="muted" style="color:var(--muted)">尚未创建，开发阶段补充。</p>';
+}
+
+/* README「描述/现象」节：按场景渲染截图区 */
+function readmeHtml() {
+  const it = items.find((x) => x.id === openId);
+  const isBug = it.id.startsWith('BUG');
+  const head = isBug ? '现象' : '描述';
+  const lines = [];
+  lines.push(`<h3>${head}</h3>`);
+  lines.push(`<p>${isBug ? '打开详情后说明页签里看不到创建时带的截图。' : '看下面的截图。'}</p>`);
+  if (scene === 'expected') {
+    for (const i of it.shots) lines.push(`<img class="doc-shot" data-shot="${i}" src="${FAKE_SHOTS[i].src}" alt="截图" loading="lazy">`);
+    if (it.shots.length === 0) lines.push('<p class="muted" style="color:var(--muted)">（本单未携带截图，描述节为纯文字——空态对照）</p>');
+  } else if (scene === 'defectB') {
+    // README 带引用行，但旧进程无附件端点 → 相对 src 改写后 404 → onerror 占位
+    for (const i of it.shots) lines.push(`<img class="doc-shot" data-shot="${i}" src="attachments/${encodeURIComponent(FAKE_SHOTS[i].name)}" alt="截图" loading="lazy">`);
+    if (it.shots.length === 0) lines.push('<p class="muted" style="color:var(--muted)">（本单未携带截图，描述节为纯文字——空态对照）</p>');
+  } else {
+    // defectA：创建时附件即被旧进程丢弃，README 根本没有引用行
+    if (it.shots.length > 0) lines.push(`<p class="muted" style="color:var(--muted)">（创建时携带 ${it.shots.length} 张截图；旧进程 <code>/api/new</code> 未识别 <code>attachments</code> 字段，附件被静默丢弃，README 未写任何 <code>![截图](attachments/…)</code> 引用行）</p>`);
+    else lines.push('<p class="muted" style="color:var(--muted)">（本单未携带截图，描述节为纯文字——空态对照）</p>');
+  }
+  lines.push('<h3>验收标准</h3><p>（开发阶段补充）</p>');
+  return lines.join('');
+}
+
+/* linkupDocImages 的行为复刻：改写相对引用 + 点击放大 + 加载失败占位 */
+function linkupDocImages(view) {
+  for (const img of view.querySelectorAll('img.doc-shot')) {
+    const raw = img.getAttribute('src') || '';
+    const i = Number(img.dataset.shot);
+    if (/^(?:\.\/)?attachments\/(.+)$/.test(raw)) {
+      // 演示：旧进程缺 /api/item/:id/attachment/:name → 真实 404 触发 onerror
+      log(`linkupDocImages → GET /api/item/${openId}/attachment/${FAKE_SHOTS[i].name} → 404 {"error":"未知接口"}（旧进程路由启动时固化）`, 'drop');
+    } else {
+      log(`linkupDocImages → GET /api/item/${openId}/attachment/${FAKE_SHOTS[i].name} → 200 image/*（新进程）`, 'ok');
+    }
+    img.addEventListener('click', () => {
+      $('#lightbox img').src = FAKE_SHOTS[i].src;
+      $('#lightbox').classList.remove('hidden');
+    });
+    img.addEventListener('error', () => {
+      const p = document.createElement('p');
+      p.className = 'shot-fail';
+      p.innerHTML = `<b>✕</b> 截图 ${esc(FAKE_SHOTS[i].name)} 无法加载（文件可能被移动、删除或超过 8MB 上限）`;
+      img.replaceWith(p);
+      log('img error → 就地替换为占位说明（<img> 加载不经 api() 封装，拿不到 atb serve 过旧指引）', 'drop');
+    });
+  }
+}
+
+/* ================= 新建弹窗（重放创建流程） ================= */
+let newShots = [], shotBusy = false;
+function renderShots() {
+  $('#fShotCount').textContent = `${newShots.length} / 9`;
+  $('#fShotEmpty').classList.toggle('hidden', newShots.length > 0);
+  $('#fShotList').innerHTML = newShots.map((s, i) => `
+    <div class="shot-item" title="${esc(s.name)}">
+      <img src="${s.src}" alt="${esc(s.name)}">
+      <div class="meta"><span>${esc(s.name)}</span><button type="button" class="x" data-i="${i}" aria-label="移除 ${esc(s.name)}"${shotBusy ? ' disabled' : ''}>✕</button></div>
+    </div>`).join('');
+  $('#fShotPick').disabled = shotBusy || newShots.length >= 9;
+  for (const b of $('#fShotList').querySelectorAll('.x')) b.addEventListener('click', () => { newShots.splice(Number(b.dataset.i), 1); renderShots(); });
+}
+$('#fShotPick').addEventListener('click', () => {
+  if (newShots.length >= 9) { $('#fShotError').textContent = '最多添加 9 张截图'; return; }
+  newShots.push(FAKE_SHOTS[newShots.length % FAKE_SHOTS.length]);
+  $('#fShotError').textContent = '';
+  renderShots();
+});
+
+$('#replayBtn').addEventListener('click', () => {
+  newShots = []; shotBusy = false;
+  $('#fTitle').value = ''; $('#fDesc').value = ''; $('#fShotError').textContent = '';
+  $('#fSubmit').disabled = false; $('#fSubmit').textContent = '创建';
+  renderShots();
+  $('#modalWrap').classList.remove('hidden');
+  $('#fTitle').focus();
+});
+$('#fCancel').addEventListener('click', () => $('#modalWrap').classList.add('hidden'));
+
+$('#newForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if ($('#fSubmit').disabled) return;
+  if (!$('#fTitle').value.trim()) { toast('标题不能为空', true); return; }
+  shotBusy = true;
+  $('#fSubmit').disabled = true; $('#fSubmit').textContent = '创建中…'; renderShots();
+  log(`POST /api/new · attachments: ${newShots.length} 张（${newShots.map((s) => s.name).join(', ') || '无'}）`, 'create');
+  await new Promise((r) => setTimeout(r, 650));
+  const id = (++seq === 1 ? 'REQ' : 'BUG') + '-20990909-' + String(10 + seq).padStart(3, '0');
+  let shots = [];
+  if (scene === 'expected') {
+    shots = newShots.map((s) => FAKE_SHOTS.findIndex((f) => f.name === s.name)).filter((i) => i >= 0);
+    log(`服务进程为当前代码：core.createItem 落盘 attachments/（${shots.length} 张）→ README ${id.startsWith('BUG') ? '现象' : '描述'}节末尾按顺序追加 ![截图](attachments/…)`, 'ok');
+  } else {
+    shots = newShots.map((s) => FAKE_SHOTS.findIndex((f) => f.name === s.name)).filter((i) => i >= 0);
+    log('服务进程早于截图功能：/api/new 处理器不识别 attachments 字段 → 静默忽略 → 201 创建成功，附件无痕丢失（不建 attachments/ 目录、README 不写引用行）', 'drop');
+  }
+  items.push({ id, title: $('#fTitle').value.trim() || '（未命名）', status: 'submitted', shots, created: true });
+  $('#modalWrap').classList.add('hidden');
+  shotBusy = false;
+  toast(`✓ 已创建 ${id}（待接受）`);
+  renderList();
+  log('提示：自愈通道——终端运行 atb serve 会检测服务过旧（磁盘代码 mtime 晚于 health startedAt）并自动重启，之后重试即可正常带图', 'muted');
+  openDrawer(id, 'info');
+});
+
+/* ================= 场景切换 / 全局 ================= */
+for (const b of $('#sceneSeg').querySelectorAll('button')) {
+  b.addEventListener('click', () => {
+    for (const x of $('#sceneSeg').querySelectorAll('button')) x.classList.toggle('on', x === b);
+    scene = b.dataset.scene;
+    log(`—— 切换场景：${{ defectA: '现状 A（旧进程：创建时附件被静默丢弃）', defectB: '现状 B（旧进程：README 有引用行但附件端点 404 → 占位）', expected: '期望（修复后：附件落盘 + 端点可用 + 详情内联显示）' }[scene]} ——`, 'muted');
+    Object.keys(docCache).forEach((k) => delete docCache[k]);   // 清缓存以重放加载态
+    if (openId) openDrawer(openId, curTab);
+  });
+}
+$('#lightbox').addEventListener('click', () => $('#lightbox').classList.add('hidden'));
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  $('#lightbox').classList.add('hidden');
+  $('#modalWrap').classList.add('hidden');
+});
+
+renderList();
+log('演示就绪：BUG-20260909-010（新建单带上截图后，详情界面没有显示截图）。默认场景为现状 A，可点「⟳ 重放创建流程」走一遍「带截图创建 → 打开详情」', 'muted');
+log('根因（2026-09-09 核实）：常驻服务 pid 10988 启动于 03:59:11Z，早于 REQ-20260909-009（截图功能）代码落盘；静态前端实时读盘为新版（弹窗能加截图），旧进程 /api/new 静默丢弃 attachments、且缺 /api/item/:id/attachment/:name 路由（实测 404 未知接口）', 'muted');
+</script>
+</body>
+</html>

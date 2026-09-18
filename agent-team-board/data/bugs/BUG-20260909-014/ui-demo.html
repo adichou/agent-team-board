@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260909-014 演示 · 任务模块头部空白与关闭按钮</title>
+<style>
+  :root {
+    --bg: #f4f6fa; --panel: #ffffff; --border: #d8dee9; --text: #232a35;
+    --muted: #7f8caa; --accent: #2f6fed; --accent-soft: rgba(47, 111, 237, .12);
+    --ok: #2e9e5b; --err: #d3455b; --shadow: 0 6px 24px rgba(35, 42, 53, .08);
+  }
+  html[data-theme="dark"] {
+    --bg: #14181f; --panel: #1c222c; --border: #303947; --text: #e6eaf2;
+    --muted: #8a94a6; --accent: #5b8dff; --accent-soft: rgba(91, 141, 255, .18);
+    --ok: #4fbf82; --err: #ff7085; --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  }
+  * { box-sizing: border-box; }
+  .hidden { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- 第一行顶栏（佐证：#dataDir 已展示项目路径） ---------- */
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .logo { font-weight: 700; }
+  .brand h1 { margin: 0; font-size: 15px; font-weight: 650; }
+  .path { display: block; color: var(--muted); font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .top-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ---------- 第二行模块导航 ---------- */
+  .module-nav { display: flex; gap: 4px; padding: 6px 18px; background: var(--panel);
+    border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .view-tab { border: 1px solid transparent; background: transparent; color: var(--muted);
+    padding: 4px 12px; border-radius: 999px; }
+  .view-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+  /* ---------- 第三行副标题（MODULE_SUB.runs 口径） ---------- */
+  .sub-strip { padding: 6px 18px; color: var(--muted); font-size: 12px;
+    border-bottom: 1px solid var(--border); background: var(--bg); }
+
+  main { max-width: 980px; margin: 0 auto; padding: 14px 18px 28px; }
+
+  /* ---------- 演示控制条 ---------- */
+  .ctrl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .ctrl .grp { display: flex; align-items: center; gap: 6px; }
+  .ctrl label { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 4px 12px; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .switch { border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 8px; padding: 4px 10px; }
+  .switch.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- 任务面板（复刻 .batch-drawer） ---------- */
+  .batch-drawer { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; box-shadow: var(--shadow); overflow: hidden; }
+  .drawer-head { border-bottom: 1px solid var(--border); }
+  /* 现状缺陷：drawer-head 上内边距 16px + 仅有一行弱化路径/✕ + batch-modes margin-top:10px */
+  .mode-now .drawer-head { padding: 16px 18px 12px; }
+  .batch-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .batch-modes.now { margin-top: 10px; }
+  /* 期望：无 ✕、无路径行，页签贴近顶部 */
+  .mode-fix .drawer-head { padding: 6px 18px 10px; }
+  .tabs { display: flex; gap: 6px; }
+  .tabs .tab { border: 1px solid var(--border); background: transparent; color: var(--muted);
+    border-radius: 999px; padding: 3px 14px; }
+  .tabs .tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .blank-note { font-size: 11px; color: var(--err); }
+  .drawer-body { padding: 14px 18px 26px; }
+
+  /* 面板主体四态 */
+  .state-hint { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .start-zone, .skeleton, .empty, .failbox { border: 1px dashed var(--border); border-radius: 10px; padding: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  select { font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 12px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .sk { background: linear-gradient(90deg, var(--accent-soft), var(--border), var(--accent-soft));
+    background-size: 200% 100%; animation: sweep 1.1s linear infinite; border-radius: 6px; height: 14px; }
+  @keyframes sweep { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .empty p, .failbox p { margin: 0 0 8px; }
+  .failbox { border-color: var(--err); }
+  .failbox .msg { color: var(--err); }
+
+  /* 状态反馈条与日志 */
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); border-radius: 8px; padding: 8px 16px;
+    opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 9; }
+  .toast.show { opacity: .95; }
+  .toast.err { background: var(--err); color: #fff; }
+  .logbox { margin-top: 14px; }
+  .logbox h3 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .log { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 12px; max-height: 150px; overflow-y: auto; }
+  .log div { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--muted); }
+  .log b { color: var(--accent); font-weight: 600; }
+
+  /* 占位视图（非任务模块） */
+  .placeholder { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 26px; text-align: center; color: var(--muted); box-shadow: var(--shadow); }
+
+  /* 窄屏预览：约束内容宽度并隐藏路径（对应 ≤640px .path{display:none}） */
+  body.narrow main { max-width: 380px; }
+  body.narrow .path { display: none; }
+</style>
+</head>
+<body>
+  <!-- 第一行：产品与项目上下文（顶栏 #dataDir 路径与面板内路径重复的佐证） -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▦</span>
+      <div>
+        <h1>智能体团队看板（演示）</h1>
+        <span id="dataDir" class="path">/Users/demo/Documents/src/agent-team-board</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="switch on" id="themeBtn">☀ 深浅色</button>
+    </div>
+  </header>
+
+  <!-- 第二行：模块导航 -->
+  <nav class="module-nav" id="moduleNav" aria-label="模块导航">
+    <button type="button" class="view-tab" data-view="oncall">讨论</button>
+    <button type="button" class="view-tab" data-view="status">需求</button>
+    <button type="button" class="view-tab active" data-view="runs">任务</button>
+    <button type="button" class="view-tab" data-view="files">文件</button>
+    <button type="button" class="view-tab" data-view="settings">设置</button>
+  </nav>
+
+  <!-- 第三行：副标题 -->
+  <div class="sub-strip" id="subStrip">进度、队列与结果集中在这里</div>
+
+  <main>
+    <!-- 演示控制 -->
+    <div class="ctrl">
+      <div class="grp">
+        <label>头部模式</label>
+        <div class="seg" id="modeSeg">
+          <button data-mode="now" class="active">现状（缺陷）</button>
+          <button data-mode="fix">期望（修复示意）</button>
+        </div>
+      </div>
+      <div class="grp">
+        <label>子面板</label>
+        <div class="seg" id="bmodeSeg">
+          <button data-bmode="refine" class="active">批量完善</button>
+          <button data-bmode="develop">批量开发</button>
+        </div>
+      </div>
+      <div class="grp">
+        <label>主体状态</label>
+        <select id="stateSel">
+          <option value="normal">正常（启动区）</option>
+          <option value="loading">加载中</option>
+          <option value="empty">空</option>
+          <option value="fail">失败</option>
+        </select>
+      </div>
+      <div class="grp">
+        <button class="switch" id="narrowBtn">窄屏预览（≤640px）</button>
+      </div>
+    </div>
+
+    <!-- 任务模块视图 -->
+    <section id="runsView">
+      <aside class="batch-drawer" id="batchDrawer" aria-label="任务面板">
+        <header class="drawer-head" id="drawerHead"><!-- JS 渲染 --></header>
+        <div class="drawer-body" id="drawerBody"><!-- JS 渲染 --></div>
+      </aside>
+    </section>
+
+    <!-- 其他模块占位 -->
+    <section id="otherView" class="placeholder hidden"></section>
+
+    <!-- 日志 -->
+    <div class="logbox">
+      <h3>操作与状态日志</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  var S = { view: 'runs', mode: 'now', bmode: 'refine', body: 'normal', loadingTimer: null };
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+
+  function log(msg, hi) {
+    var d = document.createElement('div');
+    var ts = new Date().toTimeString().slice(0, 8);
+    d.innerHTML = (hi ? '<b>' + esc(ts) + ' ' + esc(msg) + '</b>' : esc(ts) + ' ' + esc(msg));
+    var box = $('#log');
+    box.prepend(d);
+    while (box.children.length > 40) box.removeChild(box.lastChild);
+  }
+  function toast(msg, err) {
+    var t = $('#toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (err ? ' err' : '');
+    clearTimeout(t._h);
+    t._h = setTimeout(function () { t.className = 'toast'; }, 1800);
+  }
+
+  /* ---------- 头部渲染：现状 vs 期望 ---------- */
+  function renderHead() {
+    var h = $('#drawerHead');
+    h.parentElement.classList.remove('mode-now', 'mode-fix');
+    h.parentElement.classList.add(S.mode === 'now' ? 'mode-now' : 'mode-fix');
+    if (S.mode === 'now') {
+      // 现状（缺陷）：BUG-20260908-009 移除大标题后，首行仅剩 11px 弱化路径 + ✕，
+      // 叠加 .drawer-head 16px 上内边距与 .batch-modes 10px 上外边距 → 空白横带
+      h.innerHTML =
+        '<div class="batch-head">' +
+          '<div class="batch-title"><span class="path" title="/Users/demo/Documents/src/agent-team-board">/Users/demo/Documents/src/agent-team-board</span></div>' +
+          '<div class="batch-head-actions"><button class="btn" id="batchClose" title="返回需求模块" aria-label="返回需求模块">✕</button></div>' +
+        '</div>' +
+        '<nav class="tabs batch-modes now">' + tabsHtml() + '</nav>';
+      $('#batchClose').addEventListener('click', function () {
+        log('「✕」点击 → setView(\'status\') 返回需求模块（与第二行导航「需求」页签功能重复）', true);
+        toast('已返回需求模块（✕ 与导航页签效果相同）');
+        setView('status');
+      });
+    } else {
+      // 期望：无 ✕、无重复路径行，页签贴近面板顶部；离开模块统一走第二行导航
+      h.innerHTML = '<nav class="tabs">' + tabsHtml() + '</nav>';
+    }
+    bindTabs();
+  }
+  function tabsHtml() {
+    return '<button class="tab ' + (S.bmode === 'refine' ? 'active' : '') + '" data-bmode="refine">批量完善</button>' +
+           '<button class="tab ' + (S.bmode === 'develop' ? 'active' : '') + '" data-bmode="develop">批量开发</button>';
+  }
+  function bindTabs() {
+    document.querySelectorAll('#drawerHead [data-bmode]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (S.bmode === b.dataset.bmode) return;
+        S.bmode = b.dataset.bmode;
+        document.querySelectorAll('#bmodeSeg [data-bmode]').forEach(function (x) {
+          x.classList.toggle('active', x.dataset.bmode === S.bmode); });
+        log('一级页签切换 → ' + (S.bmode === 'refine' ? '批量完善' : '批量开发') + '（mode 记忆，头部结构不变）');
+        renderHead(); renderBody();
+      });
+    });
+  }
+
+  /* ---------- 主体四态渲染 ---------- */
+  function renderBody() {
+    var body = $('#drawerBody');
+    var name = S.bmode === 'refine' ? '批量完善' : '批量开发';
+    if (S.body === 'loading') {
+      body.innerHTML = '<div class="skeleton"><div class="sk" style="width:46%"></div>' +
+        '<div class="sk" style="width:72%;margin-top:10px"></div><div class="sk" style="width:60%;margin-top:10px"></div></div>' +
+        '<p class="muted small" style="margin:10px 0 0">正在加载' + name + '面板数据…（骨架占位，不阻塞其他区域）</p>';
+      return;
+    }
+    if (S.body === 'empty') {
+      body.innerHTML = '<div class="empty"><p class="muted">（空）' + name +
+        '暂无可处理条目 / 无进行中任务。</p><p class="muted small">空态占位说明实际口径：批量完善面向「已接受未完善」单，批量开发面向「已计划」队列（最旧优先）。</p></div>';
+      return;
+    }
+    if (S.body === 'fail') {
+      body.innerHTML = '<div class="failbox"><p class="msg">（失败）任务设置加载失败：演示模拟接口异常。</p>' +
+        '<p class="muted small">失败不抛出：任务模块轮询不受影响；设置保持未加载时启动区回退展示全部执行 Agent。</p>' +
+        '<button class="btn" id="retryBtn">↻ 重试</button></div>';
+      $('#retryBtn').addEventListener('click', function () {
+        log('「重试」点击 → 重新拉取任务设置');
+        S.body = 'loading'; $('#stateSel').value = 'loading'; renderBody();
+        clearTimeout(S.loadingTimer);
+        S.loadingTimer = setTimeout(function () {
+          S.body = 'normal'; $('#stateSel').value = 'normal'; renderBody();
+          toast('✓ 重试成功，已恢复启动区');
+          log('重试成功 → 恢复正常态（启动区）');
+        }, 900);
+      });
+      return;
+    }
+    // 正常态：启动区示意（执行 Agent 选择 + 启动；与真实面板口径一致地禁用未选项）
+    body.innerHTML =
+      '<p class="state-hint">（正常）' + name + '启动区示意：' + (S.bmode === 'refine'
+        ? '对已接受条目批量补全文档，与列表勾选无关。'
+        : '以已计划队列（最旧优先）为范围，由面板内「启动」创建任务。') + '</p>' +
+      '<div class="start-zone">' +
+        '<div class="row"><span class="muted small">执行 Agent</span>' +
+          '<select id="agentSel"><option value="">选择执行 Agent…</option><option value="zcode">zcode</option><option value="codex">codex</option></select>' +
+          '<button class="btn primary" id="startBtn" disabled>▶ 启动</button></div>' +
+        '<p class="muted small" style="margin:0">未显式选择执行 Agent 时不得启动（空占位「选择执行 Agent…」，两个子面板口径一致）。</p>' +
+      '</div>';
+    var sel = $('#agentSel'), start = $('#startBtn');
+    sel.addEventListener('change', function () {
+      start.disabled = !sel.value;
+      log(sel.value ? '已选择执行 Agent：' + sel.value + '（启动按钮解锁）' : '清空选择 → 启动按钮禁用');
+    });
+    start.addEventListener('click', function () {
+      toast('✓ 已启动' + name + '任务（演示，不真实派发）');
+      log('启动 ' + name + '（执行 Agent：' + sel.value + '）——运行期由运行面板承接，此处仅示意');
+    });
+  }
+
+  /* ---------- 视图切换（第二行导航，期望模式下离开任务的唯一途径） ---------- */
+  var VIEW_NAME = { oncall: '讨论', status: '需求', runs: '任务', files: '文件', settings: '设置' };
+  function setView(v) {
+    S.view = v;
+    document.querySelectorAll('#moduleNav .view-tab').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.view === v); });
+    var isRuns = v === 'runs';
+    $('#runsView').classList.toggle('hidden', !isRuns);
+    $('#otherView').classList.toggle('hidden', isRuns);
+    $('#subStrip').textContent = isRuns ? '进度、队列与结果集中在这里'
+      : '「' + VIEW_NAME[v] + '」模块占位（演示仅聚焦任务模块头部）';
+    if (!isRuns) {
+      $('#otherView').innerHTML = '<p>已通过第二行导航切换到「' + VIEW_NAME[v] +
+        '」模块。</p><p class="small">页面化模块（讨论 / 文件 / 设置）均无关闭按钮，离开模块统一走导航——任务模块应与之保持一致。</p>';
+    }
+  }
+
+  /* ---------- 控制条绑定 ---------- */
+  document.querySelectorAll('#modeSeg [data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (S.mode === b.dataset.mode) return;
+      S.mode = b.dataset.mode;
+      document.querySelectorAll('#modeSeg [data-mode]').forEach(function (x) {
+        x.classList.toggle('active', x.dataset.mode === S.mode); });
+      log(S.mode === 'now'
+        ? '切换到现状（缺陷）：路径行 + ✕ + 大间距 → 页签上方空白横带（两子面板共用头部）'
+        : '切换到期望：无 ✕、头部收紧 → 页签贴近面板顶部，离开模块走第二行导航', true);
+      renderHead();
+    });
+  });
+  document.querySelectorAll('#bmodeSeg [data-bmode]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (S.bmode === b.dataset.bmode) return;
+      S.bmode = b.dataset.bmode;
+      renderHead(); renderBody();
+      log('控制条切换子面板 → ' + (S.bmode === 'refine' ? '批量完善' : '批量开发'));
+    });
+  });
+  $('#stateSel').addEventListener('change', function (e) {
+    S.body = e.target.value;
+    log('主体状态切换 → ' + e.target.options[e.target.selectedIndex].text);
+    renderBody();
+  });
+  $('#narrowBtn').addEventListener('click', function () {
+    var on = document.body.classList.toggle('narrow');
+    this.classList.toggle('on', on);
+    log(on ? '窄屏预览开启：内容宽度受约束，面板/顶栏路径均隐藏（对应 ≤640px .path{display:none}，现状空白带仅剩 ✕）'
+           : '窄屏预览关闭');
+  });
+  $('#themeBtn').addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    this.classList.toggle('on', !dark);
+    log('主题切换 → ' + (dark ? '浅色' : '深色') + '（真实面板沿用 CSS 变量，深浅色均需复查）');
+  });
+  document.querySelectorAll('#moduleNav .view-tab').forEach(function (b) {
+    b.addEventListener('click', function () {
+      log('导航切换 → ' + VIEW_NAME[b.dataset.view] + ' 模块');
+      setView(b.dataset.view);
+    });
+  });
+
+  /* ---------- 初始化 ---------- */
+  renderHead(); renderBody(); setView('runs');
+  log('演示载入：现状/期望对照、双子面板、四态切换、窄屏与深浅色复查；面板结构复刻 scripts/web/app.js renderBatchDrawer()');
+})();
+</script>
+</body>
+</html>
