@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260917-001 界面演示 · 需求模块快捷按钮直接复制提示词</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #24292f; --muted: #6a737d;
+    --line: #d8dee4; --accent: #0969da; --accent-ink: #ffffff;
+    --ok: #1a7f37; --warn: #9a6700; --err: #cf222e;
+    --ok-bg: #dafbe1; --warn-bg: #fff8c5; --err-bg: #ffebe9; --chip-bg: #eff2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e;
+      --line: #30363d; --accent: #388bfd; --accent-ink: #ffffff;
+      --ok: #3fb950; --warn: #d29922; --err: #f85149;
+      --ok-bg: #12261e; --warn-bg: #241d10; --err-bg: #2d1416; --chip-bg: #21262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  .hidden { display: none; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  header.demo-head { padding: 14px 20px 6px; }
+  header.demo-head h1 { font-size: 16px; margin: 0 0 2px; }
+  header.demo-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .app { max-width: 1080px; margin: 0 auto; padding: 10px 20px 60px; }
+  /* 模块页签 */
+  .mod-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 0 6px; }
+  .mod-tab { border: 1px solid transparent; border-bottom: none; background: none; color: var(--muted);
+    padding: 6px 14px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13.5px; }
+  .mod-tab.active { background: var(--panel); border-color: var(--line); color: var(--ink); font-weight: 600; }
+  .mod-tab .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+    margin-left: 6px; vertical-align: 1px; }
+  .view { background: var(--panel); border: 1px solid var(--line); border-top: none; border-radius: 0 0 8px 8px; padding: 12px 14px; }
+  /* 演示控制台 */
+  .console { background: var(--panel); border: 1px dashed var(--line); border-radius: 8px;
+    padding: 10px 14px; margin: 14px 0; font-size: 13px; }
+  .console summary { cursor: pointer; font-weight: 600; }
+  .console .row { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 8px; align-items: center; }
+  .console label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .console .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .console .seg button { border: none; background: none; color: var(--muted); padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+  .console .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  .hint { color: var(--muted); font-size: 12px; }
+  /* 筛选档 + 工具栏 */
+  .lanes { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .lane { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 999px;
+    padding: 3px 12px; cursor: pointer; font-size: 12.5px; }
+  .lane.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .lane .n { opacity: .75; margin-left: 2px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .toolbar .left { margin-right: auto; color: var(--muted); font-size: 12.5px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px;
+    padding: 4px 12px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.small { padding: 2px 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  /* 条目列表 */
+  .items { list-style: none; margin: 10px 0 0; padding: 0; }
+  .items li { display: flex; gap: 10px; align-items: baseline; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  .items .id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--accent); }
+  .items .t { flex: 1; }
+  .chip { background: var(--chip-bg); border-radius: 999px; padding: 1px 9px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .chip.refine { color: var(--accent); }
+  .empty-note { color: var(--muted); padding: 14px 4px; }
+  /* 任务页示意 */
+  .task-panel h2 { font-size: 14px; margin: 4px 0 8px; }
+  .task-panel .notice { border-radius: 6px; padding: 6px 10px; margin: 8px 0; font-size: 12.5px; }
+  /* 提示词展示 */
+  .prompt-box { margin-top: 12px; }
+  .prompt-box .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .prompt-box pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; font-size: 12px; line-height: 1.55; white-space: pre-wrap; max-height: 220px; overflow: auto; }
+  /* toast */
+  .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 30; max-width: 420px; }
+  .toast { border-radius: 8px; padding: 9px 13px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    border: 1px solid var(--line); background: var(--panel); animation: slidein .18s ease-out; }
+  .toast.ok { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+  .toast.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+  .toast.err { background: var(--err-bg); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+  @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  footer.demo-foot { margin-top: 16px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="demo-head">
+  <h1>REQ-20260917-001 界面演示 · 需求模块「AI 分析 / AI 开发」按钮点击直接复制提示词</h1>
+  <p>单文件演示，数据均为示例；点击只改变本地演示状态，不发真实请求、不改动看板数据。剪贴板写入在浏览器允许时真实生效，不允许时按「复制失败」反馈演示。</p>
+</header>
+<div class="app">
+
+  <details class="console" open>
+    <summary>演示控制台（切换场景与对照旧行为）</summary>
+    <div class="row">
+      <span class="hint">队列场景：</span>
+      <span class="seg" id="segScene">
+        <button data-scene="normal" class="on">正常（有候选）</button>
+        <button data-scene="empty">空队列（无候选）</button>
+        <button data-scene="active">已有进行中一轮</button>
+      </span>
+      <span class="hint">剪贴板：</span>
+      <span class="seg" id="segClip">
+        <button data-clip="ok" class="on">可用（复制成功）</button>
+        <button data-clip="fail">不可用（复制失败）</button>
+      </span>
+      <label><input type="checkbox" id="oldMode"> 旧行为对照（开启后点击按钮跳转任务页——本需求移除的多余一跳）</label>
+    </div>
+    <div class="row"><span class="hint">提示：先在下方「需求」视图切到 <b>已接受</b> 或 <b>已计划</b> 档，快捷按钮才会出现；点击后停留本页并出现 toast 与剪贴板内容。</span></div>
+  </details>
+
+  <nav class="mod-tabs" aria-label="模块页签">
+    <button class="mod-tab active" id="tabReq">需求</button>
+    <button class="mod-tab" id="tabRuns">任务<span class="dot hidden" id="runsDot" title="存在待启动任务（本演示新建）"></span></button>
+  </nav>
+
+  <!-- 需求视图 -->
+  <section class="view" id="viewReq">
+    <div class="lanes" id="lanes" aria-label="筛选档">
+      <button class="lane" data-lane="submitted">待接受<span class="n">1</span></button>
+      <button class="lane active" data-lane="accepted">已接受<span class="n">3</span></button>
+      <button class="lane" data-lane="planned">已计划<span class="n">2</span></button>
+      <button class="lane" data-lane="in-progress">开发中<span class="n">0</span></button>
+      <button class="lane" data-lane="to-verify">待测试<span class="n">1</span></button>
+      <button class="lane" data-lane="done">已完成<span class="n">12</span></button>
+    </div>
+    <div class="toolbar">
+      <span class="left" id="selInfo">已选 0 项</span>
+      <span id="laneBtns" class="row" style="display:contents">
+        <button class="btn small primary" id="btnAccept" hidden>接受所选</button>
+        <button class="btn small primary" id="btnPlan" hidden>移入计划</button>
+        <button class="btn small" id="btnReject" hidden>驳回待接受</button>
+        <button class="btn small" id="btnRemove" hidden>移出计划</button>
+      </span>
+      <button class="btn small primary" id="quickEntry" hidden>▶ AI 分析</button>
+    </div>
+    <ul class="items" id="itemList"></ul>
+    <div class="prompt-box" id="promptBox" hidden>
+      <div class="bar">
+        <b id="promptTitle">剪贴板内容（示例提示词要点）</b>
+        <button class="btn small" id="btnSelectAll">全选（手动复制兜底）</button>
+      </div>
+      <pre id="promptPre" tabindex="0"></pre>
+    </div>
+  </section>
+
+  <!-- 任务视图（仅示意；新行为下点击快捷按钮不会切到这里） -->
+  <section class="view task-panel" id="viewRuns" hidden>
+    <h2>任务模块（示意 · 本需求不改此页）</h2>
+    <div class="notice" style="background:var(--chip-bg)">「启动」按钮与「提示词」页签保留不变，仍是查看 / 重新复制提示词、管理轮次的入口。</div>
+    <div class="notice" id="runsState" style="background:var(--chip-bg)">当前无任务。</div>
+    <div class="prompt-box">
+      <div class="bar"><b>「提示词」页签（与快捷按钮复制的同一份文本 · 示例）</b></div>
+      <pre id="runsPrompt" tabindex="0">（尚未创建任务）</pre>
+    </div>
+  </section>
+
+  <footer class="demo-foot">
+    覆盖：界面布局（工具栏内快捷按钮随档显隐）· 交互行为（点击不跳转、创建任务并复制提示词、无候选禁用、连点防重复）· 状态反馈（成功 / 空 / 加载中 / 复制失败 / 已有进行中一轮；深浅色跟随系统）。
+  </footer>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ---------- 演示状态 ---------- */
+const S = {
+  lane: 'accepted',
+  scene: 'normal',      // normal | empty | active
+  clip: 'ok',           // ok | fail
+  oldMode: false,
+  busy: false,          // 模拟创建请求进行中
+  taskCreated: false,   // 本演示已创建的任务（待启动）
+};
+const ITEMS = {
+  submitted: [{ id: 'REQ-20260917-002', t: '示例：导出看板为 Markdown 报表', tags: [] }],
+  accepted: [
+    { id: 'REQ-20260917-001', t: '需求模块的 AI 分析和 AI 开发按钮点击后，直接复制提示词', tags: ['未完善'] },
+    { id: 'BUG-20260916-004', t: '示例：深色模式下徽标对比度不足', tags: ['未完善'] },
+    { id: 'REQ-20260916-008', t: '示例：发布时同步 logo 到官网仓库', tags: ['已完善'] },
+  ],
+  planned: [
+    { id: 'REQ-20260915-002', t: '示例：跨仓库产品发布与结果跟踪', tags: [] },
+    { id: 'BUG-20260915-006', t: '示例：切项目后列表未刷新', tags: [] },
+  ],
+  'in-progress': [],
+  'to-verify': [{ id: 'REQ-20260914-003', t: '示例：全局任务总览面板', tags: [] }],
+  done: [{ id: 'REQ-20260913-001', t: '示例：构建模块（版本计划）', tags: [] }],
+};
+const $ = (s) => document.querySelector(s);
+const el = (id) => document.getElementById(id);
+
+function samplePrompt(kind) {
+  if (kind === 'refine') {
+    return [
+      '你是当前项目的 AI 分析调度员，只负责派发与接收短回执。（示例文本，实际以接口返回为准）',
+      '项目：/Users/your/project',
+      '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。',
+      '实时取单：每完成一项，立即核对并从当前已接受未完善队列（需求优先、最旧优先）领取下一项；实时队列取空即本轮结束。',
+      '1. 领取：atb refine next --by refine-<序号> --dir "/Users/your/project"',
+      '2. 直接编辑条目目录下的 markdown 补全（需求补 README：描述 + 验收标准；涉及 UI 须含界面展示与 ui-demo.html）……',
+      '3. 回执：atb refine done <RUN-ID> --summary "<补全要点>"',
+      '4. 主会话核对：atb refine check --dir "/Users/your/project"',
+    ].join('\n');
+  }
+  return [
+    '你是当前项目的 AI 开发调度员，只负责派发与接收短回执。（示例文本，实际以接口返回为准）',
+    '项目：/Users/your/project',
+    '执行规范：skills/agent-team-board/SKILL.md',
+    '调度核对入口：node scripts/atb.mjs batch check --dir /Users/your/project',
+    '每轮新启动一个子代理，按执行规范领取当前队列中最早的一个可实施条目，认领、实施、测试并上报。',
+    '实时取单：每完成一项，立即核对并从当前已计划队列（最旧优先）领取下一项；实时队列取空即本轮结束。',
+  ].join('\n');
+}
+
+/* ---------- toast ---------- */
+function toast(msg, kind) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.textContent = msg;
+  el('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 4600);
+}
+
+/* ---------- 渲染 ---------- */
+function laneMeta(lane) {
+  if (lane === 'accepted') return { label: '▶ AI 分析', title: '点击创建 AI 分析任务并复制主调度提示词（与勾选无关，不跳转任务页）' };
+  if (lane === 'planned') return { label: '▶ AI 开发', title: '点击创建 AI 开发任务并复制主调度提示词（已计划队列最旧优先，不跳转任务页）' };
+  return null;
+}
+function noCandidateReason(lane) {
+  return lane === 'accepted'
+    ? '暂无可完善候选：已接受条目均已完善（或尚无已接受条目）'
+    : '暂无已计划候选：请先在看板接受条目并「移入计划」';
+}
+function render() {
+  // 筛选档
+  for (const b of document.querySelectorAll('.lane')) b.classList.toggle('active', b.dataset.lane === S.lane);
+  // 档内批量按钮（示意）
+  el('btnAccept').hidden = S.lane !== 'submitted';
+  el('btnPlan').hidden = S.lane !== 'accepted';
+  el('btnReject').hidden = S.lane !== 'accepted';
+  el('btnRemove').hidden = S.lane !== 'planned';
+  el('selInfo').textContent = `已选 ${(S.lane === 'accepted' || S.lane === 'planned' || S.lane === 'submitted') ? 2 : 0} 项`;
+  // 快捷按钮：仅已接受 / 已计划档出现
+  const q = el('quickEntry');
+  const meta = laneMeta(S.lane);
+  q.hidden = !meta;
+  if (meta) {
+    q.textContent = meta.label;
+    q.title = meta.title;
+    q.setAttribute('aria-label', meta.label);
+    const empty = S.scene === 'empty';
+    const disabled = empty || S.busy;
+    q.disabled = disabled;
+    if (S.busy) q.title = '正在创建任务并复制提示词…（请求进行中，防连点）';
+    else if (empty) q.title = noCandidateReason(S.lane);
+  }
+  // 列表
+  let list = ITEMS[S.lane] || [];
+  if (S.scene === 'empty' && (S.lane === 'accepted' || S.lane === 'planned')) {
+    list = S.lane === 'accepted'
+      ? [{ id: '—', t: '已接受条目均已完善（示例空态）', tags: [] }]
+      : [{ id: '—', t: '已计划队列为空（示例空态）', tags: [] }];
+  }
+  el('itemList').innerHTML = list.map((it) => `
+    <li><span class="id">${it.id}</span><span class="t">${it.t}</span>
+    ${(it.tags || []).map((g) => `<span class="chip${g === '未完善' ? ' refine' : ''}">${g}</span>`).join('')}</li>`).join('')
+    || '<li class="empty-note">（空）</li>';
+  // 任务页示意
+  el('runsState').textContent = S.taskCreated
+    ? 'AI ' + (S.lastKind === 'refine' ? '分析' : '开发') + '任务 · 待启动（本演示新建）。粘贴提示词执行并登记运行后才算执行中。'
+    : (S.scene === 'active' ? '已有进行中的一轮任务（演示场景）——同一时间只有一轮执行。' : '当前无任务。');
+  el('runsPrompt').textContent = S.taskCreated || S.scene === 'active' ? samplePrompt(S.lastKind || (S.lane === 'planned' ? 'develop' : 'refine')) : '（尚未创建任务）';
+  el('runsDot').classList.toggle('hidden', !S.taskCreated);
+}
+
+/* ---------- 交互 ---------- */
+for (const b of document.querySelectorAll('.lane')) {
+  b.addEventListener('click', () => { S.lane = b.dataset.lane; render(); });
+}
+for (const seg of ['segScene', 'segClip']) {
+  el(seg).addEventListener('click', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    for (const x of el(seg).querySelectorAll('button')) x.classList.toggle('on', x === btn);
+    if (seg === 'segScene') S.scene = btn.dataset.scene; else S.clip = btn.dataset.clip;
+    render();
+  });
+}
+el('oldMode').addEventListener('change', (e) => { S.oldMode = e.target.checked; });
+el('tabReq').addEventListener('click', () => setView('req'));
+el('tabRuns').addEventListener('click', () => setView('runs'));
+function setView(v) {
+  el('tabReq').classList.toggle('active', v === 'req');
+  el('tabRuns').classList.toggle('active', v === 'runs');
+  el('viewReq').hidden = v !== 'req';
+  el('viewRuns').hidden = v !== 'runs';
+}
+
+function showPrompt(text, title) {
+  el('promptBox').hidden = false;
+  el('promptTitle').textContent = title;
+  el('promptPre').textContent = text;
+}
+el('btnSelectAll').addEventListener('click', () => {
+  const range = document.createRange();
+  range.selectNodeContents(el('promptPre'));
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+});
+
+async function writeClipboard(text) {
+  if (S.clip === 'fail') return false; // 演示「剪贴板不可用」分支
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { return false; }
+}
+
+el('quickEntry').addEventListener('click', async () => {
+  const kind = S.lane === 'accepted' ? 'refine' : 'develop';
+  const kindName = kind === 'refine' ? 'AI 分析' : 'AI 开发';
+  // 旧行为对照：跳任务页（本需求移除的路径）
+  if (S.oldMode) { setView('runs'); toast('旧行为：已跳转任务页——还需在面板内再点「启动」才能复制提示词（本需求移除该多余一跳）', 'warn'); return; }
+  if (S.scene === 'empty') { toast(noCandidateReason(S.lane), 'warn'); return; }
+  if (S.busy) return;
+  // 已有进行中一轮
+  if (S.scene === 'active') {
+    if (kind === 'refine') {
+      const text = samplePrompt(kind);
+      const ok = await writeClipboard(text);
+      if (ok) { showPrompt(text, '剪贴板内容（幂等返回的既有任务提示词 · 示例）'); toast('未新建完善任务：已有未结束的完善任务（幂等返回），已复制其提示词', 'warn'); }
+      else toast('未新建完善任务，且复制失败：请到任务页「提示词」页签手动复制', 'err');
+    } else {
+      toast('已有进行中的任务：同一时间只有一轮执行，无需重复启动；如需重开请先完成或终止当前任务', 'err');
+    }
+    return;
+  }
+  // 正常路径：请求进行中 → 创建任务 + 复制
+  S.busy = true; S.lastKind = kind; render();
+  await new Promise((r) => setTimeout(r, 750)); // 模拟接口耗时（加载中禁用可观察）
+  const text = samplePrompt(kind);
+  const copied = await writeClipboard(text);
+  S.busy = false; S.taskCreated = true; render();
+  if (copied) {
+    showPrompt(text, '剪贴板内容（' + kindName + '主调度提示词 · 示例）');
+    toast('✓ 任务已创建、提示词已复制，请在对应项目会话粘贴发送（候选 2；状态：待启动）——已停留在需求页', 'ok');
+  } else {
+    showPrompt(text, '复制失败 · 请全选手动复制（' + kindName + '主调度提示词 · 示例）');
+    toast('任务已创建，但复制失败：剪贴板不可用，请在上方全选手动复制，或到任务页「提示词」页签复制', 'err');
+  }
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260913-002 · ui-demo · 状态分类区域布局：现状 vs 目标</title>
+<style>
+  /* ---------- 主题变量（深色为默认，浅色 / 跟随系统由 JS 与媒体查询切换） ---------- */
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --panel-2: #1b202b;
+    --border: rgba(127, 140, 170, 0.28);
+    --border-strong: rgba(127, 140, 170, 0.5);
+    --text: #e6e9f0;
+    --muted: #9aa3b5;
+    --accent: #6d8dff;
+    --accent-soft: rgba(109, 141, 255, 0.14);
+    --ok: #4ade80;
+    --warn: #f0b429;
+    --err: #f87171;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f4f8;
+    --panel: #ffffff;
+    --panel-2: #f7f8fb;
+    --border: #d7dce6;
+    --border-strong: #b9c1d0;
+    --text: #1c2330;
+    --muted: #5b6474;
+    --accent: #3b6cf0;
+    --accent-soft: rgba(59, 108, 240, 0.10);
+    --ok: #16a34a;
+    --warn: #b45309;
+    --err: #dc2626;
+    --shadow: 0 8px 24px rgba(28, 35, 48, 0.10);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    padding: 14px 16px 28px;
+  }
+
+  /* ---------- 演示控制条（非产品界面，仅本演示的操控台） ---------- */
+  .demo-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 18px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .demo-bar strong { font-size: 13px; letter-spacing: 0.2px; }
+  .demo-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .demo-group > span { font-size: 12px; color: var(--muted); }
+  .demo-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    border-radius: 7px;
+    font-size: 12px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+  .demo-btn:hover { border-color: var(--border-strong); }
+  .demo-btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .demo-hint { margin: 0 2px 14px; color: var(--muted); font-size: 12.5px; }
+  .demo-hint b { color: var(--text); }
+
+  /* ---------- 对照双栏 ---------- */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .compare { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .panel-tag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .panel-tag .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .panel-now .panel-tag .dot { background: var(--err); }
+  .panel-new .panel-tag .dot { background: var(--ok); }
+  .panel-tag em { font-style: normal; color: var(--muted); font-weight: 400; margin-left: auto; font-size: 11.5px; }
+
+  /* ---------- 缩比看板（示意 Status Board 需求模块的行结构） ---------- */
+  .mini-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .mini-topbar .logo { color: var(--accent); font-weight: 700; }
+  .mini-topbar .app-name { font-weight: 650; }
+  .mini-tab {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 1px 10px;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+  .mini-tab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .mini-topbar .spacer { flex: 1; }
+  .mini-btn {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .mini-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .mini-pagehead {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .module-sub { font-size: 12px; color: var(--muted); min-width: 0; }
+  .locate-group { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .sort-select {
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 11.5px;
+    padding: 0 6px;
+  }
+  .mini-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 8px;
+    color: var(--muted);
+    font-size: 11.5px;
+    background: var(--panel);
+  }
+  .mini-search input {
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 11.5px;
+    width: 110px;
+  }
+  .mini-search input::placeholder { color: var(--muted); }
+  .search-scope {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 7px;
+    font-size: 10.5px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* 目标布局：状态分类 chips 位于副标题与定位组之间，横排一行（可换行兜底） */
+  .filter-bar-h {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  /* ---------- 状态 chips：横排（目标）与竖排（现状）共用视觉基因 ---------- */
+  .filter-chip {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 550;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+  }
+  .filter-chip:hover { color: var(--text); border-color: var(--border-strong); }
+  .filter-chip.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .filter-count { opacity: 0.72; font-weight: 500; }
+
+  /* 目标：横向 chips，文字水平排布 —— 英文文案完整可读 */
+  .filter-bar-h .filter-chip { padding: 3px 10px; }
+
+  /* 现状：左缘 64px 竖栏，writing-mode: vertical-rl + text-orientation: mixed，
+     中文逐字竖排、英文整体旋转 90°（对齐 scripts/web/style.css 271–311 行口径） */
+  .mini-reqview-split { display: flex; align-items: stretch; min-height: 430px; }
+  .filter-bar-v {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 64px;
+    flex: none;
+    padding: 14px 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-right: 1px solid var(--border);
+  }
+  .filter-bar-v .filter-chip {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 76px;
+    padding: 10px 5px;
+    border-radius: 10px;
+  }
+
+  /* ---------- 缩比列表区 ---------- */
+  .mini-list { flex: 1; min-width: 0; padding: 10px 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .list-cap { font-size: 11.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 7px 10px;
+    font-size: 12.5px;
+    background: var(--panel-2);
+  }
+  .row .rid { color: var(--muted); font-size: 11.5px; flex: none; }
+  .row .rtitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .rchip { flex: none; font-size: 10.5px; border-radius: 999px; padding: 1px 8px; border: 1px solid currentColor; }
+  .st-submitted { color: var(--muted); }
+  .st-accepted { color: var(--accent); }
+  .st-planned { color: #b48cf2; }
+  :root[data-theme="light"] .st-planned { color: #7c3aed; }
+  .st-developing { color: var(--warn); }
+  .st-confirming { color: #38bdf8; }
+  :root[data-theme="light"] .st-confirming { color: #0369a1; }
+  .st-done { color: var(--ok); }
+
+  .lane-empty, .lane-uninit {
+    margin: 26px auto;
+    max-width: 320px;
+    text-align: center;
+    border: 1px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 22px 18px;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  .lane-empty b, .lane-uninit b { display: block; color: var(--text); font-size: 13.5px; margin-bottom: 6px; }
+  .lane-uninit .mini-btn { display: inline-block; margin-top: 10px; cursor: pointer; background: var(--panel); }
+
+  .skeleton { height: 34px; border-radius: 9px; border: 1px solid var(--border);
+    background: linear-gradient(90deg, transparent, var(--accent-soft), transparent);
+    background-size: 220% 100%;
+    animation: shine 1.1s linear infinite;
+  }
+  @keyframes shine { from { background-position: 130% 0; } to { background-position: -90% 0; } }
+
+  /* 加载 / 失败反馈条（对应真实界面的轮询反馈位） */
+  .feed-strip {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .feed-strip.show { display: flex; }
+  .feed-strip.loading { color: var(--muted); }
+  .feed-strip.failed { color: var(--err); }
+  .feed-strip .spin {
+    width: 11px; height: 11px; border-radius: 50%; flex: none;
+    border: 2px solid var(--border-strong); border-top-color: transparent;
+    animation: rot 0.8s linear infinite;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .is-failed .mini-list, .is-failed .filter-bar-h, .is-failed .filter-bar-v { opacity: 0.55; }
+
+  .legend { margin: 14px 2px 0; color: var(--muted); font-size: 12px; }
+  .legend code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <strong>REQ-20260913-002 · ui-demo</strong>
+  <div class="demo-group" id="langGroup">
+    <span>界面语言</span>
+    <button class="demo-btn on" data-lang="zh" type="button">中文</button>
+    <button class="demo-btn" data-lang="en" type="button">English</button>
+  </div>
+  <div class="demo-group" id="stateGroup">
+    <span>状态模拟</span>
+    <button class="demo-btn on" data-state="normal" type="button">正常</button>
+    <button class="demo-btn" data-state="empty" type="button">空档</button>
+    <button class="demo-btn" data-state="uninit" type="button">未初始化</button>
+    <button class="demo-btn" data-state="loading" type="button">加载中</button>
+    <button class="demo-btn" data-state="failed" type="button">失败</button>
+  </div>
+  <div class="demo-group" id="themeGroup">
+    <span>外观</span>
+    <button class="demo-btn on" data-theme="auto" type="button">跟随系统</button>
+    <button class="demo-btn" data-theme="light" type="button">浅色</button>
+    <button class="demo-btn" data-theme="dark" type="button">深色</button>
+  </div>
+</div>
+
+<p class="demo-hint">
+  左侧为<b>现状布局</b>（状态分类在内容区左缘 64px 竖栏，文字竖排，与截图一致）；
+  右侧为<b>目标布局</b>（状态分类移到副标题与搜索区域之间，横排）。
+  切换 <b>English</b> 可对比英文状态文案（Pending / Accepted / Planned / Developing / In test / Done）
+  在两种布局下的可读性差异；两种布局共用同一份交互状态，点击状态 chips 或输入搜索词即可体验。
+</p>
+
+<div class="compare">
+
+  <!-- ============ 现状布局 ============ -->
+  <section class="panel panel-now" id="panelNow">
+    <div class="panel-tag"><span class="dot"></span>现状：状态分类在内容区左缘竖栏<em>文案竖排 / 英文旋转 90°</em></div>
+    <div class="mini-topbar">
+      <span class="logo">▦</span><span class="app-name" data-i18n="appName">智能体团队看板</span>
+      <span class="mini-tab active" data-i18n="tabReq">需求</span>
+      <span class="mini-tab" data-i18n="tabRuns">任务</span>
+      <span class="mini-tab" data-i18n="tabSettings">设置</span>
+      <span class="spacer"></span>
+      <span class="mini-btn" data-i18n="langBtn">EN</span>
+      <span class="mini-btn primary" data-i18n="newBtn">＋ 新建</span>
+    </div>
+    <div class="mini-pagehead">
+      <span class="module-sub" data-i18n="subTitle">在此管理需求与缺陷的流转</span>
+      <div class="locate-group">
+        <select class="sort-select" id="sortNow" aria-label="列表排序（演示）">
+          <option value="updated-desc" data-i18n="sortUpdated">最新更新</option>
+          <option value="id-asc" data-i18n="sortId">单号</option>
+        </select>
+        <div class="mini-search">
+          <span aria-hidden="true">⌕</span>
+          <span class="search-scope" data-i18n="scopeReq">需求</span>
+          <input id="searchNow" type="search" data-i18n-ph="searchPh" placeholder="搜需求 / Bug / 文档…" aria-label="搜索（演示）">
+        </div>
+      </div>
+    </div>
+    <div class="feed-strip loading" id="feedLoadingNow"><span class="spin"></span><span data-i18n="loadingMsg">同步中…（chips 保持上一次渲染，不闪烁）</span></div>
+    <div class="feed-strip failed" id="feedFailedNow"><span>✕</span><span data-i18n="failedMsg">轮询失败：服务暂不可达（演示态，chips 保持最后一次结果）</span></div>
+    <div class="mini-reqview-split">
+      <nav class="filter-bar-v" id="barV" aria-label="按状态筛选需求（现状布局演示）"></nav>
+      <div class="mini-list" id="listNow"></div>
+    </div>
+  </section>
+
+  <!-- ============ 目标布局 ============ -->
+  <section class="panel panel-new" id="panelNew">
+    <div class="panel-tag"><span class="dot"></span>目标：状态分类在副标题与搜索区域之间<em>文案横排 / 英文完整可读</em></div>
+    <div class="mini-topbar">
+      <span class="logo">▦</span><span class="app-name" data-i18n="appName">智能体团队看板</span>
+      <span class="mini-tab active" data-i18n="tabReq">需求</span>
+      <span class="mini-tab" data-i18n="tabRuns">任务</span>
+      <span class="mini-tab" data-i18n="tabSettings">设置</span>
+      <span class="spacer"></span>
+      <span class="mini-btn" data-i18n="langBtn">EN</span>
+      <span class="mini-btn primary" data-i18n="newBtn">＋ 新建</span>
+    </div>
+    <div class="mini-pagehead">
+      <span class="module-sub" data-i18n="subTitle">在此管理需求与缺陷的流转</span>
+      <!-- 目标改动点：#filterBar 移到 #moduleSub 之后、#locateGroup 之前，横向排列 -->
+      <nav class="filter-bar-h" id="barH" aria-label="按状态筛选需求（目标布局演示）"></nav>
+      <div class="locate-group">
+        <select class="sort-select" id="sortNew" aria-label="列表排序（演示）">
+          <option value="updated-desc" data-i18n="sortUpdated">最新更新</option>
+          <option value="id-asc" data-i18n="sortId">单号</option>
+        </select>
+        <div class="mini-search">
+          <span aria-hidden="true">⌕</span>
+          <span class="search-scope" data-i18n="scopeReq">需求</span>
+          <input id="searchNew" type="search" data-i18n-ph="searchPh" placeholder="搜需求 / Bug / 文档…" aria-label="搜索（演示）">
+        </div>
+      </div>
+    </div>
+    <div class="feed-strip loading" id="feedLoadingNew"><span class="spin"></span><span data-i18n="loadingMsg">同步中…（chips 保持上一次渲染，不闪烁）</span></div>
+    <div class="feed-strip failed" id="feedFailedNew"><span>✕</span><span data-i18n="failedMsg">轮询失败：服务暂不可达（演示态，chips 保持最后一次结果）</span></div>
+    <div class="mini-list" id="listNew" style="min-height: 430px;"></div>
+  </section>
+
+</div>
+
+<p class="legend">
+  演示说明：本页仅为条目 <b>REQ-20260913-002</b> 的界面演示，非业务源码。现状竖栏参数
+  （<code>width: 64px</code>、<code>writing-mode: vertical-rl</code>、<code>text-orientation: mixed</code>、
+  <code>min-height: 76px</code>）对齐 <code>scripts/web/style.css</code> 的 <code>.filter-bar / .filter-bar .filter-chip</code>；
+  六档英文文案对齐 <code>scripts/web/i18n.js</code>（Pending / Accepted / Planned / Developing / In test / Done）。
+  「空档」演示点选计数为 0 的已计划档；「未初始化」演示分类区整体隐藏（现状显隐口径不变）。
+</p>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 数据（对齐 app.js LANES / LANE_LABEL 与 i18n.js 六档英文文案） ---------- */
+  var LANES = ['submitted', 'accepted', 'planned', 'developing', 'confirming', 'done'];
+  var LABELS = {
+    zh: { submitted: '待接受', accepted: '已接受', planned: '已计划', developing: '开发中', confirming: '待测试', done: '已完成' },
+    en: { submitted: 'Pending', accepted: 'Accepted', planned: 'Planned', developing: 'Developing', confirming: 'In test', done: 'Done' }
+  };
+  var ITEMS = [
+    { id: 'REQ-20260913-002', title: '状态分类区域移到副标题与搜索区域之间（本条目）', status: 'submitted', upd: 13 },
+    { id: 'REQ-20260913-001', title: '看板顶栏模块页签样式微调', status: 'submitted', upd: 12 },
+    { id: 'BUG-20260912-004', title: '搜索清除后焦点未回归输入框', status: 'submitted', upd: 11 },
+    { id: 'REQ-20260912-011', title: '列表排序选择记忆优化', status: 'accepted', upd: 10 },
+    { id: 'REQ-20260911-020', title: '深色模式下完善徽标对比度', status: 'developing', upd: 9 },
+    { id: 'REQ-20260911-015', title: '批量完善面板空态引导', status: 'developing', upd: 8 },
+    { id: 'REQ-20260910-031', title: '快捷键帮助面板入口', status: 'confirming', upd: 7 },
+    { id: 'REQ-20260910-025', title: '定位控件等高平齐', status: 'done', upd: 6 },
+    { id: 'REQ-20260910-019', title: '发布模块插入模块导航', status: 'done', upd: 5 },
+    { id: 'REQ-20260910-012', title: '筛选条迁为内容区左缘竖栏（本演示现状来源）', status: 'done', upd: 4 }
+  ];
+  var I18N = {
+    zh: {
+      appName: '智能体团队看板', tabReq: '需求', tabRuns: '任务', tabSettings: '设置',
+      langBtn: 'EN', newBtn: '＋ 新建',
+      subTitle: '在此管理需求与缺陷的流转',
+      sortUpdated: '最新更新', sortId: '单号', scopeReq: '需求', searchPh: '搜需求 / Bug / 文档…',
+      listCap: '需求列表', laneEmpty: '该档暂无条目', laneEmptySub: '切换其他状态档，或新建条目',
+      uninitTitle: '当前项目尚未初始化看板', uninitSub: '演示态：项目未初始化时状态分类区整体隐藏',
+      initBtn: '初始化',
+      loadingMsg: '同步中…（chips 保持上一次渲染，不闪烁）',
+      failedMsg: '轮询失败：服务暂不可达（演示态，chips 保持最后一次结果）',
+      filteredOf: function (n, total) { return '当前档 ' + n + ' / 共 ' + total + ' 个条目'; }
+    },
+    en: {
+      appName: 'Agent Team Board', tabReq: 'Reqs', tabRuns: 'Runs', tabSettings: 'Settings',
+      langBtn: '中', newBtn: '＋ New',
+      subTitle: 'Track the flow of requirements and defects',
+      sortUpdated: 'Recently updated', sortId: 'ID', scopeReq: 'Reqs', searchPh: 'Search reqs / bugs / docs…',
+      listCap: 'Requirements', laneEmpty: 'No items in this lane', laneEmptySub: 'Switch to another lane, or create a new item',
+      uninitTitle: 'Project board not initialized', uninitSub: 'Demo state: the status filter bar is hidden when uninitialized',
+      initBtn: 'Initialize',
+      loadingMsg: 'Syncing… (chips keep the last render, no flicker)',
+      failedMsg: 'Polling failed: service unreachable (demo state, chips keep the last result)',
+      filteredOf: function (n, total) { return n + ' in lane / ' + total + ' items total'; }
+    }
+  };
+
+  /* ---------- 共享状态（两种布局共用，体现交互口径一致） ---------- */
+  var state = { lang: 'zh', reqFilter: 'submitted', sim: 'normal', q: '', sort: 'updated-desc' };
+
+  function counts() {
+    var c = {};
+    LANES.forEach(function (k) { c[k] = ITEMS.filter(function (it) { return it.status === k; }).length; });
+    return c;
+  }
+  function visibleItems() {
+    var list = ITEMS.filter(function (it) { return it.status === state.reqFilter; });
+    if (state.q) {
+      var q = state.q.toLowerCase();
+      list = list.filter(function (it) { return (it.id + ' ' + it.title).toLowerCase().indexOf(q) >= 0; });
+    }
+    list = list.slice().sort(function (a, b) {
+      return state.sort === 'id-asc' ? (a.id < b.id ? -1 : 1) : (b.upd - a.upd);
+    });
+    return list;
+  }
+  function t(key) { return I18N[state.lang][key]; }
+
+  /* ---------- 渲染：状态 chips（横排 / 竖排同一份 chips 状态） ---------- */
+  function chipHtml(key, count) {
+    var active = state.reqFilter === key ? ' active' : '';
+    return '<button type="button" class="filter-chip' + active + '" data-filter="' + key + '">' +
+      LABELS[state.lang][key] + ' <span class="filter-count">' + count + '</span></button>';
+  }
+  function renderBars() {
+    var c = counts();
+    var html = LANES.map(function (k) { return chipHtml(k, c[k]); }).join('');
+    $('#barV').innerHTML = html;
+    $('#barH').innerHTML = html;
+  }
+
+  /* ---------- 渲染：列表区（正常 / 空档 / 未初始化 / 加载 / 失败） ---------- */
+  function rowHtml(it) {
+    return '<div class="row"><span class="rid">' + it.id + '</span>' +
+      '<span class="rtitle">' + it.title + '</span>' +
+      '<span class="rchip st-' + it.status + '">' + LABELS[state.lang][it.status] + '</span></div>';
+  }
+  function renderList() {
+    var elNow = $('#listNow'), elNew = $('#listNew');
+    if (state.sim === 'uninit') {
+      var card = '<div class="lane-uninit"><b>' + t('uninitTitle') + '</b>' + t('uninitSub') +
+        '<br><button type="button" class="mini-btn" data-back="normal">' + t('initBtn') + '</button></div>';
+      elNow.innerHTML = card; elNew.innerHTML = card;
+      return;
+    }
+    if (state.sim === 'loading') {
+      var sk = '<div class="list-cap">' + t('listCap') + '</div>';
+      for (var i = 0; i < 6; i++) sk += '<div class="skeleton"></div>';
+      elNow.innerHTML = sk; elNew.innerHTML = sk;
+      return;
+    }
+    var list = visibleItems();
+    var cap = '<div class="list-cap">' + t('listCap') + ' · ' + t('filteredOf')(list.length, ITEMS.length) + '</div>';
+    if (!list.length) {
+      var empty = cap + '<div class="lane-empty"><b>' + t('laneEmpty') + '</b>' + t('laneEmptySub') + '</div>';
+      elNow.innerHTML = empty; elNew.innerHTML = empty;
+      return;
+    }
+    var html = cap + list.map(rowHtml).join('');
+    elNow.innerHTML = html; elNew.innerHTML = html;
+  }
+
+  /* ---------- 渲染：反馈条与显隐口径 ---------- */
+  function renderSim() {
+    ['#panelNow', '#panelNew'].forEach(function (sel) { $(sel).classList.toggle('is-failed', state.sim === 'failed'); });
+    $('#feedLoadingNow').classList.toggle('show', state.sim === 'loading');
+    $('#feedLoadingNew').classList.toggle('show', state.sim === 'loading');
+    $('#feedFailedNow').classList.toggle('show', state.sim === 'failed');
+    $('#feedFailedNew').classList.toggle('show', state.sim === 'failed');
+    // 未初始化：状态分类区整体隐藏（对齐 app.js #filterBar 的 hidden 口径）
+    var hideBars = state.sim === 'uninit';
+    $('#barV').style.display = hideBars ? 'none' : '';
+    $('#barH').style.display = hideBars ? 'none' : '';
+  }
+
+  function renderAll() { renderBars(); renderList(); renderSim(); }
+
+  /* ---------- i18n 文案（控制条除外，另见 applyLang 的 data-i18n 扫描） ---------- */
+  function applyLang() {
+    document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      var v = I18N[state.lang][el.getAttribute('data-i18n')];
+      if (typeof v === 'string') el.textContent = v;
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach(function (el) {
+      var v = I18N[state.lang][el.getAttribute('data-i18n-ph')];
+      if (typeof v === 'string') el.placeholder = v;
+    });
+    ['#sortNow', '#sortNew'].forEach(function (sel) {
+      var s = $(sel);
+      s.options[0].textContent = t('sortUpdated');
+      s.options[1].textContent = t('sortId');
+    });
+    $('#langGroup').querySelectorAll('.demo-btn').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-lang') === state.lang);
+    });
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  function $(sel) { return document.querySelector(sel); }
+  function $all(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+
+  // chips 点击委托（两种布局同口径：容器常驻，chips 重建不重绑）
+  ['#barV', '#barH'].forEach(function (sel) {
+    $(sel).addEventListener('click', function (e) {
+      var chip = e.target.closest ? e.target.closest('.filter-chip') : null;
+      if (!chip) return;
+      state.reqFilter = chip.getAttribute('data-filter');
+      renderBars(); renderList();
+    });
+  });
+
+  // 搜索（两布局共享查询词，演示口径一致）
+  ['#searchNow', '#searchNew'].forEach(function (sel) {
+    $(sel).addEventListener('input', function (e) {
+      state.q = e.target.value.trim();
+      ['#searchNow', '#searchNew'].forEach(function (other) {
+        if (other !== sel) $(other).value = e.target.value;
+      });
+      renderList();
+    });
+  });
+
+  // 排序（两布局共享）
+  function bindSort(sel) {
+    $(sel).addEventListener('change', function (e) {
+      state.sort = e.target.value;
+      ['#sortNow', '#sortNew'].forEach(function (other) { if (other !== sel) $(other).value = state.sort; });
+      renderList();
+    });
+  }
+  bindSort('#sortNow'); bindSort('#sortNew');
+
+  // 演示控制条
+  $('#langGroup').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-lang]'); if (!b) return;
+    state.lang = b.getAttribute('data-lang'); applyLang(); renderAll();
+  });
+  $('#stateGroup').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-state]'); if (!b) return;
+    state.sim = b.getAttribute('data-state');
+    if (state.sim === 'empty') state.reqFilter = 'planned'; // 计数为 0 的档
+    $all('#stateGroup .demo-btn').forEach(function (x) { x.classList.toggle('on', x === b); });
+    renderAll();
+  });
+  document.addEventListener('click', function (e) {
+    var back = e.target.closest ? e.target.closest('[data-back]') : null;
+    if (!back) return;
+    state.sim = 'normal'; state.reqFilter = 'submitted';
+    $all('#stateGroup .demo-btn').forEach(function (x) { x.classList.toggle('on', x.getAttribute('data-state') === 'normal'); });
+    renderAll();
+  });
+
+  // 外观：跟随系统 / 浅色 / 深色
+  var mq = window.matchMedia('(prefers-color-scheme: light)');
+  function applyTheme() {
+    var mode = document.querySelector('#themeGroup .demo-btn.on').getAttribute('data-theme');
+    var light = mode === 'light' || (mode === 'auto' && mq.matches);
+    document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+  }
+  $('#themeGroup').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-theme]'); if (!b) return;
+    $all('#themeGroup .demo-btn').forEach(function (x) { x.classList.toggle('on', x === b); });
+    applyTheme();
+  });
+  if (mq.addEventListener) mq.addEventListener('change', applyTheme);
+
+  /* ---------- 初始化 ---------- */
+  applyTheme();
+  applyLang();
+  renderAll();
+})();
+</script>
+</body>
+</html>

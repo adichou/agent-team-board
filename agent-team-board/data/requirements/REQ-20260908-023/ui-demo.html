@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260908-023 界面演示 — 主调度提示词会话长度自查</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #d6dae0; --text: #1f2430;
+    --muted: #6b7280; --accent: #2563eb; --accent-bg: #eff6ff;
+    --ok: #15803d; --ok-bg: #ecfdf5; --warn: #b45309; --warn-bg: #fffbeb;
+    --danger: #b91c1c; --danger-bg: #fef2f2;
+    --code-bg: #f3f4f6; --highlight-bg: #fef9c3; --highlight-border: #ca8a04;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d; --panel: #1f2430; --border: #3a4150; --text: #e5e7eb;
+      --muted: #9ca3af; --accent: #60a5fa; --accent-bg: #1e2a44;
+      --ok: #4ade80; --ok-bg: #14321f; --warn: #fbbf24; --warn-bg: #362a10;
+      --danger: #f87171; --danger-bg: #3a1a1a;
+      --code-bg: #14161b; --highlight-bg: #4a3d10; --highlight-border: #d9b427;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .panel > h2 { font-size: 15px; margin: 0 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .panel > h2 .tag { font-weight: normal; font-size: 12px; color: var(--muted); margin-left: 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+  button {
+    font: inherit; padding: 6px 14px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .notice.info { background: var(--accent-bg); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.danger { background: var(--danger-bg); color: var(--danger); }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; border: 1px solid var(--border); }
+  .chip.run { background: var(--accent-bg); color: var(--accent); }
+  .chip.stop { background: var(--warn-bg); color: var(--warn); }
+  .chip.idle { background: var(--code-bg); color: var(--muted); }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 6px 16px; margin: 10px 0; font-size: 13px;
+  }
+  .meta-grid label { display: block; color: var(--muted); font-size: 12px; }
+  pre {
+    margin: 0; background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-all; user-select: all;
+    max-height: 240px; overflow-y: auto;
+  }
+  pre.terminal { background: var(--code-bg); }
+  pre .newsec { background: var(--highlight-bg); outline: 1px dashed var(--highlight-border); display: inline-block; padding: 1px 0; width: 100%; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .meter { height: 10px; border-radius: 6px; background: var(--code-bg); border: 1px solid var(--border); overflow: hidden; flex: 1; min-width: 160px; }
+  .meter > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .35s ease, background .35s ease; }
+  .meter.warn > i { background: var(--warn); }
+  .log { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow-y: auto; font-size: 12.5px; }
+  .log li { padding: 5px 8px; border-left: 3px solid var(--border); margin-bottom: 4px; background: var(--code-bg); border-radius: 0 6px 6px 0; }
+  .log li.ok { border-left-color: var(--ok); }
+  .log li.warn { border-left-color: var(--warn); }
+  .log li.stop { border-left-color: var(--danger); }
+  .log li .t { color: var(--muted); margin-right: 6px; font-family: ui-monospace, Menlo, monospace; }
+  .switch { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+  .switch input { accent-color: var(--accent); }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend .newsec-inline { background: var(--highlight-bg); outline: 1px dashed var(--highlight-border); padding: 0 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>REQ-20260908-023 界面演示 — 批量提示词「会话上下文长度自查」</h1>
+    <p class="sub">本需求不改任何界面布局/交互，仅改 <code>buildRefinePrompt()</code> / <code>generatePrompt()</code> 生成的提示词文本。
+    本演示展示：① 提示词在既有展示位置（看板批次面板、CLI 输出）出现的形态——新增段以黄色高亮；
+    ② 主调度会话按新指令自查的状态流转（正常继续 → 过长收尾 → 新会话续接）。演示中按钮、文案与阈值均为交互模拟，具体措辞以开发阶段实现为准。</p>
+  </header>
+
+  <!-- ================= 场景一：看板任务模块 · 批次面板（既有布局，提示词文本更新） ================= -->
+  <section class="panel">
+    <h2>场景一 · 看板任务模块——「创建批次并复制提示词」与提示词展示区 <span class="tag">布局不变，仅提示词文本新增自查段（高亮）</span></h2>
+    <div class="row">
+      <span class="chip idle" id="candChip">已计划候选 <b id="candCount">12</b> · 受依赖阻塞 <b>2</b></span>
+      <label class="switch"><input type="checkbox" id="emptyToggle"> 模拟无候选（空态）</label>
+      <label class="switch"><input type="checkbox" id="failToggle"> 模拟复制失败</label>
+      <span class="small muted">开发人员 <input id="devInput" style="font:inherit;padding:2px 6px;border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--text)" placeholder="如 张三（可留空）" size="10"></span>
+    </div>
+
+    <!-- 创建态 -->
+    <div id="createPane">
+      <div class="row">
+        <button class="primary" id="btnCreate">创建批次并复制提示词</button>
+        <span class="small muted">创建时冻结当前已计划清单；完整清单存文件，不进聊天。</span>
+      </div>
+      <div id="createFeedback"></div>
+    </div>
+
+    <!-- 空态 -->
+    <div id="emptyPane" hidden>
+      <div class="notice">暂无已计划候选：请先在看板接受条目，并在详情页「移入计划」（仅已计划且未被认领的条目可入批）。</div>
+    </div>
+
+    <!-- 运行态（批次创建后） -->
+    <div id="runPane" hidden>
+      <div class="row">
+        <span class="chip run">执行中</span>
+        <span class="cid" id="batchIdText" style="font-family:ui-monospace,Menlo,monospace">batch-20260908-1900</span>
+        <span class="small muted">执行 Agent zcode（子代理模式） · 开发人员 <span id="devText">未指定</span></span>
+      </div>
+      <div class="meta-grid">
+        <div><label>当前条目</label><span id="mCur">等待领取下一项</span></div>
+        <div><label>子代理会话</label><span id="mOwner">—</span></div>
+        <div><label>计数</label><span id="mCount">0 上报 / 0 失败 / 待处理 12（共 12）</span></div>
+      </div>
+      <div class="toolbar">
+        <span class="small muted">主调度提示词（新建 zcode 会话粘贴发送）：</span>
+        <button id="btnRecopy">重新复制</button>
+        <span class="small muted" id="copyState"></span>
+      </div>
+      <pre id="boardPrompt" tabindex="0">（点击「创建批次并复制提示词」后展示）</pre>
+      <div class="legend">黄色高亮段 = 本需求新增的「会话上下文长度自查」指令；其余为既有提示词内容（示例节选）。</div>
+    </div>
+  </section>
+
+  <!-- ================= 场景二：CLI 输出 ================= -->
+  <section class="panel">
+    <h2>场景二 · CLI 输出——<code>atb batch create</code> / <code>atb refine create</code> <span class="tag">输出结构不变，提示词段内新增自查段（高亮）</span></h2>
+    <pre class="terminal" id="cliOut" tabindex="0">✓ 已创建批次：batch-20260908-1900
+  候选 12 · 受依赖阻塞 2 · 开发人员 未指定
+  完整清单已存：docs/agent-team-board/dispatch/batches/batch-20260908-1900/batch.json
+  提示词（复制后在 Zcode 本项目新建会话发送；复制成功不代表已启动，登记运行后才显示执行中）：
+  -----
+  （与场景一同一段提示词，见批次面板）
+  -----</pre>
+    <div class="legend">CLI 与看板复制的是同一生成函数的输出；<code>summary</code> 续接沿用批次落盘文本。</div>
+  </section>
+
+  <!-- ================= 场景三：主调度会话自查状态流转（提示词驱动的行为，非界面元素） ================= -->
+  <section class="panel">
+    <h2>场景三 · 主调度会话——自查状态流转模拟 <span class="tag">提示词指令的执行行为演示：正常 → 过长收尾 → 新会话续接</span></h2>
+    <div class="cols">
+      <div>
+        <div class="row">
+          <span class="small muted">会话上下文占用（定性自评，进度条仅为演示）</span>
+          <span class="chip idle" id="ctxChip">低</span>
+        </div>
+        <div class="row">
+          <div class="meter" id="ctxMeter"><i id="ctxBar"></i></div>
+          <span class="small muted" id="ctxPct">0%</span>
+        </div>
+        <div class="row">
+          <button class="primary" id="btnDispatch">派发下一项</button>
+          <button id="btnAuto">自动连跑</button>
+          <button id="btnReset">重置会话</button>
+        </div>
+        <div class="meta-grid">
+          <div><label>已派发</label><span id="simDone">0 项</span></div>
+          <div><label>会话状态</label><span id="simState" class="chip idle">待启动</span></div>
+          <div><label>在途子代理</label><span id="simInflight">无</span></div>
+        </div>
+        <div class="notice info small" id="simHint">流程：派发 → 子代理回执 → 最小核对（nextAction=continue）→ <b>自查会话长度</b> → 未过长则派发下一项；<code>stop + nextBatch</code> 自动接续前同样自查一次。点击「派发下一项」开始。</div>
+      </div>
+      <div>
+        <div class="small muted">调度日志（短回执 + 自查结果）：</div>
+        <ul class="log" id="simLog"></ul>
+      </div>
+    </div>
+    <!-- 过长收尾提示（提示词要求主调度输出给用户的一段文字） -->
+    <div id="wrapupPane" hidden>
+      <div class="small muted" style="margin:10px 0 6px">过长时主调度在会话末尾输出的收尾提示（示例形态）：</div>
+      <pre id="wrapupText" tabindex="0"></pre>
+      <div class="row">
+        <button class="primary" id="btnNewSession">在新会话用 summary 提示词续跑（模拟）</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="small muted">单文件演示 · 无外网依赖 · 深浅色随系统。文件：docs/agent-team-board/requirements/REQ-20260908-023/ui-demo.html</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var THRESHOLD = 78; // 演示阈值：上下文占用百分比超过即判「过长」（真实口径为定性自评，不虚构 token 数）
+  var state = { created: false, dispatched: 0, ctx: 0, stopped: false, inflight: false, running: false };
+
+  // ---------- 提示词文本（新增段用 <span class="newsec"> 高亮；示例节选，真实文本由生成函数产出） ----------
+  var NEWSEC = '会话上下文长度自查：每轮最小核对返回 nextAction=continue 后、启动下一个子 Agent 前，\n'
+    + '以及收到 stop 且核对响应携带 nextBatch 的自动接续指令时，各判断一次当前会话上下文是否过长\n'
+    + '（会话累计轮次/回执明显增多、接近模型上下文上限、或已出现指令遗漏/响应质量下降时视为过长）。\n'
+    + '若过长：不再在同一会话派发或接续下一批；等在途子代理回执并完成一次最小核对后收尾；\n'
+    + '向用户输出提示（原因 + 批次标识 + 新会话接续方法：用 atb batch summary / atb refine summary\n'
+    + '输出的提示词在新建会话发送续跑，批次与运行状态均在文件账本中，不丢账本）；\n'
+    + '不代替人工接受需求或确认完成。';
+
+  function promptText() {
+    return '你是当前项目的批次调度员，只负责派发与接收短回执。\n'
+      + '项目：/path/to/project\n'
+      + '批次：batch-20260908-1900\n'
+      + '执行规范：docs/agent-team-board/dispatch/worker-spec.md\n'
+      + '批次摘要入口：node scripts/atb.mjs batch check --batch batch-20260908-1900 --dir /path/to/project\n'
+      + '\n'
+      + '每轮新启动一个 general-purpose 子 Agent，按执行规范自行选择本批\n'
+      + '一个可实施条目，认领、实施、测试并上报。每个子 Agent 只做一项。\n'
+      + '同一时间只运行一个；不要让子 Agent 再派发子 Agent。\n'
+      + '只传本项目、批次标识与规范路径，不复制本会话的历史实施记录。\n'
+      + '主会话只接收规定的短回执，并调用最小核对入口。\n'
+      + 'nextAction=continue 时启动下一个新子 Agent；stop 时结束；\n'
+      + 'stop 且核对响应携带 nextBatch 时为批次排队自动接续（REQ-20260906-025）：\n'
+      + '同一会话不重开，直接以 nextBatch.batchId 替换本提示词中的批次标识与核对入口继续执行下一批。\n'
+      + '<span class="newsec">' + NEWSEC + '</span>\n'
+      + '不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。\n'
+      + '收尾只给批次计数和异常入口。不得代替人工接受需求或确认完成。';
+  }
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function $(id) { return document.getElementById(id); }
+  function now() { var d = new Date(); return d.toTimeString().slice(0, 8); }
+  function log(msg, cls) {
+    var li = document.createElement('li');
+    li.className = cls || '';
+    li.innerHTML = '<span class="t">' + now() + '</span>' + esc(msg).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    $('simLog').appendChild(li);
+    $('simLog').scrollTop = $('simLog').scrollHeight;
+  }
+
+  // ---------- 场景一：看板面板 ----------
+  function renderCreate() {
+    var empty = $('emptyToggle').checked;
+    $('candCount').textContent = empty ? 0 : 12;
+    $('createPane').hidden = empty;
+    $('emptyPane').hidden = !empty;
+    $('btnCreate').disabled = empty || state.created;
+  }
+  $('emptyToggle').addEventListener('change', function () {
+    if (state.created) { this.checked = !this.checked; return; } // 已创建批次时空态开关不适用
+    renderCreate();
+  });
+
+  $('btnCreate').addEventListener('click', function () {
+    var fb = $('createFeedback');
+    fb.innerHTML = '<div class="notice info small">正在冻结候选清单并生成提示词…（加载态）</div>';
+    $('btnCreate').disabled = true;
+    setTimeout(function () {
+      state.created = true;
+      fb.innerHTML = '';
+      $('createPane').hidden = true;
+      $('runPane').hidden = false;
+      $('devText').textContent = $('devInput').value.trim() || '未指定';
+      $('batchIdText').textContent = 'batch-20260908-1900';
+      $('boardPrompt').innerHTML = promptText();
+      doCopy('创建批次并复制提示词');
+      updateCount();
+    }, 600);
+  });
+
+  $('btnRecopy').addEventListener('click', function () { doCopy('重新复制'); });
+
+  function doCopy(action) {
+    var st = $('copyState');
+    if ($('failToggle').checked) {
+      // 失败态：提示词框 user-select: all 可一键全选手动复制（对齐既有 .batch-prompt 交互）
+      st.innerHTML = '<span style="color:var(--danger)">复制失败：请点击提示词框（已一键全选）后手动 Ctrl/Cmd+C</span>';
+      $('boardPrompt').focus();
+      $('boardPrompt').select && $('boardPrompt').select();
+      return;
+    }
+    st.innerHTML = '<span style="color:var(--ok)">✓ 已复制（' + action + '不会创建新批次）</span>';
+  }
+
+  // ---------- 场景三：会话自查流转 ----------
+  function updateCtx() {
+    var pct = Math.min(100, Math.round(state.ctx));
+    $('ctxBar').style.width = pct + '%';
+    $('ctxPct').textContent = pct + '%';
+    $('ctxMeter').className = 'meter' + (pct > THRESHOLD ? ' warn' : '');
+    var level = pct > THRESHOLD ? '过高' : (pct > 45 ? '中' : '低');
+    var chip = $('ctxChip');
+    chip.textContent = level;
+    chip.className = 'chip ' + (pct > THRESHOLD ? 'stop' : (pct > 45 ? 'run' : 'idle'));
+  }
+  function updateCount() {
+    $('simDone').textContent = state.dispatched + ' 项';
+    $('mCount').textContent = state.dispatched + ' 上报 / 0 失败 / 待处理 ' + (12 - state.dispatched) + '（共 12）';
+    $('mCur').textContent = state.inflight ? 'REQ-20260908-0' + (100 + state.dispatched) : (state.stopped ? '—' : '等待领取下一项');
+    $('mOwner').textContent = state.inflight ? 'batch-20260908-1900-' + (state.dispatched + 1) : '—';
+    $('simInflight').textContent = state.inflight ? '1 个（子代理回执后核对）' : '无';
+    var s = $('simState');
+    if (state.stopped) { s.textContent = '过长收尾（本会话结束）'; s.className = 'chip stop'; }
+    else if (state.dispatched > 0) { s.textContent = '调度中'; s.className = 'chip run'; }
+    else { s.textContent = '待启动'; s.className = 'chip idle'; }
+  }
+
+  function selfCheck() {
+    var tooLong = state.ctx > THRESHOLD;
+    if (!tooLong) {
+      log('自查：会话上下文 ' + Math.round(state.ctx) + '%，未过长 → 继续派发下一项', 'ok');
+      return false;
+    }
+    log('自查：会话上下文 ' + Math.round(state.ctx) + '%，回执明显增多、接近上限 → 判定过长，停止派发', 'warn');
+    return true;
+  }
+
+  function dispatchOnce(done) {
+    if (state.stopped) return done && done();
+    state.inflight = true;
+    state.dispatched += 1;
+    var id = 'REQ-20260908-0' + (100 + state.dispatched);
+    log('派发子 Agent #' + state.dispatched + '（' + id + '），等待短回执…');
+    updateCount();
+    setTimeout(function () {
+      state.inflight = false;
+      log('收到回执：' + id + ' 完成 → 最小核对：nextAction=continue', 'ok');
+      state.ctx += 17 + Math.random() * 8; // 每项回执累积上下文（演示值）
+      updateCtx(); updateCount();
+      var tooLong = selfCheck();
+      if (tooLong) {
+        // 过长：不再派发；若 stop+nextBatch 自动接续到来，同样不在本会话接续
+        state.stopped = true;
+        updateCount();
+        $('btnDispatch').disabled = true;
+        $('btnAuto').disabled = true;
+        log('收到 stop + nextBatch（自动接续指令）→ 因会话过长，不在同一会话接续下一批', 'stop');
+        showWrapup();
+        return;
+      }
+      done && done();
+    }, 650);
+  }
+
+  function showWrapup() {
+    $('wrapupPane').hidden = false;
+    $('wrapupText').textContent =
+      '⚠ 当前会话上下文过长，本会话停止派发并收尾。\n'
+      + '原因：主调度会话累计轮次/回执过多，接近模型上下文上限（定性自评）。\n'
+      + '批次：batch-20260908-1900（已完成 ' + state.dispatched + ' / 12 项，在途子代理已回执并核对）。\n'
+      + '新会话接续：运行 atb batch summary --batch batch-20260908-1900，复制输出的提示词，\n'
+      + '在新建 Zcode 本项目会话发送续跑——批次与运行状态均在文件账本中，新会话不丢账本。\n'
+      + '（完善批次同理：atb refine summary [可带 --batch <批次>]）';
+    $('simHint').innerHTML = '本会话已收尾。请点击「在新会话用 summary 提示词续跑」查看续接流程。';
+    log('向用户输出收尾提示（原因 + 批次标识 + 新会话接续方法），本会话调度结束', 'stop');
+    $('wrapupPane').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('btnDispatch').addEventListener('click', function () { dispatchOnce(); });
+
+  $('btnAuto').addEventListener('click', function () {
+    if (state.running || state.stopped) return;
+    state.running = true;
+    $('btnAuto').disabled = true;
+    (function loop() {
+      if (state.stopped) { state.running = false; return; }
+      dispatchOnce(function () { setTimeout(loop, 350); });
+    })();
+  });
+
+  $('btnNewSession').addEventListener('click', function () {
+    log('新会话：用户粘贴 summary 续接提示词 → 主调度从账本恢复批次状态，继续派发剩余 ' + (12 - state.dispatched) + ' 项', 'ok');
+    $('simHint').innerHTML = '新会话续跑后回到「调度中」——上下文占用清零，重新自查累计。点击「重置会话」可重演完整流程。';
+    $('btnNewSession').disabled = true;
+  });
+
+  $('btnReset').addEventListener('click', function () {
+    state.dispatched = 0; state.ctx = 0; state.stopped = false; state.inflight = false; state.running = false;
+    $('simLog').innerHTML = '';
+    $('wrapupPane').hidden = true;
+    $('btnDispatch').disabled = false;
+    $('btnAuto').disabled = false;
+    $('btnNewSession').disabled = false;
+    updateCtx(); updateCount();
+    $('simHint').innerHTML = '流程：派发 → 子代理回执 → 最小核对（nextAction=continue）→ <b>自查会话长度</b> → 未过长则派发下一项；<code>stop + nextBatch</code> 自动接续前同样自查一次。点击「派发下一项」开始。';
+  });
+
+  renderCreate(); updateCtx(); updateCount();
+})();
+</script>
+</body>
+</html>
