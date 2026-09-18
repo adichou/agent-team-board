@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260918-001 界面演示 — serve 轮询持 index.lock 与终端 git 写操作冲突</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2328; --muted: #6a737d; --line: #d8dee4;
+    --accent: #0969da; --ok: #1a7f37; --bad: #cf222e; --warnbg: #fff8c5; --warnline: #d4a72c;
+    --pollbar: #8c959f; --lockscan: #cf222e; --lockadd: #0969da; --term-bg: #f6f8fa; --chipbg: #eaeef2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e; --line: #30363d;
+      --accent: #4493f8; --ok: #3fb950; --bad: #f85149; --warnbg: #2b230d; --warnline: #9e6a03;
+      --pollbar: #6e7681; --lockscan: #f85149; --lockadd: #4493f8; --term-bg: #0d1117; --chipbg: #21262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--ink);
+         font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .layout { display: grid; grid-template-columns: minmax(320px, 5fr) minmax(280px, 4fr); gap: 14px; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  /* 顶栏（Status Board 页面示意） */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 10px; }
+  .brand { font-weight: 700; letter-spacing: .3px; }
+  .pollstate { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .pollstate .dot { color: var(--ok); }
+  .pollstate.off .dot { color: var(--muted); }
+  /* 挂起确认卡片 */
+  .confirm-card { border: 1px solid var(--line); border-left: 3px solid var(--warnline);
+                  background: var(--warnbg); border-radius: 8px; padding: 10px 12px; }
+  .confirm-card .row1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 12px; background: var(--chipbg); border-radius: 999px; padding: 1px 10px; }
+  .chip.state { color: var(--bad); }
+  .confirm-card .id { font-weight: 600; }
+  .confirm-card .scope { margin-top: 6px; font-size: 13px; }
+  .confirm-card .hint { margin-top: 8px; font-size: 12.5px; color: var(--ink);
+                        border-top: 1px dashed var(--warnline); padding-top: 6px; display: none; }
+  .confirm-card .hint.show { display: block; }
+  .confirm-card .hint .btn-retry { margin-top: 6px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 14px 4px; text-align: center; }
+  .errbar { display: none; margin-top: 8px; font-size: 12.5px; color: var(--bad); }
+  .errbar.show { display: block; }
+  /* 终端 */
+  .terminal { background: var(--term-bg); border: 1px solid var(--line); border-radius: 8px;
+              height: 300px; overflow-y: auto; padding: 10px 12px; font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .terminal .cmd { color: var(--muted); }
+  .terminal .out { white-space: pre-wrap; word-break: break-all; }
+  .terminal .fatal { color: var(--bad); font-weight: 600; }
+  .terminal .ok { color: var(--ok); }
+  /* 时间线 */
+  .timeline { margin-top: 14px; }
+  .tl-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .lane { position: relative; height: 34px; border: 1px solid var(--line); border-radius: 6px;
+          background: var(--panel); margin-bottom: 6px; overflow: hidden; }
+  .lane .label { position: absolute; left: 8px; top: 2px; font-size: 11px; color: var(--muted); z-index: 3; pointer-events: none; }
+  .bar { position: absolute; top: 14px; height: 14px; border-radius: 3px; font-size: 10px; color: #fff;
+         display: flex; align-items: center; padding: 0 4px; white-space: nowrap; overflow: hidden; z-index: 2; }
+  .bar.poll { background: var(--pollbar); }
+  .bar.lock-scan { background: var(--lockscan); }
+  .bar.lock-add { background: var(--lockadd); }
+  .bar.nolock { background: repeating-linear-gradient(45deg, var(--pollbar), var(--pollbar) 4px, transparent 4px, transparent 8px);
+                border: 1px dashed var(--pollbar); color: var(--ink); background-color: transparent; }
+  .tickline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); opacity: .5; }
+  /* 控件区 */
+  .controls { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .ctl { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--ink); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  button.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+               border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  button.btn:hover { border-color: var(--accent); }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.btn-retry { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+                     border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 12px; }
+  select { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 3px 6px; font-size: 13px; }
+  .stats { margin-top: 10px; font-size: 12.5px; color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; }
+  .stats b { color: var(--ink); }
+  .stats .hit b { color: var(--bad); }
+  .note { margin-top: 14px; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 10px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend i { display: inline-block; width: 18px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<h1>BUG-20260918-001 界面演示</h1>
+<p class="sub">serve 轮询实时 git 扫描持 index.lock，与终端 git 写操作互相锁冲突 —— 切换「修复前 / 修复后」对照观察；本页为纯前端模拟，无外网依赖。</p>
+
+<div class="layout">
+  <!-- 左：Status Board 页面示意 -->
+  <div class="card">
+    <h2>Status Board 页面（示意）</h2>
+    <div class="topbar">
+      <span class="brand">Status Board</span>
+      <span class="pollstate" id="pollState"><span class="dot">●</span><span id="pollText">实时连接：每 2 秒自动刷新</span></span>
+    </div>
+    <div id="confirmArea">
+      <div class="confirm-card" id="confirmCard">
+        <div class="row1">
+          <span class="id">REQ-20260916-007</span>
+          <span class="chip">开发</span>
+          <span class="chip state">挂起确认</span>
+        </div>
+        <div class="scope" id="scopeText">待提交：1763 个路径（本单可归属 812 · 归属待确认 951）</div>
+        <div class="hint" id="lockHint">
+          挂起原因：git 索引被并发进程占用（瞬时冲突，可重试）
+          <br><button class="btn-retry" id="retryBtn">重新核验</button>
+        </div>
+        <div class="errbar" id="errbar">服务离线：数据停止刷新（保留上次数据）</div>
+      </div>
+      <div class="empty" id="emptyState" style="display:none">暂无待人工确认条目</div>
+    </div>
+    <div class="timeline">
+      <div class="tl-head"><span>轮询 / index.lock / 终端操作时间线</span><span id="clock">t = 0.0s</span></div>
+      <div class="lane" id="lanePoll"><span class="label">轮询 GET /api/confirms</span></div>
+      <div class="lane" id="laneLock"><span class="label">.git/index.lock 占用</span></div>
+      <div class="lane" id="laneTerm"><span class="label">终端 git 操作</span></div>
+      <div class="legend">
+        <span><i style="background:var(--pollbar)"></i>轮询扫描（git status --porcelain -uall + 逐文件 sha1）</span>
+        <span><i style="background:var(--lockscan)"></i>git status 持锁窗口（修复前）</span>
+        <span><i style="background:var(--lockadd)"></i>终端 git add 持锁</span>
+        <span><i style="border:1px dashed var(--pollbar);background:transparent"></i>不持锁扫描（--no-optional-locks，修复后）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右：终端示意 -->
+  <div class="card">
+    <h2>用户终端（示意）</h2>
+    <div class="terminal" id="term"><div class="out"><span class="cmd">$ </span>cd /path/to/project</div></div>
+    <div class="controls">
+      <span class="ctl">
+        <span>模式</span>
+        <span class="seg" id="modeSeg">
+          <button data-mode="before" class="on">修复前（Bug 现象）</button>
+          <button data-mode="after">修复后（--no-optional-locks）</button>
+        </span>
+      </span>
+      <span class="ctl">
+        <span>脏路径规模</span>
+        <select id="dirtySel">
+          <option value="120">约 500 路径（持锁 ≈120ms）</option>
+          <option value="350" selected>约 1763 路径（持锁 ≈350ms）</option>
+          <option value="600">约 3000 路径（持锁 ≈600ms）</option>
+        </select>
+      </span>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="addBtn">终端执行 git add -A</button>
+      <button class="btn" id="autoBtn">自动 git add：关（每 5s）</button>
+      <button class="btn" id="playBtn">暂停时间线</button>
+      <button class="btn" id="onlineBtn">服务：在线</button>
+      <button class="btn" id="recBtn">挂起记录：有</button>
+      <button class="btn" id="resetBtn">重置</button>
+    </div>
+    <div class="stats">
+      <span>git add 尝试 <b id="statAdd">0</b> 次</span>
+      <span class="hit">撞锁 fatal <b id="statHit">0</b> 次</span>
+      <span>轮询扫描 <b id="statPoll">0</b> 次</span>
+    </div>
+    <div class="note">
+      演示口径：前端 2 秒轮询 /api/confirms → 服务端 workingTreeSnapshot() 执行 git status 全量扫描；
+      修复前 git status 机会性刷新 index 须先创建 index.lock（脏路径越多持锁越久），与终端 git add 的持锁窗口重叠即 fatal；
+      修复后轮询扫描统一加 --no-optional-locks 不再持锁，终端 git add 不再被阻塞。服务离线 / 无挂起记录时轮询不再触发，可对照「停 serve 后锁彻底消失」的实测结论。
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var TICK = 100;              // 模拟步进 ms
+  var POLL_EVERY = 2000;       // 前端轮询周期
+  var ADD_LOCK = 150;          // 终端 git add 自身持锁时长
+  var WINDOW = 8000;           // 时间线可视窗口
+  var state = {
+    mode: 'before', online: true, playing: true,
+    lockDur: 350, autoAdd: false, hasRecord: true,
+    t: 0, nextPoll: 0, nextAutoAdd: 5000,
+    events: [],                 // {lane:'poll'|'lockScan'|'lockAdd'|'nolock', start, dur}
+    poll: null,                 // 进行中的轮询 {start, lockDur, scanDur}
+    pending: 1763, attributed: 812, uncertain: 951,
+    statAdd: 0, statHit: 0, statPoll: 0,
+    hintTimer: null
+  };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- 终端输出 ----------
+  function termLine(html, cls) {
+    var t = $('term');
+    var d = document.createElement('div');
+    d.className = 'out' + (cls ? ' ' + cls : '');
+    d.innerHTML = html;
+    t.appendChild(d);
+    while (t.children.length > 60) t.removeChild(t.firstChild);
+    t.scrollTop = t.scrollHeight;
+  }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  // ---------- 挂起确认卡片 ----------
+  function renderScope(scanning) {
+    if (!state.hasRecord) {
+      $('confirmCard').style.display = 'none';
+      $('emptyState').style.display = '';
+      return;
+    }
+    $('confirmCard').style.display = '';
+    $('emptyState').style.display = 'none';
+    var s = $('scopeText');
+    if (scanning) {
+      s.textContent = '扫描工作区中…（git status 全量扫描）';
+      s.style.color = 'var(--muted)';
+    } else {
+      s.style.color = '';
+      s.textContent = '待提交：' + state.pending + ' 个路径（本单可归属 ' + state.attributed
+        + ' · 归属待确认 ' + state.uncertain + '）';
+    }
+  }
+  function showLockHint() {
+    $('lockHint').classList.add('show');
+    if (state.hintTimer) clearTimeout(state.hintTimer);
+    state.hintTimer = setTimeout(function () { $('lockHint').classList.remove('show'); }, 6000);
+  }
+
+  // ---------- 轮询 ----------
+  function startPoll() {
+    state.statPoll++;
+    state.poll = { start: state.t, lockDur: state.lockDur, scanDur: state.lockDur + 450 };
+    state.events.push({ lane: state.mode === 'before' ? 'poll' : 'nolock',
+      start: state.t, dur: state.poll.scanDur });
+    if (state.mode === 'before') {
+      state.events.push({ lane: 'lockScan', start: state.t, dur: state.lockDur });
+    }
+    renderScope(true);
+  }
+  function finishPoll() {
+    // 模拟实时扫描计数小幅波动（口径不变：本单可归属 / 归属待确认）
+    var d = (Math.random() * 7 | 0) - 3;
+    state.pending = Math.max(0, state.pending + d);
+    if (d >= 0) { state.attributed += Math.min(d, 2); state.uncertain += Math.max(0, d - 2); }
+    else { state.attributed = Math.max(0, state.attributed - 1); state.uncertain = Math.max(0, state.uncertain + d + 1); }
+    state.poll = null;
+    renderScope(false);
+    $('statPoll').textContent = state.statPoll;
+  }
+
+  // ---------- 终端 git add ----------
+  function pollHoldingLock() {
+    return state.mode === 'before' && state.poll != null
+      && state.t < state.poll.start + state.poll.lockDur;
+  }
+  function doGitAdd(auto) {
+    state.statAdd++;
+    $('statAdd').textContent = state.statAdd;
+    termLine('<span class="cmd">$ </span>git add -A' + (auto ? '   <span style="opacity:.6"># 自动</span>' : ''));
+    if (pollHoldingLock()) {
+      state.statHit++;
+      $('statHit').textContent = state.statHit;
+      termLine('fatal: Unable to create \'.git/index.lock\': File exists.', 'fatal');
+      termLine('<span style="opacity:.7"># 撞上 serve 轮询 git status 的持锁窗口（' + state.poll.lockDur + 'ms）</span>');
+      showLockHint();
+    } else {
+      state.events.push({ lane: 'lockAdd', start: state.t, dur: ADD_LOCK });
+      termLine('已暂存全部变更（staged）。', 'ok');
+    }
+  }
+
+  // ---------- 时间线渲染 ----------
+  function renderTimeline() {
+    var nowLeft = state.t - WINDOW;
+    var span = WINDOW + 1500; // 右侧预留
+    function draw(laneId, lanes) {
+      var el = $(laneId);
+      // 秒刻度线
+      var ticks = [];
+      for (var s = Math.ceil(nowLeft / 1000) * 1000; s < nowLeft + span; s += 1000) {
+        var l = (s - nowLeft) / span * 100;
+        if (l >= 0 && l <= 100) {
+          var tk = document.createElement('div');
+          tk.className = 'tickline';
+          tk.style.left = l + '%';
+          ticks.push(tk);
+        }
+      }
+      lanes.forEach(function (ln) {
+        state.events.forEach(function (e) {
+          if (e.lane !== ln) return;
+          var a = (e.start - nowLeft) / span * 100;
+          var b = (e.start + e.dur - nowLeft) / span * 100;
+          if (b < 0 || a > 100) return;
+          a = Math.max(0, a); b = Math.min(100, b);
+          var bar = document.createElement('div');
+          var labels = {
+            poll: 'git status（持锁 ' + e.dur + 'ms 中前段）',
+            nolock: 'git status --no-optional-locks（不持锁）',
+            lockScan: 'index.lock 被轮询持有 ' + e.dur + 'ms',
+            lockAdd: 'git add 持锁 ' + e.dur + 'ms'
+          };
+          bar.className = 'bar ' + (e.lane === 'lockScan' ? 'lock-scan' : e.lane === 'lockAdd' ? 'lock-add' : e.lane);
+          bar.style.left = a + '%';
+          bar.style.width = Math.max(0.8, b - a) + '%';
+          bar.title = labels[e.lane] || '';
+          if (b - a > 12) bar.textContent = labels[e.lane] || '';
+          ticks.push(bar);
+        });
+      });
+      el.innerHTML = '';
+      ticks.forEach(function (n) { el.appendChild(n); });
+    }
+    draw('lanePoll', ['poll', 'nolock']);
+    draw('laneLock', ['lockScan', 'lockAdd']);
+    draw('laneTerm', ['lockAdd']);
+    $('clock').textContent = 't = ' + (state.t / 1000).toFixed(1) + 's';
+  }
+
+  // ---------- 主循环 ----------
+  setInterval(function () {
+    if (!state.playing) return;
+    if (state.online) {
+      state.t += TICK;
+      if (state.t >= state.nextPoll) {
+        state.nextPoll = state.nextPoll + POLL_EVERY;
+        if (state.nextPoll <= state.t) state.nextPoll = state.t + POLL_EVERY;
+        startPoll();
+      }
+      if (state.poll && state.t >= state.poll.start + state.poll.scanDur) finishPoll();
+      if (state.autoAdd && state.t >= state.nextAutoAdd) {
+        state.nextAutoAdd = state.t + 5000;
+        doGitAdd(true);
+      }
+    }
+    state.events = state.events.filter(function (e) { return e.start + e.dur > state.t - WINDOW - 500; });
+    renderTimeline();
+  }, TICK);
+
+  // ---------- 控件 ----------
+  $('modeSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    state.mode = b.dataset.mode;
+    [].forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
+    termLine('<span class="cmd">$ </span># 切换到「' + (state.mode === 'before' ? '修复前：轮询 git status 默认机会性刷新 index，须创建 index.lock' : '修复后：轮询链路统一 --no-optional-locks，只读扫描不再持锁') + '」');
+  });
+  $('dirtySel').addEventListener('change', function () {
+    state.lockDur = +this.value;
+    termLine('<span class="cmd">$ </span># 脏路径规模调整：git status 持锁时长 ≈ ' + state.lockDur + 'ms');
+  });
+  $('addBtn').addEventListener('click', function () { doGitAdd(false); });
+  $('autoBtn').addEventListener('click', function () {
+    state.autoAdd = !state.autoAdd;
+    this.textContent = '自动 git add：' + (state.autoAdd ? '开（每 5s）' : '关（每 5s）');
+    this.classList.toggle('primary', state.autoAdd);
+    if (state.autoAdd) state.nextAutoAdd = state.t + 1200;
+  });
+  $('playBtn').addEventListener('click', function () {
+    state.playing = !state.playing;
+    this.textContent = state.playing ? '暂停时间线' : '播放时间线';
+  });
+  $('onlineBtn').addEventListener('click', function () {
+    state.online = !state.online;
+    this.textContent = '服务：' + (state.online ? '在线' : '离线');
+    var ps = $('pollState');
+    ps.classList.toggle('off', !state.online);
+    ps.querySelector('.dot').textContent = state.online ? '●' : '○';
+    $('pollText').textContent = state.online ? '实时连接：每 2 秒自动刷新' : '服务离线：数据停止刷新';
+    $('errbar').classList.toggle('show', !state.online);
+    if (!state.online) { state.poll = null; renderScope(false); }
+  });
+  $('recBtn').addEventListener('click', function () {
+    state.hasRecord = !state.hasRecord;
+    this.textContent = '挂起记录：' + (state.hasRecord ? '有' : '无');
+    renderScope(false);
+  });
+  $('resetBtn').addEventListener('click', function () {
+    state.t = 0; state.nextPoll = 0; state.nextAutoAdd = 5000; state.poll = null;
+    state.events = []; state.statAdd = 0; state.statHit = 0; state.statPoll = 0;
+    state.pending = 1763; state.attributed = 812; state.uncertain = 951;
+    $('statAdd').textContent = '0'; $('statHit').textContent = '0'; $('statPoll').textContent = '0';
+    $('lockHint').classList.remove('show');
+    $('term').innerHTML = '<div class="out"><span class="cmd">$ </span>cd /path/to/project</div>';
+    renderScope(false);
+    renderTimeline();
+  });
+  $('retryBtn').addEventListener('click', function () {
+    termLine('<span class="cmd">$ </span># 挂起面板「重新核验」：按 BUG-20260915-004 口径，瞬时锁冲突可重试');
+    if (!pollHoldingLock()) {
+      $('lockHint').classList.remove('show');
+      termLine('重新核验成功：待入库路径已补交。', 'ok');
+    } else {
+      termLine('fatal: Unable to create \'.git/index.lock\': File exists.', 'fatal');
+    }
+  });
+
+  renderScope(false);
+  renderTimeline();
+})();
+</script>
+</body>
+</html>
