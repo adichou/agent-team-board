@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260914-005 回退 BUG-20260914-015 · 界面演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dce1; --text: #1f2329; --muted: #6b7280;
+    --primary: #2f6fed; --primary-weak: #e8f0fe; --ok: #1a9e6c; --warn: #c77700; --err: #d54941;
+    --disabled-op: 0.5; --chip-bg: #ffffff; --row-hover: #f4f7fd; --shadow: 0 2px 10px rgba(15,23,42,.08);
+  }
+  [data-theme="dark"] {
+    --bg: #14171c; --panel: #1e2229; --border: #343a44; --text: #e7eaee; --muted: #9aa3af;
+    --primary: #6c9bff; --primary-weak: #22304d; --ok: #3fce97; --warn: #e8a33d; --err: #f0716a;
+    --chip-bg: #1e2229; --row-hover: #232a35; --shadow: 0 2px 10px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .card h2 { font-size: 15px; margin-bottom: 8px; }
+  /* 顶栏导航 */
+  .nav { display: flex; align-items: center; gap: 14px; padding: 8px 4px 10px; border-bottom: 1px solid var(--border); }
+  .nav .app { font-weight: 700; }
+  .nav .tabs { display: flex; gap: 4px; }
+  .nav .tab { padding: 4px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+  .nav .tab.active { background: var(--primary-weak); color: var(--primary); font-weight: 600; }
+  .nav .poll { margin-left: auto; font-size: 13px; color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ok); margin-right: 5px; vertical-align: -1px; }
+  .dot.off { background: var(--muted); }
+  .dot.flash { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+  /* 档位筛选条 */
+  .lanes { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 4px; }
+  .chip { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--chip-bg); cursor: pointer; font-size: 13px; color: var(--muted); }
+  .chip .n { opacity: .75; font-size: 12px; }
+  .chip.active { border-color: var(--primary); color: var(--primary); background: var(--primary-weak); font-weight: 600; }
+  /* 工具条 */
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .btn { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: var(--disabled-op); cursor: not-allowed; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:disabled { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .sel-info { color: var(--muted); font-size: 13px; }
+  .quick-wrap { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .quick-wrap.hidden { display: none; }
+  #quickEntry { font-weight: 600; }
+  /* 列表 */
+  .rows { padding: 6px 4px 2px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 8px 8px; border-radius: 8px; }
+  .row:hover { background: var(--row-hover); }
+  .row .id { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .row .title { flex: 1; }
+  .badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.gray { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .badge.blue { background: var(--primary-weak); color: var(--primary); }
+  .badge.orange { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+  .badge.green { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+  .empty { text-align: center; color: var(--muted); padding: 26px 0 18px; font-size: 13px; }
+  /* 任务面板（点击快捷入口后跳转的示意） */
+  #taskPanel { display: none; }
+  #taskPanel.show { display: block; animation: slide .25s ease; }
+  @keyframes slide { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .panel-head .t { font-weight: 700; }
+  .panel-desc { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  /* 演示控制台 */
+  .console .group { margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .console .label { font-size: 13px; color: var(--muted); min-width: 64px; }
+  .console .opt { padding: 3px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--chip-bg); cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  .console .opt.active { border-color: var(--primary); color: var(--primary); background: var(--primary-weak); font-weight: 600; }
+  .readout { font-size: 12.5px; color: var(--muted); background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; font-family: ui-monospace, Menlo, monospace; }
+  .readout b { color: var(--text); }
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(8px); background: var(--text); color: var(--bg); padding: 7px 16px; border-radius: 999px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 9; }
+  #toast.show { opacity: .96; transform: translateX(-50%); }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260914-005 回退 BUG-20260914-015 — 界面演示</h1>
+  <div class="sub">看板「需求」列表快捷入口按钮：对照「回退前（BUG 已实现：旧文案『▶ 开始 AI 分析』，任务执行中禁用变『AI 分析中 / AI 开发中』）」与「回退后（目标：恢复仅导航、恒不禁用，且文案去掉『开始』改为『▶ AI 分析 / ▶ AI 开发』）」。单号与条目为演示数据。</div>
+
+  <!-- 看板「需求」视图骨架 -->
+  <div class="card">
+    <div class="nav">
+      <span class="app">Agent Team Board</span>
+      <div class="tabs">
+        <span class="tab active">需求</span><span class="tab" data-goto="任务">任务</span><span class="tab" data-goto="设置">设置</span>
+      </div>
+      <span class="poll"><span class="dot" id="pollDot"></span><span id="pollText">轮询中</span></span>
+    </div>
+
+    <div class="lanes" id="laneBar"></div>
+
+    <div class="toolbar">
+      <button class="btn" id="selAll">全选</button>
+      <button class="btn" id="selNone">全不选</button>
+      <span class="sel-info" id="selInfo">已选 0 项</span>
+      <span class="quick-wrap" id="quickWrap">
+        <button class="btn primary" id="quickEntry">▶ AI 分析</button>
+      </span>
+    </div>
+
+    <div class="rows" id="rows"></div>
+  </div>
+
+  <!-- 任务面板示意（快捷入口跳转目标，仅导航） -->
+  <div class="card" id="taskPanel">
+    <h2 id="panelTitle">任务模块 · AI 分析面板</h2>
+    <div class="panel-head">
+      <span class="t" id="panelBatch">批次状态：—</span>
+      <span class="badge gray" id="panelBadge">无任务</span>
+    </div>
+    <div class="panel-desc">本面板为快捷入口按钮的跳转目标（仅导航）。任务创建由面板内「启动」承接，与看板按钮无关。</div>
+    <button class="btn" id="panelStart">启动</button>
+    <span class="hint" id="panelHint"></span>
+  </div>
+
+  <!-- 演示控制台 -->
+  <div class="card console">
+    <h2>演示控制台</h2>
+    <div class="group">
+      <span class="label">对照</span>
+      <button class="opt" data-mode="before">回退前（BUG 已实现）</button>
+      <button class="opt active" data-mode="after">回退后（目标）</button>
+    </div>
+    <div class="group">
+      <span class="label">任务状态</span>
+      <button class="opt active" data-task="idle">空闲</button>
+      <button class="opt" data-task="prepared">待启动</button>
+      <button class="opt" data-task="refineRunning">AI 分析执行中</button>
+      <button class="opt" data-task="refinePaused">AI 分析已暂停</button>
+      <button class="opt" data-task="developRunning">AI 开发执行中</button>
+      <button class="opt" data-task="offline">服务离线</button>
+      <button class="btn" id="reconnect" style="display:none">重连服务</button>
+    </div>
+    <div class="group">
+      <span class="label">主题</span>
+      <button class="opt" data-theme-opt="light">浅色</button>
+      <button class="opt" data-theme-opt="dark">深色</button>
+    </div>
+    <div class="readout" id="readout"></div>
+    <div class="hint">提示：切到「已接受」或「已计划」档操作快捷入口按钮；其他档按钮隐藏。对照两种模式在同一任务状态下的按钮差异——回退前＝旧文案「▶ 开始 AI 分析」且执行中禁用变「AI 分析中」；回退后＝新文案「▶ AI 分析 / ▶ AI 开发」且任何任务状态恒可点（仅导航）。</div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- 演示数据（单号与条目为演示数据） ----------
+  var LANES = [
+    { key: 'submitted', name: '待接受', rows: [] },
+    { key: 'accepted', name: '已接受', rows: [
+      { id: 'REQ-20260914-002', title: '看板条目详情抽屉支持折叠长文档', badges: [{ t: '完善中', c: 'orange' }] },
+      { id: 'REQ-20260914-005', title: '回退 BUG-20260914-015，并把 开始 AI 开发和开始 AI 分析两个按钮改成 AI 开发和 AI 分析', badges: [{ t: '完善中', c: 'orange' }] },
+      { id: 'REQ-20260914-006', title: '批量完善批次记录支持导出', badges: [{ t: '未完善', c: 'gray' }] },
+      { id: 'REQ-20260913-009', title: '档位筛选条计数口径统一', badges: [{ t: '已完善', c: 'green' }] }
+    ]},
+    { key: 'planned', name: '已计划', rows: [
+      { id: 'BUG-20260914-011', title: '切档后搜索框失焦', badges: [{ t: '已计划', c: 'blue' }] },
+      { id: 'REQ-20260913-007', title: '任务面板批次列表分页', badges: [{ t: '已计划', c: 'blue' }] }
+    ]},
+    { key: 'developing', name: '开发中', rows: [{ id: 'REQ-20260912-004', title: '讨论抽屉轮次时间线', badges: [{ t: '开发中', c: 'blue' }] }] },
+    { key: 'testing', name: '待测试', rows: [] },
+    { key: 'done', name: '已完成', rows: [{ id: 'BUG-20260914-015', title: 'AI 分析或 AI 开发中时，开始 AI 分析和开始 AI 开发按钮需要改变状态…', badges: [{ t: '已完成', c: 'green' }] }] }
+  ];
+  var TASK_LABEL = {
+    idle: '空闲（无任务）', prepared: '待启动（prepared）', refineRunning: 'AI 分析执行中（running）',
+    refinePaused: 'AI 分析已暂停（paused）', developRunning: 'AI 开发执行中（running）', offline: '服务离线（拉取失败）'
+  };
+
+  // ---------- 状态 ----------
+  var state = { lane: 'accepted', mode: 'after', task: 'idle', selected: 0 };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+  function flashSync() { // 模拟一轮轮询同步（加载反馈）
+    var d = $('pollDot'); d.classList.add('flash');
+    setTimeout(function () { d.classList.remove('flash'); }, 350);
+  }
+
+  // ---------- 档位筛选条 ----------
+  function renderLanes() {
+    var bar = $('laneBar'); bar.innerHTML = '';
+    LANES.forEach(function (l) {
+      var c = document.createElement('button');
+      c.className = 'chip' + (state.lane === l.key ? ' active' : '');
+      c.innerHTML = l.name + ' <span class="n">' + l.rows.length + '</span>';
+      c.onclick = function () { state.lane = l.key; flashSync(); render(); };
+      bar.appendChild(c);
+    });
+  }
+
+  // ---------- 条目列表（含空态） ----------
+  function renderRows() {
+    var box = $('rows'); box.innerHTML = '';
+    var lane = LANES.filter(function (l) { return l.key === state.lane; })[0];
+    if (!lane.rows.length) {
+      var e = document.createElement('div'); e.className = 'empty';
+      e.textContent = '本档暂无条目（空态：列表为空，档位计数为 0）';
+      box.appendChild(e); return;
+    }
+    lane.rows.forEach(function (r) {
+      var d = document.createElement('div'); d.className = 'row';
+      var html = '<span class="id">' + r.id + '</span><span class="title">' + r.title + '</span>';
+      r.badges.forEach(function (b) { html += '<span class="badge ' + b.c + '">' + b.t + '</span>'; });
+      d.innerHTML = html; box.appendChild(d);
+    });
+  }
+
+  // ---------- 快捷入口按钮（本演示核心） ----------
+  var lastKnownTask = 'idle'; // 服务离线时按钮保留最后已知状态（不误报）
+  function runningOf(kind) { // 与 BUG-20260914-015 同源口径：仅 status === 'running' 算执行中
+    var t = state.task === 'offline' ? lastKnownTask : state.task;
+    if (kind === 'refine') return t === 'refineRunning' ? 'running' : (t === 'refinePaused' ? 'paused' : (t === 'prepared' ? 'prepared' : null));
+    if (kind === 'develop') return t === 'developRunning' ? 'running' : null;
+    return null;
+  }
+  function renderQuick() {
+    var wrap = $('quickWrap'), btn = $('quickEntry');
+    var isAcc = state.lane === 'accepted', isPln = state.lane === 'planned';
+    wrap.classList.toggle('hidden', !isAcc && !isPln); // 其余档隐藏不占位
+    if (!isAcc && !isPln) return;
+    var kind = isAcc ? 'refine' : 'develop';
+    var running = runningOf(kind) === 'running';
+    var conf;
+    if (isAcc) {
+      conf = (state.mode === 'before' && running)
+        ? { label: 'AI 分析中', title: 'AI 分析任务执行中：子代理正在批量补全文档，收尾后自动恢复入口' }
+        : (state.mode === 'before'
+          ? { label: '▶ 开始 AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' }
+          : { label: '▶ AI 分析', title: '进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）' });
+    } else {
+      conf = (state.mode === 'before' && running)
+        ? { label: 'AI 开发中', title: 'AI 开发任务执行中：子代理正在按已计划队列实施，收尾后自动恢复入口' }
+        : (state.mode === 'before'
+          ? { label: '▶ 开始 AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' }
+          : { label: '▶ AI 开发', title: '进入任务模块 AI 开发面板：以已计划队列（最旧优先）为范围，由面板内「启动」创建任务' });
+    }
+    btn.textContent = conf.label; btn.title = conf.title; btn.setAttribute('aria-label', conf.label);
+    // 回退后（after）：恢复「仅导航、恒不禁用」——quick.disabled = false
+    btn.disabled = (state.mode === 'before' && running);
+  }
+
+  // ---------- 任务面板示意（仅导航目标） ----------
+  function renderPanel() {
+    var p = $('taskPanel');
+    if (!p.classList.contains('show')) return;
+    var isAcc = state.lane === 'accepted';
+    $('panelTitle').textContent = isAcc ? '任务模块 · AI 分析面板' : '任务模块 · AI 开发面板';
+    var st = runningOf(isAcc ? 'refine' : 'develop');
+    var map = { running: ['执行中', 'orange'], paused: ['已暂停', 'gray'], prepared: ['待启动', 'blue'], null: ['无任务', 'gray'] };
+    var m = st ? map[st] : map['null'];
+    $('panelBatch').textContent = '批次状态：' + (st ? TASK_LABEL[state.task].replace(/（.*）/, '') : '无任务');
+    var badge = $('panelBadge'); badge.textContent = m[0]; badge.className = 'badge ' + m[1];
+    $('panelStart').disabled = (st === 'running' || st === 'prepared');
+    $('panelHint').textContent = (st === 'running')
+      ? '批次执行中：看板侧按钮在「回退前」模式下为禁用态；「回退后」模式下恢复可点（仅导航）。'
+      : '点击「启动」创建任务并复制主调度提示词（演示按钮，无实际动作）。';
+  }
+
+  // ---------- 轮询指示 / 服务离线（失败态） ----------
+  function renderPoll() {
+    var offline = state.task === 'offline';
+    $('pollDot').classList.toggle('off', offline);
+    $('pollText').textContent = offline ? '离线' : '轮询中';
+    $('reconnect').style.display = offline ? '' : 'none';
+  }
+
+  // ---------- 读数 ----------
+  function renderReadout() {
+    var btn = $('quickEntry');
+    var visible = !$('quickWrap').classList.contains('hidden');
+    $('readout').innerHTML =
+      '对照模式：<b>' + (state.mode === 'before' ? '回退前（BUG-20260914-015 已实现，旧文案）' : '回退后（目标：仅导航恒不禁用 + 文案去「开始」）') + '</b> · ' +
+      '任务状态：<b>' + TASK_LABEL[state.task] + '</b><br>' +
+      '快捷入口按钮：' + (visible
+        ? ('文案 <b>' + btn.textContent + '</b> · ' + (btn.disabled ? '<b>禁用</b>（disabled，点击无效）' : '<b>可点</b>（点击跳转任务面板，仅导航）'))
+        : '当前档隐藏（不占位）');
+  }
+
+  function render() { renderLanes(); renderRows(); renderQuick(); renderPanel(); renderPoll(); renderReadout(); }
+
+  // ---------- 事件 ----------
+  $('quickEntry').addEventListener('click', function () {
+    if ($('quickEntry').disabled) return; // 原生 disabled 不派发 click，此为双保险
+    $('taskPanel').classList.add('show');
+    $('taskPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast('跳转任务模块 → ' + (state.lane === 'accepted' ? 'AI 分析' : 'AI 开发') + ' 面板（仅导航）');
+    renderPanel();
+  });
+  $('selAll').addEventListener('click', function () {
+    var lane = LANES.filter(function (l) { return l.key === state.lane; })[0];
+    state.selected = lane.rows.length; $('selInfo').textContent = '已选 ' + state.selected + ' 项'; toast('已全选当前档 ' + state.selected + ' 项（演示）');
+  });
+  $('selNone').addEventListener('click', function () {
+    state.selected = 0; $('selInfo').textContent = '已选 0 项'; toast('已全不选（演示）');
+  });
+  document.querySelectorAll('.tab[data-goto]').forEach(function (t) {
+    t.addEventListener('click', function () { toast('「' + t.dataset.goto + '」页签不在本演示范围（演示聚焦需求列表快捷入口）'); });
+  });
+  document.querySelectorAll('.console .opt[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.dataset.mode;
+      document.querySelectorAll('.console .opt[data-mode]').forEach(function (x) { x.classList.toggle('active', x === b); });
+      flashSync(); render();
+      toast(state.mode === 'before' ? '对照：回退前（旧文案「▶ 开始 AI 分析」，执行中禁用变「AI 分析中」）' : '对照：回退后（恒可点 + 新文案「▶ AI 分析 / ▶ AI 开发」）');
+    });
+  });
+  document.querySelectorAll('.console .opt[data-task]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.task = b.dataset.task;
+      if (state.task !== 'offline') lastKnownTask = state.task;
+      document.querySelectorAll('.console .opt[data-task]').forEach(function (x) { x.classList.toggle('active', x === b); });
+      flashSync(); render();
+      toast('任务状态 → ' + TASK_LABEL[state.task]);
+    });
+  });
+  document.querySelectorAll('.console .opt[data-theme-opt]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.documentElement.dataset.theme = b.dataset.themeOpt;
+      document.querySelectorAll('.console .opt[data-theme-opt]').forEach(function (x) { x.classList.toggle('active', x === b); });
+    });
+  });
+  $('reconnect').addEventListener('click', function () {
+    state.task = 'idle';
+    document.querySelectorAll('.console .opt[data-task]').forEach(function (x) { x.classList.toggle('active', x.dataset.task === 'idle'); });
+    flashSync(); render(); toast('服务已重连，轮询恢复（●）');
+  });
+  $('panelStart').addEventListener('click', function () { toast('演示按钮：真实产品中此处创建任务并复制主调度提示词'); });
+
+  // 模拟主轮询：约 2 秒一轮的轻量同步闪烁（离线时不闪）
+  setInterval(function () { if (state.task !== 'offline') flashSync(); }, 2000);
+
+  render();
+})();
+</script>
+</body>
+</html>

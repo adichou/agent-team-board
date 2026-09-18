@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260914-007 界面演示 · 确认完成 / 版本合并后自动提交管理文件</title>
+<style>
+  /* 配色取自 scripts/web/style.css（--bg/--panel/--text/--muted/--border/--primary/--warn 等），
+     深浅色按 data-theme 切换（默认深色），与看板一致。 */
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+    --primary: #2563eb; --primary-soft: rgba(37,99,235,.12);
+    --warn: #dc2626; --warn-soft: rgba(220,38,38,.1);
+    --inprogress: #d97706; --ok: #16a34a; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --warn-bg: #fef2f2; --warn-text: #b91c1c;
+    --chip-mute: #64748b; --code-bg: #f1f5f9;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    --primary: #60a5fa; --primary-soft: rgba(96,165,250,.15);
+    --warn: #f87171; --warn-soft: rgba(248,113,113,.12);
+    --inprogress: #fbbf24; --ok: #4ade80; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+    --info-bg: #0b1d3a; --info-text: #93c5fd; --warn-bg: #3b1214; --warn-text: #fca5a5;
+    --chip-mute: #94a3b8; --code-bg: #0b111a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; color: inherit; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .btn { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .btn.small { padding: 4px 10px; font-size: 12.5px; border-radius: 7px; }
+  .chip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+  .chip.mute { color: var(--chip-mute); border-color: var(--chip-mute); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+  .chip.ok { color: var(--ok); border-color: var(--ok); }
+  .chip.info { color: var(--primary); border-color: var(--primary); }
+  .chip.amber { color: var(--inprogress); border-color: var(--inprogress); }
+  code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+
+  /* ---------- 演示控制台（真实界面没有，仅为驱动本演示） ---------- */
+  .demo-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 50; }
+  .demo-top h1 { font-size: 14px; margin: 0 8px 0 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; padding: 5px 12px; cursor: pointer; color: var(--muted); }
+  .seg button.on { background: var(--primary); color: #fff; font-weight: 600; }
+  .state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding: 8px 16px; border-bottom: 1px dashed var(--border); background: var(--bg); }
+  .state-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .state-bar label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; }
+  .state-bar select { font: inherit; padding: 3px 8px; border: 1px solid var(--border);
+    border-radius: 7px; background: var(--panel); color: var(--text); }
+  .state-bar .right { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- 详情面板 ---------- */
+  .board { max-width: 920px; margin: 0 auto; padding: 14px 18px 48px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden; }
+  .panel + .panel { margin-top: 14px; }
+  .p-head { padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .p-head h2 { font-size: 14.5px; margin: 0; }
+  .p-body { padding: 14px 16px; }
+  .kv { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+
+  /* ---------- 管理记录提交反馈块（本需求新增，两入口同构） ---------- */
+  .mgt { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .mgt-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
+  .mgt-body { margin-top: 6px; font-size: 13px; }
+  .mgt.submitting { border-color: var(--inprogress); background: var(--bg); }
+  .mgt.success { border-color: var(--ok); }
+  .mgt.success .mgt-body { color: var(--ok-text); }
+  .mgt.failed { border-color: var(--warn); background: var(--warn-soft); }
+  .mgt.failed .mgt-body { color: var(--warn-text); }
+  .mgt ul { margin: 6px 0 0; padding-left: 18px; }
+  .mgt ul li { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .mgt .advice { margin-top: 6px; }
+  .mgt .persist-hint { margin-top: 6px; font-size: 12px; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--inprogress);
+    border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 版本卡片 / 条目合并结果 ---------- */
+  .ver-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .ver-items { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 10px; }
+  .ver-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; }
+  .ver-item + .ver-item { border-top: 1px dashed var(--border); }
+  .ver-item .st-ok { color: var(--ok); font-weight: 700; }
+  .branch-note { margin-top: 10px; font-size: 12.5px; color: var(--muted);
+    border-left: 3px solid var(--primary); padding: 2px 10px; background: var(--primary-soft);
+    border-radius: 0 6px 6px 0; }
+
+  .note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="demo-top">
+  <h1>REQ-20260914-007 演示 · 确认完成 / 版本合并后自动提交管理文件</h1>
+  <div class="seg" role="tablist" aria-label="入口切换">
+    <button id="tabItem" class="on" type="button">条目详情（确认完成）</button>
+    <button id="tabVer" type="button">版本详情（合并结果）</button>
+  </div>
+  <div class="right" style="margin-left:auto; display:flex; gap:8px;">
+    <button class="btn small" id="themeBtn" type="button">浅色 / 深色</button>
+  </div>
+</div>
+
+<div class="state-bar">
+  <span class="lbl">演示控制台（真实界面没有）：</span>
+  <label>场景
+    <select id="sceneSel">
+      <option value="ok">提交成功</option>
+      <option value="noop">无变化 · 已同步</option>
+      <option value="lock">失败：Git 锁冲突</option>
+      <option value="hook">失败：pre-commit 钩子失败</option>
+      <option value="identity">失败：身份配置缺失</option>
+    </select>
+  </label>
+  <label>重试结果
+    <select id="retrySel">
+      <option value="ok">重试成功</option>
+      <option value="fail">再次失败</option>
+    </select>
+  </label>
+  <div class="right">
+    <button class="btn small" id="resetBtn" type="button">重置演示</button>
+  </div>
+  <span class="lbl" style="width:100%">说明：失败提示写入本地存储，刷新页面后仍可见；提交进行中时全站 Git 写操作串行（按钮禁用）。</span>
+</div>
+
+<div class="board">
+
+  <!-- ================= 入口一：条目详情 ================= -->
+  <section id="viewItem">
+    <div class="panel">
+      <div class="p-head">
+        <span class="chip mute" id="itemIdChip">REQ-20260914-001</span>
+        <h2 id="itemTitle">自动提交不完整时挂起条目并暂停队列，人工确认后恢复开发</h2>
+      </div>
+      <div class="p-body">
+        <div class="kv">
+          <span class="muted">状态：</span><span class="chip" id="itemStatusChip">开发中</span>
+          <span class="muted small" id="itemStatusNote">Agent 已上报，待人工确认完成</span>
+        </div>
+        <div class="kv"><span class="muted">认领：</span><span>agent-a · 锁将在确认完成后释放（.locks/ 不进 Git）</span></div>
+        <div class="row">
+          <button class="btn primary" id="itemDoneBtn" type="button">确认完成</button>
+          <button class="btn hide" id="itemUndoBtn" type="button">驳回完成（退回开发）</button>
+          <span class="muted small">确认完成后将自动提交本次更新的管理记录（status.json 等）</span>
+        </div>
+
+        <!-- 管理记录提交反馈块 -->
+        <div class="mgt hide" id="itemMgt" data-state="">
+          <div class="mgt-title" id="itemMgtTitle"></div>
+          <div class="mgt-body" id="itemMgtBody"></div>
+        </div>
+
+        <div class="note">本演示数据：条目状态流转 in-progress → done；确认完成会刷新 status.json，本次确有更新的条目留痕文档（decisions.md / confirmations.md）一并纳入。业务源码与其他条目不被夹带。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 入口二：版本详情 ================= -->
+  <section id="viewVer" class="hide">
+    <div class="panel">
+      <div class="p-head">
+        <span class="chip mute">BLD-20260914-001</span>
+        <h2>多智能体协作平台成型版</h2>
+        <span class="chip" id="verStatusChip">计划中</span>
+      </div>
+      <div class="p-body">
+        <div class="ver-meta">目标分支 main · 合并方式：临时工作树逐条 --no-ff（不触碰当前工作区）· 当前工作区分支：dev</div>
+        <div class="row">
+          <button class="btn primary" id="verMergeBtn" type="button">合并入 main</button>
+          <button class="btn hide" id="verRetryMergeBtn" type="button">重试合并入 main</button>
+          <span class="muted small" id="verMergeHint">合并成功并写入最终结果后，自动提交版本管理记录</span>
+        </div>
+
+        <!-- 合并结果区 -->
+        <div class="ver-items hide" id="verItems"></div>
+
+        <!-- 管理记录提交反馈块 -->
+        <div class="mgt hide" id="verMgt" data-state="">
+          <div class="mgt-title" id="verMgtTitle"></div>
+          <div class="mgt-body" id="verMgtBody"></div>
+        </div>
+
+        <div class="branch-note">version.json 提交到<b>持有最终版本数据的分支（main，合并目标）</b>；不擅自切换当前工作区分支、不推送远端。</div>
+        <div class="note">本演示数据：版本合并提交说明携带操作类型与版本编号（如「doc: 版本合并记录 BLD-…」）；无变化视为已同步，不制造空提交；重试只补交管理记录，不重复合并。</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+/* ========== 演示数据（单号 / 标题 / commit / 路径均为演示数据） ========== */
+var ITEM = { id: 'REQ-20260914-001', files: [
+  'docs/agent-team-board/requirements/REQ-20260914-001/status.json',
+  'docs/agent-team-board/requirements/REQ-20260914-001/decisions.md',
+  'docs/agent-team-board/requirements/REQ-20260914-001/confirmations.md',
+] };
+var VER = { id: 'BLD-20260914-001', file: 'docs/agent-team-board/builds/versions/BLD-20260914-001/version.json',
+  items: [
+    { id: 'REQ-20260908-001', title: '待人工确认聚合区', merged: true },
+    { id: 'BUG-20260913-006', title: '自动提交预留前已脏文件暂扣', merged: true },
+    { id: 'REQ-20260914-001', title: '自动提交不完整挂起并暂停队列', merged: true },
+  ] };
+var SCENES = {
+  ok:       { kind: 'ok' },
+  noop:     { kind: 'noop' },
+  lock:     { kind: 'fail', reason: '无法写入 .git/index.lock：Git 锁冲突（另一 Git 进程正在运行或残留锁文件）',
+              advice: '确认没有其他 Git 进程在运行后重试；确认无进程占用后可删除残留的 .git/index.lock。' },
+  hook:     { kind: 'fail', reason: 'pre-commit 钩子退出码 1，提交被钩子拒绝',
+              advice: '查看钩子输出定位失败原因，修正后重试提交；不得绕过钩子强行提交。' },
+  identity: { kind: 'fail', reason: 'Git 身份配置缺失（user.name / user.email 未设置），无法创建提交',
+              advice: '先在本仓库或全局配置 user.name 与 user.email，再点击「重试提交」。' },
+};
+
+var LS_KEY = 'req-20260914-007-demo';
+var state = load() || {
+  tab: 'item', theme: 'dark', scene: 'ok', retry: 'ok',
+  item: { phase: 'in-progress', mgt: null },   // mgt: {state, sha?, reason?, advice?}
+  ver:  { phase: 'draft', mgt: null },
+};
+var gitBusy = false; // 串行协调：任一 Git 写操作进行中，全站写入口禁用
+
+function load() { try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { return null; } }
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) {
+  return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function shortSha() { var s = ''; for (var i = 0; i < 7; i++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)]; return s; }
+
+/* ========== 主题 / 标签页 ========== */
+$('themeBtn').addEventListener('click', function () {
+  state.theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', state.theme); save();
+});
+$('tabItem').addEventListener('click', function () { switchTab('item'); });
+$('tabVer').addEventListener('click', function () { switchTab('ver'); });
+function switchTab(t) {
+  state.tab = t; save();
+  $('tabItem').classList.toggle('on', t === 'item');
+  $('tabVer').classList.toggle('on', t === 'ver');
+  $('viewItem').classList.toggle('hide', t !== 'item');
+  $('viewVer').classList.toggle('hide', t !== 'ver');
+}
+$('sceneSel').addEventListener('change', function () { state.scene = this.value; save(); });
+$('retrySel').addEventListener('change', function () { state.retry = this.value; save(); });
+$('resetBtn').addEventListener('click', function () {
+  localStorage.removeItem(LS_KEY); location.reload();
+});
+
+/* ========== 管理记录提交反馈块渲染（两入口共用） ========== */
+function renderMgt(boxId, titleId, bodyId, mgt, entry) {
+  var box = $(boxId), title = $(titleId), body = $(bodyId);
+  box.classList.remove('hide', 'submitting', 'success', 'failed');
+  if (!mgt) { box.classList.add('hide'); return; }
+  var filesHtml = (entry.files || [entry.file]).map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('');
+  if (mgt.state === 'submitting') {
+    box.classList.add('submitting');
+    title.innerHTML = '<span class="spin"></span> 管理记录提交：提交中…';
+    body.innerHTML = '正在提交本次操作更新的管理记录（路径限定提交，不使用全量 git add）…';
+  } else if (mgt.state === 'success') {
+    box.classList.add('success');
+    title.innerHTML = '✓ 管理记录提交：<span>已提交 · <code>' + esc(mgt.sha) + '</code></span>';
+    body.innerHTML = '提交说明：<code>' + esc(mgt.subject) + '</code><ul>' + filesHtml + '</ul>';
+  } else if (mgt.state === 'noop') {
+    box.classList.add('success');
+    title.textContent = '✓ 管理记录提交：已同步 · 无新变化';
+    body.textContent = '本次操作没有产生新的管理变更，视为已同步，不制造空提交。';
+  } else if (mgt.state === 'failed') {
+    box.classList.add('failed');
+    title.textContent = '⚠ 操作已成功，管理记录提交失败';
+    body.innerHTML =
+      '原因：' + esc(mgt.reason) +
+      '<div style="margin-top:4px">未提交文件：</div><ul>' + filesHtml + '</ul>' +
+      '<div class="advice">建议：' + esc(mgt.advice) + '</div>' +
+      '<div class="row"><button class="btn primary small" type="button" data-retry="' + entry.key + '">重试提交</button>' +
+      '<span class="muted small persist-hint">失败提示已持久化：刷新页面后仍可见，直到重试成功后清除。</span></div>';
+    var btn = body.querySelector('[data-retry]');
+    btn.disabled = gitBusy;
+    btn.addEventListener('click', onRetry);
+  }
+  box.dataset.state = mgt.state;
+}
+
+/* ========== 入口一：确认完成 ========== */
+$('itemDoneBtn').addEventListener('click', function () {
+  if (gitBusy || state.item.phase === 'done') return;
+  // 1) 业务操作：人工确认完成（操作成功——本需求不动该环节）
+  state.item.phase = 'done';
+  state.item.mgt = { state: 'submitting' };
+  save(); renderAll();
+  // 2) 自动提交管理记录（提交中 → 按场景出结果）
+  runGit(function () {
+    state.item.mgt = outcome(ITEM.key);
+    save(); renderAll();
+  });
+});
+$('itemUndoBtn').addEventListener('click', function () {
+  if (gitBusy) return;
+  state.item.phase = 'in-progress'; state.item.mgt = null; save(); renderAll();
+});
+
+/* ========== 入口二：版本合并 ========== */
+$('verMergeBtn').addEventListener('click', mergeNow);
+$('verRetryMergeBtn').addEventListener('click', mergeNow);
+function mergeNow() {
+  if (gitBusy || state.ver.phase === 'merging' || state.ver.phase === 'merged') return;
+  state.ver.phase = 'merging'; state.ver.mgt = null;
+  save(); renderAll();
+  setTimeout(function () { // 合并执行（临时工作树逐条 --no-ff，演示即时完成）
+    state.ver.phase = 'merged'; state.ver.mgt = { state: 'submitting' };
+    save(); renderAll();
+    runGit(function () {
+      state.ver.mgt = outcome(VER.key);
+      save(); renderAll();
+    });
+  }, 700);
+}
+
+/* ========== 重试提交：只补交管理记录，不重放业务操作 ========== */
+function onRetry(ev) {
+  var key = ev.currentTarget.getAttribute('data-retry');
+  if (gitBusy) return;
+  var tgt = key === ITEM.key ? state.item : state.ver;
+  tgt.mgt = { state: 'submitting' };
+  save(); renderAll();
+  runGit(function () {
+    tgt.mgt = (state.retry === 'ok')
+      ? { state: 'success', sha: shortSha(), subject: commitSubject(key) }
+      : outcome(key, true);
+    save(); renderAll();
+  });
+}
+function commitSubject(key) {
+  return key === ITEM.key
+    ? 'doc: 人工确认完成 ' + ITEM.id
+    : 'doc: 版本合并记录 ' + VER.id;
+}
+function outcome(key, isRetry) {
+  var sc = SCENES[state.scene];
+  if (!isRetry && sc.kind === 'ok') return { state: 'success', sha: shortSha(), subject: commitSubject(key) };
+  if (!isRetry && sc.kind === 'noop') return { state: 'noop' };
+  // 失败场景（或重试再次失败）：真实业务状态保持，仅提交失败
+  var f = sc.kind === 'fail' ? sc : SCENES.lock;
+  return { state: 'failed', reason: f.reason, advice: f.advice };
+}
+
+/* ========== 串行协调：Git 写操作互斥 ========== */
+function runGit(fin) { gitBusy = true; renderAll(); setTimeout(function () { gitBusy = false; fin(); }, 900); }
+
+/* ========== 渲染 ========== */
+ITEM.key = 'item'; VER.key = 'ver';
+function renderAll() {
+  // 演示控制台回显
+  $('sceneSel').value = state.scene; $('retrySel').value = state.retry;
+  document.documentElement.setAttribute('data-theme', state.theme);
+  switchTab(state.tab);
+
+  // 条目
+  var done = state.item.phase === 'done';
+  var chip = $('itemStatusChip');
+  chip.textContent = done ? '已完成' : '开发中';
+  chip.className = 'chip ' + (done ? 'ok' : 'amber');
+  $('itemStatusNote').textContent = done
+    ? '人工确认完成 · ' + (state.item.mgt && state.item.mgt.state === 'failed' ? '管理记录待补提交（见下方）' : '管理记录已随操作入库')
+    : 'Agent 已上报，待人工确认完成';
+  $('itemDoneBtn').classList.toggle('hide', done);
+  $('itemUndoBtn').classList.toggle('hide', !done);
+  $('itemDoneBtn').disabled = gitBusy;
+  $('itemUndoBtn').disabled = gitBusy;
+  renderMgt('itemMgt', 'itemMgtTitle', 'itemMgtBody', state.item.mgt, ITEM);
+
+  // 版本
+  var vchip = $('verStatusChip');
+  var ph = state.ver.phase;
+  vchip.textContent = ph === 'draft' ? '计划中' : ph === 'merging' ? '合并中' : '已合并';
+  vchip.className = 'chip ' + (ph === 'merged' ? 'ok' : ph === 'merging' ? 'amber' : 'mute');
+  $('verMergeBtn').classList.toggle('hide', ph !== 'draft');
+  $('verRetryMergeBtn').classList.toggle('hide', ph === 'merged' || ph === 'draft');
+  $('verMergeBtn').disabled = gitBusy || ph === 'merging';
+  $('verRetryMergeBtn').disabled = gitBusy || ph === 'merging';
+  $('verMergeHint').textContent = ph === 'merged' ? '合并完成 · 逐条目结果见下' : '合并成功并写入最终结果后，自动提交版本管理记录';
+  var items = $('verItems');
+  if (ph === 'draft') { items.classList.add('hide'); }
+  else {
+    items.classList.remove('hide');
+    items.innerHTML = VER.items.map(function (it) {
+      return '<div class="ver-item"><span class="st-ok">' + (ph === 'merging' ? '…' : '✓') + '</span>' +
+        '<span class="chip mute">' + esc(it.id) + '</span><span>' + esc(it.title) + '</span>' +
+        '<span class="muted small" style="margin-left:auto">已合并入 main</span></div>';
+    }).join('');
+  }
+  renderMgt('verMgt', 'verMgtTitle', 'verMgtBody', state.ver.mgt, VER);
+}
+renderAll();
+</script>
+</body>
+</html>
