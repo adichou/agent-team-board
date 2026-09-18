@@ -145,6 +145,7 @@ t('U16（BUG-20260908-023）终态批次不再提供「暂停后续」入口：�
       esc: String, fmtTime: String, shortOwner: String, batchStatusLabel: String,
       taskStatsLine: () => '', fmtElapsed: () => '00:00',
       pendingQueueHtml: () => '', runAttemptsHtml: () => '',
+      batchContinueHtml: () => '', // BUG-20260916-002 续接提示词桩（止血，随该单收口正式化）
       confirmQueueBannerHtml: () => '', // REQ-20260914-001 挂起确认横幅桩
       // REQ-20260909-008：运行面板改由共用 taskPaneShell 组织二级页签（此处桩为拼合四分区内容）
       taskPaneShell: (scope, store, panes) => Object.values(panes).join(''),

@@ -2509,7 +2509,7 @@ function startConfirmTask({ dataDir, root, itemId, action, params }) {
     stage: 'verify',
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    timeoutMs: 600_000,
+    timeoutMs: 36_000_000,
     by: 'board',
     result: null,
     error: null,
