@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260916-005 界面演示 — 主分支 main→master 回退（设置页 Git 工作流分区）</title>
+<style>
+  /* 深浅色变量（浅色默认，深色经 [data-theme] 覆盖；跟随系统时由 JS 设置） */
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1f2328; --muted: #6a737d;
+    --border: #d0d7de; --accent: #0969da; --accent-text: #ffffff;
+    --ok: #1a7f37; --ok-bg: #dafbe1; --err: #cf222e; --err-bg: #ffebe9;
+    --warn: #9a6700; --warn-bg: #fff8c5; --code-bg: #f0f2f5;
+  }
+  [data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --accent: #388bfd; --accent-text: #ffffff;
+    --ok: #3fb950; --ok-bg: #12261e; --err: #f85149; --err-bg: #2d1517;
+    --warn: #d29922; --warn-bg: #241d10; --code-bg: #21262d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 48px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0; }
+  h4 { margin: 2px 0 8px; font-size: 15px; }
+  small, .small { font-size: 12.5px; }
+  .muted { color: var(--muted); }
+
+  /* 演示辅助控制条（仅评审用，不属于产品界面） */
+  .demo-bar {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px 16px;
+    align-items: center; padding: 10px 16px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-bar label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  select, .btn {
+    font: inherit; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  .btn { border-radius: 6px; }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .btn.small { padding: 2px 8px; font-size: 12.5px; }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  main { max-width: 880px; margin: 0 auto; padding: 16px; }
+  .demo-note {
+    border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px;
+    margin: 12px 0; background: var(--panel); font-size: 13px;
+  }
+  .demo-note code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+
+  /* 模拟设置页容器与真实分区结构（对应 app.js gitWorkflowAreaHtml） */
+  .page-mock { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--panel); }
+  .page-mock > .mock-label { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .cx-config { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .cx-config ul { margin: 2px 0 4px; padding-left: 18px; }
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+  .notice.err { background: var(--err-bg); color: var(--err); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .ts-block { border-left: 3px solid var(--border); padding-left: 8px; margin: 8px 0; }
+  .dep-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; font-size: 11.5px; border-radius: 10px; padding: 0 8px;
+    border: 1px solid var(--border); color: var(--muted); margin-left: 6px; vertical-align: 1px;
+  }
+  .badge.diff { color: var(--accent); border-color: var(--accent); }
+
+  /* 本地分支模拟面板 */
+  .branches-panel { margin-top: 14px; }
+  .branches-panel pre {
+    margin: 6px 0 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--code-bg); overflow-x: auto; font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .branches-panel .created { color: var(--err); font-weight: 600; }
+  .branches-panel .resolved { color: var(--ok); font-weight: 600; }
+  .legend { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="demo-bar">
+  <strong>演示辅助</strong>
+  <label>行为模式
+    <select id="modeSel">
+      <option value="after">修复后（main 优先，缺失回退 master）</option>
+      <option value="before">修复前（现状：硬编码 main）</option>
+    </select>
+  </label>
+  <label>仓库场景
+    <select id="sceneSel">
+      <option value="master-only">历史仓库：仅 master（本单核心场景）</option>
+      <option value="main-only">新仓库：仅 main</option>
+      <option value="both">main + master 并存</option>
+      <option value="not-repo">非 git 仓库</option>
+    </select>
+  </label>
+  <label>视图状态
+    <select id="viewSel">
+      <option value="ready">正常</option>
+      <option value="loading">加载中</option>
+      <option value="error">加载失败</option>
+    </select>
+  </label>
+  <label>主题
+    <select id="themeSel">
+      <option value="auto">跟随系统</option>
+      <option value="light">浅色</option>
+      <option value="dark">深色</option>
+    </select>
+  </label>
+</header>
+
+<main>
+  <h1>REQ-20260916-005 界面演示 — 主分支 main→master 回退</h1>
+  <p class="muted small">本需求为 Git 工作流兼容性改造，界面影响面集中在<strong>设置页「Git 工作流」分区</strong>（<code>scripts/web/app.js · gitWorkflowAreaHtml</code>）：回退 master 场景下工作流描述、状态行与「初始化 dev 分支」的行为。本页在浏览器本地模拟该分区与本地分支列表，无网络请求。</p>
+  <div class="demo-note">
+    对照要点（切换上方「行为模式」观察差异，场景选「历史仓库：仅 master」）：<br>
+    · <strong>修复前（现状）</strong>：初始化 dev 后，仓库凭空多出指向根提交的补建 <code>main</code> 分支（红色标注），描述固定写「main 分支承载版本构建」。<br>
+    · <strong>修复后（期望）</strong>：不补建 <code>main</code>，主分支解析为 <code>master</code>，描述文案随解析结果展示；状态行新增「主分支」字段（<em>该字段为「待确认」的可选展示，见 README；即使不展示字段，不补建 main 与文案随解析是确定行为</em>）。
+  </div>
+
+  <section class="page-mock">
+    <div class="mock-label">模拟容器：设置页 → 项目设置（以下为「Git 工作流」分区真实结构）</div>
+    <div id="gitArea"><!-- JS 渲染 --></div>
+  </section>
+
+  <section class="branches-panel">
+    <h4>本地分支模拟（<code>git branch</code> 视角，随操作实时刷新）</h4>
+    <pre id="branchList"></pre>
+    <p class="legend" id="branchLegend"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 演示状态 ----------
+  var state = {
+    mode: 'after',          // after=修复后（期望） before=修复前（现状）
+    scene: 'master-only',   // master-only | main-only | both | not-repo
+    view: 'ready',          // ready | loading | error
+    busy: false,            // 「初始化 dev 分支」执行中
+    gwMsg: null,            // 操作反馈文字（role=status）
+    gwMsgKind: null,        // ok | err
+    repo: null,             // 模拟仓库 { branches:[], devCreated:boolean }
+    initDone: false,        // 本场景是否已执行过初始化（幂等）
+  };
+
+  // 场景 → 初始分支集合（分支名 → 说明标记：'' 普通；created=初始化时补建；resolved=回退解析）
+  var SCENES = {
+    'master-only': { branches: ['master'], label: '历史仓库（仅 master，默认分支 master）' },
+    'main-only':   { branches: ['main'],   label: '新仓库（仅 main）' },
+    'both':        { branches: ['main', 'master'], label: 'main 与 master 并存（main 优先）' },
+    'not-repo':    { branches: [],         label: '非 git 仓库' },
+  };
+
+  // ---------- 主分支解析（本单核心规则的演示实现） ----------
+  // 修复后：main 存在取 main；main 不存在且 master 存在取 master；否则 null。
+  // 修复前：恒 'main'（现状硬编码，无论仓库实际分支）。
+  function primaryBranch(branches) {
+    if (state.mode === 'before') return 'main';
+    if (branches.indexOf('main') !== -1) return 'main';
+    if (branches.indexOf('master') !== -1) return 'master';
+    return null; // 两者皆无：维持现状口径（新项目 init -b main / ensureMainBranch 补建），演示不展开
+  }
+
+  function currentBranch() {
+    if (state.scene === 'not-repo') return null;
+    if (state.initDone) return 'dev'; // 初始化后整体切到 dev
+    var b = SCENES[state.scene].branches;
+    return b[b.length - 1]; // 初始停在默认分支（master-only→master，其余→列表末位）
+  }
+
+  function devExists() {
+    return state.scene !== 'not-repo' && state.initDone;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ---------- 分区渲染（结构对齐 app.js gitWorkflowAreaHtml） ----------
+  function workflowDesc(primary) {
+    // 修复前固定 main；修复后随解析结果（回退场景展示 master）
+    var mainName = state.mode === 'before' ? 'main' : (primary || 'main');
+    return '<p class="muted small" style="margin:0 0 2px">采用 dev + ' + esc(mainName)
+      + ' 双分支协作：</p>'
+      + '<ul class="muted small" style="margin:2px 0 4px;padding-left:18px">'
+      + '<li>dev 分支承载需求设计、开发和测试；' + esc(mainName) + ' 分支承载版本构建，发布构建物。</li>'
+      + '<li>每个需求或 Bug 单开发完自动提交到本地（仅本地分支操作，不 push）。</li>'
+      + '</ul>';
+  }
+
+  function renderGitArea() {
+    var el = document.getElementById('gitArea');
+    var primary = state.scene === 'not-repo' ? null : primaryBranch(state.repo.branches);
+
+    if (state.view === 'loading') {
+      el.innerHTML = '<section class="cx-config git-workflow" aria-busy="true">'
+        + '<h4>Git 工作流</h4><p class="muted small">正在获取 Git 状态…</p></section>';
+      return;
+    }
+    if (state.view === 'error') {
+      el.innerHTML = '<section class="cx-config git-workflow"><h4>Git 工作流</h4>'
+        + '<div class="notice err">Git 状态加载失败：模拟网络中断（演示） '
+        + '<button type="button" class="btn small" id="gwRetry">重试</button></div></section>';
+      document.getElementById('gwRetry').addEventListener('click', retryLoad);
+      return;
+    }
+
+    var d = { isRepo: state.scene !== 'not-repo', branch: currentBranch(), devExists: devExists() };
+    var onDev = d.isRepo && d.branch === 'dev' && d.devExists;
+
+    // 状态行：修复前保持现状两段；修复后追加「主分支」字段（待确认的可选展示）
+    var statusLine;
+    if (!d.isRepo) {
+      statusLine = '当前分支：—（不是 git 仓库）';
+    } else {
+      statusLine = '当前分支：<span>' + esc(d.branch || '未知') + '</span>'
+        + ' · dev 分支：<span>' + (d.devExists ? '已存在' : '未创建') + '</span>';
+      if (state.mode === 'after') {
+        statusLine += ' · 主分支：<span>' + esc(primary || '—（待补建）') + '</span>'
+          + (state.scene === 'master-only' ? '<span class="badge diff">main 不存在，已回退 master</span>' : '');
+      }
+    }
+
+    var btn;
+    if (onDev) {
+      btn = '<button type="button" class="btn" id="gwInit" disabled>已在 dev 分支</button>';
+    } else {
+      var dis = (!d.isRepo || state.busy) ? ' disabled' : '';
+      btn = '<button type="button" class="btn primary" id="gwInit"' + dis + '>'
+        + (state.busy ? '正在初始化…' : '初始化 dev 分支') + '</button>';
+    }
+    var notRepo = !d.isRepo
+      ? '<p class="muted small" style="margin:0 0 2px">项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。</p>'
+      : '';
+    var msg = state.gwMsg
+      ? '<span class="small" role="status" style="color:var(' + (state.gwMsgKind === 'err' ? '--err' : '--ok') + ')">' + esc(state.gwMsg) + '</span>'
+      : '<span class="muted small" role="status"></span>';
+
+    el.innerHTML = '<section class="cx-config git-workflow"><h4>Git 工作流</h4>'
+      + workflowDesc(primary) + notRepo
+      + '<div class="ts-block"><p style="margin:2px 0 0">' + statusLine + '</p></div>'
+      + '<div class="dep-toolbar">' + btn + msg + '</div></section>';
+
+    if (d.isRepo && !onDev) {
+      document.getElementById('gwInit').addEventListener('click', initDev);
+    }
+  }
+
+  // ---------- 本地分支面板 ----------
+  function renderBranches() {
+    var pre = document.getElementById('branchList');
+    var legend = document.getElementById('branchLegend');
+    if (state.scene === 'not-repo') {
+      pre.textContent = '（不是 git 仓库：无分支可展示）';
+      legend.textContent = '';
+      return;
+    }
+    var cur = currentBranch();
+    var createdMain = state.repo.createdMain; // 修复前模式补建的 main
+    var lines = [];
+    var order = state.repo.branches.slice().sort(function (a, b) { return a === cur ? -1 : b === cur ? 1 : 0; });
+    for (var i = 0; i < order.length; i++) {
+      var name = order[i];
+      var mark = name === cur ? '* ' : '  ';
+      if (name === 'main' && createdMain) {
+        lines.push(mark + '<span class="created">' + name + '   ← 初始化时凭空补建（指向根提交，与远端 origin/master 不对应）</span>');
+      } else if (name === 'master' && state.mode === 'after' && state.scene === 'master-only') {
+        lines.push(mark + '<span class="resolved">' + name + '  ← 解析为主分支（版本合并 / 发布 / 同步跳过名单均以 master 为准）</span>');
+      } else {
+        lines.push(mark + name);
+      }
+    }
+    pre.innerHTML = lines.join('\n');
+    legend.innerHTML = state.mode === 'before'
+      ? '修复前（现状）：历史仓库初始化 dev 后 <code>ensureMainBranch</code> 在根提交补建 main（<span style="color:var(--err)">红色</span>），后续版本合并 / 发布又都以该补建 main 为目标，与用户主干 master 脱节。'
+      : '修复后（期望）：命中回退（仅 master）时不补建 main、不重命名、不改远端；版本「合并入主分支」、发布冻结 / checkout / --atomic 推送、与远端同步跳过名单均解析为 master（<span style="color:var(--ok)">绿色</span>）。';
+  }
+
+  function render() { renderGitArea(); renderBranches(); }
+
+  // ---------- 交互 ----------
+  function initDev() {
+    if (state.busy) return;
+    state.busy = true;
+    state.gwMsg = '正在创建 dev 分支并切换…（仅本地操作，不 push）';
+    state.gwMsgKind = 'ok';
+    renderGitArea();
+    setTimeout(function () {
+      state.busy = false;
+      state.initDone = true;
+      state.repo.branches.push('dev');
+      // 修复前（现状）：仓库已有提交且 main 缺失 → ensureMainBranch 在根提交补建 main
+      if (state.mode === 'before' && state.repo.branches.indexOf('main') === -1) {
+        state.repo.branches.push('main');
+        state.repo.createdMain = true;
+      }
+      state.gwMsg = state.repo.createdMain
+        ? '已切换到 dev 分支；检测到 main 缺失，已在根提交补建 main（现状行为——本单将收敛）'
+        : '已创建并切换到 dev 分支（主分支：' + primaryBranch(state.repo.branches) + '）';
+      state.gwMsgKind = state.repo.createdMain ? 'err' : 'ok';
+      render();
+    }, 800);
+  }
+
+  function retryLoad() {
+    state.view = 'loading';
+    renderGitArea();
+    setTimeout(function () { state.view = 'ready'; render(); }, 600);
+  }
+
+  function resetScene(keepMessage) {
+    state.repo = { branches: SCENES[state.scene].branches.slice(), createdMain: false };
+    state.initDone = false;
+    state.busy = false;
+    if (!keepMessage) { state.gwMsg = null; state.gwMsgKind = null; }
+  }
+
+  // ---------- 主题 ----------
+  function applyTheme() {
+    var t = document.getElementById('themeSel').value;
+    var dark = t === 'dark' || (t === 'auto' && window.matchMedia
+      && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }
+
+  // ---------- 事件绑定 ----------
+  document.getElementById('modeSel').addEventListener('change', function () {
+    state.mode = this.value; resetScene(); render();
+  });
+  document.getElementById('sceneSel').addEventListener('change', function () {
+    state.scene = this.value; resetScene(); render();
+  });
+  document.getElementById('viewSel').addEventListener('change', function () {
+    state.view = this.value;
+    if (state.view === 'loading') {
+      renderGitArea();
+      setTimeout(function () {
+        if (state.view === 'loading') { state.view = 'ready'; document.getElementById('viewSel').value = 'ready'; render(); }
+      }, 900);
+      return;
+    }
+    render();
+  });
+  document.getElementById('themeSel').addEventListener('change', applyTheme);
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  }
+
+  // ---------- 启动：模拟进入设置页的加载过程 ----------
+  applyTheme();
+  resetScene();
+  state.view = 'loading';
+  render();
+  setTimeout(function () { state.view = 'ready'; render(); }, 700);
+})();
+</script>
+</body>
+</html>
