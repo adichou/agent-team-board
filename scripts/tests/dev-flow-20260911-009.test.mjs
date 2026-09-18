@@ -387,8 +387,8 @@ function runGuard(mode, toolInput, cwd) {
   });
 }
 
-t('D10 hook：看板项目内流程外 git commit 一律拦（REQ-20260911-010：CMT 豁免已移除）；无看板放行；git add 放行', async () => {
-  // 看板项目 → 拦
+t('D10 hook：流程外 git commit 按新口径拦（无 pathspec 一律拦；REQ-20260917-002 起仅条目目录用户数据放行）；无看板放行；git add 放行', async () => {
+  // 看板项目 → 拦（无 pathspec 裸提交，主题含单号也不放）
   const proj = mkTmp();
   core.initData(proj);
   let r = await runGuard('bash', { command: 'git commit -m "feat: 偷偷提交 REQ-20260911-009"' }, proj);
@@ -422,6 +422,16 @@ t('D10 hook：看板项目内流程外 git commit 一律拦（REQ-20260911-010�
   // 看板项目内非提交命令 → 放行
   r = await runGuard('bash', { command: 'git add -A && git status --short' }, proj);
   assert.equal(r.code, 0, 'git add/status 应放行');
+
+  // REQ-20260917-002 新口径抽样回归（完整矩阵见 state-guard-20260917-002.test.mjs）：
+  // 仅条目目录用户数据 + pathspec + 主题含单号 → 放行；源码 pathspec → 拦
+  const itemRel = path.relative(proj, path.join(dataDir, 'data', 'requirements', 'REQ-20260911-009'));
+  r = await runGuard('bash', { command: `git commit -m "doc: 讨论轮 REQ-20260911-009" ${itemRel}/README.md` }, proj);
+  assert.equal(r.code, 0, '条目目录用户数据提交应放行（REQ-20260917-002）');
+  r = await runGuard('bash', { command: `git commit -m "feat: 源码 REQ-20260911-009" scripts/x.mjs` }, proj);
+  assert.equal(r.code, 2, '源码 pathspec 提交仍应拦');
+  r = await runGuard('bash', { command: 'node atb.mjs new req --desc "引用 git commit 已拦截提示原文"' }, proj);
+  assert.equal(r.code, 0, '参数文本中的 git commit 字样不得误拦（REQ-20260917-002）');
 });
 
 // ---------- D11 双向索引 CLI ----------
