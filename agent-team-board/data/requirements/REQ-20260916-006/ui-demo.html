@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260916-006 界面演示 · 待人工确认的文件差异对比优化</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --card: #ffffff; --accent: #0969da; --accent-soft: #ddf4ff;
+    --add-bg: #e6ffec; --add-strong: #acf2bd; --add-fg: #116329;
+    --del-bg: #ffebe9; --del-strong: #ffc0ba; --del-fg: #82071e;
+    --hunk-bg: #ddf4ff; --meta-bg: #f6f8fa; --fold-bg: #f0f6fc;
+    --ch-add: #2da44e; --ch-del: #cf222e;
+    --err-fg: #d1242f; --err-bg: #ffebe9;
+  }
+  [data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+    --card: #161b22; --accent: #4493f8; --accent-soft: #122d42;
+    --add-bg: #12351f; --add-strong: #196c2e; --add-fg: #7ee787;
+    --del-bg: #3d1418; --del-strong: #8a1d24; --del-fg: #ffa198;
+    --hunk-bg: #122d42; --meta-bg: #1c2129; --fold-bg: #11212e;
+    --ch-add: #56d364; --ch-del: #f85149;
+    --err-fg: #ffa198; --err-bg: #3d1418;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .topbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 20px; background: var(--card); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .topbar h1 { font-size: 15px; margin: 0; }
+  .topbar .sub { color: var(--muted); font-size: 12px; }
+  .topbar .spacer { flex: 1; }
+  main { max-width: 1080px; margin: 0 auto; padding: 16px 20px 48px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 18px;
+  }
+  .card > h2 { font-size: 14px; margin: 0 0 6px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--card); color: var(--fg);
+    padding: 4px 12px;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button[aria-pressed="true"], .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  table.files { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.files th, table.files td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+  table.files th { background: var(--meta-bg); }
+  table.files tr.on td { background: var(--accent-soft); }
+  .chg { border-radius: 10px; padding: 0 8px; font-size: 12px; }
+  .chg.k-add { background: var(--add-bg); color: var(--add-fg); }
+  .chg.k-mod { background: var(--hunk-bg); color: var(--accent); }
+  .st-out { color: var(--ch-del); }
+  .st-in { color: var(--muted); }
+  .path { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 4px 12px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .controls .lab { font-size: 12px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; font-size: 12px; }
+  .legend span { border-radius: 10px; padding: 1px 10px; border: 1px solid var(--border); }
+  .lg-add { background: var(--add-bg); color: var(--add-fg); }
+  .lg-del { background: var(--del-bg); color: var(--del-fg); }
+  .lg-hunk { background: var(--hunk-bg); color: var(--accent); }
+  .lg-ctx { background: var(--meta-bg); color: var(--muted); }
+  .lg-ch { border-style: dashed; }
+
+  #diffBox { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  #diffBox .state-pad { padding: 22px 16px; }
+  .cur-diff summary { cursor: pointer; padding: 8px 12px; background: var(--meta-bg); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .cur-diff pre {
+    margin: 0; padding: 10px 12px; overflow: auto; max-height: 420px;
+    font: 12px/1.55 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre; background: var(--card); color: var(--fg);
+  }
+  .diff-scroll { overflow-x: auto; max-height: 460px; overflow-y: auto; }
+  .diff-table { min-width: 100%; width: max-content; font: 12px/1.55 ui-monospace, Menlo, Consolas, monospace; }
+  .dr { display: grid; align-items: stretch; }
+  .dr.u { grid-template-columns: 3.4em 3.4em 1.3em minmax(24em, 1fr); }
+  .dr.s { grid-template-columns: 3em minmax(18em, 1fr) 3em minmax(18em, 1fr); }
+  .dr > .no { text-align: right; padding: 0 6px; color: var(--muted); user-select: none; background: var(--meta-bg); }
+  .dr > .mk { text-align: center; color: var(--muted); user-select: none; }
+  .dr > .c, .dr > .lc, .dr > .rc { white-space: pre; padding: 0 8px; }
+  .dr > .rc { border-left: 1px solid var(--border); }
+  .dr.add { background: var(--add-bg); } .dr.add > .mk { color: var(--add-fg); }
+  .dr.del { background: var(--del-bg); } .dr.del > .mk { color: var(--del-fg); }
+  .dr.ctx > .c, .dr.ctx > .lc, .dr.ctx > .rc { color: var(--muted); }
+  .dr.hunk, .dr.meta, .dr.fold { grid-template-columns: none; display: block; }
+  .dr.hunk { background: var(--hunk-bg); color: var(--accent); padding: 1px 8px; }
+  .dr.meta { background: var(--meta-bg); color: var(--muted); padding: 0 8px; }
+  .dr.meta .minus { color: var(--del-fg); } .dr.meta .plus { color: var(--add-fg); }
+  .dr.fold { background: var(--fold-bg); text-align: center; padding: 2px 0; }
+  .dr.fold button { border: 0; background: transparent; color: var(--accent); font-size: 12px; padding: 2px 12px; text-decoration: underline; }
+  .ch-del { background: var(--del-strong); border-radius: 2px; }
+  .ch-add { background: var(--add-strong); border-radius: 2px; }
+  .want-head {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 6px 10px; background: var(--meta-bg); border-bottom: 1px solid var(--border);
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+  }
+  .want-head .stats { color: var(--muted); font-family: inherit; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .err-text { color: var(--err-fg); background: var(--err-bg); border-radius: 6px; padding: 8px 12px; display: inline-block; }
+  .note-bar { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+  .note-bar b { color: var(--fg); }
+  footer.demo-foot { color: var(--muted); font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h2 style="font-size:15px;margin:0">REQ-20260916-006 界面演示</h2>
+  <span class="sub">待人工确认面板 · 文件差异对比优化（现状 vs 期望对照）</span>
+  <span class="spacer"></span>
+  <button id="themeBtn" type="button">切换深浅色</button>
+</header>
+<main>
+  <section class="card">
+    <h2>1 · 模拟：待人工确认侧拉面板的文件表</h2>
+    <p class="hint">仅复刻与本需求相关的列（文件 / 变更 / 状态 / 差异）。「未提交」行可点击「查看差异」在下方差异查看区加载；「已入库」行显示 —，与现状一致。</p>
+    <table class="files">
+      <thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th></tr></thead>
+      <tbody>
+        <tr data-file="app"><td class="path">scripts/web/app.js</td><td><span class="chg k-mod">修改</span></td><td class="st-out">未提交</td><td><button type="button" data-open="app">查看差异</button></td></tr>
+        <tr data-file="newf"><td class="path">scripts/lib/diff-view.mjs</td><td><span class="chg k-add">新增</span></td><td class="st-out">未提交</td><td><button type="button" data-open="newf">查看差异</button></td></tr>
+        <tr data-file="docs"><td class="path">docs/guide.md</td><td><span class="chg k-mod">修改</span></td><td class="st-in">已入库</td><td><span class="muted small">—</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>2 · 差异查看区（对应现 #confirmDiffBox 位置）</h2>
+    <div class="controls">
+      <span class="lab">渲染对照</span>
+      <span class="seg" id="modeSeg" role="group" aria-label="渲染对照">
+        <button type="button" data-mode="want" aria-pressed="true">期望：高亮渲染</button>
+        <button type="button" data-mode="cur" aria-pressed="false">现状：纯文本（缺陷）</button>
+      </span>
+      <span class="lab">视图（期望模式）</span>
+      <span class="seg" id="viewSeg" role="group" aria-label="视图切换">
+        <button type="button" data-view="unified" aria-pressed="true">统一</button>
+        <button type="button" data-view="split" aria-pressed="false">并排</button>
+      </span>
+      <span class="lab">状态反馈</span>
+      <span class="seg" id="stateSeg" role="group" aria-label="状态切换">
+        <button type="button" data-state="normal" aria-pressed="true">正常</button>
+        <button type="button" data-state="loading" aria-pressed="false">加载中</button>
+        <button type="button" data-state="empty" aria-pressed="false">空差异</button>
+        <button type="button" data-state="error" aria-pressed="false">读取失败</button>
+      </span>
+    </div>
+    <div class="legend" id="legend">
+      <span class="lg-add">+ 新增行</span><span class="lg-del">− 删除行</span>
+      <span class="lg-hunk">@@ hunk 头</span><span class="lg-ctx">未变更上下文（可折叠）</span>
+      <span class="lg-ch">字符级变化片段</span>
+    </div>
+    <div id="diffBox" aria-live="polite"></div>
+    <p class="note-bar" id="noteBar"></p>
+    <footer class="demo-foot">演示数据为内存中的示例 unified diff 文本；真实数据来自 <span class="path">GET /api/confirms/&lt;id&gt;/diff?path=…</span>（只读 git diff HEAD）。本页离线可用，不联网、不证明后端能力。</footer>
+  </section>
+</main>
+
+<script type="text/plain" id="sample-app">diff --git a/scripts/web/app.js b/scripts/web/app.js
+index 4c2f9a1..b7e3d55 100644
+--- a/scripts/web/app.js
++++ b/scripts/web/app.js
+@@ -3729,30 +3729,36 @@ async function loadConfirmDiff(itemId, p) {
+ // 差异查看（BUG-20260915-003）：读取失败显示明确错误 + 重试，不冒充无差异；
+ // 空差异只表示工作区与 Git 基线一致（如已补交入库）。
+ async function loadConfirmDiff(itemId, p) {
+-  const box = document.querySelector('#confirmForm #confirmDiffBox');
+-  box.textContent = '差异读取中…';
+-  const r = await api(`/api/confirms/${encodeURIComponent(itemId)}/diff?path=${encodeURIComponent(p)}`);
+-  box.innerHTML = `<details open class="confirm-diff"><summary>${esc(p)}（工作区 vs Git 基线）</summary><pre>${esc(r.diff)}</pre></details>`;
++  const box = document.querySelector('#confirmForm #confirmDiffBox');
++  if (!box) return;
++  box.innerHTML = '<p class="muted small">正在读取差异…</p>';
++  try {
++    const r = await api(`/api/confirms/${encodeURIComponent(itemId)}/diff?path=${encodeURIComponent(p)}`);
++    box.innerHTML = renderDiffPanel(p, r.diff);
++  } catch (e) {
++    box.innerHTML = `<p class="edit-error-text">差异读取失败：${esc(e.message)}（读取失败不冒充无差异）</p><button type="button" class="btn small" id="confirmDiffRetry">重试</button>`;
++    box.querySelector('#confirmDiffRetry')?.addEventListener('click', () => loadConfirmDiff(itemId, p));
++  }
+ }
+ 
+ // —— 以下为同文件中未变更的长段上下文（用于演示折叠）——
+ function setConfirmPanelView(v) {
+   const box = document.querySelector('#confirmPanel');
+   if (!box) return;
+   box.dataset.view = v;
+   for (const page of box.querySelectorAll('[data-panel-page]')) {
+     page.hidden = page.dataset.panelPage !== v;
+   }
+ }
+ 
+ function confirmClassifyBarHtml(d) {
+   if (!d.error) return '';
+   const kinds = ['rebase', 'lock', 'network', 'unknown'];
+   return `<div class="confirm-classify">${kinds.map((k) => `<label><input type="radio" name="classify" value="${k}">${k}</label>`).join('')}</div>`;
+ }
+ 
+ function fmtTime(t) {
+   return t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '—';
+ }
+ 
+ function updateConfirmScopeSummary(d) {
+   const el = document.querySelector('#confirmScopeSummary');
+   if (el) el.textContent = confirmScopeText(d);
+@@ -3795,3 +3803,3 @@ function renderConfirmForm(d) {
+-        <td>${f.state === '已入库' ? '<span class="muted small">—</span>' : `<button type="button" class="btn small" data-confirm-diff="${esc(f.path)}">查看差异</button>`}</td>
++        <td>${f.state === '已入库' ? '<span class="muted small">—</span>' : `<button type="button" class="btn small diff-view" data-confirm-diff="${esc(f.path)}">查看差异</button>`}</td>
+       </tr>`;
+   });
+ }
+</script>
+
+<script type="text/plain" id="sample-new">（新文件，未纳入版本控制）
+============================================================
+// 差异渲染（纯展示层）：输入为 /api/confirms/<id>/diff 返回的文本
+// 已跟踪文件 = git diff HEAD -- <path> 的原始 stdout
+export function renderDiffPanel(path, text) {
+  const parsed = parseUnified(text);
+  return header(path) + renderHunks(parsed);
+}
+
+function parseUnified(text) {
+  const lines = String(text).split('\n');
+  const out = { meta: [], hunks: [] };
+  let cur = null;
+  for (const raw of lines) {
+    if (raw.startsWith('@@')) {
+      cur = { header: raw, lines: [] };
+      out.hunks.push(cur);
+    } else if (cur === null) {
+      out.meta.push(raw);
+    } else if (raw.startsWith('+')) {
+      cur.lines.push({ type: 'add', text: raw.slice(1) });
+    } else if (raw.startsWith('-')) {
+      cur.lines.push({ type: 'del', text: raw.slice(1) });
+    } else {
+      cur.lines.push({ type: 'ctx', text: raw.replace(/^ /, '') });
+    }
+  }
+  return out;
+}
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ---------- 示例数据 ----------
+  var FILES = {
+    app: { path: 'scripts/web/app.js', isNew: false,
+      data: function () { return $('#sample-app').textContent.replace(/^\n+|\s+$/g, ''); } },
+    newf: { path: 'scripts/lib/diff-view.mjs', isNew: true,
+      data: function () { return $('#sample-new').textContent.replace(/^\n+|\s+$/g, ''); } }
+  };
+
+  var state = { file: 'app', mode: 'want', view: 'unified', status: 'normal', expanded: {} };
+  var loadToken = 0;
+
+  // ---------- 解析 ----------
+  function parseUnified(text) {
+    var lines = String(text).split('\n');
+    var out = { meta: [], hunks: [] };
+    var cur = null, oldNo = 0, newNo = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      if (/^@@/.test(raw)) {
+        var m = raw.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        cur = { header: raw, lines: [] };
+        oldNo = m ? +m[1] : 0; newNo = m ? +m[3] : 0;
+        out.hunks.push(cur);
+      } else if (cur === null) {
+        if (raw !== '') out.meta.push(raw);
+      } else if (raw.charAt(0) === '+') {
+        cur.lines.push({ type: 'add', oldNo: null, newNo: newNo++, text: raw.slice(1) });
+      } else if (raw.charAt(0) === '-') {
+        cur.lines.push({ type: 'del', oldNo: oldNo++, newNo: null, text: raw.slice(1) });
+      } else if (raw.charAt(0) === '\\') {
+        cur.lines.push({ type: 'ctx', oldNo: null, newNo: null, text: raw, note: true });
+      } else {
+        cur.lines.push({ type: 'ctx', oldNo: oldNo++, newNo: newNo++, text: raw.replace(/^ /, '') });
+      }
+    }
+    markCharPairs(out);
+    return out;
+  }
+
+  function parseNewFile(text) {
+    var lines = String(text).split('\n');
+    var meta = [lines[0]];
+    var i = 1;
+    if (/^=+$/.test(lines[i] || '')) i++;
+    var hunk = { header: null, lines: [] };
+    var n = 1;
+    for (; i < lines.length; i++) {
+      hunk.lines.push({ type: 'add', oldNo: null, newNo: n++, text: lines[i] });
+    }
+    return { meta: meta, hunks: [hunk] };
+  }
+
+  // 成对 del/add 行的公共前后缀 → 中段即字符级变化
+  function markCharPairs(parsed) {
+    parsed.hunks.forEach(function (h) {
+      var L = h.lines, i = 0;
+      while (i < L.length) {
+        if (L[i].type === 'del') {
+          var j = i; while (j < L.length && L[j].type === 'del') j++;
+          var k = j; while (k < L.length && L[k].type === 'add') k++;
+          var pairs = Math.min(j - i, k - j);
+          for (var p = 0; p < pairs; p++) {
+            var d = L[i + p].text, a = L[j + p].text;
+            var s = 0;
+            while (s < d.length && s < a.length && d.charAt(s) === a.charAt(s)) s++;
+            var e = 0;
+            while (e < d.length - s && e < a.length - s &&
+              d.charAt(d.length - 1 - e) === a.charAt(a.length - 1 - e)) e++;
+            if (s + e < d.length) L[i + p].hl = { s: s, e: d.length - e };
+            if (s + e < a.length) L[j + p].hl = { s: s, e: a.length - e };
+          }
+          i = k;
+        } else i++;
+      }
+    });
+  }
+
+  // ---------- 渲染 ----------
+  function contentHtml(l, cls) {
+    if (!l.hl) return esc(l.text);
+    var m = l.hl.s, n = l.hl.e;
+    return esc(l.text.slice(0, m)) + '<span class="' + cls + '">' +
+      esc(l.text.slice(m, n)) + '</span>' + esc(l.text.slice(n));
+  }
+
+  function statsOf(parsed) {
+    var add = 0, del = 0;
+    parsed.hunks.forEach(function (h) {
+      h.lines.forEach(function (l) { if (l.type === 'add') add++; else if (l.type === 'del') del++; });
+    });
+    return { add: add, del: del };
+  }
+
+  function metaRow(text) {
+    var cls = /^---/.test(text) ? ' class="minus"' : /^\+\+\+/.test(text) ? ' class="plus"' : '';
+    return '<div class="dr meta"><span' + cls + '>' + esc(text) + '</span></div>';
+  }
+
+  function hunkRow(header) {
+    return '<div class="dr hunk">' + esc(header) + '</div>';
+  }
+
+  function foldRow(key, count) {
+    return '<div class="dr fold"><button type="button" data-unfold="' + key + '">⋯ 展开 ' + count +
+      ' 行未变更上下文 ⋯</button></div>';
+  }
+
+  var KEEP = 3, MIN_FOLD = 8;
+
+  function ctxRuns(lines) {
+    var runs = [], i = 0;
+    while (i < lines.length) {
+      if (lines[i].type === 'ctx') {
+        var j = i; while (j < lines.length && lines[j].type === 'ctx') j++;
+        runs.push({ from: i, to: j });
+        i = j;
+      } else i++;
+    }
+    return runs;
+  }
+
+  function renderUnified(parsed) {
+    var html = '';
+    parsed.meta.forEach(function (m) { html += metaRow(m); });
+    parsed.hunks.forEach(function (h, hi) {
+      html += hunkRow(h.header || '（新文件：全文按新增呈现）');
+      var lines = h.lines;
+      // 折叠段：≥MIN_FOLD 的连续上下文只保留头尾 KEEP 行，中段收进「展开」操作行
+      var foldAfter = {}; // 行号 → 折叠段 key（该行渲染后插入操作行）
+      var skip = {};
+      ctxRuns(lines).forEach(function (run, ri) {
+        var len = run.to - run.from;
+        var key = state.file + ':u:' + hi + ':' + ri;
+        if (len >= MIN_FOLD && !state.expanded[key]) {
+          for (var a = run.from; a < run.to; a++) skip[a] = true;
+          delete skip[run.from]; delete skip[run.from + 1]; delete skip[run.from + 2];
+          delete skip[run.to - 1]; delete skip[run.to - 2]; delete skip[run.to - 3];
+          foldAfter[run.from + KEEP - 1] = { key: key, count: len - KEEP * 2 };
+        }
+      });
+      for (var i = 0; i < lines.length; i++) {
+        if (skip[i]) continue;
+        html += uniRow(lines[i]);
+        if (foldAfter[i]) html += foldRow(foldAfter[i].key, foldAfter[i].count);
+      }
+    });
+    return html;
+  }
+
+  function uniRow(l) {
+    if (l.type === 'ctx' && l.note) {
+      return '<div class="dr meta"><span>' + esc(l.text) + '</span></div>';
+    }
+    var mark = l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' ';
+    var cHtml = l.type === 'add' ? contentHtml(l, 'ch-add')
+      : l.type === 'del' ? contentHtml(l, 'ch-del') : esc(l.text);
+    return '<div class="dr u ' + l.type + '"><span class="no">' + (l.oldNo != null ? l.oldNo : '') +
+      '</span><span class="no">' + (l.newNo != null ? l.newNo : '') + '</span><span class="mk">' + mark +
+      '</span><span class="c">' + cHtml + '</span></div>';
+  }
+
+  function renderSplit(parsed) {
+    var html = '';
+    parsed.meta.forEach(function (m) { html += metaRow(m); });
+    parsed.hunks.forEach(function (h, hi) {
+      html += hunkRow(h.header || '（新文件：全文按新增呈现）');
+      // 行 → 左右两侧行数组
+      var sides = []; // {left, right}：null = 空
+      var L = h.lines, i = 0;
+      while (i < L.length) {
+        var l = L[i];
+        if (l.type === 'ctx') {
+          var j = i; while (j < L.length && L[j].type === 'ctx') j++;
+          for (var a = i; a < j; a++) sides.push({ left: L[a], right: L[a] });
+          i = j;
+        } else if (l.type === 'del') {
+          var j2 = i; while (j2 < L.length && L[j2].type === 'del') j2++;
+          var k2 = j2; while (k2 < L.length && L[k2].type === 'add') k2++;
+          var dels = L.slice(i, j2), adds = L.slice(j2, k2);
+          var pairs = Math.min(dels.length, adds.length);
+          for (var p = 0; p < pairs; p++) sides.push({ left: dels[p], right: adds[p] });
+          for (var q = pairs; q < dels.length; q++) sides.push({ left: dels[q], right: null });
+          for (var r = pairs; r < adds.length; r++) sides.push({ left: null, right: adds[r] });
+          i = k2;
+        } else { // 独立 add
+          sides.push({ left: null, right: l }); i++;
+        }
+      }
+      // 上下文折叠：连续 ctx 成对段 ≥MIN_FOLD 时保留头尾 KEEP 行，中段收进「展开」操作行
+      var idx = 0;
+      while (idx < sides.length) {
+        var row = sides[idx];
+        var isCtxPair = row.left === row.right && row.left && row.left.type === 'ctx';
+        if (isCtxPair) {
+          var e = idx; while (e < sides.length) {
+            var r2 = sides[e];
+            if (!(r2.left === r2.right && r2.left && r2.left.type === 'ctx')) break;
+            e++;
+          }
+          var len2 = e - idx;
+          var key = state.file + ':s:' + hi + ':' + idx;
+          if (len2 >= MIN_FOLD && !state.expanded[key]) {
+            html += splitRow(sides[idx]) + splitRow(sides[idx + 1]) + splitRow(sides[idx + 2]);
+            html += foldRow(key, len2 - KEEP * 2);
+            html += splitRow(sides[e - 3]) + splitRow(sides[e - 2]) + splitRow(sides[e - 1]);
+          } else {
+            for (var z = idx; z < e; z++) html += splitRow(sides[z]);
+          }
+          idx = e;
+        } else {
+          html += splitRow(row);
+          idx++;
+        }
+      }
+    });
+    return html;
+  }
+
+  function splitRow(row) {
+    var left = row.left, right = row.right;
+    // 行类型：单侧删除 / 单侧新增 / 其余（上下文或成对 del+add，行内颜色由单元格背景承担）
+    var cls = left && !right ? 'del' : !left && right ? 'add' : 'ctx';
+    var lHtml = left
+      ? (left.type === 'del' ? contentHtml(left, 'ch-del') : esc(left.text))
+      : '';
+    var rHtml = right
+      ? (right.type === 'add' ? contentHtml(right, 'ch-add') : esc(right.text))
+      : '';
+    var lBg = left && left.type === 'del' ? ' style="background:var(--del-bg)"' :
+      left && left.type === 'add' ? ' style="background:var(--add-bg)"' : '';
+    var rBg = right && right.type === 'add' ? ' style="background:var(--add-bg)"' :
+      right && right.type === 'del' ? ' style="background:var(--del-bg)"' : '';
+    return '<div class="dr s ' + cls + '"><span class="no">' + (left && left.oldNo != null ? left.oldNo : '') +
+      '</span><span class="lc"' + lBg + '>' + lHtml + '</span><span class="no">' +
+      (right && right.newNo != null ? right.newNo : '') + '</span><span class="rc"' + rBg + '>' + rHtml + '</span></div>';
+  }
+
+  // ---------- 状态与主渲染 ----------
+  function render() {
+    var box = $('#diffBox');
+    var note = $('#noteBar');
+    var f = FILES[state.file];
+    syncSegs();
+    if (state.status === 'loading') {
+      box.innerHTML = '<div class="state-pad"><p class="muted small">正在读取差异…</p></div>';
+      note.innerHTML = '加载态：请求期间显示「正在读取差异…」，不残留上一份差异（现状文案沿用）。';
+      return;
+    }
+    if (state.status === 'empty') {
+      box.innerHTML = '<details open class="cur-diff"><summary>' + esc(f.path) +
+        '（工作区 vs Git 基线）</summary><div class="state-pad"><p class="muted">（与 HEAD 一致：无差异——可能已补交入库）</p></div></details>';
+      note.innerHTML = '空差异：语义与现状一致，明确「无差异」而非报错。';
+      return;
+    }
+    if (state.status === 'error') {
+      box.innerHTML = '<div class="state-pad"><p class="err-text">差异读取失败：无法读取 ' + esc(f.path) +
+        ' 与 Git 基线的差异（示例错误文案，非 git 仓库 / 文件不可读 / git 执行失败），请重试</p>' +
+        '<p><button type="button" id="retryBtn">重试</button> <span class="muted small">（读取失败不冒充无差异）</span></p></div>';
+      note.innerHTML = '失败态：显示原因并可重试，重试回到加载态再回正常——现有口径保持。';
+      $('#retryBtn').addEventListener('click', function () { startLoading(); });
+      return;
+    }
+    // normal
+    if (state.mode === 'cur') {
+      box.innerHTML = '<details open class="cur-diff"><summary>' + esc(f.path) +
+        '（工作区 vs Git 基线）</summary><pre>' + esc(f.data()) + '</pre></details>';
+      note.innerHTML = '<b>现状（缺陷）</b>：+/-/@@ 与上下文同样式、无行号、上下文不折叠、新文件全文平铺——' +
+        '改动点需逐行人工比对才能找到。此渲染与 <span class="path">scripts/web/app.js</span> 的 <span class="path">loadConfirmDiff</span> 现实现一致。';
+      return;
+    }
+    var parsed = f.isNew ? parseNewFile(f.data()) : parseUnified(f.data());
+    var st = statsOf(parsed);
+    var body = state.view === 'split' ? renderSplit(parsed) : renderUnified(parsed);
+    box.innerHTML = '<div class="want-head"><span>' + esc(f.path) + '（工作区 vs Git 基线）</span>' +
+      (f.isNew ? '<span class="stats">（新文件，未纳入版本控制）</span>' : '') +
+      '<span class="stats">' + (f.isNew ? '新增 ' + st.add + ' 行' : '新增 ' + st.add + ' 行 / 删除 ' + st.del + ' 行') +
+      ' · ' + (state.view === 'split' ? '并排视图' : '统一视图') + '</span></div>' +
+      '<div class="diff-scroll"><div class="diff-table">' + body + '</div></div>';
+    note.innerHTML = '<b>期望（优化后）</b>：行级着色 + 旧/新行号 + 长段上下文默认折叠（点「展开」就地展开）' +
+      (state.view === 'split' ? ' + 并排左右对齐' : '') + '；成对的删除/新增行内以色块标出字符级变化片段。范围口径见 README「期望优化 / 待确认」。';
+  }
+
+  function startLoading() {
+    var token = ++loadToken;
+    state.status = 'loading';
+    render();
+    setTimeout(function () {
+      if (token !== loadToken) return;
+      state.status = 'normal';
+      render();
+    }, 1100);
+  }
+
+  function syncSegs() {
+    $$('#modeSeg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode));
+    });
+    $$('#viewSeg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.view === state.view));
+      b.disabled = state.mode === 'cur';
+    });
+    $$('#stateSeg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.state === state.status));
+    });
+    $$('.files tbody tr').forEach(function (tr) {
+      tr.classList.toggle('on', tr.dataset.file === state.file);
+    });
+  }
+
+  // ---------- 事件 ----------
+  $$('#modeSeg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.dataset.mode; state.status = 'normal'; render();
+    });
+  });
+  $$('#viewSeg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.view = b.dataset.view; render();
+    });
+  });
+  $$('#stateSeg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var v = b.dataset.state;
+      if (v === 'loading') { startLoading(); return; }
+      state.status = v; render();
+    });
+  });
+  $$('button[data-open]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.file = b.dataset.open;
+      state.expanded = {};
+      state.status = 'normal';
+      render();
+    });
+  });
+  $('#diffBox').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('[data-unfold]') : null;
+    if (!btn) return;
+    state.expanded[btn.dataset.unfold] = true;
+    render();
+  });
+  $('#themeBtn').addEventListener('click', function () {
+    var root = document.documentElement;
+    var cur = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  });
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
