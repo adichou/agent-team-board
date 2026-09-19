@@ -221,7 +221,7 @@ t('S1 核验异步：POST 立即返回任务句柄；运行中 health 毫秒级�
     const { task } = r.json;
     assert.equal(task.itemId, item.id);
     assert.equal(task.status, 'running');
-    assert.equal(task.timeoutMs, 36_000_000, '任务应携带超时上限');
+    assert.equal(task.timeoutMs, 3_600_000, '任务应携带超时上限（BUG-20260918-004：与批次执行同口径，默认 60 分钟）');
     assert.ok(Date.parse(task.startedAt), '任务应携带开始时间');
 
     // 运行中：health 探活毫秒级响应（事件循环未被阻塞）
