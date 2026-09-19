@@ -388,9 +388,10 @@
     </div>
   </div>
 
-  <!-- REQ-20260911-007 待人工决策侧拉面板：条目决策表单（每个决策项一行：问题 + 作答框 + 补充说明），
-       底部「保存决策」；打开先读取决策项（加载态禁用提交、可关闭），保存支持部分作答草稿。
-       头部（标题 / 说明 / ✕）常驻，内容区独立滚动；作答 / 复工仅人工（Agent 调用被钩子拦截） -->
+  <!-- REQ-20260911-007 待人工决策侧拉面板：条目决策表单（每个决策项一行：问题 + 作答框 + 补充说明）。
+       REQ-20260919-002 布局优化：头部（标题 / 说明 / ✕）+ 常驻进度条（未答 x/y 徽标，随保存实时更新）
+       + 内容区独立滚动 + 底部常驻区（消息行 + 关闭 / 保存决策，不随问题列表卷走）；
+       打开先读取决策项（加载态禁用提交、可关闭），保存支持部分作答草稿。作答 / 复工仅人工（Agent 调用被钩子拦截） -->
   <div id="holdPanel" class="side-panel hidden" role="dialog" aria-label="人工决策">
     <header class="side-panel-head">
       <div class="side-panel-title">
@@ -399,6 +400,8 @@
       </div>
       <button type="button" class="icon-btn" id="holdPanelClose" aria-label="关闭人工决策面板" title="关闭（Esc）">✕</button>
     </header>
+    <!-- REQ-20260919-002 常驻作答进度条：未答 x/y 徽标 + 提示文案，仅表单态呈现 -->
+    <div id="holdProgress" class="sp-progress hidden" aria-live="polite"></div>
     <div class="side-panel-body">
       <p id="holdPanelLoading" class="muted edit-loading">正在读取决策项…</p>
       <div id="holdPanelError" class="edit-error hidden" role="alert">
@@ -411,13 +414,16 @@
       <form id="holdForm" class="hidden">
         <p id="holdFormMeta" class="muted small" role="status"></p>
         <div id="holdQuestions" class="hold-questions"></div>
-        <p id="holdPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
-        <footer class="modal-foot">
-          <button type="button" class="btn" id="holdPanelCancel">关闭</button>
-          <button type="submit" class="btn primary" id="holdPanelSave">保存决策</button>
-        </footer>
       </form>
     </div>
+    <!-- REQ-20260919-002 底部常驻：消息行与操作按钮不随问题列表滚动；保存按钮经 form 属性关联 holdForm -->
+    <footer class="sp-foot">
+      <p id="holdPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+      <div class="sp-foot-row">
+        <button type="button" class="btn" id="holdPanelCancel">关闭</button>
+        <button type="submit" class="btn primary" id="holdPanelSave" form="holdForm">保存决策</button>
+      </div>
+    </footer>
   </div>
 
   <!-- REQ-20260914-001 挂起确认侧拉面板（统一入口）：自动提交不完整（待人工确认提交：文件/差异/核验/

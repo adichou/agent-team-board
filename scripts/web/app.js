@@ -305,6 +305,7 @@ const state = {
     sig: '',      // 渲染签名（轮询剪枝，避免打断展开/点击）
     error: null,  // 加载失败原因（错误条 + 重试入口）
     expanded: new Set(), // 卡片「查看进展记录」展开集合（跨轮询保持）
+    answeredOpen: new Map(), // REQ-20260919-002 卡片「已答 n 项」折叠态（itemId → true；纳入签名剪枝）
     events: new Map(),   // itemId → 事件时间线缓存（展开时拉取）
   },
   confirms: {     // REQ-20260914-001 任务页「待人工确认」挂起确认区：/api/confirms 快照
@@ -2899,26 +2900,42 @@ function holdTimelineHtml(h) {
   </div>`;
 }
 
+// REQ-20260919-002 卡片四层分层：元信息行（单号 / 旗标 / 等待时长靠右）→ 标题 → 问题摘要
+//（未答计数徽标 + 未答置前加粗、已答收起为「已答 n 项」可展开）→ 操作区（主次两组）。
+// 交互口径零回退：复工禁用 + tooltip、确认完成、展开记录均保留。
 function holdCardHtml(h) {
-  const qs = h.questions.map((q) => `<li class="${q.answer ? 'answered' : 'open'}" title="${esc(q.answer ? `已答：${q.answer}` : '未答')}">${q.answer ? '✓' : '○'} ${esc(q.text)}</li>`).join('');
   const expanded = state.holds.expanded.has(h.itemId);
+  const foldOpen = state.holds.answeredOpen.get(h.itemId) === true;
+  const openQs = h.questions.filter((q) => !q.answer);
+  const answeredQs = h.questions.filter((q) => q.answer);
   const resumeDisabled = h.unanswered > 0 ? ' disabled' : '';
   const resumeTitle = h.unanswered > 0 ? ` title="尚缺 ${h.unanswered} 项决策，补齐后可复工"` : ' title="决策已齐备：条目回已计划队列，可被 AI 开发重新取单"';
+  const openRows = openQs.map((q) => `<li class="open" title="未答">○ ${esc(q.text)}</li>`).join('');
+  const answeredRows = answeredQs.map((q) => `<li class="answered" title="已答：${esc(q.answer)}">✓ ${esc(q.text)}</li>`).join('');
+  // 已答组折叠行：默认收起控制卡片高度；展开态经 answeredOpen 记录（轮询重绘不丢）
+  const foldRow = answeredQs.length
+    ? `<li class="hold-fold-row"><button type="button" class="hold-fold" data-hold-fold="${esc(h.itemId)}" aria-expanded="${foldOpen}" title="展开 / 收起已答问题"><span class="fold-arrow" aria-hidden="true">${foldOpen ? '▾' : '▸'}</span>已答 ${answeredQs.length} 项</button>${foldOpen ? `<ul class="hold-qs hold-qs-nested">${answeredRows}</ul>` : ''}</li>`
+    : '';
   return `<article class="hold-card" data-hold-id="${esc(h.itemId)}">
     <div class="card-top">
       ${itemIdHtml(h.itemId)}
       <span class="flag hold-flag" title="worker 已声明待人工决策">⚠ 等人工决策</span>
-      <span class="muted small">已等待 ${esc(fmtWait(h.declaredAt))}</span>
+      <span class="muted small hold-wait">已等待 ${esc(fmtWait(h.declaredAt))}</span>
     </div>
     <div class="card-title">${esc(h.title || '（条目已删除）')}</div>
-    <div class="hold-q-summary"><span class="muted small">未答 ${h.unanswered}/${h.total}</span>
-      <ul class="hold-qs">${qs}</ul>
+    <div class="hold-q-summary">
+      <span class="unanswered-count">未答 ${h.unanswered}/${h.total}</span>
+      <ul class="hold-qs">${openRows}${foldRow}</ul>
     </div>
     <div class="hold-acts">
-      <button type="button" class="btn small" data-hold-toggle="${esc(h.itemId)}">${expanded ? '收起记录' : '查看进展记录'}</button>
-      <button type="button" class="btn small primary" data-hold-answer="${esc(h.itemId)}">补决策</button>
-      <button type="button" class="btn small accent" data-hold-resume="${esc(h.itemId)}"${resumeDisabled}${resumeTitle}>复工</button>
-      <button type="button" class="btn small" data-hold-done="${esc(h.itemId)}">确认完成</button>
+      <span class="acts-primary">
+        <button type="button" class="btn small primary" data-hold-answer="${esc(h.itemId)}">补决策</button>
+        <button type="button" class="btn small accent" data-hold-resume="${esc(h.itemId)}"${resumeDisabled}${resumeTitle}>复工</button>
+      </span>
+      <span class="acts-secondary">
+        <button type="button" class="btn small ghost" data-hold-toggle="${esc(h.itemId)}">${expanded ? '收起记录' : '查看进展记录'}</button>
+        <button type="button" class="btn small ghost" data-hold-done="${esc(h.itemId)}">确认完成</button>
+      </span>
     </div>
     ${expanded ? holdTimelineHtml(h) : ''}
   </article>`;
@@ -2951,16 +2968,20 @@ function renderHolds() {
     area.replaceChildren();
     return;
   }
-  const sig = JSON.stringify([items.map((h) => [h.itemId, h.unanswered, h.total, h.declaredAt, h.reason, h.runId, h.questions.map((q) => q.answer || '')]), [...state.holds.expanded]]);
+  const sig = JSON.stringify([items.map((h) => [h.itemId, h.unanswered, h.total, h.declaredAt, h.reason, h.runId, h.questions.map((q) => q.answer || '')]), [...state.holds.expanded], [...state.holds.answeredOpen.keys()].filter((k) => state.holds.answeredOpen.get(k))]);
   if (sig === state.holds.sig && area.dataset.rendered === '1') return;
   state.holds.sig = sig;
   area.dataset.rendered = '1';
   area.classList.remove('hidden');
-  area.innerHTML = `<header class="hold-area-head">⚠ 待人工确认（${items.length}）</header>
+  // REQ-20260919-002 区头强调：文本 + 独立计数徽标；整区面板化描边见 style.css（位置不变）
+  area.innerHTML = `<header class="hold-area-head"><span class="hold-area-title">⚠ 待人工确认</span><span class="hold-count">${items.length}</span></header>
     <p class="muted small hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失</p>
     ${items.map((h) => holdCardHtml(h)).join('')}`;
   for (const btn of area.querySelectorAll('[data-hold-toggle]')) {
     btn.addEventListener('click', () => toggleHoldTimeline(btn.dataset.holdToggle));
+  }
+  for (const btn of area.querySelectorAll('[data-hold-fold]')) {
+    btn.addEventListener('click', () => toggleHoldAnswered(btn.dataset.holdFold));
   }
   for (const btn of area.querySelectorAll('[data-hold-answer]')) {
     btn.addEventListener('click', () => openHoldPanel(btn.dataset.holdAnswer, btn));
@@ -2988,6 +3009,13 @@ async function toggleHoldTimeline(id) {
     toast(`进展记录读取失败：${e.message}`, true);
     return;
   }
+  renderHolds();
+}
+
+// REQ-20260919-002 展开 / 收起卡片「已答 n 项」折叠组：本地态，纳入签名剪枝（重绘不丢）
+function toggleHoldAnswered(id) {
+  if (state.holds.answeredOpen.get(id)) state.holds.answeredOpen.delete(id);
+  else state.holds.answeredOpen.set(id, true);
   renderHolds();
 }
 
@@ -3031,6 +3059,23 @@ function setHoldPanelView(mode) {
   $('#holdPanelLoading').classList.toggle('hidden', mode !== 'loading');
   $('#holdPanelError').classList.toggle('hidden', mode !== 'error');
   $('#holdForm').classList.toggle('hidden', mode !== 'form');
+  // REQ-20260919-002：常驻进度条与保存按钮随表单态显隐（底部区本身常驻不滚动）
+  $('#holdProgress').classList.toggle('hidden', mode !== 'form');
+  $('#holdPanelSave').classList.toggle('hidden', mode !== 'form');
+}
+
+// REQ-20260919-002 常驻作答进度：未答 x/y 徽标 pill（齐备转绿）+ 提示；读取表单与保存成功后更新
+function renderHoldProgress(unanswered, total) {
+  const box = $('#holdProgress');
+  if (!box) return;
+  box.innerHTML = `<span class="hold-progress-pill${unanswered > 0 ? '' : ' done'}">未答 ${unanswered}/${total}</span>
+    <span class="muted small">${unanswered > 0 ? `待答 ${unanswered} 项，填写后保存草稿` : '决策已齐备，可复工'}</span>`;
+}
+
+// REQ-20260919-002 答复框随内容增高（最小 2 行由 CSS 保障；上限 12 行后内部滚动）
+function holdAutoGrow(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = `${ta.scrollHeight}px`;
 }
 
 function holdPanelMsg(text, isErr = false) {
@@ -3069,13 +3114,21 @@ async function loadHoldQuestions() {
     const rows = d.questions.map((q) => `
       <fieldset class="hold-q">
         <legend class="${q.answer ? 'answered' : 'open'}">${q.answer ? '✓' : '○'} ${esc(q.id)} · ${esc(q.text)}</legend>
-        <textarea rows="2" data-hq="${esc(q.id)}" placeholder="人工答复（必填才计入已答）">${esc(q.answer || '')}</textarea>
+        <textarea rows="2" data-hq="${esc(q.id)}" data-hold-grow placeholder="人工答复（必填才计入已答）">${esc(q.answer || '')}</textarea>
         <input type="text" data-hq-note="${esc(q.id)}" placeholder="补充说明（可选）" value="${esc(q.note || '')}">
       </fieldset>`).join('');
     $('#holdQuestions').innerHTML = rows;
     $('#holdFormMeta').textContent = `声明：${fmtTime(d.declaredAt)}（${d.declaredBy || '?'}）${d.reason ? ` · ${d.reason}` : ''} · 未答 ${d.unanswered}/${d.total}`;
+    // REQ-20260919-002：常驻进度 + 答复框自适应高度初始化
+    renderHoldProgress(d.unanswered, d.total);
+    for (const ta of $('#holdQuestions').querySelectorAll('textarea[data-hold-grow]')) {
+      holdAutoGrow(ta);
+      ta.addEventListener('input', () => holdAutoGrow(ta));
+    }
     setHoldPanelView('form');
-    $('#holdQuestions textarea')?.focus();
+    // 聚焦首个未答复框（部分作答后直达缺项；全已答时退回第一个）
+    const firstOpen = [...$('#holdQuestions').querySelectorAll('textarea[data-hq]')].find((ta) => !ta.value.trim());
+    (firstOpen || $('#holdQuestions textarea'))?.focus();
   } catch (e) {
     if (!holdSide.open || token !== holdSide.seq) return;
     $('#holdPanelErrorText').textContent = `决策项读取失败：${e.message}`;
@@ -3114,6 +3167,7 @@ async function saveHoldAnswers() {
       holdPanelMsg('决策已齐备，可复工（回到已计划队列）');
       toast('决策已齐备，可复工');
     }
+    renderHoldProgress(r.unanswered, r.total); // REQ-20260919-002：进度随保存实时更新（与卡片同源）
     await refreshHolds();
     await poll();
   } catch (e) {

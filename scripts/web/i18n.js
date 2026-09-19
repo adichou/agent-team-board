@@ -922,6 +922,9 @@ const EN = {
   '（最旧优先，实时读取；运行中新置计划的条目自动进入队列）': '(oldest first, read live; items planned while running join the queue automatically)',
   // REQ-20260911-007 待人工决策承接（hold）：聚合区 / 决策面板 / 复工 / 确认完成防呆
   '待人工确认': 'Pending human decisions',
+  // REQ-20260919-002 决策界面布局优化：区头强调文本独立成键（计数徽标为纯数字节点不翻译）
+  '⚠ 待人工确认': '⚠ Pending human decisions',
+  '展开 / 收起已答问题': 'Expand / collapse answered questions',
   '⚠ 等人工决策': '⚠ awaiting decisions',
   'worker 已声明待人工决策': 'worker declared this item blocked on human decisions',
   'worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失': 'Items blocked on human decisions are handled here: answer decisions → resume back to the planned queue; the list persists after task rounds end',
@@ -1033,12 +1036,16 @@ const EN_DYNAMIC = {
   '接受 ◇': 'Accept $1',
   '/ 强度 ◇ · 来源 ◇ · 快照时间 ◇◇': '/ effort $1 · source $2 · snapshot $3$4',
   // REQ-20260911-007 待人工决策承接（hold）：聚合区 / 决策面板 / 复工 / 确认完成防呆
-  '⚠ 待人工确认（◇）': '⚠ Pending human decisions ($1)',
+  // REQ-20260919-002：区头改「强调文本 + 计数徽标」两节点后，整串动态键 '⚠ 待人工确认（◇）'
+  // 随 UI 调整同步移除（死键清理）；挂起确认区同形长键（——阻塞队列…）不受影响。
   '已等待 ◇': 'waiting $1',
   '◇ 天': '$1 d',
   '◇ 小时': '$1 h',
   '◇ 分': '$1 min',
   '未答 ◇/◇': 'unanswered $1/$2',
+  // REQ-20260919-002 决策界面布局优化：卡片已答折叠组 / 面板常驻进度提示
+  '已答 ◇ 项': '$1 answered',
+  '待答 ◇ 项，填写后保存草稿': '$1 still to answer — fill them in and save a draft',
   '已答：◇': 'answered: $1',
   '尚缺 ◇ 项决策，补齐后可复工': '$1 decision(s) still missing; answer them to enable resume',
   '待人工决策：◇ 项未答；到列表下方「待人工确认」区补决策并复工': 'Awaiting human decisions: $1 unanswered; answer and resume in the "Pending human decisions" area below the list',

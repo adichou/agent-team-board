@@ -3235,6 +3235,125 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .hold-q input[type='text']:focus { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
 #holdFormMeta { margin: 0 0 10px; }
 
+/* ---------- REQ-20260919-002 决策界面布局优化：聚合区分层 / 面板进度常驻（纯布局层，色值全走主题变量） ---------- */
+/* 聚合区面板化：有内容时整区加底色与边界描边（不改位置，长列表下更易发现，见条目 design 决策 1） */
+.hold-area {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+}
+/* 区头：强调文本 + 独立计数徽标（语义色与卡片旗标一致） */
+.hold-area-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+.hold-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--inprogress);
+  border: 1px solid var(--inprogress);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+/* 卡片分层增量：等待时长靠右弱化；未答计数徽标；问题摘要区徽标自占一行 */
+.hold-wait { margin-left: auto; }
+.unanswered-count {
+  align-self: flex-start;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--inprogress);
+  border: 1px solid var(--inprogress);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.hold-q-summary { gap: 4px; }
+/* 已答折叠行：默认收起为「已答 n 项」，展开后在行内嵌套列表呈现（不丢轮询重绘） */
+.hold-fold-row { list-style: none; margin-left: -18px; }
+.hold-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.hold-fold:hover { color: var(--primary); }
+.hold-fold .fold-arrow { font-size: 11px; }
+.hold-qs-nested { margin: 2px 0 0; padding-left: 18px; }
+/* 操作区主次分组：主操作（补决策 / 复工）在左，次操作（查看进展记录 / 确认完成）弱化靠右 */
+.hold-acts {
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.acts-primary, .acts-secondary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.acts-secondary { padding-left: 10px; border-left: 1px dashed var(--border); }
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.btn.ghost:hover { color: var(--text); }
+/* 决策面板：常驻进度条（头部与内容区之间，不被压缩）+ 底部常驻区（消息 + 操作不随内容滚动） */
+.sp-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.hold-progress-pill {
+  font-weight: 700;
+  color: var(--inprogress);
+  border: 1px solid var(--inprogress);
+  border-radius: 999px;
+  padding: 0 9px;
+}
+.hold-progress-pill.done { color: var(--done); border-color: var(--done); }
+.sp-foot {
+  flex: none;
+  border-top: 1px solid var(--border);
+  padding: 10px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg);
+}
+.sp-foot-row { display: flex; justify-content: flex-end; gap: 10px; }
+.sp-foot .edit-msg { margin: 0; }
+/* 答复框可用性：最小 2 行随内容增高（JS holdAutoGrow），上限 12 行后内部滚动，仍可手动拉伸 */
+.hold-q textarea {
+  min-height: 52px;
+  max-height: 264px;
+  resize: vertical;
+}
+@media (max-width: 640px) {
+  .hold-acts { align-items: flex-start; }
+  .acts-secondary { padding-left: 0; border-left: 0; }
+  .sp-progress { padding: 8px 10px; }
+  .sp-foot { padding: 8px 10px 10px; }
+}
+
 /* ---------- REQ-20260914-001 挂起确认区（任务页置顶卡片 + 统一侧拉面板） ---------- */
 .confirm-area { margin: 0 0 10px; display: grid; gap: 6px; }
 .confirm-area[hidden] { display: none; }
