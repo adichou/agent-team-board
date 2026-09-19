@@ -115,7 +115,7 @@ function mkProject(tag) {
 }
 
 // 条目推进到 in-progress 并把条目目录入库（干净基线）；holdAnswered=true 时补一轮
-// 已作答的待人工决策（decisions.md 随闭环在确认完成时再次刷新——旧机制的可提交内容来源）
+// 已作答的待人工决策（决策留痕 BUG-20260918-003 起落 runtime/holds/decisions/<ID>.md）
 function mkInProgressItem(dataDir, title, { holdAnswered = false, holdOpen = false } = {}) {
   const x = core.createItem(dataDir, { type: 'requirement', title });
   core.setStatus(dataDir, x.id, 'accepted', { by: 'human' });
@@ -157,9 +157,11 @@ t('B1 网页端确认完成不提交：响应/详情无 mgtCommit、HEAD 不变�
     assert.equal(r.json.mgtCommit, undefined, '响应不应再携带 mgtCommit 提交结果');
     assert.equal(headOf(root), headBefore, '不得产生任何 git 提交（含 doc: 人工确认完成）');
     assert.equal(subjectsOn(root, 'HEAD', item.id).length, 0, '提交说明不得出现单号');
-    // 留痕文档留在工作区（随既有通道入库），不遗留账本
+    // 留痕不进 git：BUG-20260918-003 起决策留痕落 runtime（git 忽略域），闭环刷新零工作区变更
     const st = git(root, ['status', '--porcelain', '-uall']).stdout;
-    assert.ok(st.includes(`${item.id}/decisions.md`), '闭环刷新的 decisions.md 应留在工作区待既有通道入库');
+    assert.ok(!st.includes('decisions.md'), '闭环刷新的决策留痕在 runtime，不得出现在 git status');
+    const rtDoc = path.join(dataDir, 'runtime', 'holds', 'decisions', `${item.id}.md`);
+    assert.ok(fs.readFileSync(rtDoc, 'utf8').includes('closed-done'), 'runtime 决策留痕应体现闭环');
     assert.ok(!fs.existsSync(mgtStateFile(dataDir, item.id)), 'runtime/commits/mgt/ 账本不应再写入');
     const detail = await req(port, 'GET', `/api/item/${item.id}`);
     assert.equal(detail.status, 200);

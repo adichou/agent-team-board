@@ -143,8 +143,11 @@ t('C01 预留前已脏且本单修改：挂起当前单 + 暂停队列；doc 已
   assert.ok(st.lastReport, '已上报（reported 回执）——挂起只阻塞队列，不改条目终态');
   void standby;
 
-  // 条目目录留痕文档
-  assert.ok(fs.existsSync(path.join(core.resolveItemDir(dataDir, item.id).dir, 'confirmations.md')), '条目目录应有 confirmations.md 留痕');
+  // 留痕文档（BUG-20260918-003：属应用数据，落 runtime 不进 git）
+  assert.ok(!fs.existsSync(path.join(core.resolveItemDir(dataDir, item.id).dir, 'confirmations.md')), '条目目录不得出现 confirmations.md');
+  const rtDoc = path.join(dataDir, 'runtime', 'confirms', 'confirmations', `${item.id}.md`);
+  assert.ok(fs.existsSync(rtDoc), `留痕应落 runtime：${rtDoc}`);
+  assert.ok(fs.readFileSync(rtDoc, 'utf8').includes(item.id), 'runtime 留痕应含条目编号');
 });
 
 // ---------- C03/C04：统一守卫与持久化 ----------
@@ -343,11 +346,11 @@ t('C02 分组提交失败：保留已成功提交 hash，不重复提交，仍�
     projectRoot: root, fingerprint: rec.fingerprint,
   });
   assert.ok(r.ok, `修复故障后确认应成功：${JSON.stringify(r.reasons || [])}`);
-  // 业务路径恰一次入库；doc 组允许补交留痕文档（confirmations.md 等新文件），同一内容不重复提交
+  // 业务路径恰一次入库；留痕已迁 runtime（BUG-20260918-003 不再产生条目目录留痕），同一内容不重复提交
   const implSubjects = git(root, ['log', '--format=%s', '--', 'scripts/lib/impl.mjs'])
     .stdout.split('\n').filter(Boolean).filter((x) => x.includes(item.id));
   assert.equal(implSubjects.length, 1, `impl.mjs 本单提交应恰一次（得到 ${implSubjects.join(' | ')}）`);
-  assert.ok(logSubjectsOf(root, item.id).filter((s) => s.startsWith('doc: ')).length <= 2, 'doc 组至多两次（初始 + 留痕文档补交）');
+  assert.ok(logSubjectsOf(root, item.id).filter((s) => s.startsWith('doc: ')).length <= 2, 'doc 组至多两次（初始 + 条目文档补交）');
 });
 
 // ---------- C09：纯文档 / 无改动不误挂起 ----------
