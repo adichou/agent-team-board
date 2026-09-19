@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260918-003 界面演示 — confirmations.md 迁 runtime</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #d9dee4; --text: #1f2430; --muted: #66707e;
+    --accent: #2563eb; --ok: #15803d; --ok-bg: #eaf7ef; --warn: #b45309; --warn-bg: #fef3e2;
+    --err: #b91c1c; --err-bg: #fdecec; --chip: #eef1f5; --code-bg: #f0f2f5;
+    --shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --panel: #1d2129; --line: #333a45; --text: #e6e9ee; --muted: #97a1ad;
+      --accent: #60a5fa; --ok: #4ade80; --ok-bg: #14301f; --warn: #fbbf24; --warn-bg: #33270d;
+      --err: #f87171; --err-bg: #3a1717; --chip: #272d38; --code-bg: #141922;
+      --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  header.top {
+    position: sticky; top: 0; z-index: 10; background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  header.top h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header.top .sub { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  .mode-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .mode-switch button { border: 0; background: var(--panel); color: var(--text); padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .mode-switch button.active { background: var(--accent); color: #fff; }
+  button.btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  button.btn:hover { border-color: var(--accent); }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.btn.small { padding: 2px 8px; font-size: 12px; }
+  button.btn:disabled { opacity: .5; cursor: not-allowed; }
+  main { display: grid; grid-template-columns: 300px 1fr 320px; gap: 12px; padding: 12px 16px 24px; max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+  .panel > h2 { font-size: 13px; margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 600; background: var(--chip); }
+  .panel .body { padding: 10px 12px; }
+  .notice { border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 8px 0; border: 1px solid transparent; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .notice.err { background: var(--err-bg); color: var(--err); border-color: color-mix(in srgb, var(--err) 35%, transparent); }
+  .chip { display: inline-block; background: var(--chip); border-radius: 10px; padding: 1px 8px; font-size: 12px; margin: 1px 2px; }
+  .chip.dirty { background: var(--warn-bg); color: var(--warn); }
+  .chip.clean { background: var(--ok-bg); color: var(--ok); }
+  .chip.untracked { background: var(--err-bg); color: var(--err); }
+  code { background: var(--code-bg); border-radius: 4px; padding: 0 4px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; overflow: auto; font-size: 12px; margin: 6px 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  /* 文件树 */
+  .tree { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .tree .dir { color: var(--muted); margin-top: 4px; }
+  .tree .file { display: flex; align-items: center; gap: 6px; padding: 1px 0 1px 14px; }
+  .tree .file.hl { outline: 1px dashed color-mix(in srgb, var(--warn) 60%, transparent); border-radius: 4px; }
+  .tree .file.new span.name { font-weight: 700; }
+  .fade-in { animation: fadeIn .35s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+  .spin {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; vertical-align: -2px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* 看板任务页 */
+  .board-banner { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 8px; }
+  .confirm-area-head { font-weight: 600; font-size: 13px; padding: 6px 0; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+  .card .title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card .cid { color: var(--accent); cursor: pointer; font-weight: 600; }
+  .card .reason { color: var(--muted); font-size: 12.5px; margin: 4px 0; }
+  .card .counts { font-size: 12.5px; margin: 4px 0 8px; }
+  .progress { height: 6px; background: var(--chip); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
+  .progress > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .6s ease; }
+  .stage-text { font-size: 12px; color: var(--muted); }
+  /* 确认面板（模拟侧拉） */
+  .side { border-left: 4px solid var(--accent); }
+  .path-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; font-size: 13px; flex-wrap: wrap; }
+  .path-row .path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; flex: 1; min-width: 180px; }
+  .radio-group { display: inline-flex; gap: 4px; }
+  .radio-group label { background: var(--chip); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+  .radio-group label.picked { background: var(--accent); color: #fff; }
+  /* 管理记录反馈块 */
+  .mgt { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; font-size: 13px; }
+  .mgt .t { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .mgt.committing { border-color: var(--accent); }
+  .mgt.ok { border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: var(--ok-bg); }
+  .mgt.err { border-color: color-mix(in srgb, var(--err) 45%, transparent); background: var(--err-bg); }
+  /* 页签 */
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .tabs .tab { background: var(--chip); border-radius: 6px 6px 0 0; padding: 3px 10px; font-size: 12.5px; cursor: pointer; }
+  .tabs .tab.active { background: var(--accent); color: #fff; }
+  .tabs .tab.confirm-doc { outline: 1.5px dashed var(--warn); }
+  .doc-view { border: 1px solid var(--line); border-radius: 0 0 8px 8px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); min-height: 48px; }
+  /* 留痕日志 */
+  .log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; max-height: 300px; overflow: auto; }
+  .log .entry { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .log .entry .op { color: var(--accent); }
+  .log .entry.git-dirty { color: var(--warn); }
+  .log .entry.git-clean { color: var(--ok); }
+  .log .empty { color: var(--muted); }
+  /* toast */
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 99; }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow); font-size: 13px; max-width: 380px; }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.err { border-left-color: var(--err); }
+  .switch-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+  .hidden { display: none !important; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 20px; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>BUG-20260918-003 界面演示</h1>
+  <span class="sub">确认留痕 confirmations.md 迁 runtime · 对照「当前（缺陷）」与「修复后」</span>
+  <span class="spacer"></span>
+  <div class="mode-switch" role="tablist" aria-label="模式切换">
+    <button id="modeCur" class="active" type="button">当前（缺陷）</button>
+    <button id="modeFix" type="button">修复后</button>
+  </div>
+  <button class="btn" id="resetBtn" type="button">重置演示</button>
+</header>
+
+<main>
+  <!-- 左：文件布局与 git 状态 -->
+  <section class="panel" aria-label="文件布局与 git 状态">
+    <h2>文件布局 · git 状态</h2>
+    <div class="body">
+      <div id="trackStat" style="font-size:12.5px;margin-bottom:6px;"></div>
+      <div class="tree" id="tree"></div>
+      <pre id="gitStatus" aria-label="git status 模拟输出"></pre>
+      <div class="switch-row"><input type="checkbox" id="simFailCommit"> <label for="simFailCommit">模拟「管理记录提交」失败（触发重试）</label></div>
+      <div class="switch-row"><input type="checkbox" id="simFailTest"> <label for="simFailTest">模拟核验测试失败（触发核验未通过）</label></div>
+    </div>
+  </section>
+
+  <!-- 中：Status Board 任务页 -->
+  <section class="panel" aria-label="任务页待人工确认">
+    <h2>Status Board 任务页 · 「待人工确认」</h2>
+    <div class="body">
+      <div id="queueBanner" class="board-banner hidden"></div>
+      <div id="confirmArea"></div>
+      <div id="confirmPanel" class="card side hidden" aria-label="确认面板"></div>
+      <div id="doneArea" class="hidden">
+        <div class="notice ok" id="doneNotice"></div>
+        <button class="btn primary" id="confirmDoneBtn" type="button">确认完成（人工验收）</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右：条目详情 / 管理记录提交 / 留痕日志 -->
+  <section class="panel" aria-label="条目详情与留痕">
+    <h2>条目详情 · 管理记录提交 · 留痕写入</h2>
+    <div class="body">
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:4px;">条目详情抽屉文档页签</div>
+      <div class="tabs" id="docTabs"></div>
+      <div class="doc-view" id="docView">选择页签查看文档说明。</div>
+      <div id="mgtArea"></div>
+      <div style="font-size:12.5px;color:var(--muted);margin:10px 0 2px;">留痕写入日志（confirmations.md 落盘位置）</div>
+      <div class="log" id="traceLog"><div class="entry empty">（暂无操作）</div></div>
+    </div>
+  </section>
+</main>
+
+<footer>本页为 BUG-20260918-003 的界面演示（当前缺陷 vs 修复后对照）。单文件、无外网依赖；数据为模拟，路径与流程依据 scripts/lib/confirm-states.mjs / confirm-store.mjs / mgt-commit.mjs 的实际行为。</footer>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ---------- 演示状态 ---------- */
+const ITEM = 'BUG-20260918-003';
+let mode = 'cur';            // 'cur' = 当前（缺陷） | 'fix' = 修复后
+let stage = 'pending';       // pending -> verified -> resolved -> done
+let busy = false;            // 异步任务运行中
+let attrChoice = null;       // 归属待确认路径的选择：'include' | 'exclude'
+let confirmDocDirty = false; // 条目目录 confirmations.md 是否为未提交变更（当前模式）
+let entryCommits = 0;        // 针对本条目留痕的 doc 提交次数
+
+const paths = {
+  own: 'scripts/lib/foo.mjs',
+  uncertain: 'scripts/lib/shared-util.mjs',
+};
+
+/* ---------- 工具 ---------- */
+const $ = (id) => document.getElementById(id);
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function toast(text, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (kind || '');
+  el.textContent = text;
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+/* ---------- 左栏：文件树与 git ---------- */
+function tracePath() {
+  return mode === 'cur'
+    ? `agent-team-board/data/bugs/${ITEM}/confirmations.md`
+    : 'agent-team-board/runtime/confirms/confirmations/' + ITEM + '.md';
+}
+function renderTree() {
+  const curInData = mode === 'cur';
+  const dirtyChip = confirmDocDirty
+    ? '<span class="chip dirty">工作区已修改未提交</span>'
+    : '<span class="chip clean">已入库</span>';
+  const tree = `
+<div class="dir">agent-team-board/data/bugs/${ITEM}/ <span class="chip">进 git</span></div>
+<div class="file">📄 <span class="name">README.md</span> <span class="chip clean">已入库</span></div>
+<div class="file">📄 <span class="name">design.md</span> <span class="chip clean">已入库</span></div>
+<div class="file">📄 <span class="name">ui-demo.html</span> <span class="chip clean">已入库</span></div>
+${curInData
+  ? `<div class="file hl fade-in ${confirmDocDirty ? 'dirty-new' : ''}">📝 <span class="name">confirmations.md</span> ${stage === 'pending' && !confirmDocDirty ? '<span class="chip untracked">未跟踪</span>' : dirtyChip}</div>`
+  : '<div class="file" style="opacity:.45">🗑 confirmations.md（已迁出，不再生成）</div>'}
+<div class="dir" style="margin-top:8px">agent-team-board/runtime/confirms/ <span class="chip">git 忽略</span></div>
+<div class="file">🗂 confirms.json <span class="chip">事实源</span></div>
+<div class="file">🗂 tasks.json</div>
+${mode === 'fix' ? `<div class="file hl fade-in">📝 <span class="name">${ITEM}.md</span> <span class="chip">本地留存</span></div>` : ''}`;
+  $('tree').innerHTML = tree;
+  $('trackStat').innerHTML = mode === 'cur'
+    ? `git 追踪的条目留痕：<b>${6 + (stage !== 'pending' || confirmDocDirty ? 1 : 1)}</b> 个（现存 6 + 本条目）`
+    : 'git 追踪的条目留痕：<b>0</b> 个（全部留存于 runtime/，历史文件已出库迁移）';
+  renderGitStatus();
+}
+function renderGitStatus() {
+  const lines = [];
+  if (mode === 'cur') {
+    if (stage === 'pending') {
+      lines.push(confirmDocDirty ? ' M ' + tracePath() : '?? ' + tracePath());
+    } else {
+      lines.push(confirmDocDirty ? ' M ' + tracePath() : '    ' + tracePath() + '   （已随 doc 提交入库）');
+    }
+    if (stage === 'pending') lines.push(' M scripts/lib/foo.mjs（候选路径，未入库）');
+  } else {
+    lines.push('（工作区干净：留痕在 runtime/，git 不感知）');
+    if (stage === 'pending') lines.push(' M scripts/lib/foo.mjs（候选路径，未入库）');
+  }
+  $('gitStatus').textContent = '$ git status --porcelain\n' + lines.join('\n');
+}
+
+/* ---------- 留痕日志 ---------- */
+function logTrace(op, note) {
+  const log = $('traceLog');
+  if (log.querySelector('.empty')) log.replaceChildren();
+  const entry = document.createElement('div');
+  const dirty = mode === 'cur';
+  entry.className = 'entry fade-in ' + (dirty ? 'git-dirty' : 'git-clean');
+  entry.innerHTML = `<span class="op">[${op}]</span> 重写 ${esc(tracePath())}${dirty ? ' → data/ 变更，git 出现未提交改动' : ' → runtime/，git 无感知'}${note ? '<br>　' + esc(note) : ''}`;
+  log.prepend(entry);
+}
+
+/* ---------- 中栏：确认区 ---------- */
+function renderQueueBanner() {
+  const b = $('queueBanner');
+  if (stage === 'pending') {
+    b.classList.remove('hidden');
+    b.innerHTML = `⚠ AI 开发队列：已暂停 · 阻塞于 <b>${ITEM}</b> · 待人工确认提交（自动提交不完整：存在归属不明或暂扣待人工路径）`;
+  } else {
+    b.classList.add('hidden');
+  }
+}
+function renderConfirmArea() {
+  const area = $('confirmArea');
+  if (stage !== 'pending') {
+    area.innerHTML = '';
+    return;
+  }
+  area.innerHTML = `
+<div class="confirm-area-head">⚠ 待人工确认（1）——阻塞队列，确认后才继续</div>
+<div class="card fade-in" id="confirmCard">
+  <div class="title-row">
+    <span class="cid">${ITEM}</span>
+    <span class="chip">待人工确认提交</span>
+    <span class="chip">第 1 轮</span>
+    <span class="spacer"></span>
+    <span class="chip ${mode === 'cur' ? 'dirty' : 'clean'}" id="traceChip"></span>
+  </div>
+  <div class="reason">自动提交不完整：存在归属不明或暂扣待人工路径 · 声明于 2026-09-19 10:00（run-demo）</div>
+  <div class="counts">已提交 2 组 · 待人工 2 个候选路径（本单可归属 1 · 归属待确认 1）· 留痕文件：<code>${esc(mode === 'cur' ? '条目目录 confirmations.md' : 'runtime/confirms/')}</code></div>
+  <div id="verifyResult"></div>
+  <div class="progress hidden" id="taskBar"><i></i></div>
+  <div class="stage-text hidden" id="stageText"></div>
+  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+    <button class="btn" id="verifyBtn" type="button"${busy ? ' disabled' : ''}>重新核验</button>
+    <button class="btn" id="keepBtn" type="button"${busy ? ' disabled' : ''}>保持挂起</button>
+    <button class="btn primary" id="openPanelBtn" type="button"${busy ? ' disabled' : ''}>查看详情 / 确认并继续</button>
+  </div>
+</div>`;
+  $('traceChip').textContent = mode === 'cur' ? '留痕在 data/（进 git）' : '留痕在 runtime/';
+  $('verifyBtn').onclick = () => runVerify();
+  $('keepBtn').onclick = () => {
+    if (busy) return;
+    logTrace('kept', '保持挂起：现场与队列暂停保留');
+    toast('已记录处理说明，保持挂起');
+  };
+  $('openPanelBtn').onclick = () => renderConfirmPanel(true);
+}
+function setVerifyResult(ok, reasons) {
+  const el = $('verifyResult');
+  if (!el) return;
+  if (ok == null) { el.innerHTML = ''; return; }
+  el.innerHTML = ok
+    ? `<div class="notice ok">最近核验：通过（指纹基线刷新为当前内容${mode === 'cur' ? '——注：核验事件刚又重写了一次留痕文件' : ''}）</div>`
+    : `<div class="notice err">最近核验：未通过<ul style="margin:4px 0 0 18px;">${reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>`;
+}
+
+/* 确认面板（侧拉形态简化为内嵌卡片） */
+function renderConfirmPanel(show) {
+  const p = $('confirmPanel');
+  if (!show) { p.classList.add('hidden'); return; }
+  const canConfirm = attrChoice && !busy;
+  p.classList.remove('hidden');
+  p.innerHTML = `
+<div class="title-row"><b>确认面板 · ${ITEM}</b><span class="chip">提交核验型</span></div>
+<div class="path-row"><span class="path">${esc(paths.own)}</span><span class="chip">本单可归属 · 将随确认补交</span></div>
+<div class="path-row"><span class="path">${esc(paths.uncertain)}</span><span class="chip">归属待确认</span>
+  <span class="radio-group" role="radiogroup" aria-label="归属选择">
+    <label class="${attrChoice === 'include' ? 'picked' : ''}" data-attr="include">计入本次补交</label>
+    <label class="${attrChoice === 'exclude' ? 'picked' : ''}" data-attr="exclude">排除</label>
+  </span>
+</div>
+<div class="notice warn" style="font-size:12px;">${mode === 'cur'
+    ? '当前（缺陷）：确认 / 核验每步都会重写条目目录 confirmations.md 并产生新的未提交变更——「候选路径永远差一个未入库」。'
+    : '修复后：留痕写 runtime/，确认补交只涉及业务路径，git 收口一次到位。'}</div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <button class="btn primary" id="confirmBtn" type="button"${canConfirm ? '' : ' disabled'}>确认并继续</button>
+  <span class="stage-text">${attrChoice ? '' : '请先对归属待确认路径逐项选择（计入 / 排除）'}</span>
+  <span class="spacer"></span>
+  <button class="btn small" id="closePanelBtn" type="button">收起</button>
+</div>
+<div class="progress hidden" id="taskBar2"><i></i></div>
+<div class="stage-text" id="stageText2"></div>`;
+  for (const lab of p.querySelectorAll('[data-attr]')) {
+    lab.onclick = () => { attrChoice = lab.dataset.attr; renderConfirmPanel(true); };
+  }
+  $('closePanelBtn').onclick = () => renderConfirmPanel(false);
+  $('confirmBtn').onclick = () => runConfirmContinue();
+}
+
+/* ---------- 异步任务：重新核验（核验 → 测试 两阶段） ---------- */
+async function runTask(barId, textId, stages) {
+  const bar = $(barId), text = $(textId);
+  bar.classList.remove('hidden'); text.classList.remove('hidden');
+  for (const s of stages) {
+    text.innerHTML = '<span class="spin"></span> ' + esc(s.label);
+    bar.firstElementChild.style.width = s.pct + '%';
+    await sleep(s.ms);
+  }
+  bar.firstElementChild.style.width = '100%';
+  bar.classList.add('hidden'); text.classList.add('hidden');
+}
+async function runVerify() {
+  if (busy) return;
+  busy = true; renderConfirmArea();
+  await runTask('taskBar', 'stageText', [
+    { label: '重新核验中（重算候选范围与指纹）…', pct: 45, ms: 900 },
+    { label: '运行项目测试（npm test）…', pct: 85, ms: 1200 },
+  ]);
+  busy = false;
+  const failTest = $('simFailTest').checked;
+  if (failTest) {
+    setVerifyResult(false, ['仍有 1 个候选路径未入库：scripts/lib/shared-util.mjs（归属待确认）——需在面板逐项选择', '测试未通过（npm test 退出码 1）：提交后内容验证失败']);
+    logTrace('verified', '核验未通过（指纹基线仍刷新为当前内容）');
+    toast('核验未通过：见卡片原因列表', 'err');
+  } else {
+    setVerifyResult(true, null);
+    logTrace('verified', '核验通过；指纹基线在留痕写入之后刷新（避开自身污染）');
+    toast('✓ 核验通过：候选范围与指纹已刷新');
+  }
+  stage = 'verified';
+  renderConfirmArea();
+  setVerifyResult(failTest ? false : true, failTest ? ['仍有 1 个候选路径未入库：scripts/lib/shared-util.mjs（归属待确认）'] : null);
+  if (attrChoice) renderConfirmPanel(!$('confirmPanel').classList.contains('hidden'));
+}
+
+/* ---------- 异步任务：确认并继续（补交 → 测试 → 恢复） ---------- */
+async function runConfirmContinue() {
+  if (busy || !attrChoice) return;
+  busy = true;
+  renderConfirmPanel(true);
+  $('confirmBtn').disabled = true;
+  await runTask('taskBar2', 'stageText2', [
+    { label: '授权补交中（本单可归属 + 计入路径，路径限定提交）…', pct: 50, ms: 1100 },
+    { label: '完整性 + 测试复验（npm test）…', pct: 85, ms: 1000 },
+    { label: '恢复队列…', pct: 100, ms: 400 },
+  ]);
+  busy = false;
+  stage = 'resolved';
+  logTrace('confirmed', `确认并继续：1 组补交（${attrChoice === 'include' ? '含归属待确认路径' : '排除项保留工作区'}），核验通过，恢复队列`);
+  confirmDocDirty = true; // 确认事件又重写了留痕（当前模式=条目目录变脏；修复模式=runtime 内部更新）
+  renderConfirmPanel(false);
+  renderConfirmArea();
+  renderQueueBanner();
+  renderTree();
+  $('doneArea').classList.remove('hidden');
+  $('doneNotice').innerHTML = `✓ ${ITEM} 提交阻塞已解除，开发队列恢复。<b>条目保持 in-progress</b>——「确认并继续」不代替需求验收，最终完成仍需人工「确认完成」。${mode === 'cur' ? '注意：条目目录 confirmations.md 刚被确认事件重写，又成为未提交变更。' : ''}`;
+  toast('✓ 确认并继续成功：队列已恢复');
+}
+
+/* ---------- 确认完成 + 管理记录提交（右栏） ---------- */
+function renderDocTabs() {
+  const tabs = $('docTabs');
+  const base = ['README.md', 'design.md', 'test-cases.md', 'ui-demo.html'];
+  const docs = mode === 'cur' ? [...base, 'confirmations.md'] : base;
+  tabs.innerHTML = docs.map((d, i) =>
+    `<span class="tab${i === 0 ? ' active' : ''}${d === 'confirmations.md' ? ' confirm-doc' : ''}" data-doc="${esc(d)}">${esc(d)}</span>`).join('');
+  for (const t of tabs.querySelectorAll('.tab')) {
+    t.onclick = () => {
+      for (const x of tabs.querySelectorAll('.tab')) x.classList.remove('active');
+      t.classList.add('active');
+      renderDocView(t.dataset.doc);
+    };
+  }
+  renderDocView(docs[0]);
+}
+function renderDocView(doc) {
+  const v = $('docView');
+  if (doc === 'confirmations.md') {
+    v.innerHTML = `<b style="color:var(--warn)">现状（缺陷）：</b>confirmations.md 位于条目目录，被 orderedDocs() 扫描为条目文档页签、并进入全局搜索。内容为机制维护的人读留痕（「请勿手改」）——修复后该页签随文件迁 runtime/ 一并消失。`;
+  } else if (doc === 'ui-demo.html') {
+    v.textContent = '本演示文件：对照展示缺陷现象与修复后状态。';
+  } else {
+    v.textContent = `《${doc}》——条目既有文档（内容略）。`;
+  }
+}
+async function runConfirmDone() {
+  if (busy) return;
+  busy = true;
+  const area = $('mgtArea');
+  $('confirmDoneBtn').disabled = true;
+  if (mode === 'cur') {
+    area.innerHTML = `<div class="mgt committing fade-in"><div class="t"><span class="spin"></span> 管理记录提交：提交中…</div><div style="color:var(--muted);font-size:12px;">正在提交本次操作刷新的管理记录（confirmations.md，路径限定提交）…</div></div>`;
+    await sleep(1300);
+    entryCommits += 1;
+    if ($('simFailCommit').checked) {
+      area.innerHTML = `<div class="mgt err fade-in"><div class="t">⚠ 操作已成功，管理记录提交失败</div>
+<div>原因：git commit 失败（模拟：index.lock 占用）</div>
+<div style="color:var(--muted);font-size:12px;">管理文件已保留在工作区：排查原因后点「重试提交」补交；已成功的业务操作不受影响。</div>
+<div style="margin-top:6px;"><button class="btn primary small" id="mgtRetry" type="button">重试提交</button></div></div>`;
+      $('mgtRetry').onclick = () => retryMgt();
+      toast('⚠ 确认完成成功，但管理记录（confirmations.md）提交失败', 'err');
+    } else {
+      finishMgtOk();
+      toast('✓ 确认完成：管理记录已提交');
+    }
+  } else {
+    area.innerHTML = `<div class="mgt committing fade-in"><div class="t"><span class="spin"></span> 确认完成…</div></div>`;
+    await sleep(900);
+    area.innerHTML = `<div class="mgt ok fade-in"><div class="t">✓ 管理记录提交：已同步 · 无新变化</div><div style="font-size:12px;color:var(--muted);">confirmations.md / decisions.md 已属 runtime/ 应用数据，不再是入库管理记录——确认完成即闭环，无需补交与重试。</div></div>`;
+    toast('✓ 确认完成：无需留痕入库');
+  }
+  busy = false;
+  $('confirmDoneBtn').disabled = false;
+}
+async function retryMgt() {
+  const area = $('mgtArea');
+  area.innerHTML = `<div class="mgt committing"><div class="t"><span class="spin"></span> 重试提交中（只补交管理记录，不重放确认完成）…</div></div>`;
+  await sleep(1100);
+  entryCommits += 1;
+  finishMgtOk(true);
+  toast('✓ 管理记录补交成功');
+}
+function finishMgtOk(isRetry) {
+  const area = $('mgtArea');
+  const hash = 'd' + Math.random().toString(16).slice(2, 9);
+  confirmDocDirty = false;
+  area.innerHTML = `<div class="mgt ok fade-in"><div class="t">✓ 管理记录提交：${isRetry ? '补交成功' : '已提交'} · <code>${hash}</code></div>
+<div style="font-size:12px;color:var(--muted);">doc: 人工确认完成 ${ITEM}（本条目留痕第 ${entryCommits} 次入库）——修复后此类提交不再产生。</div></div>`;
+  renderTree();
+}
+
+/* ---------- 模式切换 / 重置 ---------- */
+function resetDemo(keepMode) {
+  stage = 'pending';
+  busy = false;
+  attrChoice = null;
+  confirmDocDirty = false;
+  entryCommits = 0;
+  $('doneArea').classList.add('hidden');
+  $('confirmPanel').classList.add('hidden');
+  $('mgtArea').innerHTML = '<div style="color:var(--muted);font-size:12.5px;">（确认完成后此处显示「管理记录提交」反馈）</div>';
+  $('traceLog').innerHTML = '<div class="entry empty">（暂无操作）</div>';
+  if (!keepMode) {
+    mode = 'cur';
+    $('modeCur').classList.add('active');
+    $('modeFix').classList.remove('active');
+  }
+  renderAll();
+  logTrace('declared', '声明挂起：自动提交不完整（首次写入留痕文件）');
+}
+function renderAll() {
+  renderTree();
+  renderQueueBanner();
+  renderConfirmArea();
+  renderDocTabs();
+}
+$('modeCur').onclick = () => { mode = 'cur'; $('modeCur').classList.add('active'); $('modeFix').classList.remove('active'); resetDemo(true); toast('切换到「当前（缺陷）」模式：留痕写条目目录，随 data/ 进 git'); };
+$('modeFix').onclick = () => { mode = 'fix'; $('modeFix').classList.add('active'); $('modeCur').classList.remove('active'); resetDemo(true); toast('切换到「修复后」模式：留痕写 runtime/，git 不再追踪'); };
+$('resetBtn').onclick = () => { resetDemo(false); toast('演示已重置'); };
+$('confirmDoneBtn').onclick = () => runConfirmDone();
+
+resetDemo(false);
+</script>
+</body>
+</html>
