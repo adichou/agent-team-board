@@ -2,7 +2,8 @@
 // 声明（declareHold，worker）→ 持久呈现（listHolds / holdDetail，CLI + Status Board）
 // → 人工决策（answerHold，人工专属——state-guard 拦 Agent）→ 复工（resumeHold，人工专属）/ 作废（cancelHold）。
 // 条目状态机不动：hold 全程条目保持 in-progress；复工经 core.resumeItemToPlanned 专用通路回 planned。
-// 事实源：holds/holds.json（hold-states）+ 条目目录 decisions.md（人读留痕，随代码进 git）。
+// 事实源：holds/holds.json（hold-states）+ runtime/holds/decisions/<ID>.md（人读留痕，
+// BUG-20260918-003 起属应用数据不进 git）。
 // 与 blocked/failed 回执正交：worker 声明后仍按既有协议交 blocked 回执，历史语义零改动。
 
 import {
@@ -68,7 +69,7 @@ export function declareHold(dataDir, itemId, { questions = [], reason = '', runI
     events: [event('declared', who, reason || undefined)],
   };
   saveHoldRecord(dataDir, itemId, rec);
-  renderDecisionsDoc(dataDir, itemId, dir, st.title);
+  renderDecisionsDoc(dataDir, itemId, st.title);
   return saveHoldRecord(dataDir, itemId, rec);
 }
 
@@ -100,7 +101,7 @@ export function answerHold(dataDir, itemId, { answers = [], by } = {}) {
     rec.events.push(event('answered', who, `${q.id} 已答`));
   }
   saveHoldRecord(dataDir, itemId, rec);
-  renderDecisionsDoc(dataDir, itemId, dir, st.title);
+  renderDecisionsDoc(dataDir, itemId, st.title);
   const unanswered = unansweredCount(rec);
   return {
     ok: true,
@@ -132,7 +133,7 @@ export function resumeHold(dataDir, itemId, { by } = {}) {
   rec.state = 'resumed';
   rec.events.push(event('resumed', who, '决策补齐，复工回已计划（planned）'));
   saveHoldRecord(dataDir, itemId, rec);
-  renderDecisionsDoc(dataDir, itemId, dir, st.title);
+  renderDecisionsDoc(dataDir, itemId, st.title);
   return { ok: true, itemId, status: st.status, runId: rec.runId || null };
 }
 
@@ -148,7 +149,7 @@ export function cancelHold(dataDir, itemId, { note = '', by } = {}) {
   rec.state = 'cancelled';
   rec.events.push(event('cancelled', who, note || '人工作废声明（条目状态不变，按其他方式处理）'));
   saveHoldRecord(dataDir, itemId, rec);
-  renderDecisionsDoc(dataDir, itemId, dir, readStatus(dir).title);
+  renderDecisionsDoc(dataDir, itemId, readStatus(dir).title);
   return { ok: true, itemId, state: rec.state };
 }
 

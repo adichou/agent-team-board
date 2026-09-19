@@ -2891,7 +2891,7 @@ function holdTimelineHtml(h) {
     const label = HOLD_EVENT_LABEL[e.kind] || e.kind;
     return `<li>${esc(fmtTime(e.at))} · ${esc(label)}${e.by ? `（${esc(e.by)}）` : ''}</li>`;
   }).join('');
-  const runLine = h.runId ? `<p class="hold-run">运行：${esc(h.runId)}（详情见 agent-team-board/runtime/dispatch/runs/，决策留痕见条目目录 decisions.md）</p>` : '<p class="hold-run">决策留痕见条目目录 decisions.md</p>';
+  const runLine = h.runId ? `<p class="hold-run">运行：${esc(h.runId)}（详情见 agent-team-board/runtime/dispatch/runs/，决策留痕见 agent-team-board/runtime/holds/decisions/）</p>` : '<p class="hold-run">决策留痕见 agent-team-board/runtime/holds/decisions/</p>';
   return `<div class="hold-timeline" data-hold-timeline="${esc(h.itemId)}">
     ${h.reason ? `<p class="hold-reason">受阻原因：${esc(h.reason)}</p>` : ''}
     ${runLine}
@@ -3011,7 +3011,7 @@ async function confirmDoneGuard(id) {
   if (!n) return { proceed: true, force: false };
   const ok = await uiConfirm({
     title: `尚有 ${n} 项决策未答，仍要确认完成吗？`,
-    message: '常规路径是补齐决策并复工；确认后将越过未答决策完成条目（留痕写入条目 decisions.md）。',
+    message: '常规路径是补齐决策并复工；确认后将越过未答决策完成条目（留痕写入 agent-team-board/runtime/holds/decisions/）。',
     confirmText: '仍要确认完成',
     danger: true,
   });

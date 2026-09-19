@@ -104,9 +104,14 @@ export function activeHoldCount(dataDir) {
   return Object.values(readHolds(dataDir).items).filter((r) => r.state === 'holding').length;
 }
 
-// ---------- 条目决策记录文档（<itemDir>/decisions.md，随代码进 git 的人读留痕） ----------
-// 由 hold 机制在每次声明 / 作答 / 复工 / 作废 / 闭环后整体重渲染；调用方（core / hold-store）
-// 已持有 itemDir 与标题，本模块保持自包含不 import core。
+// ---------- 条目决策记录文档（BUG-20260918-003：runtime/holds/decisions/<ID>.md） ----------
+// 人读留痕属应用数据，迁至 runtime 域（与事实源 holds.json 同域，不进 git）；由 hold 机制在
+// 每次声明 / 作答 / 复工 / 作废 / 闭环后整体重渲染。本模块保持自包含不 import core。
+
+// 留痕文档路径（runtime 域；测试 / CLI 提示与实现共用同一口径）
+export function decisionsDocFile(dataDir, itemId) {
+  return path.join(dataDir, 'runtime', 'holds', 'decisions', `${itemId}.md`);
+}
 
 function questionRow(q) {
   const answered = q.answer != null && String(q.answer).trim();
@@ -145,7 +150,7 @@ function roundSection(rec, { current = false } = {}) {
   return lines.join('\n');
 }
 
-export function renderDecisionsDoc(dataDir, itemId, itemDir, title) {
+export function renderDecisionsDoc(dataDir, itemId, title) {
   const holds = readHolds(dataDir);
   const cur = holds.items[itemId] || null;
   const past = holds.archived[itemId] || [];
@@ -153,7 +158,7 @@ export function renderDecisionsDoc(dataDir, itemId, itemDir, title) {
   const parts = [
     `# 人工决策记录 — ${itemId} ${title || ''}`,
     '',
-    '> 由 atb hold 机制维护（REQ-20260911-007）：worker 声明待人工决策 → 人工补决策 → 复工 / 闭环全程留痕。请勿手改。',
+    '> 由 atb hold 机制维护（REQ-20260911-007）：worker 声明待人工决策 → 人工补决策 → 复工 / 闭环全程留痕（BUG-20260918-003 起属应用数据，落 runtime 不进 git）。请勿手改。',
     '',
   ];
   if (cur) parts.push(roundSection(cur, { current: true }));
@@ -163,7 +168,9 @@ export function renderDecisionsDoc(dataDir, itemId, itemDir, title) {
     for (const rec of past) parts.push(roundSection(rec), '');
   }
   try {
-    fs.writeFileSync(path.join(itemDir, 'decisions.md'), parts.join('\n').replace(/\n*$/, '\n'));
+    const file = decisionsDocFile(dataDir, itemId);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, parts.join('\n').replace(/\n*$/, '\n'));
     return true;
   } catch {
     return false; // 文档写失败不阻断账本操作（账本是事实源）

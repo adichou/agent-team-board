@@ -18,7 +18,7 @@ description: Agent Team Board 看板工具（atb）：用 /req /bug /dev /board 
     ├── data/                          # 用户数据（整目录进 git）
     │   ├── requirements/REQ-YYYYMMDD-NNN/
     │   │   ├── README.md / design.md / test-cases.md / test-report.md
-    │   │   ├── ui-demo.html / licenses.md / attachments/ / decisions.md
+    │   │   ├── ui-demo.html / licenses.md / attachments/
     │   │   └── bugs/BUG-YYYYMMDD-NNN/ # 存量归属 Bug（结构同构；新建不再落入）
     │   └── bugs/BUG-YYYYMMDD-NNN/     # 独立 Bug
     └── runtime/                       # 应用数据（根 .gitignore 唯一忽略规则，不进 git）
@@ -117,7 +117,8 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
   blocked 回执——条目保持 in-progress，进入 Status Board「⚠ 待人工确认」持久聚合区与 `atb hold list`（不随批次结束消失）；
   人工在聚合区补决策（草稿可存、缺项时复工禁用）并一次操作**复工**（`hold resume`，决策齐备后条目经专用通路回已计划队列，
   被批量开发重新取单），或 force 二次确认越过未答项直接确认完成。待决期间 claim 对该条目一律拒绝（防第二实施者）；
-  `hold answer/resume/cancel` 为人工专属（Agent 调用被 state-guard 拦截）；决策与事件留痕写条目目录 `decisions.md`。
+  `hold answer/resume/cancel` 为人工专属（Agent 调用被 state-guard 拦截）；决策与事件留痕写 `runtime/holds/decisions/<ID>.md`
+  （BUG-20260918-003 起属应用数据，不进 git）。
 - 回执与核对响应各 ≤2 KiB；批次/运行账本在 `runtime/dispatch/` 与 `runtime/refine/`（应用数据，不进版本控制）；完善三态索引在
   `runtime/refine/states.json`（执行账本，不写条目状态）；待人工决策账本在 `runtime/holds/`（同口径）。
   执行 Agent 展示与四路子代理模型/智能档位在设置「批量任务」

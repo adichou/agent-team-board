@@ -1040,7 +1040,7 @@ async function refineCmd(rest) {
     });
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
     console.log(`✓ 已声明 ${r.itemId} 待人工确认分析（第 ${r.round} 轮，${r.total} 项问题），完善队列已暂停`);
-    console.log('  人工确认视图：Status Board 任务页「待人工确认」· atb confirm list · 条目目录 confirmations.md');
+    console.log('  人工确认视图：Status Board 任务页「待人工确认」· atb confirm list · 运行留痕 agent-team-board/runtime/confirms/confirmations/<ID>.md');
     console.log('  下一步：结束本轮子代理（不写 done）；人工作答确认后，答案会随续跑领取回传当前条目');
     return;
   }
@@ -1235,7 +1235,7 @@ async function holdCmd(rest) {
     if (jsonOut) { console.log(JSON.stringify({ ok: true, itemId: id, unanswered: holdStates.unansweredCount(rec), round: rec.round })); return; }
     console.log(`✓ 已声明 ${id} 待人工决策（第 ${rec.round} 轮，${rec.questions.length} 项问题，${(rec.declaredBy || '').trim()}）`);
     if (rec.runId) console.log(`  关联运行：${rec.runId}`);
-    console.log('  待人工确认视图：Status Board「待人工确认」聚合区 · atb hold list · 条目目录 decisions.md');
+    console.log('  待人工确认视图：Status Board「待人工确认」聚合区 · atb hold list · 运行留痕 agent-team-board/runtime/holds/decisions/<ID>.md');
     console.log('  下一步：交 blocked 回执收尾本次运行（atb run receipt <RUN-ID> --result blocked --reason "待人工决策"），人工补齐决策并复工后条目回到已计划队列');
     return;
   }
@@ -1290,7 +1290,7 @@ async function holdCmd(rest) {
     if (!id) die('用法：atb hold resume <ID> [--by 人工]');
     const r = hold.resumeHold(dataDir, id, { by: opts.by || undefined });
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
-    console.log(`✓ 已复工 ${id}：条目回到已计划（planned）队列，可被 AI 开发重新取单；决策记录见条目目录 decisions.md`);
+    console.log(`✓ 已复工 ${id}：条目回到已计划（planned）队列，可被 AI 开发重新取单；决策记录见 agent-team-board/runtime/holds/decisions/${id}.md`);
     return;
   }
 

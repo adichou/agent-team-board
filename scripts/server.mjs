@@ -3501,9 +3501,9 @@ async function handleApi(req, res, u, pathname) {
               : `网页端不允许 ${current.status} → ${body.to}`,
         });
       }
-      // BUG-20260918-002：确认完成只做状态流转——不再采集管理文件基线、不执行任何 git 提交，
-      // 留痕文档（confirmations.md / decisions.md）留在工作区随既有通道（收口提交 / 人工提交 /
-      // 文档提交）入库（REQ-20260914-007 自动提交闭环已随应用数据分离整体下线）。
+      // BUG-20260918-002：确认完成只做状态流转——不再采集管理文件基线、不执行任何 git 提交
+      // （REQ-20260914-007 自动提交闭环已随应用数据分离整体下线）；BUG-20260918-003 起确认 /
+      // 决策留痕（confirmations.md / decisions.md）属应用数据，落 runtime/ 域，git 全程无感知。
       const { status: st } = core.setStatus(dataDir, id, body.to, {
         by: 'board',
         // REQ-20260911-007：确认完成遇待人工决策未答项拦截；force=true 仅为前端「二次确认」放行口径

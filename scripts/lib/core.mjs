@@ -68,6 +68,9 @@ export const TRANSITIONS = {
 // accepted / planned / done 仅限人工执行；Agent 侧由 hooks/state-guard.mjs 在 PreToolUse 确定性拦截。
 export const HUMAN_ONLY_TO = new Set(['accepted', 'planned', 'done']);
 export const DOC_ORDER = ['README.md', 'design.md', 'test-cases.md', 'test-report.md'];
+// BUG-20260918-003 留痕文档（confirmations.md / decisions.md）属应用数据：已迁 runtime/ 域，
+// 不再是条目文档——目录内如遇存量遗留也不得进详情页签与全局搜索（orderedDocs 是唯一口径源）。
+export const TRACE_DOC_NAMES = new Set(['confirmations.md', 'decisions.md']);
 
 const CONFIG_LOCK_STALE_MS = 30_000;
 const CLAIM_LOCK_STALE_MS = 24 * 60 * 60 * 1000;
@@ -862,7 +865,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
   }
   // REQ-20260911-007 确认完成防呆：待人工决策未答完的条目确认完成前显式拦截——
   // 补齐决策并复工，或人工显式 force 越过（终端 --force / 网页二次确认）；
-  // 决策已答完（或 force）时随确认完成闭环 hold 记录（closed-done）并刷新 decisions.md。
+  // 决策已答完（或 force）时随确认完成闭环 hold 记录（closed-done）并刷新 runtime 决策留痕。
   if (st.status === 'in-progress' && to === 'done') {
     const hold = activeHoldOf(dataDir, id);
     if (hold) {
@@ -886,7 +889,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
         }],
       };
       saveHoldRecord(dataDir, id, closed);
-      renderDecisionsDoc(dataDir, id, dir, st.title);
+      renderDecisionsDoc(dataDir, id, st.title);
     }
   }
   // REQ-20260908-020：完善中的已接受单不可驳回回待接受（CLI 与 UI 双侧同口径，防绕过）
@@ -1221,7 +1224,7 @@ export function orderedDocs(dir) {
   const present = new Set(
     fs
       .readdirSync(dir)
-      .filter((f) => f.endsWith('.md') && fs.statSync(path.join(dir, f)).isFile())
+      .filter((f) => f.endsWith('.md') && !TRACE_DOC_NAMES.has(f) && fs.statSync(path.join(dir, f)).isFile())
   );
   return [...DOC_ORDER.filter((n) => present.has(n)), ...[...present].filter((n) => !DOC_ORDER.includes(n)).sort()];
 }

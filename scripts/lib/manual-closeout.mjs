@@ -59,7 +59,8 @@ export function closeoutManualReport({ dataDir, projectRoot, itemId }) {
     return { skipped: false, suspended: null, autoCommit };
   }
   // 提交不完整挂起：declareCommitConfirm 登记「待人工确认提交」（confirms 账本 +
-  // confirmations.md 留痕），waitingDevelopConfirm 使认领/派发在确认闭环前一律拒绝；
+  // runtime/confirms/confirmations/<ID>.md 留痕，BUG-20260918-003 起不进 git），
+  // waitingDevelopConfirm 使认领/派发在确认闭环前一律拒绝；
   // 手动通道无批次可暂停，项目级防呆即批量 pauseRequested 的等价物。声明失败不吞错，
   // 如实并入挂起原因供人工核对。
   let suspended = { itemId, reason };

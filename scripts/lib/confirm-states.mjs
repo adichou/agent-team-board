@@ -220,8 +220,15 @@ export function questionsVersionOf(rec) {
   return `r${rec.round || 1}@${rec.declaredAt}@${rec.docsFingerprint || ''}`;
 }
 
-// ---------- 条目确认记录文档（<itemDir>/confirmations.md，随代码进 git 的人读留痕） ----------
+// ---------- 条目确认记录文档（BUG-20260918-003：runtime/confirms/confirmations/<ID>.md） ----------
+// 人读留痕属应用数据，迁至 runtime 域（与事实源 confirms.json 同域，不进 git）——事件级留痕
+// 每次重写不再产生工作区未提交变更，消除「候选路径永远差一个未入库」的自指循环。
 // 由 confirm 机制在声明 / 作答 / 核验 / 确认 / 恢复 / 作废后整体重渲染（与 hold 的 decisions.md 同口径）。
+
+// 留痕文档路径（runtime 域；测试 / CLI 提示与实现共用同一口径）
+export function confirmationsDocFile(dataDir, itemId) {
+  return path.join(dataDir, 'runtime', 'confirms', 'confirmations', `${itemId}.md`);
+}
 
 function eventLine(e) {
   return `- ${String(e.at || '').slice(0, 19).replace('T', ' ')} ${e.kind}${e.by ? `（${e.by}）` : ''}${e.note ? `：${String(e.note).slice(0, 120)}` : ''}`;
@@ -307,7 +314,7 @@ function roundSection(rec, { current = false } = {}) {
   return lines.join('\n');
 }
 
-export function renderConfirmDoc(dataDir, itemId, itemDir, title) {
+export function renderConfirmDoc(dataDir, itemId, title) {
   const confirms = readConfirms(dataDir);
   const cur = confirms.items[itemId] || null;
   const past = confirms.archived[itemId] || [];
@@ -315,7 +322,7 @@ export function renderConfirmDoc(dataDir, itemId, itemDir, title) {
   const parts = [
     `# 人工确认记录 — ${itemId} ${title || ''}`,
     '',
-    '> 由 atb 挂起确认机制维护（REQ-20260914-001）：自动提交不完整 / 分析问题挂起 → 人工核对与确认 → 恢复闭环全程留痕。请勿手改。',
+    '> 由 atb 挂起确认机制维护（REQ-20260914-001）：自动提交不完整 / 分析问题挂起 → 人工核对与确认 → 恢复闭环全程留痕（BUG-20260918-003 起属应用数据，落 runtime 不进 git）。请勿手改。',
     '',
   ];
   if (cur) parts.push(roundSection(cur, { current: true }));
@@ -324,7 +331,9 @@ export function renderConfirmDoc(dataDir, itemId, itemDir, title) {
     for (const rec of past) parts.push(roundSection(rec), '');
   }
   try {
-    fs.writeFileSync(path.join(itemDir, 'confirmations.md'), parts.join('\n').replace(/\n*$/, '\n'));
+    const file = confirmationsDocFile(dataDir, itemId);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, parts.join('\n').replace(/\n*$/, '\n'));
     return true;
   } catch {
     return false; // 文档写失败不阻断账本操作（账本是事实源）
