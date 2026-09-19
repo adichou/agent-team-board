@@ -4,7 +4,7 @@
 
 ## 开发必须走看板
 
-1. **改前先登记**：改动本仓库任何源码（scripts/、commands/、skills/、hooks/、插件 manifest、根文档）前，必须先 `/req` 或 `/bug` 登记条目 → 人工在看板「接受」→ 人工「移入计划」→ `node scripts/atb.mjs claim <ID>` 认领（认领即产生认领锁）。
+1. **改前先登记**：改动本仓库任何源码（scripts/、commands/、skills/、hooks/、插件 manifest、根文档）前，必须先 `/req` 或 `/bug` 登记条目 → 人工在看板「接受」→ 人工「移入计划」→ `node scripts/atb.mjs claim <ID>` 认领（认领即产生认领锁）。**例外：根 `README.md`**（REQ-20260918-002）——该文件是纯文档，用户与 Agent 无需认领锁即可直接更新，并可经 Bash 提交仅含该文件、主题符合「类型: 描述 单号」提交规范（带条目编号）的改动。
 2. **源码受硬保护**：无有效认领锁时，PreToolUse 钩子（hooks/hooks.json → scripts/state-guard.mjs）会确定性拦截对源码的写入（REQ-20260901-003）。不要尝试绕过；看板用户数据目录（agent-team-board/data/ 的条目 markdown）编辑不受限。
 3. **状态铁律**：绝不直写任何条目状态文件（`agent-team-board/runtime/status/*.json`）；绝不把条目置为 accepted / planned / done（仅限人工）；Agent 的常规状态操作只有 claim 与 report。
 
