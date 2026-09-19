@@ -2506,7 +2506,9 @@ function startConfirmTask({ dataDir, root, itemId, action, params }) {
     stage: 'verify',
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    timeoutMs: 36_000_000,
+    // BUG-20260918-004：确认/核验测试超时与批次执行同口径（run.timeoutMin → 项目设置
+    // settings.timeoutMin → 默认 60 分钟），取代历史硬编码（登记时 600 秒 / 临时缓解 10 小时）。
+    timeoutMs: confirmStore.confirmTestTimeoutMs(dataDir, itemId, dispatchStore.loadSettings(dataDir).codex.timeoutMin),
     by: 'board',
     result: null,
     error: null,

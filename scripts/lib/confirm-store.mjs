@@ -152,7 +152,8 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
 // 项目测试运行（补交后验证「测试验证的是提交后的完整内容」）：package.json 有 scripts.test
 // 才运行；无测试脚本按纯文档/无测试口径跳过（不凭空要求）。
 // 同步版：CLI / 直连调用方语义（服务端 HTTP 路径已改用异步版，见 runProjectTestsAsync）。
-export function runProjectTests(projectRoot, timeoutMs = 600_000) {
+// BUG-20260918-004：默认超时统一为 60 分钟口径（原 600 秒，长套件被确定性 SIGKILL）。
+export function runProjectTests(projectRoot, timeoutMs = 60 * 60_000) {
   let pkg = null;
   try {
     pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -178,7 +179,9 @@ export function runProjectTests(projectRoot, timeoutMs = 600_000) {
 // BUG-20260915-008 异步版：spawn 不阻塞事件循环（同步版会把整个服务冻结到测试结束，
 // 本项目全量约 4 分钟，面板轮询/操作全部停摆）。结果口径与同步版完全一致；
 // onSpawn(child) 供调用方持有子进程（优雅关停时终止，防孤儿测试进程）。
-export function runProjectTestsAsync(projectRoot, { timeoutMs = 600_000, onSpawn } = {}) {
+// BUG-20260918-004：默认超时统一为 60 分钟口径（原 600 秒；服务端总是注入 testRunner，
+// 本默认值保护未注入的调用方——CLI / 直连 / 未来新增）。
+export function runProjectTestsAsync(projectRoot, { timeoutMs = 60 * 60_000, onSpawn } = {}) {
   let pkg = null;
   try {
     pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -237,6 +240,23 @@ export function runProjectTestsAsync(projectRoot, { timeoutMs = 600_000, onSpawn
       });
     });
   });
+}
+
+// BUG-20260918-004 确认/核验测试超时口径（与 server.mjs 批次执行同链路）：
+// 挂起关联执行的 run.timeoutMin → 项目设置 settings.timeoutMin（调用方传入；本层不
+// import dispatch-store——batch 层已引用本层，反向引入会成环）→ 默认 60 分钟。
+// 取代历史硬编码（登记时 600_000 / 临时缓解 36_000_000）。run 读取容错：确认记录或
+// 运行账本缺失（已闭环后遗留 / 账本被清理）按设置与默认口径回退，不阻断确认任务。
+export function confirmTestTimeoutMs(dataDir, itemId, settingsTimeoutMin = null) {
+  let run = null;
+  const rec = confirmOf(dataDir, itemId);
+  if (rec && rec.runId) {
+    try {
+      run = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'dispatch', 'runs', rec.runId, 'run.json'), 'utf8'));
+    } catch { run = null; /* run 账本缺失：按设置/默认口径回退 */ }
+  }
+  const min = (run && run.timeoutMin) || settingsTimeoutMin || 60;
+  return min * 60_000;
 }
 
 // BUG-20260915-003 统一候选范围（清单计数 / 文件表 / 核验 / 确认补交同源）：
