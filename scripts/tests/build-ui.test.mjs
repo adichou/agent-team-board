@@ -25,13 +25,13 @@ t('N1 顶栏导航：页签顺序 需求→构建→任务→设置；「构建�
   const nav = html.match(/<nav class="module-nav"[\s\S]*?<\/nav>/);
   assert.ok(nav, '缺少模块导航');
   const order = [...nav[0].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], '导航顺序应为 需求/构建/任务 + 末位设置');
-  assert.match(nav[0], /data-view="build"[^>]*>构建</, '构建入口文案');
+  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], '导航顺序应为 需求/发布/任务 + 末位设置');
+  assert.match(nav[0], /data-view="build"[^>]*>发布</, '发布入口文案（REQ-20260920-003：构建 → 发布）');
   const iStatus = nav[0].indexOf('data-view="status"');
   const iBuild = nav[0].indexOf('data-view="build"');
   const iRuns = nav[0].indexOf('data-view="runs"');
-  assert.ok(iStatus < iBuild && iBuild < iRuns, '构建按钮应在需求与任务之间');
-  assert.match(nav[0], /class="view-tab" data-view="build"/, '构建默认不激活（需求保持默认激活）');
+  assert.ok(iStatus < iBuild && iBuild < iRuns, '发布按钮应在需求与任务之间');
+  assert.match(nav[0], /class="view-tab" data-view="build"/, '发布默认不激活（需求保持默认激活）');
 });
 
 t('N2 app.js：VIEWS 含 build（需求与任务之间）；setView 支持 build 容器显隐与 enter；隐藏模块兜底不回退', () => {
@@ -67,7 +67,7 @@ t('N3 静态：#buildView 容器 + build.js 引用（app.js 之前加载）+ app
   const sub = app.match(/const MODULE_SUB = \{[\s\S]*?\};/);
   assert.match(sub[0], /build:\s*'/, 'MODULE_SUB 应含 build 副标题');
   const scope = app.match(/const SEARCH_SCOPE = \{[\s\S]*?\};/);
-  assert.match(scope[0], /build:\s*'构建'/, 'SEARCH_SCOPE 应含 build=构建');
+  assert.match(scope[0], /build:\s*'发布'/, 'SEARCH_SCOPE 应含 build=发布（REQ-20260920-003 更名）');
   const ph = app.match(/const SEARCH_PLACEHOLDER = \{[\s\S]*?\};/);
   assert.match(ph[0], /build:\s*'/, 'SEARCH_PLACEHOLDER 应含 build 占位符');
 });
@@ -157,8 +157,10 @@ t('N7a build.js 挂载与 state 渲染：版本列表 + 状态 chip + 空态 + �
   await h.run(`window.ATBBuild.enter('/p/a')`);
   const inner = h.run(`document.querySelector('#buildView').innerHTML`);
   assert.match(inner, /v1\.0/, '版本名渲染');
-  assert.match(inner, /REQ-20260913-001/, '关联单渲染');
+  assert.match(inner, /data-step="plan"[^>]*aria-selected="true"/, '五步导航默认在「版本计划」步（REQ-20260920-003）');
   assert.match(inner, /计划中/, '状态 chip 文案');
+  h.run(`window.ATBBuild.setStep('link')`);
+  assert.match(h.run(`document.querySelector('#buildView').innerHTML`), /REQ-20260913-001/, '关联单在「关联条目与提交」步渲染');
   assert.match(inner, /版本计划/, '子页签渲染');
   assert.match(inner, /分支浏览/, '子页签渲染');
   // 空态

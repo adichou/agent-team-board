@@ -303,14 +303,28 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.equal(r.status, 400);
     assert.match(r.json.error || '', /git|仓库/);
 
-    // S6 合并入 main：成功置 merged、逐条 mergedAt、main 含所选提交、切回原分支 dev
+    // REQ-20260920-003：合并前置 = 文档已完成且最新变化已提交——先写八个文档并提交
+    const DOCS8 = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
+    const commitDocsFor = async (id) => {
+      for (const file of DOCS8) {
+        const r0 = await req(port, 'POST', `/api/build/docs/save${P}`, { id, file, content: `# ${file} (${id})` });
+        if (r0.status !== 200) throw new Error(`docs save ${file}: ${r0.text}`);
+      }
+      const r1 = await req(port, 'POST', `/api/build/docs/commit${P}`, { id });
+      if (r1.status !== 200 || !r1.json.commitHash) throw new Error(`docs commit: ${r1.text}`);
+      return r1.json.commitHash;
+    };
+    // S6 合并入 main：成功置 merged、逐条 mergedAt、main 含重放提交（隔离合并）、切回原分支 dev
+    await commitDocsFor(vid);
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
     assert.equal(r.status, 200, `合并应成功：${r.text}`);
     assert.equal(r.json.version.status, 'merged');
     assert.ok(r.json.version.items[0].mergedAt, '成功条目落 mergedAt');
     assert.equal(git(projA, ['branch', '--show-current']), 'dev', '合并不切换当前分支（临时工作树隔离）');
-    const ancestors = git(projA, ['branch', '--contains', commit1]);
-    assert.match(ancestors, /main/, 'main 应包含所选提交');
+    const replays1 = r.json.version.merge.replays || [];
+    assert.ok(replays1.length === 1 && replays1[0].original === commit1, '记录重放证据（original → replayed）');
+    assert.match(git(projA, ['branch', '--contains', replays1[0].replayed]), /main/, 'main 应包含重放提交（REQ-20260920-003 隔离合并：只重放所选提交自身变更）');
+    assert.ok(!git(projA, ['branch', '--contains', commit1]).includes('main'), '原始提交非 main 祖先（重放语义）');
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
     assert.equal(r.status, 409, '已合并重复合并 409');
     // 已合并锁定条目增删（S4 锁口径）
@@ -349,6 +363,7 @@ t('S1~S10 /api/build* 全链路', async () => {
     const vid2 = r.json.version.id;
     fs.writeFileSync(path.join(projA, 'f1.txt'), '未提交改动\n');
     fs.writeFileSync(path.join(projA, 'untracked.txt'), '未跟踪文件\n');
+    await commitDocsFor(vid2);
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid2 });
     assert.equal(r.status, 200, '脏工作区不阻塞合并（不触碰当前工作区）');
     assert.equal(r.json.version.status, 'merged');
@@ -367,8 +382,17 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.equal(r.status, 409, 'release git 运行活动时互斥');
     assert.equal(r.json.conflict, true);
     releaseStore.mutateRun(dataDirA, relRun.id, (x) => { x.status = 'canceled'; }, { by: 'test', action: 'test-cancel' });
-    // main 仍包含两版所选提交（commit1 / commit2）
-    for (const c of [commit1, commit2]) assert.match(git(projA, ['branch', '--contains', c]), /main/, 'main 包含所选提交');
+    // main 仍包含两版所选提交的重放证据（REQ-20260920-003：隔离合并以重放提交进入 main）
+    const replayedOf = new Map();
+    {
+      const st = await req(port, 'GET', `/api/build/state${P}`);
+      for (const v of st.json.versions) for (const rp of v.merge?.replays || []) replayedOf.set(rp.original, rp.replayed);
+    }
+    for (const c of [commit1, commit2]) {
+      const rp = replayedOf.get(c);
+      assert.ok(rp, '重放证据存在');
+      assert.match(git(projA, ['branch', '--contains', rp]), /main/, 'main 包含重放提交');
+    }
 
     // S10 非 git 项目写接口明确拒绝；静态 build.js 可获取
     r = await req(port, 'POST', `/api/build/version${PB}`, { items: [{ itemId: reqA.id, commit: commit1 }] });
@@ -403,7 +427,7 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: vid2 });
     assert.equal(r.status, 200, 'merged 版本可删（仅移除看板记录）');
     assert.equal(fs.existsSync(verDir(vid2)), false, 'merged 版本目录移除');
-    for (const c of [commit1, commit2]) assert.match(git(projA, ['branch', '--contains', c]), /main/, '删除 merged 版本不动 git 历史');
+    for (const c of [commit1, commit2]) assert.match(git(projA, ['branch', '--contains', replayedOf.get(c)]), /main/, '删除 merged 版本不动 git 历史（重放提交仍在 main）');
     // 不存在：400 找不到版本计划
     r = await req(port, 'POST', `/api/build/version/delete${P}`, { id: 'BLD-20990909-999' });
     assert.equal(r.status, 400);

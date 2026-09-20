@@ -298,7 +298,7 @@ t('P3c 详情「概况」名称行仍显示合并状态；右侧「发布」页�
   const detail = inner.slice(inner.indexOf('bld-name'));
   assert.match(detail, />已合并<\/span>/, '详情概况名称行保留「已合并」');
   // 发布页签仍正常：打开后可见运行与已发布状态
-  h.run(`window.ATBBuild.setDetailTab('release')`);
+  h.run(`window.ATBBuild.setStep('release')`);
   await h.tick(4);
   const rel = h.inner();
   assert.match(rel, /data-rel-run="BPUB-20260917-0a1"/, '发布页签运行记录不受影响');

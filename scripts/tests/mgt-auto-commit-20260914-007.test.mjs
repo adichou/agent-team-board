@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import * as core from '../lib/core.mjs';
 import * as holdStore from '../lib/hold-store.mjs';
 import * as buildStore from '../lib/build-store.mjs';
+import * as buildGit from '../lib/build-git.mjs';
 import * as gitFlow from '../lib/git-flow.mjs';
 import '../web/i18n.js';
 
@@ -226,8 +227,14 @@ async function mkVersionProject(tag, { onMain = false } = {}) {
   return { root, dataDir, item, v };
 }
 
-t('R3 版本合并无管理提交：合并响应/详情不带 mgtCommit、无版本管理提交（main 上同口径）', async () => {
-  const { root, dataDir, item, v } = await mkVersionProject('r3', { onMain: true });
+t('R3 版本合并无管理提交：合并响应/详情不带 mgtCommit、无版本管理提交（REQ-20260920-003 起合并前置要求工作目录在 dev；非 dev 阻止口径由 req-20260920-003.test.mjs 覆盖）', async () => {
+  const { root, dataDir, item, v } = await mkVersionProject('r3');
+  // REQ-20260920-003：合并前置 = 八个发布文档已提交（pathspec 限定，无管理提交语义）
+  for (const file of ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md']) {
+    fs.writeFileSync(path.join(root, file), `# ${file} (${v.id})`);
+  }
+  const docsCommit = buildGit.commitPublishDocs(root, { message: 'docs: 发布文档基线' });
+  buildStore.recordDocsCommit(dataDir, v.id, { commitHash: docsCommit.commitHash, files: docsCommit.hashes, scopeFp: null });
   const { server, port } = await bootServer(root);
   try {
     const r = await req(port, 'POST', '/api/build/version/merge', { id: v.id });

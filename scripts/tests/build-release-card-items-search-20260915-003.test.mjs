@@ -150,7 +150,7 @@ t('R2 状态口径逐卡 + 按卡片版本绑定：draft/merging/failed 创建�
   const relInner = h.inner();
   assert.ok(!fired.some((e) => e.type === 'atb:goto-view'), '不再派发跨模块跳转事件');
   assert.match(relInner, /rel-card sel" data-ver-id="BLD-MERGED"/, '查看发布记录切换到所在卡片版本');
-  assert.match(relInner, /data-detail-tab="release"[^>]*aria-selected="true"/, '就地激活发布页签');
+  assert.match(relInner, /data-step="release"[^>]*aria-selected="true"/, '就地激活「正式发布」步（REQ-20260920-003 五步）');
   assert.match(relInner, /bld-rel-pane/, '发布区就地渲染');
   // 卡片按钮静态契约：bindCommon 循环绑定 data-ver-release / data-ver-release-view
   assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release\]'\)/, 'bindCommon 循环绑定 data-ver-release');
@@ -235,6 +235,7 @@ t('R5 paginateItems：切片与计数准确；页码越界回落最后有效页�
 t('R5b 渲染层分页与翻页行为：默认页大小分片；首末页禁用；上一页/下一页翻页；搜索回第一页；清空恢复；切换版本清空搜索并回第一页', async () => {
   const h = setup();
   await h.enter(); // 选中 BLD-20260915-001（merged，12 条）
+  h.run(`window.ATBBuild.setStep('link')`); // REQ-20260920-003：关联列表在「关联条目与提交」步
   const inner = () => h.inner();
   // 头部行：标题 → 搜索输入/按钮（/清空）→ 添加条目（用计数行作头部行结束锚点）
   const iHead = inner().indexOf('bld-items-head');
@@ -296,6 +297,7 @@ t('R6 空态区分：零关联显示添加引导；无匹配显示关键词与�
   // 零关联（1 条空版本）
   const h0 = setup({ versions: [ver('BLD-EMPTY', 'e', 'draft', [])] });
   await h0.enter();
+  h0.run(`window.ATBBuild.setStep('link')`);
   const inner0 = h0.inner();
   assert.match(inner0, /暂无条目：点「＋ 添加条目」纳入需求单 \/ Bug 单/, '零关联显示添加引导');
   assert.doesNotMatch(inner0, /没有匹配的关联条目/, '零关联不出搜索无结果文案');
@@ -304,6 +306,7 @@ t('R6 空态区分：零关联显示添加引导；无匹配显示关键词与�
   // 有数据但无匹配
   const h = setup();
   await h.enter();
+  h.run(`window.ATBBuild.setStep('link')`);
   const input = h.el('#bldItemsSearchInput');
   input.value = 'zzz-not-exist';
   input.listeners.input();
@@ -331,7 +334,7 @@ t('R7 加载显示提示不出数据操作；读取失败显示失败与重试�
   });
   const pending = hL.run(`window.ATBBuild.enter('/p/a')`);
   const loading = hL.inner();
-  assert.match(loading, /加载构建模块…/, '加载提示');
+  assert.match(loading, /加载发布模块…/, '加载提示');
   assert.doesNotMatch(loading, /bldItemsSearchInput|data-remove-item|bldAddItem/, '加载中不出数据操作入口（不伪装为空数据）');
   release();
   await pending;
@@ -343,13 +346,14 @@ t('R7 加载显示提示不出数据操作；读取失败显示失败与重试�
   };
   await hE.run(`window.ATBBuild.enter('/p/a')`);
   const errView = hE.inner();
-  assert.match(errView, /构建模块读取失败：boom/, '失败提示带原因');
+  assert.match(errView, /发布模块读取失败：boom/, '失败提示带原因（REQ-20260920-003 模块更名）');
   assert.match(errView, /id="bldRetryLoad"/, '失败提供重试按钮');
   assert.doesNotMatch(errView, /bldItemsSearchInput|暂无条目/, '失败不伪装为空数据');
   // 重试成功恢复
   hE.sandbox.fetch = async () => ({ ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: [ver('BLD-20260915-001', 'v1.0', 'merged')] }) });
   await hE.run(`window.ATBBuild.refresh()`);
   assert.match(hE.inner(), /data-ver-release="BLD-20260915-001"/, '重试成功恢复版本渲染');
+  hE.run(`window.ATBBuild.setStep('link')`);
   assert.match(hE.inner(), /id="bldItemsSearchInput"/, '重试成功恢复列表与搜索入口');
 });
 
@@ -358,6 +362,7 @@ t('R7 加载显示提示不出数据操作；读取失败显示失败与重试�
 t('R8 过滤/翻页后移出与 commit 换选绑定真实条目 ID；merging/merged 锁定不回归；数据减少后越界页回落最后有效页', async () => {
   const h = setup({ versions: [ver('BLD-20260915-001', 'v1.0', 'merged', manyItems(12))] });
   await h.enter();
+  h.run(`window.ATBBuild.setStep('link')`);
   // 搜索过滤到 2 条 → 行内按钮 data-remove-item 为命中的真实条目
   const input = h.el('#bldItemsSearchInput');
   input.value = '优化搜索反馈';
@@ -374,11 +379,13 @@ t('R8 过滤/翻页后移出与 commit 换选绑定真实条目 ID；merging/mer
   // merging 同口径
   const h2 = setup({ versions: [ver('BLD-MERGING', 'g', 'merging', manyItems(3))] });
   await h2.enter();
+  h2.run(`window.ATBBuild.setStep('link')`);
   const inner2 = h2.inner();
   assert.match(inner2, /data-remove-item="REQ-20260915-001" disabled title="合并中\/已合并状态锁定条目增删"/, 'merging 移出禁用提示保留');
   // 数据减少：12 条第 2 页 → 移出 2 条变 10 条后回写回落第 1 页
   const h3 = setup({ versions: [ver('BLD-20260915-001', 'v1.0', 'draft', manyItems(12))] });
   await h3.enter();
+  h3.run(`window.ATBBuild.setStep('link')`);
   h3.run(`window.ATBBuild.gotoItemsPage(2)`);
   assert.match(h3.inner(), /第 2 \/ 2 页/, '先到第 2 页');
   h3.live.versions[0].items = h3.live.versions[0].items.slice(0, 10); // 模拟移出 2 条后 refresh 返回
