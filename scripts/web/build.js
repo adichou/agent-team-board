@@ -438,12 +438,25 @@ const ATBBuild = (() => {
   // 第一父优先复用节点原槽位（主线直下），其余父向右分叉或汇入已有线；父提交不在当前展示集合
   //（搜索过滤 / 页边界未加载）时不画实线直连，改虚线延续并计入 hiddenParents。根提交（无父）无向下边。
   // hasAbove：首行上方是否还有未随行加载的上下文（翻页 offset>0 或搜索态）——有真实父提交时画上方虚线桩，
-  // 不把页边界提交误判成根。输出 { rows, laneCount }；row = { hash, lane, color, merge, parentCount,
-  // hiddenParents, stubAbove, segments }；segment = { x1, x2, color, dashed, fromNode }
+  // 不把页边界提交误判成根。
+  // BUG-20260920-002：colorOf(hash) → 色号（可选）——按分支身份稳定配色（main→0 / dev→1）：
+  // 命中时节点与父边用分支色（同 hash 恒同色，翻页 / 搜索子集不跳变；节点在 dev 色线上时仍按
+  // 自身 side 配色，汇聚点不误染）；未命中（单支 / 缺 side 的隐藏上下文）回落既有槽位分配。
+  // mergeBase（可选）：命中行的 mergeBase=true 并给 mbTo（水平汇聚虚线目标车道——取该行上方
+  // 其他延续线中最近的车道，单线汇聚时用相邻车道），供渲染层画汇聚连线与「Merge-base」标注。
+  // 输出 { rows, laneCount }；row = { hash, lane, color, merge, parentCount,
+  // hiddenParents, stubAbove, segments, mergeBase, mbTo }；segment = { x1, x2, color, dashed, fromNode }
   //（x 为列号；fromNode=父边自节点半高处出发，否则为贯穿行的延续线；dashed=上下文缺失虚线）。
-  function logGraph(commits, { hasAbove = false } = {}) {
+  function logGraph(commits, { hasAbove = false, colorOf = null, mergeBase = null } = {}) {
     const list = Array.isArray(commits) ? commits : [];
     const shown = new Set(list.map((c) => c.hash));
+    const tint = (hash, fallback) => { // 分支色优先，未命中回落槽位（fallback 惰性求值保持 nextColor 语义）
+      if (colorOf) {
+        const n = colorOf(hash);
+        if (Number.isInteger(n)) return n;
+      }
+      return fallback();
+    };
     let lanes = []; // 上一行底部延续下来的线：{ hash, color }
     let nextColor = 0;
     let laneCount = 1;
@@ -457,7 +470,9 @@ const ATBBuild = (() => {
         kept.push(l);
       });
       const stubAbove = nodeX === undefined && parents.length > 0 && (i > 0 || hasAbove);
-      if (nodeX === undefined) { nodeX = kept.length; ownColor = nextColor++ % GRAPH_LANES; }
+      const ownTint = colorOf ? colorOf(c.hash) : undefined;
+      if (nodeX === undefined) { nodeX = kept.length; ownColor = Number.isInteger(ownTint) ? ownTint : nextColor++ % GRAPH_LANES; }
+      else if (Number.isInteger(ownTint)) ownColor = ownTint; // 命中已有线也按分支色覆盖线色
       const bottom = kept.slice(); // 底部线槽（顺序即下行位置；父边新槽插入其中）
       const hiddenParents = [];
       const hiddenEdges = [];
@@ -475,7 +490,7 @@ const ATBBuild = (() => {
           return;
         }
         // 新线：第一父复用节点原槽位（主线直下、同色），其余父新色右移
-        const color = pi === 0 ? ownColor : nextColor++ % GRAPH_LANES;
+        const color = pi === 0 ? ownColor : tint(p, () => nextColor++ % GRAPH_LANES);
         const slot = Math.min(pi === 0 ? nodeX : bottom.length, bottom.length);
         bottom.splice(slot, 0, { hash: p, color });
         parentEdges.push({ target: slot, color });
@@ -490,11 +505,22 @@ const ATBBuild = (() => {
       }));
       for (const e of parentEdges) segments.push({ x1: nodeX, x2: e.target, color: e.color, dashed: false, fromNode: true });
       for (const e of hiddenEdges) segments.push({ x1: nodeX, x2: e.target, color: e.color, dashed: true, fromNode: true });
-      laneCount = Math.max(laneCount, lanes.length, bottom.length + hiddenEdges.length, nodeX + 1);
+      // BUG-20260920-002：merge-base 行汇聚标记（mbTo = 上方其他延续线中最近车道；无则相邻车道）
+      let isMb = false;
+      let mbTo = null;
+      if (mergeBase && c.hash === mergeBase) {
+        isMb = true;
+        const others = [];
+        lanes.forEach((l, idx) => { if (l.hash !== c.hash) others.push(idx); });
+        mbTo = others.length
+          ? others.reduce((best, idx) => (Math.abs(idx - nodeX) < Math.abs(best - nodeX) ? idx : best))
+          : nodeX + 1;
+      }
+      laneCount = Math.max(laneCount, lanes.length, bottom.length + hiddenEdges.length, nodeX + 1, mbTo != null ? mbTo + 1 : 0);
       lanes = bottom;
       return {
         hash: c.hash, lane: nodeX, color: ownColor, merge: parents.length >= 2, parentCount: parents.length,
-        hiddenParents, stubAbove, segments,
+        hiddenParents, stubAbove, segments, mergeBase: isMb, mbTo,
       };
     });
     return { rows, laneCount };
@@ -502,8 +528,9 @@ const ATBBuild = (() => {
 
   // 行内 SVG：每行固定高度、按 laneCount 自适应宽（flex 布局下列宽恒定，行不错位）。
   // 合并节点双圈（非仅颜色），配合行内「合并 · N 父提交」文字标签。
-  function graphSvg(row, laneCount) {
-    const w = Math.max(laneCount, row.lane + 1) * GRAPH_LANE_W + 4;
+  // BUG-20260920-002：opts.head 画分支头节点外圈；mergeBase 行画水平汇聚虚线（lg-mb，宽度覆盖 mbTo）。
+  function graphSvg(row, laneCount, opts = {}) {
+    const w = Math.max(laneCount, row.lane + 1, row.mbTo != null ? row.mbTo + 1 : 0) * GRAPH_LANE_W + 4;
     const mid = GRAPH_ROW_H / 2;
     const x = (col) => col * GRAPH_LANE_W + 4;
     const parts = row.segments.map((s) => {
@@ -522,10 +549,13 @@ const ATBBuild = (() => {
     });
     if (row.stubAbove) parts.push(`<path d="M ${x(row.lane)} 0 V ${mid}" class="lg-c${row.color}" stroke-dasharray="4 3"/>`);
     const nx = x(row.lane);
+    const mb = row.mergeBase && row.mbTo != null && row.mbTo !== row.lane
+      ? `<path d="M ${nx} ${mid} H ${x(row.mbTo)}" class="lg-mb"/>` : '';
     const node = row.merge
       ? `<circle cx="${nx}" cy="${mid}" r="6" class="lg-node lg-c${row.color}"/><circle cx="${nx}" cy="${mid}" r="2.4" class="lg-dot" fill="var(--git-lg${row.color})"/>`
       : `<circle cx="${nx}" cy="${mid}" r="4" class="lg-node lg-c${row.color}"/>`;
-    return `<svg class="bld-graph" width="${w}" height="${GRAPH_ROW_H}" viewBox="0 0 ${w} ${GRAPH_ROW_H}" aria-hidden="true"><g class="lg-lines">${parts.join('')}</g>${node}</svg>`;
+    const headRing = opts.head ? `<circle cx="${nx}" cy="${mid}" r="8.5" class="lg-head"/>` : '';
+    return `<svg class="bld-graph" width="${w}" height="${GRAPH_ROW_H}" viewBox="0 0 ${w} ${GRAPH_ROW_H}" aria-hidden="true"><g class="lg-lines">${parts.join('')}</g>${mb}${node}${headRing}</svg>`;
   }
 
   // REQ-20260920-001：选中提交节点（click 切换 / focus 直选同一路径）——重渲染出详情区；
@@ -1942,11 +1972,27 @@ const ATBBuild = (() => {
       const countBar = inSearch && state.branchLog?.query === state.logQuery && !state.logError
         ? `<div class="bld-log-count small" role="status">共 ${state.branchLog.total} 条匹配（关键词：${esc(state.logQuery)}）</div>`
         : '';
+      // BUG-20260920-002：双支并集上下文——载荷含 heads（≥2 支本地头）即双支模式（选中
+      // 主分支 / dev 且两支并存）。轨道颜色按提交 side 稳定分配（main→lg0 / dev→lg1：同 hash
+      // 恒同色，翻页 / 搜索子集不跳变）；mergeBase 行画水平汇聚虚线并加「Merge-base」文字标注。
+      const heads = Array.isArray(state.branchLog?.heads) ? state.branchLog.heads.filter((x) => x && x.name && x.hash) : [];
+      const dual = heads.length >= 2;
+      const mergeBase = state.branchLog?.mergeBase || null;
+      const sideMap = new Map(commits.map((c) => [c.hash, c.side]));
+      const headByHash = new Map(heads.map((x) => [x.hash, x.name]));
       // REQ-20260920-001：历史拓扑图——按真实父子关系绘制轨道连线（logGraph）；
       // 行内容为可聚焦按钮（click 切换选中 / focus 直选，键盘可达），选中行出详情区。
       // hasAbove：翻页 offset>0 或搜索态时首行上方存在未随行加载的上下文（虚线桩，不误判根）。
       const inSearchCtx = inSearch || Number(state.branchLog?.offset) > 0;
-      const g = logGraph(commits, { hasAbove: inSearchCtx });
+      const g = logGraph(commits, {
+        hasAbove: inSearchCtx,
+        colorOf: dual ? (hsh) => (sideMap.get(hsh) === 'dev' ? 1 : sideMap.has(hsh) ? 0 : undefined) : null,
+        mergeBase: dual ? mergeBase : null,
+      });
+      // 并集提示：双支模式常驻说明（真实分支名插值，含未合并提交口径）
+      const unionHint = dual
+        ? `<div class="bld-log-union muted small" role="note">并集视图：同时显示 ${esc(heads[0].name)} 与 ${esc(heads[1].name)} 的提交（含未合并提交）</div>`
+        : '';
       const selRow = state.logSelected ? g.rows.find((r) => r.hash === state.logSelected) : null;
       const selCommit = selRow ? commits.find((c) => c.hash === selRow.hash) : null;
       const detail = selCommit ? (() => {
@@ -1956,7 +2002,10 @@ const ATBBuild = (() => {
         const hiddenPart = selRow.hiddenParents.length
           ? ` <span class="muted">${selRow.hiddenParents.length} 个父提交未显示（虚线延续）</span>`
           : '';
-        return `<div class="bld-log-detail" id="bldLogDetail" role="status"><code>${esc(selCommit.short || selCommit.hash.slice(0, 8))}</code> ${esc(selCommit.subject)}；${parentsPart}${hiddenPart}</div>`;
+        const mbPart = dual && mergeBase && selCommit.hash === mergeBase
+          ? ' <span class="bld-branch-tag bt-mb" title="main 与 dev 的汇聚点（merge-base）">main ∩ dev 汇聚点</span>'
+          : '';
+        return `<div class="bld-log-detail" id="bldLogDetail" role="status"><code>${esc(selCommit.short || selCommit.hash.slice(0, 8))}</code> ${esc(selCommit.subject)}；${parentsPart}${hiddenPart}${mbPart}</div>`;
       })() : '';
       // 搜索隐藏中间提交：顶部统一说明（虚线语义）；无断档时不打扰
       const searchHint = inSearch && g.rows.some((r) => r.hiddenParents.length)
@@ -1966,7 +2015,12 @@ const ATBBuild = (() => {
         const row = g.rows[i];
         const mergeTag = row.merge ? `<span class="bld-merge-tag">合并 · ${row.parentCount} 父提交</span>` : '';
         const gapNote = row.hiddenParents.length ? `<span class="muted small">${row.hiddenParents.length} 个父提交未显示（虚线延续）</span>` : '';
-        return `<li><button type="button" class="bld-log-row${state.logSelected === c.hash ? ' sel' : ''}" data-log-row="${esc(c.hash)}">${graphSvg(row, g.laneCount)}<code>${markMatch(c.short || c.hash.slice(0, 8), state.logQuery)}</code> <span>${markMatch(c.subject, state.logQuery)}</span>${mergeTag}<span class="muted small">${markMatch(c.author, state.logQuery)} · ${esc(fmtTime(c.date))}</span>${gapNote}</button></li>`;
+        // BUG-20260920-002：分支头名称标签（真实 heads 命中行；配色按 side 走轨道色）+
+        // merge-base 汇聚标注（虚线描边，非颜色提示；悬停说明）
+        const headName = dual ? headByHash.get(c.hash) : null;
+        const headTag = headName ? `<span class="bld-branch-tag bt-${sideMap.get(c.hash) === 'dev' ? 'dev' : 'main'}">${esc(headName)}</span>` : '';
+        const mbTag = row.mergeBase ? '<span class="bld-branch-tag bt-mb" title="main 与 dev 的汇聚点（merge-base）">Merge-base</span>' : '';
+        return `<li><button type="button" class="bld-log-row${state.logSelected === c.hash ? ' sel' : ''}" data-log-row="${esc(c.hash)}">${graphSvg(row, g.laneCount, { head: dual && headByHash.has(c.hash) })}<code>${markMatch(c.short || c.hash.slice(0, 8), state.logQuery)}</code> ${headTag}${mbTag}<span>${markMatch(c.subject, state.logQuery)}</span>${mergeTag}<span class="muted small">${markMatch(c.author, state.logQuery)} · ${esc(fmtTime(c.date))}</span>${gapNote}</button></li>`;
       }).join('')}</ul>`;
       const total = Number(state.branchLog?.total ?? commits.length);
       // 页边界延续提示：本页未到分支历史末尾时，最老行的父提交必在后续页（父提交恒更旧）——
@@ -1984,7 +2038,7 @@ const ATBBuild = (() => {
           ? `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条匹配</div>`
           : `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条提交（可翻至分支首个提交）</div>`)
         : '';
-      return errBar + countBar + detail + searchHint + listHtml + boundary + eof + logPagerHtml(page, pages, size, total);
+      return errBar + countBar + unionHint + detail + searchHint + listHtml + boundary + eof + logPagerHtml(page, pages, size, total);
     })() : '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
     // REQ-20260914-002：搜索控件——关键词输入 + 搜索触发 + 清除入口；执行中禁用防重复触发；
     // 清除入口仅在已有生效关键词时出现（无匹配空态内另有同口径入口）。
