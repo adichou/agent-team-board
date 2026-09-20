@@ -559,7 +559,9 @@ t('D12 UI 静态断言：设置页 Git 工作流分区 + 待测试条目已提�
   assert.match(app, /id="gwInit"/, '应有初始化按钮（gwInit）');
   assert.match(app, /已在 dev 分支/, '应有已在 dev 就绪态文案');
   assert.match(app, /当前分支：/, '应有当前分支状态行');
-  assert.match(app, /正在创建并切换到 dev 分支/, '应有执行中反馈文案');
+  // REQ-20260920-002：主操作与反馈改为切换导向表达（接口与按需创建 + 切损能力不变）
+  assert.match(app, /切换至 dev 分支/, '主按钮应为切换导向文案');
+  assert.match(app, /正在切换至 dev 分支…/, '应有切换执行中反馈文案');
   // 待测试（in-progress 已上报）条目同样展示已提交徽标
   assert.match(app, /agentCompletedAt \? .*(commitBadge|已提交)|commitBadge[^\n]*agentCompletedAt/s, '徽标条件应覆盖待测试条目');
   const badgeFn = app.slice(app.indexOf('function commitBadgeHtml'), app.indexOf('function commitStatusDetailHtml'));
@@ -574,7 +576,7 @@ t('D12 UI 静态断言：设置页 Git 工作流分区 + 待测试条目已提�
   // i18n 词典覆盖（i18n-coverage 测试的静态前置）
   const i18n = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'i18n.js'), 'utf8');
   assert.match(i18n, /'Git 工作流':/, '词典应含 Git 工作流');
-  assert.match(i18n, /'初始化 dev 分支':/, '词典应含初始化按钮文案');
+  assert.match(i18n, /'切换至 dev 分支':/, '词典应含切换主按钮文案（REQ-20260920-002）');
 });
 
 let failed = 0;
