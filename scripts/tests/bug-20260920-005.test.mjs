@@ -184,9 +184,10 @@ t('U1 卡片行内键：merged 未推送「AI 完善 / 合并入 main」可用�
   assert.match(inner, /data-ver-merge="BLD-MERGED" aria-label/, 'merged 未推送合并键可用');
   assert.doesNotMatch(inner, /data-ver-merge="BLD-MERGED" disabled/, 'merged 未推送合并不再禁用');
   assert.match(inner, /data-ver-answer="BLD-PUSHED" disabled title="已正式发布，不允许再 AI 完善"/, '推送完成后 AI 完善禁用并说明');
-  assert.match(inner, /data-ver-merge="BLD-PUSHED" disabled title="已正式发布"/, '推送完成后合并键禁用并说明');
+  // BUG-20260920-006：合并键禁用从 HTML disabled 改 aria-disabled（点击可捕获反馈），title 升为完整归因
+  assert.match(inner, /data-ver-merge="BLD-PUSHED" aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '推送完成后合并键禁用并说明');
   assert.match(inner, /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging AI 完善口径不回归');
-  assert.match(inner, /data-ver-merge="BLD-MERGING" disabled title="合并中，请勿重复触发"/, 'merging 合并键口径不回归');
+  assert.match(inner, /data-ver-merge="BLD-MERGING" aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 合并键口径不回归');
   assert.match(inner, /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 零回归');
   assert.match(inner, /data-ver-merge="BLD-FAILED" aria-label="重试合并入 main BLD-FAILED"/, 'failed 零回归');
 });
