@@ -5,9 +5,10 @@
 //      重启后自动继续 / 允许非 Git 项目执行）、「保存设置」按钮与密钥说明一并移除，
 //      不残留空卡片 / 空标题 / 不可操作占位；「批量任务」分区与其保存按钮保持可用
 //   2) 加载两阶段（REQ-20260909-001）：加载中不再出现被禁用的运行参数控件或保存按钮
-//   3) 设置读取失败：整页「设置加载失败」+ 重试保留（接口调用口径未变，待确认项不动）
+//   3) 设置读取失败：局部「派发设置加载失败」+ 重试（BUG-20260920-001 起不再整页替换，
+//      旧布局项目迁移入口不再被吞掉；接口调用口径未变，待确认项不动）
 //   4) 静态契约：bindSettingsView 不再绑定运行参数保存 / 不再 POST /api/dispatch/settings；
-//      renderSettingsView 仍 GET /api/dispatch/settings（取值来源待确认，保留既有落盘配置）
+//      读取动作在 loadDispatchSettings（BUG-20260920-001 起自 renderSettingsView 移入）
 //   5) 范围边界：服务端消费点与接口不动——scheduler 仍读 cliPath / allowNonGit /
 //      resumeAfterRestart，codex-adapter 仍按 allowNonGit 追加 --skip-git-repo-check，
 //      server 仍保留 /api/dispatch/settings GET/POST（是否连带删除属待确认，不在本单）
@@ -135,22 +136,25 @@ t('T2 加载中：任务设置加载骨架保留，运行参数控件与保存�
   }
 });
 
-// ---------- T3 设置读取失败：整页错误 + 重试保留（接口口径未变） ----------
+// ---------- T3 设置读取失败：局部错误 + 重试（BUG-20260920-001 起不再整页替换） ----------
 
-t('T3 设置读取失败仍整页「设置加载失败」+ 重试；重试成功后设置页恢复且无运行参数分区', async () => {
+t('T3 设置读取失败改局部「派发设置加载失败」+ 重试，不整页替换（其余分区照常）；重试成功后局部错误消失且无运行参数分区', async () => {
   const h = harness();
   const view = element();
   h.seed('#settingsView', view);
   h.ctl.settingsFail = new Error('配置目录不可读');
   await h.run('renderSettingsView()');
   const failed = view.innerHTML;
-  assert.match(failed, /设置加载失败/, '读取失败仍显示整页错误');
+  assert.doesNotMatch(failed, /<div class="notice err">设置加载失败：/, '不再整页替换设置视图（旧整页错误形态移除）');
+  assert.match(failed, /派发设置加载失败：/, '读取失败局部显示原因');
   assert.match(failed, /配置目录不可读/, '错误信息可见');
-  assert.match(failed, /id="stRetry"/, '失败态提供重试按钮');
-  // 重试成功 → 恢复「批量任务」，且无运行参数分区
+  assert.match(failed, /id="csRetry"/, '失败态提供重试按钮');
+  assert.match(failed, /<h4>批量任务<\/h4>/, '「批量任务」分区不受局部失败影响，照常渲染');
+  // 重试成功 → 局部错误消失，仍无运行参数分区
   h.ctl.settingsFail = null;
-  await view.querySelector('#stRetry').fire('click').result;
-  assert.match(view.innerHTML, /<h4>批量任务<\/h4>/, '重试成功后设置页恢复');
+  await view.querySelector('#csRetry').fire('click').result;
+  assert.doesNotMatch(view.innerHTML, /派发设置加载失败：/, '重试成功后局部错误消失');
+  assert.match(view.innerHTML, /<h4>批量任务<\/h4>/, '重试成功后设置页照常');
   assert.doesNotMatch(view.innerHTML, /<h4>运行参数<\/h4>/, '重试成功后亦无「运行参数」分区');
 });
 
@@ -169,7 +173,10 @@ t('T4 静态契约：bindSettingsView 不再绑定运行参数保存；renderSet
   assert.doesNotMatch(bind[0], /dispatch\/settings/, '设置视图不再发起 /api/dispatch/settings 保存');
   const render = source.match(/async function renderSettingsView\(\)[\s\S]*?\n\}/);
   assert.ok(render, '应存在 renderSettingsView');
-  assert.match(render[0], /\/api\/dispatch\/settings/, '仍读取项目设置（取值来源待确认，保留既有落盘配置，服务端消费照常）');
+  // BUG-20260920-001：读取动作移入 loadDispatchSettings（失败局部显示，不再整页替换）
+  const loader = source.match(/async function loadDispatchSettings\(\)[\s\S]*?\n\}/);
+  assert.ok(loader, '应存在 loadDispatchSettings');
+  assert.match(loader[0], /\/api\/dispatch\/settings/, '仍读取项目设置（取值来源待确认，保留既有落盘配置，服务端消费照常）');
   // 旧保存入口的操作反馈文案随分区删除，不残留死文案
   assert.doesNotMatch(source, /已保存项目设置（用于后续新执行）/, '运行参数保存 toast 文案应随入口删除');
 });
