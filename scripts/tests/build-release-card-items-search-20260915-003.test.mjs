@@ -50,12 +50,13 @@ function manyItems(n = 12) {
   }));
 }
 
-function ver(id, name, status = 'merged', items = manyItems()) {
+function ver(id, name, status = 'merged', items = manyItems(), extra = {}) {
   return {
-    id, name, description: `描述 ${name}`, status, targetBranch: 'main',
+    id, name, description: `描述 ${name}`, status, targetBranch: 'main', pushed: false,
     items,
     createdAt: '2026-09-15T01:00:00.000Z', updatedAt: '2026-09-15T02:00:00.000Z',
     merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
+    ...extra,
   };
 }
 
@@ -372,16 +373,24 @@ t('R8 过滤/翻页后移出与 commit 换选绑定真实条目 ID；merging/mer
   assert.match(inner, /data-remove-item="REQ-20260915-002"/, '过滤后移出按钮绑定命中条目');
   assert.match(inner, /data-commit-item="REQ-20260915-005"/, '过滤后 commit 换选绑定命中条目');
   assert.doesNotMatch(inner, /data-remove-item="REQ-20260915-001"/, '未命中条目不出现在当前页行内操作');
-  // merged 锁定：移出 / commit 换选 / 添加条目禁用（搜索与翻页不绕过锁定）
-  assert.match(inner, /data-remove-item="REQ-20260915-002" disabled/, 'merged 移出禁用');
-  assert.match(inner, /data-commit-item="REQ-20260915-002" disabled/, 'merged commit 换选禁用');
-  assert.match(inner, /id="bldAddItem" disabled/, 'merged 添加条目禁用');
+  // BUG-20260920-005：条目锁基准后移——merged（未推送）移出 / commit 换选 / 添加条目可用
+  assert.doesNotMatch(inner, /data-remove-item="REQ-20260915-002" disabled/, 'merged 未推送移出可用');
+  assert.doesNotMatch(inner, /data-commit-item="REQ-20260915-002" disabled/, 'merged 未推送 commit 换选可用');
+  assert.doesNotMatch(inner, /id="bldAddItem" disabled/, 'merged 未推送添加条目可用');
+  // 推送完成（正式发布）后锁定（搜索与翻页不绕过锁定）
+  const hP = setup({ versions: [ver('BLD-PUSHED', 'p', 'merged', manyItems(12), { pushed: true })] });
+  await hP.enter();
+  hP.run(`window.ATBBuild.setStep('link')`);
+  const innerP = hP.inner();
+  assert.match(innerP, /data-remove-item="REQ-20260915-002" disabled title="已正式发布，条目已锁定"/, '推送完成后移出禁用并说明');
+  assert.match(innerP, /data-commit-item="REQ-20260915-002" disabled/, '推送完成后 commit 换选禁用');
+  assert.match(innerP, /id="bldAddItem" disabled title="已正式发布，条目已锁定"/, '推送完成后添加条目禁用并说明');
   // merging 同口径
   const h2 = setup({ versions: [ver('BLD-MERGING', 'g', 'merging', manyItems(3))] });
   await h2.enter();
   h2.run(`window.ATBBuild.setStep('link')`);
   const inner2 = h2.inner();
-  assert.match(inner2, /data-remove-item="REQ-20260915-001" disabled title="合并中\/已合并状态锁定条目增删"/, 'merging 移出禁用提示保留');
+  assert.match(inner2, /data-remove-item="REQ-20260915-001" disabled title="合并中，条目不可增删"/, 'merging 移出禁用提示保留');
   // 数据减少：12 条第 2 页 → 移出 2 条变 10 条后回写回落第 1 页
   const h3 = setup({ versions: [ver('BLD-20260915-001', 'v1.0', 'draft', manyItems(12))] });
   await h3.enter();

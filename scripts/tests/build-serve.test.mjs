@@ -325,11 +325,17 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.ok(replays1.length === 1 && replays1[0].original === commit1, '记录重放证据（original → replayed）');
     assert.match(git(projA, ['branch', '--contains', replays1[0].replayed]), /main/, 'main 应包含重放提交（REQ-20260920-003 隔离合并：只重放所选提交自身变更）');
     assert.ok(!git(projA, ['branch', '--contains', commit1]).includes('main'), '原始提交非 main 祖先（重放语义）');
+    // BUG-20260920-005：merged（已合并未推送）三类操作放开——重开合并幂等 200（无未合并条目
+    // 直接回 merged）；补关联 / 移出全链路可用（补入后即移出还原范围，不占用后续用例的 reqB）
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
-    assert.equal(r.status, 409, '已合并重复合并 409');
-    // 已合并锁定条目增删（S4 锁口径）
+    assert.equal(r.status, 200, `merged 未推送重开合并（幂等）：${r.text}`);
+    assert.equal(r.json.version.status, 'merged');
     r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'add', items: [{ itemId: reqB.id, commit: commit1 }] });
-    assert.equal(r.status, 409, '已合并锁定增删');
+    assert.equal(r.status, 200, `merged 未推送补关联条目：${r.text}`);
+    assert.equal(r.json.version.items.length, 2);
+    r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'remove', itemIds: [reqB.id] });
+    assert.equal(r.status, 200, `merged 未推送移出条目（还原范围）：${r.text}`);
+    assert.equal(r.json.version.items.length, 1);
 
     // S9 push / sync：首推建立上游 → 远端分组出现 origin/dev；sync（BUG-20260914-011：
     // fetch + push）幂等补推其余开发分支（long 未手动推送，由 sync 上传），main 不推
@@ -350,6 +356,16 @@ t('S1~S10 /api/build* 全链路', async () => {
     r = await req(port, 'GET', `/api/build/branches${P}`);
     assert.ok(r.json.remote.includes('origin/long'), 'sync 后远端分组出现 origin/long');
     assert.ok(!r.json.remote.includes('origin/main'), 'main 未被同步推送');
+
+    // BUG-20260920-005：推送完成（正式发布）后三类操作锁定——合并与条目增删 409 并说明已正式发布
+    r = await req(port, 'POST', `/api/build/release/push${P}`, { id: vid, remote: 'origin' });
+    assert.equal(r.status, 200, `推送主分支应成功：${r.text}`);
+    r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
+    assert.equal(r.status, 409, '已正式发布不可再合并');
+    assert.match(r.json.error || '', /正式发布/);
+    r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'add', items: [{ itemId: reqB.id, commit: commit1 }] });
+    assert.equal(r.status, 409, '已正式发布锁定条目增删');
+    assert.match(r.json.error || '', /正式发布/);
 
     // S7 合并隔离：脏工作区不阻塞（合并在临时工作树执行、不触碰当前工作区），未提交改动保留；
     // release git 运行互斥 409
