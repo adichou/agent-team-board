@@ -264,7 +264,9 @@ t('P3 发布成功版本：左侧卡片标签替换为绿色「已发布」（st
   assert.match(card, /title="[^"]*BPUB-20260917-0a1[^"]*"/, 'title 提示成功运行编号');
   assert.match(card, /1\.2\.0/, 'title / 提示含发行版本号');
   assert.doesNotMatch(card, /已合并(?!入 main)/, '卡片标题行不再显示「已合并」标签（按钮 disabled title 除外）');
-  assert.match(card, /title="已合并入 main"/, '按钮禁用规则不变（合并键仍按 merged 禁用）');
+  // BUG-20260920-005：合并键锁定基准后移到推送完成——merged（未推送）不再禁用（产品发布
+  // published 不计入推送口径，见该单待确认第 1 条默认）
+  assert.match(card, /data-ver-merge="BLD-A"(?![^>]*disabled)/, '合并键按推送完成锁定（merged 未推送仍可用）');
   assert.match(card, /data-ver-release="BLD-A"(?![^>]*disabled)/, '创建发布键仍可用（merged 未锁）');
 });
 
