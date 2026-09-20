@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260919-002 决策界面布局优化演示</title>
+<style>
+  /* ---------- 主题变量（对齐看板深浅色两套口径） ---------- */
+  :root {
+    --bg: #f5f7fa; --panel: #ffffff; --text: #1c2430; --muted: #64748b;
+    --border: #d8dee7; --primary: #2563eb; --inprogress: #d97706; --done: #16a34a;
+    --danger: #dc2626; --warn: #b45309; --shadow: 0 1px 4px rgba(15, 23, 42, .08);
+  }
+  html[data-theme="dark"] {
+    --bg: #141a22; --panel: #1d2530; --text: #e5eaf1; --muted: #93a1b3;
+    --border: #33404f; --primary: #5b93f5; --inprogress: #f0a24b; --done: #43c46f;
+    --danger: #f07171; --warn: #e0a34e; --shadow: 0 1px 5px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  button { font: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .55; }
+  textarea, input { font: inherit; color: var(--text); }
+
+  /* ---------- 演示工具栏 ---------- */
+  .demo-bar {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  }
+  .demo-bar h1 { font-size: 15px; margin: 0; }
+  .demo-bar .demo-note { font-size: 12px; color: var(--muted); flex-basis: 100%; margin: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--text); padding: 5px 12px; font-size: 12.5px;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: #fff; }
+  .seg-label { font-size: 12px; color: var(--muted); margin-right: 4px; }
+  details.demo-coverage { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+  details.demo-coverage summary { cursor: pointer; color: var(--primary); }
+  details.demo-coverage ul { margin: 6px 0 0; padding-left: 18px; }
+
+  /* ---------- 看板页局部（演示主区） ---------- */
+  .demo-main { max-width: 980px; margin: 0 auto; padding: 14px 16px 120px; }
+  .mock-caption { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .mock-list {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    max-height: 150px; overflow-y: auto; box-shadow: var(--shadow);
+  }
+  .mock-row {
+    display: flex; gap: 10px; align-items: center; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .mock-row:last-child { border-bottom: 0; }
+  .mock-row .rid { color: var(--muted); font-size: 12px; flex: none; }
+  .mock-row .st {
+    margin-left: auto; flex: none; font-size: 11.5px; border: 1px solid var(--border);
+    border-radius: 999px; padding: 1px 8px; color: var(--muted);
+  }
+  .mock-row .st.dev { color: var(--inprogress); border-color: var(--inprogress); }
+
+  /* ---------- 待人工确认聚合区 ---------- */
+  .hold-area { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .hold-area-head { display: flex; align-items: center; gap: 10px; }
+  .hold-area-head .t { font-size: 13.5px; font-weight: 700; color: var(--inprogress); }
+  .hold-area-head .count {
+    font-size: 12px; font-weight: 700; color: var(--inprogress);
+    border: 1px solid var(--inprogress); border-radius: 999px; padding: 0 8px;
+  }
+  .hold-area-sub { margin: 0; font-size: 12px; color: var(--muted); }
+  .demo-old .hold-area-head .t { color: var(--inprogress); }
+  .demo-new .hold-area {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; box-shadow: var(--shadow);
+  }
+  .demo-new .hold-area-head .t { font-size: 14px; }
+  .area-loading, .area-empty-hint {
+    border: 1px dashed var(--border); border-radius: 10px; padding: 10px 12px;
+    font-size: 12.5px; color: var(--muted); background: var(--panel);
+  }
+  .area-error {
+    display: flex; align-items: center; gap: 10px; border: 1px solid var(--warn);
+    border-radius: 10px; padding: 8px 12px; font-size: 12.5px; color: var(--warn);
+    background: var(--panel);
+  }
+
+  /* ---------- hold 卡片：现状 ---------- */
+  .hold-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--inprogress); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 10px 12px;
+  }
+  .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rid-chip { font-size: 12px; color: var(--primary); font-weight: 600; }
+  .flag-hold { color: var(--inprogress); font-size: 12px; font-weight: 600; }
+  .card-top .wait { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .demo-old .card-top .wait { margin-left: 0; }
+  .card-title { font-size: 13.5px; font-weight: 600; margin: 4px 0 2px; overflow-wrap: anywhere; }
+  .q-summary { font-size: 12.5px; color: var(--muted); }
+  .q-list { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+  .q-list li.open { color: var(--text); font-weight: 600; }
+  .q-list li.answered { color: var(--muted); }
+  .hold-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 4px 10px; font-size: 12.5px;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.accent { background: var(--done); border-color: var(--done); color: #fff; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn.small { padding: 3px 9px; font-size: 12px; }
+
+  /* ---------- hold 卡片：优化后增量样式 ---------- */
+  .demo-new .hold-acts { justify-content: space-between; }
+  .demo-new .acts-primary, .demo-new .acts-secondary {
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  }
+  .demo-new .acts-secondary { padding-left: 10px; border-left: 1px dashed var(--border); }
+  .answered-fold {
+    margin-top: 4px; display: flex; align-items: center; gap: 4px;
+    border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 0;
+  }
+  .answered-fold:hover { color: var(--primary); }
+  .unanswered-count {
+    font-size: 11.5px; font-weight: 700; color: var(--inprogress);
+    border: 1px solid var(--inprogress); border-radius: 999px; padding: 0 7px;
+  }
+
+  /* ---------- 展开记录 ---------- */
+  .hold-timeline {
+    margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; font-size: 12.5px;
+  }
+  .hold-timeline p { margin: 0 0 4px; }
+  .hold-timeline .muted { color: var(--muted); }
+  .hold-timeline ul { margin: 2px 0 0; padding-left: 18px; color: var(--muted); }
+
+  /* ---------- 侧拉面板（人工决策） ---------- */
+  .side-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
+    width: min(560px, 92vw); display: flex; flex-direction: column;
+    background: var(--bg); border-left: 1px solid var(--border);
+    box-shadow: -8px 0 30px rgba(10, 16, 26, .25);
+  }
+  .side-panel.hidden { display: none; }
+  .sp-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 14px 16px; border-bottom: 1px solid var(--border); flex: none;
+  }
+  .sp-head h3 { margin: 0; font-size: 15px; }
+  .sp-head .scope { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+  .icon-btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; width: 28px; height: 28px; line-height: 1; flex: none;
+  }
+  .sp-progress {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); flex: none; font-size: 12.5px; color: var(--muted);
+  }
+  .sp-progress .pill {
+    font-weight: 700; color: var(--inprogress);
+    border: 1px solid var(--inprogress); border-radius: 999px; padding: 0 9px;
+  }
+  .sp-progress .pill.done { color: var(--done); border-color: var(--done); }
+  .demo-old .sp-progress { border-bottom: 0; padding-bottom: 0; }
+  .sp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; }
+  .sp-meta { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
+  .hold-q {
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin: 0 0 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .hold-q legend { font-size: 12.5px; font-weight: 600; padding: 0 4px; }
+  .hold-q legend.open { color: var(--inprogress); }
+  .hold-q legend.answered { color: var(--done); }
+  .hold-q textarea, .hold-q input[type="text"] {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--panel); padding: 6px 8px; font-size: 13px; resize: vertical;
+  }
+  .hold-q textarea:focus, .hold-q input[type="text"]:focus {
+    outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary);
+  }
+  .sp-foot {
+    flex: none; border-top: 1px solid var(--border); padding: 10px 16px;
+    display: flex; flex-direction: column; gap: 8px; background: var(--bg);
+  }
+  .sp-msg { margin: 0; font-size: 12.5px; min-height: 1.2em; }
+  .sp-msg.err { color: var(--danger); }
+  .sp-msg.ok { color: var(--done); }
+  .sp-foot .row { display: flex; justify-content: flex-end; gap: 10px; }
+  .sp-loading, .sp-error { padding: 24px 4px; font-size: 13px; }
+  .sp-error { color: var(--danger); }
+  .sp-error .row { display: flex; gap: 10px; margin-top: 10px; }
+
+  /* ---------- 二次确认弹层 / toast ---------- */
+  .modal-wrap {
+    position: fixed; inset: 0; z-index: 60; background: rgba(10, 16, 26, .45);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-wrap.hidden { display: none; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    max-width: 420px; width: 100%; padding: 16px; box-shadow: var(--shadow);
+  }
+  .modal h4 { margin: 0 0 8px; font-size: 14px; }
+  .modal p { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
+  .modal .row { display: flex; justify-content: flex-end; gap: 10px; }
+  .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    z-index: 70; background: var(--text); color: var(--bg);
+    border-radius: 8px; padding: 8px 14px; font-size: 12.5px; box-shadow: var(--shadow);
+    max-width: 80vw; display: none;
+  }
+  .toast.show { display: block; }
+  .toast.err { background: var(--danger); color: #fff; }
+
+  @media (max-width: 640px) {
+    .side-panel { width: 100vw; border-left: none; }
+    .sp-head { padding: 12px; flex-wrap: wrap; }
+    .sp-body { padding: 10px 10px 20px; }
+    .demo-new .acts-secondary { padding-left: 0; border-left: 0; }
+  }
+</style>
+</head>
+<body class="demo-old">
+
+<header class="demo-bar">
+  <h1>REQ-20260919-002 · 决策界面布局优化演示</h1>
+  <span class="seg-label">布局对照</span>
+  <span class="seg" role="group" aria-label="布局对照切换">
+    <button type="button" id="modeOld" aria-pressed="true">现状布局</button>
+    <button type="button" id="modeNew" aria-pressed="false">优化后布局</button>
+  </span>
+  <span class="seg-label">主题</span>
+  <span class="seg" role="group" aria-label="深浅色切换">
+    <button type="button" id="themeLight" aria-pressed="true">浅色</button>
+    <button type="button" id="themeDark" aria-pressed="false">深色</button>
+  </span>
+  <span class="seg-label">数据状态</span>
+  <span class="seg" role="group" aria-label="数据状态切换">
+    <button type="button" data-dstate="ok" aria-pressed="true">正常</button>
+    <button type="button" data-dstate="empty" aria-pressed="false">空</button>
+    <button type="button" data-dstate="loading" aria-pressed="false">加载中</button>
+    <button type="button" data-dstate="error" aria-pressed="false">加载失败</button>
+  </span>
+  <p class="demo-note">演示为看板页局部（条目列表占位 + 「待人工确认」聚合区 + 「人工决策」侧拉面板），数据为静态示例、不接真实 API；「优化后布局」为本需求的目标示意，具体视觉细节以 design 阶段为准。</p>
+  <details class="demo-coverage">
+    <summary>本演示覆盖点（点击展开）</summary>
+    <ul>
+      <li>布局对照：现状卡片问题全平铺、四按钮同权重 vs 优化后信息分层、主次操作分组、已答折叠、区头计数强调。</li>
+      <li>侧拉面板：现状无进度徽标、固定 2 行答复框 vs 优化后常驻「未答 x/y」进度、答复框随内容增高。</li>
+      <li>交互链路：补决策 → 草稿保存（可只答部分）→ 决策齐备 → 复工；未答 &gt; 0 复工禁用；确认完成二次确认防呆。</li>
+      <li>状态反馈：正常 / 空 / 加载中 / 加载失败（错误条 + 重试）四态切换；面板读取中 / 失败 / 表单三态；保存失败输入保留。</li>
+      <li>深浅色切换；窄屏（≤640px）面板全屏——可直接缩小浏览器窗口体验。</li>
+    </ul>
+  </details>
+</header>
+
+<main class="demo-main">
+  <p class="mock-caption">▼ 看板页条目列表（占位示意：聚合区位于列表之后，长列表需滚动才能到达——现状痛点之一）</p>
+  <div class="mock-list" id="mockList" aria-hidden="true"></div>
+
+  <!-- 待人工确认聚合区 -->
+  <section id="holdArea" class="hold-area" role="region" aria-label="待人工确认" aria-live="polite"></section>
+</main>
+
+<!-- 人工决策侧拉面板 -->
+<aside id="holdPanel" class="side-panel hidden" role="dialog" aria-label="人工决策" aria-modal="true">
+  <div class="sp-head">
+    <div>
+      <h3 id="hpTitle">人工决策</h3>
+      <p class="scope">逐项作答后复工；支持保存未答完的草稿</p>
+    </div>
+    <button type="button" class="icon-btn" id="hpClose" aria-label="关闭人工决策面板" title="关闭（Esc）">✕</button>
+  </div>
+  <div id="hpProgress" class="sp-progress"></div>
+  <div class="sp-body">
+    <p id="hpLoading" class="sp-loading">正在读取决策项…</p>
+    <div id="hpError" class="sp-error" hidden>
+      <p id="hpErrorText">决策项读取失败：（演示）接口暂不可用</p>
+      <div class="row">
+        <button type="button" class="btn" id="hpErrClose">关闭</button>
+        <button type="button" class="btn primary" id="hpRetry">重试</button>
+      </div>
+    </div>
+    <form id="hpForm" hidden>
+      <p id="hpMeta" class="sp-meta" role="status"></p>
+      <div id="hpQuestions"></div>
+    </form>
+  </div>
+  <div class="sp-foot">
+    <p id="hpMsg" class="sp-msg" role="status" aria-live="polite"></p>
+    <div class="row">
+      <button type="button" class="btn" id="hpCancel">关闭</button>
+      <button type="submit" class="btn primary" id="hpSave" form="hpForm">保存决策</button>
+    </div>
+  </div>
+</aside>
+
+<!-- 确认完成二次确认（防呆演示） -->
+<div id="doneGuard" class="modal-wrap hidden" role="dialog" aria-label="确认完成防呆">
+  <div class="modal">
+    <h4 id="dgTitle">尚有决策未答，仍要确认完成吗？</h4>
+    <p>常规路径是补齐决策并复工；确认后将越过未答决策完成条目（演示中该条目将离开聚合区）。</p>
+    <div class="row">
+      <button type="button" class="btn" id="dgCancel">取消</button>
+      <button type="button" class="btn danger" id="dgOk">仍要确认完成</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 静态示例数据 ---------- */
+  var holds = [
+    {
+      id: 'REQ-20260919-010',
+      title: '批量导入支持 CSV 与 JSON 格式',
+      wait: '已等待 2 小时 13 分',
+      declared: '声明：2026-09-19 20:41（worker dev-2）',
+      reason: '受阻原因：范围取舍待人工决策——CSV 异常行策略影响导入契约',
+      run: '运行：run-20260919-1830-a1',
+      questions: [
+        { q: 'Q1', text: 'CSV 出现编码异常行时，采用跳过并记录还是整批失败回滚？', answer: '', note: '' },
+        { q: 'Q2', text: '单文件大小上限是否先按 50MB 执行？', answer: '上限先按 50MB，超限提示分批导入', note: '' }
+      ],
+      events: [
+        { at: '2026-09-19 22:05', label: '作答回执 Q2', by: '人工' },
+        { at: '2026-09-19 20:41', label: '声明待人工决策', by: 'worker dev-2' }
+      ]
+    },
+    {
+      id: 'BUG-20260919-003',
+      title: '导出文件名含日期时浏览器下载被拦截',
+      wait: '已等待 18 分钟',
+      declared: '声明：2026-09-19 22:36（worker dev-1）',
+      reason: '受阻原因：修复方案取舍待人工决策——是否迁移下载实现',
+      run: '运行：run-20260919-2230-b7',
+      questions: [
+        { q: 'Q1', text: '采用系统官方下载接口改造，还是保留现有实现并加白名单？', answer: '', note: '' },
+        { q: 'Q2', text: '旧版本生成的文件名格式是否需要继续兼容？', answer: '', note: '' },
+        { q: 'Q3', text: '是否需要提供行为开关以便回退？', answer: '', note: '' }
+      ],
+      events: [
+        { at: '2026-09-19 22:36', label: '声明待人工决策', by: 'worker dev-1' }
+      ]
+    }
+  ];
+
+  var state = {
+    mode: 'old',            // old | new
+    dstate: 'ok',           // ok | empty | loading | error
+    expanded: {},           // itemId -> true（进展记录展开）
+    answeredOpen: {},       // itemId -> true（优化后已答组展开）
+    panel: { open: false, id: null, view: 'form', busy: false, opener: null, errorOnce: false },
+    guardId: null
+  };
+
+  function $(s) { return document.querySelector(s); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function un(h) { return h.questions.filter(function (q) { return !q.answer; }).length; }
+  function byId(id) { return holds.filter(function (h) { return h.id === id; })[0]; }
+
+  var toastTimer = null;
+  function toast(text, isErr) {
+    var t = $('#toast');
+    t.textContent = text;
+    t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = 'toast'; }, 2600);
+  }
+
+  /* ---------- 工具栏：模式 / 主题 / 数据状态 ---------- */
+  function setMode(m) {
+    state.mode = m;
+    document.body.className = m === 'old' ? 'demo-old' : 'demo-new';
+    $('#modeOld').setAttribute('aria-pressed', String(m === 'old'));
+    $('#modeNew').setAttribute('aria-pressed', String(m === 'new'));
+    renderArea();
+  }
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('#themeLight').setAttribute('aria-pressed', String(t === 'light'));
+    $('#themeDark').setAttribute('aria-pressed', String(t === 'dark'));
+  }
+  function setDstate(d) {
+    state.dstate = d;
+    document.querySelectorAll('[data-dstate]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-dstate') === d));
+    });
+    renderArea();
+  }
+  $('#modeOld').addEventListener('click', function () { setMode('old'); });
+  $('#modeNew').addEventListener('click', function () { setMode('new'); });
+  $('#themeLight').addEventListener('click', function () { setTheme('light'); });
+  $('#themeDark').addEventListener('click', function () { setTheme('dark'); });
+  document.querySelectorAll('[data-dstate]').forEach(function (b) {
+    b.addEventListener('click', function () { setDstate(b.getAttribute('data-dstate')); });
+  });
+
+  /* ---------- 条目列表占位 ---------- */
+  (function mockList() {
+    var rows = [
+      ['REQ-20260919-012', '导出报表支持自定义列宽', 'done'],
+      ['REQ-20260919-011', '看板列宽记忆', 'done'],
+      ['REQ-20260918-009', '批量任务失败重试策略', 'in-progress'],
+      ['REQ-20260918-008', '运行记录按条目聚合视图', 'in-progress'],
+      ['REQ-20260917-005', '发布预检报告归档', 'planned'],
+      ['REQ-20260917-002', '文档讨论轮提交放行', 'planned'],
+      ['REQ-20260916-014', '任务页筛选持久化', 'planned'],
+      ['REQ-20260916-009', '深色模式对比度修正', 'planned']
+    ];
+    var stText = { done: '已完成', 'in-progress': '开发中', planned: '已计划' };
+    $('#mockList').innerHTML = rows.map(function (r) {
+      return '<div class="mock-row"><span class="rid">' + esc(r[0]) + '</span>' + esc(r[1]) +
+        '<span class="st ' + r[2] + '">' + stText[r[2]] + '</span></div>';
+    }).join('');
+  })();
+
+  /* ---------- 聚合区渲染 ---------- */
+  function questionRows(h, showAnsweredFlat) {
+    var open = h.questions.filter(function (q) { return !q.answer; });
+    var answered = h.questions.filter(function (q) { return q.answer; });
+    var html = '';
+    if (state.mode === 'new') {
+      html += open.map(function (q) {
+        return '<li class="open" title="未答">○ ' + esc(q.text) + '</li>';
+      }).join('');
+      if (answered.length) {
+        var foldOpen = !!state.answeredOpen[h.id];
+        html += '<li class="answered" style="list-style:none;margin-left:-18px;">' +
+          '<button type="button" class="answered-fold" data-fold="' + esc(h.id) + '" aria-expanded="' + foldOpen + '">' +
+          (foldOpen ? '▾' : '▸') + ' 已答 ' + answered.length + ' 项（点击' + (foldOpen ? '收起' : '展开') + '）</button>';
+        if (foldOpen) {
+          html += '<ul class="q-list">' + answered.map(function (q) {
+            return '<li class="answered" title="已答：' + esc(q.answer) + '">✓ ' + esc(q.text) + '</li>';
+          }).join('') + '</ul>';
+        }
+        html += '</li>';
+      }
+      return html;
+    }
+    // 现状：全部问题平铺（○ 未答在前 / ✓ 已答在后，与看板口径一致地按声明顺序）
+    return h.questions.map(function (q) {
+      return '<li class="' + (q.answer ? 'answered' : 'open') + '" title="' +
+        (q.answer ? '已答：' + esc(q.answer) : '未答') + '">' +
+        (q.answer ? '✓' : '○') + ' ' + esc(q.text) + '</li>';
+    }).join('');
+  }
+
+  function timelineHtml(h) {
+    var rows = h.events.map(function (e) {
+      return '<li>' + esc(e.at) + ' · ' + esc(e.label) + (e.by ? '（' + esc(e.by) + '）' : '') + '</li>';
+    }).join('');
+    return '<div class="hold-timeline">' +
+      '<p>' + esc(h.reason) + '</p>' +
+      '<p class="muted">' + esc(h.run) + '（决策留痕见 agent-team-board/runtime/holds/decisions/）</p>' +
+      '<ul>' + rows + '</ul></div>';
+  }
+
+  function actionsHtml(h, unanswered) {
+    var resumeDisabled = unanswered > 0 ? ' disabled' : '';
+    var resumeTitle = unanswered > 0
+      ? ' title="尚缺 ' + unanswered + ' 项决策，补齐后可复工"'
+      : ' title="决策已齐备：条目回已计划队列，可被 AI 开发重新取单"';
+    if (state.mode === 'old') {
+      return '<div class="hold-acts">' +
+        '<button type="button" class="btn small" data-toggle="' + esc(h.id) + '">' + (state.expanded[h.id] ? '收起记录' : '查看进展记录') + '</button>' +
+        '<button type="button" class="btn small primary" data-answer="' + esc(h.id) + '">补决策</button>' +
+        '<button type="button" class="btn small accent" data-resume="' + esc(h.id) + '"' + resumeDisabled + resumeTitle + '>复工</button>' +
+        '<button type="button" class="btn small" data-done="' + esc(h.id) + '">确认完成</button>' +
+        '</div>';
+    }
+    return '<div class="hold-acts">' +
+      '<span class="acts-primary">' +
+      '<button type="button" class="btn small primary" data-answer="' + esc(h.id) + '">补决策</button>' +
+      '<button type="button" class="btn small accent" data-resume="' + esc(h.id) + '"' + resumeDisabled + resumeTitle + '>复工</button>' +
+      '</span>' +
+      '<span class="acts-secondary">' +
+      '<button type="button" class="btn small ghost" data-toggle="' + esc(h.id) + '">' + (state.expanded[h.id] ? '收起记录' : '查看进展记录') + '</button>' +
+      '<button type="button" class="btn small ghost" data-done="' + esc(h.id) + '">确认完成</button>' +
+      '</span>' +
+      '</div>';
+  }
+
+  function cardHtml(h) {
+    var unanswered = un(h);
+    var countBadge = state.mode === 'new'
+      ? '<span class="unanswered-count">未答 ' + unanswered + '/' + h.questions.length + '</span>'
+      : '<span class="q-summary">未答 ' + unanswered + '/' + h.questions.length + '</span>';
+    return '<article class="hold-card" data-hold-id="' + esc(h.id) + '">' +
+      '<div class="card-top">' +
+      '<span class="rid-chip">' + esc(h.id) + '</span>' +
+      '<span class="flag-hold" title="worker 已声明待人工决策">⚠ 等人工决策</span>' +
+      '<span class="wait">' + esc(h.wait) + '</span>' +
+      '</div>' +
+      '<div class="card-title">' + esc(h.title) + '</div>' +
+      '<div>' + countBadge + '<ul class="q-list">' + questionRows(h) + '</ul></div>' +
+      actionsHtml(h, unanswered) +
+      (state.expanded[h.id] ? timelineHtml(h) : '') +
+      '</article>';
+  }
+
+  function renderArea() {
+    var area = $('#holdArea');
+    if (state.dstate === 'empty') {
+      area.innerHTML = '<div class="area-empty-hint">（演示注：空态时「待人工确认」聚合区整体隐藏、不占版面；此虚线框仅示意其位置，实际不存在。）</div>';
+      return;
+    }
+    if (state.dstate === 'loading') {
+      area.innerHTML = '<div class="area-loading">正在加载待确认清单…</div>';
+      return;
+    }
+    if (state.dstate === 'error') {
+      area.innerHTML = '<div class="area-error" role="alert">' +
+        '<span>待确认清单加载失败：（演示）网络超时。已保留上次数据（若有）。</span>' +
+        '<button type="button" class="btn small" id="holdRetry">重试</button></div>';
+      $('#holdRetry').addEventListener('click', function () {
+        setDstate('loading');
+        setTimeout(function () { setDstate('ok'); }, 700);
+      });
+      return;
+    }
+    var head = '<header class="hold-area-head">' +
+      '<span class="t">⚠ 待人工确认</span>' +
+      (state.mode === 'new' ? '<span class="count">' + holds.length + '</span>' : '<span class="t">（' + holds.length + '）</span>') +
+      '</header>' +
+      '<p class="hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失</p>';
+    area.innerHTML = head + holds.map(cardHtml).join('');
+    bindArea();
+  }
+
+  function bindArea() {
+    document.querySelectorAll('[data-toggle]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-toggle');
+        state.expanded[id] = !state.expanded[id];
+        renderArea();
+      });
+    });
+    document.querySelectorAll('[data-fold]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-fold');
+        state.answeredOpen[id] = !state.answeredOpen[id];
+        renderArea();
+      });
+    });
+    document.querySelectorAll('[data-answer]').forEach(function (b) {
+      b.addEventListener('click', function () { openPanel(b.getAttribute('data-answer'), b); });
+    });
+    document.querySelectorAll('[data-resume]').forEach(function (b) {
+      b.addEventListener('click', function () { resumeItem(b.getAttribute('data-resume'), b); });
+    });
+    document.querySelectorAll('[data-done]').forEach(function (b) {
+      b.addEventListener('click', function () { doneItem(b.getAttribute('data-done')); });
+    });
+  }
+
+  /* ---------- 复工 / 确认完成 ---------- */
+  function removeItem(id) {
+    var i = holds.findIndex(function (h) { return h.id === id; });
+    if (i >= 0) holds.splice(i, 1);
+    renderArea();
+  }
+  function resumeItem(id, btn) {
+    if (btn && btn.disabled) return;
+    var h = byId(id);
+    if (!h) return;
+    if (un(h) > 0) { toast('复工失败：尚有未答决策（演示防呆）', true); return; }
+    if (btn) { btn.disabled = true; btn.textContent = '复工中…'; }
+    setTimeout(function () {
+      removeItem(id);
+      toast('✓ 已复工 ' + id + '：回到已计划队列，可被 AI 开发重新取单');
+      if (!holds.length) setDstate('empty');
+    }, 500);
+  }
+  function doneItem(id) {
+    var h = byId(id);
+    if (!h) return;
+    if (un(h) > 0) {
+      state.guardId = id;
+      $('#dgTitle').textContent = '尚有 ' + un(h) + ' 项决策未答，仍要确认完成吗？';
+      $('#doneGuard').classList.remove('hidden');
+      return;
+    }
+    removeItem(id);
+    toast('✓ ' + id + ' 已确认完成');
+    if (!holds.length) setDstate('empty');
+  }
+  $('#dgCancel').addEventListener('click', function () {
+    state.guardId = null;
+    $('#doneGuard').classList.add('hidden');
+  });
+  $('#dgOk').addEventListener('click', function () {
+    var id = state.guardId;
+    state.guardId = null;
+    $('#doneGuard').classList.add('hidden');
+    removeItem(id);
+    toast('✓ ' + id + ' 已确认完成（越过未答决策，演示留痕略）');
+    if (!holds.length) setDstate('empty');
+  });
+
+  /* ---------- 侧拉面板 ---------- */
+  function setPanelView(v) {
+    $('#hpLoading').hidden = v !== 'loading';
+    $('#hpError').hidden = v !== 'error';
+    $('#hpForm').hidden = v !== 'form';
+  }
+  function panelMsg(text, cls) {
+    var el = $('#hpMsg');
+    el.textContent = text;
+    el.className = 'sp-msg' + (cls ? ' ' + cls : '');
+  }
+  function progressHtml(h) {
+    var unanswered = un(h);
+    var pill = '<span class="pill' + (unanswered ? '' : ' done') + '">未答 ' + unanswered + '/' + h.questions.length + '</span>';
+    if (state.mode === 'old') {
+      return '<span>（现状：进度仅在下方 meta 行展示，无常驻徽标）</span>';
+    }
+    return pill + '<span>' + (unanswered ? '待答 ' + unanswered + ' 项，填写后保存草稿' : '决策已齐备，可复工') + '</span>';
+  }
+  function openPanel(id, opener) {
+    state.panel.open = true;
+    state.panel.id = id;
+    state.panel.opener = opener || null;
+    state.panel.errorOnce = state.dstate === 'error'; // 数据态为加载失败时，同步演示面板读取失败
+    $('#hpTitle').textContent = '人工决策 · ' + id;
+    panelMsg('');
+    $('#holdPanel').classList.remove('hidden');
+    setPanelView('loading');
+    setTimeout(function () {
+      if (!state.panel.open) return;
+      if (state.panel.errorOnce) { setPanelView('error'); return; }
+      renderPanelForm();
+      setPanelView('form');
+      var first = $('#hpQuestions textarea');
+      if (first) first.focus();
+    }, 600);
+  }
+  function closePanel() {
+    state.panel.open = false;
+    $('#holdPanel').classList.add('hidden');
+    var op = state.panel.opener;
+    if (op && op.isConnected) op.focus();
+  }
+  function renderPanelForm() {
+    var h = byId(state.panel.id);
+    if (!h) return;
+    var unanswered = un(h);
+    $('#hpProgress').innerHTML = progressHtml(h);
+    $('#hpMeta').textContent = h.declared + (h.reason ? ' · ' + h.reason.replace('受阻原因：', '') : '') +
+      ' · 未答 ' + unanswered + '/' + h.questions.length;
+    $('#hpQuestions').innerHTML = h.questions.map(function (q) {
+      return '<fieldset class="hold-q">' +
+        '<legend class="' + (q.answer ? 'answered' : 'open') + '">' + (q.answer ? '✓' : '○') + ' ' + esc(q.q) + ' · ' + esc(q.text) + '</legend>' +
+        '<textarea rows="2" data-hq="' + esc(q.q) + '" placeholder="人工答复（必填才计入已答）">' + esc(q.answer || '') + '</textarea>' +
+        '<input type="text" data-hq-note="' + esc(q.q) + '" placeholder="补充说明（可选）" value="' + esc(q.note || '') + '">' +
+        '</fieldset>';
+    }).join('');
+    if (state.mode === 'new') {
+      document.querySelectorAll('#hpQuestions textarea').forEach(function (ta) {
+        autoGrow(ta);
+        ta.addEventListener('input', function () { autoGrow(ta); });
+      });
+    }
+  }
+  function autoGrow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.max(ta.scrollHeight, 52) + 'px';
+  }
+  function savePanel(e) {
+    e.preventDefault();
+    if (state.panel.busy) return;
+    var h = byId(state.panel.id);
+    if (!h) return;
+    var answers = [];
+    document.querySelectorAll('#hpQuestions textarea[data-hq]').forEach(function (ta) {
+      var text = ta.value.trim();
+      if (!text) return;
+      var noteEl = document.querySelector('#hpQuestions [data-hq-note="' + ta.getAttribute('data-hq') + '"]');
+      answers.push({ q: ta.getAttribute('data-hq'), text: text, note: noteEl ? noteEl.value.trim() : '' });
+    });
+    if (!answers.length) { panelMsg('请至少填写一项答复再保存', 'err'); return; }
+    state.panel.busy = true;
+    $('#hpSave').disabled = true;
+    $('#hpSave').textContent = '保存中…';
+    setTimeout(function () {
+      state.panel.busy = false;
+      $('#hpSave').disabled = false;
+      $('#hpSave').textContent = '保存决策';
+      answers.forEach(function (a) {
+        var q = h.questions.filter(function (x) { return x.q === a.q; })[0];
+        if (q) { q.answer = a.text; q.note = a.note; }
+      });
+      var left = un(h);
+      if (left > 0) {
+        var missing = h.questions.filter(function (q) { return !q.answer; }).map(function (q) { return q.q; }).join('、');
+        panelMsg('草稿已保存，尚缺 ' + left + ' 项（' + missing + '），复工保持禁用', '');
+        toast('草稿已保存，尚缺 ' + left + ' 项');
+      } else {
+        panelMsg('决策已齐备，可复工（回到已计划队列）', 'ok');
+        toast('决策已齐备，可复工');
+      }
+      renderPanelForm();
+      renderArea();
+    }, 500);
+  }
+  $('#hpForm').addEventListener('submit', savePanel);
+  $('#hpClose').addEventListener('click', closePanel);
+  $('#hpCancel').addEventListener('click', closePanel);
+  $('#hpErrClose').addEventListener('click', closePanel);
+  $('#hpRetry').addEventListener('click', function () {
+    state.panel.errorOnce = false;
+    setPanelView('loading');
+    setTimeout(function () {
+      if (!state.panel.open) return;
+      renderPanelForm();
+      setPanelView('form');
+    }, 600);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && state.panel.open && !state.panel.busy) closePanel();
+  });
+
+  /* ---------- 初始渲染 ---------- */
+  renderArea();
+})();
+</script>
+</body>
+</html>
