@@ -11,7 +11,7 @@
 ## TDD 与收口
 
 1. **测试先行**：在 scripts/tests/ 新增 `<前缀>-<单号小写>.test.mjs`（先跑红），实现后跑绿；交付前 `npm test` 全量必须通过。
-2. **report 收口**：完成后 `node scripts/atb.mjs report <ID> --summary "…"`——系统按认领时工作区快照归因，自动把本单改动提交到 dev（只 commit 不 push）。**不要手工 git commit**（Bash 提交会被钩子拦截）、**不要自动 push**、**不要把条目置为 done**；report 后用 `atb show <ID> --json` 与 `atb commit log <ID>` 核验待测试状态与提交 hash。
+2. **report 收口**：完成后 `node scripts/atb.mjs report <ID> --summary "…"`——系统按认领时工作区快照归因，自动把本单改动提交到 dev（只 commit 不 push）。**开发收口不要手工 git commit**（收口提交由系统自动完成，不经 Agent Bash）、**不要自动 push**、**不要把条目置为 done**；report 后用 `atb show <ID> --json` 与 `atb commit log <ID>` 核验待测试状态与提交 hash。文档讨论轮的条目文档提交放行口径见下表（REQ-20260917-002）。
 3. **受阻走 hold**：实施中需人工决策（范围 / 方案取舍 / 账号真机操作等）时，`atb hold declare` 声明问题清单并交 blocked 回执；不得代替人工作答或复工。
 
 ## 质量基线
@@ -28,7 +28,7 @@
 | 单个测试 | `node scripts/tests/<name>.test.mjs` |
 | 直写条目状态文件 / 置人工状态被拦 | 改用 atb 子命令；接受 / 置计划 / 确认完成请人工操作 |
 | 无认领锁改源码被拦 | 先登记 → 人工接受并移入计划 → `atb claim` 认领后再改 |
-| Bash 里 git commit 被拦 | `atb report` 后系统自动收口提交，无需手工提交 |
+| Bash 里 git commit 被拦 | 开发收口：`atb report` 后系统自动收口提交，无需手工提交。文档讨论轮放行口径（REQ-20260917-002）：仅含 `agent-team-board/data/{requirements,bugs}/<条目ID>/` 条目目录用户数据 + 命令带 pathspec + 提交主题含条目编号（`doc: … REQ-/BUG-…`）三者同时满足才放行；无 pathspec 裸提交、范围含源码 / runtime 应用数据 / status.json、主题无单号、`--amend` 等不可静态核验形态仍拦 |
 
 ## 文档地图
 

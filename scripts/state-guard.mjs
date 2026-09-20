@@ -9,7 +9,9 @@
 //                         ③ curl 打 Status Board 人工 API
 //                         ④ 无有效认领锁时 Bash 改写本插件源码（sed/tee/重定向等）
 //                         ⑤ 流程外 git commit（仅看板项目内；REQ-20260911-009——系统自动
-//                            提交不经 Agent Bash；REQ-20260911-010 起 CMT 豁免已随回退移除）
+//                            提交不经 Agent Bash；REQ-20260917-002 起放行文档讨论轮提交：
+//                            仅条目目录用户数据 + 带 pathspec + 主题含条目编号；参数文本
+//                            中的 git+commit 字样不再误拦——按命令位语义识别真实提交命令）
 // 放行条件（源码保护）：当前项目看板 .locks/ 下存在未过期（24h）认领锁。
 // 锁生命周期（BUG-20260903-002）：claim 创建 → report / 确认完成 / 驳回 即释放，
 // 残留锁可用 atb prune-locks 清理——「有锁=确有会话在开发中」的放行条件因此重新收紧。
@@ -521,12 +523,17 @@ function bashRewritesPluginSource(seg, norm) {
   return targets.some((t) => tokenRealpathHitsPluginRoot(t));
 }
 
-// ---------- REQ-20260911-009 流程外 git commit 拦截（仅看板项目内） ----------
-// 授权口径：到待测试自动提交由 atb 进程内部 spawnSync 执行 git，不经 Agent Bash 工具，
-// 天然不经过本守卫；Agent 经 Bash 的 git commit 一律拦截（REQ-20260911-010：人工触发的
-// CMT 批次提交通道已随回退下线，不再存在豁免场景），需要提交时由人工在终端执行。
+// ---------- REQ-20260911-009 + REQ-20260917-002 流程外 git commit 拦截（仅看板项目内） ----------
+// 授权口径：①到待测试自动提交由 atb 进程内部 spawnSync 执行 git，不经 Agent Bash 工具，
+// 天然不经过本守卫；②人工终端提交；③REQ-20260917-002 放行文档讨论轮提交——仅含条目
+// 目录用户数据（agent-team-board/data/{requirements,bugs}/<条目ID>/ 内，含嵌套归属
+// bugs/<ID>/）、命令带 pathspec、提交主题含条目编号（REQ-/BUG-），三者须同时满足。
+// 其余 Agent Bash 的 git commit 一律拦截（源码 / status.json / runtime 应用数据路径、
+// 无 pathspec 裸提交与 -a / --amend / -F 等不可静态核验形态均不放行）。
 
-// 解析 git 子命令：git [全局选项] <子命令> …（跳过 -C/-c/--git-dir 等带值选项）
+// 解析 git 子命令：git [全局选项] <子命令> …（跳过 -C/-c/--git-dir 等带值选项）。
+// 段内任意位置匹配，作为「git→commit 字样序列存在性」检测供间接执行兜底使用；
+// 是否放行/拦截由命令位解析（gitAtCommandPosition 及其下游）决定。
 function gitSubcommandOf(tokens) {
   for (let i = 0; i < tokens.length; i++) {
     if (commandName(tokens[i]) !== 'git') continue;
@@ -547,6 +554,172 @@ function gitSubcommandOf(tokens) {
   return null;
 }
 
+// REQ-20260917-002：条目目录用户数据范围——板根下 data/{requirements,bugs}/<条目ID>/
+// 条目目录内任意路径（README/design/test-cases 等文档、ui-demo.html、attachments/、
+// 嵌套 bugs/<ID>/ 结构同构）；目录边界即用户数据边界。
+const ITEM_DIR_RE = /^data\/(requirements|bugs)\/(REQ|BUG)-\d{8}-\d{3}(?:\/|$)/;
+const ITEM_ID_RE = /\b(?:REQ|BUG)-\d{8}-\d{3}\b/;
+
+function isItemUserDataAbs(absPath, boardRoot) {
+  const rel = path.relative(boardRoot, absPath).split(path.sep).join('/');
+  return ITEM_DIR_RE.test(rel);
+}
+
+// REQ-20260917-002 定案：守卫只做命令文本静态分析——通配符不展开（含 glob 元字符
+// 的 pathspec 保守拦），magic 前缀（:(exclude)/:!/^ 排除形态）改变提交范围语义直接拦。
+function pathspecInItemScope(spec, baseDir, boardRoot) {
+  const s = String(spec);
+  if (!s || s === '-' || s.startsWith(':') || s.startsWith('^')) return false;
+  if (/[*?[\]]/.test(s)) return false;
+  return isItemUserDataAbs(path.resolve(baseDir, s), boardRoot);
+}
+
+// 环境变量赋值前缀 token（VAR=…）
+const ENV_ASSIGN_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+// REQ-20260917-002 命令位判定：git 处于命令位 = 段首或环境变量赋值前缀之后，
+// 参数文本（--desc "…git commit…" 等）中的 git 字样不构成提交命令。GIT_* 赋值
+// 前缀（GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE…）改变仓库落点/索引，非授权形态。
+function gitAtCommandPosition(tokens) {
+  let i = 0;
+  let envBlocked = false;
+  while (i < tokens.length && ENV_ASSIGN_RE.test(tokens[i])) {
+    if (/^GIT_[A-Z0-9_]+=/.test(tokens[i])) envBlocked = true;
+    i++;
+  }
+  if (i >= tokens.length || commandName(tokens[i]) !== 'git') return null;
+  return { start: i, envBlocked };
+}
+
+// 解析 git [全局选项] <子命令>。仅静态可核验的形态给出 subcommand；--git-dir /
+// --work-tree 等改变仓库落点的全局选项与带值不明的短选项按 blocked 保守拦。
+function parseGitInvocation(tokens, start) {
+  let i = start + 1;
+  let cwdBase = null;
+  for (; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (tok === '--') return { subcommand: null };
+    if (tok.startsWith('--')) {
+      if (/^--(git-dir|work-tree|namespace|super-prefix|exec-path)(?:=|$)/.test(tok)) return { blocked: true };
+      continue; // 其余全局长选项（--no-pager 等）按无值跳过
+    }
+    if (tok.length > 1 && tok.startsWith('-')) {
+      if (tok === '-C') {
+        const v = tokens[i + 1];
+        if (v === undefined || v === '--' || v.startsWith('-')) return { blocked: true };
+        cwdBase = v;
+        i++;
+        continue;
+      }
+      if (tok.startsWith('-C') && tok.length > 2) { cwdBase = tok.slice(2); continue; }
+      if (tok === '-c') { i++; continue; }
+      if (tok.startsWith('-c') && tok.length > 2) continue;
+      return { blocked: true };
+    }
+    break;
+  }
+  if (i >= tokens.length) return { subcommand: null };
+  return { subcommand: tokens[i], argStart: i + 1, cwdBase };
+}
+
+// git commit 参数解析：静态可核验的 -m/--message 消息与 pathspec；消息来源不可知
+// （-F/-t/-C 复用消息/无 -m）、范围语义不可静态核验（-a/--amend/-o/-i/-p/--fixup 等）、
+// 未知选项一律 blocked（定案：非授权形态拦，含 --amend——改写上一笔提交超出放行语义）。
+function parseCommitArgs(tokens, start) {
+  const messages = [];
+  const pathspecs = [];
+  let blocked = false;
+  for (let i = start; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (tok === '--') { pathspecs.push(...tokens.slice(i + 1)); break; }
+    if (tok.startsWith('--')) {
+      if (tok === '--message') {
+        const v = tokens[i + 1];
+        if (v === undefined || v === '--' || v.startsWith('-')) { blocked = true; break; }
+        messages.push(v);
+        i++;
+        continue;
+      }
+      if (tok.startsWith('--message=')) { messages.push(tok.slice('--message='.length)); continue; }
+      if (
+        /^--(all|amend|only|include|patch|interactive|pathspec-file-nul)$/.test(tok)
+        || /^--(reuse-message|reedit-message|file|template|fixup|squash|pathspec-from-file)(?:=|$)/.test(tok)
+        || /^--(author|date)(?:=|$)/.test(tok)
+      ) { blocked = true; break; }
+      continue; // 其余无值长选项（--signoff/--no-verify/--no-edit/--quiet/--verbose/--allow-empty…）
+    }
+    if (tok.length > 1 && tok.startsWith('-')) {
+      const chars = tok.slice(1);
+      for (let k = 0; k < chars.length; k++) {
+        const ch = chars[k];
+        if (ch === 'm') {
+          const v = chars.slice(k + 1);
+          if (v) messages.push(v);
+          else {
+            const nv = tokens[i + 1];
+            if (nv === undefined || nv === '--' || nv.startsWith('-')) blocked = true;
+            else { messages.push(nv); i++; }
+          }
+          break;
+        }
+        if (!'svqnzu'.includes(ch)) { blocked = true; break; } // C/c/F/t（带值不可核验）与 a/o/i/p/e 等
+      }
+      if (blocked) break;
+      continue;
+    }
+    pathspecs.push(tok);
+  }
+  return { messages, pathspecs, blocked };
+}
+
+// 「再解释 / 透传执行」类命令：其参数文本中的 git→commit 序列可能被真实执行
+// （bash -c / eval / xargs / find -exec / ssh / sudo…）；解释器（node/python…）仅当
+// 带内联代码选项（-e/-c 等）时计入。命令位是普通命令（node 跑脚本、grep、echo…）时
+// git+commit 只是参数文本，不拦（REQ-20260917-002 误拦消除）。
+const REINTERPRET_CMDS = new Set([
+  'bash', 'sh', 'zsh', 'dash', 'ksh', 'csh', 'tcsh', 'ash', 'fish',
+  'eval', 'exec', 'source', '.', 'command',
+  'xargs', 'find', 'ssh', 'sudo', 'env', 'nohup', 'timeout', 'watch', 'parallel', 'make',
+]);
+
+function commandPositionName(tokens) {
+  let i = 0;
+  while (i < tokens.length && ENV_ASSIGN_RE.test(tokens[i])) i++;
+  return i < tokens.length ? commandName(tokens[i]) : null;
+}
+
+function isReinterpretCommand(tokens) {
+  const name = commandPositionName(tokens);
+  if (!name) return false;
+  if (REINTERPRET_CMDS.has(name)) return true;
+  if (INTERPRETER_EVAL_SHORTS[name]) return hasInterpreterEvalIntent(tokens);
+  return false;
+}
+
+// stdin 消费的解释器（bash/python 无操作数形态）：跨段关联判定用——
+// `echo "git commit …" | bash` 中含提交序列的上游段按真实提交意图保守拦。
+const STDIN_SHELL_CMDS = new Set([
+  'bash', 'sh', 'zsh', 'dash', 'ksh', 'csh', 'tcsh', 'ash', 'fish',
+  'python', 'python3', 'perl', 'ruby', 'node', 'deno', 'bun',
+]);
+
+function hasStdinShellConsumer(segments) {
+  for (const seg of segments) {
+    const toks = stripPairedQuotes(seg).split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < toks.length && ENV_ASSIGN_RE.test(toks[i])) i++;
+    if (i >= toks.length || !STDIN_SHELL_CMDS.has(commandName(toks[i]))) continue;
+    if (toks.slice(i + 1).every((tok) => tok === '-' || (tok.length > 1 && tok.startsWith('-')))) return true;
+  }
+  return false;
+}
+
+const COMMIT_SCOPE_HINT =
+  '看板项目内 Agent 提交通道：①AI 开发到待测试由系统自动提交（run receipt 核验通过后执行，不经 Agent）；' +
+  '②文档讨论轮可提交条目目录用户数据（agent-team-board/data/{requirements,bugs}/<条目ID>/ 内，' +
+  '命令带 pathspec 且提交主题含条目编号 REQ-/BUG-）；③其余场景请人工在终端执行 git commit。' +
+  '源码、runtime 应用数据、status.json、无 pathspec 裸提交与 --amend 等不可静态核验形态不在此列。';
+
 // 从 cwd 向上找看板板根（agent-team-board/，REQ-20260916-007 新布局）；无看板 = 非看板项目，不管辖
 function boardDataDirOf(cwd) {
   let dir = path.resolve(cwd || process.cwd());
@@ -565,6 +738,9 @@ if (mode === 'bash') {
 
   // 按 shell 分隔符切段，逐段检查，避免 ";"/"&&" 拼接绕过。
   const segments = splitShellSegments(cmd);
+  // REQ-20260917-002：预扫描「stdin 消费的解释器」段（| bash / | python 等）——
+  // 与段内 git→commit 字样序列跨段关联，堵 `echo "git commit …" | bash` 型绕过。
+  const stdinShellConsumer = hasStdinShellConsumer(segments);
   for (const seg of segments) {
     // 先做引号内拼接归一（BUG-20260907-006），再切 token / 子串匹配：st""atus → status。
     const norm = stripPairedQuotes(seg);
@@ -683,19 +859,41 @@ if (mode === 'bash') {
       deny(`插件源码受看板流程保护，禁止无认领锁时用 Bash 改写（命令片段：${seg.trim()}）。${CODE_GUARD_HINT}`);
     }
 
-    // (5) REQ-20260911-009 流程外 git commit（仅看板项目内）：提交进版本库绑定两条授权
-    //     通道——批量开发到待测试的系统自动提交（atb 进程内部执行，不经本守卫）与人工
-    //     终端提交；其余 Agent Bash 提交一律拦截。REQ-20260911-010：人工触发的批量
-    //     commit（CMT）批次通道已回退下线，其豁免随之移除。
-    if (gitSubcommandOf(tokens) === 'commit') {
-      const boardDir = boardDataDirOf(hook.cwd);
-      if (boardDir) {
-        deny(
-          `流程外 git commit 已拦截（命令片段：${seg.trim()}）。提交通道：` +
-          'AI 开发到待测试由系统自动提交（run receipt 核验通过后执行，不经 Agent）。' +
-          '其余场景请人工在终端执行 git commit。'
-        );
+    // (5) REQ-20260911-009 + REQ-20260917-002 流程外 git commit（仅看板项目内）：
+    //     提交进版本库绑定三条授权通道——批量开发到待测试的系统自动提交（atb 进程
+    //     内部执行，不经本守卫）、人工终端提交、以及 REQ-20260917-002 放行的文档
+    //     讨论轮提交（仅条目目录用户数据 + 带 pathspec + 主题含条目编号，三者同时
+    //     满足）。git 按命令位语义识别（参数文本中的 git+commit 字样不再误拦）；
+    //     再解释执行形态（bash -c/eval/xargs/find -exec）与 stdin 管道 shell 按
+    //     真实提交意图保守拦截。token 化用 shellTokens（引号感知：-m "多词消息"
+    //     保持单 token；st""atus 拼接归一等价，不弱于 norm.split 的防绕过口径）。
+    const gitTokens = shellTokens(seg);
+    const gitPos = gitAtCommandPosition(gitTokens);
+    if (gitPos) {
+      const inv = parseGitInvocation(gitTokens, gitPos.start);
+      if (gitPos.envBlocked || inv.blocked) {
+        deny(`git 提交形态无法静态核验（命令片段：${seg.trim()}）。${COMMIT_SCOPE_HINT}`);
       }
+      if (inv.subcommand === 'commit') {
+        const boardDir = boardDataDirOf(hook.cwd);
+        if (boardDir) {
+          const args = parseCommitArgs(gitTokens, inv.argStart);
+          const base = inv.cwdBase
+            ? path.resolve(hook.cwd || process.cwd(), inv.cwdBase)
+            : (hook.cwd || process.cwd());
+          const allowed = !args.blocked
+            && args.pathspecs.length > 0
+            && args.messages.length > 0
+            && ITEM_ID_RE.test(args.messages.join('\n'))
+            && args.pathspecs.every((spec) => pathspecInItemScope(spec, base, boardDir));
+          if (!allowed) {
+            deny(`流程外 git commit 已拦截（命令片段：${seg.trim()}）。${COMMIT_SCOPE_HINT}`);
+          }
+        }
+      }
+    } else if (gitSubcommandOf(tokens) === 'commit' && boardDataDirOf(hook.cwd)
+      && (isReinterpretCommand(tokens) || stdinShellConsumer)) {
+      deny(`疑似经间接执行提交（命令片段：${seg.trim()}）。${COMMIT_SCOPE_HINT}`);
     }
   }
   process.exit(0);
