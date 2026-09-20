@@ -332,20 +332,28 @@ function commitSubjectOf(type, desc, itemId) {
   return `${type}: ${desc} ${itemId}`;
 }
 
+// BUG-20260917-002：pathspec「无匹配」的跳过判定不得依赖错误文案——git 输出随 LC_ALL
+// 本地化（zh_CN 下 fatal 为「致命错误：路径规格 '…' 未匹配任何文件」），英文正则匹配不到
+// 会把已整体暂存删除的路径重新毒死。改结构化判定：路径在索引（ls-files --error-unmatch）
+// 与磁盘均不存在 ⇒ git add 对其无事可做（git rm 等已整体暂存的删除），跳过该路径的 add，
+// 删除由下方 commit --only 以 HEAD 跟踪记录为准一并提交；可匹配路径的 add 失败属真实
+// git 错误（index.lock、钩子等），照常上抛、不吞错。
+function pathspecMatchable(root, p) {
+  if (fs.existsSync(path.join(root, p))) return true;
+  return gitRaw(root, ['ls-files', '--error-unmatch', '--', p]).status === 0;
+}
+
 function commitPaths(root, paths, subject) {
   for (let i = 0; i < paths.length; i += PATH_CHUNK) {
     const chunk = paths.slice(i, i + PATH_CHUNK);
-    // REQ-20260916-007 迁移期容错：路径可能已从索引移除且磁盘不存在（git mv / git rm
-    // --cached 暂存的删除）——git add 对其 fatal「did not match any files」。整块 add 失败时
-    // 逐路径重试，跳过「无匹配」者（其删除已在索引中，由下方 commit --only 一并提交）。
+    // REQ-20260916-007 迁移期容错 / BUG-20260917-002 结构化判定：整块 add 失败时逐路径
+    // 重试，「索引与磁盘均无」的路径跳过 add（已整体暂存的删除由 commit --only 一并提交）。
     try {
       gitOk(root, ['add', '-A', '--', ...chunk], 'git add');
-    } catch (e) {
-      if (!/did not match any files|no such file or directory/i.test(String(e && e.message))) throw e;
+    } catch {
       for (const p of chunk) {
-        try { gitOk(root, ['add', '-A', '--', p], 'git add'); } catch (e2) {
-          if (!/did not match any files|no such file or directory/i.test(String(e2 && e2.message))) throw e2;
-        }
+        if (!pathspecMatchable(root, p)) continue;
+        gitOk(root, ['add', '-A', '--', p], 'git add');
       }
     }
   }
