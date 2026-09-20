@@ -45,6 +45,8 @@ function runRenderFragment(detail, { needsReverify = false } = {}) {
     confirmScopeText: (c) => `待提交：${c.pendingCount} 个路径`,
     confirmAttrOf: () => null,
     bindConfirmFormActions: () => {},
+    // BUG-20260920-003：分析侧表单渲染尾部回填续跑提示词卡（本片段外定义，按需打桩）
+    renderConfirmResumeCard: () => {},
   });
   const start = appSource.indexOf('function renderConfirmForm(');
   const end = appSource.indexOf('function bindConfirmFormActions(');
