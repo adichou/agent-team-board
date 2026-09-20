@@ -3,9 +3,11 @@
 // （沿用 lane-quick-entry-20260909-007.test.mjs 的 vm 模拟 DOM 模式）
 // 复现口径（README 验收说明）：两子面板本会话内先后渲染过 → 目标面板数据无变化（签名剪枝命中，
 // refreshRefine 的 `sig === state.refine.sig` / refreshBatch 的 `sig === state.batchSig` 提前 return，
-// 不再调 renderBatchDrawer）→ 点快捷入口必须仍精准落地目标子面板（页签高亮 + 面板内容一致），
-// 不得依赖数据是否变化；无缓存数据时先渲染目标面板加载态；纯导航口径（不创建/不启动/无确认弹窗）
-// 与完善徽标共用 gotoRuns('refine') 链路不回退。
+// 不再调 renderBatchDrawer）→ 进入任务模块必须仍精准落地目标子面板（页签高亮 + 面板内容一致），
+// 不得依赖数据是否变化；无缓存数据时先渲染目标面板加载态。
+// REQ-20260917-001：需求页快捷入口改为就地创建任务并复制提示词，不再走 gotoRuns 导航链路
+// （新契约由 req-20260917-001.test.mjs 守护）——本文件改为直接经 gotoRuns 触发，
+// 继续守护 gotoRuns 本身的精准落地机制（完善徽标 / 全局总览跳转仍在用此链路，不回退）。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -104,16 +106,16 @@ async function renderBothPanels(h) {
   h.requests.length = 0;
 }
 
-// R1 主复现（正向）：已接受档点「▶ AI 分析」，目标面板数据无变化（refine 签名剪枝命中），
+// R1 主复现（正向）：进入 AI 分析子面板，目标面板数据无变化（refine 签名剪枝命中），
 // 落地必须即 AI 分析页签高亮 + AI 分析面板内容，不得停留在残留的 AI 开发面板
-t('R1 数据稳态点「▶ AI 分析」：落地即 AI 分析页签高亮 + refine-create 启动区、无 dev-start 残留；refine 签名剪枝命中（渲染不依赖数据变化）', async () => {
+t('R1 数据稳态进入 AI 分析：落地即 AI 分析页签高亮 + refine-create 启动区、无 dev-start 残留；refine 签名剪枝命中（渲染不依赖数据变化）', async () => {
   const h = setup();
   await renderBothPanels(h);
   const sigBefore = h.state.refine.sig;
   assert.ok(sigBefore, '前置：AI 分析面板本会话已渲染过（签名已落）');
   assert.equal(activeMode(h), 'develop', '前置：离开任务模块时抽屉残留 AI 开发面板');
   h.state.reqFilter = 'accepted';
-  await h.document.querySelector('#laneQuickEntry').fire('click').result;
+  await h.run('gotoRuns("refine")');
   assert.equal(h.state.view, 'runs', '进入任务模块');
   assert.equal(h.state.batch.mode, 'refine', 'mode 指向 AI 分析');
   assert.equal(activeMode(h), 'refine', '落地页签高亮 = AI 分析');
@@ -122,8 +124,8 @@ t('R1 数据稳态点「▶ AI 分析」：落地即 AI 分析页签高亮 + ref
   assert.equal(h.state.refine.sig, sigBefore, '数据稳态：签名未变（剪枝命中，正确呈现来自进入渲染而非数据变化）');
 });
 
-// R2 反向：面板先停留 AI 分析，已计划档点「▶ AI 开发」，数据稳态下精准落到 AI 开发子面板
-t('R2 数据稳态点「▶ AI 开发」（反向）：抽屉残留 AI 分析面板时落地即 AI 开发页签高亮 + dev-start 启动区、无 refine-create 残留；batchSig 未变', async () => {
+// R2 反向：面板先停留 AI 分析，再进入 AI 开发子面板，数据稳态下精准落到 AI 开发子面板
+t('R2 数据稳态进入 AI 开发（反向）：抽屉残留 AI 分析面板时落地即 AI 开发页签高亮 + dev-start 启动区、无 refine-create 残留；batchSig 未变', async () => {
   const h = setup();
   await h.run('gotoRuns("develop")'); // 开发面板先渲染过一次（batchSig 已落 → 后续剪枝可命中）
   await h.run('setView("status")');
@@ -133,7 +135,7 @@ t('R2 数据稳态点「▶ AI 开发」（反向）：抽屉残留 AI 分析面
   assert.ok(sigBefore, '前置：开发面板本会话已渲染过（签名已落）');
   assert.equal(activeMode(h), 'refine', '前置：抽屉残留 AI 分析面板');
   h.state.reqFilter = 'planned';
-  await h.document.querySelector('#laneQuickEntry').fire('click').result;
+  await h.run('gotoRuns("develop")');
   assert.equal(h.state.view, 'runs', '进入任务模块');
   assert.equal(h.state.batch.mode, 'develop', 'mode 指向 AI 开发');
   assert.equal(activeMode(h), 'develop', '落地页签高亮 = AI 开发');
@@ -143,7 +145,7 @@ t('R2 数据稳态点「▶ AI 开发」（反向）：抽屉残留 AI 分析面
 });
 
 // R3 无缓存数据：进入瞬间先渲染目标面板加载态（「加载中…」+ 目标页签高亮），数据到位后照常渲染
-t('R3 无缓存数据先渲染目标面板加载态：refine 缓存已清（模拟项目切换重置）且抽屉残留开发面板 → 点击落地瞬间为 AI 分析页签高亮 + 加载中…；拉取完成后正常呈现 refine-create', async () => {
+t('R3 无缓存数据先渲染目标面板加载态：refine 缓存已清（模拟项目切换重置）且抽屉残留开发面板 → 进入瞬间为 AI 分析页签高亮 + 加载中…；拉取完成后正常呈现 refine-create', async () => {
   const h = setup();
   await h.run('gotoRuns("develop")'); // 抽屉渲染过 AI 开发面板
   await h.run('setView("status")');
@@ -156,26 +158,27 @@ t('R3 无缓存数据先渲染目标面板加载态：refine 缓存已清（模�
     return realFetch(url, opts);
   };
   h.state.reqFilter = 'accepted';
-  const click = h.document.querySelector('#laneQuickEntry').fire('click');
+  const entering = h.run('gotoRuns("refine")');
   assert.equal(activeMode(h), 'refine', '落地瞬间页签高亮即 AI 分析（不等数据）');
   assert.match(drawerHtml(h), /加载中…/, '无缓存数据时先渲染目标面板加载态');
   release();
-  await click.result;
+  await entering;
   assert.equal(activeMode(h), 'refine', '数据到位后仍为 AI 分析页签高亮');
   assert.match(drawerHtml(h), /refine-create/, '数据到位后正常渲染 AI 分析面板');
 });
 
-// R4 口径不回退：纯导航（无创建/启动请求、无确认弹窗）；完善徽标 / 全局总览共用 gotoRuns('refine')
-// 链路在数据稳态下同样精准落地
-t('R4 导航口径与共用链路不回退：点击无 /api/batch/create、/api/refine/start、无确认弹窗；gotoRuns("refine")（完善徽标同链路）数据稳态下同样精准落地', async () => {
+// R4 口径不回退：gotoRuns 纯导航（无创建/启动请求、无确认弹窗）；完善徽标 / 全局总览共用
+// gotoRuns('refine') 链路在数据稳态下同样精准落地（REQ-20260917-001 起需求页快捷入口改为
+// 就地创建，不再走此链路——新契约由 req-20260917-001.test.mjs 守护）
+t('R4 gotoRuns 导航口径与共用链路不回退：进入无 /api/batch/create、/api/refine/start、无确认弹窗；gotoRuns("refine")（完善徽标同链路）数据稳态下同样精准落地', async () => {
   const h = setup();
   await renderBothPanels(h);
   h.state.reqFilter = 'accepted';
-  await h.document.querySelector('#laneQuickEntry').fire('click').result;
-  assert.equal(activeMode(h), 'refine', '快捷入口落地正确');
+  await h.run('gotoRuns("refine")');
+  assert.equal(activeMode(h), 'refine', '进入落地正确');
   const urls = h.requests.map((r) => r.url);
-  assert.ok(!urls.some((u) => u.includes('/api/batch/create')), '不得创建批量开发任务');
-  assert.ok(!urls.some((u) => u.includes('/api/refine/start')), '不得启动完善任务');
+  assert.ok(!urls.some((u) => u.includes('/api/batch/create')), '导航不得创建批量开发任务');
+  assert.ok(!urls.some((u) => u.includes('/api/refine/start')), '导航不得启动完善任务');
   assert.equal(h.confirmations.length, 0, '纯导航不弹确认框');
   // 共用 gotoRuns（完善徽标 / 全局总览跳转）：先停回开发面板制造残留，再经 gotoRuns('refine') 进入
   await h.run('setView("status")');

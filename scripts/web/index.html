@@ -148,10 +148,11 @@
                已计划档勾选仅为「移出计划」服务 -->
           <button type="button" id="planRemove" class="btn warn hidden" disabled title="移出计划（退回已接受）：仅已计划且未进入开发中的条目可移出">移出计划</button>
           </div>
-          <!-- REQ-20260909-007：档位快捷入口——已接受档「开始完善」/ 已计划档「开始开发」，空间足够时靠右、
-               与勾选无关仅导航（初始隐藏，syncAcceptance 按当前档切换显隐与文案；任务创建仍由面板内「启动」承接）；
-               REQ-20260910-026：与批量动作组同入 #captionActions 恒定同一行 -->
-          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="AI 分析" title="进入任务模块 AI 分析面板：对已接受未完善条目批量补全文档（与勾选无关）">▶ AI 分析</button>
+          <!-- REQ-20260909-007：档位快捷入口——已接受档「▶ AI 分析」/ 已计划档「▶ AI 开发」，空间足够时靠右、
+               与勾选无关（初始隐藏，syncAcceptance 按当前档切换显隐与文案；无候选/创建进行中禁用）；
+               REQ-20260910-026：与批量动作组同入 #captionActions 恒定同一行；
+               REQ-20260917-001：点击就地创建任务并复制主调度提示词，不再跳转任务页 -->
+          <button type="button" id="laneQuickEntry" class="btn small primary hidden" aria-label="AI 分析" title="点击即创建 AI 分析任务并复制主调度提示词（不跳转任务页）：范围为全部已接受未完善条目，与勾选无关">▶ AI 分析</button>
           </div>
         </div>
         <div id="acceptResult" class="accept-result hidden" role="status" aria-live="polite"></div>

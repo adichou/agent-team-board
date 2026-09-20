@@ -2,11 +2,12 @@
 // REQ-20260909-007 已接受/已计划列表头「开始完善 / 开始开发」常驻快捷按钮 —— 前端行为与静态契约测试
 // （沿用 selection-bar-merge.test.mjs 的 vm 模拟 DOM 模式）
 // 覆盖 test-cases.md 用例 Q1-Q6：
-//   静态契约与位置 / 按档显隐与文案 / 开始完善点击行为 / 开始开发点击行为 /
+//   静态契约与位置 / 按档显隐与文案 / AI 分析点击行为 / AI 开发点击行为 /
 //   常驻可用性（与勾选、批量进行中解耦）/ 现有入口不回退
 // 口径（design.md 定稿）：BUG-20260909-006 已移除「进入批量开发」与勾选范围链路
-// （批量开发入口唯一收敛任务模块，范围恒为已计划队列），故「开始开发」= gotoRuns('develop')，
-// 无勾选范围语义；「开始完善」= gotoRuns('refine')，与勾选无关。
+// （批量开发入口唯一收敛任务模块，范围恒为已计划队列）。
+// REQ-20260917-001：快捷入口从 gotoRuns 导航改为就地创建任务并复制主调度提示词
+// （Q1 绑定契约与 Q3/Q4 点击行为随之更新；详细新契约由 req-20260917-001.test.mjs 守护）。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -58,6 +59,7 @@ function setup() {
   const sandbox = { document, URLSearchParams, console, setTimeout: () => 0, clearTimeout() {},
     location: { pathname: '/', search: '' }, history: { replaceState() {} },
     localStorage: { setItem() {}, getItem: () => null, removeItem() {} },
+    navigator: { clipboard: { writeText: async () => {} } }, // REQ-20260917-001：就地创建后复制提示词路径
     window: { addEventListener() {}, matchMedia: () => ({ matches: true }), confirm: (message) => { confirmations.push(message); return true; } },
     fetch: async (url, opts) => { requests.push({ url: String(url), opts }); return { ok: true, json: async () => ({}) }; },
   };
@@ -107,10 +109,9 @@ t('Q1 静态契约：#laneQuickEntry 在 #reqCaption 工具栏内、#reqSort 之
     assert.ok(!source.includes(gone), `范围链路符号不得回流：${gone}`);
     assert.ok(!htmlSrc.includes(gone), `页面不得残留：${gone}`);
   }
-  // 绑定契约：点击仅导航（gotoRuns），不创建任务
-  // BUG-20260911-005：done 档新增「开始 Commit」分支（accepted → refine、planned → develop、done → commit）
-  assert.match(source, /\$\('#laneQuickEntry'\)\?\.addEventListener\('click', \(\) => gotoRuns\([^)]*'refine'[^)]*'develop'[^)]*\)\)/, '点击绑定应为 gotoRuns 按档导航（含 refine/develop 分支）');
-  assert.doesNotMatch(source, /\$\('#laneQuickEntry'\)[^\n]*addEventListener\('click'[^\n]*(batch\/create|dispatch|api\()/, '点击绑定不得创建任务或调接口');
+  // 绑定契约（REQ-20260917-001）：点击就地创建任务并复制主调度提示词（laneQuickCreate），不再导航
+  assert.match(source, /\$\('#laneQuickEntry'\)\?\.addEventListener\('click', laneQuickCreate\);/, '点击绑定应为 laneQuickCreate（就地创建并复制）');
+  assert.ok(!source.includes("gotoRuns(state.reqFilter === 'accepted' ? 'refine' : 'develop')"), '旧按档导航绑定不得残留');
   // 窄屏契约：工具栏允许换行（宽度不足按组整体落行，按钮不被遮挡）；快捷入口空间足够时靠右
   const capRule = cssSrc.match(/\.req-caption\s*\{[^}]*\}/);
   assert.ok(capRule, '应有 .req-caption 规则');
@@ -121,7 +122,7 @@ t('Q1 静态契约：#laneQuickEntry 在 #reqCaption 工具栏内、#reqSort 之
 });
 
 // Q2 显隐与文案：仅已接受/已计划档显示，文案与 title 随档切换，切档即时
-t('Q2 显隐与文案：已接受档「▶ 开始完善」（title 含批量完善）；已计划档「▶ 开始开发」（title 含批量开发）；其余档（待接受/开发中/待测试）隐藏；来回切档正确', () => {
+t('Q2 显隐与文案：已接受档「▶ AI 分析」；已计划档「▶ AI 开发」（title 随档切换就地创建语义，REQ-20260917-001）；其余档（待接受/开发中/待测试）隐藏；来回切档正确', () => {
   const h = setup();
   const btn = h.document.querySelector('#laneQuickEntry');
   h.run('syncAcceptance()');
@@ -152,48 +153,44 @@ t('Q2 显隐与文案：已接受档「▶ 开始完善」（title 含批量完�
   assert.equal(btn.textContent, '▶ AI 分析');
 });
 
-// Q3 「开始完善」点击行为：gotoRuns('refine')——切任务模块 + 拉取完善面板数据；不创建任务、无确认弹窗
-t('Q3 开始完善点击：view=runs、batch.mode=refine、拉取 /api/refine/current + /api/refine/candidates；无创建/启动请求、无确认弹窗、无范围推送', async () => {
+// Q3 「▶ AI 分析」点击行为（REQ-20260917-001）：就地创建 AI 分析任务并复制提示词——不切视图、
+// 不弹确认、与勾选无关；创建走任务页「启动」同接口
+t('Q3 AI 分析点击：视图停留需求页，POST /api/refine/create；有勾选同样与勾选无关；无 /api/batch/create、无范围推送、无确认弹窗', async () => {
   const h = setup();
   h.run("state.reqFilter = 'accepted'");
   h.run('syncAcceptance()');
   // 已接受档有勾选：行为仍与勾选无关
   h.state.plan.selected.add('REQ-20990101-001');
   await h.document.querySelector('#laneQuickEntry').fire('click').result;
-  assert.equal(h.state.view, 'runs', '点击后切到任务模块');
-  assert.equal(h.state.batch.mode, 'refine', '激活批量完善子面板');
-  assert.equal(h.state.batch.open, true, '任务模块打开');
+  assert.equal(h.state.view, 'status', '不切换视图（停留需求页）');
   const urls = h.requests.map((r) => r.url);
-  assert.ok(urls.some((u) => u.includes('/api/refine/current')), '应拉取 /api/refine/current');
-  assert.ok(urls.some((u) => u.includes('/api/refine/candidates')), '应拉取 /api/refine/candidates');
-  assert.ok(!urls.some((u) => u.includes('/api/batch/create')), '点击不得创建批量开发任务');
-  assert.ok(!urls.some((u) => u.includes('/api/refine/start')), '点击不得启动完善任务');
+  assert.ok(urls.some((u) => u.includes('/api/refine/create')), '应调用 AI 分析创建接口（与任务页「启动」同接口）');
+  assert.ok(!urls.some((u) => u.includes('/api/batch/create')), '不得创建批量开发任务');
   assert.ok(!urls.some((u) => u.includes('/api/dispatch/scope')), '不得发起范围推送');
-  assert.equal(h.confirmations.length, 0, '纯导航不弹确认框');
+  assert.equal(h.confirmations.length, 0, '就地创建不弹确认框');
 });
 
-// Q4 「开始开发」点击行为：gotoRuns('develop')——拉取 /api/batch/current 且不带 ?ids=；勾选有无不影响范围
-t('Q4 开始开发点击：view=runs、batch.mode=develop、拉取 /api/batch/current 不带 ?ids=；有勾选同样不携带范围、无范围推送（BUG-20260909-006 口径）', async () => {
+// Q4 「▶ AI 开发」点击行为（REQ-20260917-001）：就地创建开发任务并复制提示词——不切视图；
+// 创建缺省范围 = 已计划队列全量，不携带勾选集合（BUG-20260909-006 口径不变）
+t('Q4 AI 开发点击：视图停留需求页，POST /api/batch/create 且 body 不携带 ids；有勾选同样不携带范围、无范围推送（BUG-20260909-006 口径）', async () => {
   const h = setup();
   h.run("state.reqFilter = 'planned'");
   h.run('syncAcceptance()');
   await h.document.querySelector('#laneQuickEntry').fire('click').result;
-  assert.equal(h.state.view, 'runs', '点击后切到任务模块');
-  assert.equal(h.state.batch.mode, 'develop', '激活批量开发子面板');
-  const fetched = h.requests.map((r) => r.url).find((u) => u.includes('/api/batch/current'));
-  assert.ok(fetched, '应拉取批次摘要');
-  assert.doesNotMatch(fetched, /[?&]ids=/, '拉取不得携带勾选集合参数（范围恒为已计划队列）');
-  assert.ok(!h.requests.some((r) => r.url.includes('/api/batch/create')), '点击不得创建任务');
+  assert.equal(h.state.view, 'status', '不切换视图（停留需求页）');
+  const create = h.requests.find((r) => r.url.includes('/api/batch/create'));
+  assert.ok(create, '应调用 AI 开发创建接口');
+  assert.equal(create.opts?.method, 'POST', '创建请求应为 POST');
+  assert.equal(create.opts?.body ? JSON.parse(create.opts.body).ids ?? null : null, null, '缺省范围 = 已计划队列全量，不携带勾选集合');
   assert.ok(!h.requests.some((r) => r.url.includes('/api/dispatch/scope')), '不得发起范围推送');
   // 已计划档有勾选：范围仍为已计划队列（勾选仅为「移出计划」服务）
   h.requests.length = 0;
-  h.state.batch.mode = '';
   h.state.impl.selected.add('REQ-20990101-005');
   await h.document.querySelector('#laneQuickEntry').fire('click').result;
-  const fetched2 = h.requests.map((r) => r.url).find((u) => u.includes('/api/batch/current'));
-  assert.ok(fetched2, '有勾选时仍应拉取批次摘要');
-  assert.doesNotMatch(fetched2, /[?&]ids=/, '有勾选也不携带范围参数');
-  assert.equal(h.confirmations.length, 0, '纯导航不弹确认框');
+  const create2 = h.requests.find((r) => r.url.includes('/api/batch/create'));
+  assert.ok(create2, '有勾选时仍可创建');
+  assert.equal(create2.opts?.body ? JSON.parse(create2.opts.body).ids ?? null : null, null, '有勾选也不携带范围参数');
+  assert.equal(h.confirmations.length, 0, '就地创建不弹确认框');
 });
 
 // Q5 常驻可用性：零勾选可见可点；批量操作进行中不禁用；与右组显隐互不影响

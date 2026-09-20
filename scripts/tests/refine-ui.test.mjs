@@ -263,7 +263,8 @@ t('R12-10（REQ-20260909-011）收尾「启动新任务」与创建面板去 Age
   assert.match(noCandHtml, /id="refineNext"[^>]*\sdisabled/, '无候选时仍应禁用');
   assert.match(noCandHtml, /暂无可完善候选/, '禁用时应说明暂无可完善候选');
   // 创建流程：不再读取面板 Agent 选择、请求体不带 mode
-  const fnSrc = js.match(/async function createRefineBatchAndCopy\(\)[\s\S]*?\n\}/)[0];
+  // REQ-20260917-001：签名加 opts（fromLane 需求页就地创建入口），提取正则随签名放宽
+  const fnSrc = js.match(/async function createRefineBatchAndCopy\([^)]*\)[\s\S]*?\n\}/)[0];
   assert.doesNotMatch(fnSrc, /refineMode|refineNextMode/, '创建流程不再读取执行 Agent 选择');
   assert.doesNotMatch(fnSrc, /请先选择执行 Agent/, '无 Agent 守卫提示');
   assert.doesNotMatch(fnSrc, /body: JSON\.stringify\(\{[^}]*mode/, '请求体不得携带 mode');
