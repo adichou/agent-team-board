@@ -317,6 +317,10 @@ const state = {
     error: null,  // 加载失败原因（错误条 + 重试）
     busyId: null, // 操作中的条目（按钮禁用防重复：核验中/确认中）
     detail: new Map(), // itemId → 详情缓存（卡片展开文件表 / 面板打开时刷新）
+    // BUG-20260920-003：分析确认续跑提示词卡状态（itemId → { status, prompt, error }，
+    // status = fetching | copied | copy-failed | fetch-failed | empty）。仅确认动作写入；
+    // 不进轮询签名，保留至页面重载（重开已确认面板只显式复制，不自动覆盖剪贴板）
+    resume: new Map(),
   },
   global: {       // REQ-20260910-003 全局任务总览（跨项目只读聚合，不随项目切换重置）；
     //          BUG-20260910-004 起为顶栏入口 + 右侧面板呈现（不再是主视图）
@@ -3651,6 +3655,7 @@ function renderConfirmForm(d) {
         <textarea id="confirmNote" rows="2" placeholder="可留空">${esc(d.keepNote || '')}</textarea>
       </label>
       <p id="confirmPanelMsg" class="edit-msg" role="status" aria-live="polite"></p>
+      <div id="confirmResumeCard"></div>
       ${resolved ? '' : '<p class="muted small confirm-btn-guide">保持挂起＝暂不处理，说明留档，队列保持暂停 · 保存草稿＝暂存作答，不确认不续跑 · 确认并继续＝答案回传当前条目继续分析，未决问题清零才处理下一条</p>'}
       <footer class="modal-foot">
         <button type="button" class="btn" id="confirmPanelCancel">关闭</button>
@@ -3659,6 +3664,7 @@ function renderConfirmForm(d) {
         <button type="button" class="btn primary" id="confirmContinueBtn"${busy || resolved ? ' disabled' : ''} title="确认并继续：答案回传当前条目继续分析；必答项全部作答才能确认" aria-label="确认并继续：答案回传当前条目继续分析；必答项全部作答才能确认">${resolved ? '已确认续跑' : '确认并继续'}</button>
       </footer>`;
     bindConfirmFormActions(d);
+    renderConfirmResumeCard(d);
   }
 }
 
@@ -3922,12 +3928,18 @@ async function confirmContinueAction(d) {
         confirmPanelMsg(`已确认恢复：${n ? `补交 ${n} 组提交` : '无需补交（已完整入库）'}，核验通过，队列已恢复；条目验收仍走「确认完成」`);
         toast(`✓ ${d.itemId} 已确认恢复：队列继续`);
       } else {
-        confirmPanelMsg('已确认，正在继续当前条目分析（完成后才处理下一条）');
+        // BUG-20260920-003：不再宣称「正在继续当前条目分析」——确认只是答案回传 + 进入续跑
+        // 队列；Agent 侧续跑要等人工把续跑提示词粘贴发送到调度会话后才发生（见下方自动复制）
+        confirmPanelMsg('已确认并加入续跑队列：正在自动复制续跑提示词，请按下方引导到 AI Agent 会话粘贴发送');
         toast(`✓ ${d.itemId} 已确认：答案回传续跑`);
       }
       await refreshConfirms(true);
       await loadConfirmDetail(true);
       await poll();
+      // BUG-20260920-003：分析确认且排队成功 → 自动复制一次当前分析批次的完整续跑提示词
+      //（来源 = /api/refine/current?batchId=，与批量完善面板「提示词」页签同一事实源，不新建
+      // 批次）；确认失败 / 草稿 / 保持挂起不触发；轮询 / 刷新 / 重开面板不自动覆盖剪贴板
+      if (!isDev && d.itemId) void fetchAndCopyResumePrompt(d, r.batchId || d.batchId || null);
     } else {
       // BUG-20260915-003：内容或候选范围变化 → 确认键停用直至「重新核验」重新核对
       if ((r.reasons || []).some((x) => /内容已变|重新核验|内容指纹/.test(String(x)))) {
@@ -3953,6 +3965,112 @@ function setConfirmButtonsDisabled(disabled) {
   for (const sel of ['#confirmKeepBtn', '#confirmVerifyBtn', '#confirmDraftBtn', '#confirmContinueBtn']) {
     const el = $(sel);
     if (el) el.disabled = disabled;
+  }
+}
+
+/* ---------- BUG-20260920-003 分析确认续跑提示词（确认成功自动复制一次 + 面板常驻引导卡） ----------
+   人工确认分析成功且当前条目已进入续跑队列后，自动复制当前项目、当前分析批次的完整主调度
+   提示词（/api/refine/current?batchId= 与批量完善面板「提示词」页签同一事实源：沿用现有
+   生成口径与归一展示，不另拼简化指令、不创建新批次），并在确认面板常驻「去 AI Agent 粘贴
+   发送」引导。区分「已进入续跑队列」与「Agent 已开始执行」；仅确认动作触发这一次自动复制，
+   普通轮询 / 刷新 / 重开已确认面板不自动覆盖剪贴板（重开只提供显式复制入口）。 ---------- */
+
+let confirmResumeBusy = false; // 续跑提示词获取 / 复制进行中（防重复触发）
+
+// 续跑提示词卡（分析确认面板内，确认成功后常驻）：状态取 state.confirms.resume；
+// 已确认但无状态（页面重载 / 重开面板）渲染显式复制入口。只更新卡容器，不打断作答输入。
+function renderConfirmResumeCard(d, busy = confirmResumeBusy) {
+  if (!d || d.kind === 'develop') return;
+  if (!confirmSide.open || confirmSide.id !== d.itemId) return;
+  const box = $('#confirmForm #confirmResumeCard');
+  if (!box) return;
+  const st = state.confirms.resume.get(d.itemId) || null;
+  if (!st && d.state !== 'confirmed') { box.innerHTML = ''; return; }
+  const meta = `条目 ${d.itemId} · 项目 ${state.project || '—'}`;
+  const agentNote = '<p class="muted small">「已进入续跑队列」不等于 Agent 已开始执行：提示词需人工到 AI Agent 会话粘贴发送后，续跑才继续。</p>';
+  let body = '';
+  if (!st) {
+    body = `
+      <p class="cr-line">已确认并加入续跑队列。续跑提示词需人工复制：重开面板不会自动复制。</p>
+      <p class="cr-meta">${esc(meta)}</p>
+      ${agentNote}
+      <div class="dep-toolbar">
+        <button type="button" class="btn" id="confirmResumeCopy"${busy ? ' disabled' : ''} title="复制当前分析任务的续跑提示词（不新建任务、不重复确认）：需人工到 AI Agent 会话粘贴发送">复制续跑提示词</button>
+      </div>`;
+  } else if (st.status === 'fetching') {
+    body = `
+      <p class="cr-line">已确认并加入续跑队列，正在获取并自动复制续跑提示词…（仅本次确认自动复制一次；轮询 / 刷新不会覆盖剪贴板）</p>
+      <p class="cr-meta">${esc(meta)}</p>
+      ${agentNote}`;
+  } else if (st.status === 'copied' || st.status === 'copy-failed') {
+    const ok = st.status === 'copied';
+    body = `
+      <p class="cr-line ${ok ? 'ok' : 'bad'}">${ok
+        ? '✓ 已确认并加入续跑队列。续跑提示词已复制，请到当前项目的 AI Agent 调度会话粘贴并发送，继续当前条目分析。'
+        : '已确认并加入续跑队列，但续跑提示词复制失败：请手动选中下方提示词复制，或点「重新复制」（不会重复确认、不回滚答案、不新建任务）'}</p>
+      <p class="cr-meta">${esc(meta)}</p>
+      ${agentNote}
+      <div class="dep-toolbar">
+        <span class="muted small">续跑提示词（当前分析任务，完整文本可选中手动复制）：</span>
+        <button type="button" class="btn" id="confirmResumeRecopy"${busy ? ' disabled' : ''} title="重试复制同一份续跑提示词：不会重复确认、不创建新任务、不丢失答案">重新复制</button>
+      </div>
+      <pre id="confirmResumePrompt" class="batch-prompt" tabindex="0">${esc(st.prompt || '')}</pre>`;
+  } else {
+    // fetch-failed | empty：不复制空文本、不显示复制成功；保留已确认与排队结果，给重新获取
+    const line = st.status === 'empty'
+      ? '当前分析任务的提示词为空：不复制空文本、不显示复制成功。已确认与排队结果保留，可点「重新获取」。'
+      : `续跑提示词获取失败：${st.error || '未知原因'}。已确认与排队结果保留（不会重复确认），可点「重新获取」。`;
+    body = `
+      <p class="cr-line bad">${esc(line)}</p>
+      <p class="cr-meta">${esc(meta)}</p>
+      ${agentNote}
+      <div class="dep-toolbar">
+        <button type="button" class="btn" id="confirmResumeRefetch"${busy ? ' disabled' : ''} title="重新获取当前分析任务提示词并尝试复制：不会重复确认、不新建任务">重新获取</button>
+      </div>`;
+  }
+  box.innerHTML = `<div class="confirm-resume" data-status="${st ? esc(st.status) : 'manual'}">${body}</div>`;
+  box.querySelector('#confirmResumeRecopy')?.addEventListener('click', () => recopyResumePrompt(d));
+  box.querySelector('#confirmResumeRefetch')?.addEventListener('click', () => fetchAndCopyResumePrompt(d, d.batchId || null));
+  box.querySelector('#confirmResumeCopy')?.addEventListener('click', () => fetchAndCopyResumePrompt(d, d.batchId || null));
+}
+
+// 获取当前分析批次的完整续跑提示词并尝试复制（确认成功自动复制 / 重新获取 / 显式复制共用）。
+// 获取失败或提示词为空不复制空文本；结果只写入卡状态，不重复确认、不回滚答案、不新建批次。
+async function fetchAndCopyResumePrompt(d, batchId = null) {
+  if (!d || !d.itemId || confirmResumeBusy) return;
+  confirmResumeBusy = true;
+  state.confirms.resume.set(d.itemId, { status: 'fetching', prompt: null, error: null });
+  renderConfirmResumeCard(d);
+  try {
+    const q = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
+    const r = await api(`/api/refine/current${q}`);
+    const prompt = String(r?.batch?.prompt || '').trim();
+    if (!prompt) {
+      state.confirms.resume.set(d.itemId, { status: 'empty', prompt: null, error: null });
+    } else {
+      const copied = await copyDispatchText(prompt);
+      state.confirms.resume.set(d.itemId, { status: copied ? 'copied' : 'copy-failed', prompt, error: null });
+    }
+  } catch (e) {
+    state.confirms.resume.set(d.itemId, { status: 'fetch-failed', prompt: null, error: String(e.message || e) });
+  } finally {
+    confirmResumeBusy = false;
+    renderConfirmResumeCard(d);
+  }
+}
+
+// 重新复制：重试复制已获取的同一份续跑提示词（不再请求，不产生新确认 / 新批次）
+async function recopyResumePrompt(d) {
+  const st = d && d.itemId ? state.confirms.resume.get(d.itemId) : null;
+  if (!st || !st.prompt || confirmResumeBusy) return;
+  confirmResumeBusy = true;
+  renderConfirmResumeCard(d);
+  try {
+    const copied = await copyDispatchText(st.prompt);
+    st.status = copied ? 'copied' : 'copy-failed';
+  } finally {
+    confirmResumeBusy = false;
+    renderConfirmResumeCard(d);
   }
 }
 
