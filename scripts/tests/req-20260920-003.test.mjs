@@ -387,9 +387,13 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
   const commitB = git(proj, ['rev-parse', 'HEAD']);
   core.initData(proj);
   const dataDir = core.dataDirFrom(proj);
-  for (const id of ['REQ-20260920-001', 'REQ-20260920-002']) {
-    core.createItem(dataDir, { type: 'requirement', title: `条目 ${id}`, by: 'test' });
-    for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDir, id, s, { by: 'test' });
+  // BUG-20260921-001：条目编号由 nextId 按本地日期生成，夹具必须捕获 createItem 返回的
+  // 真实 id（同 build-serve.test.mjs reqA/reqB 口径）——硬编码登记日编号跨日运行必「找不到」。
+  const reqA = core.createItem(dataDir, { type: 'requirement', title: '条目 A（未选）', by: 'test' });
+  const reqB = core.createItem(dataDir, { type: 'requirement', title: '条目 B（所选）', by: 'test' });
+  // BUG-20260913-001 口径：仅已完成（done）条目可纳入版本，先推到 done
+  for (const it of [reqA, reqB]) {
+    for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDir, it.id, s, { by: 'test' });
   }
   // 官网仓库（main）
   const site = mkRepo(path.join(tmp, 'site'));
@@ -419,8 +423,8 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
   assert.ok(server, '服务应启动');
   const P = `?project=${encodeURIComponent(proj)}`;
   try {
-    // 创建版本（只关联 B）
-    let r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: 'REQ-20260920-002', commit: commitB }] });
+    // 创建版本（只关联 B；itemId 用夹具捕获的真实编号，见 BUG-20260921-001）
+    let r = await req(port, 'POST', `/api/build/version${P}`, { items: [{ itemId: reqB.id, commit: commitB }] });
     assert.equal(r.status, 201, `创建版本：${r.text}`);
     const vid = r.json.version.id;
     const planId = vid;
@@ -534,7 +538,7 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.ok(r.json.site.evidence.matchedAt, '命中证据含检测时间');
     assert.ok((r.json.notice || '').includes('每分钟') && (r.json.notice || '').includes('不代表'), '常驻提示：频率与不代表已推送/部署');
     // 相似编号不命中
-    const v2 = buildStore.createVersion(dataDir, { items: [{ itemId: 'REQ-20260920-001', commit: git(proj, ['rev-parse', 'HEAD']) }] });
+    const v2 = buildStore.createVersion(dataDir, { items: [{ itemId: reqA.id, commit: git(proj, ['rev-parse', 'HEAD']) }] });
     void v2;
   } finally {
     server.kill('SIGTERM');
