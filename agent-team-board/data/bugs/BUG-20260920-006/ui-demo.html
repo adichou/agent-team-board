@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260920-006 演示 · 点击「合并入 main」按钮没有响应</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dde3; --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --primary-weak: #e8effd; --ok: #15803d; --ok-bg: #e7f6ec;
+    --run: #b45309; --run-bg: #fdf1e0; --fail: #b91c1c; --fail-bg: #fdeaea;
+    --warn-bg: #fff7e6; --warn-border: #e2b93b; --shadow: 0 8px 28px rgba(15, 23, 42, .18);
+    --code-bg: #eef1f5;
+  }
+  html[data-theme="dark"] {
+    --bg: #14171d; --panel: #1d222b; --border: #333a46; --text: #e5e9f0; --muted: #97a1af;
+    --primary: #5b8cf5; --primary-weak: #24304a; --ok: #4ade80; --ok-bg: #17301f;
+    --run: #f0b45c; --run-bg: #38290f; --fail: #f27b7b; --fail-bg: #3a1a1a;
+    --warn-bg: #33290f; --warn-border: #a3842c; --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+    --code-bg: #262c37;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  button { font: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 7px; padding: 4px 11px; }
+  .btn:hover:not(:disabled):not(.disabled) { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.small { padding: 2px 8px; font-size: 12.5px; border-radius: 6px; }
+  .btn:disabled, .btn.disabled { opacity: .5; cursor: not-allowed; filter: saturate(.7); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    background: var(--code-bg); border-radius: 4px; padding: 0 4px; }
+
+  /* ---------- 演示控制台（仅演示用） ---------- */
+  .console { border: 1px dashed var(--warn-border); background: var(--warn-bg); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .console .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .console .lbl { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 4px 12px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  select { font: inherit; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+    color: var(--text); padding: 3px 6px; }
+  .sel-line { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px 2px; }
+  .sel-line b { color: var(--text); }
+
+  /* ---------- 模拟构建模块「版本计划」页签 ---------- */
+  .mock { border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+    padding: 14px; max-width: 1080px; }
+  .bld-tabs { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+  .bld-tabs .tab { border: 1px solid var(--border); border-radius: 999px; padding: 3px 14px;
+    background: transparent; color: var(--muted); }
+  .bld-tabs .tab.on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .bld-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .rel-split { display: grid; grid-template-columns: 350px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 820px) { .rel-split { grid-template-columns: 1fr; } }
+  .rel-list { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+  .rel-card { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; cursor: pointer; }
+  .rel-card:hover { border-color: var(--primary); }
+  .rel-card.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .rel-card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rel-card .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .rel-card .row-acts { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .st { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .st-mute { background: var(--bg); color: var(--muted); }
+  .st-draft { background: var(--bg); color: var(--muted); }
+  .st-run  { background: var(--run-bg); color: var(--run); }
+  .st-ok   { background: var(--ok-bg); color: var(--ok); }
+  .st-fail { background: var(--fail-bg); color: var(--fail); }
+  .rel-detail { border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-height: 300px; }
+  .rel-detail-head h3 { margin: 0 0 2px; font-size: 15px; }
+  .rel-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  .rel-tab { border: 1px solid var(--border); border-radius: 999px; padding: 3px 13px;
+    background: transparent; color: var(--muted); }
+  .rel-tab.active { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .rel-tab:disabled, .rel-tab.disabled { opacity: .45; cursor: not-allowed; }
+  .rel-center { padding: 46px 10px; text-align: center; color: var(--muted); }
+  .pane section { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px; }
+  .pane section:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+  .pane h4 { margin: 0 0 4px; font-size: 13.5px; }
+  ul.scope-ul { margin: 6px 0; padding-left: 20px; }
+  ul.scope-ul li { margin: 3px 0; font-size: 13px; }
+  .form-err { color: var(--fail); background: var(--fail-bg); border-radius: 6px; padding: 5px 9px; font-size: 12.5px; }
+  .branch-bar { font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+  .branch-bar.err { color: var(--fail); background: var(--fail-bg); border-radius: 6px; padding: 5px 9px; }
+  .gate-bar { background: var(--warn-bg); border-radius: 6px; padding: 5px 9px; font-size: 12.5px; margin: 6px 0; }
+  .merge-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+  .demo-note { margin-top: 10px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 8px; }
+  .step-hint { color: var(--muted); font-size: 13px; padding: 18px 4px; }
+
+  /* ---------- 弹窗 ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 22, .45); display: flex;
+    align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: min(600px, 100%); max-height: 88vh; overflow: auto; padding: 14px 16px; }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal .body { font-size: 13px; }
+  .modal .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+  /* ---------- toast ---------- */
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); border-radius: 8px; padding: 7px 16px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 90; max-width: 82vw; }
+  #toast.show { opacity: 1; }
+  #toast.err { background: var(--fail); color: #fff; }
+  #toast.ok { background: var(--ok); color: #fff; }
+
+  /* ---------- 点击事件日志（演示「无响应」对照用） ---------- */
+  .logbox { border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+    padding: 10px 12px; margin-top: 12px; max-width: 1080px; }
+  .logbox h4 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  #log { font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; color: var(--muted);
+    max-height: 132px; overflow: auto; white-space: pre-wrap; }
+  #log .ln-fail { color: var(--fail); }
+  #log .ln-ok { color: var(--ok); }
+  #log .ln-mute { color: var(--muted); opacity: .8; }
+</style>
+</head>
+<body>
+
+<h1>BUG-20260920-006 · 点击「合并入 main」按钮没有响应</h1>
+<p class="sub">可交互演示（数据为模拟，不连真实看板、不发真实请求、不执行真实 git 操作）。用上方控制台切换「当前（缺陷）/ 修复后（期望）」与版本状态，对比点击「合并入 main」时的反馈差异；下方「点击事件日志」记录每次点击的处理结果。</p>
+
+<div class="console">
+  <div class="grp"><span class="lbl">模式</span>
+    <span class="seg" id="modeSeg">
+      <button data-mode="bug" class="on">当前（缺陷）</button>
+      <button data-mode="fixed">修复后（期望）</button>
+    </span>
+  </div>
+  <div class="grp"><span class="lbl">版本状态</span>
+    <select id="scenarioSel">
+      <option value="docs-uncommitted">draft · 文档未提交（门禁锁定）</option>
+      <option value="ready" selected>draft · 文档已提交（可合并）</option>
+      <option value="merging">merging · 合并执行中</option>
+      <option value="merged">merged · 已合并入 main</option>
+      <option value="failed">failed · 上次合并失败（可重试）</option>
+      <option value="gone">已被另一标签页删除（本页未刷新）</option>
+    </select>
+  </div>
+  <div class="grp"><span class="lbl">当前分支</span>
+    <span class="seg" id="branchSeg">
+      <button data-branch="dev" class="on">dev</button>
+      <button data-branch="main">main</button>
+    </span>
+  </div>
+  <div class="grp"><span class="lbl">列表状态</span>
+    <select id="listStateSel">
+      <option value="normal" selected>正常</option>
+      <option value="empty">空</option>
+      <option value="loading">加载中</option>
+      <option value="error">加载失败</option>
+    </select>
+  </div>
+  <div class="grp"><span class="lbl">合并结果</span>
+    <span class="seg" id="resultSeg">
+      <button data-result="ok" class="on">成功</button>
+      <button data-result="fail">失败（模拟冲突）</button>
+    </span>
+  </div>
+  <div class="grp"><span class="lbl">外观</span>
+    <button class="btn small" id="themeBtn">切换深浅色</button>
+  </div>
+</div>
+<p class="sel-line" id="hintLine"></p>
+
+<div class="mock" id="mock"></div>
+
+<div class="logbox">
+  <h4>点击事件日志（演示「无响应」对照）
+    <button class="btn small quiet" id="logClear" style="margin-left:auto">清空</button></h4>
+  <div id="log"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= 演示状态 ================= */
+const S = {
+  mode: 'bug',            // bug=当前（缺陷） | fixed=修复后（期望）
+  scenario: 'ready',      // docs-uncommitted | ready | merging | merged | failed | gone
+  branch: 'dev',          // dev | main
+  listState: 'normal',    // normal | empty | loading | error
+  mergeResult: 'ok',      // ok | fail（确认合并后的模拟结果）
+  busy: false,            // 演示内的合并执行中（对应 state.mergeBusy）
+  step: 'merge',          // 五步流程当前步（演示聚焦「合并入 main」步）
+  mergeConfirm: false,    // 合并确认弹窗
+  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+};
+
+const VERSION = {
+  id: 'BLD-20260920-001', name: '看板 refine 流程完善', status: 'draft',
+  items: [
+    { itemId: 'REQ-20260918-004', commit: 'a1b2c3d', title: 'refine 预留与回执命令' },
+    { itemId: 'BUG-20260919-001', commit: 'e4f5a6b', title: '修复看板列表排序' },
+  ],
+};
+
+const ST_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', failed: '失败' };
+const ST_CLS = { draft: 'st-draft', merging: 'st-run', merged: 'st-ok', failed: 'st-fail' };
+
+/* 场景 → 界面口径（对应真实实现 scripts/lib/publish-flow.mjs publishStepsState） */
+function gateOf() {
+  // merge 步门禁（locked 附 reason）
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario; // gone：本页 DOM 仍按旧状态渲染
+  if (st === 'merging') return { locked: true, reason: '合并执行中' };
+  if (st === 'merged') return { locked: true, reason: '已合并入 main' };
+  if (!VERSION.items.length) return { locked: true, reason: '暂无关联条目：请先在「关联条目与提交」步骤关联' };
+  if (st === 'docs-uncommitted') return { locked: true, reason: '文档尚未编写提交（合并前置：所需文档已完成且最新变化已提交）' };
+  return { locked: false, reason: '' };
+}
+/* 详情页按钮禁用原因（对应 scripts/web/build.js renderMergePane 2052 行） */
+function detailDisableReason() {
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario;
+  const gate = gateOf();
+  if (st === 'merged') return { off: true, real: '已合并入 main' };
+  if (gate.locked) return { off: true, real: gate.reason };
+  if (S.branch !== 'dev') return { off: true, real: '当前分支是 ' + S.branch + '，不在 dev：请自行切换回 dev 后重试' };
+  if (st === 'merging' || S.busy) return { off: true, real: '合并中，请勿重复触发' };
+  return { off: false };
+}
+/* 卡片按钮禁用原因（对应 build.js 1866 行：只看 merging/merged/mergeBusy，不含门禁与分支）；
+   修复后（期望）口径：卡片与详情一致——统一检查门禁与分支 */
+function cardDisableReason() {
+  if (S.mode === 'fixed') return detailDisableReason();
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario;
+  if (st === 'merging' || st === 'merged' || S.busy) {
+    return { off: true, real: st === 'merged' ? '已合并入 main' : '合并中，请勿重复触发' };
+  }
+  return { off: false };
+}
+
+/* ================= 工具 ================= */
+const $ = (s) => document.querySelector(s);
+let toastTimer = null;
+function toast(msg, cls) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (cls ? ' ' + cls : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2600);
+}
+function log(msg, cls) {
+  const el = $('#log');
+  const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  const line = document.createElement('div');
+  line.className = cls || 'ln-mute';
+  line.textContent = '[' + time + '] ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ================= 按钮渲染：缺陷 / 期望两种口径 ================= */
+/* 缺陷口径：禁用即原生 disabled（浏览器不触发 click → 点击「无响应」）；
+   title 归因缺陷：不在 dev / 合并中时回落「前置条件未满足」（对应 build.js 2052 行 esc(gate?.reason || '前置条件未满足')） */
+function bugDisabledTitle(r, gate) {
+  if (r.real === '已合并入 main') return '已合并入 main';
+  if (gate.locked) return gate.reason;              // 门禁锁定时归因正确
+  return '前置条件未满足';                            // 不在 dev / 合并中 → 误归因（本 Bug 一部分）
+}
+/* 渲染按钮：fixed 模式禁用态改用 .disabled + aria-disabled（可捕获点击给出反馈），视觉与 disabled 一致 */
+function btnHtml(id, label, r, gate, primary) {
+  const cls = 'btn' + (primary ? ' primary' : '') + (r.off ? (S.mode === 'fixed' ? ' disabled' : '') : '');
+  const dis = r.off && S.mode === 'bug' ? ' disabled' : '';
+  const aria = r.off && S.mode === 'fixed' ? ' aria-disabled="true"' : '';
+  const title = r.off ? (S.mode === 'fixed' ? r.real : bugDisabledTitle(r, gate)) : '';
+  return '<button type="button" id="' + id + '" class="' + cls + '"' + dis + aria +
+    (title ? ' title="' + esc(title) + '"' : '') + ' data-merge-btn="1">' + esc(label) + '</button>';
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ================= 点击处理（对照 openMergeConfirm / doMerge） ================= */
+function onMergeClick(where) {
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario;
+  const gate = gateOf();
+  const r = where === 'card' ? cardDisableReason() : detailDisableReason();
+
+  if (S.mode === 'bug') {
+    // —— 当前（缺陷）——
+    if (r.off) { log('点击「合并入 main」（' + where + '）：按钮为原生 disabled → 浏览器不触发 click → 无弹窗 / 无 toast / 无任何反馈（悬停 title：' + bugDisabledTitle(r, gate) + '）', 'ln-fail'); return; }
+    if (S.scenario === 'gone') { log('点击「合并入 main」（' + where + '）：openMergeConfirm → findVersion 返回 null → 静默 return → 无任何反馈（版本已被删除，本页未刷新）', 'ln-fail'); return; }
+    if (S.busy) { log('点击「合并入 main」（' + where + '）：state.mergeBusy → 静默 return → 无任何反馈', 'ln-fail'); return; }
+    if (where === 'card' && (gate.locked || S.branch !== 'dev')) {
+      // 卡片按钮未按门禁 / 分支禁用：可点开确认弹窗，确认后才被后端 409 拦截
+      openConfirm('card-pass-gate');
+      log('点击「合并入 main」（card）：卡片按钮未检查门禁 / 分支 → 打开确认弹窗（与详情页按钮口径不一致）', 'ln-mute');
+      return;
+    }
+    openConfirm(where);
+    log('点击「合并入 main」（' + where + '）：打开确认弹窗', 'ln-ok');
+    return;
+  }
+
+  // —— 修复后（期望）——
+  if (r.off) { toast('暂不可合并：' + r.real, 'err'); log('点击「合并入 main」（' + where + '）：反馈真实原因「' + r.real + '」（title 同步归因）', 'ln-ok'); return; }
+  if (S.scenario === 'gone') { toast('✕ 版本 ' + VERSION.id + ' 不存在或已被删除：请刷新列表', 'err'); log('点击「合并入 main」（' + where + '）：版本不存在 → toast 提示刷新（不再静默）', 'ln-ok'); return; }
+  if (S.busy) { toast('合并执行中，请稍候……', 'err'); log('点击「合并入 main」（' + where + '）：合并执行中 → toast 提示稍候（不再静默）', 'ln-ok'); return; }
+  openConfirm(where);
+  log('点击「合并入 main」（' + where + '）：打开确认弹窗', 'ln-ok');
+}
+
+function openConfirm(where) { S._confirmFrom = where; S.mergeConfirm = true; render(); }
+
+/* 确认合并（对照 doMerge → POST /version/merge） */
+function doMerge() {
+  S.mergeConfirm = false;
+  S.busy = true;
+  render();
+  log('确认合并：POST /version/merge（模拟执行，隔离 cherry-pick 逐条重放）…', 'ln-mute');
+  setTimeout(() => {
+    S.busy = false;
+    if (S.mergeResult === 'ok') {
+      toast('✓ 已合并入 main（' + VERSION.id + '）', 'ok');
+      log('合并完成：全部条目已重放入 main → 状态 merged', 'ln-ok');
+      S.scenario = 'merged';
+      $('#scenarioSel').value = 'merged';
+    } else {
+      toast('✕ 合并失败：a1b2c3d 重放冲突（README.md）：请解决后重试，只补未合并条目', 'err');
+      log('合并失败：条目 REQ-20260918-004 重放冲突 → 状态 failed（可重试）', 'ln-fail');
+      S.scenario = 'failed';
+      $('#scenarioSel').value = 'failed';
+    }
+    render();
+  }, 1500);
+}
+
+/* ================= 界面渲染 ================= */
+function renderCard() {
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario;
+  const label = st === 'failed' ? '重试合并入 main' : '合并入 main';
+  const r = cardDisableReason();
+  return `
+    <div class="rel-card sel">
+      <div class="t"><strong>${esc(VERSION.name)}</strong>
+        <span class="st ${ST_CLS[st] || 'st-mute'}">${ST_LABEL[st] || st}</span>
+        <span class="row-acts">${btnHtml('cardMergeBtn', label, r, gateOf(), true)}</span>
+      </div>
+      <div class="meta">${VERSION.id} · 关联 ${VERSION.items.length} 条目 · 目标分支 main</div>
+    </div>
+    <div class="rel-card" style="opacity:.55">
+      <div class="t"><strong>官网同步检测优化</strong><span class="st st-draft">计划中</span></div>
+      <div class="meta">BLD-20260919-002 · 关联 1 条目 · 目标分支 main</div>
+    </div>`;
+}
+
+function renderMergePane() {
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario;
+  const gate = gateOf();
+  const r = detailDisableReason();
+  const label = st === 'failed' ? '重试合并入 main' : '合并入 main';
+  const branchBar = S.branch === 'dev'
+    ? '<p class="branch-bar">当前分支 dev · 目标主分支 main（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>'
+    : '<p class="branch-bar err" role="alert">当前分支是 ' + S.branch + '，不在 dev：请自行切换回 dev 后重试（不自动切分支）。</p>';
+  const gateBar = gate.locked && st !== 'merged'
+    ? '<p class="form-err" role="alert">暂不可合并：' + esc(gate.reason) + '</p>' : '';
+  const scopeRows = VERSION.items.map((it) =>
+    '<li>' + esc(it.itemId) + ' <code>' + esc(it.commit) + '</code> ' + esc(it.title) +
+    (st === 'merged' ? ' <span class="st st-ok">已合并</span>' : '') +
+    (st === 'failed' && it.itemId === 'REQ-20260918-004' ? ' <span class="st st-fail" title="重放冲突（README.md）">失败</span>' : '') + '</li>').join('');
+  const resultBar = st === 'failed'
+    ? '<p class="form-err" role="alert">合并失败：a1b2c3d 重放冲突（README.md）（可重试，只补未合并条目）</p>'
+    : st === 'merged'
+      ? '<p class="small muted">合并完成：主分支头 <code>9f8e7d6</code>；重放证据 2 条。</p>' : '';
+  const mergingBar = st === 'merging' || S.busy
+    ? '<p class="small muted">合并中，请稍候……（执行中已禁用重复触发）</p>' : '';
+  return `
+    <div class="pane">
+      <section><h4>发布范围</h4>
+        <ul class="scope-ul">${scopeRows}</ul>
+        <p class="small muted">文档提交：<code>c3d4e5f</code>（只随本版发布最新文档提交）</p>
+      </section>
+      <section><h4>隔离分析</h4>
+        <p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>
+      </section>
+      ${branchBar}
+      ${gateBar}
+      ${mergingBar}
+      <p class="merge-row">${btnHtml('detailMergeBtn', S.busy || st === 'merging' ? '合并中…' : label, r, gate, true)}
+        <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>
+      ${resultBar}
+      <p class="demo-note">演示说明：为聚焦本 Bug，「合并入 main」步始终可进入；实际产品中该步入口同样受五步门禁约束（locked 时步骤页签禁用）。</p>
+    </div>`;
+}
+
+function renderDetail() {
+  const steps = [['plan', '版本计划'], ['link', '关联条目与提交'], ['docs', '文档编写'], ['merge', '合并入 main'], ['release', '正式发布']];
+  const st = S.scenario === 'gone' ? 'ready' : S.scenario;
+  const tabs = steps.map(([k, label]) => {
+    const active = S.step === k;
+    const locked = k === 'release' && st !== 'merged'; // 演示统一口径：正式发布步需先 merged
+    return `<button type="button" class="rel-tab${active ? ' active' : ''}" data-step="${k}"${locked ? ' disabled title="合并入 main 完成后才能正式发布"' : ''}>${label}</button>`;
+  }).join('');
+  let body;
+  if (S.step === 'merge') body = renderMergePane();
+  else body = '<p class="step-hint">「' + (steps.find(([k]) => k === S.step) || [])[1] + '」步内容从略——本演示聚焦「合并入 main」步的按钮反馈，请点击上方「合并入 main」页签进入。</p>';
+  return `
+    <div class="rel-detail">
+      <header class="rel-detail-head">
+        <div><h3>${esc(VERSION.name)} <span class="st ${ST_CLS[st] || 'st-mute'}">${ST_LABEL[st] || st}</span></h3>
+        <p class="muted small">${VERSION.id} · 更新 2026-09-20 23:40</p></div>
+      </header>
+      <nav class="rel-tabs" role="tablist" aria-label="发布五步流程">${tabs}</nav>
+      ${body}
+    </div>`;
+}
+
+function renderListPane() {
+  if (S.listState === 'loading') return '<div class="rel-center">加载发布模块…</div>';
+  if (S.listState === 'error') return `<div class="rel-center">发布模块读取失败：模拟网络错误<br><br>
+    <button class="btn" id="listRetry">重试</button></div>`;
+  if (S.listState === 'empty') return '<div class="rel-center">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
+  return renderCard();
+}
+
+function render() {
+  document.documentElement.dataset.theme = S.theme;
+  $('#mock').innerHTML = `
+    <nav class="bld-tabs"><button class="tab on">版本计划</button><button class="tab">分支浏览</button>
+      <span style="margin-left:auto"><button class="btn primary small">＋ 新建版本</button></span></nav>
+    <div class="rel-split">
+      <div class="rel-list" aria-label="版本列表">${renderListPane()}</div>
+      ${S.listState === 'normal' ? renderDetail() : '<div class="rel-detail"><p class="step-hint">列表不可用时详情区从略。</p></div>'}
+    </div>`;
+  if (S.mergeConfirm) renderConfirm();
+  bind();
+  $('#hintLine').innerHTML = '当前：<b>' + (S.mode === 'bug' ? '缺陷口径' : '期望口径') + '</b> · 版本 <b>' + VERSION.id + '</b> · 场景 <b>' + $('#scenarioSel').selectedOptions[0].textContent + '</b> · 分支 <b>' + S.branch + '</b>' +
+    (S.scenario === 'gone' ? '（列表 DOM 仍渲染该版本，按钮按旧状态可点）' : '');
+}
+
+function renderConfirm() {
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-wrap'; wrap.id = 'mergeWrap';
+  wrap.innerHTML = `
+    <div class="modal" role="dialog" aria-label="合并入 main 确认">
+      <h3>合并入 main 确认（${VERSION.id}）</h3>
+      <div class="body">
+        <p>将把以下提交逐条合并入 <strong>main</strong>（--no-ff，在临时工作树执行，不影响当前分支与未提交改动）：</p>
+        <ul class="scope-ul">${VERSION.items.map((it) => '<li>' + esc(it.itemId) + ' ' + esc(it.commit) + ' ' + esc(it.title) + '</li>').join('')}</ul>
+        <p class="muted small">确认即授权本合并计划；合并中不可重复触发或增删条目。</p>
+      </div>
+      <div class="foot">
+        <button class="btn" id="mergeCancel">取消</button>
+        <button class="btn primary" id="mergeGo">确认合并</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  $('#mergeCancel').onclick = () => { S.mergeConfirm = false; render(); log('确认弹窗：取消', 'ln-mute'); };
+  $('#mergeGo').onclick = doMerge;
+  wrap.onclick = (e) => { if (e.target === wrap) { S.mergeConfirm = false; render(); } };
+}
+
+function bind() {
+  // 合并按钮（卡片 + 详情）：bug 模式原生 disabled 不触发 click；fixed 模式 .disabled 可捕获
+  for (const el of document.querySelectorAll('[data-merge-btn]')) {
+    el.addEventListener('click', () => onMergeClick(el.id === 'cardMergeBtn' ? 'card' : 'detail'));
+  }
+  // 缺陷演示关键：原生 disabled 按钮的 click 处理器不会被触发——这里用捕获阶段监听
+  // 把「点击落在禁用按钮上、界面毫无反应」这一事实记入日志（仅演示用，产品代码无此层）。
+  // #mock 元素本身不随 render 重建，标记防重复绑定
+  const mockEl = $('#mock');
+  if (!mockEl.dataset.capBound) {
+    mockEl.dataset.capBound = '1';
+    mockEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-merge-btn]');
+      if (b && b.disabled) {
+        const where = b.id === 'cardMergeBtn' ? 'card' : 'detail';
+        log('点击落在禁用的「合并入 main」按钮（' + where + '）上 → 浏览器不触发 click 处理器 → 无弹窗 / 无 toast / 无任何反馈（悬停 title：' + (b.getAttribute('title') || '（无）') + '）', 'ln-fail');
+      }
+    }, true);
+  }
+  // 缺陷模式下卡片按钮「能点但绕过门禁」的确认路径：确认时被后端 409 拦截
+  for (const el of document.querySelectorAll('[data-step]')) {
+    el.addEventListener('click', () => { S.step = el.dataset.step; render(); });
+  }
+  $('#listRetry')?.addEventListener('click', () => {
+    S.listState = 'loading'; render();
+    setTimeout(() => { S.listState = 'normal'; render(); log('列表重试成功 → 恢复正常', 'ln-ok'); }, 900);
+  });
+}
+
+/* 确认弹窗中「确认合并」在缺陷模式 + 卡片绕过门禁场景 → 后端 409（doMerge 的后置拦截） */
+const _doMerge = doMerge;
+doMerge = function () {
+  if (S.mode === 'bug' && S._confirmFrom === 'card-pass-gate') {
+    const gate = gateOf();
+    S.mergeConfirm = false;
+    const reason = gate.locked ? gate.reason : '当前分支是 ' + S.branch + '，不在 dev：请自行切换回 dev 后重试（不自动切分支，也不能绕过该前置）';
+    toast('✕ 合并失败：' + reason, 'err');
+    log('确认合并：POST /version/merge → 409「' + reason + '」（卡片入口绕过前端门禁，由后端守卫拦截）', 'ln-fail');
+    return;
+  }
+  _doMerge();
+};
+
+/* ================= 控制台事件 ================= */
+$('#modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.mode = b.dataset.mode;
+  for (const x of $('#modeSeg').children) x.classList.toggle('on', x === b);
+  render();
+  log('切换到「' + (S.mode === 'bug' ? '当前（缺陷）' : '修复后（期望）') + '」模式', 'ln-mute');
+});
+$('#scenarioSel').addEventListener('change', (e) => {
+  S.scenario = e.target.value; S.busy = false;
+  render();
+  log('场景切换：' + e.target.selectedOptions[0].textContent, 'ln-mute');
+});
+$('#branchSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.branch = b.dataset.branch;
+  for (const x of $('#branchSeg').children) x.classList.toggle('on', x === b);
+  render();
+});
+$('#listStateSel').addEventListener('change', (e) => {
+  S.listState = e.target.value;
+  if (S.listState === 'loading') { render(); setTimeout(() => { S.listState = 'normal'; $('#listStateSel').value = 'normal'; render(); }, 1100); }
+  else render();
+});
+$('#resultSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.mergeResult = b.dataset.result;
+  for (const x of $('#resultSeg').children) x.classList.toggle('on', x === b);
+});
+$('#themeBtn').addEventListener('click', () => { S.theme = S.theme === 'dark' ? 'light' : 'dark'; render(); });
+$('#logClear').addEventListener('click', () => { $('#log').innerHTML = ''; });
+
+render();
+log('演示就绪：当前为「缺陷口径」，场景「可合并」，分支 dev——点击右侧详情或左侧卡片的「合并入 main」按钮观察反馈；再切换模式 / 场景对比。', 'ln-mute');
+</script>
+</body>
+</html>
