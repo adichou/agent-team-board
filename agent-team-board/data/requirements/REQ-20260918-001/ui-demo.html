@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260918-001 · README 中英文切换 界面演示</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9; --panel: #ffffff; --fg: #1c2330; --muted: #5b6472;
+    --border: #dde2ea; --accent: #2563eb; --accent-soft: #e8efff;
+    --ok: #15803d; --ok-bg: #dcfce7; --bad: #b91c1c; --bad-bg: #fee2e2;
+    --warn: #92400e; --warn-bg: #fef3c7; --code-bg: #f0f3f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1420; --panel: #171e2e; --fg: #e4e9f2; --muted: #9aa4b5;
+      --border: #2a3346; --accent: #60a5fa; --accent-soft: #1d2b45;
+      --ok: #4ade80; --ok-bg: #14351f; --bad: #f87171; --bad-bg: #3d1616;
+      --warn: #fbbf24; --warn-bg: #3a2c0d; --code-bg: #1d2637;
+    }
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"]  { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; }
+  header .id { color: var(--muted); font-weight: 400; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: transparent; color: var(--fg); padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button:disabled { color: var(--muted); cursor: not-allowed; }
+  .ghost {
+    border: 1px solid var(--border); background: transparent; color: var(--fg);
+    border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  .hint { width: 100%; color: var(--muted); font-size: 12.5px; }
+  main {
+    display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+    gap: 16px; padding: 16px 18px; max-width: 1180px; margin: 0 auto;
+  }
+  @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .card h2 { font-size: 13.5px; margin: 0 0 10px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  /* README 渲染模拟窗 */
+  .doc { position: relative; min-height: 480px; }
+  .doc-frame { border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
+  .doc-url {
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--muted); border-bottom: 1px dashed var(--border); padding-bottom: 8px; margin-bottom: 14px;
+  }
+  .lang-switch { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .lang-switch a { color: var(--accent); text-decoration: none; }
+  .lang-switch a:hover { text-decoration: underline; }
+  .lang-switch .cur { color: var(--fg); font-weight: 600; }
+  .placeholder-line {
+    border: 1px dashed var(--border); border-radius: 6px; padding: 6px 10px;
+    color: var(--muted); font-size: 12.5px; background: var(--code-bg);
+  }
+  .doc-frame h3.title { font-size: 21px; margin: 4px 0 6px; }
+  .doc-frame .lead { color: var(--muted); margin: 0 0 14px; }
+  .doc-frame h4 { font-size: 15px; margin: 16px 0 6px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .doc-frame ul { margin: 6px 0; padding-left: 20px; }
+  .doc-frame li { margin: 2px 0; }
+  pre.tree {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-x: auto; margin: 8px 0 4px;
+  }
+  pre.tree .new { color: var(--ok); font-weight: 700; }
+  .empty-en { color: var(--muted); font-style: italic; padding: 26px 0; text-align: center; }
+  /* loading 遮罩 */
+  .loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--panel) 72%, transparent); border-radius: 12px;
+    flex-direction: column; gap: 8px; color: var(--muted); font-size: 13px;
+  }
+  .spinner {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--accent); animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* 校验面板 */
+  .check-row { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+  .check-row:last-of-type { border-bottom: 0; }
+  .badge { flex: none; border-radius: 999px; padding: 1px 10px; font-size: 12px; font-weight: 600; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.bad { background: var(--bad-bg); color: var(--bad); }
+  .check-detail {
+    margin: 6px 0 10px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px;
+    background: var(--bad-bg); color: var(--bad); display: none;
+  }
+  .check-detail.show { display: block; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .legend { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  .legend b { color: var(--fg); }
+  /* 404 toast */
+  .toast {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad);
+    border-radius: 10px; padding: 10px 16px; font-size: 13px; z-index: 50;
+    display: none; align-items: center; gap: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  }
+  .toast.show { display: flex; }
+  .toast button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 15px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 10px 0 22px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>README 中英文切换 <span class="id">· REQ-20260918-001 ui-demo</span></h1>
+  <div class="seg" id="modeSeg" role="group" aria-label="实施阶段">
+    <button data-mode="before">实施前（基线）</button>
+    <button data-mode="after" class="on">实施后（目标）</button>
+  </div>
+  <div class="seg" id="langSeg" role="group" aria-label="语言">
+    <button data-lang="zh" class="on">中文</button>
+    <button data-lang="en">English</button>
+  </div>
+  <button class="ghost" id="themeBtn">深浅色切换</button>
+  <div class="hint">本页为静态可交互演示：模拟 README.md / README.en.md 的渲染视图与契约测试反馈，数据不出本文件。</div>
+</header>
+
+<main>
+  <section class="card doc" aria-label="README 渲染模拟">
+    <h2>README 渲染视图（模拟代码托管平台）</h2>
+    <div class="doc-frame" id="docFrame"></div>
+    <div class="loading" id="loading" hidden><div class="spinner"></div><span>正在切换语言，加载 README…</span></div>
+  </section>
+
+  <section class="card" aria-label="契约测试校验面板">
+    <h2>契约测试校验面板（模拟 scripts/tests/req-doc-entry-20260916-003.test.mjs B 组）</h2>
+    <div id="checks"></div>
+    <div class="check-detail" id="checkDetail"></div>
+    <div class="actions">
+      <button class="ghost" id="injectBtn">注入缺失章节</button>
+      <button class="ghost" id="emptyBtn">清空英文版内容</button>
+      <button class="ghost" id="resetBtn">恢复演示状态</button>
+    </div>
+    <div class="legend">
+      <b>状态说明</b>：<br>
+      · 正常态：实施后双语互链可往返，校验全绿。<br>
+      · 加载态：切换语言时短暂 loading 指示。<br>
+      · 失败态：注入缺失章节 / 清空英文版后 B2 跑红并给出原因。<br>
+      · 缺失态（实施前）：无切换行，访问 English 报 404。<br>
+      · 空态：英文文件存在但内容为空，渲染空态提示。
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="alert"><span id="toastText"></span><button id="toastClose" aria-label="关闭">×</button></div>
+<footer>agent-team-board · REQ-20260918-001 · 单文件演示，无外网依赖，浏览器直接打开即可交互</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // 演示状态
+  var state = {
+    mode: 'after',        // before = 实施前基线（无切换行 / 无 README.en.md）
+    lang: 'zh',           // after 模式下当前渲染语言
+    missingSection: false,// 注入「按任务类型导航」章节缺失（B2 失败演示）
+    emptyEn: false,       // 清空英文版内容（空态 + B2 失败演示）
+    theme: null           // null = 跟随系统；'light' / 'dark' = 手动
+  };
+
+  // 章节中英映射（取自仓库根 README.md 实际章节标题）
+  var SECTIONS = [
+    { zh: '三栏协作体系', en: 'Three-Board Collaboration System' },
+    { zh: '目录与模块职责', en: 'Directory and Module Responsibilities' },
+    { zh: '环境与运行方式', en: 'Environment and How to Run' },
+    { zh: '关键机制索引', en: 'Key Mechanism Index' },
+    { zh: '官网 / 用户文档 / 支持', en: 'Website / User Docs / Support' },
+    { zh: '按任务类型导航', en: 'Navigate by Task Type' },
+    { zh: '使用与初始化（开发视角）', en: 'Usage and Initialization (Developer View)' }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function docUrl() {
+    return state.mode === 'before' || state.lang === 'zh'
+      ? 'agent-team-board / README.md（渲染视图）'
+      : 'agent-team-board / README.en.md（渲染视图）';
+  }
+
+  function langSwitchHtml() {
+    if (state.mode === 'before') {
+      return '<div class="placeholder-line">（实施前基线：README.md 顶部无语言切换行）</div>';
+    }
+    return state.lang === 'zh'
+      ? '<div class="lang-switch"><span class="cur">中文</span> | <a href="#" data-go="en">English</a></div>'
+      : '<div class="lang-switch"><a href="#" data-go="zh">中文</a> | <span class="cur">English</span></div>';
+  }
+
+  function treeHtml(lang) {
+    var zh = lang === 'zh';
+    if (state.mode === 'before') {
+      return '<pre class="tree">agent-team-board/\n'
+        + '├── README.md        # ' + (zh ? '中文入口（基线，暂无英文版）' : 'Chinese entry (baseline, no English version yet)') + '\n'
+        + '├── AGENTS.md\n'
+        + '└── scripts/\n'
+        + '    └── lib/         # ' + (zh ? '模块分组表未含 migrate-layout / plugin-pack' : 'module table lacks migrate-layout / plugin-pack') + '</pre>';
+    }
+    return '<pre class="tree">agent-team-board/\n'
+      + '├── README.md        # ' + (zh ? '中文入口（唯一中文事实源）' : 'Chinese entry (single source of truth)') + '\n'
+      + '<span class="new">├── README.en.md   # ' + (zh ? '英文对照版（本单新增，顶部互链）' : 'English mirror (new, cross-linked)') + '</span>\n'
+      + '<span class="new">├── index.html     # ' + (zh ? '产品落地页（REQ-20260916-002）' : 'product landing page (REQ-20260916-002)') + '</span>\n'
+      + '├── AGENTS.md\n'
+      + '└── scripts/\n'
+      + '<span class="new">    ├── lib/migrate-layout.mjs   # atb migrate</span>\n'
+      + '<span class="new">    └── lib/plugin-pack.mjs      # atb pack</span></pre>';
+  }
+
+  function renderDoc() {
+    var zh = state.mode === 'before' || state.lang === 'zh';
+    var html = '';
+    html += '<div class="doc-url">' + docUrl() + '</div>';
+    html += langSwitchHtml();
+
+    if (!zh && state.emptyEn) {
+      html += '<h3 class="title">Agent Team Board</h3>'
+        + '<div class="empty-en">（空态：README.en.md 存在但内容为空 —— B2 章节映射校验将失败）</div>';
+      $('docFrame').innerHTML = html;
+      return;
+    }
+
+    html += '<h3 class="title">' + (zh ? 'Agent Team Board（智能体团队看板）' : 'Agent Team Board') + '</h3>';
+    html += '<div class="lead">' + (zh
+      ? 'ZCode 插件：需求 / Bug 的文件化管理 + Agent TDD 开发流程 + 本地网页看板（Status Board）。'
+      : 'ZCode plugin: file-based requirement / bug management + agent TDD workflow + local web status board.') + '</div>';
+
+    var secs = SECTIONS.slice();
+    if (!zh && state.missingSection) {
+      secs = secs.filter(function (s) { return s.zh !== '按任务类型导航'; });
+    }
+    html += '<h4>' + (zh ? '章节结构' : 'Section Structure') + '</h4><ul>'
+      + secs.map(function (s) { return '<li>' + (zh ? s.zh : s.en) + '</li>'; }).join('')
+      + '</ul>';
+
+    html += '<h4>' + (zh ? '目录树（节选）' : 'Directory Tree (excerpt)') + '</h4>' + treeHtml(zh ? 'zh' : 'en');
+
+    if (zh && state.mode === 'after') {
+      html += '<div class="placeholder-line">同章节的英文对照版：<a href="#" data-go="en" style="color:var(--accent)">README.en.md</a>（点击切换）</div>';
+    }
+    $('docFrame').innerHTML = html;
+  }
+
+  function updateChecks() {
+    var after = state.mode === 'after';
+    var b1 = after; // 双语互链存在
+    var b2 = after && !state.missingSection && !state.emptyEn; // 章节映射全命中且完整翻译
+    var b3 = after; // A1 路径清单扩展且文件存在
+    var b4 = after; // 内容登记
+    var rows = [
+      { name: 'B1 双语互链切换（README.md ⇄ README.en.md）', pass: b1 },
+      { name: 'B2 英文版章节映射全命中且无 CJK 漏译', pass: b2 },
+      { name: 'B3 A1 路径清单扩展且逐一真实存在', pass: b3 },
+      { name: 'B4 README 登记落地页 / migrate-layout / plugin-pack', pass: b4 }
+    ];
+    $('checks').innerHTML = rows.map(function (r) {
+      return '<div class="check-row"><span>' + r.name + '</span>'
+        + '<span class="badge ' + (r.pass ? 'ok' : 'bad') + '">' + (r.pass ? '通过' : '失败') + '</span></div>';
+    }).join('');
+
+    var detail = $('checkDetail');
+    if (after && !b2) {
+      var why = state.emptyEn
+        ? 'README.en.md 存在但内容为空：章节映射 0/7 命中（空态演示）。'
+        : '英文版缺失章节「Navigate by Task Type（按任务类型导航）」：映射 6/7 命中，契约测试跑红阻止合入（失败态演示）。';
+      detail.textContent = 'B2 失败原因：' + why;
+      detail.classList.add('show');
+    } else if (!after) {
+      detail.textContent = '实施前基线：README.md 无切换链接，README.en.md 不存在，A1 清单未含新路径 —— 本单实施后全部转绿。';
+      detail.classList.add('show');
+    } else {
+      detail.classList.remove('show');
+    }
+  }
+
+  function updateToolbar() {
+    var modeBtns = $('modeSeg').querySelectorAll('button');
+    modeBtns.forEach(function (b) { b.classList.toggle('on', b.dataset.mode === state.mode); });
+    var langBtns = $('langSeg').querySelectorAll('button');
+    langBtns.forEach(function (b) {
+      var active = state.mode === 'after' && b.dataset.lang === state.lang;
+      b.classList.toggle('on', active || (state.mode === 'before' && b.dataset.lang === 'zh'));
+    });
+    // 实施前：English 不可作为当前语言，但保留可点击以演示 404 反馈
+  }
+
+  function render() { renderDoc(); updateChecks(); updateToolbar(); }
+
+  // ---- 交互：模式切换 ----
+  $('modeSeg').addEventListener('click', function (e) {
+    var btn = e.target.closest('button'); if (!btn) return;
+    state.mode = btn.dataset.mode;
+    if (state.mode === 'before') state.lang = 'zh';
+    render();
+  });
+
+  // ---- 交互：语言切换（含加载态；实施前点 English 报 404）----
+  function switchLang(target) {
+    if (state.mode === 'before') {
+      showToast('无法打开 ./README.en.md —— HTTP 404：英文版尚未创建（实施前缺失态）');
+      return;
+    }
+    if (target === state.lang) return;
+    state.lang = target;
+    $('loading').hidden = false;
+    setTimeout(function () { $('loading').hidden = true; renderDoc(); }, 420);
+    updateChecks(); updateToolbar();
+  }
+  $('langSeg').addEventListener('click', function (e) {
+    var btn = e.target.closest('button'); if (!btn) return;
+    switchLang(btn.dataset.lang);
+  });
+  $('docFrame').addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-go]'); if (!a) return;
+    e.preventDefault(); switchLang(a.dataset.go);
+  });
+
+  // ---- 交互：失败态注入 / 空态 / 恢复 ----
+  $('injectBtn').addEventListener('click', function () {
+    if (state.mode !== 'after') { showToast('请先切换到「实施后」模式再注入失败态。'); return; }
+    state.missingSection = true; render();
+  });
+  $('emptyBtn').addEventListener('click', function () {
+    if (state.mode !== 'after') { showToast('请先切换到「实施后」模式再演示空态。'); return; }
+    state.emptyEn = true; state.lang = 'en'; render();
+  });
+  $('resetBtn').addEventListener('click', function () {
+    state.missingSection = false; state.emptyEn = false; render();
+  });
+
+  // ---- 交互：深浅色 ----
+  $('themeBtn').addEventListener('click', function () {
+    var dark = state.theme
+      ? state.theme === 'light'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    state.theme = dark ? 'dark' : 'light';
+    document.documentElement.dataset.theme = state.theme;
+  });
+
+  // ---- toast ----
+  var toastTimer = null;
+  function showToast(msg) {
+    $('toastText').textContent = msg;
+    $('toast').classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $('toast').classList.remove('show'); }, 3600);
+  }
+  $('toastClose').addEventListener('click', function () { $('toast').classList.remove('show'); });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -44,12 +44,12 @@ const declaredPaths = [
   'scripts/atb.mjs',
   'scripts/server.mjs',
   'scripts/state-guard.mjs',
-  // scripts/lib 全部模块（40 个）
+  // scripts/lib 全部模块（39 个；mgt-commit.mjs 已随 BUG-20260918-002 下线删除）
   ...[
     'batch', 'build-git', 'build-publish', 'build-publish-api', 'build-publish-store', 'build-store',
     'codex-adapter', 'codex-model-config', 'codex-preflight', 'commit-store', 'confirm-states', 'confirm-store',
     'core', 'dispatch', 'dispatch-store', 'execution-verifier', 'git-flow', 'growth-store', 'hold-states',
-    'hold-store', 'legacy-recovery', 'manual-closeout', 'marketing-store', 'mgt-commit', 'oncall-store',
+    'hold-store', 'legacy-recovery', 'manual-closeout', 'marketing-store', 'oncall-store',
     'product-release-git', 'product-release-pipeline', 'product-release-store', 'refine-states', 'refine-store',
     'release-apple', 'release-electron', 'release-git', 'release-store', 'req-disc-store', 'scheduler',
     'site-lang', 'site-materials', 'task-settings', 'webapp-profile',

@@ -38,8 +38,6 @@ import * as refine from './lib/refine-store.mjs';
 import * as refineStates from './lib/refine-states.mjs';
 import * as holdStates from './lib/hold-states.mjs';
 import * as holdStore from './lib/hold-store.mjs';
-// REQ-20260914-007：管理记录自动提交（确认完成 / 版本合并两个人工闭环入口）
-import * as mgtCommit from './lib/mgt-commit.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as confirmStates from './lib/confirm-states.mjs';
 import * as taskSettings from './lib/task-settings.mjs';
@@ -2283,9 +2281,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     if (!dataDir) return sendJson(res, 200, { initialized: false });
     try { buildStore.recoverMerging(dataDir); } catch { /* 数据目录异常不阻塞读取 */ }
     const branches = buildGit.listBranches(root);
-    // REQ-20260916-007：version.json 自动入库取消（版本账本属应用数据本地留存），
-    // 版本管理提交状态（mgtOf）随之下线；存量 'version' 账本不再透出。
-    const mgtOf = () => ({});
+    // REQ-20260916-007：version.json 自动入库取消（版本账本属应用数据本地留存），版本管理提交
+    // 状态随之下线；BUG-20260918-002：item 类闭环同口径下线，版本列表不再装配管理提交状态。
     // BUG-20260917-001：按 bldId 附各版本发布汇总（任一 succeeded 运行 → release.published），
     // 供左侧版本卡片显示「已发布」标识；随列表一次装配返回（无逐版本请求）；
     // 发布记录读取异常降级为无标识（release:null），不阻塞构建模块 state。
@@ -2295,7 +2292,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       initialized: true,
       isRepo: branches.isRepo,
       currentBranch: branches.current,
-      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, ...mgtOf(v.id), release: releaseMap.get(v.id) || null })),
+      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, release: releaseMap.get(v.id) || null })),
       statusLabels: buildStore.VERSION_STATUS_LABEL,
     });
   }
@@ -3146,19 +3143,6 @@ async function handleApi(req, res, u, pathname) {
     }
     return sendJson(res, 200, { statuses });
   }
-  // REQ-20260914-007：管理记录提交重试——只补交管理记录（路径限定），不重放确认完成；
-  // 与初次提交同锁串行；结果持久化在账本（成功 / 已同步后清除失败提示）。
-  // REQ-20260916-007：version 类随版本账本入库取消下线，仅保留 item（确认完成留痕）。
-  if (req.method === 'POST' && pathname === '/api/mgt-commit/retry') {
-    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
-    const body = JSON.parse((await readBody(req)) || '{}');
-    const id = String(body.id || '').trim();
-    if (body.kind !== 'item' || !/^(?:REQ|BUG)-\d{8}-\d{3,}$/.test(id)) {
-      throw new core.AtbError('kind 必须是 item 且 id 为 REQ/BUG 单号（version 重试已随应用数据分离下线）');
-    }
-    return sendJson(res, 200, { mgtCommit: mgtCommit.retryMgmt({ dataDir, projectRoot: root, kind: 'item', id }) });
-  }
-
   if (req.method === 'GET' && pathname === '/api/board') {
     const data = core.boardData(root);
     // REQ-20260913-003：去批次概念——「已入批次」（batchEntry）数据源下线，board 不再附加该字段。
@@ -3503,38 +3487,30 @@ async function handleApi(req, res, u, pathname) {
     return sendJson(res, 200, st);
   }
 
-  const statusMatch = pathname.match(/^\/api\/item\/([^/]+)\/status$/);
-  if (statusMatch && req.method === 'POST') {
-    if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
-    const id = decodeURIComponent(statusMatch[1]);
-    const body = JSON.parse((await readBody(req)) || '{}');
-    const current = core.getItemDetail(dataDir, id);
-    if (!boardTransitionAllowed(current.status, body.to)) {
-      return sendJson(res, 403, {
-        error:
-          current.status === 'accepted'
-            ? '网页端不承担认领：accepted 条目请由 Agent 执行 atb claim <ID>（自动进入 in-progress）'
-            : `网页端不允许 ${current.status} → ${body.to}`,
+    const statusMatch = pathname.match(/^\/api\/item\/([^/]+)\/status$/);
+    if (statusMatch && req.method === 'POST') {
+      if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
+      const id = decodeURIComponent(statusMatch[1]);
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const current = core.getItemDetail(dataDir, id);
+      if (!boardTransitionAllowed(current.status, body.to)) {
+        return sendJson(res, 403, {
+          error:
+            current.status === 'accepted'
+              ? '网页端不承担认领：accepted 条目请由 Agent 执行 atb claim <ID>（自动进入 in-progress）'
+              : `网页端不允许 ${current.status} → ${body.to}`,
+        });
+      }
+      // BUG-20260918-002：确认完成只做状态流转——不再采集管理文件基线、不执行任何 git 提交，
+      // 留痕文档（confirmations.md / decisions.md）留在工作区随既有通道（收口提交 / 人工提交 /
+      // 文档提交）入库（REQ-20260914-007 自动提交闭环已随应用数据分离整体下线）。
+      const { status: st } = core.setStatus(dataDir, id, body.to, {
+        by: 'board',
+        // REQ-20260911-007：确认完成遇待人工决策未答项拦截；force=true 仅为前端「二次确认」放行口径
+        force: body.force === true,
       });
+      return sendJson(res, 200, st);
     }
-    // REQ-20260914-007：确认完成操作前采集目标管理文件基线（操作后据此归因自动提交范围）
-    const mgtBaseline = body.to === 'done'
-      ? mgtCommit.beforeBaseline(root, mgtCommit.itemMgtFiles(dataDir, id))
-      : null;
-    const { changed: stChanged, status: st } = core.setStatus(dataDir, id, body.to, {
-      by: 'board',
-      // REQ-20260911-007：确认完成遇待人工决策未答项拦截；force=true 仅为前端「二次确认」放行口径
-      force: body.force === true,
-    });
-    // REQ-20260914-007：确认完成成功后自动提交本次刷新的管理记录（status.json 与确有刷新的
-    // confirmations.md / decisions.md）。提交失败不伪装成功、不撤销业务操作：条目保持 done，
-    // 结果独立随响应返回；重复请求（changed=false）不重放。
-    let mgtResult = null;
-    if (mgtBaseline && stChanged) {
-      mgtResult = mgtCommit.commitItemDoneMgmt({ dataDir, projectRoot: root, itemId: id, baseline: mgtBaseline });
-    }
-    return sendJson(res, 200, mgtResult ? { ...st, mgtCommit: mgtResult } : st);
-  }
 
   const itemMatch = pathname.match(/^\/api\/item\/([^/]+)$/);
   // REQ-20260908-003：删除待接受条目（仅 submitted；目录整体移除。跨站防护已在 /api/* 入口统一生效）
@@ -3585,12 +3561,6 @@ async function handleApi(req, res, u, pathname) {
           reason: holdRec.reason || null,
         };
       }
-    }
-    // REQ-20260914-007：条目详情附管理记录提交状态（账本持久化：页面刷新 / 服务重启后
-    // 失败提示仍可见，前端「管理记录提交」反馈块与「重试提交」据此渲染）
-    {
-      const mgt = mgtCommit.readMgtState(dataDir, 'item', id);
-      if (mgt) detail.mgtCommit = mgt;
     }
     return sendJson(res, 200, detail);
   }
