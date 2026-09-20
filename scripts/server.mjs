@@ -2245,7 +2245,9 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 //   GET  /api/build/branch-log        指定分支提交记录（BUG-20260914-009 分页：?limit= 默认 50 上限 500、
 //                                    ?offset= 偏移默认 0；返回 hash/short/subject/author/date + total 总数；
 //                                    REQ-20260914-002：可选 ?q= 关键词 → 搜索模式，subject/author/hash
-//                                    大小写不敏感子串匹配，服务端全量过滤后分页，total 为命中总数）
+//                                    大小写不敏感子串匹配，服务端全量过滤后分页，total 为命中总数；
+//                                    REQ-20260920-001：每条 commit 附 parents 父提交 hash 数组，供前端
+//                                    按真实父子关系绘制历史拓扑图）
 //   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
 //                                    BUG-20260913-001：非 done 条目拒绝纳入；
 //                                    BUG-20260914-004：已纳入任一版本的条目拒绝纳入，数据层兜底）

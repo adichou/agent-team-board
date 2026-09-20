@@ -68,6 +68,12 @@ const EN = {
   '搜索': 'Search',
   '清除': 'Clear',
   '搜索中…': 'Searching commits…',
+  // REQ-20260920-001 分支浏览历史拓扑图（合并标签 / 隐藏父提交计数等动态拼接见 EN_DYNAMIC；
+  // 详情区「父提交：」为独立文本节点后接父 hash code 列表，故为静态键）
+  '父提交：': 'Parents: ',
+  '无父提交（根提交）': 'No parents (root commit)',
+  '搜索已隐藏中间提交：虚线不表示直接父子关系。': 'Search hides intermediate commits: dashed lines do not represent direct parent-child edges.',
+  '父提交在后续页，轨道继续；此处不是历史起点。': 'Parent commits continue on the next page; the track continues — this is not the start of history.',
   // REQ-20260915-003 构建模块：产品发布入口迁入版本卡片 + 关联条目联合列表搜索分页 +
   // 新建版本上移页签工具行（计数 / 页码 / 无匹配空态动态拼接见 EN_DYNAMIC；
   // 「清空」值不用 Clear/Clear search——与「清除」「清除搜索」的受检唯一值口径错开）
@@ -1003,6 +1009,9 @@ const EN_DYNAMIC = {
   '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
   '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',
   '已到末尾 · 共 ◇ 条匹配': 'End of results · $1 matches in total',
+  // REQ-20260920-001 分支浏览历史拓扑图：合并标签 / 行内与详情区隐藏父提交说明（动态拼接）
+  '合并 · ◇ 父提交': 'Merge · $1 parent commits',
+  '◇ 个父提交未显示（虚线延续）': '$1 parent commits not shown (dashed continuation)',
   // REQ-20260915-003 构建模块关联条目联合列表：搜索计数 / 页码 / 无匹配空态（动态拼接）
   '匹配 ◇ / 共 ◇ 条': '$1 of $2 matched',
   '第 ◇ / ◇ 页': 'Page $1 of $2',

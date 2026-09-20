@@ -74,6 +74,8 @@ export function listBranches(root) {
 // 截断——limit 缺省 50、归一 clamp [1,500]；offset 缺省 0、负数归 0（git log -n + --skip 偏移）；
 // 附 rev-list --count 总数 total，响应 { branch, commits, total, limit, offset }，
 // offset ≥ total 时返回空页（前端按 total 计算页码不会请求，接口层保持宽容不报错）。
+// REQ-20260920-001：每条 commit 附 parents（%P 父提交 hash 数组，根提交为 []）——前端拓扑图
+// 连线以真实父子关系为据，不得从主题文本 / 行序推测。
 export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   const ref = assertRefName(branch);
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
@@ -81,12 +83,12 @@ export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   const skip = Math.max(0, Math.floor(Number(offset) || 0));
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
   const total = Number(gitOk(root, ['rev-list', '--count', ref], '统计提交总数').trim()) || 0;
-  const out = gitOk(root, ['log', ref, '-n', String(n), '--skip', String(skip), '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '读取提交记录');
+  const out = gitOk(root, ['log', ref, '-n', String(n), '--skip', String(skip), '--format=%H%x09%h%x09%an%x09%aI%x09%P%x09%s'], '读取提交记录');
   const commits = [];
   for (const line of out.split('\n')) {
     if (!line.trim()) continue;
-    const [hash, short, author, date, ...rest] = line.split('\t');
-    commits.push({ hash, short, author, date, subject: rest.join('\t') });
+    const [hash, short, author, date, parentsRaw, ...rest] = line.split('\t');
+    commits.push({ hash, short, author, date, parents: parentsRaw ? parentsRaw.split(' ') : [], subject: rest.join('\t') });
   }
   return { branch: ref, commits, total, limit: n, offset: skip };
 }
@@ -97,6 +99,7 @@ export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
 //（归一口径同 branchLog），total 为命中总数，响应 { branch, query, commits, total, limit, offset }；
 // q 空白（trim 后空）走 branchLog 默认分页。校验口径与 branchLog 一致（assertRefName / 非仓库 /
 // refs/heads/<ref> 存在性），纯只读，不引入任何 git 写操作。
+// REQ-20260920-001：命中行同样解析 parents（口径与 branchLog 一致）。
 export function branchSearchLog(root, branch, { q, limit = 50, offset = 0 } = {}) {
   const ref = assertRefName(branch);
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
@@ -105,16 +108,16 @@ export function branchSearchLog(root, branch, { q, limit = 50, offset = 0 } = {}
   const n = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
   const skip = Math.max(0, Math.floor(Number(offset) || 0));
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
-  const out = gitOk(root, ['log', ref, '--format=%H%x09%h%x09%an%x09%aI%x09%s'], '搜索提交记录');
+  const out = gitOk(root, ['log', ref, '--format=%H%x09%h%x09%an%x09%aI%x09%P%x09%s'], '搜索提交记录');
   const lower = kw.toLowerCase();
   const hits = [];
   for (const line of out.split('\n')) {
     if (!line.trim()) continue;
-    const [hash, short, author, date, ...rest] = line.split('\t');
+    const [hash, short, author, date, parentsRaw, ...rest] = line.split('\t');
     const subject = rest.join('\t');
     if (subject.toLowerCase().includes(lower) || author.toLowerCase().includes(lower)
       || short.toLowerCase().includes(lower) || hash.toLowerCase().includes(lower)) {
-      hits.push({ hash, short, author, date, subject });
+      hits.push({ hash, short, author, date, parents: parentsRaw ? parentsRaw.split(' ') : [], subject });
     }
   }
   return { branch: ref, query: kw, commits: hits.slice(skip, skip + n), total: hits.length, limit: n, offset: skip };

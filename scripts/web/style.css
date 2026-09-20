@@ -29,6 +29,13 @@
   --dv-del-bg: #ffebe9;
   --dv-del-ch: #ffc0ba;
   --dv-hunk-bg: #ddf4ff;
+  /* REQ-20260920-001 分支浏览历史拓扑图轨道调色板（浅色）：主线蓝 + 5 条并行轨道色 */
+  --git-lg0: #2563eb;
+  --git-lg1: #d97706;
+  --git-lg2: #7c3aed;
+  --git-lg3: #0891b2;
+  --git-lg4: #dc2626;
+  --git-lg5: #16a34a;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -62,6 +69,13 @@
     --dv-del-bg: rgba(248, 81, 73, 0.16);
     --dv-del-ch: rgba(248, 81, 73, 0.45);
     --dv-hunk-bg: rgba(56, 139, 253, 0.16);
+    /* REQ-20260920-001 历史拓扑图轨道调色板（深色） */
+    --git-lg0: #60a5fa;
+    --git-lg1: #fbbf24;
+    --git-lg2: #a78bfa;
+    --git-lg3: #22d3ee;
+    --git-lg4: #f87171;
+    --git-lg5: #4ade80;
   }
 }
 
@@ -3126,6 +3140,26 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-log-pager button.on { background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; }
 .bld-log-pager button:disabled { opacity: 0.45; cursor: default; }
 .bld-log-gap { color: var(--muted); }
+/* REQ-20260920-001 历史拓扑图：行内 SVG 轨道 + 可聚焦行按钮 + 合并标签 + 选中详情区。
+   轨道颜色走 --git-lg* 调色板（浅 / 深两套）；虚线 = 上下文缺失（搜索过滤 / 页边界延续），
+   合并节点双圈 + 行内文字标签（非仅颜色传达）。 */
+.bld-log-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; width: 100%; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+.bld-log-row:hover { background: var(--info-bg); }
+.bld-log-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.bld-log-row.sel { background: var(--info-bg); }
+.bld-log-row .muted { margin-left: auto; }
+.bld-graph { flex-shrink: 0; align-self: center; display: block; overflow: visible; }
+.bld-graph .lg-lines path { fill: none; stroke-width: 2; }
+.bld-graph .lg-c0 { stroke: var(--git-lg0); }
+.bld-graph .lg-c1 { stroke: var(--git-lg1); }
+.bld-graph .lg-c2 { stroke: var(--git-lg2); }
+.bld-graph .lg-c3 { stroke: var(--git-lg3); }
+.bld-graph .lg-c4 { stroke: var(--git-lg4); }
+.bld-graph .lg-c5 { stroke: var(--git-lg5); }
+.bld-graph .lg-node { fill: var(--panel); stroke-width: 2; }
+.bld-graph .lg-dot { stroke: none; }
+.bld-merge-tag { flex: none; font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 99px; background: var(--info-bg); color: var(--info-text); }
+.bld-log-detail { font-size: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
 .bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }
 .bld-log-eof { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; }
