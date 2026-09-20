@@ -120,7 +120,7 @@ const EN = {
   '确认启动发布': 'Confirm & start release',
   '发布计划确认（产品发布）': 'Release plan confirmation (product release)',
   '用户启动即授权以上明确操作；预检不推送、不上传、不部署。取消不会发出任何执行请求。': 'Starting authorizes exactly the operations above; precheck pushes nothing, uploads nothing, deploys nothing. Cancel sends no execution request.',
-  // REQ-20260911-009 设置页「Git 工作流」分区（dev 分支初始化）
+  // REQ-20260911-009 设置页「Git 工作流」分区（主操作后经 REQ-20260920-002 改为切换导向）
   'Git 工作流': 'Git workflow',
   '正在获取 Git 状态…': 'Loading Git status…',
   '当前分支：—（不是 git 仓库）': 'Current branch: — (not a git repository)',
@@ -131,7 +131,9 @@ const EN = {
   '当前分支：': 'Current branch: ',
   '· dev 分支：': '· dev branch: ',
   '已在 dev 分支': 'On the dev branch',
-  '初始化 dev 分支': 'Initialize the dev branch',
+  // REQ-20260920-002 主操作由「初始化 dev 分支」改为切换导向「切换至 dev 分支」，
+  // 旧键「初始化 dev 分支」随实现移除
+  '切换至 dev 分支': 'Switch to dev branch',
   '项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。': 'The project is not a git repository: initialize git in the terminal first (new projects are initialized automatically via atb init).',
   // REQ-20260916-007 设置页「数据布局迁移」分区（旧布局一键迁移到 data/ + runtime/）
   // BUG-20260920-001：派发设置失败改局部显示——新增「派发设置」分区标题（错误区卡片）
@@ -156,11 +158,13 @@ const EN = {
   'dev 分支承载需求设计、开发和测试；': 'The dev branch carries requirement design, development, and testing; ',
   '分支承载版本构建，发布构建物。': 'branch carries version builds and release artifacts.',
   '每个需求或 Bug 单开发完自动提交到本地（仅本地分支操作，不 push）。': 'Each requirement or bug item is auto-committed locally once development finishes (local branch operations only, no push).',
-  '正在创建并切换到 dev 分支…': 'Creating and switching to the dev branch…',
-  '初始化 dev 分支？': 'Initialize the dev branch?',
-  '将按需创建 dev 分支，并把整个项目工作区切换到 dev（已在 dev 则仅提示就绪；仅本地分支操作，不 push）。': 'Creates the dev branch as needed and switches the whole workspace to it (already on dev: just reports ready; local branch operations only, no push).',
-  '初始化并切换': 'Initialize and switch',
-  '✓ 已就绪：当前分支 dev（开发在 dev 分支进行，到待测试自动提交）': '✓ Ready: current branch is dev (development on dev, auto-commit on reaching in-test)',
+  // REQ-20260920-002 确认 / 执行 / 结果反馈同步改为切换导向（dev 不存在先创建再切换在正文言明）；
+  // 旧初始化导向词条（正在创建并切换到… / 初始化 dev 分支？ / 初始化并切换 / 已就绪 toast）随实现移除。
+  '正在切换至 dev 分支…': 'Switching to the dev branch…',
+  '切换至 dev 分支？': 'Switch to the dev branch?',
+  '将把整个项目工作区切换至 dev 分支。若 dev 不存在，将先创建再切换。仅本地操作，不 push。': 'Switches the whole project workspace to the dev branch. If dev does not exist yet, it is created first and then switched to. Local operations only, no push.',
+  '切换至 dev': 'Switch to dev',
+  '✓ 已切换至 dev 分支': '✓ Switched to the dev branch',
   '待接受': 'Pending',
   '已接受': 'Accepted',
   '已计划': 'Planned',
@@ -1041,7 +1045,8 @@ const EN_DYNAMIC = {
   '✕ 同步完成但部分推送失败：◇（◇）': '✕ Sync finished with push failures: $1 ($2)',
   // REQ-20260911-009 Git 工作流：状态/失败就近反馈（动态拼接）
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
-  '失败：◇（可重试；已存在的分支不会重复创建）': 'Failed: $1 (retryable; an existing branch is never re-created)',
+  // REQ-20260920-002 失败提示改切换导向口径：真实原因 + 可重试 + 不丢弃工作区修改
+  '失败：◇（可重试；不会丢弃工作区修改）': 'Failed: $1 (retryable; workspace changes are never discarded)',
   // BUG-20260912-001：状态行改为按段翻译（见 EN 区注释），原整句动态键移除
   '已选 ◇ 项': '$1 selected',
   '接受 ◇': 'Accept $1',
