@@ -174,10 +174,18 @@ function assertEditableStatus(v, { allowMergingInfo = false } = {}) {
   }
 }
 
-// 条目增删锁（design.md 口径）：合并中禁用增删，已合并锁定增删
+// BUG-20260920-005 正式发布判定（锁定基准后移）：以五步流程「正式发布 → 推送主分支」成功
+//（release.pushedAt 落盘）为锁定时点；产品发布（release.published）与官网命中不计入
+//（登记待确认第 1 条默认口径）。
+export function isPushed(v) {
+  return !!(v && v.release && v.release.pushedAt);
+}
+
+// 条目增删锁（BUG-20260920-005 口径后移）：合并中禁用增删；完成推送（正式发布）才锁定——
+// merged（已合并未推送）允许补关联条目 / 换 commit（随后重开合并只补未合并条目）。
 function assertItemsEditable(v) {
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，条目不可增删');
-  if (v.status === 'merged') throw new BuildConflictError('版本已合并，条目已锁定（如需调整请新建版本）');
+  if (isPushed(v)) throw new BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
 }
 
 export function saveInfo(dataDir, id, { name, description, by = 'board' } = {}) {
@@ -221,7 +229,7 @@ export function removeItems(dataDir, id, itemIds, { by = 'board' } = {}) {
   return v;
 }
 
-// 换选条目 commit（合并前可修正关联；合并后锁定）
+// 换选条目 commit（BUG-20260920-005：合并中与推送完成后锁定，merged 未推送仍可修正关联）
 export function setItemCommit(dataDir, id, itemId, commit, { by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   assertItemsEditable(v);
@@ -241,8 +249,16 @@ export function setItemCommit(dataDir, id, itemId, commit, { by = 'board' } = {}
 
 export function beginMerge(dataDir, id, { baseBranch = null, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
-  if (!['draft', 'failed'].includes(v.status)) {
-    throw new BuildConflictError(`当前状态（${VERSION_STATUS_LABEL[v.status] || v.status}）不可合并${v.status === 'merging' ? '（合并进行中）' : '（已合并）'}`);
+  // BUG-20260920-005 口径后移：merged（已合并未推送）允许为补入条目重开合并（增量：只补
+  // 未合并条目，已并入提交幂等记成功）；merging 维持锁定；推送完成（正式发布）后锁定。
+  if (v.status === 'merging') {
+    throw new BuildConflictError(`当前状态（${VERSION_STATUS_LABEL[v.status] || v.status}）不可合并（合并进行中）`);
+  }
+  if (isPushed(v)) {
+    throw new BuildConflictError('版本已正式发布，不可再合并（如需调整请新建版本）');
+  }
+  if (!['draft', 'failed', 'merged'].includes(v.status)) {
+    throw new BuildConflictError(`当前状态（${VERSION_STATUS_LABEL[v.status] || v.status}）不可合并`);
   }
   v.status = 'merging';
   v.merge.startedAt = nowIso();
