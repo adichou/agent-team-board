@@ -25,6 +25,14 @@ function git(cwd, args) {
   return r.stdout.trim();
 }
 
+// BUG-20260920-002：branch-log 双支并集（main∪dev）下，两支头提交时间戳同秒时 git 按
+// refs 顺序并列——固定递增时间戳提交，保证新→旧排序确定（dev 的 feat 恒在 main 的 init 之上）。
+function gitAt(cwd, args, at) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...GIT_ENV, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at }, timeout: 20000 });
+  if (r.status !== 0) throw new Error(`git ${args.join(' ')} 失败：${r.stderr}`);
+  return r.stdout.trim();
+}
+
 function req(port, method, pathname, body) {
   return new Promise((resolve, reject) => {
     const payload = body == null ? null : JSON.stringify(body);
@@ -66,7 +74,7 @@ t('S1~S10 /api/build* 全链路', async () => {
   git(projA, ['remote', 'add', 'origin', remoteA]);
   fs.writeFileSync(path.join(projA, 'a.txt'), 'a\n');
   git(projA, ['add', '-A']);
-  git(projA, ['commit', '-m', 'init']);
+  gitAt(projA, ['commit', '-m', 'init'], '2026-09-20T01:00:00 +0000');
   git(projA, ['switch', '-c', 'dev']);
   core.initData(projA);
   core.initData(projB);
@@ -81,7 +89,7 @@ t('S1~S10 /api/build* 全链路', async () => {
   }
   fs.writeFileSync(path.join(projA, 'f1.txt'), `feat ${reqA.id}\n`);
   git(projA, ['add', '-A']);
-  git(projA, ['commit', '-m', `feat: 演示需求一 ${reqA.id}`]);
+  gitAt(projA, ['commit', '-m', `feat: 演示需求一 ${reqA.id}`], '2026-09-20T01:00:10 +0000');
   const commit1 = git(projA, ['rev-parse', 'HEAD']);
 
   const reg = path.join(tmp, 'reg.json');
