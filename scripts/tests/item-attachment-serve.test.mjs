@@ -81,9 +81,9 @@ t('V1–V4 /api/new 附件链路与附件读取端点', async () => {
     });
     assert.equal(r.status, 201, `创建应成功（得到 ${r.status} ${JSON.stringify(r.json)}`);
     const id = r.json.id;
-    const attDir = path.join(root, 'docs', 'agent-team-board', 'requirements', id, 'attachments');
+    const attDir = path.join(root, 'agent-team-board', 'data', 'requirements', id, 'attachments');
     assert.deepEqual(fs.readdirSync(attDir).sort(), ['a.png', 'b.webp'], '附件应落盘条目 attachments/ 子目录');
-    const md = fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'requirements', id, 'README.md'), 'utf8');
+    const md = fs.readFileSync(path.join(root, 'agent-team-board', 'data', 'requirements', id, 'README.md'), 'utf8');
     assert.match(md, /!\[截图\]\(attachments\/a\.png\)\n!\[截图\]\(attachments\/b\.webp\)/, 'README 描述节末尾按顺序追加引用');
 
     // V1 附件读取端点：原字节 + 白名单 MIME + nosniff + 收敛 CSP + no-store
@@ -106,7 +106,7 @@ t('V1–V4 /api/new 附件链路与附件读取端点', async () => {
     assert.ok(r.status === 400 || r.status === 404, '不存在条目应报错不崩溃');
 
     // V2 非法附件整单拒绝：目录数不变（不产生重复 / 半写入条目）
-    const reqRoot = path.join(root, 'docs', 'agent-team-board', 'requirements');
+    const reqRoot = path.join(root, 'agent-team-board', 'data', 'requirements');
     const before = fs.readdirSync(reqRoot).length;
     const badBodies = [
       { type: 'bug', title: '非图片', attachments: [{ name: 'x.sh', dataBase64: 'eA==' }] },
@@ -125,7 +125,7 @@ t('V1–V4 /api/new 附件链路与附件读取端点', async () => {
     // V4 兼容：不带 attachments 的旧调用仍成功
     r = await req(port, 'POST', `/api/new${P}`, { type: 'bug', title: '旧口径', description: '纯文本' });
     assert.equal(r.status, 201, '不带附件的旧调用应兼容');
-    const bugDir = path.join(root, 'docs', 'agent-team-board', 'bugs', r.json.id);
+    const bugDir = path.join(root, 'agent-team-board', 'data', 'bugs', r.json.id);
     assert.equal(fs.existsSync(path.join(bugDir, 'attachments')), false, '无附件不建 attachments 目录');
   } finally {
     server.kill('SIGTERM');

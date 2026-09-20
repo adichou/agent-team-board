@@ -117,7 +117,7 @@ const Q = encodeURIComponent;
 t('F1 列项目根：目录在前、字段齐全、排除项隐藏', async () => {
   const d = await get(`${base}/api/fs?path=`);
   const names = d.entries.map((e) => e.name);
-  assert.ok(names.includes('docs'), '应含 docs 目录');
+  assert.ok(names.includes('agent-team-board'), '应含 agent-team-board 目录');
   assert.ok(names.includes('script.sh') && names.includes('data.json'), '应含普通文件');
   assert.ok(!names.includes('node_modules'), '不应列出 node_modules');
   assert.ok(d.entries.every((e) => !e.name.startsWith('.')), '不应列出点开头条目');
@@ -128,11 +128,10 @@ t('F1 列项目根：目录在前、字段齐全、排除项隐藏', async () =>
   assert.ok(typeof file.size === 'number' && file.mtime, '文件应带 size/mtime');
 });
 
-t('F2 列数据目录 docs/agent-team-board', async () => {
-  const d = await get(`${base}/api/fs?path=${Q('docs/agent-team-board')}`);
+t('F2 列数据目录 agent-team-board/data', async () => {
+  const d = await get(`${base}/api/fs?path=${Q('agent-team-board/data')}`);
   const names = d.entries.map((e) => e.name);
   assert.ok(names.includes('requirements'), '应含 requirements');
-  assert.ok(names.includes('config.json') && names.includes('README.md'), '应含 config.json / README.md');
 });
 
 t('F3 越界与排除路径一律 400', async () => {
@@ -145,8 +144,8 @@ t('F3 越界与排除路径一律 400', async () => {
 });
 
 t('F4 读文本文件返回内容与扩展名', async () => {
-  const md = await get(`${base}/api/fs/file?path=${Q('docs/agent-team-board/README.md')}`);
-  assert.match(md.content, /Agent Team Board 数据目录/);
+  const md = await get(`${base}/api/fs/file?path=${Q('agent-team-board/runtime/README.md')}`);
+  assert.match(md.content, /Agent Team Board 运行数据|runtime/, 'runtime README 模板内容');
   assert.equal(md.ext, 'md');
   const sh = await get(`${base}/api/fs/file?path=${Q('script.sh')}`);
   assert.match(sh.content, /echo hello/);
@@ -217,16 +216,16 @@ t('B1 层栈状态机：openLayer 追加/截断，truncateTo 回跳，均纯函�
   assert.deepEqual(B.openLayer(layers, ''), [''], '进入根目录等同于截断到根层');
 });
 
-t('B2 面包屑派生：crumbOf 逐段产出，首段为根；DEFAULT_PATH 保持 docs/agent-team-board', () => {
-  assert.equal(B.DEFAULT_PATH, 'docs/agent-team-board', '默认展开路径应与旧树行为一致');
-  const layers = ['', 'docs', 'docs/agent-team-board'];
+t('B2 面包屑派生：crumbOf 逐段产出，首段为根；DEFAULT_PATH 保持 agent-team-board/data', () => {
+  assert.equal(B.DEFAULT_PATH, 'agent-team-board/data', '默认展开路径应与旧树行为一致');
+  const layers = ['', 'agent-team-board', 'agent-team-board/data'];
   const crumb = B.crumbOf(layers, '项目');
   assert.deepEqual(
     crumb,
     [
       { name: '项目', path: '' },
-      { name: 'docs', path: 'docs' },
-      { name: 'agent-team-board', path: 'docs/agent-team-board' },
+      { name: 'agent-team-board', path: 'agent-team-board' },
+      { name: 'data', path: 'agent-team-board/data' },
     ],
     '面包屑应逐段派生，段名取路径末段，根段用注入的项目名',
   );

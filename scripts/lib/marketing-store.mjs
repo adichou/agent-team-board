@@ -95,7 +95,7 @@ const readJson = (file) => {
 // ---------- 目录 ----------
 
 export function marketingDir(dataDir) {
-  return path.join(dataDir, 'marketing');
+  return path.join(dataDir, 'runtime', 'marketing');
 }
 export function pricingDir(dataDir) {
   return path.join(marketingDir(dataDir), 'pricing');
@@ -262,7 +262,7 @@ function blankProfile(intro) {
 
 export function initProfile(dataDir, { projectRoot, by = 'board' }) {
   if (!fs.existsSync(dataDir)) {
-    throw new AtbError('未找到 docs/agent-team-board，请先初始化看板');
+    throw new AtbError('未找到 agent-team-board，请先初始化看板');
   }
   const file = profileFile(dataDir);
   if (fs.existsSync(file)) {

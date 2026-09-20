@@ -21,10 +21,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const appSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'app.js'), 'utf8');
 const relSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'release.js'), 'utf8');
 const htmlSrc = fs.readFileSync(path.join(root, 'scripts', 'web', 'index.html'), 'utf8');
-const itemDir = path.join(root, 'docs', 'agent-team-board', 'bugs', 'BUG-20260911-002');
+const itemDir = path.join(root, 'agent-team-board', 'data', 'bugs', 'BUG-20260911-002');
 const demoSrc = fs.readFileSync(path.join(itemDir, 'ui-demo.html'), 'utf8');
 // REQ-20260911-002：发布模块入口暂态隐藏，副标题恢复口径落在该条目 design.md 恢复步骤
-const hideDesignSrc = fs.readFileSync(path.join(root, 'docs', 'agent-team-board', 'requirements', 'REQ-20260911-002', 'design.md'), 'utf8');
+const hideDesignSrc = fs.readFileSync(path.join(root, 'agent-team-board', 'data', 'requirements', 'REQ-20260911-002', 'design.md'), 'utf8');
 
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);

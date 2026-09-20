@@ -235,10 +235,10 @@ t('Z24 CLI 认领冲突：run release 后换单继续', async () => {
     await runAtbJson(['batch', 'create'], p.root);
     const next = await runAtbJson(['batch', 'next', '--by', 'w1'], p.root);
     // 模拟他人认领（测试进程直接改状态，绕过互斥注入竞态）
-    const stFile = path.join(p.root, 'docs', 'agent-team-board');
-    const reqDir = fs.readdirSync(path.join(stFile, 'requirements')).find((d) => d === next.itemId);
+    const stFile = path.join(p.root, 'agent-team-board');
+    const reqDir = fs.readdirSync(path.join(stFile, 'data', 'requirements')).find((d) => d === next.itemId);
     assert.ok(reqDir, '条目目录应存在');
-    const statusFile = path.join(stFile, 'requirements', reqDir, 'status.json');
+    const statusFile = path.join(stFile, 'runtime', 'status', `${reqDir}.json`);
     const st = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
     st.status = 'in-progress';
     st.owner = 'someone-else';

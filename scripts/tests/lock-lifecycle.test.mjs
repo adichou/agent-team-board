@@ -22,7 +22,7 @@ fs.mkdirSync(path.join(tmp, 'proj'), { recursive: true });
 const project = fs.realpathSync(path.join(tmp, 'proj'));
 core.initData(project);
 const dataDir = core.dataDirFrom(project);
-const lockFile = (id) => path.join(dataDir, '.locks', `${id}.lock`);
+const lockFile = (id) => path.join(dataDir, 'runtime', '.locks', `${id}.lock`);
 
 const mkAccepted = (title) => {
   const it = core.createItem(dataDir, { type: 'requirement', title, by: 'test' });
@@ -67,7 +67,7 @@ const t = (name, fn) => cases.push([name, fn]);
 
 // BUG-20260906-002：claim 即占用项目实施互斥（impl.lock）；本文件关注条目认领锁生命周期，
 // 造数/用例收尾时直接释放实施占用，避免跨用例残留拦截后续 claim（真实收尾走 report/确认完成）
-const dropImpl = () => { try { fs.rmSync(path.join(dataDir, '.locks', 'impl.lock')); } catch {} };
+const dropImpl = () => { try { fs.rmSync(path.join(dataDir, 'runtime', '.locks', 'impl.lock')); } catch {} };
 
 // L1 claim 产生锁；report 上报（进入待人工确认）即释放
 t('L1 claim 有锁，report 后无锁', () => {
@@ -146,7 +146,7 @@ t('L6 prune-locks：在办新鲜锁保留，其余清理', () => {
   const staleId = mkItem('在办但锁过期', 'in-progress');
   ageFile(lockFile(staleId), 25 * 60 * 60 * 1000);
   const orphan = 'REQ-19990101-999';
-  fs.writeFileSync(path.join(dataDir, '.locks', `${orphan}.lock`), '{}');
+  fs.writeFileSync(path.join(dataDir, 'runtime', '.locks', `${orphan}.lock`), '{}');
 
   const res = core.pruneLocks(dataDir, { apply: true });
   const kept = res.kept.map((k) => k.name || k);
@@ -162,8 +162,8 @@ t('L6 prune-locks：在办新鲜锁保留，其余清理', () => {
 
 // L7 config.lock 与非认领锁文件的边界
 t('L7 prune-locks：config.lock 按新鲜度处理，陌生 .lock 跳过', () => {
-  const cfg = path.join(dataDir, '.locks', 'config.lock');
-  const stranger = path.join(dataDir, '.locks', 'someone.lock');
+  const cfg = path.join(dataDir, 'runtime', '.locks', 'config.lock');
+  const stranger = path.join(dataDir, 'runtime', '.locks', 'someone.lock');
   fs.writeFileSync(cfg, '{}');
   fs.writeFileSync(stranger, '{}');
   core.pruneLocks(dataDir, { apply: true });
@@ -179,7 +179,7 @@ t('L7 prune-locks：config.lock 按新鲜度处理，陌生 .lock 跳过', () =>
 t('L8 CLI prune-locks：--dry-run 预览，实际执行删除', async () => {
   // 前序用例可能残留边界文件（实现未跑绿时），避免干扰 nextId 的 config.lock
   for (const stray of ['config.lock', 'someone.lock']) {
-    try { fs.rmSync(path.join(dataDir, '.locks', stray)); } catch {}
+    try { fs.rmSync(path.join(dataDir, 'runtime', '.locks', stray)); } catch {}
   }
   const id = mkAccepted('CLI 清理');
   core.claim(dataDir, id, 's1');

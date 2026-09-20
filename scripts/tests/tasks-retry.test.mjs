@@ -30,9 +30,10 @@ function mkDevItem(p, title, { backMs = 0 } = {}) {
   core.setStatus(p.dataDir, st.id, 'planned', { by: 'human' });
   if (backMs) {
     const dir = core.resolveItemDir(p.dataDir, st.id).dir;
-    const s = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+    const sf = core.statusFileOfItemDir(dir); // REQ-20260916-007：状态文件在 runtime/status/
+    const s = JSON.parse(fs.readFileSync(sf, 'utf8'));
     s.createdAt = new Date(Date.parse(s.createdAt) - backMs).toISOString();
-    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(s, null, 2) + '\n');
+    fs.writeFileSync(sf, JSON.stringify(s, null, 2) + '\n');
   }
   return st.id;
 }
@@ -44,7 +45,7 @@ function mkRefineItem(p, title) {
 }
 
 function readItemSt(p, id) {
-  return JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(p.dataDir, id).dir, 'status.json'), 'utf8'));
+  return JSON.parse(fs.readFileSync(core.statusFileOfItemDir(core.resolveItemDir(p.dataDir, id).dir), 'utf8'));
 }
 
 const W1 = 'zcode-retry-w1';

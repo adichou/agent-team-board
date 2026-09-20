@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // agent-team-board 核心数据层 —— atb.mjs（CLI）与 server.mjs（Status Board）共用。
-// 事实源是项目内 docs/agent-team-board/：机器读写 status.json，人读写 markdown。
+// 事实源是项目内 agent-team-board/（REQ-20260916-007 用户数据与应用数据物理分离）：
+//   data/    用户条目文档（人读写 markdown，整目录进 git）；
+//   runtime/ 运行应用数据（status.json、计数器、锁与各模块账本，整目录被根 .gitignore 忽略）。
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -18,7 +20,33 @@ import {
 // confirm-states 自包含（不 import core），此处引用无循环依赖。
 import { waitingDevelopConfirm } from './confirm-states.mjs';
 
-export const DATA_REL_DIR = path.join('docs', 'agent-team-board');
+// REQ-20260916-007 目录布局：项目根 agent-team-board/ 板根，下分 data/（用户数据）与
+// runtime/（应用数据）。DATA_REL_DIR 语义 = 板根相对路径（server wouldWrite 与错误提示口径）。
+export const BOARD_REL_DIR = 'agent-team-board';
+export const DATA_REL_DIR = BOARD_REL_DIR;
+export const LEGACY_DATA_REL_DIR = path.join('docs', 'agent-team-board'); // 仅供迁移入口识别，运行期不再使用
+// 根 .gitignore 的唯一忽略规则（REQ-20260916-007 忽略规则极简化）
+export const RUNTIME_IGNORE_LINE = `${BOARD_REL_DIR}/runtime/`;
+
+// 板根 → 用户数据根（条目文档）
+export function itemsRoot(boardRoot) {
+  return path.join(boardRoot, 'data');
+}
+
+// 板根 → 应用数据根（运行账本与状态）
+export function runtimeRoot(boardRoot) {
+  return path.join(boardRoot, 'runtime');
+}
+
+export function runtimePath(boardRoot, ...segs) {
+  return path.join(runtimeRoot(boardRoot), ...segs);
+}
+
+// 板根 → 项目根（旧布局 dataDir 位于 root/docs/agent-team-board 需上跳两级；
+// 新布局板根为 root/agent-team-board，仅上跳一级）
+export function projectRootOfBoard(boardRoot) {
+  return path.resolve(boardRoot, '..');
+}
 // pending-alignment 仅为存量兼容保留（历史条目仍可人工放行）；主流程不再进入。
 // planned（已计划，REQ-20260908-010）：accepted 与 in-progress 之间的人工排期档。
 export const STATES = ['submitted', 'accepted', 'planned', 'pending-alignment', 'in-progress', 'done'];
@@ -91,16 +119,39 @@ export function writeJsonAtomic(file, obj) {
   fs.renameSync(tmp, file);
 }
 
+// REQ-20260916-007：条目实时状态移出条目目录，落 runtime/status/<ID>.json（平铺按单存放，
+// 编号全局唯一）。readStatus/writeStatus 保持「条目目录」入参签名（全仓 35 处调用零改动）：
+// 以条目目录 basename 为编号，向上有界查找含 runtime 子目录的祖先定位板根。
+function boardRootFromItemDir(itemDir) {
+  let dir = path.resolve(itemDir);
+  for (let i = 0; i < 8; i++) {
+    if (fs.existsSync(path.join(dir, 'runtime'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
+}
+
+export function statusFileOfItemDir(itemDir) {
+  const board = boardRootFromItemDir(itemDir);
+  return board
+    ? path.join(board, 'runtime', 'status', `${path.basename(itemDir)}.json`)
+    : path.join(itemDir, 'status.json'); // 布局外兜底（理论不可达：initData 必建 runtime）
+}
+
 export function readStatus(dir) {
-  const st = readJson(path.join(dir, 'status.json'));
+  const st = readJson(statusFileOfItemDir(dir));
   if (!st || !st.id || !st.status) {
-    throw new AtbError(`${dir} 缺少合法的 status.json`);
+    throw new AtbError(`${dir} 缺少合法的状态文件（runtime/status/${path.basename(dir)}.json）`);
   }
   return st;
 }
 
 export function writeStatus(dir, st) {
-  writeJsonAtomic(path.join(dir, 'status.json'), st);
+  const file = statusFileOfItemDir(dir);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  writeJsonAtomic(file, st);
 }
 
 function pushHistory(st, from, to, by, note = '') {
@@ -110,12 +161,16 @@ function pushHistory(st, from, to, by, note = '') {
 
 // ---------- 数据目录定位 ----------
 
+// 向上查找板根：存在 agent-team-board/data 或 agent-team-board/runtime 即认定已初始化
+// （REQ-20260916-007 新布局唯一口径；旧布局 docs/agent-team-board 仅由 atb migrate 识别）。
 export function dataDirFrom(cwd) {
   if (process.env.ATB_DIR) return path.resolve(process.env.ATB_DIR);
   let dir = path.resolve(cwd);
   for (;;) {
-    const cand = path.join(dir, DATA_REL_DIR);
-    if (fs.existsSync(cand)) return cand;
+    const board = path.join(dir, BOARD_REL_DIR);
+    if (fs.existsSync(path.join(board, 'data')) || fs.existsSync(path.join(board, 'runtime'))) {
+      return board;
+    }
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -124,7 +179,11 @@ export function dataDirFrom(cwd) {
 
 export function requireDataDir(cwd) {
   const dir = dataDirFrom(cwd);
-  if (!dir) throw new AtbError(`未找到 ${DATA_REL_DIR}，请先在项目根执行 atb init`);
+  if (!dir) {
+    throw new AtbError(
+      `未找到 ${DATA_REL_DIR}，请先在项目根执行 atb init；旧布局（${LEGACY_DATA_REL_DIR}）请先执行 atb migrate 迁移`
+    );
+  }
   return dir;
 }
 
@@ -139,40 +198,51 @@ export function gitRootFrom(cwd) {
   }
 }
 
-const DATA_README = `# Agent Team Board 数据目录
+// runtime/README.md 模板（REQ-20260916-007：应用数据说明，整目录本地留存不进 git）
+const DATA_README = `# Agent Team Board 运行数据（runtime/）
 
-本目录是「智能体团队看板」的事实源，请随项目代码提交进 git。
+本目录是「智能体团队看板」的**运行应用数据**：条目实时状态（status/）、编号计数器
+（config.json）、锁与各模块执行账本。由 atb 工具维护，**请勿手改**（Agent 写入也会被钩子拦截），
+整目录已在项目根 .gitignore 忽略，**不提交进 git**。
 
-- \`requirements/REQ-YYYYMMDD-NNN/\` —— 需求（README / design / test-cases / test-report）
-- \`requirements/<REQ>/bugs/BUG-YYYYMMDD-NNN/\` —— 归属该需求的 Bug
-- \`bugs/BUG-YYYYMMDD-NNN/\` —— 独立 Bug
-- \`status.json\` 由 atb 工具维护，**请勿手改**（Agent 写入也会被钩子拦截）
+用户数据（需求 / Bug 条目文档）在同级 \`../data/\`，整目录随项目代码提交进 git。
 
-状态流转：submitted → accepted（人工）→ planned（人工置计划）→ in-progress（Agent 认领）→ done（人工确认）。
-人工操作入口：Status Board 网页（\`/board\`）或终端执行
-\`node <插件>/scripts/atb.mjs status <ID> accepted|planned|done\`。
+单设备约束：本目录不跨设备同步，条目状态与单号计数器以本地文件为准，多设备使用不在支持范围。
+本文件由模板生成，可随时重建。
 `;
+
+// 根 .gitignore 幂等追加唯一忽略规则（REQ-20260916-007 忽略规则极简化）。
+// initData / 迁移 / 运行期账本写入前调用，返回是否发生修改。
+export function ensureRuntimeIgnore(projectRoot) {
+  const gi = path.join(projectRoot, '.gitignore');
+  let cur = '';
+  try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
+  if (cur.split('\n').includes(RUNTIME_IGNORE_LINE)) return false;
+  fs.writeFileSync(gi, cur.replace(/\n*$/, cur ? '\n' : '') + RUNTIME_IGNORE_LINE + '\n');
+  return true;
+}
 
 export function initData(cwd) {
   const existing = dataDirFrom(cwd);
   if (existing) throw new AtbError(`已初始化：${existing}`);
-  // REQ-20260911-009：初始化即落 Git 工作流——项目根不是 git 仓库则自动 `git init`，
+  // REQ-20260911-009：初始化即落 Git 工作流——项目根不是 git 仓库则自动 \`git init\`，
   // 随后按需创建 dev 分支并把工作区切到 dev（幂等、只本地操作不 push）。失败如实抛错
   // （初始化完成后当前分支应为 dev 是验收口径，不做静默降级）。
   ensureDevWorkflow(path.resolve(cwd));
   const root = gitRootFrom(cwd) || path.resolve(cwd);
-  const dataDir = path.join(root, DATA_REL_DIR);
-  fs.mkdirSync(path.join(dataDir, 'requirements'), { recursive: true });
-  fs.mkdirSync(path.join(dataDir, 'bugs'), { recursive: true });
-  fs.mkdirSync(path.join(dataDir, '.locks'), { recursive: true });
-  writeJsonAtomic(path.join(dataDir, 'config.json'), {
+  const board = path.join(root, BOARD_REL_DIR);
+  fs.mkdirSync(path.join(board, 'data', 'requirements'), { recursive: true });
+  fs.mkdirSync(path.join(board, 'data', 'bugs'), { recursive: true });
+  fs.mkdirSync(path.join(board, 'runtime', 'status'), { recursive: true });
+  fs.mkdirSync(path.join(board, 'runtime', '.locks'), { recursive: true });
+  writeJsonAtomic(path.join(board, 'runtime', 'config.json'), {
     version: 1,
     date: localDateStamp(),
     counters: { requirement: 0, bug: 0 },
   });
-  fs.writeFileSync(path.join(dataDir, '.gitignore'), '.locks/\n');
-  fs.writeFileSync(path.join(dataDir, 'README.md'), DATA_README);
-  return dataDir;
+  fs.writeFileSync(path.join(board, 'runtime', 'README.md'), DATA_README);
+  ensureRuntimeIgnore(root); // 根 .gitignore 唯一忽略规则：agent-team-board/runtime/
+  return board;
 }
 
 // ---------- 原子锁（O_EXCL，过期自动接管） ----------
@@ -218,7 +288,7 @@ export function releaseLock(lockPath) {
 
 export function readImplLockIfExists(dataDir) {
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(dataDir, '.locks', 'impl.lock'), 'utf8'));
+    const j = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', '.locks', 'impl.lock'), 'utf8'));
     return j && typeof j === 'object' ? j : null;
   } catch {
     return null;
@@ -270,7 +340,7 @@ function assertNoImplConflict(dataDir, owner) {
 // 手工/普通认领占用实施互斥（BUG-20260906-002）：claim 起到 report/确认完成前独占，
 // 与批次（batch）/Codex 派发（codex）共用 .locks/impl.lock，生命周期与认领锁对齐。
 function implLockPathOf(dataDir) {
-  return path.join(dataDir, '.locks', 'impl.lock');
+  return path.join(dataDir, 'runtime', '.locks', 'impl.lock');
 }
 
 // 手工认领占用实施互斥：同 owner 同条目幂等（含批次/Codex 属主续认，不覆盖其归属）；
@@ -304,10 +374,10 @@ function releaseImplLockForManual(dataDir, id) {
 
 export function nextId(dataDir, type) {
   if (type !== 'requirement' && type !== 'bug') throw new AtbError(`非法类型：${type}`);
-  const lockPath = path.join(dataDir, '.locks', 'config.lock');
+  const lockPath = path.join(dataDir, 'runtime', '.locks', 'config.lock');
   acquireLock(lockPath, CONFIG_LOCK_STALE_MS, { pid: process.pid, at: new Date().toISOString() });
   try {
-    const cfgPath = path.join(dataDir, 'config.json');
+    const cfgPath = path.join(dataDir, 'runtime', 'config.json');
     const cfg = readJson(cfgPath) || { version: 1, counters: {} };
     const today = localDateStamp();
     if (cfg.date !== today) {
@@ -332,10 +402,10 @@ export function resolveItemDir(dataDir, id) {
     throw new AtbError(`非法编号：${id}（形如 REQ-YYYYMMDD-NNN / BUG-YYYYMMDD-NNN）`);
   }
   const type = id.startsWith('REQ') ? 'requirement' : 'bug';
-  const topDir = path.join(dataDir, type === 'requirement' ? 'requirements' : 'bugs', id);
+  const topDir = path.join(dataDir, 'data', type === 'requirement' ? 'requirements' : 'bugs', id);
   if (fs.existsSync(topDir)) return { dir: topDir, type, nested: false };
   if (type === 'bug') {
-    const reqRoot = path.join(dataDir, 'requirements');
+    const reqRoot = path.join(dataDir, 'data', 'requirements');
     if (fs.existsSync(reqRoot)) {
       for (const name of fs.readdirSync(reqRoot)) {
         const d = path.join(reqRoot, name, 'bugs', id);
@@ -564,7 +634,7 @@ export function createItem(dataDir, { type, title, description = '', parent = nu
   const atts = parseItemAttachments(attachments); // 先全量校验再占号（不合规不消耗单号）
 
   const id = nextId(dataDir, type);
-  const dir = path.join(dataDir, type === 'requirement' ? 'requirements' : 'bugs', id);
+  const dir = path.join(dataDir, 'data', type === 'requirement' ? 'requirements' : 'bugs', id);
   fs.mkdirSync(dir, { recursive: true });
   const now = new Date().toISOString();
   const st = {
@@ -745,9 +815,9 @@ export function editItem(dataDir, id, { title, description, by } = {}) {
 
 // ---------- 删除条目（REQ-20260908-003：仅待接受，人工清理误登记） ----------
 
-// 物理删除条目目录（status.json + 全部文档）。目录即全部数据，删除后无处留痕，
-// 故无 history 记录；追溯依赖 git 历史（docs/ 随代码进版本控制）。
-// 单号计数器（config.json）不回退：单号全局唯一不复用，避免与外部引用错位。
+// 物理删除条目目录（条目文档）与 runtime 状态文件。删除后无处留痕，
+// 故无 history 记录；追溯依赖 git 历史（data/ 随代码进版本控制）。
+// 单号计数器（runtime/config.json）不回退：单号全局唯一不复用，避免与外部引用错位。
 export function deleteItem(dataDir, id, { by } = {}) {
   const { dir, type } = resolveItemDir(dataDir, id);
   const st = readStatus(dir);
@@ -767,6 +837,7 @@ export function deleteItem(dataDir, id, { by } = {}) {
     }
   }
   fs.rmSync(dir, { recursive: true, force: true });
+  try { fs.unlinkSync(statusFileOfItemDir(dir)); } catch { /* 状态文件已不存在则忽略 */ }
   return { id, title: st.title, type, dir };
 }
 
@@ -837,7 +908,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
   if (from === 'in-progress' && to === 'done') {
     // 人工确认完成：释放认领锁（BUG-20260903-002），有锁=确有会话在开发中；
     // 手工实施占用同步释放（BUG-20260906-002，幂等：report 已释放则无操作）
-    releaseLock(path.join(dataDir, '.locks', `${id}.lock`));
+    releaseLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`));
     releaseImplLockForManual(dataDir, id);
     note = note || '人工确认完成';
   }
@@ -846,7 +917,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
     // 顺带清理手工实施占用残留（BUG-20260906-002 崩溃恢复路径，幂等）
     st.owner = null;
     st.agentCompletedAt = null;
-    releaseLock(path.join(dataDir, '.locks', `${id}.lock`));
+    releaseLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`));
     releaseImplLockForManual(dataDir, id);
     note = note || '人工驳回完成，退回开发';
   }
@@ -856,7 +927,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
   // 捕获工作区快照，作为 report 无 run 收口提交的归因基线兜底（已 claim 的同周期保留最早快照）。
   if (to === 'in-progress') {
     try {
-      captureManualTreeSnapshot({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: id, owner: by || actor(), note: 'status → in-progress（例外授权/驳回重开）' });
+      captureManualTreeSnapshot({ dataDir, projectRoot: projectRootOfBoard(dataDir), itemId: id, owner: by || actor(), note: 'status → in-progress（例外授权/驳回重开）' });
     } catch { /* 快照失败不阻断状态流转，report 收口按缺失快照口径处理 */ }
   }
   // REQ-20260908-020：任何单进入 accepted（含驳回后再接受、移出计划回已接受）一律置「未完善」，
@@ -923,7 +994,7 @@ export function claim(dataDir, id, owner) {
     // 手工/普通认领同样占用项目实施互斥（BUG-20260906-002），其余实施入口一律阻塞
     acquireImplLockForClaim(dataDir, id, owner, now);
     try {
-      acquireLock(path.join(dataDir, '.locks', `${id}.lock`), CLAIM_LOCK_STALE_MS, { owner, at: now });
+      acquireLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`), CLAIM_LOCK_STALE_MS, { owner, at: now });
     } catch (e) {
       releaseImplLockForManual(dataDir, id); // 条目锁获取失败：回滚刚占用的实施互斥
       throw e;
@@ -937,19 +1008,19 @@ export function claim(dataDir, id, owner) {
     // BUG-20260915-007：认领即拍工作区快照（与批量预留 nextItem 同构）——report 无 run
     // 收口提交以此为归因基线。快照失败不阻断认领（收口按缺失快照口径处理）。
     try {
-      captureManualTreeSnapshot({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: id, owner });
+      captureManualTreeSnapshot({ dataDir, projectRoot: projectRootOfBoard(dataDir), itemId: id, owner });
     } catch { /* 同上：不阻断认领 */ }
     return st;
   }
   if (st.status === 'pending-alignment' || st.status === 'in-progress') {
     // 存量待对齐/in-progress 续认：同 owner 放行（补锁），异 owner 已被上方条目级检查拒绝
     acquireImplLockForClaim(dataDir, id, owner, now);
-    acquireLockOrOwned(path.join(dataDir, '.locks', `${id}.lock`), CLAIM_LOCK_STALE_MS, owner);
+    acquireLockOrOwned(path.join(dataDir, 'runtime', '.locks', `${id}.lock`), CLAIM_LOCK_STALE_MS, owner);
     if (!st.owner) st.owner = owner;
     writeStatus(dir, st);
     // 续认同属同一认领周期：captureManualTreeSnapshot 幂等保留最早快照（上一周期已收口则刷新）
     try {
-      captureManualTreeSnapshot({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: id, owner, note: '续认（同周期保留原快照）' });
+      captureManualTreeSnapshot({ dataDir, projectRoot: projectRootOfBoard(dataDir), itemId: id, owner, note: '续认（同周期保留原快照）' });
     } catch { /* 快照失败不阻断续认 */ }
     return st;
   }
@@ -976,7 +1047,7 @@ export function resumeItemToPlanned(dataDir, id, { by, note = '' } = {}) {
   st.updatedAt = now;
   pushHistory(st, from, 'planned', by || actor(), note || '待人工决策复工（人工补齐决策，回已计划队列）');
   writeStatus(dir, st);
-  releaseLock(path.join(dataDir, '.locks', `${id}.lock`));
+  releaseLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`));
   releaseImplLockForManual(dataDir, id);
   return st;
 }
@@ -1019,7 +1090,7 @@ ${summary || '（未填写）'}
   writeStatus(dir, st);
   // 上报即停止开发：释放认领锁（BUG-20260903-002）。条目仍为 in-progress（待人工确认），
   // 原认领者可随时 claim 续认补锁继续开发；guard 的「有锁=在开发中」放行条件因此重新收紧。
-  releaseLock(path.join(dataDir, '.locks', `${id}.lock`));
+  releaseLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`));
   // 手工实施占用一并释放（BUG-20260906-002）：上报后其余实施入口恢复；
   // 批次（kind=batch）/Codex（kind=codex）占用由各自回执收尾释放，此处不动。
   releaseImplLockForManual(dataDir, id);
@@ -1032,7 +1103,7 @@ ${summary || '（未填写）'}
 // 旧版本只驳回才释放，曾积累大量残留锁架空守卫；pruneLocks 一次性清理：
 // 仅保留「条目 in-progress 且锁未过期」的认领锁；config.lock 按新鲜度处理；其余（不在办、孤儿、过期）删除。
 export function pruneLocks(dataDir, { apply = true } = {}) {
-  const locksDir = path.join(dataDir, '.locks');
+  const locksDir = path.join(dataDir, 'runtime', '.locks');
   const kept = [];
   const removed = [];
   const skipped = [];
@@ -1109,7 +1180,7 @@ function childBugs(reqDir) {
 
 export function listItems(dataDir) {
   const items = [];
-  const reqRoot = path.join(dataDir, 'requirements');
+  const reqRoot = path.join(dataDir, 'data', 'requirements');
   if (fs.existsSync(reqRoot)) {
     for (const name of fs.readdirSync(reqRoot).sort()) {
       const dir = path.join(reqRoot, name);
@@ -1125,7 +1196,7 @@ export function listItems(dataDir) {
       items.push(...bugs);
     }
   }
-  const bugRoot = path.join(dataDir, 'bugs');
+  const bugRoot = path.join(dataDir, 'data', 'bugs');
   if (fs.existsSync(bugRoot)) {
     for (const name of fs.readdirSync(bugRoot).sort()) {
       const dir = path.join(bugRoot, name);
@@ -1182,7 +1253,7 @@ export function moveBug(dataDir, id, parent) {
     if (p.type !== 'requirement') throw new AtbError(`归属 ${parent} 不是需求编号`);
     destDir = path.join(p.dir, 'bugs', id);
   } else {
-    destDir = path.join(dataDir, 'bugs', id);
+    destDir = path.join(dataDir, 'data', 'bugs', id);
   }
   if (path.resolve(destDir) === path.resolve(dir)) return { moved: false };
   fs.mkdirSync(path.dirname(destDir), { recursive: true });
@@ -1206,7 +1277,7 @@ export function boardData(cwd) {
   return {
     initialized: true,
     dataDir,
-    projectRoot: path.resolve(dataDir, '..', '..'),
+    projectRoot: projectRootOfBoard(dataDir),
     generatedAt: new Date().toISOString(),
     items: listItems(dataDir),
   };

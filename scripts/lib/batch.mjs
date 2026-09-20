@@ -58,7 +58,7 @@ const readJson = (file) => {
 const nowIso = () => new Date().toISOString();
 
 function dispatchDir(dataDir) {
-  return path.join(dataDir, 'dispatch');
+  return path.join(dataDir, 'runtime', 'dispatch');
 }
 
 function batchesDir(dataDir) {
@@ -92,7 +92,7 @@ export function ensureDispatch(dataDir) {
     }
   }
   // 运行账本不进版本控制；不得误排除既有需求文档
-  const gi = path.join(dataDir, '.gitignore');
+  const gi = path.join(dataDir, 'runtime', '.gitignore');
   const wanted = ['dispatch/runs/', 'dispatch/batches/'];
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
@@ -103,7 +103,7 @@ export function ensureDispatch(dataDir) {
 // ---------- 编号（与 config.json 计数器同款互斥，独立序列） ----------
 
 function nextDispatchId(dataDir, kind) {
-  const lockPath = path.join(dataDir, '.locks', 'dispatch.lock');
+  const lockPath = path.join(dataDir, 'runtime', '.locks', 'dispatch.lock');
   acquireLock(lockPath, DISPATCH_LOCK_STALE_MS, { pid: process.pid, at: nowIso() });
   try {
     ensureDispatch(dataDir);
@@ -572,7 +572,7 @@ export function blockedCountAtCreate(dataDir, batch) {
 // ---------- 实施互斥（.locks/impl.lock；无超时接管，异常走人工核对） ----------
 
 function implLockPath(dataDir) {
-  return path.join(dataDir, '.locks', 'impl.lock');
+  return path.join(dataDir, 'runtime', '.locks', 'impl.lock');
 }
 
 function acquireImplLock(dataDir, payload) {

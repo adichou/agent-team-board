@@ -23,6 +23,8 @@ import * as holdStates from './lib/hold-states.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as gitFlow from './lib/git-flow.mjs';
 import * as mgtCommit from './lib/mgt-commit.mjs';
+import * as migrateLayout from './lib/migrate-layout.mjs';
+import { packPlugin } from './lib/plugin-pack.mjs';
 // BUG-20260915-007：无 run 手动 report 的系统收口提交编排（复用批量 autoCommitForRun 内核）。
 import * as manualCloseout from './lib/manual-closeout.mjs';
 
@@ -51,7 +53,9 @@ function die(msg) {
 const USAGE = `atb —— 智能体团队看板 CLI
 
 用法：
-  atb init                                     初始化 docs/agent-team-board/
+  atb init                                     初始化 agent-team-board/（data/ 用户数据 + runtime/ 应用数据）
+  atb migrate                                  旧布局（docs/agent-team-board/）一键迁移到新布局（幂等）
+  atb pack <输出目录>                          打包插件分发产物（排除看板数据/AGENTS.md/依赖/桌面链；skills 随包）
   atb new req  <标题> [--desc <描述>] [--accept]  创建需求（缺省状态 submitted；--accept 一步创建并接受）
   atb new bug  <标题> [--desc <描述>] [--accept]  创建 Bug（缺省状态 submitted；--accept 一步创建并接受；
                                                一律独立 Bug，引入来源写 design.md）
@@ -222,6 +226,43 @@ async function main() {
     return;
   }
 
+  // REQ-20260916-007 插件打包：整仓拷贝 + 分发排除（agent-team-board/、AGENTS.md、
+  // node_modules/、electron/、output/ 等），skills 完整随包，产物自校验。
+  if (cmd === 'pack') {
+    const { pos, opts } = parseOpts(rest, new Set(['out']));
+    if (opts.help || opts.h || !pos[0]) {
+      console.log('用法：atb pack <输出目录>\n整仓拷贝打包插件（排除项目看板数据 agent-team-board/、根 AGENTS.md、node_modules/、electron/、output/、.git、dist、日志；skills 完整随包；产物自校验）。输出目录须为空。');
+      return;
+    }
+    const pluginRootHere = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const r = packPlugin(pluginRootHere, pos[0]);
+    console.log(`✓ 已打包：${r.outDir}（${r.files} 个文件，${(r.bytes / 1024).toFixed(1)} KiB 纯源码量级）`);
+    console.log(`  排除：${r.excludedNames.join('、') || '（无）'}`);
+    console.log('  ZCode/Codex 双宿主安装遵循各自官方插件机制（skills 经 manifest 声明加载）');
+    if (jsonOut) console.log(JSON.stringify(r, null, 2));
+    return;
+  }
+
+  // REQ-20260916-007 旧布局一键迁移：docs/agent-team-board/ → agent-team-board/{data,runtime}
+  if (cmd === 'migrate') {
+    const { opts } = parseOpts(rest, new Set());
+    if (opts.help || opts.h) {
+      console.log('用法：atb migrate\n旧布局（docs/agent-team-board/）一键迁移到新布局（agent-team-board/{data,runtime}）：条目文档 git mv 至 data/（保留历史），运行应用数据迁 runtime/ 并退出版本控制（本地保留）。幂等可重试，不自动 commit。');
+      return;
+    }
+    const r = migrateLayout.migrateLayout(cwd);
+    if (!r.changed) {
+      console.log(`= ${r.reason}`);
+      if (jsonOut) console.log(JSON.stringify(r, null, 2));
+      return;
+    }
+    console.log(`✓ 已迁移到新布局：${r.dataDir}`);
+    console.log(`  条目 ${r.items} 个；git mv ${r.moved.gitMv} 项、移动未跟踪 ${r.moved.plain} 项、应用数据退出跟踪 ${r.moved.untracked} 项（本地保留）`);
+    console.log('  变更留在工作区/索引，请随下一次提交入库（本仓库批量/收口提交会自动收纳）');
+    if (jsonOut) console.log(JSON.stringify(r, null, 2));
+    return;
+  }
+
   if (cmd === 'new') {
     const dataDir = core.requireDataDir(cwd);
     const { pos, opts } = parseOpts(rest, new Set(['desc']));
@@ -355,11 +396,10 @@ async function main() {
     const dataDir = core.requireDataDir(cwd);
     const { pos } = parseOpts(rest, new Set());
     const [sub, kind, id] = pos;
-    if (sub !== 'retry' || (kind !== 'item' && kind !== 'version') || !id) {
-      die('用法：atb mgt retry <item|version> <ID|版本号>');
+    if (sub !== 'retry' || kind !== 'item' || !id) {
+      die('用法：atb mgt retry <item> <ID>（version 重试已随应用数据分离下线）');
     }
-    const okId = kind === 'item' ? /^(?:REQ|BUG)-\d{8}-\d{3,}$/.test(id) : /^BLD-\d{8}-\d{3}$/.test(id);
-    if (!okId) die(kind === 'item' ? 'item 需要 REQ/BUG 单号' : 'version 需要 BLD 版本号');
+    if (!/^(?:REQ|BUG)-\d{8}-\d{3,}$/.test(id)) die('item 需要 REQ/BUG 单号');
     const mgt = mgtCommit.retryMgmt({ dataDir, projectRoot: cwd, kind, id });
     if (mgt.status === 'committed') {
       const first = mgt.commits[0];
@@ -396,7 +436,7 @@ async function main() {
     // 失败/归属不明挂起待人工确认）；上报本身不受收口结果影响，条目已进入待测试。
     let closeout = null;
     if (!opts.run) {
-      closeout = manualCloseout.closeoutManualReport({ dataDir, projectRoot: path.resolve(dataDir, '..', '..'), itemId: st.id });
+      closeout = manualCloseout.closeoutManualReport({ dataDir, projectRoot: core.projectRootOfBoard(dataDir), itemId: st.id });
       const ac = closeout.autoCommit;
       if (ac.status === 'committed') {
         console.log(`✓ 系统收口提交 ${ac.commits.length} 组（只 commit 不 push，atb commit log ${st.id} 可查）：`);
@@ -636,7 +676,7 @@ async function growthCmd(rest) {
       console.log('  回执日志：');
       for (const x of run.receipts) console.log(`    - ${x.at} ${x.result}${x.reason ? `（${truncate(x.reason, 120)}）` : ''}`);
     }
-    console.log('  任务提示词与草稿全文见 docs/agent-team-board/marketing/agent-runs/ 目录（跨会话接续可直接读取）');
+    console.log('  任务提示词与草稿全文见 agent-team-board/runtime/marketing/agent-runs/ 目录（跨会话接续可直接读取）');
     return;
   }
 
@@ -935,7 +975,7 @@ async function refineCmd(rest) {
   const [sub, ...subRest] = rest;
   if (!sub) die(REFINE_USAGE);
   const dataDir = core.requireDataDir(cwd);
-  const projectRoot = path.resolve(dataDir, '..', '..');
+  const projectRoot = core.projectRootOfBoard(dataDir);
 
   if (sub === 'create') {
     const { opts } = parseOpts(subRest, new Set(['mode', 'ids']));
@@ -968,7 +1008,7 @@ async function refineCmd(rest) {
     else if (queued) console.log(`= 已有未结束的完善批次（幂等返回，未新建）：${b.batchId}（排第 ${queuePosition} 位）`);
     else console.log(`= 已有未结束完善批次（幂等返回，未新建）：${b.batchId}`);
     console.log(`  候选 ${b.candidates.length} 项 · 子代理模式（提示词通用，任意 Agent 会话可执行） · ${autoPlanOn ? '条目保持 accepted（已接受），不占实施互斥 · 完善后自动转入计划已开启：done 回执后系统自动 accepted → planned（回显「已自动转入计划」，属预期系统行为，Agent 不得据此暂停）' : '条目保持 accepted（已接受），不占实施互斥'}`);
-    console.log('  完整清单已存：docs/agent-team-board/refine/batches/' + b.batchId + '/batch.json');
+    console.log('  完整清单已存：agent-team-board/runtime/refine/batches/' + b.batchId + '/batch.json');
     if (prompt) {
       console.log('  主调度提示词（复制后在当前项目的 Agent 会话发送）：');
       console.log('  -----');
@@ -1166,7 +1206,7 @@ async function commitCmd(rest) {
   if (!sub) die(COMMIT_USAGE);
   if (ROLLED_BACK_COMMIT_SUBS.has(sub)) commitRolledBackDie(sub);
   const dataDir = core.requireDataDir(cwd);
-  const projectRoot = path.resolve(dataDir, '..', '..');
+  const projectRoot = core.projectRootOfBoard(dataDir);
 
   // REQ-20260911-009 条目 ↔ commit 双向索引
   // 单 → 全部提交：账本（经核验）与 git 历史（消息含单号）合并，与看板「已提交」徽标同源
@@ -1331,7 +1371,7 @@ async function confirmCmd(rest) {
     console.log(CONFIRM_USAGE);
     return;
   }
-  const projectRoot = path.resolve(dataDir, '..', '..');
+  const projectRoot = core.projectRootOfBoard(dataDir);
 
   if (sub === 'record-recovery') {
     const { pos, opts } = parseOpts(subRest, new Set(['evidence']));
@@ -1451,7 +1491,7 @@ async function batchCmd(rest) {
   const [sub, ...subRest] = rest;
   if (!sub) die(BATCH_USAGE);
   const dataDir = core.requireDataDir(cwd);
-  const projectRoot = path.resolve(dataDir, '..', '..');
+  const projectRoot = core.projectRootOfBoard(dataDir);
 
   if (sub === 'create') {
     const { opts } = parseOpts(subRest, new Set());
@@ -1486,7 +1526,7 @@ async function batchCmd(rest) {
     if (prunedCount) {
       console.log(`  已清理最旧批次 ${prunedCount} 个（最多保留 ${batch.BATCH_RETENTION_MAX} 个）：${pruned.removed.join('、')}`);
     }
-    console.log('  完整清单已存：docs/agent-team-board/dispatch/batches/' + b.batchId + '/batch.json');
+    console.log('  完整清单已存：agent-team-board/runtime/dispatch/batches/' + b.batchId + '/batch.json');
     console.log('  提示词（复制后在当前项目的 Agent 会话发送；复制成功不代表已启动，登记运行后才显示执行中）：');
     console.log('  -----');
     for (const line of prompt.split('\n')) console.log(`  ${line}`);
@@ -1831,14 +1871,24 @@ function serverCodeMtime(scriptsDir) {
 }
 
 function pidOnPort(port) {
-  // health 未暴露 pid 的老服务：借 lsof 按端口定位（macOS/Linux；不可用时返回 null 走手动指引）
-  try {
-    const r = spawnSync('lsof', ['-nP', '-ti', `tcp:${port}`], { encoding: 'utf8', timeout: 3000 });
-    const pids = String(r.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
-    return pids.length ? Number(pids[0]) : null;
-  } catch {
-    return null;
-  }
+  // health 未暴露 pid 的老服务：借 lsof 按端口定位（macOS/Linux；不可用时返回 null 走手动指引）。
+  // REQ-20260916-007 收尾回归（BUG-20260907-017 场景加固）：
+  //   · 只取 LISTEN 状态——按端口的裸 lsof 会同时列出客户端连接（如探活/测试进程的 keep-alive
+  //     socket，pid 常更小），误取 pids[0] 会把客户端当旧服务杀掉；
+  //   · 限时探测失败（部分环境 lsof 冷启动超过 3s，spawnSync 带 timeout 返回 ETIMEDOUT 空结果）
+  //     时去超时重试一次，仍失败才判「lsof 不可用」。
+  const run = (timeoutMs) => {
+    try {
+      return spawnSync('lsof', ['-nP', '-ti', `tcp:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8', ...(timeoutMs ? { timeout: timeoutMs } : {}) });
+    } catch {
+      return null;
+    }
+  };
+  let r = run(3000);
+  if (!r || r.status !== 0 || !String(r.stdout || '').trim()) r = run(null);
+  if (!r || r.status !== 0) return null;
+  const pids = String(r.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  return pids.length ? Number(pids[0]) : null;
 }
 
 const waitPortFree = async (port, timeoutMs = 10_000) => {
@@ -1859,7 +1909,7 @@ async function serveCmd(rest) {
   }
   const port = Number(opts.port || process.env.ATB_PORT || 8888);
   const dataDir = core.dataDirFrom(cwd);
-  const projectRoot = dataDir ? path.resolve(dataDir, '..', '..') : path.resolve(cwd);
+  const projectRoot = dataDir ? core.projectRootOfBoard(dataDir) : path.resolve(cwd);
   const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 
   // 探活：已运行 → 校验版本（过旧自动重启，否则复用）

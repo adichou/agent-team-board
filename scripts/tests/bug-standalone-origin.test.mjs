@@ -88,7 +88,7 @@ t('B2 CLI：atb new bug 正常创建独立 Bug；usage 不再宣传 --req 归属
     assert.ok(id, '输出应含新单号');
     const st = core.listItems(core.dataDirFrom(root)).find((x) => x.id === id);
     assert.equal(st.parent, null, '新建 Bug 应为独立（parent null）');
-    assert.ok(fs.existsSync(path.join(core.dataDirFrom(root), 'bugs', id)), '目录应在顶层 bugs/');
+    assert.ok(fs.existsSync(path.join(core.dataDirFrom(root), 'data', 'bugs', id)), '目录应在顶层 data/bugs/');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -110,7 +110,7 @@ t('B3 core：createItem 拒绝 bug+parent；requirement 传 parent 仍报错；�
     core.AtbError, '需求归属需求仍应报错');
   const bug = core.createItem(dataDir, { type: 'bug', title: '独立缺陷', by: 't' });
   assert.equal(bug.parent, null, 'status.parent 应为 null');
-  assert.ok(fs.existsSync(path.join(dataDir, 'bugs', bug.id)), '目录应在顶层 bugs/');
+  assert.ok(fs.existsSync(path.join(dataDir, 'data', 'bugs', bug.id)), '目录应在顶层 bugs/');
   assert.doesNotThrow(() => core.createItem(dataDir, { type: 'requirement', title: '普通需求', by: 't' }),
     '需求创建不受影响');
 });
@@ -118,7 +118,7 @@ t('B3 core：createItem 拒绝 bug+parent；requirement 传 parent 仍报错；�
 t('B4 core：新建 Bug 生成 README + design；README 无归属行；design 含引入来源节与填写指引', () => {
   const { dataDir } = tempProject('b4');
   const bug = core.createItem(dataDir, { type: 'bug', title: '溯源缺陷', description: '某页白屏', by: 't' });
-  const dir = path.join(dataDir, 'bugs', bug.id);
+  const dir = path.join(dataDir, 'data', 'bugs', bug.id);
   const readme = fs.readFileSync(path.join(dir, 'README.md'), 'utf8');
   assert.doesNotMatch(readme, /归属需求/, 'README 不应再有归属需求行');
   assert.match(readme, /独立 Bug/, 'README 应标注独立 Bug（源单见引入来源）');

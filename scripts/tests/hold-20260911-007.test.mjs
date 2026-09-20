@@ -205,7 +205,7 @@ t('D5 复工闭环：缺项拒绝并列缺项；齐备后回 planned、owner 清
   assert.equal(st.status, 'planned', '复工后条目应回到已计划');
   assert.equal(st.owner, null, '复工应清空 owner');
   assert.ok(st.history.some((h) => h.to === 'planned' && String(h.note || '').includes('复工')), 'history 应留痕复工');
-  assert.ok(!fs.existsSync(path.join(dataDir, '.locks', `${it.id}.lock`)), '复工应清理认领锁');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', '.locks', `${it.id}.lock`)), '复工应清理认领锁');
   assert.equal(holdStates.holdOf(dataDir, it.id).state, 'resumed');
 
   const cand = batch.candidateItems(dataDir).map((x) => x.id);

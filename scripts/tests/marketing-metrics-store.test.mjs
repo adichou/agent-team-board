@@ -54,7 +54,7 @@ const obs = (over = {}) => ({
 t('M1 指标定义：默认字典播种五分类；自定义指标校验；definitions.json 损坏报错不静默重建', () => {
   const { dataDir } = mkProject();
   let defs = mkt.readMetricDefinitions(dataDir);
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'metrics', 'definitions.json')), '首次读取播种落盘');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'definitions.json')), '首次读取播种落盘');
   assert.ok(defs.definitions.length >= 15, '默认字典覆盖五分类');
   const cats = new Set(defs.definitions.map((d) => d.category));
   for (const c of mkt.METRIC_CATEGORIES) assert.ok(cats.has(c), `分类 ${c} 有指标`);
@@ -76,7 +76,7 @@ t('M1 指标定义：默认字典播种五分类；自定义指标校验；defin
   assert.equal(mkt.readMetricDefinitions(dataDir).definitions.length, defs.definitions.length + 1, '追加不覆盖');
 
   // 损坏 → 报错（不静默重建）
-  fs.writeFileSync(path.join(dataDir, 'marketing', 'metrics', 'definitions.json'), '{ broken');
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'definitions.json'), '{ broken');
   assert.throws(() => mkt.readMetricDefinitions(dataDir), /损坏/, '损坏定义文件报错');
 });
 
@@ -107,7 +107,7 @@ t('M2 手工观察创建：null=未知与 0=真实零均可录入；负数 / 非
     (e) => !!(e.fields && e.fields.unit), '商业金额缺币种定位字段');
   const rev = mkt.recordObservation(dataDir, { data: obs({ metricKey: 'revenue', value: 680, unit: 'CNY' }), by: 'board' });
   assert.equal(rev.observation.unit, 'CNY');
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'metrics', 'observations', `${rev.observation.id}.json`)), '观察落盘');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations', `${rev.observation.id}.json`)), '观察落盘');
 });
 
 t('M3 修订：同键同值幂等；不同值缺理由拒绝；带理由升 revision 入历史（保留旧值）', () => {
@@ -122,13 +122,13 @@ t('M3 修订：同键同值幂等；不同值缺理由拒绝；带理由升 revi
   assert.equal(again.created, false);
   assert.equal(again.revised, false);
   assert.equal(again.observation.revision, 1, 'revision 不变');
-  const files = fs.readdirSync(path.join(dataDir, 'marketing', 'metrics', 'observations'));
+  const files = fs.readdirSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations'));
   assert.equal(files.length, 1, '不新增记录');
 
   // 不同值缺理由
   assert.throws(() => mkt.recordObservation(dataDir, { data: obs({ value: 13 }), by: 'board' }),
     (e) => !!(e.fields && e.fields.reason), '修订缺修改理由定位字段');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'marketing', 'metrics', 'observations', `${a.id}.json`), 'utf8')).revision, 1, '失败不改文件');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations', `${a.id}.json`), 'utf8')).revision, 1, '失败不改文件');
 
   // 带理由修订
   const r2 = mkt.recordObservation(dataDir, { data: obs({ value: 13, reason: '补录漏统计的一天' }), by: 'board' });
@@ -147,7 +147,7 @@ t('M4 来源不重复计算：同键不同来源同值复用同一条观察（�
   assert.equal(m2.revised, false);
   assert.equal(m2.observation.id, m1.id, '来源相同（同观察键）的手工与同步记录不重复计算');
   assert.equal(m2.observation.source, '手工记录', '无变化不静默改写来源');
-  assert.equal(fs.readdirSync(path.join(dataDir, 'marketing', 'metrics', 'observations')).length, 1);
+  assert.equal(fs.readdirSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations')).length, 1);
 
   // 不同来源不同值 → 冲突走修订（带理由），不静默相加
   const m3 = mkt.recordObservation(dataDir, { data: obs({ source: 'CSV 导入', value: 11, reason: '同步修正数值' }), by: 'board' });
@@ -181,7 +181,7 @@ t('M5 CSV 预览：合法行 new；错误行带行号与原因；预览不写盘
   assert.match(errs.find((e) => e.rowNo === 5).error, /早于/);
   assert.match(errs.find((e) => e.rowNo === 6).error, /指标/);
   assert.match(errs.find((e) => e.rowNo === 7).error, /实验/);
-  assert.ok(!fs.existsSync(path.join(dataDir, 'marketing', 'metrics', 'observations')), '预览不写盘');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations')), '预览不写盘');
 
   // 表头不可自动识别且映射缺必填列 → 整体错误
   const generic = ['a,b,c,d,e,f,g,h,i', '2026-09-01,2026-09-07,订阅新增,2,人,,,,UTC+8'].join('\n');
@@ -206,7 +206,7 @@ t('M6 CSV 提交：全部合法一次成功；存在错误行原子拒绝零写�
   const c = mkt.commitImportCsv(dataDir, { csv, by: 'board' });
   assert.equal(c.created, 2);
   assert.equal(c.revised, 0);
-  const files = fs.readdirSync(path.join(dataDir, 'marketing', 'metrics', 'observations'));
+  const files = fs.readdirSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations'));
   assert.equal(files.length, 2, '一次提交全部落盘');
   assert.equal(c.effect.cards.find((x) => x.metricKey === 'payers').value, 0, '真实零入卡');
 
@@ -217,7 +217,7 @@ t('M6 CSV 提交：全部合法一次成功；存在错误行原子拒绝零写�
     '2026-09-01,2026-09-07,点赞,bad,次,,,,UTC+8',
   ].join('\n');
   assert.throws(() => mkt.commitImportCsv(dataDir, { csv: bad, by: 'board' }), /错误行|行 3|第 3 行/, '错误行阻止提交');
-  assert.equal(fs.readdirSync(path.join(dataDir, 'marketing', 'metrics', 'observations')).length, 2, '不写入部分数据');
+  assert.equal(fs.readdirSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations')).length, 2, '不写入部分数据');
 });
 
 t('M7 CSV 重复导入：同文件再导入为无变化', () => {
@@ -232,7 +232,7 @@ t('M7 CSV 重复导入：同文件再导入为无变化', () => {
   assert.equal(again.created, 0, '不新增');
   assert.equal(again.revised, 0, '不升 revision');
   assert.equal(again.unchanged, 2, '标记无变化');
-  assert.equal(fs.readdirSync(path.join(dataDir, 'marketing', 'metrics', 'observations')).length, 2);
+  assert.equal(fs.readdirSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations')).length, 2);
 });
 
 t('M8 CSV 值冲突：未选择处理方式拒绝；skip 保持原值；revise 需理由并升 revision', () => {
@@ -436,7 +436,7 @@ t('M14 观察读取：损坏文件只读占位，其余照常；修订入口拒�
   const { dataDir } = mkProject();
   const a = mkt.recordObservation(dataDir, { data: obs({ value: 12 }), by: 'board' }).observation;
   const b = mkt.recordObservation(dataDir, { data: obs({ value: 3, dateStart: '2026-09-08', dateEnd: '2026-09-14' }), by: 'board' }).observation;
-  fs.writeFileSync(path.join(dataDir, 'marketing', 'metrics', 'observations', `${b.id}.json`), '{ broken');
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'marketing', 'metrics', 'observations', `${b.id}.json`), '{ broken');
   const eff = mkt.readEffect(dataDir, {});
   assert.equal(eff.observations.find((o) => o.id === b.id).corrupt, true, '损坏只读占位');
   assert.ok(eff.observations.find((o) => o.id === a.id).corrupt === undefined, '其余照常');

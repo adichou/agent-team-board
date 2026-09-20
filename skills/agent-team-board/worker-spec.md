@@ -1,7 +1,7 @@
 # 批量开发执行规范（batch worker）
 
 适用：REQ-20260906-002 批量开发（REQ-20260909-011 起执行端无关）。本文件由看板创建批次时快照到项目
-`docs/agent-team-board/dispatch/worker-spec.md`，主调度提示词只引用该路径。
+`agent-team-board/runtime/dispatch/worker-spec.md`，主调度提示词只引用该路径。
 每个子 Agent 读取本规范后**只实施一项**，完成后结束；不得再派发其他子 Agent。
 
 `$ATB` 指代 `node <插件>/scripts/atb.mjs`（提示词中的「批次摘要入口」已带全量命令）。
@@ -27,7 +27,7 @@
      声明并附问题清单，再交 blocked 回执（`--reason "待人工决策（已声明）"`）。人工在 Status Board
      「待人工确认」区补决策并复工后，条目回已计划队列被重新取单；声明与作答全程留痕于条目 decisions.md。
    - 失败（环境错误/实施失败，不可继续）：`--result failed --reason "<短句>" --no-safe-to-continue`。
-   - reason ≤200 字，完整错误与测试输出写入 `docs/agent-team-board/dispatch/runs/<runId>/` 下文件后引用。
+   - reason ≤200 字，完整错误与测试输出写入 `agent-team-board/runtime/dispatch/runs/<runId>/` 下文件后引用。
 6. **回执**：把 receipt 命令输出的一行 JSON 原样返回给主会话（≤2 KiB），然后结束。
    不返回完整代码、测试日志或整份报告。
 

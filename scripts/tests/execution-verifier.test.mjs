@@ -33,10 +33,10 @@ function claimedItem(root, { ownerMode = 'self' } = {}) {
 function writeReportFixture(dataDir, id, { reportAt, reportExists = true, runId = null } = {}) {
   const dir = core.resolveItemDir(dataDir, id).dir;
   if (reportExists) fs.writeFileSync(path.join(dir, 'test-report.md'), '# 报告\n通过');
-  const status = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  const status = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
   status.agentCompletedAt = reportAt;
   status.lastReport = { at: reportAt, coverage: 80, framework: 'node:test', summary: 'x', runId };
-  fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status, null, 2) + '\n');
+  fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(status, null, 2) + '\n');
   // 状态守卫只拦 Agent 工具调用，测试进程直改文件构造夹具是可控的
 }
 

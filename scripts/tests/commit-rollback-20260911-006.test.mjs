@@ -119,7 +119,7 @@ t('U1 数据层回退：默认/读取无 commit 分区；patch.commit 按未知�
     });
     assert.equal(r1.commit, undefined, '保存返回无 commit 分区（patch.commit 被忽略）');
     assert.equal(r1.refine.autoPlanAfterDone, true, 'refine 分区正常生效');
-    const sp = path.join(dataDir, 'tasks', 'settings.json');
+    const sp = path.join(dataDir, 'runtime', 'tasks', 'settings.json');
     const disk1 = JSON.parse(fs.readFileSync(sp, 'utf8'));
     assert.equal(disk1.commit, undefined, '落盘无 commit 分区');
     assert.equal(disk1.refine.autoPlanAfterDone, true, 'refine 落盘正常');
@@ -239,7 +239,7 @@ function setupUi() {
   return { sandbox, document, state, run, seed, posted };
 }
 
-t('E1 设置页回退：就绪态为「官网仓库 + 批量任务 + Git 工作流」三个分区（无批量 Commit 分区/目录复选框/恢复默认/空范围警示）；保存载荷仅含 refine', async () => {
+t('E1 设置页回退：就绪态为「官网仓库 + 批量任务 + Git 工作流 + 数据布局迁移」四个分区（无批量 Commit 分区/目录复选框/恢复默认/空范围警示）；保存载荷仅含 refine', async () => {
   const h = setupUi();
   const view = element();
   view.nodes.set('#tsStatus', element());
@@ -256,7 +256,8 @@ t('E1 设置页回退：就绪态为「官网仓库 + 批量任务 + Git 工作�
   assert.match(out, /<h4>Git 工作流<\/h4>/, '「Git 工作流」分区保留（REQ-20260911-009）');
   // BUG-20260916-001：设置页新增全局共享的「官网仓库」分区（构建发布独立配置），分区数 2 → 3
   assert.match(out, /<h4>官网仓库<\/h4>/, '「官网仓库」分区保留（BUG-20260916-001）');
-  assert.ok((out.match(/<section/g) || []).length === 3, `就绪态应恰有三个分区（当前 ${out.match(/<section/g)?.length} 个）`);
+  // REQ-20260916-007：新增「数据布局迁移」分区（旧布局一键迁移入口）
+  assert.ok((out.match(/<section/g) || []).length === 4, `就绪态应恰有四个分区（当前 ${out.match(/<section/g)?.length} 个）`);
   assert.ok(!out.includes('批量 Commit'), '不再渲染「批量 Commit」分区');
   assert.ok(!out.includes('dir-group') && !out.includes('dir-list'), '无目录清单控件');
   assert.ok(!out.includes('恢复默认'), '无恢复默认按钮');

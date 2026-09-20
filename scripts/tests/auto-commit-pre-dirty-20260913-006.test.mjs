@@ -172,7 +172,7 @@ t('P3 核心场景：预留前已脏且运行期被修改的路径不再静默�
 
   // 账本如实：auto-commit.json 明细记录 pendingManual（路径 + 建议）与 heldGroups
   const detail = JSON.parse(fs.readFileSync(
-    path.join(core.dataDirFrom(root), 'dispatch', 'runs', runId, 'auto-commit.json'), 'utf8'));
+    path.join(core.dataDirFrom(root), 'runtime', 'dispatch', 'runs', runId, 'auto-commit.json'), 'utf8'));
   assert.ok(detail.pendingManual.includes('scripts/web/build.js'), '明细应记录待人工路径');
   assert.ok(detail.pendingManualAdvice && detail.pendingManualAdvice.includes('人工'), '明细应带人工处理建议');
   assert.ok(detail.heldGroups && detail.heldGroups.test.includes('scripts/tests/impl.test.mjs'),
@@ -232,7 +232,7 @@ t('P5 全部非看板改动均待人工且无 doc 可提交：状态如实 skipp
   core.report(dataDir, item.id, { summary: '完成', by: 'w1', run: { runId: nx.runId } });
   // 预提交整个看板数据目录（含条目目录、dispatch/runs 与账本 .gitignore，不带单号），
   // 清空 doc 组 → 制造「只有待人工路径」的收尾
-  const gi = path.join(dataDir, '.gitignore');
+  const gi = path.join(dataDir, 'runtime', '.gitignore');
   const giCur = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : '';
   fs.writeFileSync(gi, giCur.replace(/\n*$/, '\n') + 'commits/runs/\ncommits/batches/\n');
   git(root, ['add', path.relative(root, dataDir)]);
@@ -245,7 +245,7 @@ t('P5 全部非看板改动均待人工且无 doc 可提交：状态如实 skipp
   assert.deepEqual(ac.pendingManual, ['scripts/web/build.js']);
   assert.equal(logSubjectsOf(root, item.id).length, 0, '不得产生任何本单提交');
   const detail = JSON.parse(fs.readFileSync(
-    path.join(dataDir, 'dispatch', 'runs', nx.runId, 'auto-commit.json'), 'utf8'));
+    path.join(dataDir, 'runtime', 'dispatch', 'runs', nx.runId, 'auto-commit.json'), 'utf8'));
   assert.ok(detail.pendingManual.includes('scripts/web/build.js'), '明细仍应落盘记录待人工路径');
   assert.ok(!commitStore.committedItemIndex(dataDir).get(item.id), '徽标账本不得点亮');
 });

@@ -65,7 +65,7 @@ t('S1 未初始化=空态；初始化生成 README 草稿（intro 取首个非�
   assert.equal(p.revision, 1);
   assert.deepEqual(p.evidence, []);
   assert.equal(p.currentPricing, null, '初始化没有当前定价');
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'profile.json')), '档案落盘 profile.json');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'profile.json')), '档案落盘 profile.json');
 
   st = mkt.readState(dataDir);
   assert.equal(st.initialized, true);
@@ -128,7 +128,7 @@ t('S5 revision 过期保存 → 冲突错误（带当前 revision），旧 profi
   const { root, dataDir } = mkProject(README);
   mkt.initProfile(dataDir, { projectRoot: root, by: 'board' });
   mkt.saveProfile(dataDir, { revision: 1, positioning: positioning({ intro: '第一版' }), evidence: [], by: 'board' });
-  const before = fs.readFileSync(path.join(dataDir, 'marketing', 'profile.json'), 'utf8');
+  const before = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'profile.json'), 'utf8');
 
   try {
     mkt.saveProfile(dataDir, { revision: 1, positioning: positioning({ intro: '陈旧写入' }), evidence: [], by: 'board' });
@@ -137,7 +137,7 @@ t('S5 revision 过期保存 → 冲突错误（带当前 revision），旧 profi
     assert.ok(e instanceof mkt.MarketingConflictError, '冲突错误类型可辨识');
     assert.equal(e.currentRevision, 2, '冲突错误携带服务端最新 revision');
   }
-  const after = fs.readFileSync(path.join(dataDir, 'marketing', 'profile.json'), 'utf8');
+  const after = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'profile.json'), 'utf8');
   assert.equal(after, before, '冲突失败不改动旧文件');
 });
 
@@ -147,12 +147,12 @@ t('S6 定价保存两次产生 v1、v2 且 v1 字节不变；保存新版本不�
 
   const v1 = mkt.savePricing(dataDir, { data: pricing({ packages: [{ name: '专业版', benefits: '全部功能', price: 29 }] }), by: 'board' });
   assert.equal(v1.version.version, 'v1');
-  const v1Raw = fs.readFileSync(path.join(dataDir, 'marketing', 'pricing', 'v1.json'), 'utf8');
+  const v1Raw = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'pricing', 'v1.json'), 'utf8');
 
   const v2 = mkt.savePricing(dataDir, { data: pricing({ packages: [{ name: '专业版', benefits: '全部功能', price: 39 }] }), by: 'board' });
   assert.equal(v2.version.version, 'v2', '第二次保存生成新版本');
 
-  assert.equal(fs.readFileSync(path.join(dataDir, 'marketing', 'pricing', 'v1.json'), 'utf8'), v1Raw, 'v1 不可覆盖');
+  assert.equal(fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'pricing', 'v1.json'), 'utf8'), v1Raw, 'v1 不可覆盖');
 
   const st = mkt.readState(dataDir);
   assert.equal(st.profile.currentPricing, null, '保存候选不会自动成为当前定价');
@@ -222,13 +222,13 @@ t('S10 损坏处理：profile.json 损坏读取报错不静默重建；单个定
   mkt.savePricing(dataDir, { data: pricing(), by: 'board' });
   mkt.savePricing(dataDir, { data: pricing({ packages: [{ name: '专业版', benefits: '全部功能', price: 39 }] }), by: 'board' });
 
-  fs.writeFileSync(path.join(dataDir, 'marketing', 'pricing', 'v2.json'), '{ broken json');
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'marketing', 'pricing', 'v2.json'), '{ broken json');
   let st = mkt.readState(dataDir);
   assert.equal(st.versions.length, 2, '损坏版本仍占历史位');
   assert.equal(st.versions.find((v) => v.version === 'v2').corrupt, true, '损坏版本标注 corrupt');
   assert.equal(st.versions.find((v) => v.version === 'v1').corrupt, undefined, 'v1 照常可读');
 
-  fs.writeFileSync(path.join(dataDir, 'marketing', 'profile.json'), 'not json at all');
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'marketing', 'profile.json'), 'not json at all');
   assert.throws(() => mkt.readState(dataDir), /损坏|无法解析/, '档案损坏应报错而非静默重建');
 });
 

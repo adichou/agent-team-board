@@ -250,7 +250,7 @@ export function normalizePromptForDisplay(prompt, { autoPlan = null } = {}) {
 const MODEL_ID_MAX_CHARS = 120;
 
 function taskSettingsPath(dataDir) {
-  return path.join(dataDir, 'tasks', 'settings.json');
+  return path.join(dataDir, 'runtime', 'tasks', 'settings.json');
 }
 
 function defaultSettings() {

@@ -33,19 +33,19 @@ function loadFns(names) {
 
 // ---------- T1 docRefPath：按条目类型 / 归属拼装真实磁盘路径 ----------
 
-t('T1 docRefPath：需求单回归口径不变（<项目根>/docs/agent-team-board/requirements/<单号>/<文档名>）', () => {
+t('T1 docRefPath：需求单回归口径不变（<项目根>/agent-team-board/data/requirements/<单号>/<文档名>）', () => {
   const sb = loadFns(['docRefPath']);
   assert.equal(
     sb.docRefPath('/Users/x/proj', 'REQ-20260909-014', 'design.md'),
-    '/Users/x/proj/docs/agent-team-board/requirements/REQ-20260909-014/design.md',
+    '/Users/x/proj/agent-team-board/data/requirements/REQ-20260909-014/design.md',
   );
 });
 
-t('T1 docRefPath：独立 Bug（parent 为空）→ docs/agent-team-board/bugs/<编号>/<文档名>', () => {
+t('T1 docRefPath：独立 Bug（parent 为空）→ agent-team-board/data/bugs/<编号>/<文档名>', () => {
   const sb = loadFns(['docRefPath']);
   assert.equal(
     sb.docRefPath('/Users/x/proj', 'BUG-20260913-003', 'README.md', null),
-    '/Users/x/proj/docs/agent-team-board/bugs/BUG-20260913-003/README.md',
+    '/Users/x/proj/agent-team-board/data/bugs/BUG-20260913-003/README.md',
   );
 });
 
@@ -53,7 +53,7 @@ t('T1 docRefPath：归属需求的 Bug（parent=REQ 编号）→ requirements/<R
   const sb = loadFns(['docRefPath']);
   assert.equal(
     sb.docRefPath('/Users/x/proj', 'BUG-20260913-003', 'test-cases.md', 'REQ-20260909-014'),
-    '/Users/x/proj/docs/agent-team-board/requirements/REQ-20260909-014/bugs/BUG-20260913-003/test-cases.md',
+    '/Users/x/proj/agent-team-board/data/requirements/REQ-20260909-014/bugs/BUG-20260913-003/test-cases.md',
   );
 });
 
@@ -61,7 +61,7 @@ t('T1 docRefPath：无项目根时返回相对路径（口径同既有实现）'
   const sb = loadFns(['docRefPath']);
   assert.equal(
     sb.docRefPath('', 'BUG-20260913-003', 'design.md', null),
-    'docs/agent-team-board/bugs/BUG-20260913-003/design.md',
+    'agent-team-board/data/bugs/BUG-20260913-003/design.md',
   );
 });
 

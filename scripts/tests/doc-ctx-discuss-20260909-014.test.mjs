@@ -206,11 +206,11 @@ t('T3 docSelLines：段落按换行精确映射；围栏偏移首行 ```；富�
 
 // ---------- T4 buildDocRef / docRefPath：复制文本组装 ----------
 
-t('T4 docRefPath：绝对路径口径同 req-disc 引用复制（<项目根>/docs/agent-team-board/requirements/<单号>/<文档名>）', () => {
+t('T4 docRefPath：绝对路径口径同 req-disc 引用复制（<项目根>/agent-team-board/data/requirements/<单号>/<文档名>）', () => {
   const sb = loadFns(['docRefPath']);
   assert.equal(
     sb.docRefPath('/Users/x/proj', 'REQ-1', 'design.md'),
-    '/Users/x/proj/docs/agent-team-board/requirements/REQ-1/design.md',
+    '/Users/x/proj/agent-team-board/data/requirements/REQ-1/design.md',
   );
 });
 

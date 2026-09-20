@@ -134,8 +134,8 @@ const ARGV_STUB_MARKER = /old-server\.mjs$/;       // serve-stale T5 冒牌老�
 const ARGV_SCRIPT_MARKER = /scripts\/(server|atb)\.mjs$/; // 插件或拷贝骨架的服务入口
 const NODE_NAME = /node/i;
 
-async function run(cmd, args) {
-  const { stdout } = await execFileP(cmd, args, { timeout: 10_000, maxBuffer: 4 * 1024 * 1024 });
+async function run(cmd, args, timeoutMs = 10_000) {
+  const { stdout } = await execFileP(cmd, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 });
   return stdout;
 }
 
@@ -146,7 +146,9 @@ function portInRange(port, ranges) {
 // lsof 枚举监听者 → [{pid, port, command}]；lsof 不可用返回 null（走 ps 回退）。
 async function scanListeners(ranges) {
   let txt;
-  try { txt = await run('lsof', ['-nP', '-w', '-iTCP', '-sTCP:LISTEN']); } catch { return null; }
+  // lsof 全表扫描在高负载 macOS 上可达 10s+（大量 TIME_WAIT/进程时更慢）：给足余量，
+  // 超时才回退 ps 纯标记扫描（回退路径不识别 cwd 形态，会漏检 server.mjs 残留）。
+  try { txt = await run('lsof', ['-nP', '-w', '-iTCP', '-sTCP:LISTEN'], 45_000); } catch { return null; }
   const out = [];
   for (const line of txt.split('\n').slice(1)) {
     const cols = line.trim().split(/\s+/);

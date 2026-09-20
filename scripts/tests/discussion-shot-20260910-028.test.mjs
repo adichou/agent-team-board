@@ -28,7 +28,7 @@ async function mkProject() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atb-disc-shot-')));
   const { initData } = await import(path.join(pluginRoot, 'scripts', 'lib', 'core.mjs'));
   initData(root);
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
+  const dataDir = path.join(root, 'agent-team-board');
   return { root, dataDir };
 }
 
@@ -65,7 +65,7 @@ t('S1 创建落盘：附件进 <讨论目录>/attachments/（同名去重）、t
 t('S2 整单拒绝：非白名单 / 超 8MB / 超 9 张 / 缺数据任一非法抛错，不建目录不消耗 ASK 单号（口径与需求 / Bug 一致）', async () => {
   const { dataDir } = await mkProject();
   const oncall = await import(path.join(pluginRoot, 'scripts', 'lib', 'oncall-store.mjs'));
-  const tickets = path.join(dataDir, 'oncall', 'tickets');
+  const tickets = path.join(dataDir, 'runtime', 'oncall', 'tickets');
   const bads = [
     [{ name: 'x.txt', dataBase64: 'eA==' }],
     [{ name: 'big.png', dataBase64: Buffer.alloc(8 * 1024 * 1024 + 1).toString('base64') }],
@@ -138,7 +138,7 @@ t('H1 POST /api/discussion 透传附件 + GET /api/discussion/:id/attachment/:na
     const p = spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'atb.mjs'), 'init', '--dir', root], { stdio: 'ignore' });
     p.on('close', resolve);
   });
-  const dataDir = path.join(root, 'docs', 'agent-team-board');
+  const dataDir = path.join(root, 'agent-team-board');
   const port = 33000 + Math.floor(Math.random() * 20000);
   const server = spawn(process.execPath, [path.join(pluginRoot, 'scripts', 'server.mjs')], {
     cwd: root,
@@ -158,7 +158,7 @@ t('H1 POST /api/discussion 透传附件 + GET /api/discussion/:id/attachment/:na
     let r = await httpReq(port, 'POST', `/api/discussion${P}`, { title: '坏附件', background: 'b', attachments: [att('x.txt')] });
     assert.equal(r.status, 400, '非白名单附件应 400');
     assert.match(r.json.error, /图片|附件/);
-    assert.deepEqual(fs.readdirSync(path.join(dataDir, 'oncall', 'tickets')), [], '不留半成品讨论目录');
+    assert.deepEqual(fs.readdirSync(path.join(dataDir, 'runtime', 'oncall', 'tickets')), [], '不留半成品讨论目录');
 
     // 合法创建：响应带 attachments，文件与引用行落盘
     r = await httpReq(port, 'POST', `/api/discussion${P}`, { title: '服务端讨论', background: '背景S', attachments: [att('a.png'), att('b.jpg')] });
@@ -166,7 +166,7 @@ t('H1 POST /api/discussion 透传附件 + GET /api/discussion/:id/attachment/:na
     const id = r.json.discussion.id;
     assert.match(id, /-001$/, '失败创建不占号');
     assert.deepEqual(r.json.discussion.attachments, ['a.png', 'b.jpg'], '响应带附件清单');
-    assert.match(fs.readFileSync(path.join(dataDir, 'oncall', 'tickets', id, 'question.md'), 'utf8'), /!\[截图\]\(attachments\/a\.png\)/);
+    assert.match(fs.readFileSync(path.join(dataDir, 'runtime', 'oncall', 'tickets', id, 'question.md'), 'utf8'), /!\[截图\]\(attachments\/a\.png\)/);
 
     // 附件端点：原始字节 + 白名单 MIME + nosniff + no-store
     const raw = Buffer.from(PNG, 'base64');

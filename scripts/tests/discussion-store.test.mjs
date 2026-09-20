@@ -220,11 +220,11 @@ t('S7 创建幂等与部分失败：已建草稿跳过不重复；空标题逐�
   publish(dataDir, d.id, { items: [{ id: 'c1', type: 'requirement', title: 'A', description: 'd' }] });
   const r1 = oncall.createItems(dataDir, d.id, { items: [{ id: 'c1', type: 'requirement', title: 'A', description: 'd' }], by: 'board' });
   assert.ok(r1.results[0].ok && r1.results[0].itemId);
-  const countAfter1 = fs.readdirSync(path.join(dataDir, 'requirements')).length;
+  const countAfter1 = fs.readdirSync(path.join(dataDir, 'data', 'requirements')).length;
   const r2 = oncall.createItems(dataDir, d.id, { items: [{ id: 'c1', type: 'requirement', title: 'A', description: 'd' }], by: 'board' });
   assert.equal(r2.results[0].skipped, true, '已创建草稿再次提交应跳过');
   assert.equal(r2.results[0].itemId, r1.results[0].itemId);
-  assert.equal(fs.readdirSync(path.join(dataDir, 'requirements')).length, countAfter1, '不重复创建条目');
+  assert.equal(fs.readdirSync(path.join(dataDir, 'data', 'requirements')).length, countAfter1, '不重复创建条目');
 
   const r3 = oncall.createItems(dataDir, d.id, {
     items: [
@@ -236,7 +236,7 @@ t('S7 创建幂等与部分失败：已建草稿跳过不重复；空标题逐�
   assert.equal(r3.results[0].ok, false, '空标题草稿应失败');
   assert.match(r3.results[0].error, /标题/);
   assert.equal(r3.results[1].skipped, true, '合法项不受失败项影响');
-  assert.equal(fs.readdirSync(path.join(dataDir, 'requirements')).length, countAfter1, '失败项不建条目');
+  assert.equal(fs.readdirSync(path.join(dataDir, 'data', 'requirements')).length, countAfter1, '失败项不建条目');
 });
 
 t('S8 零候选与阶段提示：items 空数组合法；卡片阶段等待纪要/纪要已生成/有待创建草稿', () => {

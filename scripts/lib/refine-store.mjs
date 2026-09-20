@@ -94,7 +94,7 @@ const readJson = (file) => {
 const nowIso = () => new Date().toISOString();
 
 export function refineDir(dataDir) {
-  return path.join(dataDir, 'refine');
+  return path.join(dataDir, 'runtime', 'refine');
 }
 export function refineBatchesDir(dataDir) {
   return path.join(refineDir(dataDir), 'batches');
@@ -119,7 +119,7 @@ export function ensureRefine(dataDir) {
   if (!readJson(settingsPath)) {
     writeJsonAtomic(settingsPath, { version: 1, counters: { batch: 0, run: 0 } });
   }
-  const gi = path.join(dataDir, '.gitignore');
+  const gi = path.join(dataDir, 'runtime', '.gitignore');
   const wanted = ['refine/runs/', 'refine/batches/', 'refine/states.json'];
   let cur = '';
   try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
@@ -128,7 +128,7 @@ export function ensureRefine(dataDir) {
 }
 
 function nextRefineId(dataDir, kind) {
-  const lockPath = path.join(dataDir, '.locks', 'refine-id.lock');
+  const lockPath = path.join(dataDir, 'runtime', '.locks', 'refine-id.lock');
   acquireLock(lockPath, REFINE_ID_LOCK_STALE_MS, { pid: process.pid, at: nowIso() });
   try {
     ensureRefine(dataDir);
@@ -705,7 +705,7 @@ function reacceptedForRerun(dataDir, itemId) {
 // ---------- refine 互斥（.locks/refine.lock；无超时接管，异常走人工核对/释放） ----------
 
 function refineLockPath(dataDir) {
-  return path.join(dataDir, '.locks', 'refine.lock');
+  return path.join(dataDir, 'runtime', '.locks', 'refine.lock');
 }
 
 function acquireRefineLock(dataDir, payload) {

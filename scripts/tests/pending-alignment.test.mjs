@@ -22,7 +22,7 @@ const dataDir = core.dataDirFrom(project);
 // 存量兼容样本：pending-alignment 旧条目（历史数据直写）
 const legacyPA = core.createItem(dataDir, { type: 'requirement', title: '存量待对齐', by: 'legacy' });
 {
-  const f = path.join(core.resolveItemDir(dataDir, legacyPA.id).dir, 'status.json');
+  const f = core.statusFileOfItemDir(core.resolveItemDir(dataDir, legacyPA.id).dir);
   const st = JSON.parse(fs.readFileSync(f, 'utf8'));
   st.status = 'pending-alignment';
   st.owner = 'legacy-session';

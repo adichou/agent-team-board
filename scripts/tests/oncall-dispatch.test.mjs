@@ -102,7 +102,7 @@ t('D1/D2/D3 codex 派发：自动回传、失败重派、串行、不占 impl.lo
     assert.ok(!r.json.prompt, 'codex 模式不返回 zcode 提示词');
     assert.equal(r.json.dispatched.length, 2);
 
-    const implLock = path.join(root, 'docs', 'agent-team-board', '.locks', 'impl.lock');
+    const implLock = path.join(root, 'agent-team-board', 'runtime', '.locks', 'impl.lock');
     assert.ok(!fs.existsSync(implLock), 'oncall 派单不得占用 impl.lock');
 
     const done1 = await waitStatus(port, P, a, 'answered');

@@ -184,7 +184,7 @@ t('C1 行为回归：reported 且带暂扣账本时 notice 无暂扣统计行；
   assert.ok(!String(chk.notice || '').includes('dispatch/runs/*/auto-commit.json'), `notice 不应再给暂扣明细入口：${chk.notice}`);
 
   // 暂扣账本机制（010 之前已有）保持工作：账本照常生成、build.js 列待人工路径
-  const ledger = JSON.parse(fs.readFileSync(path.join(dataDir, 'dispatch', 'runs', runId, 'auto-commit.json'), 'utf8'));
+  const ledger = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'dispatch', 'runs', runId, 'auto-commit.json'), 'utf8'));
   assert.ok(Array.isArray(ledger.pendingManual) && ledger.pendingManual.includes('scripts/web/build.js'),
     'auto-commit 暂扣账本应照常生成且列待人工路径');
 });
@@ -251,10 +251,10 @@ t('E1 他人改动完好：003/004/005/006/009/011 与 REQ-20260913-006 的暂�
 
 t('F1 历史保留：010 条目文档与实现单暂扣账本不被本回退触碰', () => {
   for (const f of ['README.md', 'design.md', 'test-report.md', 'ui-demo.html']) {
-    assert.ok(fs.existsSync(path.join(pluginRoot, 'docs', 'agent-team-board', 'bugs', ID_BUG, f)), `010 条目文档应保留：${f}`);
+    assert.ok(fs.existsSync(path.join(pluginRoot, 'agent-team-board', 'data', 'bugs', ID_BUG, f)), `010 条目文档应保留：${f}`);
   }
   // 010 实现单账本为本地未跟踪数据：存在时核对明细未被清空（不要求克隆环境存在）
-  const ledger = path.join(pluginRoot, 'docs', 'agent-team-board', 'dispatch', 'runs', 'run-20260914-232', 'auto-commit.json');
+  const ledger = path.join(pluginRoot, 'agent-team-board', 'runtime', 'dispatch', 'runs', 'run-20260914-232', 'auto-commit.json');
   if (fs.existsSync(ledger)) {
     const rec = JSON.parse(fs.readFileSync(ledger, 'utf8'));
     assert.ok(Array.isArray(rec.pendingManual) && rec.pendingManual.length > 0, '010 实现单账本明细应保持原样');

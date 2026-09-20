@@ -65,7 +65,7 @@ const FILE_VIEWER_FALLBACK_HINT = '刷新前查看的文件已不存在';
 
 function defaultBoard() {
   return {
-    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/docs/agent-team-board',
+    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/agent-team-board',
     items: [item('REQ-20990101-001', { status: 'done' }), item('BUG-20990101-002')],
   };
 }

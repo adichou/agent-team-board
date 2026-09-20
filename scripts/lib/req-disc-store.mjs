@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { AtbError, writeJsonAtomic, acquireLock, releaseLock, localDateStamp, resolveItemDir } from './core.mjs';
+import { AtbError, writeJsonAtomic, acquireLock, releaseLock, localDateStamp, resolveItemDir, projectRootOfBoard } from './core.mjs';
 
 export const DISC_QUOTE_DOCS = ['README.md']; // 引用快照白名单：本项面向需求说明（README）
 const DISC_LOCK_STALE_MS = 30_000;
@@ -30,7 +30,7 @@ const nowIso = () => new Date().toISOString();
 // ---------- 目录与初始化 ----------
 
 export function discussionsDir(dataDir) {
-  return path.join(dataDir, 'discussions');
+  return path.join(dataDir, 'runtime', 'discussions');
 }
 
 export function discussionDir(dataDir, id) {
@@ -55,7 +55,7 @@ export function ensureDiscussions(dataDir) {
 // ---------- 编号（独立序列，按日重置） ----------
 
 function nextDiscCounter(dataDir) {
-  const lockPath = path.join(dataDir, '.locks', 'disc.lock');
+  const lockPath = path.join(dataDir, 'runtime', '.locks', 'disc.lock');
   acquireLock(lockPath, DISC_LOCK_STALE_MS, { pid: process.pid, at: nowIso() });
   try {
     ensureDiscussions(dataDir);
@@ -165,7 +165,7 @@ function roundDirOf(dataDir, id, no) {
 
 // ---------- 提示词（启动 / 收尾；同一讨论/需求/轮次标识） ----------
 
-const projectRootOf = (dataDir) => path.resolve(dataDir, '..', '..');
+const projectRootOf = (dataDir) => projectRootOfBoard(dataDir);
 
 function reqDocEntry(dataDir, meta) {
   const reqDir = coreResolveItemDir(dataDir, meta.reqId);

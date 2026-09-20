@@ -21,6 +21,7 @@ import * as marketing from './lib/marketing-store.mjs';
 import * as releaseStore from './lib/release-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
 import * as buildGit from './lib/build-git.mjs';
+import * as buildPublishStore from './lib/build-publish-store.mjs';
 import * as prelStore from './lib/product-release-store.mjs';
 import * as prelGit from './lib/product-release-git.mjs';
 import * as prelMaterials from './lib/site-materials.mjs';
@@ -29,6 +30,7 @@ import { runGitPipeline, realExec as realGitExec } from './lib/release-git.mjs';
 import { runApplePipeline, createRealAdapter as createRealAppleAdapter } from './lib/release-apple.mjs';
 import { runElectronPipeline, readElectronProject } from './lib/release-electron.mjs';
 import * as growth from './lib/growth-store.mjs';
+import * as migrateLayout from './lib/migrate-layout.mjs';
 import * as reqdisc from './lib/req-disc-store.mjs';
 import * as refine from './lib/refine-store.mjs';
 // REQ-20260911-010：commit-store（提交规范内核/已提交索引）不再被服务端直接引用——
@@ -325,8 +327,8 @@ function aggregateGlobalTasks() {
       const dataDir = core.dataDirFrom(root);
       if (dataDir) {
         const corrupt = [
-          ...corruptBatchIds(path.join(dataDir, 'dispatch', 'batches')),
-          ...corruptBatchIds(path.join(dataDir, 'refine', 'batches')),
+          ...corruptBatchIds(path.join(dataDir, 'runtime', 'dispatch', 'batches')),
+          ...corruptBatchIds(path.join(dataDir, 'runtime', 'refine', 'batches')),
           // REQ-20260911-010：commits/batches（CMT 批次账本）不再纳入——人工批量提交流程已回退，
           // 存量账本目录仅作历史数据保留，不再影响全局看板
         ];
@@ -2230,7 +2232,8 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 
 
 // REQ-20260913-001 构建模块接口（版本管理 + 分支浏览与同步；绑定 ?project=）：
-//   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取）
+//   GET  /api/build/state             汇总：initialized / isRepo / currentBranch / versions（merging 恢复后读取；
+//                                    BUG-20260917-001：每版本附 release 发布汇总，任一 succeeded 发布运行 → published）
 //   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
 //                                    BUG-20260913-001：仅已完成 done 条目进入候选；
 //                                    BUG-20260914-004：已纳入任一版本的条目一并收窄，
@@ -2275,17 +2278,19 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     if (!dataDir) return sendJson(res, 200, { initialized: false });
     try { buildStore.recoverMerging(dataDir); } catch { /* 数据目录异常不阻塞读取 */ }
     const branches = buildGit.listBranches(root);
-    const mgtOf = (id) => {
-      // REQ-20260914-007：附版本管理记录提交状态（仅响应装配，不写 version.json；
-      // 失败提示持久化在账本，刷新 / 重启后仍可见）
-      const mgt = mgtCommit.readMgtState(dataDir, 'version', id);
-      return mgt ? { mgtCommit: mgt } : {};
-    };
+    // REQ-20260916-007：version.json 自动入库取消（版本账本属应用数据本地留存），
+    // 版本管理提交状态（mgtOf）随之下线；存量 'version' 账本不再透出。
+    const mgtOf = () => ({});
+    // BUG-20260917-001：按 bldId 附各版本发布汇总（任一 succeeded 运行 → release.published），
+    // 供左侧版本卡片显示「已发布」标识；随列表一次装配返回（无逐版本请求）；
+    // 发布记录读取异常降级为无标识（release:null），不阻塞构建模块 state。
+    let releaseMap = new Map();
+    try { releaseMap = buildPublishStore.publishedByBld(dataDir); } catch { /* 发布记录异常不阻塞 */ }
     return sendJson(res, 200, {
       initialized: true,
       isRepo: branches.isRepo,
       currentBranch: branches.current,
-      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, ...mgtOf(v.id) })),
+      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, ...mgtOf(v.id), release: releaseMap.get(v.id) || null })),
       statusLabels: buildStore.VERSION_STATUS_LABEL,
     });
   }
@@ -2407,8 +2412,6 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       releaseStore.assertTargetFree(board, 'git', {});
       // 前置校验（只读，不改版本状态：工作区脏 / main 缺失 / 提交缺失在此明确报 400）
       buildGit.precheckMerge(root, v.items);
-      // REQ-20260914-007：合并开始前采集版本记录基线（合并成功后据此自动提交 version.json）
-      const mgtBaseline = mgtCommit.beforeBaseline(root, [mgtCommit.versionMgtFile(board, v.id)]);
       buildStore.beginMerge(board, v.id, { baseBranch: buildGit.listBranches(root).current });
       let version;
       try {
@@ -2431,16 +2434,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         });
         version.mergeWarnings = [String(e.message || e).slice(0, 300)];
       }
-      // REQ-20260914-007：合并成功写入最终结果后，自动提交版本管理记录到持有最终版本数据的
-      // 分支（合并目标 main，不切当前分支、不推送）；提交失败不伪装成功、不回滚合并，
-      // 结果独立随响应返回（失败态持久化在账本，刷新 / 重启后仍可见且可重试）。
-      let mgtResult = null;
-      if (version.status === 'merged') {
-        mgtResult = mgtCommit.commitVersionMergeMgmt({
-          dataDir: board, projectRoot: root, versionId: version.id, baseline: mgtBaseline,
-        });
-      }
-      return sendJson(res, 200, mgtResult ? { version, mgtCommit: mgtResult } : { version });
+      // REQ-20260916-007：版本计划账本（version.json）属应用数据，本地留存——合并成功后的
+      // 自动入库整体取消（「同内容双分支提交」机制废弃），仅返回版本状态。
+      return sendJson(res, 200, { version });
     });
   }
   // REQ-20260913-004 删除版本：POST + JSON 范式（对齐 /api/batch/delete）。透传数据层结果与
@@ -2588,6 +2584,40 @@ async function handleApi(req, res, u, pathname) {
       projects: loadRegistry().projects,
       defaultProject: defaultProjectRoot(),
     });
+  }
+
+  // REQ-20260916-007 数据布局迁移（旧 docs/agent-team-board/ → agent-team-board/{data,runtime}）：
+  // 只读探测 + 一键迁移，均不依赖 ?project= 已初始化（旧项目 dataDir 为空态也要能用设置页入口）。
+  if (req.method === 'POST' && pathname === '/api/layout/state') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const abs = resolveProjectPath(body.path);
+    const st = migrateLayout.layoutState(abs);
+    return sendJson(res, 200, {
+      ok: true,
+      root: abs,
+      legacy: st.legacy,
+      modern: st.modern,
+      hint: st.legacy
+        ? '检测到旧布局（docs/agent-team-board/）：可一键迁移到新布局（条目文档进 data/ 并保留 git 历史，运行数据迁 runtime/ 并停止提交）'
+        : st.modern
+          ? '已是新布局（agent-team-board/data 用户数据 + runtime 应用数据）'
+          : '未检测到看板数据：请用「初始化项目」新建',
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/migrate') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const abs = resolveProjectPath(body.path);
+    // 本仓库特例：batch-execution.md 迁 skills/agent-team-board/（2026-09-17 人工确认，
+    // 机制文档属用户数据）；其他项目该文件归 runtime 共享文档
+    const skillsTarget = path.basename(abs) === 'agent-team-board'
+      ? path.join(abs, 'skills', 'agent-team-board')
+      : null;
+    const r = migrateLayout.migrateLayout(abs, { skillsDir: skillsTarget });
+    if (r.changed) {
+      try { registerProject(abs, { explicit: true }); } catch { /* 已注册则忽略 */ }
+    }
+    return sendJson(res, 200, { ok: true, ...r });
   }
 
   // REQ-20260910-003 全局任务看板：聚合全部注册项目「在工作」的批量任务（只读、与 ?project= 无关）。
@@ -3095,17 +3125,17 @@ async function handleApi(req, res, u, pathname) {
     }
     return sendJson(res, 200, { statuses });
   }
-  // REQ-20260914-007：管理记录提交重试——只补交管理记录（路径限定），不重放确认完成 / 版本合并；
+  // REQ-20260914-007：管理记录提交重试——只补交管理记录（路径限定），不重放确认完成；
   // 与初次提交同锁串行；结果持久化在账本（成功 / 已同步后清除失败提示）。
+  // REQ-20260916-007：version 类随版本账本入库取消下线，仅保留 item（确认完成留痕）。
   if (req.method === 'POST' && pathname === '/api/mgt-commit/retry') {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
     const body = JSON.parse((await readBody(req)) || '{}');
-    const kind = body.kind === 'version' ? 'version' : body.kind === 'item' ? 'item' : null;
     const id = String(body.id || '').trim();
-    if (!kind || !/^(?:REQ|BUG)-\d{8}-\d{3,}$|^BLD-\d{8}-\d{3}$/.test(id) || (kind === 'version') !== /^BLD-/.test(id)) {
-      throw new core.AtbError('kind 必须是 item（REQ/BUG 单号）或 version（BLD 版本号），且与 id 匹配');
+    if (body.kind !== 'item' || !/^(?:REQ|BUG)-\d{8}-\d{3,}$/.test(id)) {
+      throw new core.AtbError('kind 必须是 item 且 id 为 REQ/BUG 单号（version 重试已随应用数据分离下线）');
     }
-    return sendJson(res, 200, { mgtCommit: mgtCommit.retryMgmt({ dataDir, projectRoot: root, kind, id }) });
+    return sendJson(res, 200, { mgtCommit: mgtCommit.retryMgmt({ dataDir, projectRoot: root, kind: 'item', id }) });
   }
 
   if (req.method === 'GET' && pathname === '/api/board') {
@@ -3250,7 +3280,7 @@ async function handleApi(req, res, u, pathname) {
       let rec = confirmStore.confirmOf(dataDir, id);
       if (!rec && body.legacy) {
         // 历史账本恢复视图的人工操作：先物化为本轮确认记录再走同一闭环
-        const runDir = path.join(dataDir, 'dispatch', 'runs', String(body.runId || ''));
+        const runDir = path.join(dataDir, 'runtime', 'dispatch', 'runs', String(body.runId || ''));
         let run = null;
         let ac = null;
         try {

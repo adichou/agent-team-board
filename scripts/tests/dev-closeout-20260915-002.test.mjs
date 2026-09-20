@@ -40,10 +40,14 @@ try {
   git('commit', '-qm', `fix: ${item.id}`);
   const hash = git('rev-parse', 'HEAD');
   assert.match(hash, /^[0-9a-f]{40}$/);
-  assert.equal(git('status', '--porcelain', '--', 'fix.txt', ownDir), '', '本单源码、状态、报告全部入库');
+  assert.equal(git('status', '--porcelain', '--', 'fix.txt', ownDir), '', '本单源码与报告全部入库（状态文件在 runtime 不入库）');
   assert.match(git('status', '--porcelain', '--', 'other.txt'), /other.txt/, '其他任务修改保留');
   assert.equal(git('show', 'HEAD:other.txt'), '别的任务原文');
-  assert.equal(JSON.parse(git('show', `HEAD:${ownDir}/status.json`)).agentCompletedAt, state.agentCompletedAt);
+  // REQ-20260916-007：status.json 属应用数据（runtime/，被忽略），不入库；本地留存且记录本轮上报
+  const stRel = path.relative(root, path.join(data, 'runtime', 'status', `${item.id}.json`)).split(path.sep).join('/');
+  git('check-ignore', '-q', stRel);
+  assert.equal(git('ls-files', '--', stRel), '', 'runtime 状态文件不得被 git 跟踪');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, stRel), 'utf8')).agentCompletedAt, state.agentCompletedAt, '本地 runtime 状态保留上报时间');
   assert.match(git('show', `HEAD:${ownDir}/test-report.md`), /例外授权收尾验证/);
   console.log('✓ 例外状态收尾、真实 report、本单 Git 提交、待测试核验及其他修改隔离');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

@@ -32,7 +32,7 @@ function accept(dataDir, id) {
 }
 
 function batchFile(dataDir, batchId) {
-  return path.join(dataDir, 'refine', 'batches', batchId, 'batch.json');
+  return path.join(dataDir, 'runtime', 'refine', 'batches', batchId, 'batch.json');
 }
 
 // 改写账本基线（模拟历史口径冻结的存量账本；batch.json 是数据账本，非 status.json）

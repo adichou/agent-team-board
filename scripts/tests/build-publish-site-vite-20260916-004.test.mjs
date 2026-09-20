@@ -65,7 +65,7 @@ function mergedBld(project){
  return {id:'BLD-S',name:'t',status:'merged',items:[{itemId:'REQ-s',commit:git(project,'rev-parse','HEAD')}]};
 }
 async function runThrough(project,version){
- const db=path.join(project,'docs','agent-team-board');
+ const db=path.join(project, 'agent-team-board');
  const run=await publish.create(db,project,mergedBld(project),version);
  await publish.precheck(db,project,run.id);
  const plan=await publish.plan(db,project,run.id);
@@ -85,7 +85,7 @@ test('P1 注册且 content 中英成对齐备 → 预检双语材料通过', asy
 test('P2 apps.js 未注册产品 → 失败提示未注册与产品 id', async () => {
  store.saveConfig(makeSite({id:'p2',versions:['1.0'],register:false}));
  const project=makeSource('p2');
- const db=path.join(project,'docs','agent-team-board');
+ const db=path.join(project, 'agent-team-board');
  const run=await publish.create(db,project,mergedBld(project),'1.0');
  const checked=await publish.precheck(db,project,run.id);
  const mat=materialCheck(checked);
@@ -99,7 +99,7 @@ test('P3 缺 changelog 英文与 faq 英文 → 失败逐项列出缺失文件',
  fs.rmSync(path.join(repo,'content','p3','faq.en.md'));
  store.saveConfig(repo);
  const project=makeSource('p3');
- const db=path.join(project,'docs','agent-team-board');
+ const db=path.join(project, 'agent-team-board');
  const run=await publish.create(db,project,mergedBld(project),'1.0');
  const checked=await publish.precheck(db,project,run.id);
  const mat=materialCheck(checked);
@@ -112,7 +112,7 @@ test('P3 缺 changelog 英文与 faq 英文 → 失败逐项列出缺失文件',
 test('P4 docs 无中英成对文档 → 失败提示成对要求与示例文件', async () => {
  store.saveConfig(makeSite({id:'p4',versions:['1.0'],docsPair:false}));
  const project=makeSource('p4');
- const db=path.join(project,'docs','agent-team-board');
+ const db=path.join(project, 'agent-team-board');
  const run=await publish.create(db,project,mergedBld(project),'1.0');
  const checked=await publish.precheck(db,project,run.id);
  const mat=materialCheck(checked);
@@ -124,7 +124,7 @@ test('P5+P6 产品 id 默认取项目目录名，productIds 映射可覆盖', as
  const repo=makeSite({id:'demo',versions:['1.0']});
  store.saveConfig(repo);
  const project=makeSource('cam-media-man-mobile');
- const db=path.join(project,'docs','agent-team-board');
+ const db=path.join(project, 'agent-team-board');
  const bld=mergedBld(project);
  const run=await publish.create(db,project,bld,'1.0');
  const checked=await publish.precheck(db,project,run.id);
@@ -137,7 +137,7 @@ test('P5+P6 产品 id 默认取项目目录名，productIds 映射可覆盖', as
 test('P7 材料内容变更 → 旧预检指纹失效，plan 拒绝', async () => {
  store.saveConfig(makeSite({id:'p7',versions:['1.0']}));
  const project=makeSource('p7');
- const db=path.join(project,'docs','agent-team-board');
+ const db=path.join(project, 'agent-team-board');
  const run=await publish.create(db,project,mergedBld(project),'1.0');
  const checked=await publish.precheck(db,project,run.id);
  assert.equal(checked.precheck.ok,true);

@@ -73,14 +73,14 @@ t('B1 渠道创建：平台必填 / 优先级枚举 / 负每周投入定位字�
   assert.match(ch.id, /^ch-/, '渠道稳定 ID 前缀');
   assert.equal(ch.revision, 1);
   assert.equal(ch.platform, 'X');
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'channels', `${ch.id}.json`)), '渠道落盘');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'channels', `${ch.id}.json`)), '渠道落盘');
   assert.equal(r.board.channels.length, 1, '返回看板快照');
 });
 
 t('B2 渠道更新：revision 过期冲突（旧文件字节不变）；合法更新递增 revision', () => {
   const { dataDir } = mkProject(README);
   const ch = mkt.createChannel(dataDir, { data: channel(), by: 'board' }).channel;
-  const file = path.join(dataDir, 'marketing', 'channels', `${ch.id}.json`);
+  const file = path.join(dataDir, 'runtime', 'marketing', 'channels', `${ch.id}.json`);
   const before = fs.readFileSync(file, 'utf8');
   assert.throws(() => mkt.saveChannel(dataDir, {
     id: ch.id, revision: 9, data: channel({ platform: 'Reddit' }), by: 'board',
@@ -140,12 +140,12 @@ t('B5 实验更新：冲突拒绝；绑定 v1 后新增/切换当前定价不改
   const { dataDir } = mkProject(README);
   mkt.savePricing(dataDir, { data: { model: 'subscription', currency: 'CNY', cycle: 'monthly', packages: [] }, by: 'board' });
   const exp = mkt.createExperiment(dataDir, { data: experiment({ pricingVersion: 'v1' }), by: 'board' }).experiment;
-  const before = fs.readFileSync(path.join(dataDir, 'marketing', 'experiments', `${exp.id}.json`), 'utf8');
+  const before = fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'experiments', `${exp.id}.json`), 'utf8');
 
   assert.throws(() => mkt.saveExperiment(dataDir, {
     id: exp.id, revision: 5, data: experiment({ pricingVersion: 'v1' }), by: 'board',
   }), (e) => e instanceof mkt.MarketingConflictError, '过期 revision 应冲突');
-  assert.equal(fs.readFileSync(path.join(dataDir, 'marketing', 'experiments', `${exp.id}.json`), 'utf8'), before, '冲突不改旧文件');
+  assert.equal(fs.readFileSync(path.join(dataDir, 'runtime', 'marketing', 'experiments', `${exp.id}.json`), 'utf8'), before, '冲突不改旧文件');
 
   // 新增 v2 并把当前指针切到 v2：实验仍绑定 v1（版本文件不可变）
   mkt.savePricing(dataDir, { data: { model: 'onetime', currency: 'USD', cycle: '', packages: [] }, by: 'board' });
@@ -171,7 +171,7 @@ t('B6 行动创建：channelId 必填且存在；experimentId 可选但存在；
   assert.equal(act.status, 'draft');
   assert.equal(act.statusHistory.length, 1);
   assert.equal(act.statusHistory[0].to, 'draft');
-  assert.ok(fs.existsSync(path.join(dataDir, 'marketing', 'activities', `${act.id}.json`)), '行动落盘');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', 'marketing', 'activities', `${act.id}.json`)), '行动落盘');
   assert.match(act.id, /^act-/);
 });
 
@@ -402,9 +402,9 @@ t('B13 创建开发需求：submitted + 双向关联 + 同 key 幂等；key/标�
   const r = mkt.linkActivityReq(dataDir, { id: act.id, key: 'landing', title: '落地页改造', description: '加价格锚点', by: 'board' });
   assert.equal(r.created, true);
   assert.match(r.link.id, /^REQ-/, '创建为 REQ');
-  const st = core.readStatus(path.join(dataDir, 'requirements', r.link.id));
+  const st = core.readStatus(path.join(dataDir, 'data', 'requirements', r.link.id));
   assert.equal(st.status, 'submitted', '人工创建进入 submitted，不自动接受');
-  const readme = fs.readFileSync(path.join(dataDir, 'requirements', r.link.id, 'README.md'), 'utf8');
+  const readme = fs.readFileSync(path.join(dataDir, 'data', 'requirements', r.link.id, 'README.md'), 'utf8');
   assert.ok(readme.includes(act.id), 'REQ README 含行动来源（双向关联）');
   assert.ok(readme.includes('营销'), 'README 标注营销来源');
 
@@ -417,7 +417,7 @@ t('B13 创建开发需求：submitted + 双向关联 + 同 key 幂等；key/标�
   const again = mkt.linkActivityReq(dataDir, { id: act.id, key: 'landing', title: '落地页改造', description: 'd', by: 'board' });
   assert.equal(again.created, false, '幂等重试不重复创建');
   assert.equal(again.link.id, r.link.id);
-  const ids = fs.readdirSync(path.join(dataDir, 'requirements')).filter((x) => x.startsWith('REQ-'));
+  const ids = fs.readdirSync(path.join(dataDir, 'data', 'requirements')).filter((x) => x.startsWith('REQ-'));
   assert.equal(ids.length, 1, '仍只有一个 REQ 目录');
   assert.equal(root.length > 0, true);
 });
@@ -435,7 +435,7 @@ t('B14 readBoard：未初始化空态；损坏文件只读占位；createdAt 排
   let board = mkt.readBoard(dataDir);
   assert.deepEqual(board.activities.map((a) => a.id), [act.id, act2.id], '按创建时间稳定排序');
 
-  fs.writeFileSync(path.join(dataDir, 'marketing', 'activities', `${act2.id}.json`), '{ broken');
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'marketing', 'activities', `${act2.id}.json`), '{ broken');
   board = mkt.readBoard(dataDir);
   const corrupt = board.activities.find((a) => a.id === act2.id);
   assert.equal(corrupt.corrupt, true, '损坏行动只读占位');

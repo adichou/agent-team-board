@@ -59,10 +59,10 @@ function atbJson(args, cwd) {
 }
 
 const ledgerOf = (dataDir, batchId) =>
-  JSON.parse(fs.readFileSync(path.join(dataDir, 'refine', 'batches', batchId, 'batch.json'), 'utf8'));
+  JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'refine', 'batches', batchId, 'batch.json'), 'utf8'));
 
 const workerArgs = {
-  item: { id: 'REQ-20260910-001', title: '示例', itemDir: '/tmp/proj/docs/agent-team-board/requirements/REQ-20260910-001', reasons: [] },
+  item: { id: 'REQ-20260910-001', title: '示例', itemDir: '/tmp/proj/agent-team-board/data/requirements/REQ-20260910-001', reasons: [] },
   projectRoot: '/tmp/proj',
   runId: 'run-20260910-000000-0000',
 };

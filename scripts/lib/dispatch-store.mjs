@@ -1,5 +1,5 @@
 // REQ-20260906-003 执行账本（RunStore）—— Codex 自动派发存储层（与 REQ-20260906-002 共用 dispatch/ 规范）。
-// 目录（docs/agent-team-board/dispatch/，随项目走，账本由受控函数维护）：
+// 目录（agent-team-board/runtime/dispatch/，应用数据本地留存，账本由受控函数维护）：
 //   settings.json          共用：批次/run 计数器 + codex 自动派发配置（不含任何密钥）
 //   policies.json          共用：条目依赖策略（deps schema，读写委托 batch.mjs，单一事实源）
 //   .locks/impl.lock       共用：项目实施互斥（core 层，Zcode/Codex/手工 claim 均检查）
@@ -29,7 +29,7 @@ export const isTerminalPhase = (p) => TERMINAL_PHASES.includes(p);
 const MY_EXECUTOR = 'codex-exec';
 
 export function dispatchRoot(dataDir) {
-  return path.join(dataDir, 'dispatch');
+  return path.join(dataDir, 'runtime', 'dispatch');
 }
 export function runDir(dataDir, runId) {
   if (!/^run-\d{8}-\d{6}-[0-9a-f]{4}$/.test(String(runId))) throw new AtbError(`非法 runId：${runId}`);
@@ -403,12 +403,12 @@ export function readLog(dataDir, runId, name, { offset = 0, limit = 256 * 1024 }
 // owner 必须与 worker 认领名（单号）一致，assertNoImplConflict 才会放行 worker 的 claim。
 
 function implLockPath(dataDir) {
-  return path.join(dataDir, '.locks', 'impl.lock');
+  return path.join(dataDir, 'runtime', '.locks', 'impl.lock');
 }
 
 // 获取实施互斥：payload 至少含 owner（=worker 认领名单号）；被占返回 { ok:false, holder }，绝不自动接管
 export function acquireProjectLock(dataDir, owner, { pid = process.pid, kind = 'codex', itemId = null, runId = null } = {}) {
-  ensureDir(path.join(dataDir, '.locks'));
+  ensureDir(path.join(dataDir, 'runtime', '.locks'));
   const payload = { kind, owner, pid, itemId, runId, at: new Date().toISOString() };
   try {
     acquireLock(implLockPath(dataDir), Infinity, payload);

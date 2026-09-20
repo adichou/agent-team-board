@@ -72,9 +72,9 @@ t('H9b 服务端零改动：讨论 / 文档讨论 / 文件读取路由仍注册�
   assert.match(serverSrc, /pathname === '\/api\/oncall\/tickets'/, '/api/oncall/tickets 路由保留');
   assert.match(serverSrc, /pathname === '\/api\/req-disc'/, '/api/req-disc 路由保留');
   assert.match(serverSrc, /pathname === '\/api\/fs'/, '/api/fs 文件读取路由保留（文件读取能力不因模块隐藏禁用）');
-  const docsRoot = path.join(pluginRoot, 'docs', 'agent-team-board');
-  assert.ok(fs.existsSync(path.join(docsRoot, 'discussions')), 'discussions/ 数据目录保留');
-  assert.ok(fs.existsSync(path.join(docsRoot, 'oncall')), 'oncall/ 数据目录保留');
+  const docsRoot = path.join(pluginRoot, 'agent-team-board');
+  assert.ok(fs.existsSync(path.join(docsRoot, 'runtime', 'discussions')), 'discussions/ 数据目录保留');
+  assert.ok(fs.existsSync(path.join(docsRoot, 'runtime', 'oncall')), 'oncall/ 数据目录保留');
 });
 
 /* ---------- 行为测试（vm 全量加载 app.js，boot 即跑） ---------- */
@@ -116,7 +116,7 @@ function setup({ search = '' } = {}) {
   document.createElement = element;
   for (const sel of INITIALLY_HIDDEN) document.querySelector(sel).classList.add('hidden');
   const board = {
-    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/docs/agent-team-board',
+    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/agent-team-board',
     items: [
       item('REQ-20990101-001', {
         status: 'accepted',

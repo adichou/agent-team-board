@@ -39,9 +39,9 @@ function mkItem(p, title, { accept = true, backMs = 0 } = {}) {
   }
   if (backMs) {
     const { dir } = core.resolveItemDir(p.dataDir, st.id);
-    const s = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+    const s = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
     s.createdAt = new Date(Date.parse(s.createdAt) - backMs).toISOString();
-    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(s, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(s, null, 2) + '\n');
   }
   return st.id;
 }
@@ -61,7 +61,7 @@ function runOneItem(p, batchId, owner = W1) {
   return run;
 }
 
-const batchDirOf = (p, batchId) => path.join(p.dataDir, 'dispatch', 'batches', batchId);
+const batchDirOf = (p, batchId) => path.join(p.dataDir, 'runtime', 'dispatch', 'batches', batchId);
 
 // ---------- C1 执行中创建（回归） ----------
 
@@ -96,7 +96,7 @@ t('D1 core：删除排队中（未执行）的存量账本——目录移除、�
     // REQ-20260913-003：不再排队——手工构造升级前的后位排队账本（CLI 处理存量数据的路径）
     const rB = { batchId: 'batch-20990101-099' };
     const raw = batch.getBatch(p.dataDir, rA.batch.batchId);
-    const dirB = path.join(p.dataDir, 'dispatch', 'batches', rB.batchId);
+    const dirB = path.join(p.dataDir, 'runtime', 'dispatch', 'batches', rB.batchId);
     fs.mkdirSync(dirB, { recursive: true });
     fs.writeFileSync(path.join(dirB, 'batch.json'), JSON.stringify({
       ...raw, batchId: rB.batchId, createdAt: '2099-01-02T00:00:00.000Z', status: 'prepared', currentRunId: null,
@@ -140,7 +140,7 @@ t('D2 core：删除有在途运行的批次被拒绝（错误含 runId）；收�
     const r = batch.deleteBatch(p.dataDir, rA.batch.batchId);
     assert.equal(r.ok, true);
     assert.equal(
-      fs.existsSync(path.join(p.dataDir, 'dispatch', 'runs', run.runId, 'run.json')),
+      fs.existsSync(path.join(p.dataDir, 'runtime', 'dispatch', 'runs', run.runId, 'run.json')),
       true,
       '删除批次不移除 runs/ 运行记录',
     );
@@ -194,7 +194,7 @@ t('D5 core：删除队首未执行账本后，存量后位账本成为队首且 
     // 手工构造升级前的后位排队账本（candidates 冻结 B1 的存量形态）
     const rB = { batchId: 'batch-20990101-098' };
     const raw = batch.getBatch(p.dataDir, rA.batch.batchId);
-    const dirB = path.join(p.dataDir, 'dispatch', 'batches', rB.batchId);
+    const dirB = path.join(p.dataDir, 'runtime', 'dispatch', 'batches', rB.batchId);
     fs.mkdirSync(dirB, { recursive: true });
     fs.writeFileSync(path.join(dirB, 'batch.json'), JSON.stringify({
       ...raw, batchId: rB.batchId, createdAt: '2099-01-02T00:00:00.000Z', status: 'prepared', currentRunId: null, candidates: [b1],
@@ -283,7 +283,7 @@ async function acceptNew(root, title) {
 
 // 读取项目当前队首账本号（创建响应不再透出批次号后的测试辅助）
 function batchHeadOf(p) {
-  const dir = path.join(p.root, 'docs', 'agent-team-board', 'dispatch', 'batches');
+  const dir = path.join(p.root, 'agent-team-board', 'runtime', 'dispatch', 'batches');
   const ids = fs.readdirSync(dir).sort();
   for (const id of ids) {
     try {

@@ -266,7 +266,7 @@ t('R4b 重复派发保护（REQ-20260913-003 口径）：未结束轮内一律�
   // 存量排队数据防抢（升级前账本形态）：后位账本不得越过队首领取
   const b2Id = 'RFB-20990101-099';
   const raw = refine.getRefineBatch(dataDir, b1.batch.batchId);
-  const dirB = path.join(dataDir, 'refine', 'batches', b2Id);
+  const dirB = path.join(dataDir, 'runtime', 'refine', 'batches', b2Id);
   fs.mkdirSync(dirB, { recursive: true });
   fs.writeFileSync(path.join(dirB, 'batch.json'), JSON.stringify({
     ...raw, batchId: b2Id, createdAt: '2099-01-02T00:00:00.000Z', status: 'prepared', currentRunId: null, candidates: [],
@@ -289,7 +289,7 @@ t('R5 领取：预留+互斥；未收尾重复领取被拒；状态变化出局�
   assert.match(got.runId, /^run-/);
   assert.ok(got.reasons.length, '领取结果带缺失原因');
   assert.ok(got.itemDir.endsWith(req1.id), '领取结果带条目目录');
-  assert.ok(fs.existsSync(path.join(dataDir, '.locks', 'refine.lock')), '领取应持有 refine 互斥锁');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')), '领取应持有 refine 互斥锁');
   assert.throws(() => refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w1b' }), /未收尾/, '在途执行不得二次领取');
 
   // 完成第一项（先改文档再 done；条目保持 accepted）
@@ -787,7 +787,7 @@ ${demoBody}
 t('P1 提示词口径（REQ-20260908-021）：ui-demo.html 交互演示 + 质量门槛 + 约束允许另建演示文件；旧 ASCII 必需口径不再出现', () => {
   const head = refine.buildRefinePrompt({ projectRoot: '/tmp/proj', batchId: 'RFB-20260908-001' });
   const worker = refine.buildRefineWorkerPrompt({
-    item: { id: 'REQ-20260908-001', title: '示例', itemDir: '/tmp/proj/docs/agent-team-board/requirements/REQ-20260908-001', reasons: [] },
+    item: { id: 'REQ-20260908-001', title: '示例', itemDir: '/tmp/proj/agent-team-board/data/requirements/REQ-20260908-001', reasons: [] },
     projectRoot: '/tmp/proj',
     runId: 'run-20260908-000000-0000',
   });
@@ -827,7 +827,7 @@ t('S10（回归）存量冻结批次原因快照不重算：旧口径原因原�
   const { batch } = refine.createRefineBatch(dataDir, { ids: [req.id], mode: 'zcode', projectRoot: root });
   // 模拟创建于旧口径（REQ-20260908-015 之前）的已冻结批次：直接改账本里的原因快照
   //（ids 显式种子落账，保证 candidates[0] 存在——REQ-20260913-003 起缺省建轮不冻结候选）
-  const bfile = path.join(dataDir, 'refine', 'batches', batch.batchId, 'batch.json');
+  const bfile = path.join(dataDir, 'runtime', 'refine', 'batches', batch.batchId, 'batch.json');
   const raw = JSON.parse(fs.readFileSync(bfile, 'utf8'));
   raw.candidates[0].reasons = ['README 描述待补充', 'design 仅模板', 'test-cases 无用例'];
   fs.writeFileSync(bfile, JSON.stringify(raw));

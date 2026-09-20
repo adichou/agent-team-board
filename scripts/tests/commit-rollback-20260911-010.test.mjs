@@ -194,7 +194,7 @@ t('R5+R6 服务端：5 条批量 Commit 路由 404；item-status 换源（账本
   git(root, ['commit', '-q', '-m', `feat: 共享改动 ${a.id} ${b.id}`]);
   const shared = git(root, ['rev-parse', 'HEAD']).trim();
   // REQ-009 自动提交账本形态记录（git-flow writeAutoCommitLedger 落盘形态）
-  const runDir = path.join(dataDir, 'commits', 'runs', 'run-20990101-000000-aaaa');
+  const runDir = path.join(dataDir, 'runtime', 'commits', 'runs', 'run-20990101-000000-aaaa');
   fs.mkdirSync(runDir, { recursive: true });
   fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify({
     version: 1, runId: 'run-20990101-000000-aaaa', batchId: `auto:run-x`, itemId: a.id,

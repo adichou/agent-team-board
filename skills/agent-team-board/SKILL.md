@@ -1,27 +1,37 @@
 ---
 name: agent-team-board
-description: Agent Team Board 看板工具（atb）：用 /req /bug /dev /board 命令，或直接提及 atb、agent-team-board、Status Board、REQ-/BUG-YYYYMMDD-NNN 编号时使用。规定 docs/agent-team-board 数据规范、两阶段 TDD 流程与状态铁律。
+description: Agent Team Board 看板工具（atb）：用 /req /bug /dev /board 命令，或直接提及 atb、agent-team-board、Status Board、REQ-/BUG-YYYYMMDD-NNN 编号时使用。规定 agent-team-board（data 用户数据 / runtime 应用数据）数据规范、两阶段 TDD 流程与状态铁律。
 ---
 
 # Agent Team Board（智能体团队看板）
 
-三栏协作体系：**Project Board**（ZCode 自带项目/会话列表，不改造）、**Discussion Board**（当前聊天窗口 + `/req` `/bug` `/dev` `/board` 命令）、**Status Board**（插件本地网页看板，端口 8888）。事实源是项目内 `docs/agent-team-board/` 目录（非隐藏，随代码进 git）。
+三栏协作体系：**Project Board**（ZCode 自带项目/会话列表，不改造）、**Discussion Board**（当前聊天窗口 + `/req` `/bug` `/dev` `/board` 命令）、**Status Board**（插件本地网页看板，端口 8888）。事实源是项目内 `agent-team-board/` 目录：`data/`（用户条目文档，随代码进 git）与 `runtime/`（运行应用数据，本地留存不进 git）物理分离（REQ-20260916-007）。
 
 工具入口：本 skill 所在插件根目录下的 `scripts/`（即本文件相对路径 `../../scripts/`）。下文用 `$ATB` 指代 `node <插件根>/scripts/atb.mjs`，用 `$SERVER` 指代 `node <插件根>/scripts/server.mjs`。
 
 ## 数据规范
 
 ```
-docs/agent-team-board/
-├── config.json                        # 按日重置的全局计数器（需求、Bug 各一；Bug 全局唯一）
-├── requirements/REQ-YYYYMMDD-NNN/     # 需求
-│   ├── status.json                    # 机器状态（atb 维护，禁止手改）
-│   ├── README.md / design.md / test-cases.md / test-report.md
-│   └── bugs/BUG-YYYYMMDD-NNN/         # 存量归属 Bug（结构同构；新建不再落入）
-└── bugs/BUG-YYYYMMDD-NNN/             # 独立 Bug
+<项目根>/
+├── …                                  # 项目自身源码与文档：atb 不感知，按 git 默认提交
+└── agent-team-board/
+    ├── data/                          # 用户数据（整目录进 git）
+    │   ├── requirements/REQ-YYYYMMDD-NNN/
+    │   │   ├── README.md / design.md / test-cases.md / test-report.md
+    │   │   ├── ui-demo.html / licenses.md / attachments/ / decisions.md
+    │   │   └── bugs/BUG-YYYYMMDD-NNN/ # 存量归属 Bug（结构同构；新建不再落入）
+    │   └── bugs/BUG-YYYYMMDD-NNN/     # 独立 Bug
+    └── runtime/                       # 应用数据（根 .gitignore 唯一忽略规则，不进 git）
+        ├── status/<ID>.json           # 条目实时状态（atb 维护，禁止手改；Agent 直写被钩子拦截）
+        ├── config.json                # 按日重置的全局计数器（需求、Bug 各一；Bug 全局唯一）
+        ├── .locks/                    # 认领锁与实施互斥锁
+        ├── dispatch/ refine/ commits/ confirms/ holds/   # 执行账本
+        ├── tasks/ discussions/ oncall/ builds/ releases/ # 模块设置与运行记录
+        └── README.md / test-runs/ / test-audits/ / marketing/ …
 ```
 
-- `status.json` 字段：`id` `type`（requirement/bug）`title` `status` `parent` `owner` `createdAt/updatedAt` `agentCompletedAt` `lastReport` `history[]`。
+- **用户数据 / 应用数据分离（REQ-20260916-007）**：条目文档整目录提交进 git；运行数据（状态、计数器、锁、账本、设置）只在本地、不跨设备同步。**单设备约束**：`runtime/` 不跨设备同步，条目状态与单号计数器以本地文件为准，多设备使用不在支持范围。旧布局（`docs/agent-team-board/`）项目用 `$ATB migrate` 或 Status Board 设置页「数据布局迁移」一键迁移。
+- `runtime/status/<ID>.json` 字段：`id` `type`（requirement/bug）`title` `status` `parent` `owner` `createdAt/updatedAt` `agentCompletedAt` `lastReport` `history[]`。
 - Bug 一律独立创建（`bugs/`，REQ-20260908-009 去掉了创建时归属需求选项）；源单（引入来源）写 design.md「引入来源（源单）」节详述、README 开头头部 `- 引入来源：` 行速览（REQ-20260908-012），不再用目录归属表达关联。`atb move <BUG-ID> --req <REQ-ID>|--standalone` 仅作存量归属 Bug 的整理。
 - 人读 markdown：需求四件套 README（描述+验收标准；涉及 UI 需含「界面展示」——完善阶段须为条目目录内可交互 `ui-demo.html` 演示：README 链接 `./ui-demo.html` 并保留布局/交互/状态反馈文字说明，单文件、内联 CSS/JS、无外网依赖、无构建步骤；创建阶段可先内嵌 ASCII 线框 / 结构示意，REQ-20260908-021）/ design（方案，开发阶段补）/ test-cases（用例，开发阶段补）/ test-report（报告）。Bug 生成 README 与 design（含「引入来源」节），至少再有 test-report。
 - **Bug 修复阶段必须归因引入来源**（REQ-20260830-004 规范；登记时可暂空或写「未定位」——登记时通常尚未定位）。来源写入
@@ -42,7 +52,7 @@ submitted ──人工──▶ accepted ──人工──▶ planned ──Age
 
 **Agent 必须遵守（PreToolUse 钩子会确定性拦截，不要尝试绕过）：**
 
-1. **绝不**用 Write/Edit 直接写任何 `docs/agent-team-board/**/status.json`——会被拦截。状态只能通过 `$ATB` 子命令变更。
+1. **绝不**用 Write/Edit 直接写任何 `agent-team-board/runtime/status/**.json`（条目实时状态）——会被拦截。状态只能通过 `$ATB` 子命令变更。
 2. **绝不**把条目置为 `accepted`、`planned` 或 `done`（包括 `$ATB status <ID> …`、curl 调 Status Board 的 `/api/item/*/status`）。这三个状态**仅限人工**（planned = 已计划排期，REQ-20260908-010）。
 3. 常规开发的状态操作为 claim/report；用户明确授权单项例外开发时，另见 [收尾规则](dev-closeout.md) 的状态收尾边界：
    - `$ATB claim <ID>`——认领（accepted/planned → in-progress，O_EXCL 原子锁防并行冲突），认领即实施；
@@ -92,7 +102,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 
 - **批量开发**：看板「⚡ 批量开发」从**已计划（planned）**队列最旧优先实时取单。创建批次并复制
   通用主调度提示词（REQ-20260909-011 起执行端无关），在当前项目的 Agent 会话粘贴发送；主会话每轮派一个新子 Agent，
-  子 Agent 按 `docs/agent-team-board/dispatch/worker-spec.md` 只实施一项（batch next → claim → TDD → report --run →
+  子 Agent 按 `agent-team-board/runtime/dispatch/worker-spec.md`（批次创建时快照）只实施一项（batch next → claim → TDD → report --run →
   run receipt）。运行中新置计划的条目自动进入队列。支持暂停/恢复与终止（`$ATB batch pause|abort`）。
 - **批量完善**：面向**已接受（accepted）未完善**单，每轮领取时实时读取候选（新接受的单自动进入本轮范围）。
   子代理只补条目文档（需求补 README：描述 + 验收标准；涉及 UI 须产出条目目录内可交互 `ui-demo.html` 演示——单文件、
@@ -107,10 +117,10 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
   人工在聚合区补决策（草稿可存、缺项时复工禁用）并一次操作**复工**（`hold resume`，决策齐备后条目经专用通路回已计划队列，
   被批量开发重新取单），或 force 二次确认越过未答项直接确认完成。待决期间 claim 对该条目一律拒绝（防第二实施者）；
   `hold answer/resume/cancel` 为人工专属（Agent 调用被 state-guard 拦截）；决策与事件留痕写条目目录 `decisions.md`。
-- 回执与核对响应各 ≤2 KiB；批次/运行账本在 `dispatch/` 与 `refine/`（不进版本控制）；完善三态索引在
-  `refine/states.json`（执行账本，不写条目 status.json）；待人工决策账本在 `holds/holds.json`（同口径）。
+- 回执与核对响应各 ≤2 KiB；批次/运行账本在 `runtime/dispatch/` 与 `runtime/refine/`（应用数据，不进版本控制）；完善三态索引在
+  `runtime/refine/states.json`（执行账本，不写条目状态）；待人工决策账本在 `runtime/holds/`（同口径）。
   执行 Agent 展示与四路子代理模型/智能档位在设置「批量任务」
-  分区配置（`tasks/settings.json`）。详约见项目内 `docs/agent-team-board/batch-execution.md`。
+  分区配置（`runtime/tasks/settings.json`）。详约见本 skill 目录 [batch-execution.md](batch-execution.md)。
 
 ## TDD 开发流程（/dev 触发）
 
@@ -152,7 +162,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
    解析，直接用当前会话项目根。
 4. 加载 browser-use 的 control-browser skill，用浏览器打开
    `http://127.0.0.1:8888/?project=<encodeURIComponent(目标项目根绝对路径)>`
-   （未提及项目时目标 = 会话所在项目根目录：git root 或含 `docs/agent-team-board/` 的目录；拿不准就用 cwd 绝对路径，
+   （未提及项目时目标 = 会话所在项目根目录：git root 或含 `agent-team-board/` 的目录；拿不准就用 cwd 绝对路径，
    服务端向上探测）。桌面端展开内置浏览器面板；无法使用浏览器时把 URL 告诉用户手动打开。
    目标项目尚未初始化时打开不报错，显示既有「当前项目尚未初始化看板」空态与「初始化」按钮。
 5. 看板上的人工操作：接受（submitted→accepted）、**置计划（accepted→planned）/移出计划（planned→accepted）**、确认完成（in-progress→done）、
@@ -162,7 +172,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 
 | 报错 | 原因与处理 |
 | ---- | ---------- |
-| `未找到 docs/agent-team-board` | 项目还没初始化：`$ATB init` |
+| `未找到 agent-team-board` | 项目还没初始化：`$ATB init`；旧布局（docs/agent-team-board）先 `$ATB migrate` |
 | `尚未被人工接受，不能认领` | 条目还是 submitted，请用户先接受 |
 | `已被 <owner> 认领` | 并行冲突，`$ATB list --status accepted` 换任务 |
 | `待人工决策（N 项未答）` | 条目正等人工作答（REQ-20260911-007）：请人工在 Status Board「待人工确认」补决策并复工后再实施 |

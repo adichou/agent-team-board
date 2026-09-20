@@ -30,7 +30,7 @@ function git(cwd, args, opts = {}) {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const webRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const itemDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'agent-team-board', 'requirements', 'REQ-20260910-030');
+const itemDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'agent-team-board', 'data', 'requirements', 'REQ-20260910-030');
 
 /* ---------- 真实工程环境 ---------- */
 

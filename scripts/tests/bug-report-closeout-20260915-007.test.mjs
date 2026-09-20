@@ -69,7 +69,7 @@ try {
     assert.equal(a.git('remote'), '', '只 commit 不 push（无远端）');
 
     // 手动收口 run 记录（dispatch/runs/manual-<ID>/）与提交索引
-    const rec = JSON.parse(fs.readFileSync(path.join(data, 'dispatch', 'runs', `manual-${item.id}`, 'run.json'), 'utf8'));
+    const rec = JSON.parse(fs.readFileSync(path.join(data, 'runtime', 'dispatch', 'runs', `manual-${item.id}`, 'run.json'), 'utf8'));
     assert.equal(rec.itemId, item.id);
     assert.equal(rec.phase, 'reported');
     assert.equal(rec.autoCommit.status, 'committed');
@@ -107,9 +107,9 @@ try {
     assert.equal(st.status, 'in-progress', '上报不受阻断，条目仍进入待测试');
     assert.ok(st.agentCompletedAt, '本轮上报时间已落账');
 
-    const runRec = JSON.parse(fs.readFileSync(path.join(data, 'dispatch', 'runs', `manual-${item.id}`, 'run.json'), 'utf8'));
+    const runRec = JSON.parse(fs.readFileSync(path.join(data, 'runtime', 'dispatch', 'runs', `manual-${item.id}`, 'run.json'), 'utf8'));
     assert.equal(runRec.autoCommit.status, 'failed', '自动提交失败如实落账');
-    const confirms = JSON.parse(fs.readFileSync(path.join(data, 'confirms', 'confirms.json'), 'utf8'));
+    const confirms = JSON.parse(fs.readFileSync(path.join(data, 'runtime', 'confirms', 'confirms.json'), 'utf8'));
     const rec = confirms.items[item.id];
     assert.ok(rec, '挂起确认已登记');
     assert.equal(rec.kind, 'develop');
@@ -135,7 +135,7 @@ try {
     assert.match(d.git('log', '--format=%s'), new RegExp(`^fix: 例外分支收口 ${item.id}$`, 'm'), '例外分支同样系统收口提交');
     assert.equal(d.git('status', '--porcelain', '--', 'src'), '', '本单实现入库');
     assert.match(d.git('status', '--porcelain', '--', 'other-task.txt'), /other-task\.txt/, '其他任务改动保留');
-    const rec = JSON.parse(fs.readFileSync(path.join(data, 'dispatch', 'runs', `manual-${item.id}`, 'run.json'), 'utf8'));
+    const rec = JSON.parse(fs.readFileSync(path.join(data, 'runtime', 'dispatch', 'runs', `manual-${item.id}`, 'run.json'), 'utf8'));
     assert.equal(rec.autoCommit.status, 'committed');
   }
 
@@ -148,7 +148,7 @@ try {
     write(e.root, 'src/fix.js', '本单实现');
     const out = e.run('report', item.id, '--framework', 'node:test', '--summary', '通过', '--by', 'w1');
     assert.match(out, /不是 git 仓库/, '非 git 项目按既有口径跳过并说明');
-    assert.ok(!fs.existsSync(path.join(data, 'confirms', 'confirms.json')), '非 git 跳过不产生挂起');
+    assert.ok(!fs.existsSync(path.join(data, 'runtime', 'confirms', 'confirms.json')), '非 git 跳过不产生挂起');
     const st = core.readStatus(core.resolveItemDir(data, item.id).dir);
     assert.equal(st.status, 'in-progress', '非 git 项目上报照常完成');
   }

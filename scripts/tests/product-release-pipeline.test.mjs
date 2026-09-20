@@ -97,9 +97,9 @@ async function setup({ sitePages = null } = {}) {
   writeSite(sitePages);
   // 看板数据目录 + 模块配置（官网仓库根目录）
   core.initData(proj);
-  const dataDir = path.join(proj, 'docs', 'agent-team-board');
-  fs.mkdirSync(path.join(dataDir, 'releases'), { recursive: true });
-  core.writeJsonAtomic(path.join(dataDir, 'releases', 'config.json'), { homepageRepoRoot: homepage });
+  const dataDir = path.join(proj, 'agent-team-board');
+  fs.mkdirSync(path.join(dataDir, 'runtime', 'releases'), { recursive: true });
+  core.writeJsonAtomic(path.join(dataDir, 'runtime', 'releases', 'config.json'), { homepageRepoRoot: homepage });
   // 已合并 BLD
   const v = buildStore.createVersion(dataDir, {
     name: '版本 V1', items: [{ itemId: 'REQ-20260915-010', commit: itemCommit, title: 'webapp' }],

@@ -445,7 +445,7 @@ t('C14 旧部分提交/暂扣账本恢复：待人工路径仍脏 → 呈现待�
   git(root, ['add', '.']);
   git(root, ['commit', '-q', '-m', 'chore: legacy 源码入库']);
   fs.appendFileSync(path.join(root, 'scripts', 'web', 'legacy.js'), '遗留未提交改动\n'); // 仍脏
-  const runDir = path.join(dataDir, 'dispatch', 'runs', 'run-20990101-000000-0001');
+  const runDir = path.join(dataDir, 'runtime', 'dispatch', 'runs', 'run-20990101-000000-0001');
   fs.mkdirSync(runDir, { recursive: true });
   fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify({
     runId: 'run-20990101-000000-0001', batchId: 'batch-20990101-001', itemId: item.id,

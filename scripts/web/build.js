@@ -1086,6 +1086,9 @@ const ATBBuild = (() => {
     } finally {
       if (state.rel === rel) rel.busy = false;
       await ensureReleaseData(true);
+      // BUG-20260917-001：发布动作完成后顺带重取构建 state，让左侧卡片「已发布」标识随
+      // 最新发布状态更新（单次显式动作触发一次刷新，不引入轮询）
+      await refresh();
     }
   }
 
@@ -1121,7 +1124,9 @@ const ATBBuild = (() => {
   }
 
   function refreshReleasePane() {
-    return ensureReleaseData(true);
+    // BUG-20260917-001：「刷新状态」除重读发布记录外一并重取构建 state，
+    // 让左侧卡片「已发布」标识随最新发布状态更新（单次显式动作触发，不引入轮询）
+    return ensureReleaseData(true).finally(() => refresh());
   }
 
   function setDetailTab(tab) {
@@ -1505,6 +1510,19 @@ const ATBBuild = (() => {
     return `<span class="st ${STATUS_CLS[status] || 'st-mute'}">${esc(STATUS_LABEL[status] || status)}</span>`;
   }
 
+  // BUG-20260917-001：左侧版本卡片状态标签——该版本存在发布成功（succeeded）的运行时
+  //（/api/build/state 附带的 release.published，任一成功运行即成立），以绿色「已发布」
+  // 替换原合并状态标签（口径与右侧「发布」页签 relStatusChip 一致，title 提示成功运行）；
+  // 未发布成功（无运行 / 草稿 / 预检 / 进行中 / 失败 / 已取消）保持原四态标签与按钮规则不变，
+  // 中间态不上卡片（在「发布」页签查看）。
+  function versionChip(v) {
+    if (v.release?.published) {
+      const tip = `发布成功：${v.release.runId || ''}${v.release.version ? `（v${v.release.version}）` : ''}`;
+      return `<span class="st st-ok" title="${esc(tip)}">${esc(REL_STATUS_LABEL.succeeded)}</span>`;
+    }
+    return statusChip(v.status);
+  }
+
   function renderVersionList() {
     const versions = filteredVersions();
     if (!versions.length) {
@@ -1535,7 +1553,7 @@ const ATBBuild = (() => {
       const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
       return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
-        <div class="t"><strong>${esc(v.name || v.id)}</strong> ${statusChip(v.status)}</div>
+        <div class="t"><strong>${esc(v.name || v.id)}</strong> ${versionChip(v)}</div>
         <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
         <div class="card-acts">${answerBtn}${mergeBtn}${releaseBtn}${releaseViewBtn}${delBtn}</div>
       </div>`;

@@ -10,7 +10,7 @@ export function legacyPaths(ac) {
 }
 function files(dataDir, runId) {
   if (!/^run-[a-zA-Z0-9-]+$/.test(runId)) throw new AtbError('无效运行编号');
-  return { ledger:path.join(dataDir,'dispatch','runs',runId,'auto-commit.json'), run:path.join(dataDir,'dispatch','runs',runId,'run.json'), record:path.join(dataDir,'confirms','recoveries',`${runId}.json`) };
+  return { ledger:path.join(dataDir,'runtime','dispatch','runs',runId,'auto-commit.json'), run:path.join(dataDir,'runtime','dispatch','runs',runId,'run.json'), record:path.join(dataDir,'runtime','confirms','recoveries',`${runId}.json`) }; // REQ-20260916-007：应用数据
 }
 function digest(text) { return crypto.createHash('sha256').update(text).digest('hex'); }
 function git(root, args) {

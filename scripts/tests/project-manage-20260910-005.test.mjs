@@ -113,7 +113,7 @@ t('P1 preview：存在目录返回解析结果；相对路径 / 不存在目录 
   assert.equal(r.root, projectC);
   assert.equal(r.name, 'projC');
   assert.equal(r.initialized, false);
-  assert.equal(r.wouldWrite, path.join(projectC, 'docs', 'agent-team-board'));
+  assert.equal(r.wouldWrite, path.join(projectC, 'agent-team-board'));
   await post(`${base}/api/project/preview`, { path: 'relative/path' }, 400);
   await post(`${base}/api/project/preview`, { path: path.join(tmp, 'not-exists') }, 400);
 });
@@ -130,8 +130,8 @@ t('P2 preview：子目录 / 符号链接须明确解析到真实数据位置', a
 t('P3 init（body.path）：创建数据 + 登记注册表 + 返回 root/projects；?project= 旧签名兼容', async () => {
   const r = await post(`${base}/api/init`, { path: projectC });
   assert.equal(r.root, projectC);
-  assert.equal(r.dataDir, path.join(projectC, 'docs', 'agent-team-board'));
-  assert.ok(fs.existsSync(path.join(projectC, 'docs', 'agent-team-board', 'config.json')), '初始化应落盘 config.json');
+  assert.equal(r.dataDir, path.join(projectC, 'agent-team-board'));
+  assert.ok(fs.existsSync(path.join(projectC, 'agent-team-board', 'runtime', 'config.json')), '初始化应落盘 config.json');
   assert.ok(r.projects.includes(projectC), '初始化后应加入项目列表');
   const saved = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
   assert.ok(saved.projects.includes(projectC), '注册表文件应包含 projC');
@@ -145,7 +145,7 @@ t('P4 init 重复执行 400（已有数据不覆盖），报错含已存在的�
   const r = await post(`${base}/api/init`, { path: projectC }, 400);
   assert.match(r.error, /已初始化/, '应说明已有数据位置');
   // 数据未被覆盖重建：config.json 仍存在且 counters 未被重置为初始写入以外的状态
-  const cfg = JSON.parse(fs.readFileSync(path.join(projectC, 'docs', 'agent-team-board', 'config.json'), 'utf8'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(projectC, 'agent-team-board', 'runtime', 'config.json'), 'utf8'));
   assert.equal(cfg.counters.requirement, 0, '重复初始化不得改写既有配置');
 });
 
@@ -175,7 +175,7 @@ t('P7 remove：移出列表并落盘注册表；项目目录与看板数据保�
   assert.ok(saved.removed.includes(projectB), '移出应记入 removed（防隐式重现）');
   // 磁盘保留：目录、数据目录、条目文档原样
   assert.ok(fs.existsSync(dataB), '移出不得删除数据目录');
-  assert.ok(fs.existsSync(path.join(dataB, 'requirements', itemB.id, 'README.md')), '移出不得删除需求文档');
+  assert.ok(fs.existsSync(path.join(dataB, 'data', 'requirements', itemB.id, 'README.md')), '移出不得删除需求文档');
 });
 
 t('P8 remove 未注册路径 / 相对路径 400', async () => {

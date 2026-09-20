@@ -30,7 +30,7 @@ export const VERSION_STATUS_LABEL = {
 // 冲突类（HTTP 409）：状态机不允许的操作（重复合并 / 锁定态增删编辑等）。
 export class BuildConflictError extends AtbError {}
 
-const versionsRoot = (dataDir) => path.join(dataDir, 'builds', 'versions');
+const versionsRoot = (dataDir) => path.join(dataDir, 'runtime', 'builds', 'versions');
 
 function readJsonSafe(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }

@@ -314,7 +314,7 @@ t('S3 重启恢复：账本遗留 running 任务被标记 interrupted 并留痕�
   const root = mkProject();
   const { dataDir, item } = mkDevSuspension(root);
   // 预置上一进程中断时遗留的运行中任务账本
-  fs.mkdirSync(path.join(dataDir, 'confirms'), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, 'runtime', 'confirms'), { recursive: true });
   const seeded = {
     version: 1,
     tasks: {
@@ -325,7 +325,7 @@ t('S3 重启恢复：账本遗留 running 任务被标记 interrupted 并留痕�
       },
     },
   };
-  fs.writeFileSync(path.join(dataDir, 'confirms', 'tasks.json'), JSON.stringify(seeded, null, 2));
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'confirms', 'tasks.json'), JSON.stringify(seeded, null, 2));
   const { server, port } = await startServer(root);
   const P = `?project=${encodeURIComponent(root)}`;
   try {

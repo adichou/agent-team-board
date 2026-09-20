@@ -54,7 +54,7 @@ async function mkProject(name, nItems) {
   const ids = [];
   for (let i = 1; i <= nItems; i++) {
     await runAtb(['new', 'req', `${name}-条目-${i}`], root);
-    const dir = path.join(root, 'docs', 'agent-team-board', 'requirements');
+    const dir = path.join(root, 'agent-team-board', 'data', 'requirements');
     const found = fs.readdirSync(dir).filter((d) => d.startsWith('REQ-'));
     ids.push(found[found.length - 1]);
   }
@@ -180,7 +180,7 @@ t('REQ-20260910-027 开发人员移除：create 遗留 developer 忽略、响应
 
     // 重复创建（含显式 ids 与超长 developer）被拒；非法值不再 400（校验随功能移除，忽略语义不变）
     await runAtb(['new', 'req', 'dev-重复启动条目'], A.root);
-    const reqDir = path.join(A.root, 'docs', 'agent-team-board', 'requirements');
+    const reqDir = path.join(A.root, 'agent-team-board', 'data', 'requirements');
     const found = fs.readdirSync(reqDir).filter((d) => d.startsWith('REQ-'));
     const third = found[found.length - 1];
     await runAtb(['status', third, 'accepted'], A.root);

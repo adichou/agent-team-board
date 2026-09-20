@@ -102,11 +102,11 @@ t('T4 三态只落执行账本：states.json 在 refine/ 下；status.json 无�
   const { dataDir } = mkProject();
   const a = core.createItem(dataDir, { type: 'requirement', title: '账本隔离' });
   accept(dataDir, a.id);
-  const statesFile = path.join(dataDir, 'refine', 'states.json');
+  const statesFile = path.join(dataDir, 'runtime', 'refine', 'states.json');
   assert.ok(fs.existsSync(statesFile), '三态索引应落在 refine/states.json');
   const raw = JSON.parse(fs.readFileSync(statesFile, 'utf8'));
   assert.equal(raw.items[a.id].state, 'unrefined');
-  const st = JSON.parse(fs.readFileSync(path.join(core.resolveItemDir(dataDir, a.id).dir, 'status.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(core.resolveItemDir(dataDir, a.id).dir), 'utf8')); // REQ-20260916-007：runtime/status/
   assert.equal(st.refineState, undefined, 'status.json 不得新增完善状态字段');
 });
 
@@ -137,7 +137,7 @@ t('T6 refine 终止：剩余项出局、在途 interrupted、锁释放、批次�
   accept(dataDir, b2.id);
   const { batch: b } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
   const got = refine.nextRefineItem(dataDir, b.batchId, { owner: 'w1' });
-  assert.ok(fs.existsSync(path.join(dataDir, '.locks', 'refine.lock')), '领取持有互斥锁');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')), '领取持有互斥锁');
 
   const r = refine.abortRefineBatch(dataDir, b.batchId);
   assert.equal(r.ok, true);
@@ -151,7 +151,7 @@ t('T6 refine 终止：剩余项出局、在途 interrupted、锁释放、批次�
   const runs = refine.listRefineRuns(dataDir, b.batchId, { offset: 0, limit: 20 });
   assert.equal(runs.records.filter((x) => x.result === 'skipped').length, 2, '剩余两项出局');
   assert.equal(runs.records.filter((x) => x.result === 'skipped' && x.itemId === b1.id).length, 1);
-  assert.ok(!fs.existsSync(path.join(dataDir, '.locks', 'refine.lock')), 'refine 锁全部释放');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')), 'refine 锁全部释放');
   const ck = refine.checkRefineBatch(dataDir, b.batchId);
   assert.equal(ck.nextAction, 'stop', '终止后核对停止派发');
   // 终止后可立即启动新任务（不残留旧锁）
@@ -170,7 +170,7 @@ t('T7 batch 终止：剩余项 skipped 出局、在途 interrupted、impl 锁释
   core.setStatus(dataDir, b.id, 'planned', { by: 'human' });
   const { batch: bt } = batch.createBatch(dataDir, { projectRoot: root });
   const got = batch.nextItem(dataDir, bt.batchId, { owner: 'w1' });
-  assert.ok(fs.existsSync(path.join(dataDir, '.locks', 'impl.lock')), '领取持有实施互斥');
+  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'impl.lock')), '领取持有实施互斥');
 
   const r = batch.abortBatch(dataDir, bt.batchId);
   assert.equal(r.ok, true);
@@ -182,7 +182,7 @@ t('T7 batch 终止：剩余项 skipped 出局、在途 interrupted、impl 锁释
   assert.match(batch.getRun(dataDir, got.runId).reason, /人工终止/);
   const runs = batch.listRuns(dataDir, bt.batchId, { offset: 0, limit: 20 });
   assert.equal(runs.records.filter((x) => x.result === 'skipped').length, 1, '未领取项出局');
-  assert.ok(!fs.existsSync(path.join(dataDir, '.locks', 'impl.lock')), 'impl 锁全部释放');
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'impl.lock')), 'impl 锁全部释放');
   const nxt = batch.nextItem(dataDir, bt.batchId, { owner: 'w2' });
   assert.equal(nxt.stop, 'aborted', '终止后 next 停止派发');
   // 终止后可创建新批次

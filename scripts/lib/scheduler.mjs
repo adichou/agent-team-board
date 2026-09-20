@@ -75,7 +75,7 @@ export function buildWorkerPrompt({ itemId, title, projectRoot, atbCliPath, runI
     '',
     '按以下步骤完成，只处理这一个条目：',
     `1. 认领：node ${JSON.stringify(atbCliPath)} claim ${itemId} --by ${itemId}`,
-    `2. 读取条目文档：docs/agent-team-board/**/${itemId}/ 下的 README.md、design.md、test-cases.md`,
+    `2. 读取条目文档：agent-team-board/data/**/${itemId}/ 下的 README.md、design.md、test-cases.md`,
     '3. 按 TDD 实施：先补用例跑红 → 实现 → 跑绿 → 重构；不改动无关文件；不执行 git commit/push',
     '   开源选型牵引（REQ-20260909-015）：方案优先复用成熟开源库，以依赖方式引入（npm / SPM / CocoaPods），',
     '   禁止复制开源库源码进项目仓库；仅用开源友好许可（MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / ISC /',

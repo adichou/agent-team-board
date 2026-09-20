@@ -135,7 +135,7 @@ t('D3 存量兼容：账本手工含 developer 的批次 summary/publicView/brie
   try {
     mkPlanned(p, 'A');
     const { batch: bt } = batch.createBatch(p.dataDir, { projectRoot: p.root });
-    const bfile = path.join(p.dataDir, 'dispatch', 'batches', bt.batchId, 'batch.json');
+    const bfile = path.join(p.dataDir, 'runtime', 'dispatch', 'batches', bt.batchId, 'batch.json');
     const saved = JSON.parse(fs.readFileSync(bfile, 'utf8'));
     saved.developer = '存量开发'; // 模拟存量账本
     fs.writeFileSync(bfile, JSON.stringify(saved, null, 2) + '\n');
@@ -146,7 +146,7 @@ t('D3 存量兼容：账本手工含 developer 的批次 summary/publicView/brie
 
     mkAccepted(p, 'B');
     const rb = refine.createRefineBatch(p.dataDir, { projectRoot: p.root });
-    const rfile = path.join(p.dataDir, 'refine', 'batches', rb.batch.batchId, 'batch.json');
+    const rfile = path.join(p.dataDir, 'runtime', 'refine', 'batches', rb.batch.batchId, 'batch.json');
     const rsaved = JSON.parse(fs.readFileSync(rfile, 'utf8'));
     rsaved.developer = '存量开发';
     fs.writeFileSync(rfile, JSON.stringify(rsaved, null, 2) + '\n');

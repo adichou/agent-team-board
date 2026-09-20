@@ -21,6 +21,9 @@ import {
   writeJsonAtomic,
   resolveItemDir,
   readStatus,
+  ensureRuntimeIgnore,
+  projectRootOfBoard,
+  LEGACY_DATA_REL_DIR,
 } from './core.mjs';
 import {
   TEST_PATH_PREFIX,
@@ -193,19 +196,11 @@ export function changedPathsSince(root, snapshot) {
   return [...diff.changed, ...diff.dirtyTouched];
 }
 
-// 数据账本 .gitignore 补齐：自动提交账本目录（commits/runs、commits/batches、dispatch/runs）
-// 不进版本控制。返回是否发生修改（看板共享文件由 doc 组整体收纳，保持工作区干净）。
-// BUG-20260915-007：dispatch/runs/ 由手动收口 run 记录（manual-<itemId>）使用——core.claim
-// 无法引用 batch.ensureDispatch（循环依赖），此处幂等补行保持单一目录口径。
+// REQ-20260916-007 忽略规则极简化：全部运行账本已随 runtime/ 整目录被根 .gitignore 忽略
+// （唯一规则 agent-team-board/runtime/），此处仅幂等保证根规则存在（自动提交/手动收口前兜底）。
+// 旧逐文件账本规则（commits/runs、dispatch/runs 等）随板内 .gitignore 废弃。
 function ensureLedgerIgnore(dataDir) {
-  const gi = path.join(dataDir, '.gitignore');
-  const wanted = ['commits/runs/', 'commits/batches/', 'dispatch/runs/'];
-  let cur = '';
-  try { cur = fs.readFileSync(gi, 'utf8'); } catch {}
-  const add = wanted.filter((l) => !cur.split('\n').includes(l));
-  if (!add.length) return false;
-  fs.writeFileSync(gi, cur.replace(/\n*$/, '\n') + add.join('\n') + '\n');
-  return true;
+  return ensureRuntimeIgnore(projectRootOfBoard(dataDir));
 }
 
 // ---------- 2b. BUG-20260915-007 手动 /dev 收口 run 记录 ----------
@@ -220,7 +215,7 @@ export function manualRunIdOf(itemId) {
 }
 
 function manualRunPath(dataDir, itemId) {
-  return path.join(dataDir, 'dispatch', 'runs', manualRunIdOf(itemId), 'run.json');
+  return path.join(dataDir, 'runtime', 'dispatch', 'runs', manualRunIdOf(itemId), 'run.json');
 }
 
 const readJsonFile = (file) => {
@@ -286,12 +281,26 @@ export function saveManualRunResult(dataDir, itemId, autoCommit) {
 
 // ---------- 3. 到待测试自动提交 ----------
 
-// 条目目录相对路径归属解析：boardRel 下的路径 → 所属条目编号（首个 REQ-/BUG- 段）
+// 条目目录相对路径归属解析（REQ-20260916-007 新口径）：
+//   新板根前缀（agent-team-board/）下仅 data/(requirements|bugs)/<ID>/… 归属该单
+//   （runtime/ 整目录被忽略，理论上不出现脏路径）；
+//   过渡期旧前缀（docs/agent-team-board/）下 requirements|bugs/<ID>/… 的**文档**归属该单，
+//   旧 status.json（应用数据退出跟踪的删除）归板级共享，随本单 doc 组整体收纳。
 function owningItemIdOf(boardRel, p) {
-  const pref = boardRel ? boardRel + '/' : 'docs/agent-team-board/';
-  if (!p.startsWith(pref)) return null;
-  const m = /^(?:requirements|bugs)\/((?:REQ|BUG)-\d{8}-\d{3,})(?:\/|$)/.exec(p.slice(pref.length));
-  return m ? m[1] : null;
+  const pref = boardRel ? boardRel + '/' : 'agent-team-board/';
+  const legacyPref = LEGACY_DATA_REL_DIR.split(path.sep).join('/') + '/';
+  let rest = null;
+  let legacy = false;
+  if (p.startsWith(pref)) rest = p.slice(pref.length);
+  else if (p.startsWith(legacyPref)) { rest = p.slice(legacyPref.length); legacy = true; }
+  if (rest == null) return null;
+  const dataM = /^data\/(?:requirements|bugs)\/((?:REQ|BUG)-\d{8}-\d{3,})(?:\/|$)/.exec(rest);
+  if (dataM) return dataM[1];
+  if (!legacy) return null;
+  const m = /^(?:requirements|bugs)\/((?:REQ|BUG)-\d{8}-\d{3,})(?:\/|$)/.exec(rest);
+  if (!m) return null;
+  if (rest === `requirements/${m[1]}/status.json` || rest === `bugs/${m[1]}/status.json`) return null;
+  return m[1];
 }
 
 function commitSubjectOf(type, desc, itemId) {
@@ -300,9 +309,23 @@ function commitSubjectOf(type, desc, itemId) {
 
 function commitPaths(root, paths, subject) {
   for (let i = 0; i < paths.length; i += PATH_CHUNK) {
-    gitOk(root, ['add', '-A', '--', ...paths.slice(i, i + PATH_CHUNK)], 'git add');
+    const chunk = paths.slice(i, i + PATH_CHUNK);
+    // REQ-20260916-007 迁移期容错：路径可能已从索引移除且磁盘不存在（git mv / git rm
+    // --cached 暂存的删除）——git add 对其 fatal「did not match any files」。整块 add 失败时
+    // 逐路径重试，跳过「无匹配」者（其删除已在索引中，由下方 commit --only 一并提交）。
+    try {
+      gitOk(root, ['add', '-A', '--', ...chunk], 'git add');
+    } catch (e) {
+      if (!/did not match any files|no such file or directory/i.test(String(e && e.message))) throw e;
+      for (const p of chunk) {
+        try { gitOk(root, ['add', '-A', '--', p], 'git add'); } catch (e2) {
+          if (!/did not match any files|no such file or directory/i.test(String(e2 && e2.message))) throw e2;
+        }
+      }
+    }
   }
   // --only：只提交指定路径的工作区内容，不卷入预留前已暂存的其他内容
+  //（路径已在索引删除且磁盘不存在时，--only 以 HEAD 跟踪记录为准提交该删除）
   for (let i = 0; i < paths.length; i += PATH_CHUNK) {
     gitOk(root, ['commit', '-q', '--only', '-m', subject, '--', ...paths.slice(i, i + PATH_CHUNK)], 'git commit');
   }
@@ -359,12 +382,17 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
     const itemRel = path.relative(repoTop, itemDir);
     const boardRel = path.relative(repoTop, dataDir);
-    const boardPref = boardRel + '/';
+    const legacyBoardRel = path.relative(repoTop, path.join(repoTop, LEGACY_DATA_REL_DIR));
+    const isBoardPath = (p) => p.startsWith(boardRel + '/')
+      || p.startsWith(legacyBoardRel + '/')
+      || (itemRel && (p === itemRel || p.startsWith(itemRel + '/')));
 
-    // 归因集合（design 定稿口径）：
-    //   doc 组 = 看板数据目录内当前全部脏路径，排除其他条目目录——本单条目目录整体
-    //            纳入（含预留前注册产生的未跟踪文档，它们从属于本单）；看板共享文件
-    //            （.gitignore / config.json / dispatch 索引等）随本单 doc 提交收纳；
+    // 归因集合（design 定稿口径；REQ-20260916-007 新布局）：
+    //   doc 组 = 看板板根（agent-team-board/，实际脏路径来自 data/）与过渡期旧前缀
+    //            （docs/agent-team-board/，存量迁移产生的删除/搬移）内当前全部脏路径，
+    //            排除其他条目目录——本单条目目录整体纳入；看板共享文件随本单 doc 提交收纳；
+    //            重命名（R 码，git mv 位置搬移）一律视为板级共享：纯搬移不按单排除，
+    //            保证迁移成对入库（git log --follow 历史可循）；
     //   test / 业务组 = 严格按快照差集（非看板路径）——预留前已存在的无关改动绝不卷入。
     //   BUG-20260913-006：非看板路径若「预留前已脏且本单动过」（同码内容变，或码也变
     //   但快照有预留前内容基线——整文件提交会连带预留前旧脏内容），不自动归因，列入
@@ -378,8 +406,10 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
     for (const p of allDirty) {
       const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
-      if (p.startsWith(boardPref) || inItem) {
-        const owner = owningItemIdOf(boardRel, p);
+      if (isBoardPath(p)) {
+        const code = nowSnap.entries[p] || '';
+        const renamed = code.startsWith('R') || code.includes('R');
+        const owner = renamed ? null : owningItemIdOf(boardRel, p);
         if (owner && owner !== itemId && !inItem) { excluded.push(p); continue; }
         groups.doc.push(p);
         continue;
@@ -523,7 +553,7 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
     autoForRun: run.runId,
   };
   if (commits.length) {
-    const dir = path.join(dataDir, 'commits', 'runs', runId);
+    const dir = path.join(dataDir, 'runtime', 'commits', 'runs', runId);
     fs.mkdirSync(dir, { recursive: true });
     writeJsonAtomic(path.join(dir, 'run.json'), record);
   }
@@ -531,7 +561,7 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
   // BUG-20260915-003：提交失败也必须落明细（含 0 组提交失败）——status 如实标记 failed，
   // errorFull 保留完整原始错误供挂起确认面板展示与诊断（回执 reason 短句不再是无处可查的唯一线索）。
   try {
-    const runDir = path.join(dataDir, 'dispatch', 'runs', run.runId);
+    const runDir = path.join(dataDir, 'runtime', 'dispatch', 'runs', run.runId);
     fs.mkdirSync(runDir, { recursive: true });
     writeJsonAtomic(path.join(runDir, 'auto-commit.json'), {
       ...record,
@@ -618,6 +648,7 @@ export function confirmScopeForRun({ dataDir, projectRoot, run }) {
   const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
   const itemRel = path.relative(repoTop, itemDir);
   const boardRel = path.relative(repoTop, dataDir);
+  const legacyBoardRel = path.relative(repoTop, path.join(repoTop, LEGACY_DATA_REL_DIR));
   const boardPref = boardRel + '/';
   const attributed = [];
   const uncertain = [];
@@ -626,8 +657,10 @@ export function confirmScopeForRun({ dataDir, projectRoot, run }) {
   for (const p of [...allDirty].sort()) {
     const kind = changeKindOf(nowSnap.entries[p]);
     const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
-    if (p.startsWith(boardPref) || inItem) {
-      const owner = owningItemIdOf(boardRel, p);
+    if (p.startsWith(boardPref) || p.startsWith(legacyBoardRel + '/') || inItem) {
+      const code = nowSnap.entries[p] || '';
+      const renamed = code.startsWith('R') || code.includes('R');
+      const owner = renamed ? null : owningItemIdOf(boardRel, p);
       if (owner && owner !== run.itemId && !inItem) { excluded.push(p); continue; }
       if (inItem) attributed.push({ path: p, kind });
       else uncertain.push({ path: p, kind, why: '看板共享/全局文件：可能混有其他任务或系统写入，不能只因出现在差集中就归为本单' });
@@ -660,13 +693,15 @@ export function supplementCommitForRun({ dataDir, projectRoot, run, include = []
     const desc = String(title);
     const repoTop = gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim();
     const boardPref = path.relative(repoTop, dataDir) + '/';
+    const legacyBoardPref = path.relative(repoTop, path.join(repoTop, LEGACY_DATA_REL_DIR)) + '/';
+    const isDoc = (p) => p.startsWith(boardPref) || p.startsWith(legacyBoardPref);
     const includeSet = new Set((Array.isArray(include) ? include : []).filter(Boolean));
     const docPaths = [];
     const fixPaths = [];
-    for (const f of scope.attributed) (f.path.startsWith(boardPref) ? docPaths : fixPaths).push(f.path);
+    for (const f of scope.attributed) (isDoc(f.path) ? docPaths : fixPaths).push(f.path);
     for (const p of includeSet) {
       if (!scope.uncertain.some((x) => x.path === p)) continue; // 现场已变（如已入库）：忽略
-      (p.startsWith(boardPref) ? docPaths : fixPaths).push(p);
+      (isDoc(p) ? docPaths : fixPaths).push(p);
     }
     let plan = [
       ['doc', docPaths, commitSubjectOf('doc', desc, itemId)],

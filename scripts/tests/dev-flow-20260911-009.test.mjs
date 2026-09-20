@@ -237,6 +237,9 @@ t('D8 失败不阻断回执：提交失败回执仍 reported、改动保留；RE
   const blocked = batch.nextItem(dataDir, batchId, { owner: 'w2' });
   assert.equal(blocked.stop, 'paused', '挂起期间不得派发后续单');
   void item2;
+  // REQ-20260916-007：config.json 已迁 runtime（被忽略）不再触发过期确认——改在挂起后
+  // 追加条目 README（挂起确认候选范围内的受跟踪路径），内容变化模拟同一过期场景
+  fs.appendFileSync(path.join(core.resolveItemDir(dataDir, item.id).dir, 'README.md'), '\n挂起后追加\n');
 
   // 移除故障钩子后人工确认：授权补交恰一次（不重复），核验通过恢复队列
   fs.rmSync(path.join(root, '.git', 'hooks', 'pre-commit'));
@@ -244,7 +247,7 @@ t('D8 失败不阻断回执：提交失败回执仍 reported、改动保留；RE
   const confirmStates = await import('../lib/confirm-states.mjs');
   const rec = confirmStates.confirmOf(dataDir, item.id);
   assert.ok(rec, '失败应已声明挂起确认记录');
-  // BUG-20260915-003：挂起期间又创建了后续单（config.json 计数器等全局文件内容变化）——
+  // BUG-20260915-003：挂起期间板级共享文件内容变化——
   // 归属待确认路径内容已变，确认被拦截并要求先「重新核验」绑定最新所见，再确认成功。
   const r0 = await confirmStore.confirmCommitContinue(dataDir, item.id, {
     projectRoot: root, fingerprint: rec.fingerprint,
@@ -272,7 +275,7 @@ t('D9 旧版预留（无快照）/非 git 项目 → 明确跳过，不猜测归
   const item = mkPlannedItem(dataDir, '旧版预留单');
   batch.createBatch(dataDir, { projectRoot: root });
   const nx = batch.nextItem(dataDir, batch.queueHeadBatch(dataDir).batchId, { owner: 'w1' });
-  const runFile = path.join(dataDir, 'dispatch', 'runs', nx.runId, 'run.json');
+  const runFile = path.join(dataDir, 'runtime', 'dispatch', 'runs', nx.runId, 'run.json');
   const runJson = JSON.parse(fs.readFileSync(runFile, 'utf8'));
   delete runJson.treeSnapshot;
   fs.writeFileSync(runFile, JSON.stringify(runJson, null, 2));
@@ -400,12 +403,12 @@ t('D10 hook：看板项目内流程外 git commit 一律拦（REQ-20260911-010�
   const dataDir = core.dataDirFrom(proj);
   const cmtId = 'CMT-20260911-001';
   const runId = 'run-20260911-120000-abcd';
-  fs.mkdirSync(path.join(dataDir, 'commits', 'batches', cmtId), { recursive: true });
-  fs.writeFileSync(path.join(dataDir, 'commits', 'batches', cmtId, 'batch.json'), JSON.stringify({
+  fs.mkdirSync(path.join(dataDir, 'runtime', 'commits', 'batches', cmtId), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'commits', 'batches', cmtId, 'batch.json'), JSON.stringify({
     batchId: cmtId, status: 'running', abortRequested: false, currentRunId: runId,
   }));
-  fs.mkdirSync(path.join(dataDir, 'commits', 'runs', runId), { recursive: true });
-  fs.writeFileSync(path.join(dataDir, 'commits', 'runs', runId, 'run.json'), JSON.stringify({
+  fs.mkdirSync(path.join(dataDir, 'runtime', 'commits', 'runs', runId), { recursive: true });
+  fs.writeFileSync(path.join(dataDir, 'runtime', 'commits', 'runs', runId, 'run.json'), JSON.stringify({
     runId, batchId: cmtId, phase: 'reserved',
   }));
   r = await runGuard('bash', { command: 'git commit -m "feat: 存量通道残留 REQ-1"' }, proj);

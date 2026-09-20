@@ -39,9 +39,9 @@ function mkItem(p, title, { accept = true, backMs = 0 } = {}) {
   }
   if (backMs) {
     const { dir } = core.resolveItemDir(p.dataDir, st.id);
-    const s = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+    const s = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
     s.createdAt = new Date(Date.parse(s.createdAt) - backMs).toISOString();
-    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(s, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(s, null, 2) + '\n');
   }
   return st.id;
 }
@@ -118,10 +118,10 @@ t('Q3 空转账本就地收尾：候选全部流失的未结束轮不卡住下�
     const rA = batch.createBatch(p.dataDir, { projectRoot: p.root });
     // 唯一候选被人工认领（绕过本轮）→ 本轮空转（无在途、无剩余）
     const { dir } = core.resolveItemDir(p.dataDir, a);
-    const st = JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+    const st = JSON.parse(fs.readFileSync(core.statusFileOfItemDir(dir), 'utf8'));
     st.status = 'in-progress';
     st.owner = 'human';
-    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(st, null, 2) + '\n');
+    fs.writeFileSync(core.statusFileOfItemDir(dir), JSON.stringify(st, null, 2) + '\n');
     // 空转且无候选：按候选口径报错，且空转轮被就地收尾
     assert.throws(() => batch.createBatch(p.dataDir, { projectRoot: p.root }), /没有可实施候选/);
     assert.equal(batch.getBatch(p.dataDir, rA.batch.batchId).status, 'finished', '空转旧轮应被就地收尾');
@@ -143,7 +143,7 @@ t('Q4 存量排队数据防抢：后位账本不得越过队首领取；队首�
     // 手工构造存量排队形态：后位账本 candidates 冻结 B（升级前数据形态）
     const laterId = batch.nextDispatchIdForTest ? batch.nextDispatchIdForTest(p.dataDir) : null;
     void laterId;
-    const b2Dir = path.join(p.dataDir, 'dispatch', 'batches', 'batch-20990101-099');
+    const b2Dir = path.join(p.dataDir, 'runtime', 'dispatch', 'batches', 'batch-20990101-099');
     fs.mkdirSync(b2Dir, { recursive: true });
     const later = {
       ...rA.batch,

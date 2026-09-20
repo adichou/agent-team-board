@@ -62,7 +62,9 @@ agent-team-board/
 │   ├── lib/                      # 数据层与业务模块（见下表）
 │   ├── web/                      # 看板前端（单页多视图，见下表）
 │   └── tests/                    # 测试：run-all.mjs 聚合入口 + *.test.mjs 用例
-├── docs/agent-team-board/        # 看板事实源（随项目进 git）：config.json 计数器、requirements/、bugs/、builds/、releases/、tasks/、marketing/、oncall/、discussions/ 等
+├── agent-team-board/
+│   ├── data/                     # 看板用户数据（进 git）：requirements/、bugs/ 条目文档（README/design/test-cases/test-report/licenses/ui-demo/attachments/decisions）
+│   └── runtime/                  # 看板应用数据（不进 git，本地留存）：status/ 条目状态、config.json 计数器、.locks/、dispatch/、refine/、commits/、holds/、confirms/、builds/、releases/、tasks/、marketing/、oncall/、discussions/ 等
 └── output/                       # 品牌素材（logo 等）
 ```
 
@@ -100,12 +102,13 @@ agent-team-board/
 - **Status Board**：`node scripts/server.mjs`（默认端口 8888，环境变量 `ATB_PORT` 覆盖；单服务多项目，`?project=<项目根绝对路径>` 切换数据源）。桌面壳 `npm run app` 会自动拉起同一服务。
 - **桌面壳**：`npm run app`（`electron .`，主进程 electron/main.mjs 以子进程拉起 server 并加载看板页）；打包 `npm run dist`（electron-builder，macOS dmg / Windows nsis，产物在 dist/）。
 - **CLI**：`node scripts/atb.mjs <子命令>`；`node scripts/atb.mjs cli install` 把 bin/atb 符号链接进 PATH，之后终端直接敲 `atb …`。
+- **插件打包**：`node scripts/atb.mjs pack <输出目录>` 生成分发产物（排除 agent-team-board/ 看板数据、根 AGENTS.md、node_modules/、electron/、output/；skills 完整随包，REQ-20260916-007）。
 
 ## 关键机制索引
 
-- **认领锁与源码守卫**：core.mjs 用 O_EXCL 原子锁实现认领（.locks/，24 小时过期）与项目实施互斥；hooks/hooks.json 两条 PreToolUse 守卫 → state-guard.mjs：拦直写 status.json、拦人工专属状态、无有效认领锁时拦改插件源码（REQ-20260901-003）。
+- **认领锁与源码守卫**：core.mjs 用 O_EXCL 原子锁实现认领（runtime/.locks/，24 小时过期）与项目实施互斥；hooks/hooks.json 两条 PreToolUse 守卫 → state-guard.mjs：拦直写 runtime/status 条目状态、拦人工专属状态、无有效认领锁时拦改插件源码（REQ-20260901-003）。
 - **report 自动收口提交**：`atb report` 后由 git-flow.mjs + manual-closeout.mjs 按认领时工作区快照归因，自动把本单代码 / 测试 / 文档提交到 dev（只 commit 不 push）；批量 run receipt 同口径（REQ-20260911-009、BUG-20260915-007）。
-- **批量任务**：批量开发（从 planned 队列取单，主会话每轮派一个子 Agent，worker 规范见 docs/agent-team-board/dispatch/worker-spec.md）、批量完善（accepted 单补文档）、待人工决策（hold）与挂起确认（confirm）闭环；总览见 docs/agent-team-board/batch-execution.md。
+- **批量任务**：批量开发（从 planned 队列取单，主会话每轮派一个子 Agent，worker 规范见 skills/agent-team-board/worker-spec.md，批次创建时快照到 agent-team-board/runtime/dispatch/）、批量完善（accepted 单补文档）、待人工决策（hold）与挂起确认（confirm）闭环；总览见 skills/agent-team-board/batch-execution.md。
 - **构建版本与发布流水线**：构建模块管理 BLD 版本（build-store.mjs 版本状态机，build-git.mjs 合并入 main）；构建发布独立执行（build-publish.mjs 等，BUG-20260916-001）；发布模块三条 REL 流水线（release-git.mjs / release-apple.mjs / release-electron.mjs）；产品发布 PREL 六阶段打通源码与官网（product-release-pipeline.mjs + site-materials.mjs / site-lang.mjs / webapp-profile.mjs）。
 - **中英文资源**：界面文案集中在 scripts/web/i18n.js（中文原文为键，静态精确 EN + 动态 EN_DYNAMIC 插值），改文案必须同步两语言（BUG-20260912-001）。
 
@@ -121,7 +124,7 @@ agent-team-board/
 | ---- | ---- |
 | CLI / 状态机 / 数据层 | scripts/atb.mjs、scripts/lib/core.mjs 及对应 *-store.mjs；测试在 scripts/tests/ |
 | 看板界面 | scripts/web/（骨架 app.js；模块页 build.js / release.js / marketing.js / oncall.js；文案改 i18n.js 并同步中英） |
-| 批量任务与派发 | scripts/lib/batch.mjs、dispatch-store.mjs、scheduler.mjs、codex-adapter.mjs 等；规范见 docs/agent-team-board/batch-execution.md 与 dispatch/worker-spec.md |
+| 批量任务与派发 | scripts/lib/batch.mjs、dispatch-store.mjs、scheduler.mjs、codex-adapter.mjs 等；规范见 skills/agent-team-board/batch-execution.md 与 worker-spec.md |
 | 构建与发布 | scripts/lib/build-*.mjs（构建）、release-*.mjs（REL 流水线）、product-release-*.mjs（产品发布）；界面 build.js / release.js |
 | 桌面壳 | electron/ |
 | 钩子与守卫 | hooks/hooks.json、scripts/state-guard.mjs |
@@ -129,4 +132,4 @@ agent-team-board/
 
 ## 使用与初始化（开发视角）
 
-新项目接入看板：项目内任一会话执行 `node scripts/atb.mjs init`（或看板网页点「初始化」），生成 docs/agent-team-board/ 事实源目录（结构见 docs/agent-team-board/README.md）。日常 `/req` `/bug` `/dev` `/board` 用法与状态机细则见 skills/agent-team-board/SKILL.md；人工操作（接受 / 置计划 / 确认完成）入口在 Status Board 或 `atb status` 命令。
+新项目接入看板：项目内任一会话执行 `node scripts/atb.mjs init`（或看板网页点「初始化」），生成 `agent-team-board/` 事实源目录（`data/` 用户数据进 git、`runtime/` 应用数据本地留存；结构见 agent-team-board/runtime/README.md 与 skills/agent-team-board/SKILL.md 数据规范节）。旧布局（docs/agent-team-board/）项目用 `atb migrate` 或看板设置页「数据布局迁移」一键迁移。日常 `/req` `/bug` `/dev` `/board` 用法与状态机细则见 skills/agent-team-board/SKILL.md；人工操作（接受 / 置计划 / 确认完成）入口在 Status Board 或 `atb status` 命令。

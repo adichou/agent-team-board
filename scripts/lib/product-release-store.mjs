@@ -56,7 +56,7 @@ export class ProductReleaseConflictError extends AtbError {
 
 /* ---------- 目录 ---------- */
 
-export const productRunsRoot = (dataDir) => path.join(dataDir, 'releases', 'product-runs');
+export const productRunsRoot = (dataDir) => path.join(dataDir, 'runtime', 'releases', 'product-runs');
 export const productRunDir = (dataDir, id) => path.join(productRunsRoot(dataDir), id);
 export const productRunFile = (dataDir, id) => path.join(productRunDir(dataDir, id), 'run.json');
 

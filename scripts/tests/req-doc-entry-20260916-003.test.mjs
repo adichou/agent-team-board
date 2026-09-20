@@ -69,9 +69,10 @@ const declaredPaths = [
   'scripts/web/highlight.min.js',
   'scripts/web/wunderbaum.umd.min.js',
   'scripts/tests/run-all.mjs',
-  'docs/agent-team-board/README.md',
-  'docs/agent-team-board/batch-execution.md',
-  'docs/agent-team-board/dispatch/worker-spec.md',
+  'skills/agent-team-board/SKILL.md',
+  'skills/agent-team-board/batch-execution.md',
+  'skills/agent-team-board/worker-spec.md',
+  'skills/agent-team-board/dev-closeout.md',
   'output',
 ];
 
@@ -87,7 +88,7 @@ t('A1 README 章节结构与人机分工新机制齐备（REQ-20260916-003）', 
     '环境与运行方式', '关键机制索引', '官网 / 用户文档 / 支持', '按任务类型导航',
     'planned', '待人工决策', '待测试', 'git 克隆',
     'commands/{req,bug,dev,board}.md', 'AGENTS.md', 'skills/agent-team-board/SKILL.md',
-    'docs/agent-team-board', 'output/',
+    'agent-team-board/', 'output/',
   ]) {
     assert.ok(readme.includes(s), `README 缺少表述：${s}`);
   }

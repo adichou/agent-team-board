@@ -14,7 +14,7 @@ const webRoot = path.join(pluginRoot, 'scripts', 'web');
 const html = fs.readFileSync(path.join(webRoot, 'index.html'), 'utf8');
 const app = fs.readFileSync(path.join(webRoot, 'app.js'), 'utf8');
 const serverSrc = fs.readFileSync(path.join(pluginRoot, 'scripts', 'server.mjs'), 'utf8');
-const itemDir = path.join(pluginRoot, 'docs', 'agent-team-board', 'requirements', 'REQ-20260911-002');
+const itemDir = path.join(pluginRoot, 'agent-team-board', 'data', 'requirements', 'REQ-20260911-002');
 const designSrc = fs.readFileSync(path.join(itemDir, 'design.md'), 'utf8');
 
 const cases = [];
@@ -63,9 +63,9 @@ t('M6 服务端与模块零改动：路由 / 源文件 / 容器 / 脚本引用 /
   assert.match(html, /id="releaseView"/, '#releaseView 容器保留');
   assert.match(html, /<script src="\/marketing\.js">/, 'index.html 引入 marketing.js');
   assert.match(html, /<script src="\/release\.js">/, 'index.html 引入 release.js');
-  const docsRoot = path.join(pluginRoot, 'docs', 'agent-team-board');
-  assert.ok(fs.existsSync(path.join(docsRoot, 'marketing')), 'marketing/ 数据目录保留');
-  assert.ok(fs.existsSync(path.join(docsRoot, 'releases')), 'releases/ 数据目录保留');
+  const docsRoot = path.join(pluginRoot, 'agent-team-board');
+  assert.ok(fs.existsSync(path.join(docsRoot, 'runtime', 'marketing')), 'marketing/ 数据目录保留');
+  assert.ok(fs.existsSync(path.join(docsRoot, 'runtime', 'releases')), 'releases/ 数据目录保留');
 });
 
 t('M5 静态前置：快照恢复接缝保留——applyViewSnapshot 仍把 marketing / release 子状态交给模块暂存（不做破坏性清理）', () => {
@@ -125,7 +125,7 @@ function setup({ search = '', snapshot = null } = {}) {
   document.createElement = element;
   for (const sel of INITIALLY_HIDDEN) document.querySelector(sel).classList.add('hidden');
   const board = {
-    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/docs/agent-team-board',
+    initialized: true, projectRoot: '/project/a', dataDir: '/project/a/agent-team-board',
     items: [item('REQ-20990101-001', { status: 'accepted' }), item('BUG-20990101-002')],
   };
   const requests = [];

@@ -21,7 +21,7 @@ try {
   git('add', '.'); git('commit', '-qm', 'baseline');
   const base = git('rev-parse', 'HEAD');
   const runId = 'run-fixture-001';
-  const runDir = path.join(data, 'dispatch', 'runs', runId);
+  const runDir = path.join(data, 'runtime', 'dispatch', 'runs', runId);
   fs.mkdirSync(runDir, {recursive:true});
   const ac = { itemId:item.id, pendingManual:['code.js'], heldGroups:{test:['test.js'],biz:[]}, commits:[{hash:base}] };
   fs.writeFileSync(path.join(runDir,'auto-commit.json'), JSON.stringify(ac));
@@ -43,7 +43,7 @@ try {
   fs.writeFileSync(path.join(root,'code.js'),'new task\n');
   assert.equal(legacyConfirmViews(data,root).length,0,'新任务改同路径不能复活旧运行');
   assert.equal(fs.readFileSync(path.join(runDir,'auto-commit.json'),'utf8'),original,'原账本不变');
-  const file=path.join(data,'confirms','recoveries',`${runId}.json`);
+  const file=path.join(data,'runtime','confirms','recoveries',`${runId}.json`);
   const saved=fs.readFileSync(file,'utf8');
   const before=fs.statSync(file).mtimeMs;
   legacyConfirmViews(data,root);
@@ -57,7 +57,7 @@ try {
   assert.equal(legacyConfirmViews(data,root).length,1,'证明不在当前历史不能隐藏');
   git('checkout','--force','--detach',full);
   fs.writeFileSync(path.join(root,'code.js'),'new task again\n');
-  const second=path.join(data,'dispatch','runs','run-fixture-002');fs.mkdirSync(second);
+  const second=path.join(data,'runtime','dispatch','runs','run-fixture-002');fs.mkdirSync(second);
   fs.writeFileSync(path.join(second,'auto-commit.json'),original);
   fs.writeFileSync(path.join(second,'run.json'),JSON.stringify({runId:'run-fixture-002',itemId:item.id,phase:'reported'}));
   assert.equal(legacyConfirmViews(data,root).length,1,'同条目新运行不继承旧证据');

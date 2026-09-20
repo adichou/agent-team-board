@@ -113,7 +113,7 @@ function mkFixture(name) {
   git(homepage, 'commit', '-m', 'site');
   core.initData(proj);
   core.initData(projB);
-  const dataDir = path.join(proj, 'docs', 'agent-team-board');
+  const dataDir = path.join(proj, 'agent-team-board');
   const v = buildStore.createVersion(dataDir, {
     name: '版本 V1', items: [{ itemId: 'REQ-20260915-010', commit: itemCommit, title: 'webapp' }],
   });

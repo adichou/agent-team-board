@@ -24,7 +24,7 @@ test('独立运行存储隔离项目、版本，旧产品记录不可读取', ()
  assert.match(a.id,/^BPUB-/); assert.equal(store.listRuns(path.join(root,'other')).length,0);
  assert.equal(store.listRuns(board,'BLD-B').length,0);
  assert.throws(()=>store.readRun(board,'../legacy'),/编号/);
- assert.ok(fs.existsSync(path.join(board,'builds','publish-runs',a.id,'run.json')));
+ assert.ok(fs.existsSync(path.join(board, 'runtime', 'builds','publish-runs',a.id,'run.json')));
 });
 test('Finder 仅使用结果路径，未生成禁用，删除后拒绝，不读取最新配置', async () => {
  const out=path.join(root,'output');fs.mkdirSync(out);
@@ -75,7 +75,7 @@ test('真实临时 Git 双目标执行、计划确认、防重复、全局改动
   "fs.writeFileSync('dist/favicon.svg','<svg xmlns=\\'http://www.w3.org/2000/svg\\'/>');",
  ].join('\n'));
  git(repo,'add','.');git(repo,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','site');
- const db=path.join(project,'docs','agent-team-board');const bld={id:'BLD-X',name:'test',status:'merged',items:[{itemId:'REQ-test',commit:git(project,'rev-parse','HEAD')}]};
+ const db=path.join(project, 'agent-team-board');const bld={id:'BLD-X',name:'test',status:'merged',items:[{itemId:'REQ-test',commit:git(project,'rev-parse','HEAD')}]};
  const run=await publish.create(db,project,bld,'1.0');
  await assert.rejects(()=>publish.start(db,project,run.id,'invented'),/预检/);
  const checked=await publish.precheck(db,project,run.id);assert.equal(checked.precheck.ok,true,JSON.stringify(checked.precheck.checks));

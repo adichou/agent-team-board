@@ -53,9 +53,9 @@ t('B5 解析失败不猜：路径不存在 / 无命中 / 同名歧义 / 多项�
   assert.match(boardCmd, /完整路径/, '应列出已知项目含完整路径供确认');
 });
 
-t('B6 未提及项目走现状：git root / docs/agent-team-board/ / cwd 兜底', () => {
+t('B6 未提及项目走现状：git root / agent-team-board/ / cwd 兜底', () => {
   assert.match(boardCmd, /git root/, '应保留 git root 探测');
-  assert.match(boardCmd, /docs\/agent-team-board\//, '应保留数据目录探测');
+  assert.match(boardCmd, /agent-team-board\//, '应保留数据目录探测（新板根）');
   assert.match(boardCmd, /cwd|工作目录/, '应保留 cwd 兜底');
 });
 
