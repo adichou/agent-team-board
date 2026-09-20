@@ -77,8 +77,14 @@ const ATBBuild = (() => {
     deleteBusy: false,
     // REQ-20260915-002 产品发布：从已合并版本创建发布（弹层仅核对发行版本号，其余自动带入）
     releaseConfirm: null, // { verId, version, busy, error }
-    // BUG-20260915-014：右侧详情「概况 / 发布」页签（默认概况；随项目切换重置）
-    detailTab: 'overview', // overview | release
+    // REQ-20260920-003 五步流程：右侧详情按 版本计划 → 关联条目与提交 → 文档编写 → 合并入
+    // main → 正式发布 分步导航（替代原「概况 / 发布」两页签）；随项目 / 版本切换重置回 plan
+    step: 'plan', // plan | link | docs | merge | release
+    // 发布流程数据（/api/build/publish-plan + /api/build/docs 装配；以 verId 归属隔离，
+    // seq 丢弃切换版本 / 项目后迟到的旧响应）：phase: idle → loading → ready | error
+    pf: null, // { verId, seq, phase, error, plan, file, mode, content, busy, savedMsg, commitMsg, ideMsg, siteBusy }
+    // 官网检测轮询句柄（60 秒一轮；离开发布步 / 切换版本 / 切换页签即停止，返回可继续核对）
+    siteTimer: null,
     // 发布页签数据（以 verId 归属隔离；seq/detailSeq 丢弃切换版本 / 项目后迟到的旧响应）
     // phase: idle → loading → ready | error；detailPhase: idle | loading | ready | error
     rel: null, // { verId, seq, phase, error, runs, runId, detailSeq, detailPhase, detailError, detail, planModal, busy }
@@ -274,10 +280,13 @@ const ATBBuild = (() => {
   // REQ-20260915-003：切换选中版本——清空关联列表搜索（关键词与草稿）并回第一页
   //（口径同分支浏览切分支重置搜索）；同时清行内编辑态，与原卡片点击行为一致。
   // BUG-20260915-014：一并清空发布页签数据（旧版本记录 / 选中运行 / 错误不带入新版本）。
+  // REQ-20260920-003：五步流程数据与轮询一并重置（step 回「版本计划」，旧版本轮询停止）。
   function selectVersion(id) {
     state.selVerId = id;
     state.edit = null;
     state.rel = null;
+    state.pf = null;
+    stopSiteTimer();
     resetItemsList();
   }
 
@@ -295,8 +304,9 @@ const ATBBuild = (() => {
         project: project ?? null, phase: 'loading', error: null, data: null, tab: 'versions',
         selVerId: null, edit: null, createPanel: null, addPanel: null, answer: null,
         itemsQuery: '', itemsQueryInput: '', itemsPage: 1, // REQ-20260915-003：关联列表搜索分页随项目切换重置
-        // BUG-20260915-014：详情页签与发布数据随项目切换重置（页签回概况，旧项目记录不串用）
-        detailTab: 'overview', rel: null,
+        // BUG-20260915-014：详情页签与发布数据随项目切换重置（页签回概况，旧项目记录不串用）；
+        // REQ-20260920-003：五步流程与官网轮询随项目切换重置（step 回 plan）
+        step: 'plan', rel: null, pf: null,
         mergeConfirm: null, pushConfirm: null, mergeBusy: false,
         deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
@@ -309,6 +319,7 @@ const ATBBuild = (() => {
         lastSync: null, // BUG-20260914-011：同步结果明细（pushed/failed/skipped）随项目切换重置
         rendered: false, pendingRestore: state.pendingRestore,
       });
+      stopSiteTimer(); // REQ-20260920-003：切换项目停止旧项目官网轮询
       render(); // 拉取前先呈现加载态
     }
     refreshWorkspaceApps(); // BUG-20260913-005：宿主探测预热（fire-and-forget，loaded 后为 no-op）
@@ -1206,19 +1217,252 @@ const ATBBuild = (() => {
     return ensureReleaseData(true).finally(() => refresh());
   }
 
-  function setDetailTab(tab) {
-    state.detailTab = tab === 'release' ? 'release' : 'overview';
-    render();
-    if (state.detailTab === 'release') ensureReleaseData(); // 只读按需拉取（幂等：加载中/已加载不重发）
+  /* ---------- REQ-20260920-003 发布流程数据（publish-plan / docs / release） ---------- */
+
+  function defaultPf(verId) {
+    return {
+      verId, seq: 0, phase: 'idle', error: null, plan: null,
+      file: 'README.md', mode: 'edit', content: null, loadedFile: null,
+      busy: false, savedMsg: null, commitMsg: null, ideMsg: null, siteBusy: false,
+    };
   }
 
-  // 「查看发布记录」新落点：选中所在卡片版本并激活其详情发布页签（不跳隐藏模块）
+  const pfOf = (v) => (state.pf && state.pf.verId === v.id ? state.pf : null);
+
+  // 拉取五步装配（GET publish-plan，只读；steps 门禁 / 文档状态 / 提示词 / 影响分析 / 发布状态）。
+  // force 用于动作完成后的刷新；迟到响应按闭包身份 + seq 丢弃。
+  async function ensurePublishPlan(force = false) {
+    const v = selVersion();
+    if (!v || !state.project) return;
+    let pf = pfOf(v);
+    if (!pf) { pf = defaultPf(v.id); state.pf = pf; }
+    if (!force && (pf.phase === 'loading' || (pf.phase === 'ready' && pf.plan))) return;
+    const seq = ++pf.seq;
+    pf.phase = 'loading';
+    pf.error = null;
+    render();
+    try {
+      const r = await fetch(`/api/build/publish-plan?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
+      if (state.pf !== pf || pf.seq !== seq) return;
+      pf.plan = data;
+      pf.phase = 'ready';
+    } catch (e) {
+      if (state.pf !== pf || pf.seq !== seq) return;
+      pf.plan = null;
+      pf.phase = 'error';
+      pf.error = e.message;
+    }
+    render();
+    if (pf.phase === 'ready' && (state.step === 'docs')) await loadDocFile(pf.file);
+  }
+
+  // 读取单个文档内容（GET docs；编辑态回填，测试环境无 DOM 时跳过）
+  async function loadDocFile(file) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || !state.project) return;
+    const seq = ++pf.seq;
+    pf.file = file;
+    try {
+      const r = await fetch(`/api/build/docs?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}&file=${encodeURIComponent(file)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
+      if (state.pf !== pf || pf.seq !== seq) return;
+      pf.content = data.content == null ? '' : data.content;
+      pf.loadedFile = file;
+      const box = $('#buildView')?.querySelector('.bld-doc-editor');
+      if (box) box.value = pf.content;
+    } catch (e) {
+      toast(`✕ 文档读取失败：${e.message}`, true);
+    }
+  }
+
+  function selectDocFile(file) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.busy) return;
+    // 编辑内容草稿回同步（防切文档丢字）；保存后切换以磁盘为准重读
+    syncDocDraft();
+    pf.savedMsg = null;
+    loadDocFile(file);
+  }
+
+  // 重渲染前把编辑框当前值同步回 pf.content（防后台刷新冲掉未保存输入）
+  function syncDocDraft() {
+    const pf = state.pf;
+    if (!pf || pf.mode !== 'edit') return;
+    const view = $('#buildView');
+    const box = view?.querySelector?.('.bld-doc-editor');
+    if (box) pf.content = box.value;
+  }
+
+  async function saveDocFile() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.busy || !state.project) return;
+    syncDocDraft();
+    pf.busy = true;
+    pf.savedMsg = null;
+    render();
+    try {
+      const r = await fetch(`/api/build/docs/save?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, file: pf.file, content: String(pf.content ?? '') }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
+      pf.savedMsg = `已保存 ${pf.file}（未提交：需「提交文档到 Git」后才能合并）`;
+      toast(`✓ 已保存 ${pf.file}`);
+      await ensurePublishPlan(true);
+    } catch (e) {
+      pf.savedMsg = `保存失败：${e.message}（内容已保留，可重试）`;
+      toast(`✕ 保存失败：${e.message}`, true);
+    } finally {
+      pf.busy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  async function commitDocs() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.busy || !state.project) return;
+    syncDocDraft();
+    pf.busy = true;
+    pf.commitMsg = null;
+    render();
+    try {
+      const r = await fetch(`/api/build/docs/commit?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `提交失败（${r.status}）`);
+      pf.commitMsg = data.noop
+        ? '文档没有变化，未制造空提交'
+        : `已提交文档（${String(data.commitHash || '').slice(0, 12)}；范围：${(data.files || []).join('、')}）`;
+      toast(data.noop ? '文档无变化，未空提交' : `✓ 文档已提交到 Git（${String(data.commitHash || '').slice(0, 8)}）`);
+      await Promise.all([ensurePublishPlan(true), refresh()]);
+    } catch (e) {
+      pf.commitMsg = `提交失败：${e.message}（内容已保留，可重试）`;
+      toast(`✕ 文档提交失败：${e.message}`, true);
+    } finally {
+      pf.busy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  async function openIdeApp(app) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.busy || !state.project) return;
+    pf.busy = true;
+    pf.ideMsg = null;
+    render();
+    try {
+      const r = await fetch(`/api/build/docs/open-ide?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, app }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `打开失败（${r.status}）`);
+      pf.ideMsg = data.message;
+      toast(`✓ ${data.message}`);
+    } catch (e) {
+      pf.ideMsg = e.message; // 未安装 / 启动失败：提示与手动打开路径就地展示
+      toast(`✕ ${e.message}`, true);
+    } finally {
+      pf.busy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  /* ---------- 官网检测轮询（60 秒一轮 + 立即检测；离开发布步即停止） ---------- */
+
+  function stopSiteTimer() {
+    if (state.siteTimer) { clearInterval(state.siteTimer); state.siteTimer = null; }
+  }
+
+  function startSiteTimer() {
+    stopSiteTimer();
+    if (typeof setInterval !== 'function') return; // 测试沙箱无定时器：跳过（浏览器正常轮询）
+    state.siteTimer = setInterval(() => { siteScan(false); }, 60_000);
+  }
+
+  async function siteScan(force) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || !state.project || pf.siteBusy) return;
+    if (!force && state.step !== 'release') return; // 离开发布步不触发
+    pf.siteBusy = true;
+    try {
+      const r = await fetch(`/api/build/release/site-scan?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, force: !!force }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `检测失败（${r.status}）`);
+      if (state.pf === pf && selVersion()?.id === v.id && data.site) {
+        pf.plan = { ...(pf.plan || {}), release: { ...(pf.plan?.release || {}), site: data.site }, siteNotice: data.notice || '' };
+        render();
+      }
+    } catch (e) {
+      toast(`✕ 官网检测失败：${e.message}`, true);
+    } finally {
+      pf.siteBusy = false;
+    }
+  }
+
+  // 正式发布第一步：推送主分支（只推 main/master 解析结果；成功记录推送完成时间）
+  async function pushMain() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.busy || !state.project) return;
+    const remote = $('#buildView')?.querySelector('.bld-push-main-remote')?.value || 'origin';
+    pf.busy = true;
+    render();
+    try {
+      const r = await fetch(`/api/build/release/push?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, remote }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `推送失败（${r.status}）`);
+      toast(`✓ 已推送主分支 ${data.pushed?.branch || ''} → ${data.pushed?.remote || remote}（推送完成时间已记录，官网检测从该时间起）`);
+      await Promise.all([ensurePublishPlan(true), refresh()]);
+    } catch (e) {
+      toast(`✕ 推送失败：${e.message}（可重试；失败不进入完成状态）`, true);
+    } finally {
+      pf.busy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  // REQ-20260920-003 五步导航切换：步进 / 回退均为浏览位置，数据按需拉取；进入「正式发布」
+  // 步启动官网检测轮询（60 秒一轮），离开（任意切步 / 切版本 / 切页签 / 切项目）即停止。
+  function setStep(step) {
+    const s = ['plan', 'link', 'docs', 'merge', 'release'].includes(step) ? step : 'plan';
+    state.step = s;
+    stopSiteTimer();
+    render();
+    if (s === 'docs' || s === 'merge' || s === 'release') ensurePublishPlan();
+    if (s === 'release') {
+      ensureReleaseData(); // BUG-20260915-014：产品发布记录就地展示（沿用）
+      startSiteTimer();
+    }
+  }
+
+  // 「查看发布记录」新落点：选中所在卡片版本并进入「正式发布」步（不跳隐藏模块）
   function openReleaseTab(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
     if (v.id !== state.selVerId) selectVersion(v.id); // 清空旧版本发布数据（含记录与错误）
-    state.detailTab = 'release';
+    state.step = 'release';
+    stopSiteTimer();
     render();
+    startSiteTimer();
     return ensureReleaseData();
   }
 
@@ -1251,9 +1495,10 @@ const ATBBuild = (() => {
       state.releaseConfirm = null;
       const runId = data.run?.id || null;
       toast(`✓ 已创建产品发布 ${runId || ''}（草稿）：请在本页签预检并启动`);
-      // BUG-20260915-014：创建成功落在当前版本的发布页签并选中新草稿（不跳隐藏模块）
+      // BUG-20260915-014：创建成功落在当前版本的发布页签并选中新草稿（不跳隐藏模块）；
+      // REQ-20260920-003：落点为五步流程的「正式发布」步
       if (state.selVerId !== v.id) selectVersion(v.id);
-      state.detailTab = 'release';
+      state.step = 'release';
       const rel = relOf(v) || defaultRel(v.id);
       state.rel = rel;
       if (runId) rel.runId = runId;
@@ -1550,9 +1795,11 @@ const ATBBuild = (() => {
   }
 
   function snapshot() {
-    // BUG-20260915-014：detailTab 进快照（刷新后保留正确页签；运行选中不持久化，
-    // 重进发布页签自动选最新一条，不混入其他版本记录——README「待确认」最低要求）
-    return { tab: state.tab, selVerId: state.selVerId, logBranch: state.logBranch, detailTab: state.detailTab };
+    // BUG-20260915-014：详情页签进快照（刷新后保留正确页签；运行选中不持久化，
+    // 重进发布页签自动选最新一条，不混入其他版本记录——README「待确认」最低要求）；
+    // REQ-20260920-003：改为五步流程 step（仅认合法值；轮询句柄不进快照，重进自愈恢复）
+    const steps = ['plan', 'link', 'docs', 'merge', 'release'];
+    return { tab: state.tab, selVerId: state.selVerId, logBranch: state.logBranch, step: steps.includes(state.step) ? state.step : 'plan' };
   }
 
   function restoreView(snap) {
@@ -1567,8 +1814,8 @@ const ATBBuild = (() => {
     state.selVerId = known ? snap.selVerId : null;
     resetItemsList(); // REQ-20260915-003：恢复浏览位置视为重新选中版本，清空关联列表搜索回第一页
     state.rel = null; // BUG-20260915-014：恢复视为重新选中版本，发布数据按需重载
-    if (snap.detailTab === 'release') state.detailTab = 'release'; // 仅认合法值，其余回落概况
-    else state.detailTab = 'overview';
+    state.pf = null;  // REQ-20260920-003：发布流程数据按需重载
+    state.step = ['plan', 'link', 'docs', 'merge', 'release'].includes(snap.step) ? snap.step : 'plan'; // 仅认合法值
     state.logBranch = typeof snap.logBranch === 'string' ? snap.logBranch : null;
     state.pendingRestore = null;
     if (state.tab === 'branches' && !state.branches) loadBranches();
@@ -1577,6 +1824,7 @@ const ATBBuild = (() => {
 
   function setTab(t) {
     state.tab = TABS.some(([k]) => k === t) ? t : 'versions';
+    if (state.tab !== 'versions') stopSiteTimer(); // REQ-20260920-003：离开版本计划页签即停止官网轮询
     if (state.tab === 'branches' && !state.branches && state.data?.isRepo) loadBranches();
     render();
   }
@@ -1628,10 +1876,13 @@ const ATBBuild = (() => {
       // merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（与合并键一并禁用）。
       const delDisabled = v.status === 'merging' || state.mergeBusy;
       const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
+      // REQ-20260920-003：列表展示计划号 + 提取版本号（保留前导零）+ 阶段
+      const verNo = /^BLD-\d{8}-\d{3}$/.test(v.id) ? v.id.replace(/^BLD-/, '') : '';
+      const stage = v.status === 'merged' ? '正式发布' : v.status === 'merging' ? '合并中' : v.status === 'failed' ? '失败（可重试）' : '计划中';
       return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><strong>${esc(v.name || v.id)}</strong> ${versionChip(v)}</div>
-        <div class="meta">${esc(v.id)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
+        <div class="meta">${esc(v.id)}${verNo ? ` · 版本号 ${esc(verNo)}` : ''} · 阶段 ${esc(stage)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
         <div class="card-acts">${answerBtn}${mergeBtn}${releaseBtn}${releaseViewBtn}${delBtn}</div>
       </div>`;
     }).join('');
@@ -1686,6 +1937,169 @@ const ATBBuild = (() => {
       </aside>`;
   }
 
+  /* ---------- REQ-20260920-003 五步流程渲染（plan / link / docs / merge / release） ---------- */
+
+  const STEP_LABEL = { plan: '版本计划', link: '关联条目与提交', docs: '文档编写', merge: '合并入 main', release: '正式发布' };
+  const DOC_STATE_LABEL = { unwritten: '未编写', uncommitted: '未提交', committed: '已提交', 'needs-rewrite': '需重新编写' };
+  const DOC_STATE_CLS = { unwritten: 'st-mute', uncommitted: 'st-run', committed: 'st-ok', 'needs-rewrite': 'st-wait' };
+  const SITE_STATE_LABEL = { waiting: '等待官网同步', scanning: '扫描中', missed: '未命中（可继续检测）', hit: '已检测到官网同步', failed: '读取失败' };
+
+  function renderStepNav(v) {
+    const pf = pfOf(v);
+    const steps = pf?.plan?.steps || null;
+    return `
+        <nav class="rel-tabs bld-detail-tabs" role="tablist" aria-label="发布五步流程">
+          ${['plan', 'link', 'docs', 'merge', 'release'].map((k) => {
+            const gate = steps?.find((s) => s.key === k) || null;
+            const locked = !!gate?.locked;
+            return `<button type="button" class="rel-tab${state.step === k ? ' active' : ''}" data-step="${k}" role="tab" aria-selected="${state.step === k}"${locked && state.step !== k ? ` disabled title="${esc(gate.reason || '前置条件未满足')}"` : ''}>${STEP_LABEL[k]}</button>`;
+          }).join('')}
+        </nav>`;
+  }
+
+  // 文档编写步：上部 AI 写作（提示词 + IDE 入口），下部文档与语言选择、编辑 / 预览、提交状态与 Git 按钮
+  function renderDocsPane(v) {
+    const pf = pfOf(v);
+    if (!pf || pf.phase === 'loading') return '<div class="bld-docs-pane"><p class="muted" role="status">正在加载发布流程数据…</p></div>';
+    if (pf.phase === 'error' || !pf.plan) {
+      return `<div class="bld-docs-pane"><p class="rel-form-err" role="alert">发布流程数据读取失败：${esc(pf.error || '未知原因')}</p>
+        <p><button type="button" class="btn small" data-pf-retry>重试</button></p></div>`;
+    }
+    const p = pf.plan;
+    const docs = p.docs || { files: [], overall: 'none', reasons: [] };
+    const key = String(pf.file || 'README.md').replace(/\.en\.md$|\.md$/, '');
+    const lang = String(pf.file || '').endsWith('.en.md') ? 'en' : 'zh';
+    const editing = pf.mode !== 'preview';
+    const content = pf.content == null ? '' : String(pf.content);
+    const editor = editing
+      ? `<textarea class="bld-doc-editor" rows="14" spellcheck="false">${esc(content)}</textarea>`
+      : `<pre class="bld-doc-preview">${esc(content) || '（空文档）'}</pre>`;
+    const fileRows = (docs.files || []).map((f) => `<span class="bld-doc-chip" data-doc-file="${esc(f.file)}" role="button" tabindex="0" title="${esc(DOC_STATE_LABEL[f.state] || f.state)}">${esc(f.file)} <span class="st ${DOC_STATE_CLS[f.state] || 'st-mute'}">${esc(DOC_STATE_LABEL[f.state] || f.state)}</span></span>`).join('');
+    const gateBar = docs.overall !== 'committed'
+      ? `<div class="bld-docs-gate" role="note">${(docs.reasons || []).map((x) => `<p class="small">${esc(x)}</p>`).join('') || '<p class="small">文档未完成提交，暂不可合并</p>'}</div>`
+      : `<p class="small muted">文档已提交（${String(docs.commitHash || '').slice(0, 12)}）：满足合并前置</p>`;
+    return `
+      <div class="bld-docs-pane">
+        <section class="bld-docs-ai">
+          <strong>AI 写作</strong>
+          <p class="muted small">由「技术写作人员」角色的子代理完成当前版本文档任务：主会话派发下方提示词并接收短回执；子代理按关联条目与实际代码核实变化，简练通俗，不编造能力。</p>
+          <textarea class="bld-docs-prompt" rows="7" readonly>${esc(p.docsPrompt || '')}</textarea>
+          <p><button type="button" class="btn small primary" data-pf-copy-prompt>复制提示词</button>
+            <button type="button" class="btn small" data-pf-ide="trae-cn" title="用 TRAE CN 打开当前项目编辑文档（未安装会明确提示并给手动路径）">TRAE CN 打开</button>
+            <button type="button" class="btn small" data-pf-ide="trae" title="用 TRAE 打开当前项目编辑文档（未安装会明确提示并给手动路径）">TRAE 打开</button></p>
+          ${pf.ideMsg ? `<p class="small" role="status">${esc(pf.ideMsg)}</p>` : ''}
+        </section>
+        <section class="bld-docs-edit">
+          <div class="bld-docs-head">
+            <strong>文档</strong>
+            <label class="small">类型
+              <select class="bld-doc-key">${['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].map((k) => `<option value="${k}"${k === key ? ' selected' : ''}>${k}</option>`).join('')}</select></label>
+            <label class="small">语言
+              <select class="bld-doc-lang"><option value="zh"${lang === 'zh' ? ' selected' : ''}>中文</option><option value="en"${lang === 'en' ? ' selected' : ''}>英文</option></select></label>
+            <div class="bld-doc-mode" role="group" aria-label="编辑或预览">
+              <button type="button" class="btn small${editing ? ' on' : ''}" data-pf-mode="edit">编辑</button>
+              <button type="button" class="btn small${!editing ? ' on' : ''}" data-pf-mode="preview">预览</button>
+            </div>
+            <button type="button" class="btn small primary" data-pf-save${pf.busy ? ' disabled' : ''}>${pf.busy ? '处理中…' : '保存'}</button>
+          </div>
+          ${editor}
+          ${pf.savedMsg ? `<p class="small" role="status">${esc(pf.savedMsg)}</p>` : ''}
+          ${pf.file === 'README.md' || pf.file === 'README.en.md' ? `<p class="muted small">README 需链接同语言 CHANGELOG 与 FEATURES（${pf.file === 'README.md' ? 'CHANGELOG.md、FEATURES.md' : 'CHANGELOG.en.md、FEATURES.en.md'}）。</p>` : ''}
+        </section>
+        <section class="bld-docs-commit">
+          <div class="bld-docs-files">${fileRows}</div>
+          ${gateBar}
+          <p><button type="button" class="btn primary" data-pf-commit${pf.busy || docs.overall === 'none' ? ' disabled title="先编写并保存文档"' : ''}>${pf.busy ? '提交中…' : '提交文档到 Git'}</button>
+            <span class="muted small">只提交上述八个文档，不夹带业务源码；无变化不空提交。</span></p>
+          ${pf.commitMsg ? `<p class="small" role="status">${esc(pf.commitMsg)}</p>` : ''}
+        </section>
+      </div>`;
+  }
+
+  // 合并入 main 步：范围与隔离分析、禁用原因、合并结果
+  function renderMergePane(v) {
+    const pf = pfOf(v);
+    if (!pf || pf.phase === 'loading') return '<div class="bld-merge-pane"><p class="muted" role="status">正在加载合并分析…</p></div>';
+    if (pf.phase === 'error' || !pf.plan) {
+      return `<div class="bld-merge-pane"><p class="rel-form-err" role="alert">合并分析读取失败：${esc(pf.error || '未知原因')}</p>
+        <p><button type="button" class="btn small" data-pf-retry>重试</button></p></div>`;
+    }
+    const p = pf.plan;
+    const gate = (p.steps || []).find((s) => s.key === 'merge');
+    const an = p.mergeAnalysis || { perItem: [], blocked: [], notes: [] };
+    const onDev = p.currentBranch === 'dev';
+    const scopeRows = (v.items || []).map((it) => `<li>${esc(it.itemId)} <code>${esc(short(it.commit))}</code> ${it.mergedAt ? '<span class="st st-ok">已合并</span>' : ''}${it.mergeError ? `<span class="st st-fail" title="${esc(it.mergeError)}">失败</span>` : ''}</li>`).join('');
+    const interRows = (an.perItem || []).filter((x) => (x.intermediates || []).length).map((x) => `
+      <li>${esc(x.itemId)}：${x.count} 个未选祖先提交（普通 merge 会一并带入 main；隔离合并不带入，依赖其内容将冲突阻止）
+        <ul>${(x.intermediates || []).slice(0, 5).map((i) => `<li><code>${esc(short(i.hash))}</code> ${esc(i.subject || '')}</li>`).join('')}</ul></li>`).join('');
+    const devBar = onDev
+      ? `<p class="small muted">当前分支 dev · 目标主分支 ${esc(p.mainBranch || 'main')}（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>`
+      : `<p class="rel-form-err" role="alert">当前分支${p.currentBranch ? `是 ${esc(p.currentBranch)}` : '处于 detached HEAD'}，不在 dev：请自行切换回 dev 后重试（不自动切分支）。</p>`;
+    const merged = v.status === 'merged';
+    return `
+      <div class="bld-merge-pane">
+        <section><strong>发布范围</strong>
+          <ul>${scopeRows || '<li class="muted small">（无关联条目：回到「关联条目与提交」步骤关联）</li>'}</ul>
+          ${p.docs?.commitHash ? `<p class="small muted">文档提交：<code>${esc(short(p.docs.commitHash))}</code>（只随本版发布最新文档提交）</p>` : ''}
+        </section>
+        <section><strong>隔离分析</strong>
+          ${(an.blocked || []).length ? `<p class="rel-form-err" role="alert">${(an.blocked || []).map((x) => esc(x)).join('；')}</p>` : ''}
+          ${(an.notes || []).map((x) => `<p class="small muted">${esc(x)}</p>`).join('')}
+          ${interRows ? `<ul>${interRows}</ul>` : '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>'}
+        </section>
+        ${devBar}
+        ${gate?.locked && !merged ? `<p class="rel-form-err" role="alert">暂不可合并：${esc(gate.reason || '前置条件未满足')}</p>` : ''}
+        <p><button type="button" class="btn primary" data-ver-merge="${esc(v.id)}"${!merged && !gate?.locked && onDev && !state.mergeBusy ? '' : ' disabled title="' + esc(merged ? '已合并入 main' : gate?.reason || '前置条件未满足') + '"'}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
+          <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>
+        ${v.status === 'failed' && v.merge?.error ? `<p class="rel-form-err" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>` : ''}
+        ${merged && v.merge?.mainSha ? `<p class="small muted">合并完成：主分支头 <code>${esc(short(v.merge.mainSha))}</code>；重放证据 ${(v.merge?.replays || []).length} 条。</p>` : ''}
+      </div>`;
+  }
+
+  // 正式发布步：主分支推送 → 官网 AI 写作提示词 → 同步检测（60 秒轮询 + 立即检测）
+  function renderReleaseFlowPane(v) {
+    const pf = pfOf(v);
+    if (!pf || pf.phase === 'loading') return '<div class="bld-release-pane"><p class="muted" role="status">正在加载发布状态…</p></div>';
+    if (pf.phase === 'error' || !pf.plan) {
+      return `<div class="bld-release-pane"><p class="rel-form-err" role="alert">发布状态读取失败：${esc(pf.error || '未知原因')}</p>
+        <p><button type="button" class="btn small" data-pf-retry>重试</button></p></div>`;
+    }
+    const p = pf.plan;
+    const rel = p.release || {};
+    const remotes = (p.remotes || []).length ? p.remotes : ['origin'];
+    const onDev = p.currentBranch === 'dev';
+    const pushState = rel.pushedAt
+      ? `<p class="small" role="status">已推送主分支 ${esc(rel.pushRemote || '')}（完成时间 ${esc(fmtTime(rel.pushedAt))}，基准 <code>${esc(short(rel.pushedSha))}</code>）；官网检测从该时间起。</p>`
+      : '<p class="small muted">尚未推送主分支（未推送过官网；推送成功时间将作为官网检测时间窗口起点）。</p>';
+    const site = rel.site || { status: 'waiting' };
+    const siteCls = site.status === 'hit' ? 'st-ok' : site.status === 'failed' ? 'st-fail' : site.status === 'scanning' ? 'st-run' : 'st-mute';
+    const evidence = site.status === 'hit' && site.evidence
+      ? `<p class="small">匹配提交 <code>${esc(short(site.evidence.hash))}</code>（分支 ${esc(site.branch || '—')}，检测时间 ${esc(fmtTime(site.evidence.matchedAt))}）<br>主题：${esc(site.evidence.subject || '')}</p>`
+      : '';
+    const siteInfo = site.reason ? `<p class="small">${esc(site.reason)}</p>` : '';
+    const times = `<p class="muted small">官网路径：${esc(p.siteRepoRoot || '未配置（设置中配置官网仓库根目录）')} · 实际分支：${esc(site.branch || '—')} · 上次检测 ${esc(fmtTime(site.lastScanAt))}${site.nextScanAt ? ` · 下一次 ${esc(fmtTime(site.nextScanAt))}` : ''}${site.since ? ` · 扫描起点 ${esc(fmtTime(site.since))}` : ''}</p>`;
+    return `
+      <div class="bld-release-pane">
+        <section><strong>第一步 · 推送主分支</strong>
+          ${pushState}
+          <p><label class="small">目标远端 <select class="bld-push-main-remote">${remotes.map((r) => `<option>${esc(r)}</option>`).join('')}</select></label>
+            <button type="button" class="btn primary" data-pf-push${v.status === 'merged' && onDev && !pf.busy ? '' : ` disabled title="${esc(v.status !== 'merged' ? '先完成合并入 main' : '请自行切换回 dev 后重试')}"`}>${pf.busy ? '推送中…' : '推送主分支'}</button>
+            <span class="muted small">只推主分支（${esc(p.mainBranch || 'main')}）：不推 dev、不强推；失败可重试，不进入完成状态。</span></p>
+        </section>
+        <section><strong>第二步 · 官网 AI 写作</strong>
+          <p class="muted small">推送成功后进行：提示词在官网仓库执行，读取本项目已发布版本 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新；完成提交消息须含完整计划号。</p>
+          ${p.sitePrompt ? `<textarea class="bld-site-prompt" rows="7" readonly>${esc(p.sitePrompt)}</textarea>
+          <p><button type="button" class="btn small primary" data-pf-copy-site>复制官网提示词</button></p>` : '<p class="small muted">未配置官网仓库：先在设置中配置官网仓库根目录。</p>'}
+        </section>
+        <section><strong>第三步 · 官网同步检测</strong>
+          <p><span class="st ${siteCls}">${esc(SITE_STATE_LABEL[site.status] || site.status)}</span>
+            <button type="button" class="btn small" data-pf-scan${pf.siteBusy ? ' disabled' : ''}>${pf.siteBusy ? '检测中…' : '立即检测'}</button></p>
+          ${evidence}${siteInfo}${times}
+          <p class="muted small" role="note">${esc(p.siteNotice || pf.plan?.siteNotice || '每分钟检查官网本地主分支；匹配仅表示本地提交已同步，不代表已推送或网站已部署')}</p>
+        </section>
+      </div>`;
+  }
+
   function renderDetail(v) {
     if (!v) return '<div class="rel-detail muted">点击左侧版本查看详情</div>';
     const lockItems = ['merging', 'merged'].includes(v.status);
@@ -1733,16 +2147,14 @@ const ATBBuild = (() => {
       : v.status === 'failed' && v.merge?.error
         ? `<p class="rel-form-err bld-merge-note" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>`
         : '';
-    // BUG-20260915-014：详情标题下「概况 / 发布」页签——概况承接原有全部内容（描述 / 关联条目 /
-    // 合并反馈），发布页签按当前版本（bldId）就地展示产品发布记录（默认概况）
-    // BUG-20260918-002：版本侧 mgt 反馈块（服务端已不再返回对应数据的死代码）随闭环下线移除
-    const tabs = `
-        <nav class="rel-tabs bld-detail-tabs" role="tablist" aria-label="版本详情页签">
-          <button type="button" class="rel-tab${state.detailTab === 'overview' ? ' active' : ''}" data-detail-tab="overview" role="tab" aria-selected="${state.detailTab === 'overview'}">概况</button>
-          <button type="button" class="rel-tab${state.detailTab === 'release' ? ' active' : ''}" data-detail-tab="release" role="tab" aria-selected="${state.detailTab === 'release'}">发布</button>
-        </nav>`;
-    const overviewBody = `
+    // REQ-20260920-003：右侧详情改为五步流程导航——1 版本计划（信息编辑）→ 2 关联条目与提交
+    //（原概况的关联列表）→ 3 文档编写 → 4 合并入 main → 5 正式发布（含原产品发布记录页签）
+    const versionNumber = (v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '';
+    const planBody = `
+        <p class="muted small">计划号 ${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 目标分支 ${esc(v.targetBranch || 'main')}${v.merge?.baseBranch ? ` · 来源分支 ${esc(v.merge.baseBranch)}` : ''}</p>
         <div class="bld-desc-block"><span class="muted small">描述</span>${descCell}</div>
+        ${mergeState}`;
+    const linkBody = `
         <div class="bld-items">
           <div class="bld-items-head"><strong>关联条目与 commit</strong>
             <div class="bld-items-search" role="search">
@@ -1755,18 +2167,23 @@ const ATBBuild = (() => {
           ${countBar}
           ${listBody}
           ${pager}
-        </div>
-        ${mergeState}`;
+        </div>`;
+    let stepBody;
+    if (state.step === 'link') stepBody = linkBody;
+    else if (state.step === 'docs') stepBody = renderDocsPane(v);
+    else if (state.step === 'merge') stepBody = renderMergePane(v);
+    else if (state.step === 'release') stepBody = `${renderReleaseFlowPane(v)}${renderReleasePane(v)}`;
+    else stepBody = planBody;
     return `
       <div class="rel-detail">
         <header class="rel-detail-head">
           <div>
             <h3>${nameCell}</h3>
-            <p class="muted small">${esc(v.id)} · 目标分支 main${v.merge?.baseBranch ? ` · 来源分支 ${esc(v.merge.baseBranch)}` : ''} · 更新 ${esc(fmtTime(v.updatedAt))}</p>
+            <p class="muted small">${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 更新 ${esc(fmtTime(v.updatedAt))}</p>
           </div>
         </header>
-        ${tabs}
-        ${state.detailTab === 'release' ? renderReleasePane(v) : overviewBody}
+        ${renderStepNav(v)}
+        ${stepBody}
       </div>`; // REQ-20260915-003：产品发布操作区（原 bld-release-block）已迁入左侧版本卡片，详情不再重复渲染
   }
 
@@ -2070,18 +2487,22 @@ const ATBBuild = (() => {
 
   // syncModalDrafts=false 供 parseAnswerPreview 跳过草稿回同步（解析结果刚写入 state，
   // 旧 DOM 输入值不应覆盖预填值）；其余调用方默认 true——重渲染前把弹窗内未保存的
-  // 回答草稿与回填编辑值写回 state，防止后台刷新冲掉用户输入（REQ-20260913-006）
+  // 回答草稿与回填编辑值写回 state，防止后台刷新冲掉用户输入（REQ-20260913-006）；
+  // REQ-20260920-003：文档编辑框同样回同步（syncDocDraft，防轮询 / 刷新冲掉未保存文档）
   function render(syncModalDrafts = true) {
     const view = $('#buildView');
     if (!view) return;
-    if (syncModalDrafts && state.rendered && state.answer) syncAnswerDraft();
+    if (syncModalDrafts && state.rendered) {
+      syncAnswerDraft();
+      syncDocDraft();
+    }
     if (state.phase === 'loading') {
-      view.innerHTML = '<div class="rel-loading muted">加载构建模块…</div>';
+      view.innerHTML = '<div class="rel-loading muted">加载发布模块…</div>';
       state.rendered = true;
       return;
     }
     if (state.phase === 'error') {
-      view.innerHTML = `<div class="rel-error"><p>构建模块读取失败：${esc(state.error || '')}</p>
+      view.innerHTML = `<div class="rel-error"><p>发布模块读取失败：${esc(state.error || '')}</p>
         <button type="button" class="btn" id="bldRetryLoad">重试</button></div>`;
       bindCommon(view);
       state.rendered = true;
@@ -2093,7 +2514,7 @@ const ATBBuild = (() => {
     if (!d?.isRepo) {
       // 非 git 仓库：版本计划同样受不可用（创建 / 合并均需 git），给统一引导空态
       body = `<div class="rel-empty"><h3>当前项目不是 git 仓库</h3>
-        <p class="muted">构建模块基于 git（版本计划合并入 main、分支浏览与同步）：可在终端执行 git init，或经 <code>atb init</code> 初始化项目（设置模块「Git 工作流」亦有初始化入口）。</p></div>`;
+        <p class="muted">发布模块基于 git（版本计划合并入 main、分支浏览与同步）：可在终端执行 git init，或经 <code>atb init</code> 初始化项目（设置模块「Git 工作流」亦有初始化入口）。</p></div>`;
     } else if (state.tab === 'versions') {
       body = `
         <div class="rel-split">
@@ -2120,12 +2541,17 @@ const ATBBuild = (() => {
       ${renderReleaseConfirm()}
       ${renderRelPlanModal()}`;
     bindCommon(view);
-    // BUG-20260915-014：发布页签按需自愈加载——详情在发布页签但数据缺失 / 版本不匹配
-    //（切换版本 / 选中失效回落 / 恢复快照）时只读拉取；ensureReleaseData 同步置 loading 态，
-    // 重入 render 不再触发（无请求循环）
-    if (state.tab === 'versions' && state.detailTab === 'release' && d?.isRepo) {
+    // REQ-20260920-003：文档 / 合并 / 正式发布步按需自愈加载——详情在这些步但 pf 数据缺失 /
+    // 版本不匹配（切换版本 / 选中失效回落 / 恢复快照）时只读拉取；ensurePublishPlan 同步置
+    // loading 态，重入 render 不再触发（无请求循环）
+    if (state.tab === 'versions' && d?.isRepo) {
       const v0 = selVersion();
-      if (v0 && (!state.rel || state.rel.verId !== v0.id)) ensureReleaseData();
+      const needPf = v0 && ['docs', 'merge', 'release'].includes(state.step) && (!state.pf || state.pf.verId !== v0.id);
+      if (needPf) ensurePublishPlan();
+      // BUG-20260915-014：正式发布步同时自愈加载产品发布记录（原发布页签数据）
+      if (v0 && state.step === 'release' && (!state.rel || state.rel.verId !== v0.id)) ensureReleaseData();
+      // 官网检测轮询自愈：处于正式发布步且未启动时启动（离开发布步由 setStep / selectVersion 停止）
+      if (v0 && state.step === 'release' && !state.siteTimer) startSiteTimer();
     }
     state.rendered = true;
   }
@@ -2320,10 +2746,49 @@ const ATBBuild = (() => {
     q('#bldReleaseWrap')?.addEventListener('click', (e) => {
       if (e.target?.id === 'bldReleaseWrap' && !state.releaseConfirm?.busy) { state.releaseConfirm = null; render(); }
     });
-    // BUG-20260915-014：详情「概况 / 发布」页签切换 + 发布记录选择 / 动作 / 只读重试
-    for (const el of view.querySelectorAll('[data-detail-tab]')) {
-      el.addEventListener('click', () => setDetailTab(el.dataset.detailTab));
+    // REQ-20260920-003 五步流程导航 + 发布记录选择 / 动作 / 只读重试（BUG-20260915-014 迁移）
+    for (const el of view.querySelectorAll('[data-step]')) {
+      el.addEventListener('click', () => setStep(el.dataset.step));
     }
+    for (const el of view.querySelectorAll('[data-pf-retry]')) {
+      el.addEventListener('click', () => ensurePublishPlan(true));
+    }
+    for (const el of view.querySelectorAll('[data-pf-mode]')) {
+      el.addEventListener('click', () => {
+        const pf = state.pf;
+        if (!pf) return;
+        syncDocDraft();
+        pf.mode = el.dataset.pfMode === 'preview' ? 'preview' : 'edit';
+        render();
+      });
+    }
+    const docKey = q('.bld-doc-key');
+    const docLang = q('.bld-doc-lang');
+    const docFileFromSel = () => `${docKey?.value || 'README'}${docLang?.value === 'en' ? '.en' : ''}.md`;
+    docKey?.addEventListener('change', () => selectDocFile(docFileFromSel()));
+    docLang?.addEventListener('change', () => selectDocFile(docFileFromSel()));
+    for (const el of view.querySelectorAll('[data-doc-file]')) {
+      el.addEventListener('click', () => selectDocFile(el.dataset.docFile));
+    }
+    q('[data-pf-save]')?.addEventListener('click', saveDocFile);
+    q('[data-pf-commit]')?.addEventListener('click', commitDocs);
+    for (const el of view.querySelectorAll('[data-pf-ide]')) {
+      el.addEventListener('click', () => openIdeApp(el.dataset.pfIde));
+    }
+    q('[data-pf-copy-prompt]')?.addEventListener('click', async () => {
+      const box = q('.bld-docs-prompt');
+      const ok = await copyText(box?.value || '');
+      if (ok) toast('✓ AI 写作提示词已复制：交给技术写作子代理执行，完成后接收短回执');
+      else toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制', true);
+    });
+    q('[data-pf-copy-site]')?.addEventListener('click', async () => {
+      const box = q('.bld-site-prompt');
+      const ok = await copyText(box?.value || '');
+      if (ok) toast('✓ 官网提示词已复制：请切换到官网仓库会话粘贴执行（提交消息须含完整计划号）');
+      else toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制', true);
+    });
+    q('[data-pf-push]')?.addEventListener('click', pushMain);
+    q('[data-pf-scan]')?.addEventListener('click', () => siteScan(true));
     for (const el of view.querySelectorAll('[data-rel-run]')) {
       el.addEventListener('click', (e) => {
         if (e.target?.closest?.('button')) return;
@@ -2380,9 +2845,12 @@ const ATBBuild = (() => {
     selectVersion,
     // REQ-20260915-002：产品发布入口行为接缝（测试与创建交互）
     openReleaseConfirm, doCreateRelease,
-    // BUG-20260915-014：详情「概况 / 发布」页签与发布记录接缝（测试与就地查看 / 动作交互）
-    setDetailTab, openReleaseTab, selectReleaseRun, relAction,
+    // BUG-20260915-014：详情「正式发布」步与发布记录接缝（测试与就地查看 / 动作交互）；
+    // REQ-20260920-003 更名 setDetailTab → setStep（五步流程）
+    setStep, openReleaseTab, selectReleaseRun, relAction,
     openRelPlan, confirmRelStart, refreshReleasePane, openPublishDirectory,
+    // REQ-20260920-003：发布流程接缝（文档读存提交 / IDE 入口 / 推送 / 官网检测）
+    ensurePublishPlan, loadDocFile, saveDocFile, commitDocs, openIdeApp, pushMain, siteScan, setDocMode: (m) => { if (state.pf) { state.pf.mode = m === 'preview' ? 'preview' : 'edit'; render(); } },
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };

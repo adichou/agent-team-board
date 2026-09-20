@@ -65,13 +65,30 @@ export async function inputs(root,run){
  if(homepage.repoRoot){try{materialFiles=siteMaterials(homepage.repoRoot,productId,run.version);}catch(e){materialError=e.message;}}
  return {mainSha:await git(root,'rev-parse','refs/heads/main'),devSha:await git(root,'rev-parse','refs/heads/dev'),remote,remoteUrlHash:store.fingerprint(await git(root,'remote','get-url','--push',remote)),homepage,materialFiles,materialError,version:run.version};
 }
+// REQ-20260920-003：包含性检验适配重放证据——隔离合并以 cherry-pick 重放提交进 main，原始
+// commit 不再是 main 祖先；认可「原始提交为祖先」或「记录的重放提交为祖先」两种证据。
+async function assertItemsIncluded(root, items, mainSha, replays = []) {
+  const rs = (replays || []).map((r) => ({ ...r, original: String(r.original || '').toLowerCase() }));
+  const included = async (commit) => {
+    try { await git(root, 'merge-base', '--is-ancestor', commit, mainSha); return true; } catch {}
+    const r = rs.find((x) => x.original === String(commit).toLowerCase());
+    if (!r) return false;
+    try { await git(root, 'merge-base', '--is-ancestor', r.replayed, mainSha); return true; } catch {}
+    return false;
+  };
+  for (const item of items) {
+    if (!(await included(item.commit))) {
+      throw new AtbError(`条目 ${item.itemId} 的提交（${String(item.commit).slice(0, 12)}）未包含在主分支（含重放证据核对）`);
+    }
+  }
+}
 export async function create(dataDir,root,bld,version){
  if(bld.status!=='merged'||!bld.items?.length)throw new AtbError('仅已合并且包含条目的版本可创建发布');
  const seed={productId:path.basename(root),bldId:bld.id,bldName:bld.name,version};
  const current=await inputs(root,seed);
- for(const item of bld.items)await git(root,'merge-base','--is-ancestor',item.commit,current.mainSha);
- const extra=await git(root,'log',current.mainSha,'--not',...bld.items.map(i=>i.commit),'--format=%H %s');
- return store.createRun(dataDir,{...seed,frozen:{...current,items:bld.items,extraCommits:extra.split('\n').filter(Boolean)}});
+ await assertItemsIncluded(root,bld.items,current.mainSha,bld.merge?.replays);
+ const extra=await git(root,'log',current.mainSha,'--not',...bld.items.map(i=>i.commit),...(bld.merge?.replays||[]).map(r=>r.replayed),'--format=%H %s');
+ return store.createRun(dataDir,{...seed,frozen:{...current,items:bld.items,replays:bld.merge?.replays||[],extraCommits:extra.split('\n').filter(Boolean)}});
 }
 function assertIdle(dataDir,id){
  if(active.has(`${dataDir}:${id}`)||store.listRuns(dataDir).some(r=>r.id!==id&&['running','prechecking'].includes(r.status)))throw new AtbError('项目已有活动发布，请等待结束');
@@ -95,7 +112,7 @@ export async function precheck(dataDir,root,id){
   await check('工作区',()=>clean(root));
   await check('官网全局配置',()=>store.validateRepo(store.readConfig().homepageRepoRoot));
   await check('双语材料',()=>{if(!current?.materialFiles)throw Error(current?.materialError||'官网双语材料缺失');});
-  await check('条目包含性',async()=>{for(const i of run.frozen.items)await git(root,'merge-base','--is-ancestor',i.commit,run.frozen.mainSha);});
+  await check('条目包含性',()=>assertItemsIncluded(root,run.frozen.items,run.frozen.mainSha,run.frozen.replays));
   await check('Web App 构建识别',async()=>{detected=await profile(root,run.frozen.mainSha);if(detected.version&&detected.version!==run.version)throw Error('冻结 package.json 版本与发行版本不一致');});
   await check('原子推送预演',()=>git(root,'push','--dry-run','--atomic',run.frozen.remote,'refs/heads/main:refs/heads/main','refs/heads/dev:refs/heads/dev'));
   return store.updateRun(dataDir,id,r=>{
@@ -110,8 +127,8 @@ export async function refreeze(dataDir,root,id){
  if(!['draft','failed','canceled'].includes(run.status))throw new AtbError('当前状态不可重新冻结');
  if(run.stages.some(s=>s.status==='done'))throw new AtbError('已有执行证据，请创建新发行版本，不能替换历史冻结');
  const current=await inputs(root,run);
- for(const i of run.frozen.items)await git(root,'merge-base','--is-ancestor',i.commit,current.mainSha);
- const extra=await git(root,'log',current.mainSha,'--not',...run.frozen.items.map(i=>i.commit),'--format=%H %s');
+ await assertItemsIncluded(root,run.frozen.items,current.mainSha,run.frozen.replays);
+ const extra=await git(root,'log',current.mainSha,'--not',...run.frozen.items.map(i=>i.commit),...(run.frozen.replays||[]).map(r=>r.replayed),'--format=%H %s');
  return store.updateRun(dataDir,id,r=>{r.frozen={...r.frozen,...current,extraCommits:extra.split('\n').filter(Boolean)};r.precheck=null;r.status='draft';});
 }
 export async function plan(dataDir,root,id){

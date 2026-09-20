@@ -3622,3 +3622,42 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .dv-gap { background: var(--border); }
 .dv-notice { padding: 3px 8px; color: var(--warn); background: var(--info-bg); }
 .dv-cell-empty { display: block; }
+
+/* ---------- REQ-20260920-003 发布五步流程：文档编写 / 合并 / 正式发布步 ---------- */
+/* 五步导航复用 .rel-tabs/.rel-tab；步内容纵向分节，节间留白，窄屏自然纵向堆叠 */
+.bld-docs-pane, .bld-merge-pane, .bld-release-pane { display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
+.bld-docs-pane section, .bld-merge-pane section, .bld-release-pane section {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+}
+.bld-docs-prompt, .bld-site-prompt, .bld-doc-editor {
+  font: inherit; font-size: 12.5px; line-height: 1.55; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel); color: var(--text); padding: 8px 10px; resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.bld-docs-prompt, .bld-site-prompt { color: var(--muted); }
+.bld-doc-preview {
+  border: 1px dashed var(--border); border-radius: 8px; background: var(--panel); color: var(--text);
+  padding: 10px 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto;
+}
+.bld-docs-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-docs-head > strong { flex: none; }
+.bld-docs-head label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.bld-docs-head select {
+  font: inherit; font-size: 12.5px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text);
+}
+.bld-doc-mode .btn.on { border-color: var(--accent, #2563eb); font-weight: 600; }
+.bld-docs-files { display: flex; gap: 6px; flex-wrap: wrap; }
+.bld-doc-chip {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 8px; font-size: 12px; cursor: pointer; background: var(--panel); color: var(--text);
+}
+.bld-doc-chip:hover { border-color: var(--accent, #2563eb); }
+.bld-docs-gate { border-left: 3px solid var(--warn, #d97706); padding-left: 8px; }
+.bld-merge-pane ul, .bld-release-pane ul { margin: 2px 0 0; padding-left: 18px; }
+.bld-merge-pane li, .bld-release-pane li { margin: 2px 0; }
+/* 窄屏：五步导航横向滚动不折行（步名较长），各节纵向堆叠（不并排） */
+@media (max-width: 640px) {
+  .bld-detail-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .bld-detail-tabs .rel-tab { flex: none; white-space: nowrap; }
+  .bld-docs-head, .bld-release-pane section p { flex-wrap: wrap; }
+}

@@ -22,6 +22,7 @@ import * as releaseStore from './lib/release-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
 import * as buildGit from './lib/build-git.mjs';
 import * as buildPublishStore from './lib/build-publish-store.mjs';
+import * as flow from './lib/publish-flow.mjs';
 import * as prelStore from './lib/product-release-store.mjs';
 import * as prelGit from './lib/product-release-git.mjs';
 import * as prelMaterials from './lib/site-materials.mjs';
@@ -2109,9 +2110,10 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
       if (!mainSha) throw new core.AtbError(`${mainBranch} 分支缺失：无法冻结（发布必须冻结 ${mainBranch} 分支头）`);
       if (!devSha) throw new core.AtbError('dev 分支缺失：主分支/dev 双分支推送前置，无法冻结');
       const items = bld.items.map((x) => ({ itemId: x.itemId, commit: x.commit }));
-      const contain = await prelGit.verifyItemsOnMain(root, realExec, items, mainSha);
-      if (!contain.ok) throw new core.AtbError(`计划条目不在 ${mainBranch} 历史内：${contain.missing.join('、')}（请确认版本已完整合并）`);
-      const extraCommits = await prelGit.collectExtraCommits(root, realExec, { mainSha, itemCommits: items.map((x) => x.commit), bldId: bld.id });
+      const replays = bld.merge?.replays || []; // REQ-20260920-003：隔离合并重放证据
+      const contain = await prelGit.verifyItemsOnMain(root, realExec, items, mainSha, replays);
+      if (!contain.ok) throw new core.AtbError(`计划条目不在 ${mainBranch} 历史内（含重放证据核对）：${contain.missing.join('、')}（请确认版本已完整合并）`);
+      const extraCommits = await prelGit.collectExtraCommits(root, realExec, { mainSha, itemCommits: items.map((x) => x.commit), replayCommits: replays.map((r) => r.replayed), bldId: bld.id });
       const cfg = releaseStore.readModuleConfig(board);
       let homepage = { repoRoot: cfg.homepageRepoRoot || '', branch: 'main', contentDir: '' };
       if (cfg.homepageRepoRoot) {
@@ -2122,7 +2124,7 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
       const run = prelStore.createProductRun(board, {
         productId: path.basename(root),
         bld,
-        freeze: { mainBranch, mainSha, devSha, remote: remoteInfo.remote, remoteUrl: remoteInfo.sanitizedUrl, extraCommits, homepage },
+        freeze: { mainBranch, mainSha, devSha, remote: remoteInfo.remote, remoteUrl: remoteInfo.sanitizedUrl, extraCommits, homepage, replays },
         version: body.version,
         versionName: body.versionName || bld.name,
         by: 'board',
@@ -2419,18 +2421,34 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       if (v.status === 'merged') {
         throw new buildStore.BuildConflictError('版本已合并入 main，无需重复合并');
       }
+      // REQ-20260920-003 发布前置：工作目录必须在 dev（main / 其他分支 / detached 一律阻止，
+      // 提示自行切回 dev；不自动切分支，也不经隔离执行绕过）
+      buildGit.assertOnDev(root);
+      // REQ-20260920-003 文档门禁：无条目 / 文档未完成（未提交、外部修改未提交、范围过期）
+      // 不得合并；旧已提交标识不为新范围放行
+      buildStore.assertMergeDocsGate(board, v.id, (f) => {
+        try { return fs.readFileSync(path.join(root, f), 'utf8'); } catch { return null; }
+      });
       // 与发布模块互斥（design.md 落定）：release 有活动 git 目标运行时拒绝合并（读侧校验，不改发布状态）
       releaseStore.assertTargetFree(board, 'git', {});
-      // 前置校验（只读，不改版本状态：工作区脏 / main 缺失 / 提交缺失在此明确报 400）
+      // 影响分析：混合提交（同一 commit 关联多条目）无法安全拆分，明确阻止并列出原因
+      const analysis = buildGit.analyzePublishIsolation(root, v.items);
+      if (analysis.blocked.length) {
+        throw new buildStore.BuildConflictError(analysis.blocked.join('；'));
+      }
+      // 前置校验（只读，不改版本状态：主分支缺失 / 提交缺失在此明确报 400）
       buildGit.precheckMerge(root, v.items);
       buildStore.beginMerge(board, v.id, { baseBranch: buildGit.listBranches(root).current });
       let version;
       try {
-        const r = buildGit.mergeCommitsIntoMain(root, { versionId: v.id, versionName: v.name, items: v.items });
+        // REQ-20260920-003 隔离合并：cherry-pick 重放只发布所选提交自身变更，不夹带未选祖先；
+        // 冲突即中止并说明原因；重试只补未合并条目（幂等续传）。
+        const pending = v.items.filter((x) => !x.mergedAt);
+        const r = buildGit.mergeIsolatedIntoMain(root, { versionId: v.id, versionName: v.name, items: pending });
         // REQ-20260915-002：全量合并成功时记录最终主分支头（作为发布冻结证据；
         // 旧计划无 merge.mainSha 时按「候选 + 额外提交」口径展示）。
         // REQ-20260916-005：主分支头按解析结果读取（仅 master 历史仓库为 master 头）。
-        const allMerged = v.items.every((it) => (r.results || []).some((x) => x.itemId === it.itemId && x.ok));
+        const allMerged = v.items.every((it) => (r.results || []).some((x) => x.itemId === it.itemId && x.ok) || it.mergedAt);
         let mainSha = null;
         if (allMerged) {
           const sha = spawnSync('git', ['rev-parse', `refs/heads/${gitFlow.resolveMainBranch(root) || 'main'}`], { cwd: root, encoding: 'utf8', timeout: 15000 });
@@ -2438,8 +2456,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         }
         version = buildStore.finishMerge(board, v.id, { results: r.results, mainSha });
         version.mergeWarnings = r.warnings || [];
+        if ((r.replays || []).length) version = buildStore.saveMergeReplays(board, v.id, r.replays);
       } catch (e) {
-        // 合并执行中异常（如切分支失败）：未覆盖的条目按失败落盘，版本置 failed 可重试
+        // 合并执行中异常（如工作树创建失败）：未覆盖的条目按失败落盘，版本置 failed 可重试
         const done = new Set(v.items.filter((x) => x.mergedAt).map((x) => x.itemId));
         version = buildStore.finishMerge(board, v.id, {
           results: v.items.filter((x) => !done.has(x.itemId)).map((x) => ({ itemId: x.itemId, ok: false, error: String(e.message || e).slice(0, 300) })),
@@ -2448,7 +2467,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       }
       // REQ-20260916-007：版本计划账本（version.json）属应用数据，本地留存——合并成功后的
       // 自动入库整体取消（「同内容双分支提交」机制废弃），仅返回版本状态。
-      return sendJson(res, 200, { version });
+      return sendJson(res, 200, { version, analysis: { notes: analysis.notes, perItem: analysis.perItem } });
     });
   }
   // REQ-20260913-004 删除版本：POST + JSON 范式（对齐 /api/batch/delete）。透传数据层结果与
@@ -2465,6 +2484,185 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   }
   if (req.method === 'POST' && pathname === '/api/build/push') {
     return runPost((body) => sendJson(res, 200, buildGit.pushBranch(root, { remote: body.remote, branch: body.branch })));
+  }
+
+  /* ---------- REQ-20260920-003 发布流程：计划总览 / 文档 / 正式发布 ---------- */
+
+  const docReadFile = (f) => {
+    try { return fs.readFileSync(path.join(root, f), 'utf8'); } catch { return null; }
+  };
+
+  // GET /api/build/publish-plan?id=：五步导航装配（版本号 / 步骤门禁 / 文档状态 / AI 写作与
+  // 官网提示词 / 合并影响分析 / 当前分支与主分支 / 发布状态），只读。
+  if (req.method === 'GET' && pathname === '/api/build/publish-plan') {
+    const board = requireBoard();
+    const v = buildStore.readVersion(board, String(u.searchParams.get('id') || ''));
+    const docsEval = flow.evaluateDocsState(v, docReadFile);
+    let mergeAnalysis = null;
+    let analysisError = null;
+    try { mergeAnalysis = buildGit.analyzePublishIsolation(root, v.items); } catch (e) { analysisError = String(e.message || e); }
+    const branches = buildGit.listBranches(root);
+    let config = {};
+    try { config = buildPublishStore.readConfig(); } catch { /* 配置读取失败不阻塞总览 */ }
+    return sendJson(res, 200, {
+      version: v,
+      versionNumber: flow.versionNumberOf(v.id),
+      steps: flow.publishStepsState(v, docsEval),
+      docs: docsEval,
+      docsPrompt: flow.buildDocWritingPrompt({ projectRoot: root, planId: v.id, items: v.items }),
+      sitePrompt: config.homepageRepoRoot
+        ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
+        : null,
+      siteRepoRoot: config.homepageRepoRoot || null,
+      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, blocked: mergeAnalysis.blocked, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared } : null,
+      analysisError,
+      currentBranch: branches.current,
+      mainBranch: branches.mainBranch,
+      remotes: branches.remotes || [],
+      release: v.release || null,
+    });
+  }
+
+  // GET /api/build/docs?id=&file=：单个文档内容 + 全部八文件状态（file 缺省 README.md）。
+  if (req.method === 'GET' && pathname === '/api/build/docs') {
+    const board = requireBoard();
+    const v = buildStore.readVersion(board, String(u.searchParams.get('id') || ''));
+    const file = String(u.searchParams.get('file') || 'README.md');
+    if (!flow.isPublishDocFile(file)) return sendJson(res, 400, { error: `非发布文档文件：${file}` });
+    const docsEval = flow.evaluateDocsState(v, docReadFile);
+    return sendJson(res, 200, {
+      file,
+      content: docReadFile(file),
+      links: flow.readmeDocLinks(file),
+      docs: docsEval,
+    });
+  }
+
+  // POST /api/build/docs/save {id, file, content}：保存单个发布文档（白名单限定，≤ 2 MiB）。
+  if (req.method === 'POST' && pathname === '/api/build/docs/save') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可修改文档');
+      const file = String(body.file || '');
+      if (!flow.isPublishDocFile(file)) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅八个已确认文档可编辑）`);
+      const content = String(body.content ?? '');
+      if (Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) throw new core.AtbError('文档内容过大（上限 2 MiB）');
+      fs.writeFileSync(path.join(root, file), content);
+      return sendJson(res, 200, { ok: true, file, docs: flow.evaluateDocsState(buildStore.readVersion(board, body.id), docReadFile) });
+    });
+  }
+
+  // POST /api/build/docs/commit {id}：提交文档到 Git（pathspec 限定八个文档，不夹带业务源码；
+  // 无变化不空提交；成功返回 hash 并固化范围快照；失败保留内容可重试）。
+  if (req.method === 'POST' && pathname === '/api/build/docs/commit') {
+    return runPost(async (body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可提交文档');
+      if (!v.items.length) throw new core.AtbError('版本暂无关联条目：请先关联条目再编写并提交文档');
+      const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${v.id}` });
+      if (r.noop) {
+        return sendJson(res, 200, { ok: true, noop: true, files: r.files, version: buildStore.readVersion(board, body.id) });
+      }
+      const scopeFp = flow.publishScopeFingerprint(v.items, docReadFile);
+      const version = buildStore.recordDocsCommit(board, body.id, { commitHash: r.commitHash, files: r.hashes, scopeFp });
+      return sendJson(res, 200, { ok: true, commitHash: r.commitHash, files: r.files, version });
+    });
+  }
+
+  // POST /api/build/docs/open-ide {id, app}：用 TRAE CN / TRAE 打开当前项目根目录；未安装 /
+  // 启动失败明确提示并保留手动打开路径（打开 IDE 不等于已完成写作）。
+  if (req.method === 'POST' && pathname === '/api/build/docs/open-ide') {
+    return runPost((body) => {
+      const board = requireBoard();
+      buildStore.readVersion(board, body.id);
+      const apps = { 'trae-cn': 'TRAE CN', trae: 'TRAE' };
+      const appName = apps[String(body.app || '')];
+      if (!appName) throw new core.AtbError('app 必须是 trae-cn 或 trae');
+      const r = spawnSync('/usr/bin/open', ['-a', appName, root], { encoding: 'utf8', timeout: 15000 });
+      if (r.status !== 0) {
+        const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 2).join('；');
+        throw new core.AtbError(`打开 ${appName} 失败（可能未安装或无法启动）：${detail}。可手动打开 ${appName} 后进入项目目录 ${root} 编辑文档（打开 IDE 不等于已完成写作）`.slice(0, 400));
+      }
+      return sendJson(res, 200, { ok: true, message: `已请求 ${appName} 打开当前项目（${root}）；请在其内编辑发布文档，保存后回到本页刷新状态` });
+    });
+  }
+
+  // POST /api/build/release/push {id, remote}：正式发布第一步——推送主分支（只推 main/master
+  // 解析结果，不推 dev、不强推）；成功持久保存推送完成时间（官网检测时间窗口起点）。
+  if (req.method === 'POST' && pathname === '/api/build/release/push') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status !== 'merged') throw new core.AtbError('请先完成「合并入 main」，再推送主分支');
+      // 推送前重新检查 dev 前置（与合并同一口径，不自动切分支）
+      buildGit.assertOnDev(root);
+      const r = buildGit.pushMainBranch(root, { remote: body.remote });
+      const version = buildStore.recordPushSuccess(board, body.id, { remote: r.remote, sha: r.sha });
+      return sendJson(res, 200, { ok: true, pushed: r, version });
+    });
+  }
+
+  // 官网检测：POST /api/build/release/site-scan {id, force}。读取已配置官网仓库本地主分支
+  //（不 fetch），仅核对提交者时间不早于推送成功时间的提交并精确匹配完整计划号；每 60 秒
+  // 一轮（force = 立即检测）；未配置 / 读取失败显示失败及原因，不误报完成；命中证据失效
+  //（官网历史改写）退回等待并解释。常驻提示随响应返回（不代表已推送或网站已部署）。
+  const SITE_SCAN_INTERVAL_MS = 60_000;
+  const siteScanNotice = '每分钟检查官网本地主分支；匹配仅表示本地提交已同步，不代表已推送或网站已部署';
+  if (req.method === 'POST' && pathname === '/api/build/release/site-scan') {
+    return runPost(async (body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      const rel = v.release || {};
+      const persist = (scan) => buildStore.recordSiteScan(board, body.id, scan).release.site;
+      if (v.status !== 'merged') {
+        return sendJson(res, 200, { site: { status: 'waiting', reason: '请先完成合并并推送主分支，再检测官网同步' }, notice: siteScanNotice });
+      }
+      if (!rel.pushedAt) {
+        // 存量计划：缺少可信推送成功时间 → 待核对，不猜测起点、不做全历史兜底扫描
+        return sendJson(res, 200, { site: persist({ status: 'waiting', reason: '缺少推送完成时间，待核对（不使用猜测起点，不做全历史扫描）' }), notice: siteScanNotice });
+      }
+      if (!body.force && rel.site?.nextScanAt && Date.now() < Date.parse(rel.site.nextScanAt)) {
+        return sendJson(res, 200, { site: rel.site, skipped: true, notice: siteScanNotice });
+      }
+      let config = {};
+      try { config = buildPublishStore.readConfig(); } catch (e) {
+        return sendJson(res, 200, { site: persist({ status: 'failed', reason: `官网配置读取失败：${String(e.message || e).slice(0, 160)}`, since: rel.pushedAt }), notice: siteScanNotice });
+      }
+      const siteRoot = config.homepageRepoRoot;
+      if (!siteRoot) {
+        return sendJson(res, 200, { site: persist({ status: 'failed', reason: '未配置官网仓库：请先在设置中配置官网仓库根目录', since: rel.pushedAt }), notice: siteScanNotice });
+      }
+      // 命中证据仍可达且未要求立即检测：沿用既有证据（不重复读取），失效则退回等待
+      if (!body.force && rel.site?.status === 'hit' && rel.site.evidence?.hash) {
+        let reachable = false;
+        try { reachable = buildGit.siteEvidenceReachable(siteRoot, rel.site.evidence.hash, rel.site.branch); } catch { reachable = false; }
+        if (reachable) return sendJson(res, 200, { site: rel.site, notice: siteScanNotice });
+        return sendJson(res, 200, {
+          site: persist({ status: 'waiting', reason: '官网历史变化，原命中证据已失效，重新检测中', since: rel.pushedAt, nextScanAt: null }),
+          notice: siteScanNotice,
+        });
+      }
+      const BUDGET = 200;
+      let log = null;
+      let readError = null;
+      try { log = buildGit.siteMainLog(siteRoot, { limit: BUDGET + 1 }); } catch (e) { readError = String(e.message || e).slice(0, 200); }
+      if (!log) {
+        return sendJson(res, 200, { site: persist({ status: 'failed', reason: `官网提交读取失败：${readError}`, since: rel.pushedAt }), notice: siteScanNotice });
+      }
+      const scan = flow.scanSiteCommitsForPlan(log.commits, { planId: v.id, sinceIso: rel.pushedAt, budget: BUDGET });
+      const checkedHead = log.commits[0]?.hash || null;
+      const site = persist({
+        ...scan,
+        branch: log.branch,
+        checkedHead,
+        since: rel.pushedAt,
+        lastScanAt: new Date().toISOString(),
+        nextScanAt: new Date(Date.now() + SITE_SCAN_INTERVAL_MS).toISOString(),
+      });
+      return sendJson(res, 200, { site, siteRepoRoot: siteRoot, notice: siteScanNotice });
+    });
   }
   return notFound();
 }
