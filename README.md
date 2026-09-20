@@ -112,7 +112,7 @@ agent-team-board/
 
 ## 关键机制索引
 
-- **认领锁与源码守卫**：core.mjs 用 O_EXCL 原子锁实现认领（runtime/.locks/，24 小时过期）与项目实施互斥；hooks/hooks.json 两条 PreToolUse 守卫 → state-guard.mjs：拦直写 runtime/status 条目状态、拦人工专属状态、无有效认领锁时拦改插件源码（REQ-20260901-003）。
+- **认领锁与源码守卫**：core.mjs 用 O_EXCL 原子锁实现认领（runtime/.locks/，24 小时过期）与项目实施互斥；hooks/hooks.json 两条 PreToolUse 守卫 → state-guard.mjs：拦直写 runtime/status 条目状态、拦人工专属状态、无有效认领锁时拦改插件源码（REQ-20260901-003）。根 `README.md` 例外（REQ-20260918-002）：用户与 Agent 无需认领锁即可直接更新，并可经 Bash 提交仅含该文件、主题带条目编号且符合提交规范的改动。
 - **report 自动收口提交**：`atb report` 后由 git-flow.mjs + manual-closeout.mjs 按认领时工作区快照归因，自动把本单代码 / 测试 / 文档提交到 dev（只 commit 不 push）；批量 run receipt 同口径（REQ-20260911-009、BUG-20260915-007）。
 - **批量任务**：批量开发（从 planned 队列取单，主会话每轮派一个子 Agent，worker 规范见 skills/agent-team-board/worker-spec.md，批次创建时快照到 agent-team-board/runtime/dispatch/）、批量完善（accepted 单补文档）、待人工决策（hold）与挂起确认（confirm）闭环；总览见 skills/agent-team-board/batch-execution.md。
 - **构建版本与发布流水线**：构建模块管理 BLD 版本（build-store.mjs 版本状态机，build-git.mjs 合并入 main）；构建发布独立执行（build-publish.mjs 等，BUG-20260916-001），官网目标已适配 Vite + Vue 新架构（REQ-20260916-004）——`src/data/apps.js` 产品注册与 `content/<产品id>/` 双语成对材料预检（productIds 覆盖映射可在设置中配置）、site-deploy 在官网仓库执行 `npm install` + `npm run build`（产物以 dist/ 为准）、site-verify 本机静态服务做 SPA 回退与 zh/en 镜像路由校验、子路径 base 从官网 vite 配置解析；发布模块三条 REL 流水线（release-git.mjs / release-apple.mjs / release-electron.mjs）；产品发布 PREL 六阶段打通源码与官网（product-release-pipeline.mjs + site-materials.mjs / site-lang.mjs / webapp-profile.mjs）。

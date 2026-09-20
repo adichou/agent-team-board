@@ -427,8 +427,14 @@ function runGuardAt(guardPath, mode, toolInput, cwd, env = {}) {
 
 const fakeRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'atb-proot-')));
 const fakePlugin = path.join(fakeRoot, 'fake-plugin');
-fs.mkdirSync(path.join(fakePlugin, 'scripts'), { recursive: true });
+fs.mkdirSync(path.join(fakePlugin, 'scripts', 'lib'), { recursive: true });
 fs.copyFileSync(guard, path.join(fakePlugin, 'scripts', 'state-guard.mjs'));
+// REQ-20260918-002：state-guard.mjs 静态 import lib/commit-store.mjs（提交主题规范核验），
+// 伪插件副本须一并带上依赖，否则 import 报模块不存在。
+fs.copyFileSync(
+  path.join(pluginRoot, 'scripts', 'lib', 'commit-store.mjs'),
+  path.join(fakePlugin, 'scripts', 'lib', 'commit-store.mjs'),
+);
 const sibling = path.join(fakeRoot, 'other-project');
 fs.mkdirSync(path.join(sibling, 'src'), { recursive: true });
 
