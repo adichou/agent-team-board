@@ -101,7 +101,10 @@ export function buildResumePrompt({ itemId, atbCliPath, runId, missing }) {
 
 function gitStatusSnapshot(projectRoot) {
   if (!fs.existsSync(path.join(projectRoot, '.git'))) return null;
-  const r = spawnSync('git', ['-C', projectRoot, 'status', '--porcelain'], { encoding: 'utf8', timeout: 5000 });
+  // BUG-20260918-001：探针扫描注入 --no-optional-locks——批量执行期本探针随调度周期在 serve
+  // 进程内运行，原生 git status 的机会性 index 刷新会创建/持有 .git/index.lock，与终端及
+  // worker 的 git 写操作互相锁冲突。
+  const r = spawnSync('git', ['--no-optional-locks', '-C', projectRoot, 'status', '--porcelain'], { encoding: 'utf8', timeout: 5000 });
   if (r.status !== 0) return null;
   return (r.stdout || '')
     .split('\n')

@@ -43,8 +43,25 @@ const GIT_TIMEOUT_MS = 60_000;
 
 const nowIso = () => new Date().toISOString();
 
+// BUG-20260918-001：只读 git 命令统一注入 --no-optional-locks——git status / diff 等读取类
+// 命令默认做「机会性刷新 index stat 缓存」的可选写，须先创建 .git/index.lock；serve 轮询链路
+// （/api/confirms 清单 / 详情 / 单文件差异 → listConfirms / confirmDetail / fileDiffText
+// → confirmScopeForRun / pathStates → workingTreeSnapshot → git status --porcelain -uall）
+// 每 2 秒全量扫描，脏路径越多持锁窗口越长，与终端 git add/commit 的持锁窗口重叠即互相
+// fatal: index.lock: File exists。显式全局选项优先于仓库 core.optionalLocks 配置与
+// GIT_OPTIONAL_LOCKS 环境，保证轮询扫描在任何环境下都不创建/持有 index.lock。写命令
+// （init / switch / branch / add / commit）不注入：其锁为本职所需，report 收口等写链路
+// 行为保持不变。
+const GIT_READONLY_SUBCOMMANDS = new Set([
+  'status', 'diff', 'log', 'show', 'ls-files', 'rev-parse', 'rev-list',
+  'symbolic-ref', 'for-each-ref', 'describe', 'merge-base', 'cat-file', 'remote',
+]);
+
 function gitRaw(root, args) {
-  return spawnSync('git', args, { cwd: root, encoding: 'utf8', timeout: GIT_TIMEOUT_MS });
+  const argv = GIT_READONLY_SUBCOMMANDS.has(String(args[0] || ''))
+    ? ['--no-optional-locks', ...args]
+    : args;
+  return spawnSync('git', argv, { cwd: root, encoding: 'utf8', timeout: GIT_TIMEOUT_MS });
 }
 
 function gitOk(root, args, label) {

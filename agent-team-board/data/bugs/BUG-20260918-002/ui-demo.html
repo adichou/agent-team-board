@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260918-002 界面演示 — 点击完成不应触发管理记录提交</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #d9dee5; --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --primary-h: #1d4ed8; --ok: #16a34a; --ok-bg: #ecfdf5; --ok-border: #a7f3d0;
+    --warn: #b45309; --warn-bg: #fffbeb; --warn-border: #fde68a;
+    --err: #b91c1c; --err-bg: #fef2f2; --err-border: #fecaca;
+    --chip-bg: #eef2f7; --code-bg: #f1f3f7; --spin-border: #93c5fd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --panel: #1d2026; --border: #333842; --text: #e5e7eb; --muted: #9ca3af;
+      --primary: #60a5fa; --primary-h: #3b82f6; --ok: #4ade80; --ok-bg: #10241a; --ok-border: #14532d;
+      --warn: #fbbf24; --warn-bg: #2a2110; --warn-border: #78350f;
+      --err: #f87171; --err-bg: #2a1414; --err-border: #7f1d1d;
+      --chip-bg: #262a32; --code-bg: #262a32; --spin-border: #2563eb;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  label.switch { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; cursor: pointer; }
+  .mode-note { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border); background: var(--panel); }
+  .mode-note.bug { border-color: var(--err-border); background: var(--err-bg); }
+  .mode-note.fix { border-color: var(--ok-border); background: var(--ok-bg); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card h2 { font-size: 13px; color: var(--muted); margin: 0 0 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .drawer-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .item-id { font-weight: 700; font-size: 14px; }
+  .item-title { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .chip { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--muted); }
+  .chip.in-progress { color: var(--warn); }
+  .chip.done { color: var(--ok); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  button.btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  button.btn.primary:hover:not(:disabled) { background: var(--primary-h); }
+  button.btn:disabled { opacity: .5; cursor: not-allowed; }
+  button.btn.small { padding: 3px 10px; font-size: 12px; }
+  .block { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
+  .block .t { font-weight: 600; }
+  .block.submitting { border-color: var(--border); color: var(--muted); }
+  .block.committed { border-color: var(--ok-border); background: var(--ok-bg); }
+  .block.noop { border-color: var(--ok-border); background: var(--ok-bg); color: var(--ok); }
+  .block.failed { border-color: var(--err-border); background: var(--err-bg); }
+  code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--spin-border); border-top-color: transparent; border-radius: 50%; animation: rot .8s linear infinite; vertical-align: -2px; margin-right: 4px; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  .muted { color: var(--muted); font-size: 12px; }
+  .log { font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.7; }
+  .log .new { color: var(--err); font-weight: 700; }
+  .toast-layer { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+  .toast { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--ok); border-radius: 8px; padding: 10px 14px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.14); animation: fade .25s ease; }
+  .toast.err { border-left-color: var(--err); }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260918-002 界面演示</h1>
+  <div class="sub">需求 / Bug 点击「确认完成」不应触发管理记录提交 —— 现状（缺陷）与修复后（期望）对照</div>
+
+  <div class="toolbar">
+    <div class="seg" id="modeSeg">
+      <button type="button" data-mode="bug" class="on">现状（缺陷）</button>
+      <button type="button" data-mode="fix">修复后（期望）</button>
+    </div>
+    <label class="switch"><input type="checkbox" id="failSwitch"> 模拟提交失败（仅现状模式生效）</label>
+    <button type="button" class="btn" id="resetBtn">重置演示</button>
+  </div>
+  <div class="mode-note bug" id="modeNote"></div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>条目详情（抽屉，简化模拟）</h2>
+      <div class="drawer-head"><span class="item-id">BUG-20260918-002</span><span class="chip in-progress" id="statusChip">开发中 in-progress</span></div>
+      <div class="item-title">需求 / bug 点击完成不应该触发管理记录提交（新目录架构下状态变更无需同步提交 git）</div>
+      <div class="row">
+        <button type="button" class="btn primary" id="doneBtn">确认完成</button>
+        <button type="button" class="btn" id="reopenBtn" style="display:none">驳回完成（退回开发）</button>
+      </div>
+      <div id="mgtArea"></div>
+      <div class="legend">演示的是 Status Board 条目详情抽屉里的「确认完成」操作；「待人工确认」聚合区卡片上的同名按钮走同一链路。</div>
+    </div>
+    <div class="card">
+      <h2>终端 git log（对照观察）</h2>
+      <div class="log" id="gitLog"></div>
+      <div class="legend">现状模式点击「确认完成」会新增 <code>doc: 人工确认完成 &lt;ID&gt;</code> 提交；修复后模式不再产生任何提交（留痕文档留在工作区，随收口 / 人工提交通道入库）。</div>
+    </div>
+  </div>
+</div>
+<div class="toast-layer" id="toastLayer"></div>
+
+<script>
+(function () {
+  var mode = 'bug';
+  var itemDone = false;
+  var submitting = false;
+  var baseLog = ['a4f19c2 test: 收口提交 REQ-20260917-002', '9d21be0 feat: 看板状态流转优化 REQ-20260917-001'];
+  var state = {
+    el: function (id) { return document.getElementById(id); },
+    notes: {
+      bug: '现状（缺陷）：点击「确认完成」后，状态流转成功之外还会自动执行一次管理记录 git 提交（doc: 人工确认完成 <ID>，路径限定提交条目目录 confirmations.md / decisions.md）。提交失败时界面出现失败反馈块与「重试提交」入口，把提交负担带进确认完成交互。',
+      fix: '修复后（期望）：点击「确认完成」只做状态流转（in-progress → done：释放认领锁、闭环挂起、刷新留痕文档），不触发任何 git 提交；详情抽屉不再出现「管理记录提交」反馈块与重试入口，留痕文档留在工作区随既有通道入库。'
+    },
+    renderNote: function () {
+      var n = state.el('modeNote');
+      n.textContent = state.notes[mode];
+      n.className = 'mode-note ' + (mode === 'bug' ? 'bug' : 'fix');
+    },
+    renderChip: function () {
+      var chip = state.el('statusChip');
+      chip.textContent = itemDone ? '已完成 done' : '开发中 in-progress';
+      chip.className = 'chip ' + (itemDone ? 'done' : 'in-progress');
+      state.el('doneBtn').style.display = itemDone ? 'none' : '';
+      state.el('reopenBtn').style.display = itemDone ? '' : 'none';
+    },
+    renderLog: function (extra) {
+      var lines = baseLog.slice();
+      if (extra) lines.unshift(extra);
+      state.el('gitLog').innerHTML = lines.map(function (l, i) {
+        return '<div' + (extra && i === 0 ? ' class="new"' : '') + '>' + l + '</div>';
+      }).join('');
+    },
+    renderMgt: function (block) {
+      state.el('mgtArea').innerHTML = block || '';
+    },
+    toast: function (text, err) {
+      var layer = state.el('toastLayer');
+      var t = document.createElement('div');
+      t.className = 'toast' + (err ? ' err' : '');
+      t.textContent = text;
+      layer.appendChild(t);
+      setTimeout(function () { t.remove(); }, 4200);
+    },
+    confirmDone: function () {
+      if (itemDone || submitting) return;
+      if (mode === 'fix') {
+        itemDone = true;
+        state.renderChip();
+        state.renderMgt('');
+        state.renderLog(null);
+        state.toast('✓ BUG-20260918-002 已确认完成');
+        return;
+      }
+      // 现状（缺陷）：先渲染「提交中」反馈块，再落定提交结果
+      submitting = true;
+      state.renderMgt('<div class="block submitting"><span class="spin"></span><span class="t">管理记录提交：提交中…</span><br>正在提交本次操作更新的管理记录（路径限定提交，不使用全量 git add）…</div>');
+      var fail = state.el('failSwitch').checked;
+      setTimeout(function () {
+        submitting = false;
+        itemDone = true;
+        state.renderChip();
+        if (fail) {
+          state.renderMgt(
+            '<div class="block failed"><div class="t">⚠ 操作已成功，管理记录提交失败</div>'
+            + '<div class="muted">原因：目标文件含无法安全分离的其他变更（操作前已暂存），待人工处理：agent-team-board/data/bugs/BUG-20260918-002/decisions.md</div>'
+            + '<div class="muted">未提交文件：confirmations.md、decisions.md</div>'
+            + '<div class="row"><button type="button" class="btn primary small" id="retryBtn">重试提交</button></div></div>'
+          );
+          state.toast('⚠ 操作已成功，管理记录提交失败：目标文件含无法安全分离的其他变更', true);
+          var rb = document.getElementById('retryBtn');
+          rb.addEventListener('click', function () {
+            rb.disabled = true;
+            state.renderMgt('<div class="block submitting"><span class="spin"></span><span class="t">管理记录提交：提交中…</span><br>正在补交管理记录（只补交，不重放确认完成）…</div>');
+            setTimeout(function () {
+              state.renderMgt('<div class="block committed"><span class="t">✓ 管理记录提交：</span>已提交 · <code>e07b31f</code> <span class="muted">doc: 人工确认完成 BUG-20260918-002</span></div>');
+              state.renderLog('e07b31f doc: 人工确认完成 BUG-20260918-002');
+              state.toast('✓ 管理记录已提交 · e07b31f');
+            }, 900);
+          });
+        } else {
+          state.renderMgt('<div class="block committed"><span class="t">✓ 管理记录提交：</span>已提交 · <code>a9c41e7</code> <span class="muted">doc: 人工确认完成 BUG-20260918-002</span></div>');
+          state.renderLog('a9c41e7 doc: 人工确认完成 BUG-20260918-002');
+          state.toast('✓ BUG-20260918-002 已确认完成');
+        }
+      }, 1100);
+    },
+    reopen: function () {
+      if (submitting) return;
+      itemDone = false;
+      state.renderChip();
+      state.renderMgt('');
+      state.toast('BUG-20260918-002 已驳回完成，退回开发中');
+    },
+    reset: function () {
+      itemDone = false; submitting = false;
+      state.renderChip(); state.renderMgt(''); state.renderLog(null);
+    },
+    init: function () {
+      var seg = state.el('modeSeg');
+      seg.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-mode]');
+        if (!b) return;
+        mode = b.getAttribute('data-mode');
+        seg.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        state.reset();
+        state.renderNote();
+      });
+      state.el('doneBtn').addEventListener('click', state.confirmDone);
+      state.el('reopenBtn').addEventListener('click', state.reopen);
+      state.el('resetBtn').addEventListener('click', state.reset);
+      state.renderNote(); state.renderChip(); state.renderLog(null);
+    }
+  };
+  state.init();
+})();
+</script>
+</body>
+</html>
