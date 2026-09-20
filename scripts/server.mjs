@@ -2300,7 +2300,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       initialized: true,
       isRepo: branches.isRepo,
       currentBranch: branches.current,
-      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, release: releaseMap.get(v.id) || null })),
+      // BUG-20260920-005：随列表附带 pushed（五步流程「正式发布 → 推送主分支」成功，
+      // version.json release.pushedAt）——卡片行内键（AI 完善 / 合并入 main）与详情条目锁
+      // 的锁定基准从 merged 后移到该时点；release 字段仍为产品发布汇总（不改既有语义）。
+      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, pushed: buildStore.isPushed(v), release: releaseMap.get(v.id) || null })),
       statusLabels: buildStore.VERSION_STATUS_LABEL,
     });
   }
@@ -2418,8 +2421,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       if (v.status === 'merging') {
         throw new buildStore.BuildConflictError('版本正在合并中，请勿重复触发');
       }
-      if (v.status === 'merged') {
-        throw new buildStore.BuildConflictError('版本已合并入 main，无需重复合并');
+      // BUG-20260920-005：锁定基准后移——merged（已合并未推送）允许为补入条目重开合并
+      //（增量：只补未合并条目，已并入提交幂等记成功）；推送完成（正式发布）后拒绝。
+      if (buildStore.isPushed(v)) {
+        throw new buildStore.BuildConflictError('版本已正式发布，不可再合并（如需调整请新建版本）');
       }
       // REQ-20260920-003 发布前置：工作目录必须在 dev（main / 其他分支 / detached 一律阻止，
       // 提示自行切回 dev；不自动切分支，也不经隔离执行绕过）

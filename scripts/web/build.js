@@ -784,12 +784,13 @@ const ATBBuild = (() => {
 
   // BUG-20260913-004：入口迁入版本卡片后按 verId 打开（对按钮所在卡片生效）；
   // 不带参时回落当前选中版本（向后兼容），带参但版本已不存在时不弹窗。
-  // BUG-20260914-020：merged 版本不允许再 AI 完善——卡片按钮已禁用，此处对带参直调与
-  // 无参回落两条路径兜底校验状态（merging 与按钮禁用口径同步收口），锁定态一律不弹窗。
+  // BUG-20260920-005：锁定基准后移——推送完成（正式发布）后不允许再 AI 完善（卡片按钮已
+  // 禁用），此处对带参直调与无参回落两条路径兜底校验（merging 同步收口），锁定态一律不弹窗；
+  // merged（已合并未推送）放开，可完整走通复制 → 解析 → 应用回填。
   function openAnswerModal(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
-    if (v.status === 'merging' || v.status === 'merged') return;
+    if (v.status === 'merging' || pushedOf(v)) return;
     state.answer = { verId: v.id, text: '', parsed: null, draft: null, error: null, busy: false, copied: false };
     render();
     refreshWorkspaceApps(); // BUG-20260913-005：入口探测（fire-and-forget；loaded / 进行中 / 已失败不重探）
@@ -1835,6 +1836,12 @@ const ATBBuild = (() => {
     return `<span class="st ${STATUS_CLS[status] || 'st-mute'}">${esc(STATUS_LABEL[status] || status)}</span>`;
   }
 
+  // BUG-20260920-005：锁定基准后移——「关联条目与提交 / 合并入 main / AI 完善」三类操作的
+  // 锁定从 merged 后移到推送完成（正式发布）。/api/build/state 随版本附带 pushed
+  //（五步流程「正式发布 → 推送主分支」成功，release.pushedAt 落盘）；merged（已合并
+  // 未推送）三类操作全部可用。
+  const pushedOf = (v) => !!(v && v.pushed);
+
   // BUG-20260917-001：左侧版本卡片状态标签——该版本存在发布成功（succeeded）的运行时
   //（/api/build/state 附带的 release.published，任一成功运行即成立），以绿色「已发布」
   // 替换原合并状态标签（口径与右侧「发布」页签 relStatusChip 一致，title 提示成功运行）；
@@ -1859,11 +1866,13 @@ const ATBBuild = (() => {
     // 状态禁用/文案规则逐卡继承原详情底部逻辑；mergeBusy 为全局口径（执行中禁所有卡片的合并键）。
     return versions.map((v) => {
       const mergeLabel = v.status === 'failed' ? '重试合并入 main' : '合并入 main';
-      // BUG-20260914-020：AI 完善禁用口径与同卡合并键对齐——merged 同样禁用（title 说明已合并不可再完善），
-      // merging 维持「合并中，请稍候……」；draft / failed 仍可用。
-      const answerLocked = v.status === 'merging' || v.status === 'merged';
-      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${v.status === 'merged' ? '已合并入 main，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
-      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || v.status === 'merged' || state.mergeBusy ? ` disabled title="${v.status === 'merged' ? '已合并入 main' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
+      // BUG-20260920-005：锁定基准后移——merged（已合并未推送）「AI 完善 / 合并入 main」可用
+      //（补关联后可重开合并）；推送完成（正式发布）后禁用（title 说明已正式发布）；
+      // merging 维持「合并中」口径；draft / failed 仍可用。
+      const vPushed = pushedOf(v);
+      const answerLocked = v.status === 'merging' || vPushed;
+      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${vPushed ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
+      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || vPushed || state.mergeBusy ? ` disabled title="${vPushed ? '已正式发布' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
       // REQ-20260915-003：产品发布操作迁入版本卡片按钮区（与 AI 完善 / 合并 / 删除集中展示），
       // 右侧详情不再重复显示发布操作区。创建发布仅 merged 可用；draft / merging / failed 禁用并
       // 可见说明「请先完成合并入 main」；沿用 openReleaseConfirm 既有发布校验与核对弹层，
@@ -2048,8 +2057,8 @@ const ATBBuild = (() => {
           ${interRows ? `<ul>${interRows}</ul>` : '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>'}
         </section>
         ${devBar}
-        ${gate?.locked && !merged ? `<p class="rel-form-err" role="alert">暂不可合并：${esc(gate.reason || '前置条件未满足')}</p>` : ''}
-        <p><button type="button" class="btn primary" data-ver-merge="${esc(v.id)}"${!merged && !gate?.locked && onDev && !state.mergeBusy ? '' : ' disabled title="' + esc(merged ? '已合并入 main' : gate?.reason || '前置条件未满足') + '"'}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
+        ${gate?.locked ? `<p class="rel-form-err" role="alert">暂不可合并：${esc(gate.reason || '前置条件未满足')}</p>` : ''}
+        <p><button type="button" class="btn primary" data-ver-merge="${esc(v.id)}"${!gate?.locked && onDev && !state.mergeBusy ? '' : ' disabled title="' + esc(gate?.reason || '前置条件未满足') + '"'}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
           <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>
         ${v.status === 'failed' && v.merge?.error ? `<p class="rel-form-err" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>` : ''}
         ${merged && v.merge?.mainSha ? `<p class="small muted">合并完成：主分支头 <code>${esc(short(v.merge.mainSha))}</code>；重放证据 ${(v.merge?.replays || []).length} 条。</p>` : ''}
@@ -2102,7 +2111,10 @@ const ATBBuild = (() => {
 
   function renderDetail(v) {
     if (!v) return '<div class="rel-detail muted">点击左侧版本查看详情</div>';
-    const lockItems = ['merging', 'merged'].includes(v.status);
+    // BUG-20260920-005：条目锁基准后移——merging 与推送完成（正式发布）锁定增删 / 换 commit，
+    // merged（已合并未推送）放开（补关联后重开合并只补未合并条目）。
+    const lockItems = v.status === 'merging' || pushedOf(v);
+    const itemsLockTitle = v.status === 'merging' ? '合并中，条目不可增删' : '已正式发布，条目已锁定';
     const editing = state.edit && state.edit.id === v.id ? state.edit : null;
     const nameCell = editing?.field === 'name'
       ? `<div class="bld-edit-row"><input class="bld-name-input" value="${esc(v.name)}"><button type="button" class="btn small primary" id="bldSaveName">保存</button><button type="button" class="btn small" id="bldCancelEdit">取消</button></div>`
@@ -2118,11 +2130,11 @@ const ATBBuild = (() => {
       <div class="bld-item-row" data-row-item="${esc(it.itemId)}">
         <span class="bld-item-id">${esc(it.itemId)}</span>
         <span class="bld-item-title" title="${esc(it.title || '')}">${esc(it.title || '')}</span>
-        <select class="bld-commit-sel" data-commit-item="${esc(it.itemId)}" ${lockItems ? 'disabled' : ''}>
+        <select class="bld-commit-sel" data-commit-item="${esc(it.itemId)}" ${lockItems ? `disabled title="${itemsLockTitle}"` : ''}>
           <option value="${esc(it.commit)}">${esc(short(it.commit))}</option>
         </select>
         ${it.mergedAt ? `<span class="st st-ok" title="已合并入 main">✓</span>` : it.mergeError ? `<span class="st st-fail" title="${esc(it.mergeError)}">✕</span>` : ''}
-        <button type="button" class="btn small quiet bld-item-remove" data-remove-item="${esc(it.itemId)}" ${lockItems ? 'disabled title="合并中/已合并状态锁定条目增删"' : 'title="移出该条目（连同 commit 关联）"'}>移出</button>
+        <button type="button" class="btn small quiet bld-item-remove" data-remove-item="${esc(it.itemId)}" ${lockItems ? `disabled title="${itemsLockTitle}"` : 'title="移出该条目（连同 commit 关联）"'}>移出</button>
       </div>`).join('');
     // 计数行：搜索态显示「匹配 X / 共 Y 条」（零结果显示 0 条，不伪装成空数据），默认显示总数
     const countBar = searching || pg.total
@@ -2162,7 +2174,7 @@ const ATBBuild = (() => {
               <button type="button" class="btn small" id="bldItemsSearchGo">搜索</button>
               ${state.itemsQuery ? '<button type="button" class="btn small quiet" data-items-search-clear>清空</button>' : ''}
             </div>
-            <button type="button" class="btn small" id="bldAddItem" ${lockItems ? 'disabled title="合并中/已合并状态锁定条目增删"' : ''}>＋ 添加条目</button>
+            <button type="button" class="btn small" id="bldAddItem" ${lockItems ? `disabled title="${itemsLockTitle}"` : ''}>＋ 添加条目</button>
           </div>
           ${countBar}
           ${listBody}

@@ -252,16 +252,19 @@ const DOCS_GATE_TEXT = {
   'needs-rewrite': '发布范围已变化，文档需重新核对 / 编写并重新提交',
 };
 
-// 五步导航门禁（只读求值）：plan 恒可用；link / docs 在 merging / merged 锁定；merge 需
-// 「有条目 + 文档 overall=committed + 状态可合并」；release 需 merged。locked 附 reason。
+// 五步导航门禁（只读求值）：plan 恒可用；link / docs 在 merging / 推送完成（正式发布，
+// BUG-20260920-005 基准后移：merged 未推送放开，供补关联后重新提交文档、重开合并）锁定；
+// merge 需「有条目 + 文档 overall=committed + 状态可合并（draft/failed/merged 未推送）」；
+// release 需 merged。locked 附 reason。
 export function publishStepsState(v, docsEval) {
   const items = Array.isArray(v?.items) ? v.items : [];
   const status = v?.status || 'draft';
-  const lockedScope = status === 'merging' || status === 'merged';
-  const canMerge = ['draft', 'failed'].includes(status);
+  const pushed = !!(v?.release && v?.release.pushedAt);
+  const lockedScope = status === 'merging' || pushed;
+  const canMerge = ['draft', 'failed', 'merged'].includes(status) && !pushed;
   const mergeReason = () => {
     if (status === 'merging') return '合并执行中';
-    if (status === 'merged') return '已合并入 main';
+    if (pushed) return '已正式发布，不可再合并（如需调整请新建版本）';
     if (!items.length) return '暂无关联条目：请先在「关联条目与提交」步骤关联';
     if (docsEval && docsEval.overall !== 'committed') return DOCS_GATE_TEXT[docsEval.overall] || '文档未就绪';
     return '';
@@ -275,7 +278,7 @@ export function publishStepsState(v, docsEval) {
     let reason = '';
     if (s.key === 'link' || s.key === 'docs') {
       locked = lockedScope;
-      reason = locked ? (status === 'merging' ? '合并执行中' : '已合并，范围锁定（如需调整请新建版本）') : '';
+      reason = locked ? (status === 'merging' ? '合并执行中' : '已正式发布，范围锁定（如需调整请新建版本）') : '';
     } else if (s.key === 'merge') {
       locked = !canMerge || !items.length || !docsEval || docsEval.overall !== 'committed';
       reason = mergeReason();

@@ -32,8 +32,15 @@ const EN = {
   '删除该版本计划（需确认，删除后不可恢复）': 'Delete this version plan (confirmation required; cannot be undone)',
   '删除后不可恢复，关联条目与 commit 关联一并移除；条目本身可重新纳入其他版本。': 'This cannot be undone: linked items and their commit associations are removed; the items themselves can be added to another version later.',
   '仅删除看板版本记录，不影响已合并入 main 的提交与代码。': 'Only the board record is removed; commits and code already merged into main are untouched.',
-  // BUG-20260914-020：merged 版本卡片「AI 完善」禁用 title（口径参照同行合并键「已合并入 main」）
-  '已合并入 main，不允许再 AI 完善': 'Already merged into main — AI refine disabled',
+  // BUG-20260920-005：锁定基准后移到推送完成（正式发布）——merged 未推送三类操作（关联
+  // 条目与提交 / 合并入 main / AI 完善）放开，推送完成后禁用并说明已正式发布；旧键
+  //「已合并入 main，不允许再 AI 完善」（BUG-20260914-020 merged 禁用口径）随口径迁移清理。
+  '已正式发布，不允许再 AI 完善': 'Officially released — AI refine disabled',
+  '已正式发布': 'Officially released',
+  '已正式发布，条目已锁定': 'Officially released — items locked',
+  '已正式发布，范围锁定（如需调整请新建版本）': 'Officially released — scope locked (create a new version for further changes)',
+  '已正式发布，不可再合并（如需调整请新建版本）': 'Officially released — no further merges (create a new version for further changes)',
+  '合并中，条目不可增删': 'Merging in progress — item changes disabled',
   '此操作不可撤销，请确认后再继续。': 'This action is irreversible — please confirm to continue.',
   // BUG-20260913-005：版本回填弹窗「去新建 XX 会话」入口——既有复制 toast 一并补齐词条
   '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方': '✓ Prompt copied — paste it into the Agent, run it, then paste the answer back below',
