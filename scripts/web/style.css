@@ -357,7 +357,9 @@ code {
    #devStart/#batchNext/#refineNext 等「禁用 + title 说明」按钮（.btn.primary
    等变体为复合类，元素恒带 .btn，无需逐变体另写）；既有上下文规则（.sel-group .btn:disabled、
    .card-accept-btn:disabled、.shot-x:disabled、.refine-badge:disabled）均在后声明，专属口径不回退 */
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* BUG-20260920-006：aria-disabled 同口径——HTML disabled 不派发 click（点击无反馈），
+   「合并入 main」入口改 aria-disabled 呈禁用视觉且仍可点击捕获反馈原因（现无其他 .btn 使用者，无回归面） */
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .icon-btn {
   appearance: none;
   border: none;
