@@ -248,6 +248,9 @@ const state = {
     // REQ-20260906-024：模型目录（只读能力）、继承解析展示、待处理记录
     models: undefined,   // undefined=未加载；null=加载失败；{ok, models, reason}
     inherit: null,       // /api/dispatch/codex/model-inherit 结果
+    // BUG-20260920-001：设置页派发设置读取失败原因（旧布局项目必然失败）——
+    // 只局部显示 + 重试，不再整页替换设置视图
+    settingsError: null,
   },
   codexPending: { count: 0, items: [], byItem: new Set() }, // 顶栏徽标 + 行标记（每轮询刷新）
   // REQ-20260911-009 设置页「Git 工作流」分区：分支状态加载/执行反馈
@@ -8132,9 +8135,21 @@ function bindHomepageSettings(view) {
   });
 }
 
+// BUG-20260920-001：派发设置读取失败只局部显示——不设独立分区时会随整页错误吞掉迁移入口。
+// 旧布局项目（无 agent-team-board/ 数据目录）/api/dispatch/* 必然失败，该分区常驻显示原因与重试。
+function dispatchSettingsAreaHtml() {
+  if (!state.codex.settingsError) return '';
+  return `
+    <section class="cx-config dispatch-settings">
+      <h4>派发设置</h4>
+      <div class="notice err">派发设置加载失败：${esc(state.codex.settingsError)} <button type="button" class="btn small" id="csRetry">重试</button></div>
+    </section>`;
+}
+
 function paintSettingsView(view) {
   view.innerHTML = `
     <div class="drawer-body settings-body">
+      ${dispatchSettingsAreaHtml()}
       ${homepageSettingsHtml()}
       ${taskSettingsAreaHtml()}
       ${gitWorkflowAreaHtml()}
@@ -8196,6 +8211,19 @@ async function refreshLayoutState() {
   }
 }
 
+// BUG-20260920-001：派发设置读取失败不再整页替换设置视图——旧布局项目（无 agent-team-board/
+// 数据目录）该接口必然失败（服务端 /api/dispatch/* 在 dataDir 缺失时报未初始化），整页替换会把
+// 并行加载的「数据布局迁移」入口一起吞掉，导致无法从设置迁移既有数据。失败只记录到
+// state.codex.settingsError，由独立分区就近显示 + 重试；其余分区照常并行加载与渲染。
+async function loadDispatchSettings() {
+  state.codex.settingsError = null;
+  try {
+    if (!state.codex.settings) state.codex.settings = (await api('/api/dispatch/settings')).settings;
+  } catch (e) {
+    state.codex.settingsError = e.message;
+  }
+}
+
 async function renderSettingsView() {
   const view = $('#settingsView');
   if (!view) return;
@@ -8208,22 +8236,22 @@ async function renderSettingsView() {
   const homepageLoad = loadHomepageSettings();
   const gitLoad = refreshGitState(); // REQ-20260911-009：Git 状态与任务设置并行加载
   const layoutLoad = refreshLayoutState(); // REQ-20260916-007：布局检测并行加载
-  try {
-    if (!state.codex.settings) state.codex.settings = (await api('/api/dispatch/settings')).settings;
-  } catch (e) {
-    state.tasks.loading = false;
-    view.innerHTML = `<div class="notice err">设置加载失败：${esc(e.message)} <button type="button" class="btn small" id="stRetry">重试</button></div>`;
-    view.querySelector('#stRetry')?.addEventListener('click', () => renderSettingsView());
-    return;
-  }
+  await loadDispatchSettings(); // BUG-20260920-001：失败局部记录，不再中断整页渲染
   await ensureTaskSettings(true); // REQ-20260908-020：批量任务分区随设置视图实时读取（失败记录于 state.tasks.error）
   await gitLoad;
   await homepageLoad;
   await layoutLoad;
-  paintSettingsView(view); // 阶段二：就绪渲染隐藏开关（或失败态错误 + 重试）
+  paintSettingsView(view); // 阶段二：就绪渲染——各分区加载失败各自就近显示原因与重试，互不吞并
 }
 
 function bindSettingsView(view) {
+  // BUG-20260920-001：派发设置失败重试——只重读派发设置并重绘本视图，不整体重进设置页
+  //（迁移卡片等分区状态保留，旧布局项目不必等派发设置恢复才能迁移）
+  const csRetry = view.querySelector('#csRetry');
+  if (csRetry) csRetry.addEventListener('click', async () => {
+    await loadDispatchSettings();
+    paintSettingsView(view);
+  });
   // REQ-20260909-011：批量任务设置 = 仅完善流转开关（按 Agent 的隐藏/模型配置已移除）。
   // 草稿变更就近提示「有未保存的更改」；保存只提交 refine 开关（服务端忽略遗留的 agents/models 键）
   const tsRetry = view.querySelector('#tsRetry');
