@@ -137,7 +137,9 @@ t('T6 i18n：新增动态词条入 EN_DYNAMIC（◇ ↔ $1），不可达旧键�
     'title 悬停提示词条（英文）'
   );
   assert.equal(EN_DYNAMIC['✓ 已复制完整提交号 ◇…'], '✓ Copied full commit hash $1…', '复制成功 toast 词条（英文）');
-  assert.ok(!('已提交' in EN), '「已提交」徽标词条随 UI 移除清理');
+  // REQ-20260920-003：'已提交' 以静态键重新入 EN（发布文档状态 chip「Docs committed」），
+  // 本 Bug 的口径是徽标词条不可达——渲染层不产出徽标（T1 断言 commitBadgeHtml / 卡片不含），
+  // app.js 其余「已提交：N 组」为确认面板既有文案，与本徽标无关。
   assert.ok(!('◇ 个提交号' in EN_DYNAMIC), '折叠 summary 词条清理');
   assert.ok(!('复制提交号 ◇' in EN_DYNAMIC), '复制按钮 aria 词条清理');
 });

@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as core from '../lib/core.mjs';
 import * as buildStore from '../lib/build-store.mjs';
+import * as buildGit from '../lib/build-git.mjs';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -98,6 +99,8 @@ function mkFixture(name) {
   commitFile(proj, 'dev.txt', 'd\n', 'dev work');
   git(proj, 'checkout', 'main');
   git(proj, 'remote', 'add', 'origin', remote);
+  // REQ-20260920-003：发布前置要求工作目录在 dev（非 dev 阻止合并），fixture 落回 dev
+  git(proj, 'checkout', 'dev');
   // 官网
   git(homepage, 'init', '-b', 'main');
   git(homepage, 'config', 'user.email', 't@e.co');
@@ -118,6 +121,16 @@ function mkFixture(name) {
     name: '版本 V1', items: [{ itemId: 'REQ-20260915-010', commit: itemCommit, title: 'webapp' }],
   });
   return { tmp, proj, projB, projC, remote, homepage, dataDir, version: v };
+}
+
+// REQ-20260920-003：合并前置 = 八个发布文档已提交（pathspec 限定，不夹带其他改动）
+function writePublishDocs(root, dataDir, verId) {
+  const files = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
+  for (const f of files) fs.writeFileSync(path.join(root, f), `# ${f} (${verId})\n`);
+  const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${verId}` });
+  if (r.noop) throw new Error('文档提交不应为空提交');
+  buildStore.recordDocsCommit(dataDir, verId, { commitHash: r.commitHash, files: r.hashes, scopeFp: null });
+  return r.commitHash;
 }
 
 t('G1~G6 /api/product-release/* 全链路', async () => {
@@ -151,7 +164,8 @@ t('G1~G6 /api/product-release/* 全链路', async () => {
     const early = await req(port, 'POST', '/api/product-release/from-build', { bldId: s.version.id, version: VERSION });
     assert.equal(early.status, 400);
     assert.ok(/合并/.test(early.json.error));
-    // 合并 BLD（经 HTTP，同时覆盖 I2：merge.mainSha 落真实值）
+    // 合并 BLD（经 HTTP，同时覆盖 I2：merge.mainSha 落真实值）；REQ-20260920-003：先提交八个发布文档
+    writePublishDocs(s.proj, s.dataDir, s.version.id);
     const merge = await req(port, 'POST', '/api/build/version/merge', { id: s.version.id });
     assert.equal(merge.status, 200, JSON.stringify(merge.json));
     const merged = buildStore.readVersion(s.dataDir, s.version.id);
@@ -243,8 +257,9 @@ t('G2b 官网根目录变更使旧预检失效', async () => {
   try {
     await sleep(700);
     await req(port, 'POST', '/api/product-release/config', { homepageRepoRoot: s.homepage });
+    writePublishDocs(s.proj, s.dataDir, s.version.id);
     const merge = await req(port, 'POST', '/api/build/version/merge', { id: s.version.id });
-    assert.equal(merge.status, 200);
+    assert.equal(merge.status, 200, JSON.stringify(merge.json));
     const created = await req(port, 'POST', '/api/product-release/from-build', { bldId: s.version.id, version: VERSION });
     const runId = created.json.run.id;
     const pre = await req(port, 'POST', `/api/product-release/run/${runId}/precheck`);

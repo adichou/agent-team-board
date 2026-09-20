@@ -125,8 +125,10 @@ t('B3 移动而非复制：详情底部不再渲染操作按钮（无 rel-acts /
   assert.doesNotMatch(inner, /rel-acts/, '详情底部 rel-acts 移除');
   assert.doesNotMatch(inner, /bldAnswerBtn/, '旧 #bldAnswerBtn 移除');
   assert.doesNotMatch(inner, /bldMergeBtn/, '旧 #bldMergeBtn 移除');
-  assert.match(inner, /bldAddItem/, '详情「＋ 添加条目」保留');
   assert.match(inner, /bld-name/, '详情名称区保留');
+  // REQ-20260920-003：五步流程——「＋ 添加条目」在「关联条目与提交」步
+  h.run(`window.ATBBuild.setStep('link')`);
+  assert.match(h.inner(), /bldAddItem/, '「关联条目与提交」步「＋ 添加条目」保留');
 });
 
 t('B4 卡片按钮操作所在卡片版本且不改变选中：对非选中版本 B 开弹窗，内容对 B，选中态保持 A', async () => {

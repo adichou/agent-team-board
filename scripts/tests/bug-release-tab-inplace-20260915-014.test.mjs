@@ -147,12 +147,13 @@ t('R1a 详情标题下出现概况/发布页签，默认概况：原描述、关
   const h = setup();
   await h.enter();
   const inner = h.inner();
-  assert.match(inner, /data-detail-tab="overview"[^>]*aria-selected="true"/, '概况页签默认激活');
-  assert.match(inner, /data-detail-tab="release"[^>]*aria-selected="false"/, '发布页签存在且未激活');
-  assert.match(inner, /<strong>概况<\/strong>|>概况<\/button>/, '概况页签文案');
-  assert.match(inner, />发布<\/button>/, '发布页签文案');
-  assert.match(inner, /bld-desc-block/, '概况含描述块');
-  assert.match(inner, /关联条目与 commit/, '概况含关联条目列表');
+  assert.match(inner, /data-step="plan"[^>]*aria-selected="true"/, '概况页签默认激活');
+  assert.match(inner, /data-step="release"[^>]*aria-selected="false"/, '发布页签存在且未激活');
+  assert.match(inner, />版本计划<\/button>/, '「版本计划」步文案（原「概况」，REQ-20260920-003）');
+  assert.match(inner, />正式发布<\/button>/, '「正式发布」步文案（原「发布」页签）');
+  assert.match(inner, /bld-desc-block/, '版本计划步含描述块');
+  h.run(`window.ATBBuild.setStep('link')`);
+  assert.match(h.inner(), /关联条目与 commit/, '「关联条目与提交」步含关联条目列表');
   assert.doesNotMatch(inner, /bld-rel-pane/, '概况不渲染发布区内容');
   assert.doesNotMatch(inner, /正在加载发布记录|当前版本暂无发布记录|发布记录读取失败/, '概况不出发布区状态内容');
 });
@@ -160,16 +161,16 @@ t('R1a 详情标题下出现概况/发布页签，默认概况：原描述、关
 t('R1b 切到发布页签再切回概况：发布区出现/消失；左侧版本列表与模块页签不受影响', async () => {
   const h = setup();
   await h.enter();
-  h.run(`window.ATBBuild.setDetailTab('release')`);
+  h.run(`window.ATBBuild.setStep('release')`);
   await h.tick();
   let inner = h.inner();
-  assert.match(inner, /data-detail-tab="release"[^>]*aria-selected="true"/, '发布页签激活');
+  assert.match(inner, /data-step="release"[^>]*aria-selected="true"/, '发布页签激活');
   assert.match(inner, /bld-rel-pane/, '发布区渲染');
   assert.match(inner, /data-ver-id="BLD-A"/, '左侧版本列表仍在');
   assert.match(inner, /data-bld-tab="versions"/, '模块页签不受影响');
-  h.run(`window.ATBBuild.setDetailTab('overview')`);
+  h.run(`window.ATBBuild.setStep('plan')`);
   inner = h.inner();
-  assert.match(inner, /data-detail-tab="overview"[^>]*aria-selected="true"/, '切回概况');
+  assert.match(inner, /data-step="plan"[^>]*aria-selected="true"/, '切回概况');
   assert.doesNotMatch(inner, /bld-rel-pane/, '发布区不再渲染');
   assert.match(inner, /bld-desc-block/, '概况内容保留');
 });
@@ -185,7 +186,7 @@ t('R2a 「查看发布记录」就地激活当前版本发布页签：不派发 
   await h.tick();
   const inner = h.inner();
   assert.ok(!fired.some((e) => e.type === 'atb:goto-view'), '不再派发 atb:goto-view（旧跳转即缺陷根因）');
-  assert.match(inner, /data-detail-tab="release"[^>]*aria-selected="true"/, '发布页签就地激活');
+  assert.match(inner, /data-step="release"[^>]*aria-selected="true"/, '发布页签就地激活');
   assert.match(inner, /data-bld-tab="versions"/, '仍在构建模块版本计划页');
   assert.match(inner, /rel-card sel" data-ver-id="BLD-A"/, '当前版本保持选中');
   assert.match(inner, /bld-rel-pane/, '发布区渲染');
@@ -199,7 +200,7 @@ t('R2b 未选中卡片的查看发布记录以所在卡片为准；概况内容�
   const inner = h.inner();
   assert.match(inner, /rel-card sel" data-ver-id="BLD-B"/, '切换到所在卡片版本');
   assert.match(inner, /data-rel-ver="BLD-B"/, '发布区归属 BLD-B');
-  h.run(`window.ATBBuild.setDetailTab('overview')`);
+  h.run(`window.ATBBuild.setStep('plan')`);
   assert.match(h.inner(), /bld-desc-block/, '概况内容切回可见');
 });
 
@@ -214,7 +215,7 @@ t('R3a 创建成功：留在构建模块，当前版本详情切到发布页签�
   await h.tick();
   const inner = h.inner();
   assert.doesNotMatch(inner, /创建产品发布（BLD-A）/, '创建弹层关闭');
-  assert.match(inner, /data-detail-tab="release"[^>]*aria-selected="true"/, '落点为发布页签');
+  assert.match(inner, /data-step="release"[^>]*aria-selected="true"/, '落点为发布页签');
   assert.match(inner, /data-rel-run="PREL-NEW-1"/, '新建草稿出现在列表');
   assert.match(inner, /data-rel-run="PREL-NEW-1"[\s\S]{0,400}?(sel"|草稿)/, '新建草稿被选中（或可见草稿状态）');
   assert.match(inner, /rel-card sel" data-ver-id="BLD-A"/, '版本选中保持');
@@ -237,7 +238,7 @@ t('R3b 创建失败：弹层保留、错误可见、不切页签；创建中重�
   assert.match(inner, /创建产品发布（BLD-A）/, '失败后弹层保留');
   assert.match(inner, /已有进行中的产品发布/, '错误信息可见');
   assert.match(inner, /value="1.3.0"/, '输入保留');
-  assert.doesNotMatch(inner, /data-detail-tab="release"[^>]*aria-selected="true"/, '失败不切页签');
+  assert.doesNotMatch(inner, /data-step="release"[^>]*aria-selected="true"/, '失败不切页签');
   // 创建中防重复：from-build 挂起期间再次触发确认，不产生第二个请求
   let release;
   h.sandbox.fetch = async (url, opts = {}) => {
@@ -294,7 +295,7 @@ t('R4c 切换项目重置页签与发布数据；旧项目慢返回不覆盖新�
   // 切项目：页签回概况、发布数据重置
   await h.run(`window.ATBBuild.enter('/p/other')`);
   const inner = h.inner();
-  assert.match(inner, /data-detail-tab="overview"[^>]*aria-selected="true"/, '切项目后页签回概况');
+  assert.match(inner, /data-step="plan"[^>]*aria-selected="true"/, '切项目后页签回概况');
   assert.doesNotMatch(inner, /PREL-A1/, '旧项目发布数据清除');
 });
 
@@ -338,7 +339,7 @@ t('R5a 加载：发布区显示加载提示；页签与版本列表仍可用（�
   const inner = h.inner();
   assert.match(inner, /正在加载发布记录…/, '加载提示');
   assert.match(inner, /data-ver-id="BLD-A"/, '版本列表仍渲染');
-  assert.match(inner, /data-detail-tab="overview"/, '页签仍渲染');
+  assert.match(inner, /data-step="plan"/, '页签仍渲染');
   assert.doesNotMatch(inner, /PREL-A1/, '不以旧版本记录顶替');
   release();
   await h.tick();
@@ -367,10 +368,10 @@ t('R5b 读取失败：显示「发布记录读取失败」与只读重试；重�
   const posts = h.calls.filter((c) => c.method === 'POST').length;
   assert.equal(posts, 0, '读取失败路径不发任何写请求');
   // 概况仍可访问
-  h.run(`window.ATBBuild.setDetailTab('overview')`);
+  h.run(`window.ATBBuild.setStep('plan')`);
   assert.match(h.inner(), /bld-desc-block/, '概况不受阻');
   // 重试成功恢复
-  h.run(`window.ATBBuild.setDetailTab('release')`);
+  h.run(`window.ATBBuild.setStep('release')`);
   await h.tick();
   fail = false;
   h.el('#bldRelRetry').listeners.click();
@@ -427,7 +428,7 @@ t('R5d 详情字段：运行 ID、发行版本号、状态、阶段、Web App / 
   assert.match(inner, /PREL-FAIL/, '运行 ID 展示');
   assert.match(inner, /1\.4\.0/, '发行版本号展示');
   assert.match(inner, /失败/, '失败状态展示（非已发布）');
-  assert.doesNotMatch(inner, /已发布/, '失败运行不显示为已发布');
+  assert.doesNotMatch(inner, /class="st[^"]*">已发布<\/span>/, '失败运行不显示为已发布（状态 chip 口径；REQ-20260920-003 官网提示词文案含「已发布版本」不受影响）');
   assert.match(inner, /Web App[\s\S]{0,60}已完成/, 'Web App 目标结果');
   assert.match(inner, /官网与文档[\s\S]{0,60}失败/, '官网目标结果');
   assert.match(inner, /官网构建部署/, '阶段展示');
@@ -551,7 +552,7 @@ t('R7a 新增静态文案入 EN、含插值句入 EN_DYNAMIC（值无中文）',
 /* ---------- 静态契约 ---------- */
 
 t('S1 静态契约：页签/记录/动作绑定存在；build.js 不再派发 atb:goto-view；样式类存在', () => {
-  assert.match(buildJs, /view\.querySelectorAll\('\[data-detail-tab\]'\)/, 'bindCommon 绑定详情页签切换');
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-step\]'\)/, 'bindCommon 绑定五步导航切换');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-run\]'\)/, 'bindCommon 绑定运行选择');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-act\]'\)/, 'bindCommon 绑定发布动作');
   assert.match(buildJs, /#bldRelRetry/, 'bindCommon 绑定读取重试');
