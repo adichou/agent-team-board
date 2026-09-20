@@ -3159,6 +3159,15 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-graph .lg-node { fill: var(--panel); stroke-width: 2; }
 .bld-graph .lg-dot { stroke: none; }
 .bld-merge-tag { flex: none; font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 99px; background: var(--info-bg); color: var(--info-text); }
+/* BUG-20260920-002 双支并集：分支头名称标签（main/dev 按轨道色 lg0/lg1 稳定配色）+
+   Merge-base 汇聚标注（虚线描边青色，非颜色提示另有文字）+ 汇聚水平虚线 + 分支头节点外圈 */
+.bld-branch-tag { flex: none; align-self: center; border-radius: 4px; font-size: 11px; line-height: 17px; padding: 0 7px; color: #fff; }
+.bld-branch-tag.bt-main { background: var(--git-lg0); }
+.bld-branch-tag.bt-dev { background: var(--git-lg1); }
+.bld-branch-tag.bt-mb { border: 1px dashed #2dd4bf; color: #2dd4bf; background: transparent; }
+.bld-graph .lg-mb { fill: none; stroke: #2dd4bf; stroke-width: 1.6; stroke-dasharray: 4 3; }
+.bld-graph .lg-head { fill: none; stroke: var(--text); stroke-width: 1.2; opacity: .8; }
+.bld-log-union { margin: 0 0 8px; }
 .bld-log-detail { font-size: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
 .bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }

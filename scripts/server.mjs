@@ -2247,7 +2247,11 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 //                                    REQ-20260914-002：可选 ?q= 关键词 → 搜索模式，subject/author/hash
 //                                    大小写不敏感子串匹配，服务端全量过滤后分页，total 为命中总数；
 //                                    REQ-20260920-001：每条 commit 附 parents 父提交 hash 数组，供前端
-//                                    按真实父子关系绘制历史拓扑图）
+//                                    按真实父子关系绘制历史拓扑图；
+//                                    BUG-20260920-002：所选分支为主分支或 dev 且两支本地并存时返回
+//                                    main∪dev 并集（等价 git log <main> <dev>），响应附 heads（两支头）
+//                                    与 mergeBase、逐提交 side（dev 独有为 'dev'，其余 'main'），
+//                                    供前端分支头标签 / 分支稳定配色 / 汇聚点标注；其余分支保持单支口径）
 //   POST /api/build/version           创建版本计划（至少一个条目，每条带 40 位 commit；
 //                                    BUG-20260913-001：非 done 条目拒绝纳入；
 //                                    BUG-20260914-004：已纳入任一版本的条目拒绝纳入，数据层兜底）
