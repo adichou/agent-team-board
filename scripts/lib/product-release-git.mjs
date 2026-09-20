@@ -133,9 +133,11 @@ export async function worktreeDirtyFiles(projectRoot, exec) {
 
 /* ---------- 写操作（受限） ---------- */
 
-// 切 main 并核对 HEAD：工作区不干净 / 分支被其他 worktree 占用 / main 已前进 → 明确阻塞；
-// 成功后工作目录保持在 main（README：发布执行后源码工作目录保持在 main）。
-export async function switchMainVerifyHead(projectRoot, exec, { expectedMainSha }) {
+// 切主分支并核对 HEAD：工作区不干净 / 分支被其他 worktree 占用 / 主分支已前进 → 明确阻塞；
+// 成功后工作目录保持在主分支（README：发布执行后源码工作目录保持在主分支）。
+// REQ-20260916-005：mainBranch 按主分支解析结果传入（仅 master 历史仓库为 'master'）；
+// 缺省 'main'（旧调用兼容）。
+export async function switchMainVerifyHead(projectRoot, exec, { expectedMainSha, mainBranch = 'main' }) {
   const dirty = await worktreeDirtyFiles(projectRoot, exec);
   if (dirty.length) {
     throw new ProductGitError(
@@ -145,23 +147,23 @@ export async function switchMainVerifyHead(projectRoot, exec, { expectedMainSha 
     );
   }
   const current = await maybe(exec, projectRoot, ['branch', '--show-current']);
-  if (current !== 'main') {
-    const r = await exec('git', ['checkout', 'main'], { cwd: projectRoot });
+  if (current !== mainBranch) {
+    const r = await exec('git', ['checkout', mainBranch], { cwd: projectRoot });
     if (r.code !== 0) {
       const text = `${r.stderr || ''}${r.stdout || ''}`;
       const kind = /already (checked out|used)/i.test(text) ? 'occupied' : 'checkout-failed';
       throw new ProductGitError(
         kind === 'occupied'
-          ? 'main 分支正被其他工作树（worktree）占用：请先移除占用的工作树或在其内完成操作（不强切）'
-          : `切换 main 失败：${head(text)}`,
+          ? `${mainBranch} 分支正被其他工作树（worktree）占用：请先移除占用的工作树或在其内完成操作（不强切）`
+          : `切换 ${mainBranch} 失败：${head(text)}`,
         kind,
       );
     }
   }
-  const headNow = (await ok(exec, projectRoot, ['rev-parse', 'HEAD'], '读取 main HEAD')).toLowerCase();
+  const headNow = (await ok(exec, projectRoot, ['rev-parse', 'HEAD'], `读取 ${mainBranch} HEAD`)).toLowerCase();
   if (headNow !== String(expectedMainSha).toLowerCase()) {
     throw new ProductGitError(
-      `main 分支头已前进（当前 ${headNow.slice(0, 8)} ≠ 冻结 ${String(expectedMainSha).slice(0, 8)}）：不能把旧计划 SHA 冒充当前 main 发布，请重新冻结后再启动`,
+      `${mainBranch} 分支头已前进（当前 ${headNow.slice(0, 8)} ≠ 冻结 ${String(expectedMainSha).slice(0, 8)}）：不能把旧计划 SHA 冒充当前 ${mainBranch} 发布，请重新冻结后再启动`,
       'plan-stale',
       { current: headNow, frozen: String(expectedMainSha).toLowerCase() },
     );
@@ -169,22 +171,24 @@ export async function switchMainVerifyHead(projectRoot, exec, { expectedMainSha 
   return { ok: true, previousBranch: current };
 }
 
-// main/dev 双分支一次原子推送（--atomic；任一被拒整体失败，不回退为两次推送）
-export async function atomicPushBranches(projectRoot, exec, { remote }) {
-  const r = await exec('git', ['push', '--atomic', remote, 'main', 'dev'], { cwd: projectRoot, timeoutMs: 300000 });
+// 主分支/dev 双分支一次原子推送（--atomic；任一被拒整体失败，不回退为两次推送）
+// REQ-20260916-005：mainBranch 按解析结果传入（回退 master 场景推送 master + dev）。
+export async function atomicPushBranches(projectRoot, exec, { remote, mainBranch = 'main' }) {
+  const r = await exec('git', ['push', '--atomic', remote, mainBranch, 'dev'], { cwd: projectRoot, timeoutMs: 300000 });
   if (r.code !== 0) {
     const text = `${r.stderr || ''}${r.stdout || ''}`;
     if (/atomic/i.test(text) && /disable|unsupported|advertise/i.test(text)) {
-      throw new ProductGitError('远端不支持 atomic 推送：main/dev 无法原子同批发布，已阻塞（不回退为可能仅成功一个分支的两次推送）', 'atomic-unsupported');
+      throw new ProductGitError(`远端不支持 atomic 推送：${mainBranch}/dev 无法原子同批发布，已阻塞（不回退为可能仅成功一个分支的两次推送）`, 'atomic-unsupported');
     }
-    throw new ProductGitError(`推送被拒（main/dev 原子推送失败，不 force）：${head(text)}`, 'push-rejected');
+    throw new ProductGitError(`推送被拒（${mainBranch}/dev 原子推送失败，不 force）：${head(text)}`, 'push-rejected');
   }
   return { ok: true, note: head(r.stderr || r.stdout || '推送完成', 6) };
 }
 
-// 远端核验：main/dev 两分支 SHA 必须都等于冻结值（单分支一致不算完成）
-export async function verifyRemoteBranches(projectRoot, exec, { remote, mainSha, devSha }) {
-  const r = await exec('git', ['ls-remote', remote, 'refs/heads/main', 'refs/heads/dev'], { cwd: projectRoot, timeoutMs: 30000 });
+// 远端核验：主分支/dev 两分支 SHA 必须都等于冻结值（单分支一致不算完成）
+// REQ-20260916-005：mainBranch 按解析结果传入（回退 master 场景核验 refs/heads/master）。
+export async function verifyRemoteBranches(projectRoot, exec, { remote, mainSha, devSha, mainBranch = 'main' }) {
+  const r = await exec('git', ['ls-remote', remote, `refs/heads/${mainBranch}`, 'refs/heads/dev'], { cwd: projectRoot, timeoutMs: 30000 });
   if (r.code !== 0) {
     throw new ProductGitError(`核验读取远端失败：${head(r.stderr || r.stdout)}`, 'verify-unreachable');
   }
@@ -193,12 +197,12 @@ export async function verifyRemoteBranches(projectRoot, exec, { remote, mainSha,
     const [oid, ref] = line.split('\t');
     actual[ref] = oid ? oid.toLowerCase() : null;
   }
-  const mainOk = actual['refs/heads/main'] === String(mainSha).toLowerCase();
+  const mainOk = actual[`refs/heads/${mainBranch}`] === String(mainSha).toLowerCase();
   const devOk = actual['refs/heads/dev'] === String(devSha).toLowerCase();
   if (!mainOk || !devOk) {
-    const bad = [!mainOk && 'main', !devOk && 'dev'].filter(Boolean);
+    const bad = [!mainOk && mainBranch, !devOk && 'dev'].filter(Boolean);
     throw new ProductGitError(
-      `远端核验不一致（${bad.join('、')}）：main 实际 ${actual['refs/heads/main'] ? actual['refs/heads/main'].slice(0, 8) : '（不存在）'} / dev 实际 ${actual['refs/heads/dev'] ? actual['refs/heads/dev'].slice(0, 8) : '（不存在）'}。双分支一致才算完成，可重试（重试先查询远端）`,
+      `远端核验不一致（${bad.join('、')}）：${mainBranch} 实际 ${actual[`refs/heads/${mainBranch}`] ? actual[`refs/heads/${mainBranch}`].slice(0, 8) : '（不存在）'} / dev 实际 ${actual['refs/heads/dev'] ? actual['refs/heads/dev'].slice(0, 8) : '（不存在）'}。双分支一致才算完成，可重试（重试先查询远端）`,
       'verify-mismatch',
       { actual },
     );
@@ -207,12 +211,13 @@ export async function verifyRemoteBranches(projectRoot, exec, { remote, mainSha,
 }
 
 // 只读推送预演（预检用：dry-run 不产生远端更新）
-export async function precheckAtomicPushDryRun(projectRoot, exec, { remote }) {
-  const r = await exec('git', ['push', '--dry-run', '--atomic', remote, 'main', 'dev'], { cwd: projectRoot, timeoutMs: 60000 });
+// REQ-20260916-005：mainBranch 按解析结果传入（回退 master 场景预演 master + dev）。
+export async function precheckAtomicPushDryRun(projectRoot, exec, { remote, mainBranch = 'main' }) {
+  const r = await exec('git', ['push', '--dry-run', '--atomic', remote, mainBranch, 'dev'], { cwd: projectRoot, timeoutMs: 60000 });
   if (r.code !== 0) {
     const text = `${r.stderr || ''}${r.stdout || ''}`;
     if (/atomic/i.test(text) && /disable|unsupported|advertise/i.test(text)) {
-      throw new ProductGitError('远端不支持 atomic 推送（dry-run 探测）：main/dev 无法原子同批发布，预检阻塞', 'atomic-unsupported');
+      throw new ProductGitError(`远端不支持 atomic 推送（dry-run 探测）：${mainBranch}/dev 无法原子同批发布，预检阻塞`, 'atomic-unsupported');
     }
     throw new ProductGitError(`推送预演失败（不推送）：${head(text)}`, 'dry-run-failed');
   }

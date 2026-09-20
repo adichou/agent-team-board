@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BUG-20260916-002 界面演示 · 重新执行无法续接 blocked 条目</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #e3e6ea; --text: #1f2328;
+    --muted: #6a737d; --accent: #2f6feb; --ok: #1a7f37; --err: #cf222e;
+    --chip-blocked-bg: #fff3cd; --chip-blocked-fg: #8a6d00; --chip-reported-bg: #e8f2e8; --chip-reported-fg: #1a7f37;
+    --batch-bg: #eef4fd; --btn-bg: #ffffff; --textarea-bg: #fafbfc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171a; --panel: #1d2126; --border: #333a42; --text: #e6e8eb;
+      --muted: #9aa4ae; --accent: #5c8dff; --ok: #3fb950; --err: #f87171;
+      --chip-blocked-bg: #4a3f14; --chip-blocked-fg: #e3c567; --chip-reported-bg: #1d3324; --chip-reported-fg: #57ab5a;
+      --batch-bg: #1b2636; --btn-bg: #262c33; --textarea-bg: #171a1e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171a; --panel: #1d2126; --border: #333a42; --text: #e6e8eb;
+    --muted: #9aa4ae; --accent: #5c8dff; --ok: #3fb950; --err: #f87171;
+    --chip-blocked-bg: #4a3f14; --chip-blocked-fg: #e3c567; --chip-reported-bg: #1d3324; --chip-reported-fg: #57ab5a;
+    --batch-bg: #1b2636; --btn-bg: #262c33; --textarea-bg: #171a1e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  /* 控制条 */
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; }
+  .controls .grp { display: flex; align-items: center; gap: 6px; }
+  .controls .lbl { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: var(--btn-bg); color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .chipbtn { border: 1px solid var(--border); background: var(--btn-bg); color: var(--text);
+    padding: 4px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+  .chipbtn.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  label.ck { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  /* 任务面板 */
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .batchbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--batch-bg); border-bottom: 1px solid var(--border); }
+  .batchbar .t { font-weight: 600; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); }
+  .records { padding: 12px 16px 16px; }
+  .dep-toolbar { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0 10px; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .attempt-table-wrap { overflow-x: auto; }
+  table.attempt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.attempt-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px;
+    padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.attempt-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.attempt-table tr:last-child td { border-bottom: none; }
+  .chip { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+  .rs-blocked { background: var(--chip-blocked-bg); color: var(--chip-blocked-fg); }
+  .rs-reported { background: var(--chip-reported-bg); color: var(--chip-reported-fg); }
+  .cid { color: var(--accent); font-weight: 600; cursor: default; }
+  .btn { border: 1px solid var(--border); background: var(--btn-bg); color: var(--text);
+    border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .55; cursor: wait; }
+  /* 提示词面板 */
+  .promptbox { margin-top: 14px; border: 1px dashed var(--accent); border-radius: 10px; padding: 12px 14px; }
+  .promptbox .hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .promptbox .hd .t { font-weight: 600; color: var(--accent); }
+  textarea.prompt { width: 100%; min-height: 220px; resize: vertical; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
+    background: var(--textarea-bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .manual-tip { margin-top: 6px; }
+  /* 状态区 */
+  .statebar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .dot.warn { background: var(--chip-blocked-fg); }
+  .dot.err { background: var(--err); }
+  .dot.load { background: var(--accent); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  /* toast */
+  #toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 99; max-width: 460px; }
+  .toast { padding: 10px 14px; border-radius: 10px; color: #fff; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    animation: rise .25s ease; word-break: break-all; }
+  .toast.ok { background: var(--ok); } .toast.err { background: var(--err); }
+  @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+  .foot { margin-top: 12px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260916-002 · 任务记录「重新执行」无法续接已认领后 blocked 的条目</h1>
+  <p class="sub">演示任务记录页对 blocked 终态记录点击「重新执行」的缺陷现象与期望修复后状态。表格行、owner 与提示词均为示意数据。</p>
+
+  <div class="controls">
+    <span class="grp"><span class="lbl">形态</span>
+      <span class="seg" id="modeSeg">
+        <button type="button" data-mode="bug" class="on">缺陷形态（现状）</button>
+        <button type="button" data-mode="fixed">修复后（期望）</button>
+      </span>
+    </span>
+    <span class="grp"><span class="lbl">记录状态</span>
+      <button type="button" class="chipbtn on" data-state="normal">正常（含受阻）</button>
+      <button type="button" class="chipbtn" data-state="empty">空态</button>
+      <button type="button" class="chipbtn" data-state="loading">加载中</button>
+      <button type="button" class="chipbtn" data-state="fail">请求失败</button>
+    </span>
+    <label class="ck"><input type="checkbox" id="copyFail" /> 模拟复制失败</label>
+    <span class="grp" style="margin-left:auto">
+      <button type="button" class="chipbtn" id="themeBtn" title="覆盖系统深浅色偏好">🌗 深浅色</button>
+    </span>
+  </div>
+
+  <div class="panel">
+    <div class="batchbar">
+      <span class="t">批量开发</span>
+      <span class="badge">本轮已结束 · finished</span>
+      <span class="muted small">本轮执行已收尾，处理记录仍可按条目重建 / 续接</span>
+    </div>
+    <div class="records">
+      <div class="dep-toolbar">
+        <span class="muted small">本轮处理记录</span>
+        <span class="muted small" id="countTip">最近 2 条 / 共 5 条</span>
+      </div>
+      <div class="attempt-table-wrap" id="tableWrap"><!-- JS 渲染 --></div>
+      <div class="promptbox" id="promptBox" hidden>
+        <div class="hd">
+          <span class="t">续接提示词（自动复制失败时请手动选中复制）</span>
+          <button type="button" class="btn" id="copyBtn">复制提示词</button>
+        </div>
+        <textarea class="prompt" id="promptText" readonly spellcheck="false"></textarea>
+        <div class="muted small manual-tip" id="manualTip" hidden>提示词未进入剪贴板：请全选上方文本手动复制；「复制提示词」可重试（不会产生新任务 / 新运行）。</div>
+      </div>
+    </div>
+    <div class="statebar"><span class="dot" id="stateDot"></span><span id="stateText">正常：受阻（blocked）记录可「重新执行」，已处理（reported）记录不可重试</span></div>
+  </div>
+
+  <p class="foot">缺陷链路：blocked 为终态运行但条目保持 in-progress / owner 不变 → 终态重建路径按「已计划且未认领」过滤候选 → 报「指定的条目均不可入队」。期望：识别「blocked + 仍被原 owner 认领 + 无在途运行」→ 生成续接提示词（沿用原 owner 幂等续认），不走普通新批次入队、不新建运行。</p>
+</div>
+<div id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  var mode = 'bug';           // bug = 缺陷形态；fixed = 修复后
+  var recState = 'normal';    // normal / empty / loading / fail
+  var busy = false;
+  var promptShown = false;
+
+  var ROWS = [
+    { id: 'BUG-20260916-002', kind: 'Bug', title: '任务记录重新执行无法续接已认领后 blocked 的条目',
+      result: 'blocked', resultLabel: '受阻', note: '边界待确认：活跃任务分支是否同样改走续接提示词', attempt: 1, retryable: true },
+    { id: 'REQ-20260910-032', kind: '需求', title: '（示意行）全局任务总览跳转目标视图记忆',
+      result: 'reported', resultLabel: '已处理', note: '按单项流程 report 收口', attempt: 2, retryable: false }
+  ];
+
+  var PROMPT = [
+    '【续接执行】BUG-20260916-002 任务记录重新执行无法续接已认领后 blocked 的条目',
+    '项目根：<项目根目录>',
+    '原认领身份（owner）：dev-07',
+    '',
+    '第一步（开工前核对）：确认旧 worker 会话已停止且无活动 worker。',
+    '  后端已核验该条目无在途（非终态）运行；旧子代理会话是否停止请人工确认后再继续。',
+    '',
+    '认领方式（同 owner 幂等续认，不退回已计划、不清 owner）：',
+    '  node scripts/atb.mjs claim BUG-20260916-002 --by dev-07',
+    '',
+    '文档入口：',
+    '  - <项目根>/agent-team-board/data/bugs/BUG-20260916-002/README.md',
+    '  - <项目根>/agent-team-board/data/bugs/BUG-20260916-002/design.md',
+    '  - <数据目录>/dispatch/worker-spec.md（事实源：skills/agent-team-board/worker-spec.md）',
+    '',
+    '流程（单项 /dev 口径）：读文档 → TDD → report 不带 --run 收口，继续实施、测试、上报。',
+    '',
+    '红线：不走普通新批次入队；不复用终态旧运行；不新建 run 账目；',
+    '不代替人工接受需求或确认完成；不修改人工管理的业务状态。'
+  ].join('\n');
+
+  function $(id) { return document.getElementById(id); }
+  function toast(msg, isErr) {
+    var t = document.createElement('div');
+    t.className = 'toast ' + (isErr ? 'err' : 'ok');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(function () { t.remove(); }, 4200);
+  }
+  function setState(cls, text) {
+    $('stateDot').className = 'dot ' + cls;
+    $('stateText').textContent = text;
+  }
+
+  function renderTable() {
+    var wrap = $('tableWrap');
+    if (recState === 'loading') {
+      wrap.innerHTML = '<p class="muted small" style="margin:6px 0">正在加载执行记录…</p>';
+      $('countTip').textContent = '加载中…';
+      setState('load', '加载中：正在请求执行记录');
+      return;
+    }
+    if (recState === 'empty') {
+      wrap.innerHTML = '<table class="attempt-table"><tbody><tr><td colspan="4" class="muted small">暂无执行记录</td></tr></tbody></table>';
+      $('countTip').textContent = '最近 0 条 / 共 0 条';
+      setState('warn', '空态：本轮无执行记录，「重新执行」入口不出现');
+      return;
+    }
+    $('countTip').textContent = '最近 2 条 / 共 5 条';
+    var rows = ROWS.map(function (r) {
+      var op = r.retryable
+        ? '<button type="button" class="btn" data-retry="' + r.id + '"' + (busy ? ' disabled' : '') +
+          ' title="保留原记录并增加一次执行尝试；不可重试时会给出原因与后续操作">' + (busy ? '执行中…' : '重新执行') + '</button>'
+        : '—';
+      return '<tr><td><span class="chip rs-reported">' + r.kind + '</span> <span class="cid">' + r.id + '</span>' +
+        '<div class="muted small">' + r.title + '</div></td>' +
+        '<td><span class="chip rs-' + r.result + '">' + r.resultLabel + '</span>' +
+        '<div class="muted small">' + r.note + '</div></td>' +
+        '<td>第 ' + r.attempt + ' 次</td><td>' + op + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table class="attempt-table"><thead><tr><th>需求 / Bug</th><th>执行状态</th><th>次数</th><th>操作</th></tr></thead><tbody>' +
+      rows + '</tbody></table>';
+    setState(recState === 'fail' ? 'err' : '',
+      recState === 'fail'
+        ? '请求失败：本轮记录接口不可用，操作将以错误 toast 反馈'
+        : (mode === 'bug' ? '正常（缺陷形态）：点击「重新执行」将命中「候选过滤为空」报错' : '正常（修复后）：点击「重新执行」生成续接提示词并自动复制'));
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-retry]'), function (b) {
+      b.addEventListener('click', function () { onRetry(b.dataset.retry); });
+    });
+  }
+
+  function onRetry(itemId) {
+    if (busy) return;
+    busy = true; renderTable();
+    setTimeout(function () {
+      busy = false;
+      if (recState === 'fail') {
+        renderTable();
+        toast('请求失败：无法连接服务（模拟网络错误），请稍后重试', true);
+        return;
+      }
+      if (recState !== 'normal') { renderTable(); return; }
+      if (mode === 'bug') {
+        // 缺陷形态：createBatch scoped 候选被「planned 且未认领」过滤为空
+        renderTable();
+        toast('指定的条目均不可入队：可能已被认领或不在已计划状态', true);
+        return;
+      }
+      // 修复后：识别 blocked + 原 owner 认领 + 无在途运行 → 续接提示词
+      var fail = $('copyFail').checked;
+      renderTable();
+      $('promptText').value = PROMPT;
+      $('promptBox').hidden = false;
+      $('manualTip').hidden = !fail;
+      if (fail) {
+        toast('续接提示词已生成，但复制失败：请在下方选中提示词手动复制，或点「复制提示词」重试', true);
+      } else {
+        toast('✓ 续接提示词已复制，请在原项目会话粘贴发送（条目 ' + itemId + '；沿用原 owner dev-07 续认，不新建运行）');
+      }
+    }, 650);
+  }
+
+  // 形态切换
+  Array.prototype.forEach.call($('modeSeg').querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () {
+      mode = b.dataset.mode;
+      Array.prototype.forEach.call($('modeSeg').querySelectorAll('button'), function (x) { x.classList.toggle('on', x === b); });
+      promptShown = false; $('promptBox').hidden = true; renderTable();
+    });
+  });
+  // 记录状态切换
+  Array.prototype.forEach.call(document.querySelectorAll('[data-state]'), function (b) {
+    b.addEventListener('click', function () {
+      recState = b.dataset.state;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-state]'), function (x) { x.classList.toggle('on', x === b); });
+      if (recState !== 'normal') { $('promptBox').hidden = true; }
+      renderTable();
+    });
+  });
+  // 手动复制 / 重试复制（演示：不依赖真实剪贴板权限，按勾选模拟结果）
+  $('copyBtn').addEventListener('click', function () {
+    var fail = $('copyFail').checked;
+    if (fail) { toast('复制失败：请手动选中提示词文本复制', true); return; }
+    $('manualTip').hidden = true;
+    toast('✓ 续接提示词已复制，请在原项目会话粘贴发送');
+  });
+  // 深浅色：跟随系统，可手动覆盖
+  var themeIdx = 0; // 0=跟随系统 1=light 2=dark
+  $('themeBtn').addEventListener('click', function () {
+    themeIdx = (themeIdx + 1) % 3;
+    var root = document.documentElement;
+    if (themeIdx === 1) { root.dataset.theme = 'light'; this.textContent = '☀️ 浅色'; }
+    else if (themeIdx === 2) { root.dataset.theme = 'dark'; this.textContent = '🌙 深色'; }
+    else { delete root.dataset.theme; this.textContent = '🌗 跟随系统'; }
+  });
+
+  renderTable();
+})();
+</script>
+</body>
+</html>

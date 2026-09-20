@@ -39,3 +39,31 @@
 
 - 「旧 worker 已停止」无法程序化确证，只能核账本在途运行 + 提示词/界面双重提示人工确认；若旧 worker 实际未停止，同 owner 续认后存在双执行风险——提示词须把「先确认旧会话已停止」放在第一步。
 - 不自动修改人工管理的业务状态：续接不退回已计划、不清 owner；人工仍可随时按状态机处理条目。
+
+## 实施记录（2026-09-18，BUG-20260916-002）
+
+按方案「后端新增 `POST /api/batch/continue`」路由落地（最小改动，前端终态分支前置续接判定）：
+
+- **数据层 `scripts/lib/batch.mjs`**：新增导出 `continueRun(dataDir, runId, { projectRoot })`——
+  ① 防线优先：全账本扫描该条目在途（非终态、非 interrupted、排除 `executor='manual'` 归因记录）
+  运行，命中返回 `{ ok:false, fallback:'none', message }`（在途指引，前端不回退）；
+  ② 运行非 blocked → `{ ok:false, fallback:'rebuild' }`（维持既有重建路径与报错口径）；
+  ③ 条目非 in-progress 或 owner 与运行记录不一致 → `{ ok:false, fallback:'rebuild' }`；
+  ④ 满足条件 → `{ ok:true, runId, itemId, title, owner, prompt }`（提示词含核对清单全要素：
+  编号/标题/owner/项目根/README·design·worker-spec 入口/第一步核对旧 worker/同 owner 续认指令/
+  单项 /dev（report 不带 --run）/红线）。只读账本与状态：不新建 run、不改业务状态、幂等。
+- **服务端 `scripts/server.mjs`**：`POST /api/batch/continue`（body `{ runId }`）透传 `batch.continueRun`，
+  200 携带 ok/fallback 语义（对齐 `/api/batch/create` 的 `created:false` 幂等返回范式，非 2xx 只留缺参/未初始化）。
+- **前端 `scripts/web/app.js`**：`retryRunFromRecord` 终态 develop 分支对 `rec.result === 'blocked'`
+  先调续接接口——成功则 `state.batchContinue` 暂存 + `copyDispatchText` 自动复制（失败不宣称已复制），
+  记录分区表格下方常驻「续接提示词」面板（`#continuePrompt` 全文 + `#continueRecopy` 重试复制）；
+  `fallback:'none'` 直接 toast 指引；`fallback:'rebuild'` 落回原 `createBatchAndCopy({ ids })`。
+  refine 终态分支与活跃分支（`/api/batch/retry` 拒绝口径）不动。
+- **i18n `scripts/web/i18n.js`**：新增静态 2 条（复制失败兜底/重试复制成功）+ 动态 2 条（成功 toast/面板标题，
+  ◇ 插值），复用既有「重新复制」等词条；i18n-coverage 全量通过。
+- **测试 `scripts/tests/retry-blocked-continue-20260916-002.test.mjs`**：9 例——数据层 D1 核心（要素清单+幂等+
+  不变量：不新建 run/不改状态）、D2 在途防线、D3 身份/状态不符回退、D4 failed 原路径回归（重建不受影响）；
+  静态契约 U1–U4（前端路由/回退口径/面板/服务端路由）；I1 词典同步。
+- 关键实现发现：`core.claim` 会在 `dispatch/runs/manual-<itemId>/` 落「手动 /dev 归因快照」记录
+  （executor='manual'、phase='reserved'，BUG-20260915-007）——在途扫描必须排除之，否则被认领条目
+  永远误判「已有在途执行」；续接流程按同 owner 续认复用该归因周期，正好同构。

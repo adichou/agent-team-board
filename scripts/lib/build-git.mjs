@@ -1,15 +1,18 @@
 // REQ-20260913-001 构建模块 Git 执行层（build-git）—— server.mjs 使用，全部 spawnSync 本机 git。
 // 只提供 design.md 落定的六类操作：分支列表（只读）、分支提交记录（只读）、同步远端
-//（受限写：BUG-20260914-011 起 = fetch --all --prune 后推送除 main 外的本地开发分支，
-// 使本地与远端记录一致；main 归发布模块，不在此推送）、推送分支 push（受限写，首推建立
-// 上游）、合并入 main（受限写：临时工作树隔离执行 + 逐条目 --no-ff 合并 + 冲突即 abort，
-// 不触碰当前工作区）。除此外不提供任何 git 写操作（无 pull / rebase / 删分支 / 改历史 / --force）。
+//（受限写：BUG-20260914-011 起 = fetch --all --prune 后推送除主分支外的本地开发分支，
+// 使本地与远端记录一致；主分支归发布模块，不在此推送）、推送分支 push（受限写，首推建立
+// 上游）、合并入主分支（受限写：临时工作树隔离执行 + 逐条目 --no-ff 合并 + 冲突即 abort，
+// 不触碰当前工作树）。除此外不提供任何 git 写操作（无 pull / rebase / 删分支 / 改历史 / --force）。
+// REQ-20260916-005：主分支统一解析（优先 main，本地仅 master 时回退 master）——同步跳过
+// 名单与合并目标均按解析结果取用。
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AtbError } from './core.mjs';
+import { resolveMainBranch } from './git-flow.mjs';
 
 const GIT_TIMEOUT_MS = 120_000;
 // 临时工作树根：优先系统临时目录；不可用（或挂载不允许执行 git）时回退项目内 .git/atb-tmp
@@ -54,15 +57,17 @@ export function assertRefName(branch) {
 // 只读：当前分支 + 本地分支 + 远端分支（origin/xxx 短名；排除 origin/HEAD 指针）+ 已配置远端名。
 // BUG-20260914-006：remotes（git remote，本地配置读、非网络）供前端区分
 // 「未配置远端」/「已配置但本地无跟踪引用」/「同步成功后仍为空 = 远端仓库为空」三种空态。
+// REQ-20260916-005：mainBranch = 主分支解析结果（优先 main，本地仅有 master 时回退
+// master，两者皆无为 null）——前端 main 缺失提示与主分支行推送豁免以此为准。
 export function listBranches(root) {
-  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [], remotes: [] };
+  if (!isGitRepo(root)) return { isRepo: false, current: null, local: [], remote: [], remotes: [], mainBranch: null };
   const current = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim() || null;
   const local = String(gitRaw(root, ['branch', '--format=%(refname:short)']).stdout || '')
     .split('\n').map((s) => s.trim()).filter(Boolean);
   const remote = String(gitRaw(root, ['branch', '-r', '--format=%(refname:short)']).stdout || '')
     .split('\n').map((s) => s.trim())
     .filter((s) => s && !s.endsWith('/HEAD'));
-  return { isRepo: true, current, local, remote, remotes: remoteNames(root) };
+  return { isRepo: true, current, local, remote, remotes: remoteNames(root), mainBranch: resolveMainBranch(root) };
 }
 
 // 只读：指定分支提交记录（分页，新→旧）。BUG-20260914-009：放开原「默认 50 / 上限 200 且无翻页」
@@ -125,22 +130,25 @@ export function fetchRemote(root) {
 }
 
 // 受限写：与远端同步（BUG-20260914-011 design.md 落定口径）——先 fetch --all --prune（失败即
-// 整体抛错，不进推送），再推送除 main 外的全部本地分支（main 归发布模块管理，不在此推送；
+// 整体抛错，不进推送），再推送除主分支外的全部本地分支（主分支归发布模块管理，不在此推送；
 // 未建上游的首推 -u 建立跟踪），使本地与远端记录一致。单分支推送失败不中断其他分支，逐条
 // 收集结果（failed 含原因）；不用 --force、不强推——远端领先（非快进被拒）时该分支计入
 // failed 并携带 git 原因，不自动改写本地历史。远端未显式指定时 origin 优先、否则取已配置
 // 远端第一个（与分支行推送确认框默认一致）。
+// REQ-20260916-005：受控推送跳过名单与主分支解析结果一致——本地仅有 master 的历史仓库
+// 跳过 master（dev 等其余分支照常推送）；main 与 master 并存仍只跳 main（无回归）。
 export function syncRemote(root, { remote } = {}) {
   fetchRemote(root); // 前置校验（非 git 仓库）+ fetch 失败整体报错口径复用
   const remotes = remoteNames(root);
   if (!remotes.length) throw new AtbError('尚未配置远端（git remote add origin <url>），无法与远端同步');
   const rm = String(remote || '').trim();
   const target = rm && remotes.includes(rm) ? rm : (remotes.includes('origin') ? 'origin' : remotes[0]);
+  const mainBranch = resolveMainBranch(root);
   const pushed = [];
   const failed = [];
   const skipped = [];
   for (const branch of listBranches(root).local) {
-    if (branch === 'main') { skipped.push(branch); continue; } // main：发布模块受控推送
+    if (mainBranch && branch === mainBranch) { skipped.push(branch); continue; } // 主分支：发布模块受控推送
     try {
       pushed.push({ branch, ...pushBranch(root, { remote: target, branch }) });
     } catch (e) {
@@ -184,14 +192,17 @@ export function pushBranch(root, { remote, branch } = {}) {
   return { ok: true, setUpstream: !(hadUpstream && hadUpstream.remote === rm), remoteBranch: `${rm}/${ref}`, hadUpstream: !!hadUpstream };
 }
 
-// 合并前置校验（只读，状态变更前由服务端调用）：非仓库 / main 缺失 / 提交缺失 / detached。
+// 合并前置校验（只读，状态变更前由服务端调用）：非仓库 / 主分支缺失 / 提交缺失 / detached。
 // 工作区不再要求干净：合并经临时工作树执行（见 mergeCommitsIntoMain），不触碰当前工作区。
 // 返回当前分支（仅用于记录 baseBranch；合并本身不切分支）。
+// REQ-20260916-005：合并目标按主分支解析结果取 main 或 master（本地仅 master 的历史
+// 仓库以 master 为目标，不再报「main 分支不存在」）；两者皆无（如 dev-only 未补建）
+// 时仍按 main 报缺失（与 build.js main 缺失提示口径一致）。
 export function precheckMerge(root, items = []) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再合并入 main');
   const baseBranch = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim();
   if (!baseBranch) throw new AtbError('当前处于 detached HEAD，无法自动合并；请先切到一个本地分支');
-  gitOk(root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main'], 'main 分支不存在');
+  gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${resolveMainBranch(root) || 'main'}`], 'main 分支不存在');
   for (const it of items) {
     const r = gitRaw(root, ['rev-parse', '--verify', '--quiet', `${it.commit}^{commit}`]);
     if (r.status !== 0) throw new AtbError(`提交不存在：${it.itemId} → ${String(it.commit).slice(0, 12)}`);
@@ -199,20 +210,22 @@ export function precheckMerge(root, items = []) {
   return baseBranch;
 }
 
-// 受限写：把版本所选条目的 commit 逐条合并入 main（--no-ff 保留合并语义，消息含版本与条目号）。
-// 执行隔离（design.md 落定口径）：当前分支非 main 时，在 os.tmpdir() 建临时工作树检出 main，
-// 逐条 merge 后移除——全程不切换、不触碰用户当前工作区（未提交改动保留、不被卷入，脏工作区不阻塞）；
-// 单条失败即中止并 git merge --abort，已成功条目保持已合并（重试只补未合并，幂等续传：
-// 已在 main 的提交再合并返回 Already up to date，结果仍为成功）。
+// 受限写：把版本所选条目的 commit 逐条合并入主分支（--no-ff 保留合并语义，消息含版本与条目号）。
+// 执行隔离（design.md 落定口径）：当前分支非主分支时，在 os.tmpdir() 建临时工作树检出台
+// 主分支，逐条 merge 后移除——全程不切换、不触碰用户当前工作区（未提交改动保留、不被卷入，
+// 脏工作区不阻塞）；单条失败即中止并 git merge --abort，已成功条目保持已合并（重试只补
+// 未合并，幂等续传：已在主分支的提交再合并返回 Already up to date，结果仍为成功）。
+// REQ-20260916-005：主分支名按解析结果取 main 或 master（回退 master 场景合并入 master）。
 export function mergeCommitsIntoMain(root, { versionId, versionName, items = [] } = {}) {
   const baseBranch = precheckMerge(root, items);
+  const targetBranch = resolveMainBranch(root) || 'main';
   const results = [];
   const warnings = [];
-  const inPlace = baseBranch === 'main'; // 当前就在 main：原地合并，无需临时工作树
+  const inPlace = baseBranch === targetBranch; // 当前就在主分支：原地合并，无需临时工作树
   let wt = null;
   if (!inPlace) {
     wt = path.join(realTmpdir(), `atb-merge-${versionId || 'v'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-    const r = gitRaw(root, ['worktree', 'add', wt, 'main']);
+    const r = gitRaw(root, ['worktree', 'add', wt, targetBranch]);
     if (r.status !== 0) {
       const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
       throw new AtbError(`创建合并工作树失败：${detail}`.slice(0, 300));

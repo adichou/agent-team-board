@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260916-003 演示 — 条目人工确认完成后未取消其受阻回执，批次计数永久残留受阻</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #1f2328; --muted: #6b7280; --line: #e4e7ec;
+    --warn-bg: #fff7e6; --warn-ink: #9a6700; --warn-line: #f0d47a;
+    --info-bg: #eaf3ff; --info-ink: #0b5cad; --info-line: #b6d4f5;
+    --ok-bg: #e9f7ee; --ok-ink: #1a7f37; --ok-line: #a9dcb9;
+    --err-bg: #fdecec; --err-ink: #c0392b; --err-line: #f2b8b5;
+    --btn: #ffffff; --btn-ink: #1f2328; --btn-line: #c9ced6;
+    --btn-primary-bg: #2563eb; --btn-primary-ink: #ffffff;
+    --chip-running-bg: #dcf5e3; --chip-running-ink: #1a7f37;
+    --chip-finished-bg: #e2e8f0; --chip-finished-ink: #475569;
+    --chip-blocked-bg: #fbdddd; --chip-blocked-ink: #c0392b;
+    --chip-reported-bg: #dcf5e3; --chip-reported-ink: #1a7f37;
+    --chip-cancelled-bg: #e2e8f0; --chip-cancelled-ink: #64748b;
+    --chip-planned-bg: #eaf3ff; --chip-planned-ink: #0b5cad;
+    --chip-inprogress-bg: #fdeeda; --chip-inprogress-ink: #9a6700;
+    --chip-done-bg: #e2e8f0; --chip-done-ink: #334155;
+    --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10141a; --card: #1a2029; --ink: #e6e9ee; --muted: #9aa4b2; --line: #2c3440;
+      --warn-bg: #3a2f14; --warn-ink: #ffd88a; --warn-line: #6b5a22;
+      --info-bg: #14283d; --info-ink: #9cc8f5; --info-line: #274b6e;
+      --ok-bg: #14321f; --ok-ink: #8fd6a4; --ok-line: #2a5c3b;
+      --err-bg: #3d1a17; --err-ink: #f2a49b; --err-line: #6e2d27;
+      --btn: #232b36; --btn-ink: #e6e9ee; --btn-line: #3a4452;
+      --btn-primary-bg: #2f6fed; --btn-primary-ink: #ffffff;
+      --chip-running-bg: #14321f; --chip-running-ink: #8fd6a4;
+      --chip-finished-bg: #262e3a; --chip-finished-ink: #9aa4b2;
+      --chip-blocked-bg: #3d1a17; --chip-blocked-ink: #f2a49b;
+      --chip-reported-bg: #14321f; --chip-reported-ink: #8fd6a4;
+      --chip-cancelled-bg: #262e3a; --chip-cancelled-ink: #9aa4b2;
+      --chip-planned-bg: #14283d; --chip-planned-ink: #9cc8f5;
+      --chip-inprogress-bg: #3a2f14; --chip-inprogress-ink: #ffd88a;
+      --chip-done-bg: #262e3a; --chip-done-ink: #cbd5e1;
+      --code-bg: #0d1117;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--ink);
+         font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--card);
+             border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: var(--btn); color: var(--btn-ink); padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--btn-primary-bg); color: var(--btn-primary-ink); }
+  .toolbar .grow { flex: 1; }
+  button.btn { border: 1px solid var(--btn-line); background: var(--btn); color: var(--btn-ink);
+               border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn.primary { background: var(--btn-primary-bg); color: var(--btn-primary-ink); border-color: transparent; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .chip.running { background: var(--chip-running-bg); color: var(--chip-running-ink); }
+  .chip.finished { background: var(--chip-finished-bg); color: var(--chip-finished-ink); }
+  .chip.blocked { background: var(--chip-blocked-bg); color: var(--chip-blocked-ink); }
+  .chip.reported { background: var(--chip-reported-bg); color: var(--chip-reported-ink); }
+  .chip.cancelled { background: var(--chip-cancelled-bg); color: var(--chip-cancelled-ink); }
+  .chip.planned { background: var(--chip-planned-bg); color: var(--chip-planned-ink); }
+  .chip.inprogress { background: var(--chip-inprogress-bg); color: var(--chip-inprogress-ink); }
+  .chip.done { background: var(--chip-done-bg); color: var(--chip-done-ink); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .statline { font-size: 13.5px; }
+  .statline b.residue { color: var(--err-ink); }
+  .notice { border: 1px solid; border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 13px; }
+  .notice.warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+  .notice.info { background: var(--info-bg); border-color: var(--info-line); color: var(--info-ink); }
+  .notice.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+  .notice.err { background: var(--err-bg); border-color: var(--err-line); color: var(--err-ink); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  td .mono, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .timeline { list-style: none; margin: 0; padding: 0; }
+  .timeline li { padding: 5px 0 5px 14px; border-left: 2px solid var(--line); margin-left: 6px; font-size: 13px; }
+  .timeline li b { font-weight: 600; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .stepline { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+              padding: 10px 14px; margin-bottom: 14px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .stepline .num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%;
+                   background: var(--btn-primary-bg); color: var(--btn-primary-ink);
+                   align-items: center; justify-content: center; font-size: 12px; flex: none; }
+  code.inline { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: 12.5px;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+           background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
+           padding: 10px 16px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.16);
+           opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; max-width: 86vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.ok { border-color: var(--ok-line); }
+  #toast.err { border-color: var(--err-line); color: var(--err-ink); }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none;
+             align-items: center; justify-content: center; padding: 20px; }
+  .overlay.show { display: flex; }
+  .dialog { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+            max-width: 420px; padding: 18px 20px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  .dialog h3 { margin: 0 0 8px; font-size: 15px; }
+  .dialog p { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+  .dialog .row { justify-content: flex-end; }
+  .kv { font-size: 12.5px; }
+  .kv div { padding: 2px 0; border-bottom: 1px dashed var(--line); }
+  .kv span.k { color: var(--muted); display: inline-block; min-width: 128px; }
+  .strike { text-decoration: line-through; opacity: .6; }
+  .hint { border-left: 3px solid var(--info-line); padding: 2px 10px; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260916-003 演示 — 条目人工确认完成后未取消其受阻回执，批次计数永久残留受阻</h1>
+  <p class="sub">模拟看板「任务 → 批量开发」面板与条目状态卡。按步骤回放实例链路（blocked 回执 → 手工通道上报 → 人工确认完成），用「Bug 现状 / 修复后期望」模式切换对照缺陷与期望。</p>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="模式切换">
+      <button id="modeBug" class="on" type="button">Bug 现状</button>
+      <button id="modeFixed" type="button">修复后期望</button>
+    </div>
+    <span class="muted small" id="modeNote">Bug 现状：条目确认完成后，历史 blocked run 永久残留计数。</span>
+    <span class="grow"></span>
+    <button class="btn" id="btnReset" type="button">重置演示</button>
+  </div>
+
+  <div class="stepline">
+    <span class="num" id="stepNum">0</span>
+    <span id="stepText">准备就绪：队列中有一个已计划条目 BUG-20260916-001，批量开发任务运行中。</span>
+    <span class="grow"></span>
+    <button class="btn primary" id="btnNext" type="button">① worker 认领并交受阻回执</button>
+  </div>
+
+  <div class="card">
+    <h2>批量开发面板（模拟）</h2>
+    <div class="row" style="margin-bottom:8px;">
+      <span class="chip running" id="batchChip">执行中</span>
+      <span class="muted small">执行 Agent：zcode 子代理 · 队列实时读取（最旧优先）</span>
+    </div>
+    <div id="noticeArea"></div>
+    <div class="statline" id="statline"></div>
+    <div class="notice info" id="emptyHint" style="display:none;">本轮队列已处理完毕：实时队列已取空，可启动新一轮。</div>
+
+    <h2 style="margin-top:14px;">运行记录（本批次）</h2>
+    <table>
+      <thead><tr><th>运行</th><th>条目</th><th>阶段</th><th>说明</th></tr></thead>
+      <tbody id="runsBody">
+        <tr><td colspan="4" class="muted">（暂无运行记录）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="actions">
+      <button class="btn" id="btnCancelRun" type="button" disabled>atb run cancel run-20260916-266（修复后·可选人工入口）</button>
+    </div>
+    <p class="hint" style="margin-top:8px;">受阻计数只统计本批次 run 账本中各条目「最新终态」；手工通道上报落 <code class="inline">manual-&lt;ID&gt;</code> 记录（<code class="inline">batchId=null</code>），不计入任何批次。</p>
+  </div>
+
+  <div class="card">
+    <h2>条目状态卡：BUG-20260916-001</h2>
+    <div class="row" style="margin-bottom:8px;">
+      <span class="chip planned" id="itemChip">已计划</span>
+      <span class="muted small" id="itemOwner">未认领</span>
+    </div>
+    <ul class="timeline" id="itemTimeline"></ul>
+  </div>
+
+  <div class="card">
+    <h2>数据检视（口径示意）</h2>
+    <div class="kv" id="dataView"></div>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<div class="overlay" id="confirmOverlay">
+  <div class="dialog">
+    <h3>确认完成 BUG-20260916-001？</h3>
+    <p id="confirmText">确认后条目转 done。该条目名下存在历史受阻回执（run-20260916-266）。</p>
+    <div class="row">
+      <button class="btn" id="confirmNo" type="button">取消</button>
+      <button class="btn primary" id="confirmYes" type="button">确认完成</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var RUN = 'run-20260916-266';
+  var ITEM = 'BUG-20260916-001';
+  var MANUAL = 'manual-BUG-20260916-001';
+
+  // 演示状态机：stage = init(0) → blocked(1) → reported(2) → done(3)
+  var state = { stage: 'init', mode: 'bug', runCancelled: false, busy: false };
+
+  var STEPS = {
+    init:    { num: 0, text: '准备就绪：队列中有一个已计划条目 BUG-20260916-001，批量开发任务运行中。', next: '① worker 认领并交受阻回执' },
+    blocked: { num: 1, text: 'worker 认领后交 blocked 回执（原因：发布接口独立化与官网配置共享范围待确认，safeToContinue=true），run 落终态 blocked，批次继续其他项。', next: '② 手工通道实施并上报' },
+    reported:{ num: 2, text: '另一会话手工收口该条目：atb claim → 实施 → atb report（不带 --run）。账本只新增 manual 记录，本批次 run 账本不变，受阻计数仍为 1。条目进入待测试。', next: '③ 人工确认完成' },
+    done:    { num: 3, text: '条目已人工确认完成（done）。对照两种模式下批次「受阻待处理」计数的差异。', next: null },
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  }); }
+
+  function toast(msg, kind) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'show' + (kind ? ' ' + kind : '');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.className = ''; }, 3200);
+  }
+
+  function counts() {
+    // counts.blocked 口径：本批次 run 账本中该条目最新终态为 blocked 且未被取消
+    var blockedHeld = state.stage === 'blocked' || state.stage === 'reported' || state.stage === 'done';
+    var cancelled = state.runCancelled;
+    return {
+      reported: state.stage === 'reported' || state.stage === 'done' ? 1 : 0, // 本批次内成功上报（演示中为 0——手工通道不计批次；用 0 呈现）
+      blocked: (blockedHeld && !cancelled) ? 1 : 0,
+      remaining: state.stage === 'init' ? 1 : 0,
+    };
+  }
+
+  function batchCountReported() { return 0; } // 手工通道上报不计入批次 counts.reported
+
+  function render() {
+    // 步骤条
+    var step = STEPS[state.stage];
+    $('stepNum').textContent = step.num;
+    $('stepText').textContent = step.text;
+    $('btnNext').textContent = step.next || '（演示已结束，可切换模式对比或重置）';
+    $('btnNext').disabled = !step.next || state.busy;
+    $('btnCancelRun').disabled = !(state.mode === 'fixed' && (state.stage === 'blocked' || state.stage === 'reported') && !state.runCancelled);
+
+    // 模式说明
+    $('modeBug').className = state.mode === 'bug' ? 'on' : '';
+    $('modeFixed').className = state.mode === 'fixed' ? 'on' : '';
+    $('modeNote').textContent = state.mode === 'bug'
+      ? 'Bug 现状：条目确认完成后，历史 blocked run 永久残留计数。'
+      : '修复后期望：确认完成时自动取消历史 blocked run（具体形态以 design.md 定稿为准）。';
+
+    // 批次徽标与提示区
+    var c = counts();
+    var noticeArea = $('noticeArea');
+    var html = '';
+    if (state.stage === 'blocked' || state.stage === 'reported') {
+      html += '<div class="notice warn">run-20260916-266 ' + ITEM + ' 受阻：发布接口独立化与官网配置共享范围待确认。</div>';
+    }
+    if (state.stage === 'done') {
+      if (state.mode === 'bug') {
+        html += '<div class="notice err">条目 ' + ITEM + ' 已人工确认完成（done），但本批次「受阻待处理 1」永久残留——无任何自动或人工途径取消该历史受阻回执。</div>';
+      } else if (state.runCancelled) {
+        html += '<div class="notice ok">条目 ' + ITEM + ' 已人工确认完成；其历史受阻回执已自动取消（随条目完成关闭，账本留痕），受阻计数同步归零。</div>';
+      } else {
+        html += '<div class="notice warn">条目已确认完成；历史受阻回执尚未取消——可点下方人工取消入口（方案取舍以 design.md 为准）。</div>';
+      }
+    }
+    noticeArea.innerHTML = html;
+
+    // 计数行
+    var residue = state.stage === 'done' && state.mode === 'bug';
+    var statline = $('statline');
+    statline.innerHTML = '上报 <b>' + batchCountReported() + '</b> · 失败 <b>0</b> · '
+      + '受阻待处理 <b class="' + (c.blocked ? 'residue' : '') + '">' + c.blocked + '</b>'
+      + (residue ? ' <span class="muted small">（缺陷：条目已完成，计数仍残留）</span>' : '')
+      + ' · 待处理 <b>' + c.remaining + '</b>';
+    $('emptyHint').style.display = state.stage === 'done' ? '' : 'none';
+    $('batchChip').textContent = state.stage === 'done' ? '已结束' : '执行中';
+    $('batchChip').className = 'chip ' + (state.stage === 'done' ? 'finished' : 'running');
+
+    // 运行记录
+    var rows = [];
+    if (state.stage !== 'init') {
+      var cancelled = state.runCancelled;
+      rows.push('<tr>'
+        + '<td class="mono">' + RUN + '</td>'
+        + '<td class="mono">' + ITEM + '</td>'
+        + '<td><span class="chip ' + (cancelled ? 'cancelled' : 'blocked') + '">' + (cancelled ? '已取消' : '受阻') + '</span></td>'
+        + '<td class="small">' + (cancelled
+            ? '随条目人工确认完成自动取消，账本留痕（时间与操作路径）；不再计入受阻计数'
+            : 'blocked 回执（safeToContinue=true）' + (state.stage === 'done' && state.mode === 'bug' ? '；<span class="strike">条目已 done</span>，回执无取消途径' : '')) + '</td>'
+        + '</tr>');
+    }
+    if (state.stage === 'reported' || state.stage === 'done') {
+      rows.push('<tr>'
+        + '<td class="mono">' + MANUAL + '</td>'
+        + '<td class="mono">' + ITEM + '</td>'
+        + '<td><span class="chip reported">已上报</span></td>'
+        + '<td class="small">手工通道（batchId=null）：不计入本批次计数，只做收口提交归因</td>'
+        + '</tr>');
+    }
+    $('runsBody').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" class="muted">（暂无运行记录）</td></tr>';
+
+    // 条目卡
+    var chip = $('itemChip'), owner = $('itemOwner');
+    if (state.stage === 'init') { chip.textContent = '已计划'; chip.className = 'chip planned'; owner.textContent = '未认领'; }
+    if (state.stage === 'blocked') { chip.textContent = '实施中（已认领）'; chip.className = 'chip inprogress'; owner.textContent = 'owner: zcode-batch-0916-02'; }
+    if (state.stage === 'reported') { chip.textContent = '待测试（已上报）'; chip.className = 'chip inprogress'; owner.textContent = 'owner: zcode-dev-build-publish'; }
+    if (state.stage === 'done') { chip.textContent = '已完成'; chip.className = 'chip done'; owner.textContent = '人工确认完成 · 提交 e6f6267 等'; }
+
+    var tl = [];
+    if (state.stage !== 'init') tl.push('<li><b>17:01</b> · planned → in-progress（worker 认领）</li>');
+    if (state.stage === 'blocked' || state.stage === 'reported') tl.push('<li><b>17:03</b> · 交 blocked 回执 ' + RUN + '（发布接口独立化与官网配置共享范围待确认）</li>');
+    if (state.stage === 'reported' || state.stage === 'done') tl.push('<li><b>次日 02:23</b> · 手工通道上报测试报告，待人工确认完成（lastReport.runId=null）</li>');
+    if (state.stage === 'done') tl.push('<li><b>次日 05:46</b> · in-progress → done（人工确认完成）</li>');
+    $('itemTimeline').innerHTML = tl.join('');
+
+    // 数据检视
+    var dv = [];
+    dv.push('<div><span class="k">条目状态</span>' + esc($('itemChip').textContent) + '</div>');
+    dv.push('<div><span class="k">' + RUN + '.phase</span>' + (state.stage === 'init' ? '—（未创建）' : (state.runCancelled ? 'blocked → 已取消（留痕）' : 'blocked（终态，无取消途径）')) + '</div>');
+    dv.push('<div><span class="k">批次 counts.blocked</span>' + c.blocked + (residue ? '（条目已 done，计数不一致）' : '') + '</div>');
+    dv.push('<div><span class="k">manual 记录</span>' + (state.stage === 'reported' || state.stage === 'done' ? MANUAL + '（batchId=null，不计批次）' : '—') + '</div>');
+    dv.push('<div><span class="k">看板「受阻待处理」</span>' + c.blocked + '</div>');
+    $('dataView').innerHTML = dv.join('');
+  }
+
+  function next() {
+    if (state.busy) return;
+    if (state.stage === 'init') {
+      state.busy = true; render();
+      setTimeout(function () {
+        state.stage = 'blocked'; state.busy = false;
+        toast('已落账 blocked 回执：' + RUN + '（safeToContinue=true，批次继续）', 'ok');
+        render();
+      }, 600);
+    } else if (state.stage === 'blocked') {
+      state.busy = true; render();
+      setTimeout(function () {
+        state.stage = 'reported'; state.busy = false;
+        toast('手工通道上报完成：manual 记录不挂批次，条目进入待测试', 'ok');
+        render();
+      }, 600);
+    } else if (state.stage === 'reported') {
+      $('confirmText').textContent = state.mode === 'bug'
+        ? '确认后条目转 done（现状：历史受阻回执不会被取消，批次计数将永久残留）。'
+        : '确认后条目转 done（修复后：系统随确认完成自动取消其历史受阻回执并留痕）。';
+      $('confirmOverlay').classList.add('show');
+    }
+  }
+
+  $('btnNext').addEventListener('click', next);
+  $('btnReset').addEventListener('click', function () {
+    state.stage = 'init'; state.runCancelled = false; state.busy = false;
+    toast('已重置演示', 'ok');
+    render();
+  });
+  $('modeBug').addEventListener('click', function () { state.mode = 'bug'; render(); });
+  $('modeFixed').addEventListener('click', function () {
+    state.mode = 'fixed';
+    if (state.stage === 'done') state.runCancelled = true; // 修复模式下确认完成即自动闭环
+    render();
+  });
+  $('confirmNo').addEventListener('click', function () { $('confirmOverlay').classList.remove('show'); });
+  $('confirmOverlay').addEventListener('click', function (e) { if (e.target === this) this.classList.remove('show'); });
+  $('confirmYes').addEventListener('click', function () {
+    $('confirmOverlay').classList.remove('show');
+    state.busy = true; render();
+    setTimeout(function () {
+      state.stage = 'done';
+      state.runCancelled = state.mode === 'fixed'; // 修复后期望：确认完成 → 自动取消历史 blocked run
+      state.busy = false;
+      toast(state.mode === 'bug'
+        ? '条目已确认完成；「受阻待处理 1」永久残留（缺陷现象）'
+        : '条目已确认完成；历史受阻回执已自动取消，计数归零', 'ok');
+      render();
+    }, 600);
+  });
+  $('btnCancelRun').addEventListener('click', function () {
+    state.runCancelled = true;
+    toast('已人工取消历史受阻回执（可选入口，形态以 design.md 定稿为准）', 'ok');
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,7 +1,10 @@
 // REQ-20260915-002 产品发布流水线（product-release-pipeline）—— server.mjs / 测试使用。
-// 六阶段：sync-source（切 main + main/dev --atomic 推送 + 远端核验）→ webapp-build（冻结源码
-// 隔离 worktree 构建）→ webapp-verify（本机部署 + 可用性/版本回验）→ site-materials（中英文
-// 材料核验）→ site-deploy（官网本机部署）→ site-verify（中英文页面/链接/语言入口回验）。
+// 六阶段：sync-source（切主分支 + 主分支/dev --atomic 推送 + 远端核验）→ webapp-build
+//（冻结源码隔离 worktree 构建）→ webapp-verify（本机部署 + 可用性/版本回验）→ site-materials
+//（中英文材料核验）→ site-deploy（官网本机部署）→ site-verify（中英文页面/链接/语言入口回验）。
+// REQ-20260916-005：主分支统一解析（优先 main，本地仅 master 的历史仓库以 master 为
+// 主分支）——冻结 SHA、切换、原子推送与核验均按解析结果取用（frozen.mainBranch 落库，
+// 旧 run 无该字段时缺省 main，行为不变）。
 // 语义边界：
 //   - 预检全只读（dry-run 不推送、不上传、不部署、不构建）；
 //   - 启动前预检必须新鲜（冻结输入变化 → 重新预检并展示新计划；main 前进可重新冻结）；
@@ -58,8 +61,19 @@ function httpGet(url, timeoutMs = 10000) {
 
 /* ---------- 冻结输入收集（预检 / 启动新鲜度共用） ---------- */
 
+// REQ-20260916-005 统一主分支解析（发布流水线版，exec 注入）：优先 main；本地 main 不存在
+// 而 master 存在时以 master 为主分支；两者皆无返回 null。口径与 git-flow.resolveMainBranch
+// 一致（仅本地 refs 判定、不读远端、并存取 main）。server.mjs 冻结入口与本流水线共用。
+export async function resolveMainBranchName(projectRoot, exec) {
+  for (const name of ['main', 'master']) {
+    if (await prelGit.branchHead(projectRoot, exec, name)) return name;
+  }
+  return null;
+}
+
 export async function collectCurrentInputs({ dataDir, projectRoot, run, exec }) {
-  const mainSha = await prelGit.branchHead(projectRoot, exec, 'main');
+  const mainBranch = await resolveMainBranchName(projectRoot, exec);
+  const mainSha = await prelGit.branchHead(projectRoot, exec, mainBranch || 'main');
   const devSha = await prelGit.branchHead(projectRoot, exec, 'dev');
   let remote = null;
   try {
@@ -74,7 +88,7 @@ export async function collectCurrentInputs({ dataDir, projectRoot, run, exec }) 
     } catch { /* 项目名不安全：保持 contentDir null，预检给诊断 */ }
   }
   const materialsFingerprint = homepage.contentDir ? materialsMod.materialsFingerprint(homepage.contentDir) : null;
-  return { version: run.frozen.version, mainSha, devSha, remote, homepage, materialsFingerprint };
+  return { version: run.frozen.version, mainBranch, mainSha, devSha, remote, homepage, materialsFingerprint };
 }
 
 /* ---------- 预检（全只读） ---------- */
@@ -119,15 +133,17 @@ export async function runProductPrecheck({ dataDir, projectRoot, runId, exec }) 
     } catch (e) {
       push('source-remote', '源码远端解析', false, e.message);
     }
-    // 本地双分支
+    // 本地双分支（REQ-20260916-005：主分支按解析结果取 main 或 master）
     let mainSha = null;
     let devSha = null;
+    let mainBranch = null;
     try {
-      mainSha = await prelGit.branchHead(projectRoot, exec, 'main');
+      mainBranch = await resolveMainBranchName(projectRoot, exec);
+      mainSha = await prelGit.branchHead(projectRoot, exec, mainBranch || 'main');
       devSha = await prelGit.branchHead(projectRoot, exec, 'dev');
-      const missing = [mainSha ? null : 'main', devSha ? null : 'dev'].filter(Boolean);
-      if (missing.length) throw new AtbError(`本地分支缺失：${missing.join('、')}（main/dev 双分支推送前置，缺一不可）`);
-      push('branches', '本地双分支', true, `main ${mainSha.slice(0, 8)} · dev ${devSha.slice(0, 8)}`);
+      const missing = [mainSha ? null : mainBranch || 'main', devSha ? null : 'dev'].filter(Boolean);
+      if (missing.length) throw new AtbError(`本地分支缺失：${missing.join('、')}（${mainBranch || 'main'}/dev 双分支推送前置，缺一不可）`);
+      push('branches', '本地双分支', true, `${mainBranch || 'main'} ${mainSha.slice(0, 8)} · dev ${devSha.slice(0, 8)}`);
     } catch (e) {
       push('branches', '本地双分支', false, e.message);
     }
@@ -143,10 +159,10 @@ export async function runProductPrecheck({ dataDir, projectRoot, runId, exec }) 
     if (remoteInfo) {
       try {
         if (mainSha !== run.frozen.mainSha || devSha !== run.frozen.devSha) {
-          throw new AtbError(`分支头与冻结不一致：main ${mainSha ? mainSha.slice(0, 8) : '—'}/${run.frozen.mainSha.slice(0, 8)} · dev ${devSha ? devSha.slice(0, 8) : '—'}/${run.frozen.devSha.slice(0, 8)}（main 前进可重新冻结）`);
+          throw new AtbError(`分支头与冻结不一致：${mainBranch || 'main'} ${mainSha ? mainSha.slice(0, 8) : '—'}/${run.frozen.mainSha.slice(0, 8)} · dev ${devSha ? devSha.slice(0, 8) : '—'}/${run.frozen.devSha.slice(0, 8)}（${mainBranch || 'main'} 前进可重新冻结）`);
         }
-        await prelGit.precheckAtomicPushDryRun(projectRoot, exec, { remote: remoteInfo.remote });
-        push('remote-push', '远端可达与原子推送预演', true, `${remoteInfo.remote} main+dev dry-run 通过（不推送）`);
+        await prelGit.precheckAtomicPushDryRun(projectRoot, exec, { remote: remoteInfo.remote, mainBranch: mainBranch || 'main' });
+        push('remote-push', '远端可达与原子推送预演', true, `${remoteInfo.remote} ${mainBranch || 'main'}+dev dry-run 通过（不推送）`);
       } catch (e) {
         push('remote-push', '远端可达与原子推送预演', false, e.message);
       }
@@ -154,8 +170,8 @@ export async function runProductPrecheck({ dataDir, projectRoot, runId, exec }) 
     // 条目包含性（发布范围确实包含计划条目）
     try {
       const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, run.frozen.mainSha);
-      if (!v.ok) throw new AtbError(`计划条目不在 main 历史内：${v.missing.join('、')}`);
-      push('items-contained', '计划条目包含性', true, `${run.frozen.items.length} 个条目均在冻结 main 历史内`);
+      if (!v.ok) throw new AtbError(`计划条目不在 ${mainBranch || 'main'} 历史内：${v.missing.join('、')}`);
+      push('items-contained', '计划条目包含性', true, `${run.frozen.items.length} 个条目均在冻结 ${mainBranch || 'main'} 历史内`);
     } catch (e) {
       push('items-contained', '计划条目包含性', false, e.message);
     }
@@ -199,7 +215,7 @@ export async function runProductPrecheck({ dataDir, projectRoot, runId, exec }) 
   }
 }
 
-/* ---------- 重新冻结（main 前进后：用当前 main 重新走冻结，不冒充旧 SHA） ---------- */
+/* ---------- 重新冻结（主分支前进后：用当前主分支重新走冻结，不冒充旧 SHA） ---------- */
 
 export async function refreezeProductRun({ dataDir, projectRoot, runId, exec }) {
   const run = store.readProductRun(dataDir, runId);
@@ -207,22 +223,24 @@ export async function refreezeProductRun({ dataDir, projectRoot, runId, exec }) 
     throw new AtbError(`当前状态（${store.PREL_STATUS_LABEL[run.status] || run.status}）不可重新冻结`);
   }
   const remoteInfo = await prelGit.resolveSourceRemote(projectRoot, exec);
-  const mainSha = await prelGit.branchHead(projectRoot, exec, 'main');
+  const mainBranch = (await resolveMainBranchName(projectRoot, exec)) || 'main';
+  const mainSha = await prelGit.branchHead(projectRoot, exec, mainBranch);
   const devSha = await prelGit.branchHead(projectRoot, exec, 'dev');
-  if (!mainSha || !devSha) throw new AtbError('main/dev 分支缺失，无法重新冻结');
+  if (!mainSha || !devSha) throw new AtbError(`${mainBranch}/dev 分支缺失，无法重新冻结`);
   const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, mainSha);
-  if (!v.ok) throw new AtbError(`重新冻结失败：计划条目 ${v.missing.join('、')} 不在当前 main 历史内`);
+  if (!v.ok) throw new AtbError(`重新冻结失败：计划条目 ${v.missing.join('、')} 不在当前 ${mainBranch} 历史内`);
   const extras = await prelGit.collectExtraCommits(projectRoot, exec, {
     mainSha, itemCommits: run.frozen.items.map((x) => x.commit), bldId: run.bldId,
   });
   return store.mutateProductRun(dataDir, runId, (r) => {
+    r.frozen.mainBranch = mainBranch;
     r.frozen.mainSha = mainSha;
     r.frozen.devSha = devSha;
     r.frozen.remote = remoteInfo.remote;
     r.frozen.remoteUrl = remoteInfo.sanitizedUrl;
     r.frozen.extraCommits = extras;
     r.precheck = null; // 旧预检失效：重新冻结后必须重新预检
-  }, { action: 'refreeze', note: `重新冻结为当前 main ${mainSha.slice(0, 8)} / dev ${devSha.slice(0, 8)}（额外提交 ${extras.length}）` });
+  }, { action: 'refreeze', note: `重新冻结为当前 ${mainBranch} ${mainSha.slice(0, 8)} / dev ${devSha.slice(0, 8)}（额外提交 ${extras.length}）` });
 }
 
 /* ---------- Web App 构建（冻结源码隔离 worktree） ---------- */
@@ -290,44 +308,47 @@ export async function buildWebAppFromFrozen({ projectRoot, runId, mainSha, exec 
 async function stageSyncSource(ctx) {
   const { dataDir, projectRoot, run, exec, log } = ctx;
   const frozen = run.frozen;
+  // REQ-20260916-005：主分支名按冻结记录取用（仅 master 历史仓库冻结时为 'master'；
+  // 旧 run 无此字段时缺省 'main'，行为不变）
+  const mainBranch = frozen.mainBranch || 'main';
   const dirty = await prelGit.worktreeDirtyFiles(projectRoot, exec);
   if (dirty.length) {
     throw new ProductStageError(`工作区有未提交修改（${dirty.slice(0, 5).join('、')}${dirty.length > 5 ? ' 等' : ''}）：请先完成提交（不自动 add/commit/stash）`, 'dirty', { files: dirty.slice(0, 20) });
   }
-  const mainSha = await prelGit.branchHead(projectRoot, exec, 'main');
+  const mainSha = await prelGit.branchHead(projectRoot, exec, mainBranch);
   const devSha = await prelGit.branchHead(projectRoot, exec, 'dev');
   if (!mainSha || !devSha) {
-    throw new ProductStageError(`本地分支缺失：${[mainSha ? null : 'main', devSha ? null : 'dev'].filter(Boolean).join('、')}`, 'branch-missing');
+    throw new ProductStageError(`本地分支缺失：${[mainSha ? null : mainBranch, devSha ? null : 'dev'].filter(Boolean).join('、')}`, 'branch-missing');
   }
   if (mainSha !== frozen.mainSha || devSha !== frozen.devSha) {
     throw new ProductStageError(
-      `分支头与冻结不一致（main ${mainSha.slice(0, 8)}/${frozen.mainSha.slice(0, 8)} · dev ${devSha.slice(0, 8)}/${frozen.devSha.slice(0, 8)}）：执行前输入已变化，请重新预检（main 前进可重新冻结）`,
+      `分支头与冻结不一致（${mainBranch} ${mainSha.slice(0, 8)}/${frozen.mainSha.slice(0, 8)} · dev ${devSha.slice(0, 8)}/${frozen.devSha.slice(0, 8)}）：执行前输入已变化，请重新预检（${mainBranch} 前进可重新冻结）`,
       'plan-stale',
       { mainSha, devSha },
     );
   }
   const contain = await prelGit.verifyItemsOnMain(projectRoot, exec, frozen.items, frozen.mainSha);
-  if (!contain.ok) throw new ProductStageError(`计划条目不在冻结 main 历史内：${contain.missing.join('、')}`, 'items-missing');
-  const sw = await prelGit.switchMainVerifyHead(projectRoot, exec, { expectedMainSha: frozen.mainSha });
-  log(`已切换 main（原分支 ${sw.previousBranch || 'main'}），HEAD === 冻结 ${frozen.mainSha.slice(0, 8)}`);
+  if (!contain.ok) throw new ProductStageError(`计划条目不在冻结 ${mainBranch} 历史内：${contain.missing.join('、')}`, 'items-missing');
+  const sw = await prelGit.switchMainVerifyHead(projectRoot, exec, { expectedMainSha: frozen.mainSha, mainBranch });
+  log(`已切换 ${mainBranch}（原分支 ${sw.previousBranch || mainBranch}），HEAD === 冻结 ${frozen.mainSha.slice(0, 8)}`);
   // 幂等 / 重试语义：先查询远端，双分支已到达目标则不重复推送
   let already = false;
   try {
-    await prelGit.verifyRemoteBranches(projectRoot, exec, { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha });
+    await prelGit.verifyRemoteBranches(projectRoot, exec, { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha, mainBranch });
     already = true;
-    log('远端 main/dev 已与冻结一致（查询确认）：不重复推送');
+    log(`远端 ${mainBranch}/dev 已与冻结一致（查询确认）：不重复推送`);
   } catch {
     already = false;
   }
   if (!already) {
-    log(`执行原子推送：git push --atomic ${frozen.remote} main dev`);
+    log(`执行原子推送：git push --atomic ${frozen.remote} ${mainBranch} dev`);
     try {
-      await prelGit.atomicPushBranches(projectRoot, exec, { remote: frozen.remote });
+      await prelGit.atomicPushBranches(projectRoot, exec, { remote: frozen.remote, mainBranch });
     } catch (e) {
       if (e && e.code === 'ETIMEDOUT') {
         log('推送响应超时（网络响应丢失）：先查询远端实际 ref 再判定，不盲目重推');
         try {
-          await prelGit.verifyRemoteBranches(projectRoot, exec, { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha });
+          await prelGit.verifyRemoteBranches(projectRoot, exec, { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha, mainBranch });
           log('超时后查询确认：远端双分支已到达目标，不重复推送');
         } catch (e2) {
           throw new ProductStageError(`推送超时且远端未到达目标：${e2.message}`, 'push-timeout');
@@ -337,10 +358,10 @@ async function stageSyncSource(ctx) {
       }
     }
   }
-  const verify = await prelGit.verifyRemoteBranches(projectRoot, exec, { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha });
-  log(`远端核验通过：main ${frozen.mainSha.slice(0, 8)} · dev ${frozen.devSha.slice(0, 8)}`);
-  store.pushProductEvidence(run, 'sync-source', `main/dev 原子推送并核验一致（远端 ${frozen.remote}）`, { mainSha: frozen.mainSha, devSha: frozen.devSha });
-  return { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha, skippedPush: already };
+  const verify = await prelGit.verifyRemoteBranches(projectRoot, exec, { remote: frozen.remote, mainSha: frozen.mainSha, devSha: frozen.devSha, mainBranch });
+  log(`远端核验通过：${mainBranch} ${frozen.mainSha.slice(0, 8)} · dev ${frozen.devSha.slice(0, 8)}`);
+  store.pushProductEvidence(run, 'sync-source', `${mainBranch}/dev 原子推送并核验一致（远端 ${frozen.remote}）`, { mainSha: frozen.mainSha, devSha: frozen.devSha });
+  return { remote: frozen.remote, mainBranch, mainSha: frozen.mainSha, devSha: frozen.devSha, skippedPush: already };
 }
 
 async function stageWebappBuild(ctx) {

@@ -237,6 +237,9 @@ const state = {
   // REQ-20260909-011：devAgent / refine.mode Agent 选择草稿已随启动区去 Agent 化移除
   batchData: null, // /api/batch/current 最近一次响应
   batchSig: '',    // 变更签名：轮询无变化不重渲染（避免打断面板内点击/输入）
+  // BUG-20260916-002：blocked 终态记录「重新执行」生成的续接提示词（记录分区常驻面板，
+  // 复制失败可手动复制 / 重试复制；不进轮询签名，生成后保留至页面重载）
+  batchContinue: null,
   codex: {         // Codex 自动派发（REQ-20260906-003；REQ-20260907-004 起运行配置在设置模块同步呈现）
     settings: null, status: null, statusSig: '',
     preflight: null, modelProbe: null, probing: false,
@@ -5408,6 +5411,13 @@ const ATTEMPT_RESULT_LABEL = {
   reported: '已处理', done: '已处理', failed: '异常', blocked: '受阻', interrupted: '已中断',
   skipped: '已出局', 'in-flight': '处理中', reserved: '处理中', running: '处理中', queued: '排队中',
 };
+// BUG-20260916-003：已取消的受阻回执标注（后端 listRuns 的 cancelled.kind）——
+// item-done = 随条目确认完成关闭（有留痕）；item-done-legacy = 条目已完成的存量未标记回执。
+// chip 保持「受阻」形态（不抹除回执历史），标注行说明取消原因。
+const CANCELLED_NOTE_LABEL = {
+  'item-done': '已取消（随条目完成关闭）',
+  'item-done-legacy': '已取消（条目已完成）',
+};
 // REQ-20260909-010：完善后自动流转结果的可读标注（仅 refine 运行携带 autoPlan 字段时渲染，
 // develop 记录无该字段不受影响；文案与 refine-store.autoPlanResultText 同口径）
 function autoPlanNoteOf(plan) {
@@ -5441,7 +5451,10 @@ function runAttemptsHtml(records, total, kind, q = '') {
   const hidden = all.length - shown.length;
   const n = Math.max(Number(total ?? all.length), all.length);
   const recent = shown.slice(0, 2); // 记录本身最新在前
-  const retryable = (r) => ['failed', 'interrupted', 'blocked'].includes(r.result);
+  // BUG-20260916-003：已取消的受阻回执不再提供「重新执行」——其条目已 done，续接/重建
+  // 必然报「均不可入队」，是死路；保留 failed / interrupted / 未取消 blocked 的既有入口。
+  const retryable = (r) => ['failed', 'interrupted', 'blocked'].includes(r.result) && !r.cancelled;
+  const cancelledNote = (r) => (r.cancelled ? (CANCELLED_NOTE_LABEL[r.cancelled.kind] || '已取消') : '');
   const rows = recent.map((r) => `
     <tr>
       <td>
@@ -5451,6 +5464,7 @@ function runAttemptsHtml(records, total, kind, q = '') {
       </td>
       <td>
         <span class="chip rs-${esc(r.result)}">${esc(ATTEMPT_RESULT_LABEL[r.result] || r.result)}</span>
+        ${cancelledNote(r) ? `<div class="muted small" title="${esc(cancelledNote(r))}">${esc(cancelledNote(r))}</div>` : ''}
         ${r.summary ? `<div class="muted small" title="${esc(r.summary)}">${esc(shortOwner(String(r.summary)))}</div>` : ''}
         ${r.reason ? `<div class="muted small" title="${esc(r.reason)}">${esc(shortOwner(String(r.reason)))}</div>` : ''}
         ${r.autoPlan && autoPlanNoteOf(r.autoPlan) ? `<div class="muted small" title="${esc(autoPlanNoteOf(r.autoPlan))}">${esc(shortOwner(autoPlanNoteOf(r.autoPlan)))}</div>` : ''}
@@ -5471,6 +5485,22 @@ function runAttemptsHtml(records, total, kind, q = '') {
         <tbody>${rows || `<tr><td colspan="4" class="muted small">${ql && all.length ? '没有匹配的处理记录，清空搜索恢复。' : '暂无执行记录'}</td></tr>`}</tbody>
       </table></div>
     </section>`;
+}
+
+// BUG-20260916-002：续接提示词面板（批量开发「记录」分区表格下方）——blocked 终态记录
+// 「重新执行」生成续接提示词后常驻展示：复制失败可手动选中复制（pre 面板）或点「重新复制」
+// 重试；口径沿用主调度提示词面板（#batchPrompt / 重新复制）。不进轮询签名，保留至页面重载。
+function batchContinueHtml() {
+  const c = state.batchContinue;
+  if (!c) return '';
+  return `
+    <div class="batch-prompt-block">
+      <div class="dep-toolbar">
+        <span class="muted small">续接提示词（条目 ${esc(c.itemId)} · 沿用原认领身份 ${esc(c.owner)}）：在原项目会话粘贴发送，先确认旧子代理已停止</span>
+        <button type="button" class="btn" id="continueRecopy" title="复制失败可重试；重试复制不会创建新任务">重新复制</button>
+      </div>
+      <pre id="continuePrompt" class="batch-prompt" tabindex="0">${esc(c.prompt)}</pre>
+    </div>`;
 }
 
 // 重新执行（REQ-20260908-026）：活跃任务核验后重排队本轮（遵守暂停与串行领取）；
@@ -5497,6 +5527,28 @@ async function retryRunFromRecord(runId, kind) {
           ? `任务已创建、提示词已复制，请在对应项目会话粘贴发送（条目 ${rec.itemId}；状态：待启动）`
           : '任务已创建，但复制失败：请展开提示词手动复制', !copied);
       } else {
+        // BUG-20260916-002：blocked 终态记录且条目仍被原认领身份持有（in-progress）→ 生成续接
+        // 提示词（同 owner 幂等续认 + 单项 /dev 流程承接），不再走普通新批次重建入队——该路径
+        // 经 createBatch「已计划且未认领」候选过滤，对已认领条目必然报「均不可入队」。
+        // 不满足续接条件时由后端指示回退：fallback=none（在途防线）直接给指引；
+        // fallback=rebuild（人工已处理 / 身份变化）维持既有重建路径与报错口径。
+        if (rec.result === 'blocked') {
+          const c = await api('/api/batch/continue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ runId }),
+          });
+          if (c.ok) {
+            state.batchContinue = { runId: c.runId, itemId: c.itemId, title: c.title, owner: c.owner, prompt: c.prompt };
+            const copied = await copyDispatchText(c.prompt);
+            toast(copied
+              ? `✓ 已复制续接提示词（条目 ${c.itemId}，沿用原认领身份 ${c.owner}）：请先确认旧子代理已停止，再到原项目会话粘贴发送`
+              : '已生成续接提示词，但复制失败：请在「记录」分区的续接提示词面板手动复制', !copied);
+            return;
+          }
+          if (c.fallback === 'none') { toast(c.message, true); return; }
+          // fallback === 'rebuild'：条件不符，走下方既有重建路径
+        }
         await createBatchAndCopy({ ids: [rec.itemId] });
       }
       return;
@@ -6942,7 +6994,8 @@ function renderZcodeBatchPanel() {
         </div>
         <pre id="batchPrompt" class="batch-prompt" tabindex="0">${esc(b.prompt)}</pre>
       </div>`,
-    records: runAttemptsHtml(data.records || [], data.recordsTotal ?? (data.records || []).length, 'develop', ql),
+    // BUG-20260916-002：记录分区在表格下方挂续接提示词面板（blocked 续接生成后出现）
+    records: runAttemptsHtml(data.records || [], data.recordsTotal ?? (data.records || []).length, 'develop', ql) + batchContinueHtml(),
   });
 }
 
@@ -7417,6 +7470,13 @@ function bindBatchDrawer() {
   for (const el of drawer.querySelectorAll('[data-retry-run]')) {
     el.addEventListener('click', () => retryRunFromRecord(el.dataset.retryRun, el.dataset.retryKind));
   }
+  // BUG-20260916-002：续接提示词面板「重新复制」——重试复制同一份续接提示词，不产生新任务/新账目
+  const cRecopy = drawer.querySelector('#continueRecopy');
+  if (cRecopy) cRecopy.addEventListener('click', async () => {
+    const p = state.batchContinue?.prompt;
+    const copied = p ? await copyDispatchText(p) : false;
+    toast(copied ? '已复制续接提示词；请在原项目会话粘贴发送' : '复制失败：请手动选中提示词文本复制', !copied);
+  });
   // 需求完善面板（REQ-20260907-003；REQ-20260909-011 起 Agent 选择控件已移除，无 change 草稿）
   const rfCreate = drawer.querySelector('#refineCreate');
   if (rfCreate) rfCreate.addEventListener('click', createRefineBatchAndCopy);
@@ -7892,11 +7952,15 @@ function taskSettingsAreaHtml() {
 // REQ-20260912-001：Git 工作流详细描述——dev + main 双分支协作总述、分支职责
 // （dev 承载需求设计/开发/测试，main 承载版本构建与发布构建物）、每个需求或 Bug
 // 单开发完自动提交到本地。就绪态（含非 git 仓库）始终展示，初始化前即可了解全貌。
-function gitWorkflowDescHtml() {
+// REQ-20260916-005：职责句中的主分支名随解析结果取用（本地仅 master 的历史仓库
+// 显示 master，不再误导性写 main）。主分支名包 <span> 拆成独立文本节点——英文词典
+// 的全文匹配逐段命中（BUG-20260912-001 口径），分支名两语言一致不参与翻译。
+function gitWorkflowDescHtml(mainBranch) {
+  const mb = esc(String(mainBranch || 'main'));
   return `
       <p class="muted small" style="margin:0 0 2px">采用 dev + main 双分支协作：</p>
       <ul class="muted small" style="margin:2px 0 4px;padding-left:18px">
-        <li>dev 分支承载需求设计、开发和测试；main 分支承载版本构建，发布构建物。</li>
+        <li>dev 分支承载需求设计、开发和测试；<span>${mb}</span> 分支承载版本构建，发布构建物。</li>
         <li>每个需求或 Bug 单开发完自动提交到本地（仅本地分支操作，不 push）。</li>
       </ul>`;
 }
@@ -7938,7 +8002,7 @@ function gitWorkflowAreaHtml() {
   return `
     <section class="cx-config git-workflow">
       <h4>Git 工作流</h4>
-      ${gitWorkflowDescHtml()}
+      ${gitWorkflowDescHtml(d.mainBranch)}
       ${notRepo}
       <div class="ts-block"><p style="margin:2px 0 0">${statusLine}</p></div>
       <div class="dep-toolbar">

@@ -281,8 +281,10 @@ t('S1 不越界：徽标代码 / 样式无残留，main 行无任何推送入口
   const m = buildJs.match(/x === 'main' \? [\s\S]{0,400}? :/);
   assert.ok(m, 'main 行渲染分支应存在');
   assert.ok(!/data-push/.test(m[0]), 'main 行渲染分支不得包含推送入口');
-  // 服务端：syncRemote 排除 main 行为不变（本单仅展示层）
-  assert.match(buildGitJs, /if \(branch === 'main'\) \{ skipped\.push\(branch\); continue; \}/, 'syncRemote 排除 main 逻辑保持原样');
+  // 服务端：syncRemote 仍排除主分支（REQ-20260916-005 起跳过名单与主分支解析结果一致，
+  // 不再硬编码 'main'——仅 master 的历史仓库跳 master，并存仍只跳 main）
+  assert.match(buildGitJs, /const mainBranch = resolveMainBranch\(root\);/, 'syncRemote 应经主分支解析取跳过名单');
+  assert.match(buildGitJs, /if \(mainBranch && branch === mainBranch\) \{ skipped\.push\(branch\); continue; \}/, 'syncRemote 排除解析出的主分支');
 });
 
 /* ---------- 执行 ---------- */
