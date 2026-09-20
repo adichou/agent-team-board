@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260918-003 · atb rebuild 交互演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2330; --muted: #5c6675;
+    --line: #d9dee6; --accent: #2563eb; --ok: #15803d; --ok-bg: #dcfce7;
+    --warn: #92400e; --warn-bg: #fef3c7; --err: #b91c1c; --err-bg: #fee2e2;
+    --term-bg: #101623; --term-ink: #d5dcea; --term-dim: #7c8aa0;
+    --term-green: #7ee2a8; --term-amber: #f2c979; --term-red: #ff8f8f; --term-blue: #8ab8ff;
+    --code-bg: #eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b26; --ink: #e4e9f2; --muted: #98a3b6;
+      --line: #2a3242; --accent: #6ea0ff; --ok-bg: #11331f; --ok: #7ee2a8;
+      --warn-bg: #36290d; --warn: #f2c979; --err-bg: #3a1517; --err: #ff8f8f;
+      --term-bg: #0a0f1a; --code-bg: #1d2433;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--ink); padding: 24px; line-height: 1.6; }
+  header { max-width: 1080px; margin: 0 auto 16px; }
+  header h1 { font-size: 20px; }
+  header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .scenarios { max-width: 1080px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .scenarios .label { font-size: 13px; color: var(--muted); margin-right: 4px; }
+  button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .layout { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; }
+  @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .panel h2 { font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .panel h2 .hint { font-weight: 400; font-size: 12px; color: var(--muted); }
+  .terminal { background: var(--term-bg); border-radius: 10px; padding: 12px 14px; font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--term-ink); min-height: 340px; max-height: 420px; overflow-y: auto; }
+  .terminal .row { white-space: pre-wrap; word-break: break-all; }
+  .terminal .cmd { color: var(--term-blue); }
+  .terminal .dim { color: var(--term-dim); }
+  .terminal .ok { color: var(--term-green); }
+  .terminal .warn { color: var(--term-amber); }
+  .terminal .err { color: var(--term-red); }
+  .cursor { display: inline-block; width: 7px; height: 14px; background: var(--term-dim); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .board { display: flex; flex-direction: column; gap: 10px; }
+  .col-title { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  .cards { display: flex; flex-direction: column; gap: 6px; min-height: 56px; border: 1px dashed var(--line); border-radius: 8px; padding: 8px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; background: var(--bg); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .card .id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.done { background: var(--ok-bg); color: var(--ok); }
+  .badge.submitted { background: var(--warn-bg); color: var(--warn); }
+  .badge.none { background: var(--code-bg); color: var(--muted); }
+  .empty-tip { font-size: 12px; color: var(--muted); text-align: center; padding: 10px 4px; }
+  .kv { font-size: 12px; color: var(--muted); margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+  .kv b { color: var(--ink); font-weight: 600; }
+  .note { max-width: 1080px; margin: 14px auto 0; font-size: 12px; color: var(--muted); }
+  .note code { background: var(--code-bg); border-radius: 4px; padding: 0 4px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>atb rebuild — clone 后从 git 历史重建看板状态（REQ-20260918-003 交互演示）</h1>
+  <p>左侧为命令终端模拟（交互行为 + 状态反馈），右侧为重建前后看板（runtime/status/）的条目状态视角。条目与提交均为演示示例数据。</p>
+</header>
+
+<div class="scenarios">
+  <span class="label">场景：</span>
+  <button class="primary" id="btn-normal" onclick="setScenario('normal')">正常重建（混合 done / submitted）</button>
+  <button id="btn-empty" onclick="setScenario('empty')">空仓库（data/ 无条目）</button>
+  <button id="btn-blocked" onclick="setScenario('blocked')">失败（runtime/status 非空 → 拒绝）</button>
+  <span class="label" style="margin-left:auto">操作：</span>
+  <button id="btn-run" onclick="runRebuild()" disabled>执行 node scripts/atb.mjs rebuild</button>
+  <button id="btn-reset" onclick="setScenario(scenario)">重置</button>
+</div>
+
+<div class="layout">
+  <section class="panel">
+    <h2>终端 <span class="hint">交互行为与状态反馈（加载 / 成功 / 失败）</span></h2>
+    <div class="terminal" id="term"></div>
+  </section>
+  <section class="panel">
+    <h2>看板状态（runtime/status/） <span class="hint">重建前 → 重建后</span></h2>
+    <div class="board">
+      <div>
+        <div class="col-title"><span>已完成 done</span><span id="cnt-done">0</span></div>
+        <div class="cards" id="col-done"><div class="empty-tip">（空）</div></div>
+      </div>
+      <div>
+        <div class="col-title"><span>待接受 submitted</span><span id="cnt-sub">0</span></div>
+        <div class="cards" id="col-sub"><div class="empty-tip">（空）</div></div>
+      </div>
+      <div class="kv" id="runtime-state">runtime/status/：<b>为空（0 个状态文件）</b> — 允许重建</div>
+    </div>
+  </section>
+</div>
+
+<p class="note">说明：判定口径——git 提交历史消息含条目单号（<code>类型: 描述 单号</code>，规范见 scripts/lib/commit-store.mjs）→ done；无提交痕迹 → submitted。安全边界——仅当 runtime/status/ 无任何条目状态文件时允许重建；全程对 git 只读。本页面为纯前端模拟，无外网依赖。</p>
+
+<script>
+(function () {
+  'use strict';
+
+  var term = document.getElementById('term');
+
+  // 演示数据：条目 → 判定依据（命中提交或 null）
+  var SCENARIOS = {
+    normal: {
+      items: [
+        { id: 'REQ-20260910-013', type: 'requirement', commit: { hash: 'a1b2c3d', subject: 'feat: 批量 commit 数据层 REQ-20260910-013' } },
+        { id: 'REQ-20260911-009', type: 'requirement', commit: { hash: '4f5e6a7', subject: 'feat: 开发完成到待测试自动提交 REQ-20260911-009' } },
+        { id: 'BUG-20260914-021', type: 'bug', commit: { hash: '9a8b7c6', subject: 'fix: 提交描述上限对齐条目标题 BUG-20260914-021' } },
+        { id: 'BUG-20260916-007', type: 'bug', commit: { hash: 'c2d3e4f', subject: 'chore: 条目状态迁 runtime BUG-20260916-007' } },
+        { id: 'REQ-20260918-003', type: 'requirement', commit: null },
+        { id: 'BUG-20260918-003', type: 'bug', commit: null }
+      ],
+      existingStatusFiles: 0
+    },
+    empty: { items: [], existingStatusFiles: 0 },
+    blocked: {
+      items: [
+        { id: 'REQ-20260911-009', type: 'requirement', commit: { hash: '4f5e6a7', subject: 'feat: 开发完成到待测试自动提交 REQ-20260911-009' } },
+        { id: 'BUG-20260918-003', type: 'bug', commit: null }
+      ],
+      existingStatusFiles: 129
+    }
+  };
+
+  var scenario = 'normal';
+  var running = false;
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function line(cls, text) {
+    var row = el('div', 'row ' + (cls || ''));
+    row.textContent = text;
+    term.appendChild(row);
+    term.scrollTop = term.scrollHeight;
+    return row;
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  function renderBoard(items) {
+    var done = items.filter(function (i) { return i.commit; });
+    var sub = items.filter(function (i) { return !i.commit; });
+    function fill(colId, cntId, list, badge) {
+      var col = document.getElementById(colId);
+      col.innerHTML = '';
+      if (!list.length) { col.appendChild(el('div', 'empty-tip', '（空）')); }
+      list.forEach(function (i) {
+        var card = el('div', 'card');
+        card.appendChild(el('span', 'id', i.id));
+        card.appendChild(el('span', 'badge ' + badge, badge));
+        col.appendChild(card);
+      });
+      document.getElementById(cntId).textContent = String(list.length);
+    }
+    fill('col-done', 'cnt-done', done, 'done');
+    fill('col-sub', 'cnt-sub', sub, 'submitted');
+  }
+
+  function setRuntimeState(html) {
+    document.getElementById('runtime-state').innerHTML = html;
+  }
+
+  function setScenario(name) {
+    scenario = name;
+    running = false;
+    ['normal', 'empty', 'blocked'].forEach(function (s) {
+      var b = document.getElementById('btn-' + s);
+      b.classList.toggle('primary', s === name);
+    });
+    document.getElementById('btn-run').disabled = false;
+    term.innerHTML = '';
+    line('cmd', '$ cd /path/to/project && node scripts/atb.mjs rebuild --dir .');
+    line('dim', '（演示就绪——点击上方「执行」按钮运行；当前场景：' + ({ normal: '正常重建', empty: '空仓库', blocked: 'status 非空' })[name] + '）');
+    if (name === 'blocked') {
+      setRuntimeState('runtime/status/：<b>非空（129 个状态文件）</b> — 重建将被拒绝');
+    } else {
+      setRuntimeState('runtime/status/：<b>为空（0 个状态文件）</b> — 允许重建');
+    }
+    renderBoard([]); // 重建前：clone 后看板状态为空
+    if (name === 'normal') line('dim', 'clone 后看板：data/ 有 6 个条目文档，但 runtime/status/ 为空，无法得知哪些已完成');
+    if (name === 'empty') line('dim', 'data/requirements/ 与 data/bugs/ 均无条目');
+  }
+
+  async function runRebuild() {
+    if (running) return;
+    running = true;
+    document.getElementById('btn-run').disabled = true;
+    var sc = SCENARIOS[scenario];
+    term.innerHTML = '';
+    line('cmd', '$ node scripts/atb.mjs rebuild --dir .');
+
+    // 安全边界检查
+    await sleep(350);
+    if (sc.existingStatusFiles > 0) {
+      line('dim', '检查 runtime/status/ …');
+      await sleep(450);
+      line('err', '✗ 拒绝重建：runtime/status/ 已存在 ' + sc.existingStatusFiles + ' 个条目状态文件。');
+      line('err', '  rebuild 仅允许在条目状态为空时执行（防误覆盖既有看板）。');
+      line('dim', '  如需在新机器重建，请先确认当前 runtime/ 不是既有看板；中断的重建可重跑续全。');
+      line('dim', '$ ');
+      running = false;
+      document.getElementById('btn-run').disabled = false;
+      return;
+    }
+    line('ok', '✓ runtime/status/ 为空，允许重建');
+
+    // 空仓库
+    if (!sc.items.length) {
+      await sleep(400);
+      line('dim', '扫描 data/requirements/ 与 data/bugs/ …');
+      await sleep(500);
+      line('warn', '⚠ 未发现任何条目目录，无可重建内容（输出清单 0 条）。');
+      line('dim', '$ ');
+      running = false;
+      document.getElementById('btn-run').disabled = false;
+      return;
+    }
+
+    // 加载态：逐条扫描
+    line('dim', '扫描 data/requirements/ 与 data/bugs/ … 发现 ' + sc.items.length + ' 个条目');
+    await sleep(300);
+    var scanRow = line('dim', '读取 git 提交历史（git log，只读）… ');
+    scanRow.appendChild(el('span', 'cursor'));
+    await sleep(650);
+    scanRow.removeChild(scanRow.lastChild);
+    scanRow.textContent += '完成';
+
+    line('');
+    line('', '重建结果清单：');
+    line('dim', 'ID                  状态        依据');
+    for (var i = 0; i < sc.items.length; i++) {
+      var it = sc.items[i];
+      var row = line('', '');
+      await sleep(260);
+      if (it.commit) {
+        row.textContent = pad(it.id, 20) + 'done        ' + it.commit.hash + ' ' + it.commit.subject;
+        row.className = 'row ok';
+      } else {
+        row.textContent = pad(it.id, 20) + 'submitted   无提交痕迹';
+        row.className = 'row warn';
+      }
+      renderBoard(sc.items.slice(0, i + 1));
+    }
+    await sleep(200);
+    var doneCnt = sc.items.filter(function (x) { return x.commit; }).length;
+    line('');
+    line('ok', '✓ 重建完成：写入 ' + sc.items.length + ' 个 runtime/status/<ID>.json（done ' + doneCnt + ' / submitted ' + (sc.items.length - doneCnt) + '）');
+    line('dim', '  history 已留痕 rebuild 来源；命令幂等，中断可重跑续全；git 全程只读。');
+    setRuntimeState('runtime/status/：<b>已重建（' + sc.items.length + ' 个状态文件）</b> — 再次执行将被安全拒绝');
+    line('dim', '$ ');
+    running = false;
+    document.getElementById('btn-run').disabled = false;
+  }
+
+  function pad(s, n) { while (s.length < n) s += ' '; return s; }
+
+  window.setScenario = setScenario;
+  window.runRebuild = runRebuild;
+  setScenario('normal');
+})();
+</script>
+</body>
+</html>

@@ -8,7 +8,8 @@
 // 人工确认只解除提交阻塞，不代替需求验收（条目保持 in-progress，done 仍走既有「确认完成」）。
 // 分析侧确认成功 = 必答齐备 + 版本/文档指纹未过期 → 记录 confirmed，调用方经 refine-store
 // 把答案回传当前条目续跑（重排队首 + retryItems），收尾 done 时随闭环 closed-done。
-// 事实源：<dataDir>/confirms/confirms.json（confirm-states）+ 条目目录 confirmations.md（人读留痕）。
+// 事实源：<dataDir>/confirms/confirms.json（confirm-states）+ runtime/confirms/confirmations/<ID>.md
+// （人读留痕，BUG-20260918-003 起属应用数据不进 git）。
 // 本模块可 import core / git-flow / confirm-states；不得被 core 反向引用（core 只用 confirm-states）。
 
 import fs from 'node:fs';
@@ -92,9 +93,8 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
     : [];
   // BUG-20260915-003：指纹覆盖全部候选（声明扫描）——不只声明账面字段；git add 阶段失败
   // 未生成 pendingManual 时，实际候选（实现/测试/全局文件）同样绑定内容指纹，
-  // 确认时内容变化一律拦截（不再漏检账面之外的候选）。基线在账本/留痕写入之后取：
-  // 声明自身会写 .gitignore（补 confirms/）与 confirmations.md，先取基线会让首次确认
-  // 必被误判「内容已变」；候选集也以留痕后的现场为准（confirmations.md 纳入基线）。
+  // 确认时内容变化一律拦截（不再漏检账面之外的候选）。BUG-20260918-003 起留痕写 runtime/
+  // （git 不可见），基线与候选集不再受声明自身写入影响，无需「留痕后再取基线」的补正。
   const now = new Date().toISOString();
   // BUG-20260915-003：失败现场保留完整原始错误（summary 短句 + full 全文，full 缺失 =
   // 历史截断无原日志，如实标记信息不足，不编造原因）。
@@ -136,7 +136,7 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
     events: [event('declared', by || 'auto-commit', reason.slice(0, 120))],
   };
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, dir, st.title);
+  renderConfirmDoc(dataDir, itemId, st.title);
   let scope = null;
   try {
     scope = gitFlow.confirmScopeForRun({ dataDir, projectRoot, run });
@@ -152,7 +152,8 @@ export function declareCommitConfirm(dataDir, { run, batch, autoCommit, projectR
 // 项目测试运行（补交后验证「测试验证的是提交后的完整内容」）：package.json 有 scripts.test
 // 才运行；无测试脚本按纯文档/无测试口径跳过（不凭空要求）。
 // 同步版：CLI / 直连调用方语义（服务端 HTTP 路径已改用异步版，见 runProjectTestsAsync）。
-export function runProjectTests(projectRoot, timeoutMs = 600_000) {
+// BUG-20260918-004：默认超时统一为 60 分钟口径（原 600 秒，长套件被确定性 SIGKILL）。
+export function runProjectTests(projectRoot, timeoutMs = 60 * 60_000) {
   let pkg = null;
   try {
     pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -178,7 +179,9 @@ export function runProjectTests(projectRoot, timeoutMs = 600_000) {
 // BUG-20260915-008 异步版：spawn 不阻塞事件循环（同步版会把整个服务冻结到测试结束，
 // 本项目全量约 4 分钟，面板轮询/操作全部停摆）。结果口径与同步版完全一致；
 // onSpawn(child) 供调用方持有子进程（优雅关停时终止，防孤儿测试进程）。
-export function runProjectTestsAsync(projectRoot, { timeoutMs = 600_000, onSpawn } = {}) {
+// BUG-20260918-004：默认超时统一为 60 分钟口径（原 600 秒；服务端总是注入 testRunner，
+// 本默认值保护未注入的调用方——CLI / 直连 / 未来新增）。
+export function runProjectTestsAsync(projectRoot, { timeoutMs = 60 * 60_000, onSpawn } = {}) {
   let pkg = null;
   try {
     pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -237,6 +240,23 @@ export function runProjectTestsAsync(projectRoot, { timeoutMs = 600_000, onSpawn
       });
     });
   });
+}
+
+// BUG-20260918-004 确认/核验测试超时口径（与 server.mjs 批次执行同链路）：
+// 挂起关联执行的 run.timeoutMin → 项目设置 settings.timeoutMin（调用方传入；本层不
+// import dispatch-store——batch 层已引用本层，反向引入会成环）→ 默认 60 分钟。
+// 取代历史硬编码（登记时 600_000 / 临时缓解 36_000_000）。run 读取容错：确认记录或
+// 运行账本缺失（已闭环后遗留 / 账本被清理）按设置与默认口径回退，不阻断确认任务。
+export function confirmTestTimeoutMs(dataDir, itemId, settingsTimeoutMin = null) {
+  let run = null;
+  const rec = confirmOf(dataDir, itemId);
+  if (rec && rec.runId) {
+    try {
+      run = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'dispatch', 'runs', rec.runId, 'run.json'), 'utf8'));
+    } catch { run = null; /* run 账本缺失：按设置/默认口径回退 */ }
+  }
+  const min = (run && run.timeoutMin) || settingsTimeoutMin || 60;
+  return min * 60_000;
 }
 
 // BUG-20260915-003 统一候选范围（清单计数 / 文件表 / 核验 / 确认补交同源）：
@@ -303,6 +323,9 @@ export async function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTes
     }
   }
   const ok = reasons.length === 0;
+  if (scope) {
+    rec.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
+  }
   rec.verify = {
     lastCheckAt: new Date().toISOString(),
     ok,
@@ -310,20 +333,13 @@ export async function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTes
     remaining: paths.map((x) => x.path),
     test: test || undefined,
   };
-  if (scope) {
-    rec.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
-  }
   rec.events.push(event('verified', by, ok
     ? '核验通过（指纹基线刷新为当前内容）'
     : `核验未通过（${reasons.length} 项；指纹基线刷新为当前内容）`));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
-  if (scope) {
-    // 指纹基线在留痕写入之后刷新：verify 事件写 confirmations.md，先刷新会被自身
-    // 留痕污染成「内容已变」，导致重新核验后的确认被误拦截。
-    rec.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
-    saveConfirmRecord(dataDir, itemId, rec);
-  }
+  // BUG-20260918-003：留痕写 runtime/（git 不可见），核验事件的写入不再污染指纹基线，
+  // 无需「留痕后再刷新一次基线」的补正——单次落账即绑定人工所见内容。
+  renderConfirmDoc(dataDir, itemId, rec.title);
   return { ok, reasons, remaining: paths.map((x) => x.path), test };
 }
 
@@ -335,7 +351,7 @@ export function keepConfirm(dataDir, itemId, { note = '', by = 'human' } = {}) {
   rec.keepNote = note || null;
   rec.events.push(event('kept', by, note || '保持挂起：现场与队列暂停保留'));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  renderConfirmDoc(dataDir, itemId, rec.title);
   return { ok: true, itemId, state: rec.state };
 }
 
@@ -438,7 +454,7 @@ export async function confirmCommitContinue(dataDir, itemId, { projectRoot = nul
     };
     rec.events.push(event('confirm-rejected', by, reasons[0].slice(0, 120)));
     saveConfirmRecord(dataDir, itemId, rec);
-    renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+    renderConfirmDoc(dataDir, itemId, rec.title);
     return { ok: false, itemId, reasons };
   }
   const nowIso = new Date().toISOString();
@@ -455,7 +471,7 @@ export async function confirmCommitContinue(dataDir, itemId, { projectRoot = nul
   rec.resolvedAt = nowIso;
   rec.events.push(event('confirmed', by, `确认并继续：${(rec.supplement.commits || []).length} 组补交，核验通过，恢复队列`));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  renderConfirmDoc(dataDir, itemId, rec.title);
   return {
     ok: true, itemId, batchId: rec.batchId,
     supplementCommits: (rec.supplement.commits || []).map((c) => c.hash),
@@ -501,7 +517,7 @@ export function noteConfirmTaskInterrupted(dataDir, itemId, note) {
   if (!rec) return false;
   rec.events.push(event('task-interrupted', 'system', cleanText(note).slice(0, 120) || '服务重启，运行中的核验/确认任务已中断'));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  renderConfirmDoc(dataDir, itemId, rec.title);
   return true;
 }
 
@@ -576,7 +592,7 @@ export function declareAnalysisConfirm(dataDir, { itemId, runId, batchId, reason
   };
   rec.questionsVersion = questionsVersionOf(rec);
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, dir, st.title);
+  renderConfirmDoc(dataDir, itemId, st.title);
   return saveConfirmRecord(dataDir, itemId, rec);
 }
 
@@ -621,7 +637,7 @@ export function answerAnalysisConfirm(dataDir, itemId, { answers = [], by = 'hum
   }
   rec.events.push(event('answered', by, `作答 ${list.length} 项（草稿即时保存）`));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  renderConfirmDoc(dataDir, itemId, rec.title);
   const missing = unansweredRequired(rec);
   return {
     ok: true, itemId,
@@ -663,14 +679,14 @@ export function confirmAnalysisContinue(dataDir, itemId, { version = '', by = 'h
   if (reasons.length) {
     rec.events.push(event('confirm-rejected', by, reasons[0].slice(0, 120)));
     saveConfirmRecord(dataDir, itemId, rec);
-    renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+    renderConfirmDoc(dataDir, itemId, rec.title);
     return { ok: false, itemId, reasons };
   }
   rec.state = 'confirmed';
   rec.confirmedAt = new Date().toISOString();
   rec.events.push(event('confirmed', by, '答案齐备且版本有效：回传当前条目续跑'));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  renderConfirmDoc(dataDir, itemId, rec.title);
   return { ok: true, itemId, runId: rec.runId, batchId: rec.batchId };
 }
 
@@ -681,7 +697,7 @@ export function closeAnalysisConfirm(dataDir, itemId, { by = 'system' } = {}) {
   rec.state = 'closed-done';
   rec.events.push(event('closed-done', by, '分析收尾完成，随完成闭环'));
   saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, resolveItemDir(dataDir, itemId).dir, rec.title);
+  renderConfirmDoc(dataDir, itemId, rec.title);
   return true;
 }
 

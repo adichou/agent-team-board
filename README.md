@@ -1,3 +1,5 @@
+中文 | [English](./README.en.md)
+
 # Agent Team Board（智能体团队看板）
 
 ZCode 插件：需求 / Bug 的文件化管理 + Agent TDD 开发流程 + 本地网页看板（Status Board）。
@@ -48,7 +50,9 @@ agent-team-board/
 ├── .zcode-plugin/plugin.json     # ZCode manifest（displayName：智能体团队看板）
 ├── .codex-plugin/plugin.json     # Codex 兼容 manifest（仅 skills；Codex 无命令/钩子）
 ├── AGENTS.md                     # 开发本产品的仓库规则（Agent 必读）
-├── README.md                     # 本文件：项目入口与模块地图
+├── README.md                     # 本文件：项目入口与模块地图（中文版，顶部可切 English）
+├── README.en.md                  # 英文对照版 README（章节与中文版一一对应）
+├── index.html                    # 仓库根产品落地页：自包含单文件介绍页（含 Status Board 启动与 Electron 说明，REQ-20260916-002）；区别于 scripts/web/index.html（看板前端骨架）
 ├── skills/agent-team-board/SKILL.md   # 「使用本产品管理任务」的行为规范
 ├── commands/{req,bug,dev,board}.md    # 四个斜杠命令提示词
 ├── hooks/hooks.json              # PreToolUse 状态守卫（Edit|Write / Bash → scripts/state-guard.mjs）
@@ -82,6 +86,7 @@ agent-team-board/
 | 发布模块 | release-store.mjs、release-git.mjs、release-apple.mjs、release-electron.mjs | REL 发布运行事实源；Git 远端七阶段 / Apple App Store 八阶段 / Electron 桌面五阶段流水线 |
 | | product-release-pipeline.mjs、product-release-store.mjs、product-release-git.mjs、site-materials.mjs、site-lang.mjs、webapp-profile.mjs | PREL 产品发布六阶段（源码同步→官网构建→核验→材料→部署→回验）；官网双语材料、语言选择、Web App 识别与本机部署 |
 | 其他业务 | marketing-store.mjs、growth-store.mjs、oncall-store.mjs、req-disc-store.mjs、legacy-recovery.mjs | 营销档案与定价版本、增长工作流、开放式讨论、需求文档引用讨论、历史运行处理证据存档 |
+| | migrate-layout.mjs、plugin-pack.mjs | 旧数据布局一键迁移（`atb migrate`：docs/agent-team-board/ → agent-team-board/{data,runtime}，CLI 与看板设置页双入口）；插件分发打包（`atb pack`：整仓拷贝、排除看板数据 / 桌面构建链等，含产物自校验，REQ-20260916-007） |
 
 ### scripts/web 界面
 
@@ -90,15 +95,16 @@ agent-team-board/
 | index.html、app.js | 看板骨架：2 秒轮询 /api/board；顶栏页签 需求（status）/ 构建（build）/ 任务（runs）/ 设置（settings）；发布（release）/ 营销（marketing）/ 讨论（oncall）/ 文件（files）为深链视图 |
 | build.js、release.js、marketing.js、oncall.js、req-disc.js | 构建、发布、营销、开放式讨论、需求文档引用讨论各模块界面 |
 | i18n.js | 中英文国际化：集中词典（中文原文为键）+ 运行时 DOM 翻译层 |
-| banner.js、splitter.js | File Board 横幅层栈状态机（纯函数）、分栏拖拽 |
-| marked.min.js、highlight.min.js、wunderbaum.umd.min.js 等 | vendored 第三方库（引入与更新按 REQ-20260909-015 在对应条目 licenses.md 登记） |
+| banner.js、splitter.js、diff-view.js | File Board 横幅层栈状态机（纯函数）、分栏拖拽、文件差异视图 |
+| style.css、wunderbaum.css、highlight-github.min.css、highlight-github-dark.min.css、marked.min.js、highlight.min.js、wunderbaum.umd.min.js 等 | 界面样式、树表与代码高亮资源 + vendored 第三方库（引入与更新按 REQ-20260909-015 在对应条目 licenses.md 登记） |
 
 ## 环境与运行方式
 
-以下命令均在本仓库实测核对（2026-09-16，Node v17.8.0）：
+以下命令均在本仓库实测核对（2026-09-19，Node v17.8.0）：
 
 - **Node**：运行时零 npm 依赖（dependencies 为空，devDependencies 仅 electron / electron-builder）；仓库未声明 engines 下限，当前开发验证环境为 Node v17.8.0。
-- **测试**：`npm test`（= `node scripts/tests/run-all.mjs`）顺序执行 scripts/tests/ 全部 `*.test.mjs`，任一失败即非零退出；单个文件直接 `node scripts/tests/<name>.test.mjs`。
+- **测试**：`npm test`（= `node scripts/tests/run-all.mjs`）顺序执行 scripts/tests/ 全部 `*.test.mjs`（当前 278 个测试文件，2026-09-19 实测），任一失败即非零退出；单个文件直接 `node scripts/tests/<name>.test.mjs`。
+- **产品落地页**：浏览器直接打开仓库根 `index.html`——自包含单文件产品介绍页（REQ-20260916-002，含 Status Board 启动步骤与 Electron 桌面说明）；与 `scripts/web/index.html`（看板前端骨架，由 server.mjs 服务）是两个不同文件，注意区分。
 - **Status Board**：`node scripts/server.mjs`（默认端口 8888，环境变量 `ATB_PORT` 覆盖；单服务多项目，`?project=<项目根绝对路径>` 切换数据源）。桌面壳 `npm run app` 会自动拉起同一服务。
 - **桌面壳**：`npm run app`（`electron .`，主进程 electron/main.mjs 以子进程拉起 server 并加载看板页）；打包 `npm run dist`（electron-builder，macOS dmg / Windows nsis，产物在 dist/）。
 - **CLI**：`node scripts/atb.mjs <子命令>`；`node scripts/atb.mjs cli install` 把 bin/atb 符号链接进 PATH，之后终端直接敲 `atb …`。
@@ -109,7 +115,7 @@ agent-team-board/
 - **认领锁与源码守卫**：core.mjs 用 O_EXCL 原子锁实现认领（runtime/.locks/，24 小时过期）与项目实施互斥；hooks/hooks.json 两条 PreToolUse 守卫 → state-guard.mjs：拦直写 runtime/status 条目状态、拦人工专属状态、无有效认领锁时拦改插件源码（REQ-20260901-003）。
 - **report 自动收口提交**：`atb report` 后由 git-flow.mjs + manual-closeout.mjs 按认领时工作区快照归因，自动把本单代码 / 测试 / 文档提交到 dev（只 commit 不 push）；批量 run receipt 同口径（REQ-20260911-009、BUG-20260915-007）。
 - **批量任务**：批量开发（从 planned 队列取单，主会话每轮派一个子 Agent，worker 规范见 skills/agent-team-board/worker-spec.md，批次创建时快照到 agent-team-board/runtime/dispatch/）、批量完善（accepted 单补文档）、待人工决策（hold）与挂起确认（confirm）闭环；总览见 skills/agent-team-board/batch-execution.md。
-- **构建版本与发布流水线**：构建模块管理 BLD 版本（build-store.mjs 版本状态机，build-git.mjs 合并入 main）；构建发布独立执行（build-publish.mjs 等，BUG-20260916-001）；发布模块三条 REL 流水线（release-git.mjs / release-apple.mjs / release-electron.mjs）；产品发布 PREL 六阶段打通源码与官网（product-release-pipeline.mjs + site-materials.mjs / site-lang.mjs / webapp-profile.mjs）。
+- **构建版本与发布流水线**：构建模块管理 BLD 版本（build-store.mjs 版本状态机，build-git.mjs 合并入 main）；构建发布独立执行（build-publish.mjs 等，BUG-20260916-001），官网目标已适配 Vite + Vue 新架构（REQ-20260916-004）——`src/data/apps.js` 产品注册与 `content/<产品id>/` 双语成对材料预检（productIds 覆盖映射可在设置中配置）、site-deploy 在官网仓库执行 `npm install` + `npm run build`（产物以 dist/ 为准）、site-verify 本机静态服务做 SPA 回退与 zh/en 镜像路由校验、子路径 base 从官网 vite 配置解析；发布模块三条 REL 流水线（release-git.mjs / release-apple.mjs / release-electron.mjs）；产品发布 PREL 六阶段打通源码与官网（product-release-pipeline.mjs + site-materials.mjs / site-lang.mjs / webapp-profile.mjs）。
 - **中英文资源**：界面文案集中在 scripts/web/i18n.js（中文原文为键，静态精确 EN + 动态 EN_DYNAMIC 插值），改文案必须同步两语言（BUG-20260912-001）。
 
 ## 官网 / 用户文档 / 支持
@@ -128,6 +134,7 @@ agent-team-board/
 | 构建与发布 | scripts/lib/build-*.mjs（构建）、release-*.mjs（REL 流水线）、product-release-*.mjs（产品发布）；界面 build.js / release.js |
 | 桌面壳 | electron/ |
 | 钩子与守卫 | hooks/hooks.json、scripts/state-guard.mjs |
+| 项目入口文档（中英双语） | 根 README.md（中文）与 README.en.md（English），顶部互链切换、章节一一对应，改一方须同步另一方 |
 | 开发流程与规则 | 根 AGENTS.md（开发本产品必读）→ skills/agent-team-board/SKILL.md（使用产品管理任务）→ commands/ |
 
 ## 使用与初始化（开发视角）

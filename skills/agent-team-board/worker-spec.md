@@ -25,7 +25,7 @@
    - **需人工决策的阻塞**（REQ-20260911-007，范围/口径确认、方案取舍、账号或真机操作、排除项批准等）：
      先 `$ATB hold declare <itemId> (--question "决策问题")… [--reason "短句"] [--run <runId>] --by <同上>`
      声明并附问题清单，再交 blocked 回执（`--reason "待人工决策（已声明）"`）。人工在 Status Board
-     「待人工确认」区补决策并复工后，条目回已计划队列被重新取单；声明与作答全程留痕于条目 decisions.md。
+     「待人工确认」区补决策并复工后，条目回已计划队列被重新取单；声明与作答全程留痕于 runtime/holds/decisions/<ID>.md（应用数据）。
    - 失败（环境错误/实施失败，不可继续）：`--result failed --reason "<短句>" --no-safe-to-continue`。
    - reason ≤200 字，完整错误与测试输出写入 `agent-team-board/runtime/dispatch/runs/<runId>/` 下文件后引用。
 6. **回执**：把 receipt 命令输出的一行 JSON 原样返回给主会话（≤2 KiB），然后结束。

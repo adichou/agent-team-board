@@ -2891,7 +2891,7 @@ function holdTimelineHtml(h) {
     const label = HOLD_EVENT_LABEL[e.kind] || e.kind;
     return `<li>${esc(fmtTime(e.at))} · ${esc(label)}${e.by ? `（${esc(e.by)}）` : ''}</li>`;
   }).join('');
-  const runLine = h.runId ? `<p class="hold-run">运行：${esc(h.runId)}（详情见 agent-team-board/runtime/dispatch/runs/，决策留痕见条目目录 decisions.md）</p>` : '<p class="hold-run">决策留痕见条目目录 decisions.md</p>';
+  const runLine = h.runId ? `<p class="hold-run">运行：${esc(h.runId)}（详情见 agent-team-board/runtime/dispatch/runs/，决策留痕见 agent-team-board/runtime/holds/decisions/）</p>` : '<p class="hold-run">决策留痕见 agent-team-board/runtime/holds/decisions/</p>';
   return `<div class="hold-timeline" data-hold-timeline="${esc(h.itemId)}">
     ${h.reason ? `<p class="hold-reason">受阻原因：${esc(h.reason)}</p>` : ''}
     ${runLine}
@@ -3011,7 +3011,7 @@ async function confirmDoneGuard(id) {
   if (!n) return { proceed: true, force: false };
   const ok = await uiConfirm({
     title: `尚有 ${n} 项决策未答，仍要确认完成吗？`,
-    message: '常规路径是补齐决策并复工；确认后将越过未答决策完成条目（留痕写入条目 decisions.md）。',
+    message: '常规路径是补齐决策并复工；确认后将越过未答决策完成条目（留痕写入 agent-team-board/runtime/holds/decisions/）。',
     confirmText: '仍要确认完成',
     danger: true,
   });
@@ -3244,7 +3244,7 @@ function confirmTaskHtml(task) {
   }).join('');
   const stageText = CONFIRM_TASK_STAGE_TEXT[task.stage] || '处理中';
   const elapsed = confirmTaskElapsedText(task);
-  const limitSec = String(Math.round((task.timeoutMs || 600_000) / 1000));
+  const limitSec = String(Math.round((task.timeoutMs || 60 * 60_000) / 1000));
   return `<div class="confirm-task" role="status">
     <span class="task-stages">${stages}</span>
     <span class="task-elapsed">⟳ ${stageText} · 已运行 ${elapsed} 秒 / 超时上限 ${limitSec} 秒</span>
@@ -3366,7 +3366,8 @@ async function verifyConfirmItem(id, btn) {
   }
   await refreshConfirms(true); // 立即渲染运行中进度条
   if (confirmSide.open && confirmSide.id === id) await loadConfirmDetail(true); // 面板同步进入运行态
-  const task = await watchConfirmTask(id);
+  // BUG-20260918-004：观察窗口随任务超时口径（不再固定 600 秒时代余量）
+  const task = await watchConfirmTask(id, r.task?.timeoutMs ? r.task.timeoutMs + 20_000 : undefined);
   if (!task) return; // 观察超时：进度条与结论由主轮询自然回填，不再叠 toast
   if (task.status === 'failed') {
     toast(`核验失败：${task.error || '未知错误'}`, true);
@@ -3384,8 +3385,9 @@ async function verifyConfirmItem(id, btn) {
 }
 
 // 轮询核验/确认任务至终态（done / failed / interrupted）；服务瞬断继续重试，
-// 观察窗口 = 任务超时上限 + 余量。返回 null 表示仍在运行（由主轮询接管呈现）。
-async function watchConfirmTask(id, timeoutMs = 620_000) {
+// 观察窗口 = 任务超时上限 + 余量（BUG-20260918-004：默认随确认任务口径 60 分钟，
+// 调用方有任务句柄时按其 timeoutMs 取值）。返回 null 表示仍在运行（由主轮询接管呈现）。
+async function watchConfirmTask(id, timeoutMs = 60 * 60_000 + 20_000) {
   const deadline = Date.now() + timeoutMs;
   let missingSince = 0;
   while (Date.now() < deadline) {
@@ -3837,7 +3839,8 @@ async function confirmContinueAction(d) {
     });
     if (isDev && r.accepted) {
       await refreshConfirms(true); // 卡片/面板立即显示运行中进度
-      const task = await watchConfirmTask(d.itemId);
+      // BUG-20260918-004：观察窗口随任务超时口径（不再固定 600 秒时代余量）
+      const task = await watchConfirmTask(d.itemId, r.task?.timeoutMs ? r.task.timeoutMs + 20_000 : undefined);
       if (!task) {
         confirmPanelMsg('确认任务仍在运行：进度见任务页卡片，完成后结论自动回填（本面板稍后自动刷新）');
         return;

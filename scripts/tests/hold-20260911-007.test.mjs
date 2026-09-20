@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // REQ-20260911-007 —— 受阻待人工决策条目的承接机制：声明 → 持久呈现 → 人工决策 → 复工 → 防呆。
-// 覆盖：hold 账本（holds/holds.json + 条目 decisions.md）、CLI（atb hold declare/list/show/answer/resume/cancel）、
+// 覆盖：hold 账本（holds/holds.json + runtime/holds/decisions/<ID>.md 留痕）、CLI（atb hold declare/list/show/answer/resume/cancel）、
 // core 集成（claim 拦截 / 确认完成防呆 / 复工专用通路）、state-guard 拦截面、Status Board API 与前端静态契约。
 // 用法：node scripts/tests/hold-20260911-007.test.mjs
 
@@ -99,8 +99,10 @@ t('D1 worker 声明：两个问题落账、条目 decisions.md 生成、事件�
   assert.equal(holdStates.unansweredCount(rec), 2);
   assert.ok(rec.events.some((e) => e.kind === 'declared'), '事件应留痕 declared');
 
+  // BUG-20260918-003：decisions.md 迁 runtime/holds/decisions/<ID>.md（应用数据不进 git）
   const { dir } = core.resolveItemDir(dataDir, it.id);
-  const md = fs.readFileSync(path.join(dir, 'decisions.md'), 'utf8');
+  assert.ok(!fs.existsSync(path.join(dir, 'decisions.md')), '条目目录不得出现 decisions.md');
+  const md = fs.readFileSync(path.join(dataDir, 'runtime', 'holds', 'decisions', `${it.id}.md`), 'utf8');
   assert.ok(md.includes(it.id), 'decisions.md 应含条目编号');
   assert.ok(md.includes('首批平台范围是 iOS 还是双端？'), 'decisions.md 应含问题清单');
   assert.ok(md.includes('未答'), 'decisions.md 应展示未答状态');
@@ -170,8 +172,7 @@ t('D4 人工作答：草稿可存、decisions.md 更新、覆盖重答、未知�
   assert.equal(rec.questions[0].answer, '先做 iOS 单端');
   assert.equal(rec.questions[0].answeredBy, 'human-a');
 
-  const { dir } = core.resolveItemDir(dataDir, it.id);
-  const md = fs.readFileSync(path.join(dir, 'decisions.md'), 'utf8');
+  const md = fs.readFileSync(path.join(dataDir, 'runtime', 'holds', 'decisions', `${it.id}.md`), 'utf8');
   assert.ok(md.includes('先做 iOS 单端'), 'decisions.md 应含人工答复');
   assert.ok(md.includes('human-a'), 'decisions.md 应含作答人');
 
@@ -254,8 +255,7 @@ t('D8 多轮承接：resumed 后再声明开新一轮，旧轮归档并保留历
   assert.equal(archived.length, 1, '旧轮应进 archived');
   assert.equal(archived[0].round, 1);
 
-  const { dir } = core.resolveItemDir(dataDir, it.id);
-  const md = fs.readFileSync(path.join(dir, 'decisions.md'), 'utf8');
+  const md = fs.readFileSync(path.join(dataDir, 'runtime', 'holds', 'decisions', `${it.id}.md`), 'utf8');
   assert.ok(md.includes('第 2 轮') || md.includes('2'), 'decisions.md 应体现轮次');
 });
 

@@ -23,6 +23,8 @@ import * as holdStates from './lib/hold-states.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as gitFlow from './lib/git-flow.mjs';
 import * as migrateLayout from './lib/migrate-layout.mjs';
+// REQ-20260918-003：clone 后从 git 历史重建看板状态（runtime/status 为空时的恢复入口）。
+import * as rebuild from './lib/rebuild.mjs';
 import { packPlugin } from './lib/plugin-pack.mjs';
 // BUG-20260915-007：无 run 手动 report 的系统收口提交编排（复用批量 autoCommitForRun 内核）。
 import * as manualCloseout from './lib/manual-closeout.mjs';
@@ -54,6 +56,8 @@ const USAGE = `atb —— 智能体团队看板 CLI
 用法：
   atb init                                     初始化 agent-team-board/（data/ 用户数据 + runtime/ 应用数据）
   atb migrate                                  旧布局（docs/agent-team-board/）一键迁移到新布局（幂等）
+  atb rebuild                                  从 git 历史重建条目状态（clone 后恢复看板；仅 runtime 条目
+                                               状态为空时允许；对 git 只读，不产生提交）
   atb pack <输出目录>                          打包插件分发产物（排除看板数据/AGENTS.md/依赖/桌面链；skills 随包）
   atb new req  <标题> [--desc <描述>] [--accept]  创建需求（缺省状态 submitted；--accept 一步创建并接受）
   atb new bug  <标题> [--desc <描述>] [--accept]  创建 Bug（缺省状态 submitted；--accept 一步创建并接受；
@@ -259,6 +263,31 @@ async function main() {
     console.log(`  条目 ${r.items} 个；git mv ${r.moved.gitMv} 项、移动未跟踪 ${r.moved.plain} 项、应用数据退出跟踪 ${r.moved.untracked} 项（本地保留）`);
     console.log('  变更留在工作区/索引，请随下一次提交入库（本仓库批量/收口提交会自动收纳）');
     if (jsonOut) console.log(JSON.stringify(r, null, 2));
+    return;
+  }
+
+  // REQ-20260918-003 clone 后从 git 历史重建看板状态：新机器 runtime/status/ 为空时，
+  // 扫描 data/ 条目目录并按「git 历史消息含单号」判定 done / submitted（对 git 只读）。
+  if (cmd === 'rebuild') {
+    const { opts } = parseOpts(rest, new Set());
+    if (opts.help || opts.h) {
+      console.log('用法：atb rebuild\n从 git 历史重建条目状态（clone 后恢复看板）：扫描 data/ 条目目录，git 提交历史消息含单号 → done、无提交痕迹 → submitted（默认当前检出分支完整历史）。仅允许 runtime 条目状态为空（或全部由本命令产生）时执行；对 git 全程只读，不产生提交 / 推送 / 分支变更，不改 data/ 条目文档。');
+      return;
+    }
+    const dataDir = core.requireDataDir(cwd);
+    const r = rebuild.rebuildBoardStatus(dataDir);
+    if (jsonOut) { console.log(JSON.stringify(r, null, 2)); return; }
+    if (!r.total) {
+      console.log('= data/ 下没有条目，无可重建内容');
+      return;
+    }
+    console.log(`✓ 重建完成：共 ${r.total} 个条目（done ${r.done} · submitted ${r.submitted}）`);
+    if (!r.isRepo) console.log('  ⚠ 项目不是 git 仓库：全部条目按无提交痕迹判为 submitted');
+    for (const l of r.lines) {
+      const basis = l.basis ? `${l.basis.hash.slice(0, 10)} ${l.basis.subject}` : '无提交痕迹';
+      console.log(`  · ${l.id} → ${l.status}（${basis}）${l.kept ? ' · 沿用上次重建' : ''}`);
+    }
+    console.log(`  状态文件：${path.join(r.dataDir, 'runtime', 'status')}/<ID>.json（history 留痕 by ${rebuild.REBUILD_ACTOR}）`);
     return;
   }
 
@@ -1040,7 +1069,7 @@ async function refineCmd(rest) {
     });
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
     console.log(`✓ 已声明 ${r.itemId} 待人工确认分析（第 ${r.round} 轮，${r.total} 项问题），完善队列已暂停`);
-    console.log('  人工确认视图：Status Board 任务页「待人工确认」· atb confirm list · 条目目录 confirmations.md');
+    console.log('  人工确认视图：Status Board 任务页「待人工确认」· atb confirm list · 运行留痕 agent-team-board/runtime/confirms/confirmations/<ID>.md');
     console.log('  下一步：结束本轮子代理（不写 done）；人工作答确认后，答案会随续跑领取回传当前条目');
     return;
   }
@@ -1235,7 +1264,7 @@ async function holdCmd(rest) {
     if (jsonOut) { console.log(JSON.stringify({ ok: true, itemId: id, unanswered: holdStates.unansweredCount(rec), round: rec.round })); return; }
     console.log(`✓ 已声明 ${id} 待人工决策（第 ${rec.round} 轮，${rec.questions.length} 项问题，${(rec.declaredBy || '').trim()}）`);
     if (rec.runId) console.log(`  关联运行：${rec.runId}`);
-    console.log('  待人工确认视图：Status Board「待人工确认」聚合区 · atb hold list · 条目目录 decisions.md');
+    console.log('  待人工确认视图：Status Board「待人工确认」聚合区 · atb hold list · 运行留痕 agent-team-board/runtime/holds/decisions/<ID>.md');
     console.log('  下一步：交 blocked 回执收尾本次运行（atb run receipt <RUN-ID> --result blocked --reason "待人工决策"），人工补齐决策并复工后条目回到已计划队列');
     return;
   }
@@ -1290,7 +1319,7 @@ async function holdCmd(rest) {
     if (!id) die('用法：atb hold resume <ID> [--by 人工]');
     const r = hold.resumeHold(dataDir, id, { by: opts.by || undefined });
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
-    console.log(`✓ 已复工 ${id}：条目回到已计划（planned）队列，可被 AI 开发重新取单；决策记录见条目目录 decisions.md`);
+    console.log(`✓ 已复工 ${id}：条目回到已计划（planned）队列，可被 AI 开发重新取单；决策记录见 agent-team-board/runtime/holds/decisions/${id}.md`);
     return;
   }
 

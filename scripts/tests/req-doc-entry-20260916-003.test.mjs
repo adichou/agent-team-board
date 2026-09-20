@@ -7,6 +7,12 @@
 //   A4 根 AGENTS.md 存在且包含必需内容（看板流程 / 守卫 / 收口 / 质量基线 / 拦截速查）
 //   A5 双入口边界：SKILL.md 路径真实、划界表述、不复制 worker 细则
 //   A6 两文件无私有运营信息（本机绝对路径 / 私有运营仓库 / 全局条款字样 / 密钥形态）
+// 覆盖（test-cases.md B 组，REQ-20260918-001）：
+//   B1 双语切换：README.md / README.en.md 顶部互链
+//   B2 英文版结构：中英章节映射全命中；除切换行外无 CJK
+//   B3 路径清单扩展：README.en.md、migrate-layout.mjs、plugin-pack.mjs 逐一真实存在
+//   B4 README.md 登记新落地能力（根落地页 / migrate / pack / 官网 Vite+Vue 适配）
+//   B5 既有 A1–A6 契约断言全部保持
 // 用法：node scripts/tests/req-doc-entry-20260916-003.test.mjs
 
 import assert from 'node:assert/strict';
@@ -16,8 +22,10 @@ import { fileURLToPath } from 'node:url';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readmePath = path.join(pluginRoot, 'README.md');
+const readmeEnPath = path.join(pluginRoot, 'README.en.md');
 const agentsPath = path.join(pluginRoot, 'AGENTS.md');
 const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : '';
+const readmeEn = fs.existsSync(readmeEnPath) ? fs.readFileSync(readmeEnPath, 'utf8') : '';
 const agents = fs.existsSync(agentsPath) ? fs.readFileSync(agentsPath, 'utf8') : '';
 
 const cases = [];
@@ -29,6 +37,8 @@ const declaredPaths = [
   '.zcode-plugin/plugin.json',
   '.codex-plugin/plugin.json',
   'README.md',
+  'README.en.md', // REQ-20260918-001 英文对照版
+  'index.html', // 仓库根产品落地页（REQ-20260916-002）
   'AGENTS.md',
   'skills/agent-team-board/SKILL.md',
   'commands/req.md',
@@ -44,15 +54,15 @@ const declaredPaths = [
   'scripts/atb.mjs',
   'scripts/server.mjs',
   'scripts/state-guard.mjs',
-  // scripts/lib 全部模块（39 个；mgt-commit.mjs 已随 BUG-20260918-002 下线删除）
+  // scripts/lib 全部模块（41 个；mgt-commit.mjs 已随 BUG-20260918-002 下线删除）
   ...[
     'batch', 'build-git', 'build-publish', 'build-publish-api', 'build-publish-store', 'build-store',
     'codex-adapter', 'codex-model-config', 'codex-preflight', 'commit-store', 'confirm-states', 'confirm-store',
     'core', 'dispatch', 'dispatch-store', 'execution-verifier', 'git-flow', 'growth-store', 'hold-states',
-    'hold-store', 'legacy-recovery', 'manual-closeout', 'marketing-store', 'oncall-store',
-    'product-release-git', 'product-release-pipeline', 'product-release-store', 'refine-states', 'refine-store',
-    'release-apple', 'release-electron', 'release-git', 'release-store', 'req-disc-store', 'scheduler',
-    'site-lang', 'site-materials', 'task-settings', 'webapp-profile',
+    'hold-store', 'legacy-recovery', 'manual-closeout', 'marketing-store', 'migrate-layout', 'oncall-store',
+    'plugin-pack', 'product-release-git', 'product-release-pipeline', 'product-release-store', 'refine-states',
+    'refine-store', 'release-apple', 'release-electron', 'release-git', 'release-store', 'req-disc-store',
+    'scheduler', 'site-lang', 'site-materials', 'task-settings', 'webapp-profile',
   ].map((m) => `scripts/lib/${m}.mjs`),
   // scripts/web 界面
   'scripts/web/index.html',
@@ -65,9 +75,14 @@ const declaredPaths = [
   'scripts/web/i18n.js',
   'scripts/web/banner.js',
   'scripts/web/splitter.js',
+  'scripts/web/diff-view.js',
+  'scripts/web/style.css',
   'scripts/web/marked.min.js',
   'scripts/web/highlight.min.js',
+  'scripts/web/highlight-github.min.css',
+  'scripts/web/highlight-github-dark.min.css',
   'scripts/web/wunderbaum.umd.min.js',
+  'scripts/web/wunderbaum.css',
   'scripts/tests/run-all.mjs',
   'skills/agent-team-board/SKILL.md',
   'skills/agent-team-board/batch-execution.md',
@@ -158,6 +173,75 @@ t('A6 两文件无私有运营信息（本机路径 / 私有仓库 / 全局条�
       !/(^|[^A-Za-z0-9])sk-[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|EC|OPENSSH) PRIVATE KEY/.test(text),
       `${name} 无密钥形态字符串`,
     );
+  }
+});
+
+// ---------- B 组：REQ-20260918-001 中英文切换与新落地能力登记 ----------
+
+const ZH_SWITCH_LINE = '中文 | [English](./README.en.md)';
+const EN_SWITCH_LINE = '[中文](./README.md) | English';
+// 中英章节映射表（同一信息架构，一一对应；专有 token 保持原样）
+const sectionPairs = [
+  ['# Agent Team Board（智能体团队看板）', '# Agent Team Board'],
+  ['## 三栏协作体系', '## Three-Board Collaboration System'],
+  ['### 状态机与人机分工', '### State Machine and Human/Agent Division of Labor'],
+  ['## 目录与模块职责', '## Directory and Module Responsibilities'],
+  ['### scripts/lib 模块分组', '### scripts/lib Module Groups'],
+  ['### scripts/web 界面', '### scripts/web UI'],
+  ['## 环境与运行方式', '## Environment and How to Run'],
+  ['## 关键机制索引', '## Key Mechanism Index'],
+  ['## 官网 / 用户文档 / 支持', '## Website / User Docs / Support'],
+  ['## 按任务类型导航', '## Navigate by Task Type'],
+  ['## 使用与初始化（开发视角）', '## Usage and Initialization (Developer View)'],
+];
+
+t('B1a README.md 顶部含语言切换行（中文 | English 互链形态）', () => {
+  assert.ok(readme.startsWith(ZH_SWITCH_LINE), `README.md 首行应为语言切换行：${ZH_SWITCH_LINE}`);
+});
+
+t('B1b README.en.md 存在且顶部含返回 README.md 的切换链接', () => {
+  assert.ok(readmeEn.length > 0, 'README.en.md 存在且非空');
+  assert.ok(readmeEn.startsWith(EN_SWITCH_LINE), `README.en.md 首行应为语言切换行：${EN_SWITCH_LINE}`);
+});
+
+t('B2a README.en.md 与 README.md 章节一一对应（预置映射表全部命中）', () => {
+  for (const [zh, en] of sectionPairs) {
+    assert.ok(readme.includes(zh), `README.md 缺少章节标题：${zh}`);
+    assert.ok(readmeEn.includes(en), `README.en.md 缺少对应章节标题：${en}`);
+  }
+  const zhH2 = readme.split('\n').filter((l) => /^## /.test(l)).length;
+  const enH2 = readmeEn.split('\n').filter((l) => /^## /.test(l)).length;
+  assert.equal(enH2, zhH2, `二级章节数不一致（中文 ${zhH2} / 英文 ${enH2}）`);
+});
+
+t('B2b README.en.md 除语言切换行外不含 CJK 字符（完整翻译）', () => {
+  const rest = readmeEn.split('\n').filter((l) => !l.includes('[中文](./README.md)')).join('\n');
+  const cjk = rest.match(/[\u3000-\u303F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g);
+  assert.equal(cjk, null, `英文版含未翻译 CJK 字符：${[...new Set(cjk || [])].join(' ')}`);
+});
+
+t('B3 路径清单含 README.en.md / migrate-layout.mjs / plugin-pack.mjs 且逐一真实存在', () => {
+  for (const rel of ['README.en.md', 'scripts/lib/migrate-layout.mjs', 'scripts/lib/plugin-pack.mjs']) {
+    assert.ok(declaredPaths.includes(rel), `A1 路径清单未包含：${rel}`);
+    assert.ok(fs.existsSync(path.join(pluginRoot, rel)), `文件不存在：${rel}`);
+  }
+});
+
+t('B4 README.md 登记新落地能力（根落地页 / 数据迁移 / 插件打包 / 官网适配）', () => {
+  assert.ok(/^├── index\.html\b.*落地页/m.test(readme), '目录树登记仓库根 index.html 产品落地页');
+  assert.ok(readme.includes('REQ-20260916-002'), '落地页登记标注 REQ-20260916-002');
+  assert.ok(readme.includes('migrate-layout.mjs') && readme.includes('atb migrate'), '登记 migrate-layout.mjs（atb migrate）');
+  assert.ok(readme.includes('plugin-pack.mjs') && readme.includes('atb.mjs pack'), '登记 plugin-pack.mjs（atb pack）');
+  assert.ok(
+    readme.includes('src/data/apps.js') && readme.includes('site-deploy') && readme.includes('site-verify'),
+    '登记官网 Vite+Vue 适配（apps.js 注册 / site-deploy / site-verify）',
+  );
+});
+
+t('B5 既有 A1–A6 契约用例全部保持（防误删）', () => {
+  const names = cases.map(([n]) => n);
+  for (const key of ['A1 ', 'A2 ', 'A3 ', 'A4 ', 'A5 ', 'A6 ']) {
+    assert.ok(names.some((n) => n.startsWith(key)), `A 组用例缺失：${key}`);
   }
 });
 

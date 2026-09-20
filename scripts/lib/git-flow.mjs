@@ -328,6 +328,10 @@ export function saveManualRunResult(dataDir, itemId, autoCommit) {
 //   （runtime/ 整目录被忽略，理论上不出现脏路径）；
 //   过渡期旧前缀（docs/agent-team-board/）下 requirements|bugs/<ID>/… 的**文档**归属该单，
 //   旧 status.json（应用数据退出跟踪的删除）归板级共享，随本单 doc 组整体收纳。
+//   BUG-20260918-003：confirmations.md / decisions.md 属应用数据（留痕迁 runtime 后出库），
+//   其删除/变更同样归板级共享——出库迁移随执行迁移的单收口提交（主题带迁移单单号），
+//   不得因原路径在他条目目录而被排除在外。
+const TRACE_DOC_BASENAMES = new Set(['confirmations.md', 'decisions.md']);
 function owningItemIdOf(boardRel, p) {
   const pref = boardRel ? boardRel + '/' : 'agent-team-board/';
   const legacyPref = LEGACY_DATA_REL_DIR.split(path.sep).join('/') + '/';
@@ -337,7 +341,11 @@ function owningItemIdOf(boardRel, p) {
   else if (p.startsWith(legacyPref)) { rest = p.slice(legacyPref.length); legacy = true; }
   if (rest == null) return null;
   const dataM = /^data\/(?:requirements|bugs)\/((?:REQ|BUG)-\d{8}-\d{3,})(?:\/|$)/.exec(rest);
-  if (dataM) return dataM[1];
+  if (dataM) {
+    const tail = rest.slice(dataM[0].length);
+    if (tail && TRACE_DOC_BASENAMES.has(tail)) return null; // 留痕文档出库迁移：板级共享
+    return dataM[1];
+  }
   if (!legacy) return null;
   const m = /^(?:requirements|bugs)\/((?:REQ|BUG)-\d{8}-\d{3,})(?:\/|$)/.exec(rest);
   if (!m) return null;

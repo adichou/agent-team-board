@@ -82,14 +82,14 @@ blocked 回执适用于「依赖 / 信息缺失，可继续其他项」；「必
 
 - **声明**：worker `atb hold declare <ID> (--question 决策问题)… [--reason 短句] [--run RUN-ID]` 附问题清单，随后仍交 blocked 回执。声明落 `runtime/holds/`（执行账本），条目保持 in-progress。
 - **呈现**：Status Board「⚠ 待人工确认（N）」持久聚合区（不随批次结束消失）；CLI `atb hold list` / `atb hold show`。
-- **决策**：人工在聚合区补决策或终端 `atb hold answer`；作答留痕写条目目录 `decisions.md`（用户数据随 git 提交）。作答为人工专属，Agent 调用被守卫拦截。
+- **决策**：人工在聚合区补决策或终端 `atb hold answer`；作答留痕写 `runtime/holds/decisions/<ID>.md`（BUG-20260918-003 起属应用数据，不进 git）。作答为人工专属，Agent 调用被守卫拦截。
 - **复工**：决策齐备后人工 `atb hold resume <ID>` —— 条目经专用通路 in-progress → planned（清 owner、释放锁、history 留痕），回到已计划队列重新取单。
 - **防呆**：待决期间 `atb claim` 一律拒绝（含原 owner）；确认完成遇未答项默认拦截，人工显式越过（`--force` / 网页二次确认）留痕闭环。
-- **作废与多轮**：`atb hold cancel` 作废当前声明（条目状态不变）；复工 / 作废后再声明开新一轮，旧轮归档于 decisions.md。
+- **作废与多轮**：`atb hold cancel` 作废当前声明（条目状态不变）；复工 / 作废后再声明开新一轮，旧轮归档于 runtime 决策留痕。
 
 ### 挂起确认承接（confirm）
 
-自动提交不完整（分组失败 / 待人工路径）时项目级挂起：账本 `runtime/confirms/`，Status Board 任务页「待人工确认」核对差异后「确认并继续」（核验 + 补交 + 测试通过后自动恢复队列）。核验 / 作答 / 确认并继续为人工专属；`atb confirm list|show` 只读呈现。
+自动提交不完整（分组失败 / 待人工路径）时项目级挂起：账本 `runtime/confirms/`，确认留痕 `runtime/confirms/confirmations/<ID>.md`（BUG-20260918-003 起属应用数据，不进 git）；Status Board 任务页「待人工确认」核对差异后「确认并继续」（核验 + 补交 + 测试通过后自动恢复队列）。核验 / 作答 / 确认并继续为人工专属；`atb confirm list|show` 只读呈现。
 
 ## 6. Zcode 调度提示词模板
 

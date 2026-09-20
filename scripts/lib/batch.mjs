@@ -1053,6 +1053,17 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
 
   const batch = getBatch(dataDir, run.batchId);
   if (batch.currentRunId === runId) batch.currentRunId = null;
+  // BUG-20260919-001：已终止批次不复活——在途子代理被人工终止后仍可能补交回执（interrupted
+  // 不在 FINAL_RUN_PHASES，回执不拒绝、上方已照常落账），但收尾重算不得把 abortRequested 终态
+  // 批次改回 running/paused/needs_attention：保持 finished 终态（顺带把已被旧缺陷复活的账本就地
+  // 修复），不写 pauseRequested、不进入挂起/待核对占用、不触碰项目实施锁（终止时已全量释放，
+  // 其后锁可能已归后续批次/手工认领，重放释放会误伤现任持锁者）。
+  if (batch.abortRequested) {
+    batch.currentRunId = null;
+    batch.status = 'finished';
+    saveBatch(dataDir, batch);
+    return { ok: true, receipt };
+  }
   const state = batchState(dataDir, batch);
   if (suspendReason) {
     // REQ-20260914-001 提交不完整挂起：持久化暂停队列（pauseRequested）+ 声明待人工确认
@@ -1267,7 +1278,30 @@ function skipBatchRun(dataDir, batch, itemId, reason) {
 export function abortBatch(dataDir, batchId) {
   const batch = getBatch(dataDir, batchId);
   if (batch.abortRequested) {
-    return { ok: true, batchId, aborted: true, counts: batchState(dataDir, batch).counts, notice: '任务已终止（幂等返回）' };
+    // BUG-20260919-001：幂等分支不能只返回——账本可能已被在途回执复活（abortRequested=true +
+    // status=running 并存，队首永久 stop=aborted 阻塞后续批次派发）。重复终止应具备自愈能力：
+    // 在途运行补 interrupted、未出局候选补 skipped 出局账、清 currentRunId、status 重算回 finished。
+    // 不触碰项目实施锁：原终止时已全量释放，其后锁可能已归后续批次/手工认领，重放释放会误伤
+    // 现任持锁者。
+    const state = batchState(dataDir, batch);
+    for (const r of state.runs) {
+      if (FINAL_OR_SKIP(r.phase) || r.phase === 'interrupted') continue;
+      r.phase = 'interrupted';
+      r.reason = '人工终止任务（幂等修复）';
+      r.finishedAt = nowIso();
+      saveRun(dataDir, r);
+    }
+    const handled = new Set(state.runs.filter((r) => FINAL_OR_SKIP(r.phase) || r.phase === 'interrupted').map((r) => r.itemId));
+    for (const itemId of effectiveCandidates(dataDir, batch)) {
+      if (handled.has(itemId)) continue;
+      skipBatchRun(dataDir, batch, itemId, '任务终止，剩余项出局（幂等修复）');
+    }
+    batch.currentRunId = null;
+    if (batch.status !== 'finished') {
+      batch.status = 'finished';
+      saveBatch(dataDir, batch);
+    }
+    return { ok: true, batchId, aborted: true, counts: batchState(dataDir, batch).counts, notice: '任务已终止（幂等返回，账本已核校为终止终态）' };
   }
   const state = batchState(dataDir, batch);
   for (const r of state.runs) {
