@@ -169,8 +169,8 @@ export async function runProductPrecheck({ dataDir, projectRoot, runId, exec }) 
     }
     // 条目包含性（发布范围确实包含计划条目）
     try {
-      const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, run.frozen.mainSha);
-      if (!v.ok) throw new AtbError(`计划条目不在 ${mainBranch || 'main'} 历史内：${v.missing.join('、')}`);
+      const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, run.frozen.mainSha, run.frozen.replays);
+      if (!v.ok) throw new AtbError(`计划条目不在 ${mainBranch || 'main'} 历史内（含重放证据核对）：${v.missing.join('、')}`);
       push('items-contained', '计划条目包含性', true, `${run.frozen.items.length} 个条目均在冻结 ${mainBranch || 'main'} 历史内`);
     } catch (e) {
       push('items-contained', '计划条目包含性', false, e.message);
@@ -227,10 +227,10 @@ export async function refreezeProductRun({ dataDir, projectRoot, runId, exec }) 
   const mainSha = await prelGit.branchHead(projectRoot, exec, mainBranch);
   const devSha = await prelGit.branchHead(projectRoot, exec, 'dev');
   if (!mainSha || !devSha) throw new AtbError(`${mainBranch}/dev 分支缺失，无法重新冻结`);
-  const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, mainSha);
-  if (!v.ok) throw new AtbError(`重新冻结失败：计划条目 ${v.missing.join('、')} 不在当前 ${mainBranch} 历史内`);
+  const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, mainSha, run.frozen.replays);
+  if (!v.ok) throw new AtbError(`重新冻结失败：计划条目 ${v.missing.join('、')} 不在当前 ${mainBranch} 历史内（含重放证据核对）`);
   const extras = await prelGit.collectExtraCommits(projectRoot, exec, {
-    mainSha, itemCommits: run.frozen.items.map((x) => x.commit), bldId: run.bldId,
+    mainSha, itemCommits: run.frozen.items.map((x) => x.commit), replayCommits: (run.frozen.replays || []).map((r) => r.replayed), bldId: run.bldId,
   });
   return store.mutateProductRun(dataDir, runId, (r) => {
     r.frozen.mainBranch = mainBranch;
@@ -327,8 +327,8 @@ async function stageSyncSource(ctx) {
       { mainSha, devSha },
     );
   }
-  const contain = await prelGit.verifyItemsOnMain(projectRoot, exec, frozen.items, frozen.mainSha);
-  if (!contain.ok) throw new ProductStageError(`计划条目不在冻结 ${mainBranch} 历史内：${contain.missing.join('、')}`, 'items-missing');
+  const contain = await prelGit.verifyItemsOnMain(projectRoot, exec, frozen.items, frozen.mainSha, frozen.replays);
+  if (!contain.ok) throw new ProductStageError(`计划条目不在冻结 ${mainBranch} 历史内（含重放证据核对）：${contain.missing.join('、')}`, 'items-missing');
   const sw = await prelGit.switchMainVerifyHead(projectRoot, exec, { expectedMainSha: frozen.mainSha, mainBranch });
   log(`已切换 ${mainBranch}（原分支 ${sw.previousBranch || mainBranch}），HEAD === 冻结 ${frozen.mainSha.slice(0, 8)}`);
   // 幂等 / 重试语义：先查询远端，双分支已到达目标则不重复推送

@@ -1075,7 +1075,7 @@ const MD_EXT = new Set(['md', 'markdown']);
 const MODULE_SUB = {
   status: '从想法到验收，跟进每一项工作',
   // REQ-20260913-001：构建模块（版本管理 + 分支浏览与同步）插在需求与任务之间
-  build: '版本计划与分支，集中在这里',
+  build: '发布计划与流程，集中在这里',
   runs: '进度、队列与结果集中在这里',
   settings: '',
 };
@@ -1198,7 +1198,7 @@ const SEARCH_PLACEHOLDER = {
 // 不再只靠占位符表达范围；语义与 SEARCH_PLACEHOLDER 同键（设置模块无搜索，整组隐藏）
 const SEARCH_SCOPE = {
   status: '需求',
-  build: '构建',
+  build: '发布',
   runs: '任务',
 };
 

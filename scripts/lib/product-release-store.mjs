@@ -140,6 +140,11 @@ function normalizeFreeze(freeze) {
     remote: String(f.remote).trim(),
     remoteUrl: scrubSecrets(String(f.remoteUrl || '')),
     extraCommits: Array.isArray(f.extraCommits) ? f.extraCommits.slice(0, 50) : [],
+    // REQ-20260920-003：合并重放证据（隔离合并 original → replayed）；发布包含性检验认可重放提交
+    replays: (Array.isArray(f.replays) ? f.replays : [])
+      .filter((r) => r && HASH_RE.test(String(r.original || '')) && HASH_RE.test(String(r.replayed || '')))
+      .map((r) => ({ original: String(r.original).toLowerCase(), replayed: String(r.replayed).toLowerCase() }))
+      .slice(0, 200),
     homepage: {
       repoRoot: String(f.homepage?.repoRoot || ''),
       branch: String(f.homepage?.branch || 'main'),

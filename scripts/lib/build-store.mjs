@@ -11,7 +11,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { AtbError, writeJsonAtomic } from './core.mjs';
+import * as flow from './publish-flow.mjs';
 
 const pad = (n, len) => String(n).padStart(len, '0');
 const nowIso = () => new Date().toISOString();
@@ -198,7 +200,9 @@ export function addItems(dataDir, id, items, { by = 'board' } = {}) {
   assertNotOccupied(dataDir, add.map((x) => x.itemId), id);
   v.items.push(...add);
   v.by = by;
-  return writeVersion(dataDir, v);
+  // REQ-20260920-003：新增条目 → 发布范围变化，旧文档提交标识失效（需重新核对）
+  markDocsScopeStale(dataDir, v, `新增关联条目：${add.map((x) => x.itemId).join('、')}`);
+  return v;
 }
 
 export function removeItems(dataDir, id, itemIds, { by = 'board' } = {}) {
@@ -209,9 +213,12 @@ export function removeItems(dataDir, id, itemIds, { by = 'board' } = {}) {
   const set = new Set(ids);
   const keep = v.items.filter((x) => !set.has(x.itemId));
   if (keep.length === v.items.length) throw new AtbError('所选条目均不在本版本中');
+  const removed = v.items.filter((x) => set.has(x.itemId)).map((x) => x.itemId);
   v.items = keep; // 允许清空（draft/failed 态）：移出后可重新添加，合并确认按当前清单生成
   v.by = by;
-  return writeVersion(dataDir, v);
+  // REQ-20260920-003：移出条目 → 发布范围变化，旧文档提交标识失效（需重新核对）
+  markDocsScopeStale(dataDir, v, `移出关联条目：${removed.join('、')}`);
+  return v;
 }
 
 // 换选条目 commit（合并前可修正关联；合并后锁定）
@@ -222,11 +229,14 @@ export function setItemCommit(dataDir, id, itemId, commit, { by = 'board' } = {}
   if (!it) throw new AtbError(`${itemId} 不在本版本中`);
   const h = String(commit || '').trim().toLowerCase();
   if (!HASH_RE.test(h)) throw new AtbError(`${itemId} 缺少有效的关联 commit（40 位提交号）`);
+  const prev = it.commit;
   it.commit = h;
   it.mergedAt = null;
   it.mergeError = null;
   v.by = by;
-  return writeVersion(dataDir, v);
+  // REQ-20260920-003：更换 commit → 发布范围变化，旧文档提交标识失效（需重新核对）
+  if (prev !== h) markDocsScopeStale(dataDir, v, `条目 ${it.itemId} 更换了关联提交`);
+  return v;
 }
 
 export function beginMerge(dataDir, id, { baseBranch = null, by = 'board' } = {}) {
@@ -296,4 +306,131 @@ export function deleteVersion(dataDir, id) {
   }
   fs.rmSync(path.join(versionsRoot(dataDir), v.id), { recursive: true, force: true });
   return { ok: true, id: v.id };
+}
+
+/* ---------- REQ-20260920-003 发布流程：文档 / 推送 / 官网检测状态 ---------- */
+
+// 范围指纹：条目 + 每条提交 hash（发布范围骨架）。文档基准由 recordDocsCommit 时的
+// publishScopeFingerprint（含八文件内容 hash）另行固化，两者共同构成「旧快照不放行」依据。
+export function scopeFingerprintOf(v) {
+  const part = (v?.items || []).map((it) => `${it.itemId}:${String(it.commit || '').toLowerCase()}`).sort();
+  return crypto.createHash('sha256').update(JSON.stringify(part)).digest('hex');
+}
+
+// 记录文档提交：files = { '<文件名>': '<内容 sha256>' }（提交时点磁盘内容），scopeFp 为
+// publish-flow.publishScopeFingerprint（条目 + 文档基准）计算值；清除范围过期标记。
+export function recordDocsCommit(dataDir, id, { commitHash, files, scopeFp } = {}) {
+  const v = readVersion(dataDir, id);
+  if (!/^[0-9a-f]{40}$/i.test(String(commitHash || ''))) throw new AtbError('文档提交记录缺少有效 commit hash');
+  if (!files || typeof files !== 'object') throw new AtbError('文档提交记录缺少文件清单');
+  for (const name of Object.keys(files)) {
+    if (!flow.isPublishDocFile(name)) throw new AtbError(`非发布文档文件：${name}`);
+  }
+  v.docs = {
+    commitHash: String(commitHash).toLowerCase(),
+    files,
+    scopeFp: String(scopeFp || ''),
+    scopeStale: false,
+    staleReason: null,
+    committedAt: nowIso(),
+  };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
+// 范围变化（增删条目 / 换 commit）后失效旧提交标识：标记 scopeStale 并说明来源；
+// 保留已写内容与提交记录（不得拿旧已提交标识为新范围放行合并）。始终落盘（调用方返回 v）。
+function markDocsScopeStale(dataDir, v, reason) {
+  if (v.docs?.commitHash) {
+    v.docs.scopeStale = true;
+    v.docs.staleReason = String(reason || '发布范围已变化').slice(0, 200);
+  }
+  return writeVersion(dataDir, v);
+}
+
+// 合并前置门禁（REQ-20260920-003）：无条目 / 文档未完成（未提交、外部修改未提交、范围过期）
+// → AtbError（HTTP 400/409 由调用方映射），错误信息按最差项说明。
+export function assertMergeDocsGate(dataDir, id, readFile) {
+  const v = readVersion(dataDir, id);
+  if (!v.items.length) throw new AtbError('版本暂无关联条目：请先在「关联条目与提交」步骤关联后再合并');
+  const read = typeof readFile === 'function'
+    ? readFile
+    : (f) => { try { return fs.readFileSync(path.join(projectRootGuess(dataDir), f), 'utf8'); } catch { return null; } };
+  const evalr = flow.evaluateDocsState(v, read);
+  if (evalr.overall !== 'committed') {
+    throw new BuildConflictError(`文档未就绪，暂不可合并：${evalr.reasons[0] || '请完成文档编写并提交'}`);
+  }
+  return evalr;
+}
+
+// 推送成功记录：同基准（同 sha）重试 / 页面重载不重置起点；基准变化（main 前进后重新推送
+// 成功）更新起点并作废旧官网命中证据（需重新核对目标范围）。
+export function recordPushSuccess(dataDir, id, { remote, sha } = {}) {
+  const v = readVersion(dataDir, id);
+  if (!/^[0-9a-f]{40}$/i.test(String(sha || ''))) throw new AtbError('推送成功记录缺少有效 sha');
+  const prev = v.release || {};
+  const sameBaseline = prev.pushedSha && prev.pushedSha === String(sha).toLowerCase();
+  v.release = {
+    ...prev,
+    pushRemote: String(remote || prev.pushRemote || 'origin'),
+    pushedSha: String(sha).toLowerCase(),
+    pushedAt: sameBaseline ? prev.pushedAt : nowIso(),
+    site: sameBaseline ? (prev.site || { status: 'waiting' }) : { status: 'waiting', evidence: null, checkedHead: null, lastScanAt: null, nextScanAt: null, note: '推送基准已变化，重新检测' },
+  };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
+// 官网扫描结果落盘（幂等覆写 site 子状态；保留 pushedAt / pushedSha 推送事实）。
+export function recordSiteScan(dataDir, id, scan) {
+  const v = readVersion(dataDir, id);
+  const prev = v.release || {};
+  const s = scan || {};
+  v.release = {
+    ...prev,
+    site: {
+      status: String(s.status || 'waiting'),
+      reason: s.reason || null,
+      scanned: Number.isInteger(s.scanned) ? s.scanned : null,
+      windowCount: Number.isInteger(s.windowCount) ? s.windowCount : null,
+      checkedHead: s.checkedHead || null,
+      lastScanAt: s.lastScanAt || nowIso(),
+      nextScanAt: s.nextScanAt || null,
+      since: s.since || prev.pushedAt || null,
+      evidence: s.evidence || null,
+      branch: s.branch || null,
+      note: s.note || null,
+    },
+  };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
+// 重放证据落账：merge.replays = [{ itemId, original, replayed }]（隔离合并以 cherry-pick
+// 重放提交进 main，原始 commit 不再是 main 祖先；发布包含性检验据此认可重放提交）。
+// 重试分批执行时按 original 去重合并累积（不覆盖丢失此前批次的证据）。
+export function saveMergeReplays(dataDir, id, replays = []) {
+  const v = readVersion(dataDir, id);
+  const prev = new Map((v.merge?.replays || []).map((r) => [r.original, r]));
+  for (const r of Array.isArray(replays) ? replays : []) {
+    if (!r.itemId || !r.original || !r.replayed) continue;
+    prev.set(String(r.original).toLowerCase(), {
+      itemId: String(r.itemId),
+      original: String(r.original).toLowerCase(),
+      replayed: String(r.replayed).toLowerCase(),
+    });
+  }
+  v.merge = { ...(v.merge || {}), replays: [...prev.values()] };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
+// 项目根推断（readFile 缺省口径的兜底）：dataDir 形如 <root>/agent-team-board，取上一级。
+function projectRootGuess(dataDir) {
+  try {
+    const p = path.resolve(String(dataDir), '..');
+    return p;
+  } catch {
+    return '.';
+  }
 }

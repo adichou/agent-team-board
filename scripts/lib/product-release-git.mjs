@@ -73,20 +73,37 @@ export async function branchHead(projectRoot, exec, branch) {
   return sha ? sha.toLowerCase() : null;
 }
 
-// 条目包含性：每个计划条目 commit 必须是 main 的祖先（发布范围确实包含计划条目）
-export async function verifyItemsOnMain(projectRoot, exec, items, mainSha) {
+// 条目包含性：每个计划条目 commit 必须是 main 的祖先（发布范围确实包含计划条目）。
+// REQ-20260920-003：隔离合并以 cherry-pick 重放提交进入 main，原始 commit 不再是祖先——
+// 认可「原始提交为祖先」或「记录的重放提交（replays: original → replayed）为祖先」两种证据。
+export async function verifyItemsOnMain(projectRoot, exec, items, mainSha, replays = []) {
+  const rs = new Map((Array.isArray(replays) ? replays : [])
+    .filter((r) => r && r.original && r.replayed)
+    .map((r) => [String(r.original).toLowerCase(), String(r.replayed).toLowerCase()]));
   const missing = [];
   for (const it of items) {
-    const r = await exec('git', ['merge-base', '--is-ancestor', String(it.commit), String(mainSha)], { cwd: projectRoot });
-    if (r.code !== 0) missing.push(it.itemId);
+    const c = String(it.commit).toLowerCase();
+    let ok = false;
+    try {
+      const r = await exec('git', ['merge-base', '--is-ancestor', c, String(mainSha)], { cwd: projectRoot });
+      ok = r.code === 0;
+    } catch { ok = false; }
+    if (!ok && rs.has(c)) {
+      try {
+        const r2 = await exec('git', ['merge-base', '--is-ancestor', rs.get(c), String(mainSha)], { cwd: projectRoot });
+        ok = r2.code === 0;
+      } catch { ok = false; }
+    }
+    if (!ok) missing.push(it.itemId);
   }
   return { ok: missing.length === 0, missing };
 }
 
 // 额外提交：main 上不在任何计划条目 commit 祖先内的提交（基线与计划外直接提交均计入，如实展示），
 // 剔除本 BLD 的 build 合并提交（build: … 合并 …（BLD-…）——build-git 生成口径）。
-export async function collectExtraCommits(projectRoot, exec, { mainSha, itemCommits, bldId, limit = 50 }) {
-  const args = ['log', mainSha, '--not', ...itemCommits.map(String), '--format=%H%x09%h%x09%an%x09%aI%x09%s'];
+export async function collectExtraCommits(projectRoot, exec, { mainSha, itemCommits, replayCommits = [], bldId, limit = 50 }) {
+  // REQ-20260920-003：重放提交同样从额外提交中剔除（它们就是计划条目本身的重放证据，非范围外变更）
+  const args = ['log', mainSha, '--not', ...itemCommits.map(String), ...replayCommits.map(String), '--format=%H%x09%h%x09%an%x09%aI%x09%s'];
   let raw = '';
   try {
     raw = await ok(exec, projectRoot, args, '归集额外提交');

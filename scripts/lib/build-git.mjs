@@ -8,6 +8,7 @@
 // 名单与合并目标均按解析结果取用。
 
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -320,4 +321,187 @@ export function mergeCommitsIntoMain(root, { versionId, versionName, items = [] 
     }
   }
   return { results, baseBranch, warnings };
+}
+
+/* ---------- REQ-20260920-003 发布流程：dev 前置 / 隔离合并 / 主分支推送 / 官网读取 ---------- */
+
+// 发布前置（人工确认口径）：当前工作目录必须在 dev——main、其他分支及 detached HEAD 一律
+// 阻止合并与推送，提示自行切回 dev 后重试；不自动切分支，也不允许经隔离执行绕过该前置。
+export function assertOnDev(root) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init）');
+  const current = String(gitRaw(root, ['branch', '--show-current']).stdout || '').trim();
+  if (!current) {
+    throw new AtbError('当前处于 detached HEAD：请自行切换回 dev 后重试（发布前置：工作目录必须在 dev 分支）');
+  }
+  if (current !== DEV_BRANCH) {
+    throw new AtbError(`当前分支是 ${current}，不在 dev：请自行切换回 dev 后重试（不自动切分支，也不能绕过该前置）`);
+  }
+  return current;
+}
+
+// 只读：commit 是否为 ref 的祖先（merge-base --is-ancestor）。
+export function isAncestorOf(root, commit, ref) {
+  const h = String(commit || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{4,40}$/.test(h)) return false;
+  return gitRaw(root, ['merge-base', '--is-ancestor', h, String(ref || 'HEAD')]).status === 0;
+}
+
+// 只读影响分析（合并前展示）：对每个所选提交列出「目标分支可达之外、又不属于所选集合」的
+// 祖先提交（普通 merge 会把它们一并带入；隔离合并不带入，若所选改动依赖其内容将在执行时
+// 冲突阻止）。同一 commit 关联多个条目视为混合提交，列入 blocked（无法安全拆分）。
+export function analyzePublishIsolation(root, items = []) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法分析发布范围');
+  const targetBranch = resolveMainBranch(root) || 'main';
+  const selected = new Set(items.map((it) => String(it.commit || '').toLowerCase()));
+  const byCommit = new Map();
+  for (const it of items) {
+    const c = String(it.commit || '').toLowerCase();
+    if (!byCommit.has(c)) byCommit.set(c, []);
+    byCommit.get(c).push(it.itemId);
+  }
+  const shared = [...byCommit.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([commit, itemIds]) => ({ commit, itemIds }));
+  const blocked = shared.map((s) => `同一提交 ${s.commit.slice(0, 12)} 关联多个条目（${s.itemIds.join('、')}）：混合提交无法安全拆分，请调整关联或先合并为一个条目`);
+  const perItem = items.map((it) => {
+    const intermediates = [];
+    try {
+      const out = gitOk(root, ['log', `${targetBranch}..${String(it.commit)}`, '--format=%H%x09%s'], '读取范围提交');
+      for (const line of out.split('\n')) {
+        if (!line.trim()) continue;
+        const [hash, ...rest] = line.split('\t');
+        if (selected.has(hash.toLowerCase())) continue;
+        intermediates.push({ hash, subject: rest.join('\t') });
+      }
+    } catch { /* 单条读取失败不阻塞整体分析（执行前 precheckMerge 兜底） */ }
+    return { itemId: it.itemId, commit: String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };
+  });
+  const notes = [];
+  const totalInter = perItem.reduce((n, x) => n + x.count, 0);
+  if (totalInter) notes.push(`所选提交存在 ${totalInter} 个未选祖先提交：普通 merge 会一并带入 main，隔离合并不带入；若所选改动依赖这些内容，执行时将冲突阻止并说明原因`);
+  return { targetBranch, perItem, shared, blocked, notes };
+}
+
+// 受限写（隔离合并）：把版本所选条目的 commit 逐条 cherry-pick 重放入主分支（-x 保留原始
+// 提交溯源）。与旧 merge --no-ff 的关键差异：cherry-pick 只重放所选提交自身的变更，不把其
+// 未选祖先带入 main（共享 dev 上只选 B 不再夹带先前未选 A）。执行隔离：非主分支时在临时
+// 工作树检出主分支执行，全程不切换、不触碰用户当前工作区；单条冲突即 cherry-pick --abort
+// 并中止（已成功条目保持，重试只补未合并）；返回 replays（original → replayed）作为重放
+// 证据，发布包含性检验据此认可（原始 commit 不再是 main 祖先）。
+export function mergeIsolatedIntoMain(root, { versionId, versionName, items = [] } = {}) {
+  const baseBranch = precheckMerge(root, items);
+  const targetBranch = resolveMainBranch(root) || 'main';
+  const results = [];
+  const replays = [];
+  const warnings = [];
+  const inPlace = baseBranch === targetBranch; // 理论上 dev 前置下不出现；保留与旧实现一致的兜底
+  let wt = null;
+  if (!inPlace) {
+    wt = path.join(realTmpdir(), `atb-iso-${versionId || 'v'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    const r = gitRaw(root, ['worktree', 'add', wt, targetBranch]);
+    if (r.status !== 0) {
+      const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+      throw new AtbError(`创建隔离合并工作树失败：${detail}`.slice(0, 300));
+    }
+  }
+  const cwd = inPlace ? root : wt;
+  try {
+    for (const it of items) {
+      const commit = String(it.commit || '').toLowerCase();
+      // 幂等续传：原始提交已是主分支祖先（旧 --no-ff 版本 / 已并入）→ 记成功不重放
+      if (isAncestorOf(cwd, commit, targetBranch)) {
+        results.push({ itemId: it.itemId, commit, ok: true, alreadyIncluded: true });
+        continue;
+      }
+      const r = gitRaw(cwd, ['cherry-pick', '-x', commit]);
+      if (r.status === 0) {
+        const replayed = String(gitRaw(cwd, ['rev-parse', 'HEAD']).stdout || '').trim().toLowerCase();
+        results.push({ itemId: it.itemId, commit, ok: true });
+        replays.push({ itemId: it.itemId, original: commit, replayed });
+        continue;
+      }
+      const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+      gitRaw(cwd, ['cherry-pick', '--abort']); // 冲突现场清理（best-effort，不吞并报错）
+      results.push({
+        itemId: it.itemId, commit, ok: false,
+        error: `隔离合并冲突或依赖未选变化（${detail || '冲突'}）`.slice(0, 300),
+      });
+      break; // 逐条推进：一条失败即中止，保留已成功条目供重试续传
+    }
+  } finally {
+    if (wt) {
+      const rm = gitRaw(root, ['worktree', 'remove', '--force', wt]);
+      if (rm.status !== 0) {
+        gitRaw(root, ['worktree', 'prune']);
+        warnings.push(`临时隔离合并工作树清理失败（${String(rm.stderr || '').trim().slice(0, 120)}），可忽略或手动 git worktree prune`);
+      }
+    }
+  }
+  return { results, replays, baseBranch, warnings };
+}
+
+// 受限写（正式发布第一步）：把本地主分支（解析结果 main / master）推送到所选远端。
+// 只推主分支本身（不推 dev、不强推、不 --force）；失败抛错由调用方保留重试入口。
+export function pushMainBranch(root, { remote } = {}) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再推送主分支');
+  const rm = String(remote || '').trim();
+  if (!REF_RE.test(rm)) throw new AtbError(`远端名不合法：${rm || '（空）'}`);
+  if (!remoteNames(root).includes(rm)) throw new AtbError(`远端 ${rm} 未配置（git remote add ${rm} <url>）`);
+  const targetBranch = resolveMainBranch(root) || 'main';
+  gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${targetBranch}`], `${targetBranch} 分支不存在`);
+  const sha = gitOk(root, ['rev-parse', `refs/heads/${targetBranch}`], '读取主分支头').trim();
+  const r = gitRaw(root, ['push', rm, `refs/heads/${targetBranch}:refs/heads/${targetBranch}`]);
+  if (r.status !== 0) {
+    const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 4).join('；');
+    throw new AtbError(`推送主分支 ${targetBranch} 到 ${rm} 失败：${detail}`.slice(0, 400));
+  }
+  return { ok: true, remote: rm, branch: targetBranch, sha };
+}
+
+// 只读（官网检测事实源）：读取官网仓库本地主分支提交（新→旧），主分支解析沿用 main 优先、
+// 仅无 main 时回退 master 的兼容规则；返回逐提交提交者时间（%cI，降低变基保留旧作者日期的
+// 漏检）。不 fetch、不触碰远端。
+export function siteMainLog(siteRoot, { limit = 200 } = {}) {
+  if (!isGitRepo(siteRoot)) throw new AtbError('官网目录不是 git 仓库，无法读取本地主分支提交');
+  const branch = resolveMainBranch(siteRoot);
+  if (!branch) throw new AtbError('官网仓库缺少本地 main / master 分支，无法检测');
+  gitOk(siteRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], '官网主分支不存在');
+  const n = Math.max(1, Math.min(5000, Math.floor(Number(limit) || 200)));
+  const out = gitOk(siteRoot, ['log', branch, '-n', String(n), '--format=%H%x09%cI%x09%s'], '读取官网提交记录');
+  const commits = [];
+  for (const line of out.split('\n')) {
+    if (!line.trim()) continue;
+    const [hash, committerDate, ...rest] = line.split('\t');
+    commits.push({ hash, committerDate, subject: rest.join('\t') });
+  }
+  return { branch, commits };
+}
+
+// 只读：证据有效性（官网历史改写 / 证据被移除后退回等待并解释原因）。
+export function siteEvidenceReachable(siteRoot, hash, branch) {
+  if (!isGitRepo(siteRoot) || !hash) return false;
+  const b = branch || resolveMainBranch(siteRoot);
+  if (!b) return false;
+  return isAncestorOf(siteRoot, hash, b);
+}
+
+// 受限写（文档提交）：只提交本次确认的八个发布文档中已存在的文件——git add 与 git commit
+// 均按 pathspec 限定，绝不夹带业务源码或其他工作区修改；无变化时不制造空提交（noop）。
+// 返回逐文件内容 sha256（供 recordDocsCommit 固化「提交时点磁盘内容」基准）。
+export function commitPublishDocs(root, { message } = {}) {
+  // REQ-20260920-003 已确认的八个发布文档（与 publish-flow.publishDocFiles 同源清单）
+  const DOC_FILES = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再提交文档');
+  const existing = DOC_FILES.filter((f) => fs.existsSync(path.join(root, f)));
+  if (!existing.length) throw new AtbError('尚无已编写的发布文档（先保存至少一个文档再提交）');
+  gitOk(root, ['add', '--', ...existing], '暂存发布文档');
+  const diff = gitRaw(root, ['diff', '--cached', '--quiet', '--', ...existing]);
+  if (diff.status === 0) return { ok: true, noop: true, files: existing, hashes: null };
+  gitOk(root, ['commit', '-m', String(message || 'docs: 发布文档'), '--', ...existing], '提交发布文档');
+  const commitHash = gitOk(root, ['rev-parse', 'HEAD'], '读取文档提交').trim();
+  const hashes = {};
+  for (const f of existing) {
+    hashes[f] = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, f))).digest('hex');
+  }
+  return { ok: true, noop: false, commitHash, files: existing, hashes };
 }
