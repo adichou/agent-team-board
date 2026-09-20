@@ -42,6 +42,17 @@ const EN = {
   '已正式发布，不可再合并（如需调整请新建版本）': 'Officially released — no further merges (create a new version for further changes)',
   '合并中，条目不可增删': 'Merging in progress — item changes disabled',
   '此操作不可撤销，请确认后再继续。': 'This action is irreversible — please confirm to continue.',
+  // BUG-20260920-006：「合并入 main」入口点击必反馈——aria-disabled 禁用态 title 与点击
+  // toast 的真实原因词条（mergeBlockReason 统一求值：合并执行中 / 五步门禁 / 兜底），
+  // 分支句见 EN_DYNAMIC。
+  '合并中，请勿重复触发': 'Merging in progress — do not trigger again',
+  '暂无关联条目：请先在「关联条目与提交」步骤关联': 'No linked items yet: link items in the "Link items & commits" step first',
+  '文档尚未编写提交（合并前置：所需文档已完成且最新变化已提交）': 'Docs not written or committed yet (merge prerequisite: required docs complete and latest changes committed)',
+  '文档有未提交修改，不得合并（请先提交文档）': 'Docs have uncommitted changes — merge blocked (commit the docs first)',
+  '发布范围已变化，文档需重新核对 / 编写并重新提交': 'Publish scope has changed: review / rewrite the docs and commit them again',
+  '前置条件未满足': 'Prerequisites not met',
+  '未找到该版本（可能已被删除）：请刷新页面后重试': 'Version not found (it may have been deleted): refresh the page and retry',
+  '当前处于 detached HEAD，不在 dev：请自行切换回 dev 后重试（不自动切分支）': 'Currently on a detached HEAD, not dev: switch back to dev yourself and retry (no automatic branch switch)',
   // BUG-20260913-005：版本回填弹窗「去新建 XX 会话」入口——既有复制 toast 一并补齐词条
   '✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方': '✓ Prompt copied — paste it into the Agent, run it, then paste the answer back below',
   '剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制': 'Clipboard unavailable: select all (⌘A) in the prompt box and copy manually',
@@ -1071,6 +1082,9 @@ const EN_DYNAMIC = {
   '删除版本（◇）': 'Delete version ($1)',
   '✓ 已删除版本（◇）': '✓ Version deleted ($1)',
   '✕ 删除失败：◇': '✕ Delete failed: $1',
+  // BUG-20260920-006：「合并入 main」入口不在 dev 的禁用 title / 点击 toast（真实分支名插值；
+  // detached HEAD 回退句无插值，放静态 EN）
+  '当前分支是 ◇，不在 dev：请自行切换回 dev 后重试（不自动切分支）': 'Current branch is $1, not dev: switch back to dev yourself and retry (no automatic branch switch)',
   // REQ-20260914-002 分支浏览提交记录搜索：命中计数 / 无匹配空态 / 搜索态末页反馈（动态拼接）
   '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
   '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',

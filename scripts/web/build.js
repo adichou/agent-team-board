@@ -995,16 +995,60 @@ const ATBBuild = (() => {
 
   /* ---------- 合并入 main ---------- */
 
+  // BUG-20260920-006：「合并入 main」不可合并真实原因（详情页主按钮与卡片行内按钮共用，
+  // 返回 '' 表示可合并）。优先级：全局合并执行中 > 版本 merging > 已正式发布（BUG-20260920-005
+  // 基准，merged 未推送可增量重开）> 五步门禁（暂无关联条目 / 文档未编写 / 未提交 / 范围过期，
+  // 口径同 publishStepsState 与服务端守卫）> 不在 dev（含 detached HEAD）。
+  // 门禁与分支仅当前选中版本已加载五步装配（pfOf(v).plan）时可知；未加载时不猜测，
+  // 放行至确认后由后端守卫 409 + toast 给出真实原因（反馈链路完整，不误报）。
+  function mergeBlockReason(v) {
+    if (!v) return '';
+    if (state.mergeBusy || v.status === 'merging') return '合并中，请勿重复触发';
+    if (pushedOf(v)) return '已正式发布，不可再合并（如需调整请新建版本）';
+    const p = pfOf(v)?.plan || null;
+    const gate = p ? (p.steps || []).find((s) => s.key === 'merge') : null;
+    if (gate?.locked) return gate.reason || '前置条件未满足';
+    if (p && p.currentBranch !== 'dev') {
+      return p.currentBranch
+        ? `当前分支是 ${p.currentBranch}，不在 dev：请自行切换回 dev 后重试（不自动切分支）`
+        : '当前处于 detached HEAD，不在 dev：请自行切换回 dev 后重试（不自动切分支）';
+    }
+    return '';
+  }
+
+  // 打开合并确认弹窗。BUG-20260920-006：守卫分支不再静默——版本不存在（如另一标签页
+  // 已删除、本页按钮残留）提示刷新；不可合并（含全局合并执行中）toast 真实原因
+  //（口径同 mergeBlockReason），点击不再「消失」。
   function openMergeConfirm(verId) {
     const v = verId ? findVersion(verId) : selVersion();
-    if (!v || state.mergeBusy) return;
+    if (!v) {
+      toast('未找到该版本（可能已被删除）：请刷新页面后重试', true);
+      return;
+    }
+    const reason = mergeBlockReason(v);
+    if (reason) {
+      toast(reason, true);
+      return;
+    }
     state.mergeConfirm = { verId: v.id };
     render();
   }
 
   async function doMerge() {
+    // BUG-20260920-006：先查全局合并执行中（防重复触发的真实保护仍在此状态守卫）——
+    // 执行中再点（含确认键双击）提示勿重复触发，不再静默；
+    // 确认时版本已不存在（删除后残留触发）关闭弹窗并提示刷新。
+    if (state.mergeBusy) {
+      toast('合并中，请勿重复触发', true);
+      return;
+    }
     const v = findVersion(state.mergeConfirm?.verId);
-    if (!v || state.mergeBusy) return;
+    if (!v) {
+      state.mergeConfirm = null;
+      toast('未找到该版本（可能已被删除）：请刷新页面后重试', true);
+      render();
+      return;
+    }
     state.mergeConfirm = null;
     state.mergeBusy = true;
     render();
@@ -1872,7 +1916,12 @@ const ATBBuild = (() => {
       const vPushed = pushedOf(v);
       const answerLocked = v.status === 'merging' || vPushed;
       const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${vPushed ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
-      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${v.status === 'merging' || vPushed || state.mergeBusy ? ` disabled title="${vPushed ? '已正式发布' : '合并中，请勿重复触发'}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
+      // BUG-20260920-006：合并键禁用改 aria-disabled（HTML disabled 不派发 click，点击无反馈），
+      // 原因统一走 mergeBlockReason 与详情页主按钮同口径（含全局合并执行中 / 已正式发布 /
+      // 五步门禁 / 不在 dev，选中版本装配已加载时同查门禁与分支）；点击由 openMergeConfirm
+      // 守卫 toast 真实原因，防重复触发仍由 state.mergeBusy 状态守卫保证。
+      const mergeReason = mergeBlockReason(v);
+      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${mergeReason ? ` aria-disabled="true" title="${esc(mergeReason)}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
       // REQ-20260915-003：产品发布操作迁入版本卡片按钮区（与 AI 完善 / 合并 / 删除集中展示），
       // 右侧详情不再重复显示发布操作区。创建发布仅 merged 可用；draft / merging / failed 禁用并
       // 可见说明「请先完成合并入 main」；沿用 openReleaseConfirm 既有发布校验与核对弹层，
@@ -2045,6 +2094,10 @@ const ATBBuild = (() => {
       ? `<p class="small muted">当前分支 dev · 目标主分支 ${esc(p.mainBranch || 'main')}（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>`
       : `<p class="rel-form-err" role="alert">当前分支${p.currentBranch ? `是 ${esc(p.currentBranch)}` : '处于 detached HEAD'}，不在 dev：请自行切换回 dev 后重试（不自动切分支）。</p>`;
     const merged = v.status === 'merged';
+    // BUG-20260920-006：主按钮禁用改 aria-disabled（HTML disabled 不派发 click，点击无反馈）；
+    // title 归因统一走 mergeBlockReason——不在 dev / 合并执行中不再误回落「前置条件未满足」，
+    // 与真实禁用原因一一对应；点击由 openMergeConfirm 守卫 toast 真实原因。
+    const mergeReason = mergeBlockReason(v);
     return `
       <div class="bld-merge-pane">
         <section><strong>发布范围</strong>
@@ -2058,7 +2111,7 @@ const ATBBuild = (() => {
         </section>
         ${devBar}
         ${gate?.locked ? `<p class="rel-form-err" role="alert">暂不可合并：${esc(gate.reason || '前置条件未满足')}</p>` : ''}
-        <p><button type="button" class="btn primary" data-ver-merge="${esc(v.id)}"${!gate?.locked && onDev && !state.mergeBusy ? '' : ' disabled title="' + esc(gate?.reason || '前置条件未满足') + '"'}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
+        <p><button type="button" class="btn primary" data-ver-merge="${esc(v.id)}"${mergeReason ? ` aria-disabled="true" title="${esc(mergeReason)}"` : ''}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
           <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>
         ${v.status === 'failed' && v.merge?.error ? `<p class="rel-form-err" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>` : ''}
         ${merged && v.merge?.mainSha ? `<p class="small muted">合并完成：主分支头 <code>${esc(short(v.merge.mainSha))}</code>；重放证据 ${(v.merge?.replays || []).length} 条。</p>` : ''}
@@ -2851,8 +2904,9 @@ const ATBBuild = (() => {
     // REQ-20260915-003：关联条目联合列表搜索 / 分页纯函数与行为接缝（测试与交互）
     filterVersionItems, paginateItems, submitItemsSearch, clearItemsSearch, gotoItemsPage,
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
-    // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行）
-    openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete,
+    // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行；
+    // BUG-20260920-006：doMerge 守卫分支（执行中 / 版本不存在）补反馈测试接缝）
+    openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete, doMerge,
     // REQ-20260915-003：切换选中版本（清空关联列表搜索并回第一页）
     selectVersion,
     // REQ-20260915-002：产品发布入口行为接缝（测试与创建交互）
