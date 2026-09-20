@@ -8017,7 +8017,8 @@ function gitWorkflowDescHtml(mainBranch) {
 }
 
 // REQ-20260911-009 设置页「Git 工作流」分区：展示当前分支与 dev 分支状态，
-// 主操作「初始化 dev 分支」（按需创建 + 整体切换，幂等）；加载/执行期间按钮禁用，
+// 主操作「切换至 dev 分支」（REQ-20260920-002 由「初始化 dev 分支」改为切换导向表达：
+// dev 存在时切换、不存在时按需创建再切换，幂等）；加载/执行期间按钮禁用，
 // 非 git 仓库禁用并提示（不出现可点击但必然失败的入口），失败给原因与重试。
 // REQ-20260912-001：单行提示升级为详细工作流描述（gitWorkflowDescHtml），
 // 非 git 仓库在其后保留初始化指引。
@@ -8046,7 +8047,7 @@ function gitWorkflowAreaHtml() {
     : `当前分支：<span>${esc(d.branch || '未知')}</span> · dev 分支：<span>${d.devExists ? '已存在' : '未创建'}</span>`;
   const btn = onDev
     ? `<button type="button" class="btn" id="gwInit" disabled>已在 dev 分支</button>`
-    : `<button type="button" class="btn primary" id="gwInit"${(!d.isRepo || g.busy) ? ' disabled' : ''}>初始化 dev 分支</button>`;
+    : `<button type="button" class="btn primary" id="gwInit"${(!d.isRepo || g.busy) ? ' disabled' : ''}>切换至 dev 分支</button>`;
   const notRepo = !d.isRepo
     ? `<p class="muted small" style="margin:0 0 2px">项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。</p>`
     : '';
@@ -8331,7 +8332,8 @@ function bindSettingsView(view) {
     }
   });
 
-  // REQ-20260911-009「Git 工作流」分区：状态重试 + 初始化 dev 分支（确认 → 执行 → 就近反馈）
+  // REQ-20260911-009「Git 工作流」分区：状态重试 + 切换至 dev 分支（REQ-20260920-002
+  // 确认 → 执行 → 就近反馈整体改为切换导向表达；dev 不存在时按需创建再切换不变）
   const gwRetry = view.querySelector('#gwRetry');
   if (gwRetry) gwRetry.addEventListener('click', async () => {
     state.git.loading = true;
@@ -8343,26 +8345,26 @@ function bindSettingsView(view) {
   const gwStatus = view.querySelector('#gwStatus');
   if (gwInit && !gwInit.disabled) gwInit.addEventListener('click', async () => {
     const ok = await uiConfirm({
-      title: '初始化 dev 分支？',
-      message: '将按需创建 dev 分支，并把整个项目工作区切换到 dev（已在 dev 则仅提示就绪；仅本地分支操作，不 push）。',
-      confirmText: '初始化并切换',
+      title: '切换至 dev 分支？',
+      message: '将把整个项目工作区切换至 dev 分支。若 dev 不存在，将先创建再切换。仅本地操作，不 push。',
+      confirmText: '切换至 dev',
     });
     if (!ok) return;
     state.git.busy = true;
     gwInit.disabled = true;
-    if (gwStatus) gwStatus.textContent = '正在创建并切换到 dev 分支…';
+    if (gwStatus) gwStatus.textContent = '正在切换至 dev 分支…';
     try {
       await api('/api/git/init-dev', { method: 'POST' });
       state.git.busy = false;
       await refreshGitState();
       paintSettingsView(view); // 成功：状态区刷新，按钮转「已在 dev 分支」就绪态
-      toast('✓ 已就绪：当前分支 dev（开发在 dev 分支进行，到待测试自动提交）');
+      toast('✓ 已切换至 dev 分支');
     } catch (e) {
-      // 失败：保留当前状态与原因，按钮恢复可点（重试不重复创建已存在的分支）
+      // 失败：保留当前状态与真实原因，按钮恢复可点（重试不重建已有分支、不丢弃工作区修改）
       state.git.busy = false;
       paintSettingsView(view);
       const st2 = view.querySelector('#gwStatus');
-      if (st2) st2.textContent = `失败：${e.message}（可重试；已存在的分支不会重复创建）`;
+      if (st2) st2.textContent = `失败：${e.message}（可重试；不会丢弃工作区修改）`;
     }
   });
 }
