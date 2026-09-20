@@ -526,7 +526,21 @@ const EN = {
   '· 已确认，续跑中': '· confirmed; resuming',
   '（历史账本恢复）': '(recovered from the historical ledger)',
   '，测试通过': ', tests passed',
-  '已确认，正在继续当前条目分析（完成后才处理下一条）': 'Confirmed; continuing the current analysis (the next item starts after it completes)',
+  // BUG-20260920-003 分析确认续跑提示词（旧口径「已确认，正在继续当前条目分析…」随文案
+  // 更新移除——确认只是排队回传，不宣称自动继续；新口径见下方词条与 EN_DYNAMIC 拼接）
+  '已确认并加入续跑队列：正在自动复制续跑提示词，请按下方引导到 AI Agent 会话粘贴发送': 'Confirmed and queued for continuation: copying the continuation prompt automatically — follow the guide below to paste and send it in an AI Agent session',
+  '✓ 已确认并加入续跑队列。续跑提示词已复制，请到当前项目的 AI Agent 调度会话粘贴并发送，继续当前条目分析。': '✓ Confirmed and queued for continuation. The continuation prompt is copied — paste and send it in this project\'s AI Agent dispatch session to continue the current item\'s analysis.',
+  '已确认并加入续跑队列，但续跑提示词复制失败：请手动选中下方提示词复制，或点「重新复制」（不会重复确认、不回滚答案、不新建任务）': 'Confirmed and queued for continuation, but copying the continuation prompt failed: select the prompt below and copy it manually, or click "Recopy" (no duplicate confirmation, no answer rollback, no new task)',
+  '已确认并加入续跑队列，正在获取并自动复制续跑提示词…（仅本次确认自动复制一次；轮询 / 刷新不会覆盖剪贴板）': 'Confirmed and queued for continuation; fetching and copying the continuation prompt… (auto-copied only once per confirmation; polling / refresh never overwrites the clipboard)',
+  '已确认并加入续跑队列。续跑提示词需人工复制：重开面板不会自动复制。': 'Confirmed and queued for continuation. The continuation prompt must be copied manually: reopening this panel never auto-copies it.',
+  '「已进入续跑队列」不等于 Agent 已开始执行：提示词需人工到 AI Agent 会话粘贴发送后，续跑才继续。': '"Queued for continuation" does not mean the agent has started: the continuation proceeds only after you paste and send the prompt in an AI Agent session.',
+  '续跑提示词（当前分析任务，完整文本可选中手动复制）：': 'Continuation prompt (current analysis task; full text selectable for manual copy):',
+  '当前分析任务的提示词为空：不复制空文本、不显示复制成功。已确认与排队结果保留，可点「重新获取」。': 'The current analysis task has an empty prompt: no empty text is copied and no success is shown. The confirmation and queue placement are kept; click "Fetch again" to retry.',
+  '重新获取': 'Fetch again',
+  '复制续跑提示词': 'Copy the continuation prompt',
+  '复制当前分析任务的续跑提示词（不新建任务、不重复确认）：需人工到 AI Agent 会话粘贴发送': 'Copy the continuation prompt of the current analysis task (no new task, no duplicate confirmation): it must be pasted and sent in an AI Agent session manually',
+  '重试复制同一份续跑提示词：不会重复确认、不创建新任务、不丢失答案': 'Retry copying the same continuation prompt: no duplicate confirmation, no new task, no lost answers',
+  '重新获取当前分析任务提示词并尝试复制：不会重复确认、不新建任务': 'Fetch the current analysis task prompt again and try to copy it: no duplicate confirmation, no new task',
   '确认未通过，保持挂起': 'Confirmation rejected; still suspended',
   // BUG-20260915-003 挂起确认面板：统一口径计数 / 归属分组 / Git 错误块 / 确认范围
   '修改': 'Modified',
@@ -1125,6 +1139,9 @@ const EN_DYNAMIC = {
   '已提交：◇ 组（补交 ◇ 组）· 待人工：◇ 路径': 'Committed: $1 groups ($2 supplemented) · pending manual: $3 paths',
   '已确认恢复：补交 ◇ 组提交，核验通过，队列已恢复；条目验收仍走「确认完成」': 'Confirmed & resumed: $1 supplemental commit(s), verification passed, queue resumed; item acceptance still goes through "Confirm done"',
   '必答项未完成（缺 ◇）：完成作答后才能确认并继续': 'Required questions incomplete (missing $1): finish answering before confirm & continue',
+  // BUG-20260920-003 分析确认续跑提示词卡（元信息 / 获取失败动态拼接）
+  '条目 ◇ · 项目 ◇': 'Item $1 · project $2',
+  '续跑提示词获取失败：◇。已确认与排队结果保留（不会重复确认），可点「重新获取」。': 'Failed to fetch the continuation prompt: $1. The confirmation and queue placement are kept (no duplicate confirmation); click "Fetch again" to retry.',
   '测试输出（◇ 退出码 ◇）': 'Test output ($1, exit code $2)',
   // BUG-20260915-003 挂起确认面板：统一口径计数 / 归属分组 / 确认范围（动态拼接）
   '已提交：◇ 组（补交 ◇ 组）· ◇': 'Committed: $1 groups ($2 supplemented) · $3',
