@@ -107,14 +107,15 @@ t('B2 状态口径逐卡继承：merging 两键禁用；merged 未推送两键�
   assert.match(inner, /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 的 AI 完善可用（无 disabled）');
   assert.match(inner, /data-ver-merge="BLD-DRAFT" aria-label/, 'draft 的合并键可用');
   assert.match(inner, /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging 的 AI 完善禁用并提示');
-  assert.match(inner, /data-ver-merge="BLD-MERGING" disabled title="合并中，请勿重复触发"/, 'merging 的合并键禁用并提示');
+  assert.match(inner, /data-ver-merge="BLD-MERGING" aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 的合并键禁用并提示');
   // BUG-20260920-005：merged（已合并未推送）两类键放开（补关联后可重开合并 / AI 完善）
   assert.match(inner, /data-ver-answer="BLD-MERGED"[^>]*title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'merged 未推送的 AI 完善带可用 title');
   assert.match(inner, /data-ver-merge="BLD-MERGED" aria-label/, 'merged 未推送的合并键可用（增量重开合并）');
   assert.doesNotMatch(inner, /data-ver-merge="BLD-MERGED" disabled/, 'merged 未推送的合并不再禁用');
   // BUG-20260920-005：推送完成（正式发布）后两键禁用，title 说明已正式发布
+  // BUG-20260920-006：合并键禁用从 HTML disabled 改 aria-disabled（点击可捕获反馈），title 升为完整归因
   assert.match(inner, /data-ver-answer="BLD-PUSHED" disabled title="已正式发布，不允许再 AI 完善"/, '推送完成后的 AI 完善禁用且 title 说明');
-  assert.match(inner, /data-ver-merge="BLD-PUSHED" disabled title="已正式发布"/, '推送完成后的合并键禁用且 title 说明');
+  assert.match(inner, /data-ver-merge="BLD-PUSHED" aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '推送完成后的合并键禁用且 title 说明');
   assert.match(inner, /data-ver-merge="BLD-FAILED" aria-label="重试合并入 main BLD-FAILED"/, 'failed 的合并键 aria 口径');
   assert.match(inner, />重试合并入 main<\/button>/, 'failed 的合并键文案');
   // 回归：merging 详情提示保留
