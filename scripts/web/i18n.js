@@ -522,6 +522,15 @@ const EN = {
   '待选择（归属待确认）': 'Unresolved (ownership to confirm)',
   '计入本次补交': 'Include in this supplement',
   '排除（保持工作区）': 'Exclude (keep in worktree)',
+  // BUG-20260917-003 归属待确认批量条：全部计入 / 全部排除（显式选择的效率工具，
+  // 服务端 include 口径不变）；按钮 title 与组内提示一并同步双语。
+  '全部计入': 'Include all',
+  '全部排除': 'Exclude all',
+  '批量选择：': 'Batch choice:',
+  '归属待确认批量选择': 'Ownership-to-confirm batch choice',
+  '批量计入：把归属待确认的全部未入库路径显式选为「计入本次补交」，仍可逐项覆盖': 'Batch include: explicitly mark every uncommitted ownership-uncertain path as "include in this supplement"; per-row choices can still override',
+  '批量排除：把归属待确认的全部未入库路径显式选为「排除（保持工作区）」，仍可逐项覆盖': 'Batch exclude: explicitly mark every uncommitted ownership-uncertain path as "exclude (keep in worktree)"; per-row choices can still override',
+  '作用于归属待确认的未入库路径；批量后仍可逐项覆盖': 'Applies to uncommitted paths under ownership-to-confirm; per-row choices can still override after a batch action',
   '复制完整错误': 'Copy full error',
   '摘要可折叠，全文可展开 / 复制': 'Summary collapsible; full text expandable / copyable',
   '完整错误（点击展开 · 原始输出保留用于诊断）': 'Full error (click to expand · raw output kept for diagnosis)',

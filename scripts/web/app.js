@@ -3598,8 +3598,20 @@ function renderConfirmForm(d) {
       const ownTable = own.length ? `
         <div class="confirm-group-head">本单可归属（${own.length}）</div>
         <table class="confirm-files"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th></tr></thead><tbody>${own.map((f) => fileRow(f, false)).join('')}</tbody></table>` : '';
+      // BUG-20260917-003：归属待确认批量条——「全部计入 / 全部排除」是显式选择的效率工具：
+      // 一步把组内全部未入库行置为对应值（等价逐项选择），可反复使用、可再逐项覆盖；
+      // 已入库行不参与；busy / 已确认（resolved）态与行内下拉一致禁用。
+      const undetActive = undet.filter((f) => f.state !== '已入库');
+      const batchBar = undet.length ? `
+        <div class="confirm-batch-bar" role="group" aria-label="归属待确认批量选择">
+          <span class="confirm-batch-label">批量选择：</span>
+          <button type="button" class="btn small" data-confirm-batch="include"${resolved || busy || !undetActive.length ? ' disabled' : ''} title="批量计入：把归属待确认的全部未入库路径显式选为「计入本次补交」，仍可逐项覆盖" aria-label="批量计入：把归属待确认的全部未入库路径显式选为「计入本次补交」，仍可逐项覆盖">全部计入</button>
+          <button type="button" class="btn small" data-confirm-batch="exclude"${resolved || busy || !undetActive.length ? ' disabled' : ''} title="批量排除：把归属待确认的全部未入库路径显式选为「排除（保持工作区）」，仍可逐项覆盖" aria-label="批量排除：把归属待确认的全部未入库路径显式选为「排除（保持工作区）」，仍可逐项覆盖">全部排除</button>
+          <span class="confirm-batch-hint">作用于归属待确认的未入库路径；批量后仍可逐项覆盖</span>
+        </div>` : '';
       const undetTable = undet.length ? `
         <div class="confirm-group-head">归属待确认（${undet.length}）——全局 / 来源不明，不得静默归为本单</div>
+        ${batchBar}
         <table class="confirm-files"><thead><tr><th>文件</th><th>变更</th><th>状态</th><th>差异</th><th>归属处理</th></tr></thead><tbody>${undet.map((f) => fileRow(f, true)).join('')}</tbody></table>` : '';
       filesHtml = ownTable + undetTable;
     }
@@ -3735,6 +3747,25 @@ function bindConfirmFormActions(d) {
     sel.addEventListener('change', () => {
       if (sel.value) confirmSide.attr.set(sel.dataset.confirmAttr, sel.value);
       else confirmSide.attr.delete(sel.dataset.confirmAttr);
+      updateConfirmScopeSummary(d);
+    });
+  }
+  // BUG-20260917-003：归属待确认批量操作（全部计入 / 全部排除）——批量只是显式选择的
+  // 效率工具：把组内全部未入库行的归属一步置为对应值（等价逐项选择，仍走
+  // confirmSide.attr → 确认时 include 显式携带，服务端不静默并入）；已入库行不参与
+  // 批量与计数；批量后可逐项覆盖，批量可反复使用、相互覆盖（以最后一次操作为准）。
+  for (const btn of form.querySelectorAll('[data-confirm-batch]')) {
+    btn.addEventListener('click', () => {
+      if (btn.disabled || confirmSide.busy) return;
+      const val = btn.dataset.confirmBatch === 'include' ? 'include' : 'exclude';
+      for (const f of d.files || []) {
+        if ((f.group || 'own') === 'undetermined' && f.state !== '已入库') confirmSide.attr.set(f.path, val);
+      }
+      const committed = new Set((d.files || []).filter((f) => f.state === '已入库').map((f) => f.path));
+      for (const sel of form.querySelectorAll('[data-confirm-attr]')) {
+        if (committed.has(sel.dataset.confirmAttr)) continue; // 已入库行不参与批量
+        sel.value = val;
+      }
       updateConfirmScopeSummary(d);
     });
   }
