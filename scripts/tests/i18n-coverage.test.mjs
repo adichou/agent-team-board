@@ -17,9 +17,12 @@ assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
 const { EN, EN_DYNAMIC, ALLOWLIST } = I._dict;
 
 const appJs = fs.readFileSync(path.join(webRoot, 'app.js'), 'utf8');
+const diffViewJs = fs.readFileSync(path.join(webRoot, 'diff-view.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(webRoot, 'index.html'), 'utf8');
 const records = [
   ...makeScanner().run(appJs).map((r) => ({ ...r, file: 'app.js' })),
+  // REQ-20260916-006：差异语义渲染层 diff-view.js 同口径纳入覆盖卡点
+  ...makeScanner().run(diffViewJs).map((r) => ({ ...r, file: 'diff-view.js' })),
   ...scanHtml(indexHtml).map((r) => ({ ...r, file: 'index.html' })),
 ];
 const { texts, attrs } = extractFragments(records);

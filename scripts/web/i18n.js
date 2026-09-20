@@ -465,6 +465,11 @@ const EN = {
   '已入库': 'Committed',
   '未提交': 'Uncommitted',
   '查看差异': 'View diff',
+  // REQ-20260916-006 差异语义渲染（视图切换 / 新文件标注）
+  '统一': 'Unified',
+  '并排': 'Side-by-side',
+  '视图切换': 'View switcher',
+  '（新文件，未纳入版本控制）': '(new file, not tracked in Git)',
   '差异': 'Diff',
   '文件': 'File',
   '状态': 'Status',
@@ -1071,6 +1076,8 @@ const EN_DYNAMIC = {
   'Git 失败摘要：◇': 'Git failure summary: $1',
   '差异读取失败：◇（读取失败不冒充无差异）': 'Failed to load diff: $1 (a read failure is never presented as "no diff")',
   '◇（工作区 vs Git 基线）': '$1 (worktree vs Git baseline)',
+  // REQ-20260916-006 差异语义渲染：折叠段就地展开操作行（动态拼接）
+  '⋯ 展开 ◇ 行未变更上下文 ⋯': '⋯ Expand $1 unchanged lines ⋯',
   // BUG-20260915-004 挂起原因分层折叠入口（动态拼接）
   '完整原始输出（◇ 字符，不截断）': 'Full raw output ($1 chars, untruncated)',
   '确认被拦截：归属待确认项未处理（◇）——每个路径须显式选择「计入本次补交 / 排除」，全局文件不得静默整批归为本单': 'Confirmation blocked: unresolved ownership ($1) — each path needs an explicit "include/exclude" choice; global files are never silently batched into this item',
