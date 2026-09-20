@@ -2009,8 +2009,9 @@ const ATBBuild = (() => {
         <nav class="rel-tabs bld-detail-tabs" role="tablist" aria-label="发布五步流程">
           ${['plan', 'link', 'docs', 'merge', 'release'].map((k) => {
             const gate = steps?.find((s) => s.key === k) || null;
+            // 步骤只改变浏览位置；执行门禁由各步动作保留，避免文档加载后导航突然失效。
             const locked = !!gate?.locked;
-            return `<button type="button" class="rel-tab${state.step === k ? ' active' : ''}" data-step="${k}" role="tab" aria-selected="${state.step === k}"${locked && state.step !== k ? ` disabled title="${esc(gate.reason || '前置条件未满足')}"` : ''}>${STEP_LABEL[k]}</button>`;
+            return `<button type="button" class="rel-tab${state.step === k ? ' active' : ''}" data-step="${k}" role="tab" aria-selected="${state.step === k}"${locked ? ` title="${esc(gate.reason || '前置条件未满足')}"` : ''}>${STEP_LABEL[k]}</button>`;
           }).join('')}
         </nav>`;
   }
