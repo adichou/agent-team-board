@@ -144,7 +144,7 @@ const GROUPS=[
   {c:'commit log',d:'查该单全部提交（账本与 git 历史合并）',a:[{k:'ITEM-ID',r:1,p:'REQ-…'}],out:'abc1234 feat: … REQ-…（模拟）'},
   {c:'commit which',d:'从提交反查条目',a:[{k:'HASH或消息',r:1,p:'abc1234'}],out:'→ REQ-…（模拟）'}]},
  {g:'服务',items:[
-  {c:'serve',d:'后台启动看板服务 —— 看板正在运行，界面重复下发只会端口冲突；请在终端按需启动',dis:1}]},
+  {c:'serve',d:'后台启动看板服务 —— 界面本身由 serve 提供，能打开即已在运行：重复执行只是复用提示；版本过旧时还会杀掉正在响应本请求的服务进程；请在终端按需启动',dis:1}]},
  {g:'终端命令',items:[
   {c:'cli install',d:'安装终端命令（写 PATH，属本机终端操作）—— 请在终端执行',dis:1,o:'--to 目录'},
   {c:'cli uninstall',d:'卸载终端命令 —— 请在终端执行',dis:1,o:'--to 目录'},
