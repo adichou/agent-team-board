@@ -134,6 +134,8 @@ const EN = {
   '初始化 dev 分支': 'Initialize the dev branch',
   '项目不是 git 仓库：请先在终端完成 git 初始化（新项目可经 atb init 自动初始化）。': 'The project is not a git repository: initialize git in the terminal first (new projects are initialized automatically via atb init).',
   // REQ-20260916-007 设置页「数据布局迁移」分区（旧布局一键迁移到 data/ + runtime/）
+  // BUG-20260920-001：派发设置失败改局部显示——新增「派发设置」分区标题（错误区卡片）
+  '派发设置': 'Dispatch settings',
   '将在项目根 agent-team-board/ 创建数据目录：条目文档在 data/ 随代码进 git，运行数据在 runtime/ 本地留存不提交。': 'Creates the data directory at agent-team-board/ in the project root: item documents in data/ are committed with git; runtime data in runtime/ is kept locally and never committed.',
   '数据布局迁移': 'Data layout migration',
   '正在检测数据布局…': 'Detecting data layout…',
@@ -1325,7 +1327,8 @@ const EN_DYNAMIC = {
   '该模型支持：◇◇': 'This model supports: $1$2',
   '需求 / Bug / 文档命中 ◇ · 在需求查看': 'Requirements / bugs / docs hit $1 · view in Requirements',
   '解析失败：◇': 'Resolve failed: $1',
-  '设置加载失败：◇': 'Failed to load settings: $1',
+  // BUG-20260920-001：整页「设置加载失败」随整页替换逻辑移除，改局部「派发设置加载失败」
+  '派发设置加载失败：◇': 'Failed to load dispatch settings: $1',
   '项目被占用：◇（核对后自动继续）': 'Project busy: $1 (continues automatically after review)',
   '驳回待接受完成：成功 ◇ 条，失败 ◇ 条': 'Reject-to-pending done: $1 succeeded, $2 failed',
   '验证失败 · ◇◇': 'Verification failed · $1$2',
