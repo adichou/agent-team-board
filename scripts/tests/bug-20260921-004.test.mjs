@@ -65,10 +65,13 @@ t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表�
     DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' },
     DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' },
     DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
-    DOC_FILES: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].flatMap((key) => [
+    // REQ-20260921-010 起文档清单按语言集动态展开（原模块级 DOC_FILES 常量下线）
+    DEFAULT_DOC_LANGS: ['cn', 'en'],
+    langNameOf: (l) => String(l),
+    docFilesOf: (langs) => ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].flatMap((key) => [
       { key, lang: 'zh', file: `${key}.md` },
       { key, lang: 'en', file: `${key}.en.md` },
-    ]),
+    ]).slice(0, Array.isArray(langs) && langs.length ? langs.length * 4 : 8),
   };
   const context = vm.createContext(ctx);
   vm.runInContext([pick('summaryBtnText'), pick('commitBtnHtml'), pick('renderDocsPane'), pick('renderReviewModal')].join('\n'), context);

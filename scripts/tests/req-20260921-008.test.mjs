@@ -82,11 +82,11 @@ t('L1-2 evaluateDocsFlow 基础求值：无审核无总结 → 全未总结；su
 });
 
 t('L1-3 审核与回退：hash 一致 reviewed；内容修改回退 summarized；scopeStale 失效回退', () => {
-  const contents = { 'README.md': 'a', 'README.en.md': 'b' };
+  const contents = { 'README.md': 'a', 'README_en.md': 'b' };
   const review = { files: { 'README.md': { hash: sha256('a'), at: '2026-09-21T00:00:00Z' } } };
   let r = flow.evaluateDocsFlow({ review }, readsOf(contents), {});
   assert.equal(r.files.find((f) => f.file === 'README.md').state, 'reviewed');
-  assert.equal(r.files.find((f) => f.file === 'README.en.md').state, 'unsummarized');
+  assert.equal(r.files.find((f) => f.file === 'README_en.md').state, 'unsummarized');
   assert.equal(r.reviewedCount, 1);
 
   // 已审核文件被编辑（内部或外部 IDE）→ 回退已总结待审核
@@ -113,12 +113,12 @@ t('L1-5 提交门禁求值：canCommit 仅 8/8 reviewed；missing 列出缺口�
   const files = {};
   for (const f of flow.publishDocFiles()) files[f.file] = { hash: sha256(contents[f.file]), at: '2026-09-21T00:00:00Z' };
   // 先只审 6 个
-  const partial = { 'README.md': files['README.md'], 'README.en.md': files['README.en.md'], 'CHANGELOG.md': files['CHANGELOG.md'], 'CHANGELOG.en.md': files['CHANGELOG.en.md'], 'FEATURES.md': files['FEATURES.md'], 'FEATURES.en.md': files['FEATURES.en.md'] };
+  const partial = { 'README.md': files['README.md'], 'README_en.md': files['README_en.md'], 'CHANGELOG.md': files['CHANGELOG.md'], 'CHANGELOG_en.md': files['CHANGELOG_en.md'], 'FEATURES.md': files['FEATURES.md'], 'FEATURES_en.md': files['FEATURES_en.md'] };
   let r = flow.evaluateDocsFlow({ review: { files: partial } }, readsOf(contents), {});
   assert.equal(r.reviewedCount, 6);
   assert.equal(r.canCommit, false, '未满 8/8 不可提交');
   assert.equal(r.missing.length, 2);
-  assert.deepEqual(r.missing.map((m) => m.file).sort(), ['AGENTS.en.md', 'AGENTS.md']);
+  assert.deepEqual(r.missing.map((m) => m.file).sort(), ['AGENTS.md', 'AGENTS_en.md']);
   assert.ok(r.missing.every((m) => m.state === 'unsummarized'), '缺口带各自状态');
 
   r = flow.evaluateDocsFlow({ review: { files } }, readsOf(contents), {});
@@ -134,7 +134,7 @@ t('L1-6 AI 总结提示词：计划号/版本号/项目路径/八文档/逐文�
   });
   assert.ok(p.includes('BLD-20260921-001') && p.includes('20260921-001'), '计划号与版本号');
   assert.ok(p.includes('/tmp/proj-x'), '项目路径');
-  assert.ok(p.includes('README.en.md') && p.includes('AGENTS.md'), '八文档清单');
+  assert.ok(p.includes('README_en.md') && p.includes('AGENTS.md'), '八文档清单');
   assert.ok(p.includes('sum-20260921-010101-ab01'), '带 runId');
   assert.ok(p.includes('summary file') && p.includes('summary done') && p.includes('summary fail'), '逐文件进度回执 CLI 指令');
   assert.ok(p.includes('不得编造'), '写作约束保留');
@@ -342,9 +342,9 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
       fs.writeFileSync(path.join(proj, f.file), contents[f.file]);
     }
     contents['README.md'] = '# README\n[更新日志](CHANGELOG.md) [功能](FEATURES.md)\n';
-    contents['README.en.md'] = '# README\n[Changelog](CHANGELOG.en.md) [Features](FEATURES.en.md)\n';
+    contents['README_en.md'] = '# README\n[Changelog](CHANGELOG_en.md) [Features](FEATURES_en.md)\n';
     fs.writeFileSync(path.join(proj, 'README.md'), contents['README.md']);
-    fs.writeFileSync(path.join(proj, 'README.en.md'), contents['README.en.md']);
+    fs.writeFileSync(path.join(proj, 'README_en.md'), contents['README_en.md']);
     for (const f of flow.publishDocFiles()) {
       r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
       assert.equal(r.status, 200, `review ${f.file}：${r.text}`);
@@ -415,10 +415,10 @@ const FLOW_STUB = {
   DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' },
   DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' },
   DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
-  DOC_FILES: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].flatMap((key) => [
-    { key, lang: 'zh', file: `${key}.md` },
-    { key, lang: 'en', file: `${key}.en.md` },
-  ]),
+  // REQ-20260921-010 起文档清单按语言集动态展开（原模块级 DOC_FILES 常量下线）
+  DEFAULT_DOC_LANGS: ['cn', 'en'],
+  langNameOf: (l) => String(l),
+  docFilesOf: (langs) => flow.publishDocFiles(Array.isArray(langs) && langs.length ? langs : flow.DEFAULT_DOC_LANGS),
 };
 
 t('L4-1 renderDocsPane：副标题 + 四按钮 + 八文件行四态 chip + 门禁条', () => {
@@ -436,10 +436,10 @@ t('L4-1 renderDocsPane：副标题 + 四按钮 + 八文件行四态 chip + 门�
       phase: 'ready',
       plan: {
         docsFlow: { files: [
-          { file: 'README.md', state: 'summarized' }, { file: 'README.en.md', state: 'unsummarized' },
-          { file: 'CHANGELOG.md', state: 'summarizing' }, { file: 'CHANGELOG.en.md', state: 'reviewed' },
-          { file: 'FEATURES.md', state: 'unsummarized' }, { file: 'FEATURES.en.md', state: 'reviewed' },
-          { file: 'AGENTS.md', state: 'unsummarized' }, { file: 'AGENTS.en.md', state: 'unsummarized' },
+          { file: 'README.md', state: 'summarized' }, { file: 'README_en.md', state: 'unsummarized' },
+          { file: 'CHANGELOG.md', state: 'summarizing' }, { file: 'CHANGELOG_en.md', state: 'reviewed' },
+          { file: 'FEATURES.md', state: 'unsummarized' }, { file: 'FEATURES_en.md', state: 'reviewed' },
+          { file: 'AGENTS.md', state: 'unsummarized' }, { file: 'AGENTS_en.md', state: 'unsummarized' },
         ], reviewedCount: 2, canCommit: false, missing: [{ file: 'README.md', state: 'summarized' }] },
         summary: { phase: 'running', counts: { summarized: 2, total: 8 }, currentFile: 'CHANGELOG.md' },
         docs: { overall: 'none' },
@@ -452,7 +452,7 @@ t('L4-1 renderDocsPane：副标题 + 四按钮 + 八文件行四态 chip + 门�
     assert.ok(html.includes(btn), `四按钮之一 ${btn} 存在`);
   }
   // 八文件行 + 四态 chip（文字 + 图标，不只靠颜色）
-  for (const f of ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md']) {
+  for (const f of ['README.md', 'README_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'AGENTS.md', 'AGENTS_en.md']) {
     assert.ok(html.includes(f), `文件行 ${f}`);
   }
   for (const label of ['未总结', '正在总结', '已总结待审核', '已审核']) {
@@ -494,18 +494,18 @@ t('L4-3 审查对话框：四类型页签 × 中英双栏 / 编辑预览 / 保�
   }, `renderReviewModal({
     id: 'BLD-20260921-001',
     pf: {
-      review: { open: true, key: 'README', modes: { 'README.md': 'preview', 'README.en.md': 'edit' },
-        contents: { 'README.md': '# 中', 'README.en.md': '# EN' } },
+      review: { open: true, key: 'README', modes: { 'README.md': 'preview', 'README_en.md': 'edit' },
+        contents: { 'README.md': '# 中', 'README_en.md': '# EN' } },
       plan: { docsFlow: { files: [
-        { file: 'README.md', state: 'reviewed' }, { file: 'README.en.md', state: 'unsummarized' },
-        { file: 'CHANGELOG.md', state: 'unsummarized' }, { file: 'CHANGELOG.en.md', state: 'unsummarized' },
-        { file: 'FEATURES.md', state: 'unsummarized' }, { file: 'FEATURES.en.md', state: 'unsummarized' },
-        { file: 'AGENTS.md', state: 'unsummarized' }, { file: 'AGENTS.en.md', state: 'unsummarized' },
+        { key: 'README', lang: 'cn', file: 'README.md', state: 'reviewed' }, { key: 'README', lang: 'en', file: 'README_en.md', state: 'unsummarized' },
+        { key: 'CHANGELOG', lang: 'cn', file: 'CHANGELOG.md', state: 'unsummarized' }, { key: 'CHANGELOG', lang: 'en', file: 'CHANGELOG_en.md', state: 'unsummarized' },
+        { key: 'FEATURES', lang: 'cn', file: 'FEATURES.md', state: 'unsummarized' }, { key: 'FEATURES', lang: 'en', file: 'FEATURES_en.md', state: 'unsummarized' },
+        { key: 'AGENTS', lang: 'cn', file: 'AGENTS.md', state: 'unsummarized' }, { key: 'AGENTS', lang: 'en', file: 'AGENTS_en.md', state: 'unsummarized' },
       ], reviewedCount: 1 } } } })`);
   for (const k of ['README', 'CHANGELOG', 'FEATURES', 'AGENTS']) {
     assert.ok(html.includes(`data-review-tab="${k}"`), `类型页签 ${k}`);
   }
-  assert.ok(html.includes('README.md') && html.includes('README.en.md'), '页签内中英双栏');
+  assert.ok(html.includes('README.md') && html.includes('README_en.md'), '页签内中英双栏');
   assert.ok(html.includes('data-review-mode') && html.includes('data-mode="edit"') && html.includes('data-mode="preview"'), '编辑/预览切换');
   assert.ok(html.includes('data-review-save'), '保存按钮');
   assert.ok(html.includes('data-review-approve'), '通过审核按钮');

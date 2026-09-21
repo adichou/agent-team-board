@@ -60,20 +60,20 @@ t('L1-1 版本号提取：取计划编号后两段、保留前导零；非法输
   assert.equal(flow.versionNumberOf(null), null);
 });
 
-t('L1-2 发布文档清单：四类 × 双语共八个文件，命名与需求一致', () => {
+t('L1-2 发布文档清单：四类 × 双语共八个文件，命名与需求一致（REQ-20260921-010 起默认语言集 cn,en、下划线命名）', () => {
   const files = flow.publishDocFiles();
   assert.equal(files.length, 8);
   assert.deepEqual(
     files.map((f) => f.file).sort(),
-    ['AGENTS.en.md', 'AGENTS.md', 'CHANGELOG.en.md', 'CHANGELOG.md', 'FEATURES.en.md', 'FEATURES.md', 'README.en.md', 'README.md'].sort(),
+    ['AGENTS.md', 'AGENTS_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'README.md', 'README_en.md'].sort(),
   );
-  for (const f of files) assert.ok(['zh', 'en'].includes(f.lang) && f.key, '每条含 key/lang');
-  assert.equal(flow.docFileOf('CHANGELOG', 'en'), 'CHANGELOG.en.md');
+  for (const f of files) assert.ok(['cn', 'en'].includes(f.lang) && f.key, '每条含 key/lang');
+  assert.equal(flow.docFileOf('CHANGELOG', 'en'), 'CHANGELOG_en.md');
 });
 
 t('L1-3 README 互链口径：按语言链接 CHANGELOG 与 FEATURES，其余文档无链接要求', () => {
   assert.deepEqual(flow.readmeDocLinks('README.md'), ['CHANGELOG.md', 'FEATURES.md']);
-  assert.deepEqual(flow.readmeDocLinks('README.en.md'), ['CHANGELOG.en.md', 'FEATURES.en.md']);
+  assert.deepEqual(flow.readmeDocLinks('README_en.md'), ['CHANGELOG_en.md', 'FEATURES_en.md']);
   assert.deepEqual(flow.readmeDocLinks('AGENTS.md'), []);
 });
 
@@ -150,8 +150,8 @@ t('L1-9 文档状态机：未提交 / 已提交 / 外部修改未提交 / 范围
   const none = flow.evaluateDocsState(v, () => null);
   assert.equal(none.overall, 'none', '无记录且未编写 → 整体未开始');
   const disk = {
-    'README.md': 'r1', 'README.en.md': 'r2', 'CHANGELOG.md': 'c1', 'CHANGELOG.en.md': 'c2',
-    'FEATURES.md': 'f1', 'FEATURES.en.md': 'f2', 'AGENTS.md': 'a1', 'AGENTS.en.md': 'a2',
+    'README.md': 'r1', 'README_en.md': 'r2', 'CHANGELOG.md': 'c1', 'CHANGELOG_en.md': 'c2',
+    'FEATURES.md': 'f1', 'FEATURES_en.md': 'f2', 'AGENTS.md': 'a1', 'AGENTS_en.md': 'a2',
   };
   const files8 = {};
   for (const [f, c] of Object.entries(disk)) files8[f] = sha(c);
@@ -452,7 +452,7 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     const contents = {};
     for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.key} ${f.lang}\n`;
     contents['README.md'] = '# README\n[更新日志](CHANGELOG.md) [功能](FEATURES.md)\n';
-    contents['README.en.md'] = '# README\n[Changelog](CHANGELOG.en.md) [Features](FEATURES.en.md)\n';
+    contents['README_en.md'] = '# README\n[Changelog](CHANGELOG_en.md) [Features](FEATURES_en.md)\n';
     for (const [file, content] of Object.entries(contents)) {
       r = await req(port, 'POST', `/api/build/docs/save${P}`, { id: vid, file, content });
       assert.equal(r.status, 200, `保存 ${file}：${r.text}`);
@@ -583,7 +583,7 @@ t('L5-1 导航与模块命名：顶栏「构建」改为「发布」；五步流
   for (const s of ['AI 总结', 'data-pf-refresh', 'data-pf-summary', 'data-pf-review', 'data-pf-commit', '官网 AI 写作', '立即检测']) {
     assert.ok(buildJs.includes(s), `文档/发布页关键入口：${s}`);
   }
-  assert.ok(buildJs.includes('DOC_FILES'), '前端消费八文档清单');
+  assert.ok(buildJs.includes('docFilesOf'), '前端按语言集展开文档清单（REQ-20260921-010 起 DOC_FILES 常量下线）');
 });
 
 t('L5-2 i18n 同步：发布流程新增文案中英文同步', () => {
