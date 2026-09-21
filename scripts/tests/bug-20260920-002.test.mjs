@@ -287,7 +287,10 @@ t('G1 双支身份：treeData 把 heads 命中行标为分支（main/dev 分支�
   // 稳定性：搜索 / 翻页子集同 hash 同身份（refs 由 heads 数据决定，不跳变）
   const d2 = ATB.treeData([commits[0], commits[2]], { heads, branchName: 'main' });
   assert.deepEqual([...d2[0].refs], ['dev'], '子集中 dev 头仍 dev 分支名');
-  assert.deepEqual([...d2[1].refs], [], '子集中汇聚点仍无分支名');
+  // BUG-20260921-007：子集中 main 头不在集合 → main 侧最新行（汇聚点）锚定 main 分支名
+  // （side 身份不变：仍是 main 侧 / 主分支蓝，翻页 / 搜索不跳变——原「无分支名」即第 2 页起
+  // dev 泳道变蓝的同源根因）
+  assert.deepEqual([...d2[1].refs], ['main'], '子集中 main 侧最新行锚定 main（side 身份稳定）');
 });
 
 t('G2 单支零回归：无 heads 时不编造分支名（仅选中分支名挂最新行）；数据行不带双支 refs', () => {
