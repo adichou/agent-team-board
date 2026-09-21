@@ -77,16 +77,18 @@ t('L1-3 README 互链口径：按语言链接 CHANGELOG 与 FEATURES，其余文
   assert.deepEqual(flow.readmeDocLinks('AGENTS.md'), []);
 });
 
-t('L1-4 AI 写作提示词：技术写作角色 + 子代理流程 + 项目路径/计划号/版本号/关联范围/八文档清单/写作约束', () => {
-  const p = flow.buildDocWritingPrompt({
+t('L1-4 AI 总结提示词（REQ-20260921-008 更名自 AI 写作）：技术写作角色 + 子代理流程 + 项目路径/计划号/版本号/关联范围/八文档清单/逐文件进度回执/写作约束', () => {
+  const p = flow.buildDocSummaryPrompt({
     projectRoot: '/tmp/projX',
     planId: 'BLD-20260920-001',
+    runId: 'sum-20260921-010101-ab01',
     items: [{ itemId: 'REQ-20260920-009', commit: 'a'.repeat(40), title: '示例' }],
   });
   for (const s of ['/tmp/projX', 'BLD-20260920-001', '20260920-001', 'REQ-20260920-009', '技术写作', '子代理', '不得编造']) {
     assert.ok(p.includes(s), `提示词应含 ${s}`);
   }
   for (const f of flow.publishDocFiles().map((x) => x.file)) assert.ok(p.includes(f), `提示词应列 ${f}`);
+  assert.ok(p.includes('summarizing') && p.includes('summarized'), 'REQ-20260921-008：逐文件进度回执指令');
 });
 
 t('L1-5 官网 AI 写作提示词：在官网仓库执行、读已发布 CHANGELOG/FEATURES 双语、提交消息含完整计划号', () => {
@@ -429,12 +431,16 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     const vid = r.json.version.id;
     const planId = vid;
 
-    // publish-plan：版本号 + 五步 + 提示词
+    // publish-plan：版本号 + 五步 + 文档四态与 AI 总结字段（REQ-20260921-008：docsPrompt 移除，
+    // 提示词改由 docs-summary/start 按需生成）
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.status, 200, `publish-plan：${r.text}`);
     assert.equal(r.json.versionNumber, vid.replace(/^BLD-/, ''), '版本号 = 计划编号后两段');
     assert.deepEqual(r.json.steps.map((s) => s.key), ['plan', 'link', 'docs', 'merge', 'release']);
-    assert.ok(r.json.docsPrompt.includes(planId) && r.json.docsPrompt.includes(proj), 'AI 写作提示词带计划号与项目路径');
+    assert.equal(r.json.docsFlow.files.length, 8, 'docsFlow 八文件四态');
+    assert.ok(r.json.docsFlow.files.every((f) => f.state === 'unsummarized'), '全新版本全未总结');
+    assert.ok(r.json.summary === null || r.json.summary.phase, 'AI 总结 run 字段存在');
+    assert.equal(r.json.docsPrompt, undefined, '提示词不在总览（start 按需生成）');
     assert.ok(r.json.mergeAnalysis.perItem.length === 1, '合并分析含所选条目');
 
     // 未完成文档 → 合并被门禁拦截
@@ -461,6 +467,19 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     // 工作区留无关脏文件：文档提交不得夹带
     fs.writeFileSync(path.join(proj, 'unrelated-draft.txt'), '业务草稿');
 
+    // REQ-20260921-008 提交门禁：八文件未全部通过审查 → 400 带缺口
+    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
+    assert.equal(r.status, 400, '未全审核不可提交');
+    assert.match(r.json.error || '', /已审核/);
+
+    // 逐文件通过审查（人工审查对话框「通过审核」路径）
+    for (const f of flow.publishDocFiles()) {
+      r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
+      assert.equal(r.status, 200, `审核 ${f.file}：${r.text}`);
+    }
+    r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
+    assert.equal(r.json.docsFlow.canCommit, true, '8/8 已审核');
+
     // 无变化不空提交：先对未变更文件集合提交（此刻 8 文件均为新文件，有变化）
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `文档提交：${r.text}`);
@@ -474,12 +493,17 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.status, 200);
     assert.equal(r.json.noop, true, '无变化不制造空提交');
 
-    // 外部修改文档 → 未提交，合并再次被拦
+    // 外部修改文档 → 已审核回退待审核，合并再次被拦；重新审核后提交放行
     fs.writeFileSync(path.join(proj, 'FEATURES.md'), '# FEATURES 改动\n');
+    r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
+    assert.equal(r.json.docsFlow.files.find((f) => f.file === 'FEATURES.md').state, 'summarized', '编辑后回退待审核');
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
     assert.equal(r.status, 409);
     assert.match(r.json.error || '', /未提交/);
-    // 重新提交后放行
+    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
+    assert.equal(r.status, 400, '回退待审核后提交被门禁拦截');
+    r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'FEATURES.md' });
+    assert.equal(r.status, 200, `重新审核 FEATURES.md：${r.text}`);
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.ok(r.json.commitHash, '重新提交成功');
 
@@ -554,18 +578,22 @@ t('L5-1 导航与模块命名：顶栏「构建」改为「发布」；五步流
   assert.ok(buildJs.includes('data-step='), '五步导航 data-step 结构存在');
   for (const k of ['plan', 'link', 'docs', 'merge', 'release']) assert.ok(buildJs.includes(`'${k}'`), `五步导航含 ${k}`);
   assert.ok(buildJs.includes('发布流程') || buildJs.includes('五步'), '发布流程语义存在');
-  for (const s of ['AI 写作', 'TRAE CN', 'TRAE', '提交文档到 Git', '官网 AI 写作', '立即检测']) {
+  // REQ-20260921-008：文档编写页重构为「总结 → 审查 → 提交」——AI 写作 / TRAE / 提交文档到 Git
+  // 随旧布局移除，改为 AI 总结 / 刷新 / 审查 / 提交四按钮 + 审查对话框；官网侧入口保留
+  for (const s of ['AI 总结', 'data-pf-refresh', 'data-pf-summary', 'data-pf-review', 'data-pf-commit', '官网 AI 写作', '立即检测']) {
     assert.ok(buildJs.includes(s), `文档/发布页关键入口：${s}`);
   }
-  assert.ok(buildJs.includes('publishDoc') || buildJs.includes('docsPrompt'), '前端消费文档清单/提示词');
+  assert.ok(buildJs.includes('DOC_FILES'), '前端消费八文档清单');
 });
 
 t('L5-2 i18n 同步：发布流程新增文案中英文同步', () => {
   const I = globalThis.ATBI18N;
   const { EN } = I._dict;
-  for (const zh of ['发布', 'AI 写作', '提交文档到 Git', '官网 AI 写作', '立即检测', '正式发布', '文档编写', '关联条目与提交']) {
+  // REQ-20260921-008：「AI 写作」「提交文档到 Git」随更名 / 布局重构清理；AI 总结词条接替
+  for (const zh of ['发布', 'AI 总结', '官网 AI 写作', '立即检测', '正式发布', '文档编写', '关联条目与提交']) {
     assert.ok(zh in EN, `词典应含「${zh}」`);
   }
+  assert.ok(!('AI 写作' in EN) && !('提交文档到 Git' in EN), '旧键已随界面更名清理');
 });
 
 /* ---------- 执行 ---------- */

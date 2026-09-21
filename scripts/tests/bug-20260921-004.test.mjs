@@ -9,7 +9,8 @@
 // 并对类型下拉声明 data-i18n-skip——文件名是标识不是文案，不进翻译管线。
 // 本文件回归：
 // B1 词典层：四个带 .md 文件名在 zh 反复重翻下不变形（反向词典不得命中标识）；
-// B2 渲染层：renderDocsPane 类型下拉 option 文本带 .md、value 保持裸键、select 声明 data-i18n-skip；
+// B2 渲染层（REQ-20260921-008 起口径）：文档编写页八文件列表与审查对话框的文件名标识一律
+//     data-i18n-skip 豁免（原类型下拉随旧编辑区移除，豁免口径迁移到文件名展示处）；
 // B3 根因锁定与豁免：未豁免时 zh 反向翻译确会把 README 译成「说明」；声明 data-i18n-skip
 //     的子树 translateTree 不改写其中文本；
 // B4 词条回归：条目详情抽屉「说明」页签词条与中英往返不受修复影响。
@@ -48,41 +49,58 @@ t('B1 词典层：四个 .md 文件名 zh 反复重翻不变形（反向词典�
   I.setLang('zh');
 });
 
-t('B2 渲染层：renderDocsPane 类型下拉显示完整文件名、value 保持裸键、声明翻译豁免', () => {
+t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表行 + 审查对话框双栏）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const fn = source.match(/  function renderDocsPane\(v\) \{[\s\S]*?\n  \}/);
-  assert.ok(fn, 'build.js 中应存在 renderDocsPane 函数');
-  const context = vm.createContext({
+  const pick = (name) => {
+    const m = source.match(new RegExp(`  function ${name}\\(([a-zA-Z]*)\\) \\{[\\s\\S]*?\\n  \\}`));
+    assert.ok(m, `build.js 中应存在 ${name} 函数`);
+    return m[0];
+  };
+  const ctx = {
     pfOf: (v) => v.pf,
     esc: (s) => String(s),
-    DOC_STATE_LABEL: { draft: '草稿', committed: '已提交' },
-    DOC_STATE_CLS: { draft: 'st-warn', committed: 'st-ok' },
-  });
-  context.version = {
+    short: (h) => String(h || '').slice(0, 8),
+    fmtTime: () => 't',
+    DOCS_FLOW_LABEL: { unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核' },
+    DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' },
+    DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' },
+    DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+    DOC_FILES: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].flatMap((key) => [
+      { key, lang: 'zh', file: `${key}.md` },
+      { key, lang: 'en', file: `${key}.en.md` },
+    ]),
+  };
+  const context = vm.createContext(ctx);
+  vm.runInContext([pick('summaryBtnText'), pick('commitBtnHtml'), pick('renderDocsPane'), pick('renderReviewModal')].join('\n'), context);
+  const html = vm.runInContext(`renderDocsPane({
+    id: 'V',
     pf: {
       phase: 'ready',
       plan: {
-        docs: { files: [{ file: 'README.md', state: 'draft' }], overall: 'none', reasons: ['文档未完成提交'] },
-        docsPrompt: '写文档提示词',
+        docsFlow: { files: [
+          { file: 'README.md', lang: 'zh', state: 'unsummarized' },
+          { file: 'README.en.md', lang: 'en', state: 'unsummarized' },
+        ], reviewedCount: 0, canCommit: false, missing: [{ file: 'README.md', state: 'unsummarized' }] },
+        docs: { overall: 'none' },
       },
-      file: 'README.md',
-      mode: 'preview',
-      content: '# Hello',
     },
-  };
-  vm.runInContext(fn[0], context);
-  const html = vm.runInContext('renderDocsPane(version)', context);
-  // 类型下拉（.bld-doc-key）声明 data-i18n-skip：文件名是标识不是文案，不进翻译管线
-  assert.match(html, /<select class="bld-doc-key" data-i18n-skip>/, '类型下拉应声明 data-i18n-skip');
-  const options = [...html.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)<\/option>/g)]
-    .filter((m) => ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].includes(m[1]));
-  assert.equal(options.length, 4, `类型下拉应有四个文档选项（实际 ${options.length} 个）`);
-  const want = { README: 'README.md', CHANGELOG: 'CHANGELOG.md', FEATURES: 'FEATURES.md', AGENTS: 'AGENTS.md' };
-  for (const [, value, attrs, label] of options) {
-    assert.equal(label, want[value], `「${value}」选项文本应显示完整文件名 ${want[value]}（实际：${label || '（空）'}）`);
-  }
-  const readme = options.find((m) => m[1] === 'README');
-  assert.match(readme[2], /\sselected/, '当前 README.md 文档应保持选中');
+  }) + renderReviewModal({
+    id: 'V',
+    pf: {
+      review: { open: true, key: 'README', modes: { 'README.md': 'preview', 'README.en.md': 'preview' },
+        contents: { 'README.md': '# zh', 'README.en.md': '# en' } },
+      plan: { docsFlow: { files: [
+        { file: 'README.md', lang: 'zh', state: 'unsummarized' },
+        { file: 'README.en.md', lang: 'en', state: 'unsummarized' },
+      ], reviewedCount: 0 } },
+    },
+  })`, context);
+  // 文件名标识（列表行 fname / 审查对话框栏头）声明 data-i18n-skip：文件名是标识不是文案
+  const names = [...html.matchAll(/<span class="bld-doc-fname" data-i18n-skip>([^<]+)</g)].map((m) => m[1]);
+  assert.ok(names.some((n) => n.startsWith('README.md')), '文件列表行文件名带豁免');
+  assert.ok(names.some((n) => n.startsWith('README.en.md')), '审查对话框双栏文件名带豁免');
+  // 未豁免的裸键形态不得再出现（旧类型下拉已移除）
+  assert.doesNotMatch(html, /<select class="bld-doc-key"/, '旧类型下拉随编辑区移除');
 });
 
 t('B3 根因锁定与豁免：未豁免时 zh 反向翻译确会把 README 译成「说明」；豁免子树不改写', () => {

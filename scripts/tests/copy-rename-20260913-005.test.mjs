@@ -63,7 +63,7 @@ t('W1b app.js 用户可见文案：页签/筛选档/徽标/弹窗/toast/空态/�
     ['完善中，待本轮批量完善结束后再驳回', '完善中，待本轮 AI 分析结束后再驳回'],
     ["{ key: 'develop', label: '批量开发' }", "{ key: 'develop', label: 'AI 开发' }"],
     ["{ key: 'refine', label: '批量完善' }", "{ key: 'refine', label: 'AI 分析' }"],
-    ['GLOBAL_KIND_LABEL = { develop: \'批量开发\', refine: \'批量完善\' }', 'GLOBAL_KIND_LABEL = { develop: \'AI 开发\', refine: \'AI 分析\' }'],
+    ['GLOBAL_KIND_LABEL = { develop: \'批量开发\', refine: \'批量完善\' }', "GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结' }"],
     ['可启动新的批量开发 / 批量完善任务', '可启动新的 AI 开发 / AI 分析任务'],
     ['data-bmode="refine">批量完善<', 'data-bmode="refine">AI 分析<'],
     ['data-bmode="develop">批量开发<', 'data-bmode="develop">AI 开发<'],
@@ -115,7 +115,7 @@ t('W3 i18n 中英成对更新：19 个新键存在且值非空；中英两侧均
     "'文档已由 AI 分析补全；点击查看 AI 分析面板'",
     "'决策已齐备：条目回已计划队列，可被 AI 开发重新取单'",
     "'已复工 ◇：回到已计划队列，可被 AI 开发重新取单'",
-    "'到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析任务；新任务登记运行后会自动出现在这里。'",
+    "'到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析任务（AI 总结到发布模块「文档编写」页启动）；新任务登记运行后会自动出现在这里。'",
     "'AI 分析：对已接受条目批量补全文档",
   ];
   for (const p of pairs) assert.ok(i18n.includes(p), `i18n.js 应含新键：${p}`);
