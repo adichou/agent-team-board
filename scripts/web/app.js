@@ -2956,6 +2956,8 @@ function renderHolds() {
   const showStatus = state.view === 'status';
   const b = state.board;
   if (!showStatus || !b?.initialized || state.holds.error) {
+    // 清空或替换卡片后，使相同数据的下一轮渲染重新生效。
+    delete area.dataset.rendered;
     if (state.holds.error && showStatus && b?.initialized) {
       area.classList.remove('hidden');
       area.innerHTML = `<div class="hold-error" role="alert">
@@ -2971,6 +2973,7 @@ function renderHolds() {
   }
   const items = state.holds.data?.items || [];
   if (!items.length) {
+    delete area.dataset.rendered;
     area.classList.add('hidden');
     area.replaceChildren();
     return;
@@ -3363,6 +3366,8 @@ function renderConfirmArea() {
   if (!area) return;
   const items = (state.confirms.data?.items || []).filter((c) => c.state === 'waiting' || c.state === 'confirmed');
   if (state.confirms.error && !state.confirms.data) {
+    // 错误条不代表卡片已渲染，恢复后不能复用旧签名剪枝。
+    delete area.dataset.rendered;
     area.classList.remove('hidden');
     area.innerHTML = `<div class="hold-error" role="alert">
       <span>挂起确认清单加载失败：${esc(state.confirms.error)}</span>
@@ -3372,6 +3377,7 @@ function renderConfirmArea() {
     return;
   }
   if (!items.length) {
+    delete area.dataset.rendered;
     area.classList.add('hidden');
     area.replaceChildren();
     return;
