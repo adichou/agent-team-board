@@ -2567,18 +2567,21 @@ const ATBBuild = (() => {
   function renderDocsPane(v) {
     const pf = pfOf(v);
     if (!pf) return '<div class="bld-docs-pane"><p class="muted" role="status">正在加载发布流程数据…</p></div>';
-    // 语言集（加载 / 失败态按缺省口径展示输入框；值 = 输入中草稿优先，回显上次有效语言集）
+    // 语言集（加载 / 失败态按缺省口径展示输入框；值 = 输入中草稿优先，回显上次有效语言集）。
+    // BUG-20260921-012：不再独占副标题条下方一行，移入标题行右侧与标题同行对齐；
+    // 辅助说明与行内错误换行右对齐到输入框下方（选择器 / 禁用口径 / 反馈均不变）。
     const langs = pf?.plan?.langs || DEFAULT_DOC_LANGS;
     const langsValue = pf.langsInput != null ? pf.langsInput : langs.join(',');
     const langsField = `
-        <div class="bld-docs-langset">
-          <label class="field-inline" for="bldDocLangs">语言集</label>
-          <input id="bldDocLangs" data-pf-langs type="text" value="${esc(langsValue)}" autocomplete="off" spellcheck="false"${pf.langsBusy ? ' disabled' : ''}${pf.phase === 'ready' ? '' : ' disabled'} title="逗号分隔的语言缩写（2–3 个字母，国际规范）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用">
-          <span class="muted small">第一个为默认语言（不带后缀），其余为 KEY_lang.md；回车 / 失焦应用</span>
-          ${pf.langsBusy ? '<span class="muted small" role="status">保存中…</span>' : ''}
-        </div>
-        ${pf.langsErr ? `<p class="rel-form-err small bld-docs-langset-err" role="alert">${esc(pf.langsErr)}</p>` : ''}`;
-    // 副标题 + 六按钮恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）
+            <div class="bld-docs-langset">
+              <label class="field-inline" for="bldDocLangs">语言集</label>
+              <input id="bldDocLangs" data-pf-langs type="text" value="${esc(langsValue)}" autocomplete="off" spellcheck="false"${pf.langsBusy ? ' disabled' : ''}${pf.phase === 'ready' ? '' : ' disabled'} title="逗号分隔的语言缩写（2–3 个字母，国际规范）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用">
+              ${pf.langsBusy ? '<span class="muted small" role="status">保存中…</span>' : ''}
+              <span class="muted small bld-docs-langset-hint">第一个为默认语言（不带后缀），其余为 KEY_lang.md；回车 / 失焦应用</span>
+              ${pf.langsErr ? `<p class="rel-form-err small bld-docs-langset-err" role="alert">${esc(pf.langsErr)}</p>` : ''}
+            </div>`;
+    // 副标题 + 六按钮恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。
+    // BUG-20260921-012：纵向布局——标题行（左标题 + 右语言集同行对齐）→ 说明 → 按钮行。
     const actionsHtml = `
           <div class="bld-docs-actions">
             <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
@@ -2591,12 +2594,14 @@ const ATBBuild = (() => {
     const subBar = `
         <div class="bld-docs-sub">
           <div class="bld-docs-subtitle">
-            <strong>文档编写 · 三阶段</strong>
+            <div class="bld-docs-titlebar">
+              <strong>文档编写 · 三阶段</strong>
+${langsField}
+            </div>
             <p class="muted small">先总结审查默认语言四文档，审核完毕后 AI 翻译生成剩余语言文档，逐语言审查，最后整体审查完结后方可提交。</p>
           </div>
           ${actionsHtml}
-        </div>
-        ${langsField}`;
+        </div>`;
     if (pf.phase === 'loading') return `<div class="bld-docs-pane">${subBar}<p class="muted" role="status">正在加载发布流程数据…</p></div>`;
     if (pf.phase === 'error' || !pf.plan) {
       return `<div class="bld-docs-pane">${subBar}

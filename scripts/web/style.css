@@ -3674,22 +3674,25 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 }
 
 /* ---------- REQ-20260921-008 文档编写页重构：副标题 + 四按钮 / 文件四态列表 / 审查对话框 ---------- */
-/* REQ-20260921-010：语言集输入行（副标题条下方）+ 行内错误 */
+/* REQ-20260921-010 语言集输入框；BUG-20260921-012 移入标题行右侧与标题同行对齐：
+   标签 + 输入框 + 保存中一行，辅助说明 / 行内错误换行右对齐到输入框下方 */
 .bld-docs-langset {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 12px 2px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px 8px; flex-wrap: wrap;
 }
 .bld-docs-langset input {
   width: 190px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--panel); color: var(--text); font: inherit;
 }
-.bld-docs-langset-err { padding: 0 12px; margin: 2px 0 0; }
-/* 副标题条：左目标说明、右四按钮（提交按门禁禁用）；窄屏按钮换行 */
+.bld-docs-langset-hint { flex-basis: 100%; text-align: right; }
+.bld-docs-langset-err { flex-basis: 100%; text-align: right; margin: 0; }
+/* 副标题条（BUG-20260921-012 纵向布局）：标题行（左标题 + 右语言集同行对齐）→ 说明 → 按钮行；窄屏换行 */
 .bld-docs-sub {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
   border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
 }
-.bld-docs-subtitle strong { display: block; font-size: 13.5px; }
+.bld-docs-subtitle { min-width: 0; }
+.bld-docs-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bld-docs-titlebar strong { font-size: 13.5px; }
 .bld-docs-subtitle p { margin: 2px 0 0; max-width: 640px; }
 .bld-docs-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
 /* 文件列表（4 类 × 语言集语言数）：文件名等宽、右侧状态 chip（图标独立元素 i.st-ico，保证状态文字整节点可翻译） */
