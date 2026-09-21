@@ -43,6 +43,10 @@ const ATBBuild = (() => {
   // REQ-20260915-003：关联条目联合列表每页条数——产品参数待确认（条目 README「待确认」：
   // 演示用 5 条不代表产品默认值），先取 10（版本关联单通常个位到十位数，10 条平衡翻页与扫视）
   const ITEMS_PAGE_SIZE = 10;
+  // REQ-20260921-014：版本信息编辑长度上限——镜像 scripts/lib/build-store.mjs 的
+  // NAME_MAX / DESC_MAX（客户端校验只做就地拦截，数据层校验兜底双保险）
+  const INFO_NAME_MAX = 80;
+  const INFO_DESC_MAX = 4000;
 
   const state = {
     project: null,
@@ -59,6 +63,9 @@ const ATBBuild = (() => {
     itemsQueryInput: '',
     itemsPage: 1,
     edit: null,          // { id, field: 'name'|'desc' } 行内编辑态
+    // REQ-20260921-014 概况页签显式编辑态 { id, name, description, error, busy }——按版本
+    // id 归属（切换版本 / 步骤 / 项目即清空回展示态，不把未保存草稿静默写入）
+    planEdit: null,
     createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, totalDone, busy, error }
     addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, totalDone, busy, error }
     //（totalDone：候选接口占用过滤前的 done 条目总数，用于空态区分「无 done 条目」与
@@ -290,6 +297,7 @@ const ATBBuild = (() => {
   function selectVersion(id) {
     state.selVerId = id;
     state.edit = null;
+    state.planEdit = null; // REQ-20260921-014：切换版本丢弃概况页签未保存编辑（不误保存）
     state.rel = null;
     state.pf = null;
     stopSiteTimer();
@@ -310,6 +318,7 @@ const ATBBuild = (() => {
       Object.assign(state, {
         project: project ?? null, phase: 'loading', error: null, data: null, tab: 'versions',
         selVerId: null, edit: null, createPanel: null, addPanel: null, answer: null,
+        planEdit: null, // REQ-20260921-014：切换项目丢弃概况页签未保存编辑
         itemsQuery: '', itemsQueryInput: '', itemsPage: 1, // REQ-20260915-003：关联列表搜索分页随项目切换重置
         // BUG-20260915-014：详情页签与发布数据随项目切换重置（页签回概况，旧项目记录不串用）；
         // REQ-20260920-003：五步流程与官网轮询随项目切换重置（step 回 plan）
@@ -890,6 +899,92 @@ const ATBBuild = (() => {
     } catch (e) {
       toast(`✕ 保存失败：${e.message}`, true); // ✕ 前缀为失败口径：错误样式（REQ-20260913-006 与弹窗反馈一致）
       return false;
+    }
+  }
+
+  /* ---------- REQ-20260921-014 概况页签显式编辑版本名称与描述 ---------- */
+
+  // 客户端校验（纯函数，渲染与测试共用）——镜像 build-store validateInfo 与
+  // 「版本名称不能为空」口径：名称 trim 后判空与计长，描述不 trim 计长；
+  // 返回 { field: 'name'|'desc', error } 或 null（合法）。仅就地拦截不发请求，
+  // 数据层校验兜底双保险（沿用 AI 完善表单 REQ-20260913-006 口径）。
+  function validateVersionInfo(name, description) {
+    const n = String(name ?? '').trim();
+    const d = String(description ?? '');
+    if (!n) return { field: 'name', error: '版本名称不能为空' };
+    if (n.length > INFO_NAME_MAX) return { field: 'name', error: `版本名称不超过 ${INFO_NAME_MAX} 字` };
+    if (d.length > INFO_DESC_MAX) return { field: 'desc', error: `版本描述不超过 ${INFO_DESC_MAX} 字` };
+    return null;
+  }
+
+  // 当前选中版本的概况页签编辑态（版本不匹配返回 null，旧表单自然失效不渲染）
+  function planEditOf(v) {
+    return state.planEdit && state.planEdit.id === v?.id ? state.planEdit : null;
+  }
+
+  // 打开概况页签就地编辑表单：预填当前名称与描述，焦点落名称输入框；merging 锁定不放行
+  //（入口按钮已禁用，此处为防御路径并 toast 原因）。与遗留行内编辑（state.edit 单字段）
+  // 互斥：打开表单即收起行内编辑。
+  function openPlanEdit() {
+    const v = selVersion();
+    if (!v) return;
+    if (v.status === 'merging') { toast('版本合并中，暂不可修改', true); return; }
+    state.edit = null;
+    state.planEdit = { id: v.id, name: v.name ?? '', description: v.description ?? '', error: null, busy: false };
+    render();
+    try { $('#bldPlanNameInput')?.focus(); } catch { /* 测试环境无 DOM focus */ }
+  }
+
+  // 取消：放弃未保存修改回展示态（保存中不响应，按钮已禁用、此处防御）
+  function cancelPlanEdit() {
+    const pe = state.planEdit;
+    if (!pe || pe.busy) return;
+    state.planEdit = null;
+    render();
+  }
+
+  // 重渲染前把表单输入框当前值回写 state.planEdit（与 syncAnswerDraft 同口径），
+  // 防后台 refresh 等重渲染冲掉未保存草稿；输入监听也即时回写（双保险）。
+  // 仅在表单已在当前 DOM 时同步（首次打开前无可同步输入，保持 state 预填值）。
+  function syncPlanEditDraft() {
+    const pe = state.planEdit;
+    if (!pe) return;
+    const view = $('#buildView');
+    if (!view || !String(view.innerHTML || '').includes('bld-plan-name')) return;
+    const n = view.querySelector('.bld-plan-name');
+    const d = view.querySelector('.bld-plan-desc');
+    if (n) pe.name = n.value ?? pe.name;
+    if (d) pe.description = d.value ?? pe.description;
+  }
+
+  // 保存：名称与描述经同一请求提交（POST /version/save）；客户端校验就地拦截（不发请求、
+  // 聚焦出错字段）；保存中按钮禁用防重复提交；失败（网络 / 服务端错误含 merging 409）就地
+  // 显示原因 + toast，表单内容保留可重试或取消
+  async function submitPlanEdit() {
+    const pe = state.planEdit;
+    if (!pe || pe.busy) return;
+    syncPlanEditDraft();
+    const bad = validateVersionInfo(pe.name, pe.description);
+    if (bad) {
+      pe.error = bad.error;
+      render();
+      try { $(bad.field === 'name' ? '#bldPlanNameInput' : '#bldPlanDescInput')?.focus(); } catch { /* 测试环境无 DOM focus */ }
+      return;
+    }
+    pe.busy = true;
+    pe.error = null;
+    render();
+    try {
+      const r = await post('/version/save', { id: pe.id, name: pe.name, description: pe.description });
+      if (!r.ok) throw new Error(await errOf(r, '保存失败'));
+      state.planEdit = null;
+      toast('✓ 已保存版本信息');
+      await refresh(); // 成功就地刷新：详情头部 / 概况页签 / 左侧版本列表同步更新
+    } catch (e) {
+      pe.busy = false;
+      pe.error = e.message;
+      render();
+      toast(`✕ 保存失败：${e.message}`, true);
     }
   }
 
@@ -1983,6 +2078,8 @@ const ATBBuild = (() => {
   // REQ-20260921-008：docs 步驻留期间启动 AI 总结进度轮询（15 秒一轮），离开即停。
   function setStep(step) {
     const s = ['plan', 'link', 'docs', 'merge', 'release'].includes(step) ? step : 'plan';
+    // REQ-20260921-014：切换步骤丢弃概况页签未保存编辑（同一步骤重复点击不丢草稿）
+    if (s !== state.step) state.planEdit = null;
     state.step = s;
     stopSiteTimer();
     stopSummaryTimer();
@@ -3053,6 +3150,28 @@ ${langsField}
       </div>`;
   }
 
+  // REQ-20260921-014：概况页签就地编辑表单——名称 + 描述同一表单一次保存；字数计数器
+  //（N / 上限）输入时由监听直接更新文本节点（不整页重渲染保焦点）；错误区承载客户端校验
+  // 与保存失败原因（失败内容保留可重试）；保存中双按钮禁用防重复提交
+  function renderPlanEditForm(pe) {
+    const nameLen = String(pe.name ?? '').length;
+    const descLen = String(pe.description ?? '').length;
+    return `
+        <div class="bld-plan-edit bld-edit-form" role="form" aria-label="编辑版本信息">
+          <label class="field">版本名称
+            <input class="bld-plan-name" id="bldPlanNameInput" type="text" value="${esc(pe.name)}" autocomplete="off"${pe.busy ? ' disabled' : ''}></label>
+          <p class="small muted bld-plan-count" data-plan-count="name">${nameLen} / ${INFO_NAME_MAX}</p>
+          <label class="field">版本描述
+            <textarea class="bld-plan-desc" id="bldPlanDescInput" rows="4"${pe.busy ? ' disabled' : ''}>${esc(pe.description)}</textarea></label>
+          <p class="small muted bld-plan-count" data-plan-count="desc">${descLen} / ${INFO_DESC_MAX}</p>
+          ${pe.error ? `<p class="rel-form-err bld-plan-err" role="alert">${esc(pe.error)}</p>` : ''}
+          <div class="bld-edit-row">
+            <button type="button" class="btn small primary" id="bldPlanSave"${pe.busy ? ' disabled' : ''}>${pe.busy ? '保存中…' : '保存'}</button>
+            <button type="button" class="btn small" id="bldPlanCancel"${pe.busy ? ' disabled' : ''}>取消</button>
+          </div>
+        </div>`;
+  }
+
   function renderDetail(v) {
     if (!v) return '<div class="rel-detail muted">点击左侧版本查看详情</div>';
     // BUG-20260920-005：条目锁基准后移——merging 与推送完成（正式发布）锁定增删 / 换 commit，
@@ -3065,7 +3184,7 @@ ${langsField}
       : `<strong class="bld-name" title="点击编辑名称" role="button" tabindex="0">${esc(v.name || v.id)}</strong> ${statusChip(v.status)}`;
     const descCell = editing?.field === 'desc'
       ? `<div class="bld-edit-row"><textarea class="bld-desc-input" rows="3">${esc(v.description)}</textarea><button type="button" class="btn small primary" id="bldSaveDesc">保存</button><button type="button" class="btn small" id="bldCancelEdit">取消</button></div>`
-      : `<span class="bld-desc" title="点击编辑描述" role="button" tabindex="0">${v.description ? esc(v.description) : '<span class="muted">（无描述，点击补充）</span>'}</span>`;
+      : `<span class="bld-desc" title="点击编辑描述" role="button" tabindex="0">${v.description ? esc(v.description) : '<span class="muted">（无描述）</span>'}</span>`;
     // REQ-20260915-003：关联条目联合列表——先对当前版本全量关联行按关键词过滤（覆盖所有页），
     // 再分页（每页 ITEMS_PAGE_SIZE）；渲染时把越界页码校正回写（数据减少回落最后有效页）。
     const searching = !!state.itemsQuery;
@@ -3106,9 +3225,23 @@ ${langsField}
     // REQ-20260920-003：右侧详情改为五步流程导航——1 版本计划（信息编辑）→ 2 关联条目与提交
     //（原概况的关联列表）→ 3 文档编写 → 4 合并入 main → 5 正式发布（含原产品发布记录页签）
     const versionNumber = (v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '';
+    // REQ-20260921-014：概况页签显式编辑——描述块头部行放可见「编辑」按钮（merging 禁用 +
+    // title 文字原因），点开就地替换描述块为名称 + 描述同一表单（见 renderPlanEditForm）；
+    // 与遗留行内点击编辑并存（快捷路径，见 bindCommon 绑定）
+    const planEdit = planEditOf(v);
+    const descBlock = planEdit
+      ? renderPlanEditForm(planEdit)
+      : `<div class="bld-desc-block">
+            <div class="bld-desc-block-head">
+              <span class="muted small">描述</span>
+              ${v.status === 'merging'
+                ? '<button type="button" class="btn small quiet" id="bldEditInfo" disabled title="版本合并中，暂不可修改">编辑</button>'
+                : '<button type="button" class="btn small quiet" id="bldEditInfo" title="编辑版本名称与描述">编辑</button>'}
+            </div>
+            ${descCell}</div>`;
     const planBody = `
         <p class="muted small">计划号 ${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 目标分支 ${esc(v.targetBranch || 'main')}${v.merge?.baseBranch ? ` · 来源分支 ${esc(v.merge.baseBranch)}` : ''}</p>
-        <div class="bld-desc-block"><span class="muted small">描述</span>${descCell}</div>
+        ${descBlock}
         ${mergeState}`;
     const linkBody = `
         <div class="bld-items">
@@ -3441,6 +3574,7 @@ ${langsField}
     if (syncModalDrafts && state.rendered) {
       syncAnswerDraft();
       syncReviewDrafts();
+      syncPlanEditDraft(); // REQ-20260921-014：概况页签编辑草稿回同步（防后台重渲染冲掉输入）
     }
     if (state.phase === 'loading') {
       view.innerHTML = '<div class="rel-loading muted">加载发布模块…</div>';
@@ -3527,11 +3661,48 @@ ${langsField}
     });
     // 详情
     q('#bldNewBtn')?.addEventListener('click', openCreatePanel);
-    q('.bld-name')?.addEventListener('click', () => { const v = selVersion(); if (v) { state.edit = { id: v.id, field: 'name' }; render(); } });
-    q('.bld-desc')?.addEventListener('click', () => { const v = selVersion(); if (v) { state.edit = { id: v.id, field: 'desc' }; render(); } });
+    q('.bld-name')?.addEventListener('click', () => {
+      const v = selVersion();
+      if (!v) return;
+      // REQ-20260921-014：概况页签编辑表单已开时聚焦表单名称字段（两编辑入口互斥不叠开）
+      if (state.planEdit) { try { $('#bldPlanNameInput')?.focus(); } catch { /* 测试环境无 DOM focus */ } return; }
+      // REQ-20260921-014：merging 锁定口径与显式入口一致——不进编辑，toast 文字原因
+      if (v.status === 'merging') { toast('版本合并中，暂不可修改', true); return; }
+      state.edit = { id: v.id, field: 'name' };
+      render();
+    });
+    q('.bld-desc')?.addEventListener('click', () => {
+      const v = selVersion();
+      if (!v) return;
+      if (state.planEdit) return; // 表单打开时描述块已替换为表单，此路径仅防御
+      if (v.status === 'merging') { toast('版本合并中，暂不可修改', true); return; }
+      state.edit = { id: v.id, field: 'desc' };
+      render();
+    });
     q('#bldSaveName')?.addEventListener('click', () => { const v = selVersion(); const val = q('.bld-name-input')?.value; if (v && val != null) { state.edit = null; saveInfo(v.id, { name: val }); } });
     q('#bldSaveDesc')?.addEventListener('click', () => { const v = selVersion(); const val = q('.bld-desc-input')?.value; if (v && val != null) { state.edit = null; saveInfo(v.id, { description: val }); } });
     q('#bldCancelEdit')?.addEventListener('click', () => { state.edit = null; render(); });
+    // REQ-20260921-014：概况页签显式编辑（名称 + 描述同一表单，一次保存）
+    q('#bldEditInfo')?.addEventListener('click', openPlanEdit);
+    q('#bldPlanSave')?.addEventListener('click', submitPlanEdit);
+    q('#bldPlanCancel')?.addEventListener('click', cancelPlanEdit);
+    const planNameInput = q('.bld-plan-name');
+    planNameInput?.addEventListener('input', () => {
+      const pe = state.planEdit;
+      if (!pe) return;
+      pe.name = planNameInput.value; // 草稿即时回写：重渲染不丢输入
+      const c = q('[data-plan-count="name"]');
+      if (c) c.textContent = `${String(pe.name ?? '').length} / ${INFO_NAME_MAX}`; // 计数直改文本节点，不整页重渲染保焦点
+    });
+    planNameInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPlanEdit(); });
+    const planDescInput = q('.bld-plan-desc');
+    planDescInput?.addEventListener('input', () => {
+      const pe = state.planEdit;
+      if (!pe) return;
+      pe.description = planDescInput.value;
+      const c = q('[data-plan-count="desc"]');
+      if (c) c.textContent = `${String(pe.description ?? '').length} / ${INFO_DESC_MAX}`;
+    });
     // 条目增删与 commit 换选（REQ-20260915-003：行来自过滤分页后的当前页，data-* 均绑定真实条目 ID）
     q('#bldAddItem')?.addEventListener('click', openAddPanel);
     for (const el of view.querySelectorAll('[data-remove-item]')) {
@@ -3841,6 +4012,8 @@ ${langsField}
     selectLogRow,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
+    // REQ-20260921-014：概况页签显式编辑（行为接缝 + 客户端校验纯函数，测试与交互共用）
+    openPlanEdit, cancelPlanEdit, submitPlanEdit, validateVersionInfo,
     // REQ-20260915-003：关联条目联合列表搜索 / 分页纯函数与行为接缝（测试与交互）
     filterVersionItems, paginateItems, submitItemsSearch, clearItemsSearch, gotoItemsPage,
     // 行为接缝（BUG-20260913-004：openAnswerModal / openMergeConfirm 支持 verId 定位卡片版本；
