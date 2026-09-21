@@ -109,20 +109,23 @@ t('L1-4 readmeDocLinks：README 按语言链接同语言 CHANGELOG / FEATURES', 
   assert.deepEqual(flow.readmeDocLinks('CHANGELOG.md', ['cn', 'fr']), [], '非 README 无链接要求');
 });
 
-t('L1-5 buildDocSummaryPrompt：文档清单按语言集展开（4 类 × N），README 链接行随语言命名', () => {
+t('L1-5 buildDocSummaryPrompt：清单按语言集的默认语言（首语言）展开（REQ-20260921-012 阶段一收窄）', () => {
   const p = flow.buildDocSummaryPrompt({
     projectRoot: '/tmp/proj-x', planId: 'BLD-20260921-010',
     items: [{ itemId: 'REQ-20260921-010', commit: 'a'.repeat(40), title: '语言集' }],
     langs: ['cn', 'en', 'fr', 'jp'],
   });
-  const files = flow.publishDocFiles(['cn', 'en', 'fr', 'jp']).map((f) => f.file);
-  for (const f of files) assert.ok(p.includes(f), `提示词应含 ${f}`);
-  assert.ok(p.includes('16') && p.includes('4 类 × 4 语言'), '文件数与语言说明与实际一致');
-  assert.ok(p.includes('README_fr.md → CHANGELOG_fr.md / FEATURES_fr.md'), 'README 链接提示按语言展开');
+  for (const f of ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md']) {
+    assert.ok(p.includes(`${f}（`), `提示词应含默认语言 ${f}`);
+  }
+  assert.ok(!p.includes('README_en.md') && !p.includes('_fr.md') && !p.includes('_jp.md'), '总结清单不含剩余语言文件');
+  assert.ok(p.includes('4 个文档') && p.includes('4 类 × 1'), '文件数与阶段说明与实际一致');
+  assert.ok(p.includes('README.md → CHANGELOG.md / FEATURES.md'), 'README 链接提示按默认语言命名');
   assert.ok(!p.includes('八个'), '不再硬编码「八个」');
 
-  const p2 = flow.buildDocSummaryPrompt({ projectRoot: '/p', planId: 'BLD-20260921-010', items: [] });
-  assert.ok(p2.includes('README_en.md') && p2.includes('8'), '缺省语言集仍为 cn,en（8 文件）');
+  const p2 = flow.buildDocSummaryPrompt({ projectRoot: '/p', planId: 'BLD-20260921-010', items: [], langs: ['en', 'cn'] });
+  assert.ok(p2.includes('默认语言（语言集首语言 en）') || p2.includes('首语言 en'), '默认语言随语言集首语言（可为英文）');
+  assert.ok(!p2.includes('README_cn.md') && !p2.includes('README.md → CHANGELOG.md') === false, '英文默认语言时 README.md 即英文基准');
 });
 
 t('L1-6 evaluateDocsState / evaluateDocsFlow：行数 = 4×N，计数与文案不硬编码 8', () => {
@@ -136,7 +139,10 @@ t('L1-6 evaluateDocsState / evaluateDocsFlow：行数 = 4×N，计数与文案�
   const fv = flow.evaluateDocsFlow({ langs, review: { files: reviewFiles } }, readsOf(contents), {});
   assert.equal(fv.files.length, 12, '4 × 3 语言');
   assert.equal(fv.reviewedCount, 12);
-  assert.equal(fv.canCommit, true, '12/12 已审核可提交');
+  assert.equal(fv.canFinalize, true, '12/12 已审核可整体审查完结');
+  assert.equal(fv.canCommit, false, 'REQ-20260921-012：整体审查未完结前不可提交');
+  const fv0 = flow.evaluateDocsFlow({ langs, review: { files: reviewFiles, finalized: { at: '2026-09-21T02:00:00Z', langsKey: 'cn,en,fr', files: {} } } }, readsOf(contents), {});
+  assert.equal(fv0.canCommit, true, '12/12 已审核 + 整体完结可提交');
 
   // 求值从 v.langs 取语言集：新增语言文件缺失 → 缺口
   const fv2 = flow.evaluateDocsFlow({ langs: ['cn', 'en', 'fr', 'jp'], review: { files: reviewFiles } }, readsOf(contents), {});
@@ -219,21 +225,20 @@ t('L2-2 审核与提交记录白名单按语言集：README_fr.md 可审核；�
   assert.doesNotThrow(() => buildStore.recordDocsCommit(dataDir, v.id, { commitHash: 'a'.repeat(40), files: { 'README_fr.md': 'x'.repeat(64) }, scopeFp: 'f' }));
 });
 
-t('L2-3 docs-summary 账本按语言集展开；集合外回执拒绝；counts.total 动态', () => {
+t('L2-3 docs-summary 账本按语言集默认语言展开（REQ-20260921-012 收窄 4 文件）；集合外回执拒绝', () => {
   const { dataDir } = mkData(tmpdir('atb-010-l23-'));
   const run = summaryStore.createSummaryRun(dataDir, { verId: 'BLD-20260921-001', owner: 's', langs: ['cn', 'en', 'fr'] });
-  assert.equal(Object.keys(run.files).length, 12, '4 × 3 全 pending');
-  summaryStore.markSummaryFile(dataDir, run.runId, 'README_fr.md', 'summarizing');
-  assert.equal(summaryStore.getSummaryRun(dataDir, run.runId).files['README_fr.md'], 'summarizing');
+  assert.equal(Object.keys(run.files).length, 4, '默认语言（首语言 cn）4 文件全 pending');
+  assert.throws(() => summaryStore.markSummaryFile(dataDir, run.runId, 'README_fr.md', 'summarizing'), /非发布文档文件/, '剩余语言文件不在总结账本');
   assert.throws(() => summaryStore.markSummaryFile(dataDir, run.runId, 'README_jp.md', 'summarizing'), /非发布文档/);
   assert.throws(() => summaryStore.markSummaryFile(dataDir, run.runId, 'README.en.md', 'summarizing'), /非发布文档/);
   const view = summaryStore.summaryRunView(run);
-  assert.equal(view.counts.total, 12, 'total 按账本文件数动态');
+  assert.equal(view.counts.total, 4, 'total = 默认语言文件数');
   summaryStore.finishSummaryRun(dataDir, run.runId, { result: 'done', summary: '完成' });
 
-  const run2 = summaryStore.createSummaryRun(dataDir, { verId: 'BLD-20260921-002', owner: 's' });
-  assert.equal(Object.keys(run2.files).length, 8, '缺省语言集 8 文件');
-  assert.equal(summaryStore.summaryRunView(run2).counts.total, 8);
+  const run2 = summaryStore.createSummaryRun(dataDir, { verId: 'BLD-20260921-002', owner: 's', langs: ['en', 'cn', 'fr'] });
+  assert.equal(Object.keys(run2.files).length, 4, '默认语言 en（首语言）4 文件（不带后缀）');
+  assert.deepEqual(Object.keys(run2.files).sort(), ['AGENTS.md', 'CHANGELOG.md', 'FEATURES.md', 'README.md']);
   summaryStore.finishSummaryRun(dataDir, run2.runId, { result: 'done', summary: '完成' });
 });
 
@@ -352,6 +357,11 @@ t('L3 服务接口：langs 保存 / publish-plan 回显 / save / review / commit
       const rr = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
       assert.equal(rr.status, 200, `review ${f.file}：${rr.text}`);
     }
+    // REQ-20260921-012：全部已审核后先「整体审查完结」，提交才解锁
+    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
+    assert.equal(r.status, 400, '整体审查未完结提交被阻止');
+    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
+    assert.equal(r.status, 200, `finalize：${r.text}`);
     fs.writeFileSync(path.join(proj, 'evil.txt'), '不应被夹带');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
@@ -381,6 +391,7 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInput：�
     assert.ok(m, `build.js 中应存在 ${name} 函数`);
     return m[0];
   };
+  // REQ-20260921-012：renderDocsPane 新增依赖（阶段条 / AI 翻译 / 整体审查 / 分组求值兜底）
   const ctx = {
     pfOf: (v) => v.pf,
     esc: (s) => String(s),
@@ -396,7 +407,9 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInput：�
   };
   const context = vm.createContext(ctx);
   vm.runInContext([
-    pick('summaryBtnText'), pick('commitBtnHtml'), pick('renderDocsPane'), pick('renderReviewModal'), pick('validateLangSetInput'),
+    pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'),
+    pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
+    pick('renderReviewModal'), pick('validateLangSetInput'),
   ].join('\n'), context);
 
   const frFiles = flow.publishDocFiles(['cn', 'en', 'fr']);
@@ -412,10 +425,11 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInput：�
   assert.match(html, /data-pf-langs/, '语言集输入框存在');
   assert.match(html, /value="cn,en,fr"/, '回显当前语言集');
   assert.match(html, /语言集/, '标签存在');
-  // 文件列表动态：16/12 行 fr 文件出现；门禁计数 X/12
+  // 文件列表动态：12 行 fr 文件出现；门禁分组计数按语言集（默认 0/4 · 剩余 0/8）
   assert.match(html, /README_fr\.md/, 'fr 文件在列表 / 审查对话框');
-  assert.match(html, /0\/12/, '门禁计数按语言集（不再固定 /8）');
-  assert.doesNotMatch(html, /\/8 已审核/, '不再硬编码 8');
+  assert.match(html, /默认语言 0\/4/, '门禁默认语言计数（首语言 cn 四文件）');
+  assert.match(html, /剩余语言 0\/8/, '门禁剩余语言计数（en+fr 八文件，不再固定 /8）');
+  assert.match(html, /① 默认语言先行/, '阶段条（REQ-20260921-012）');
   // 审查对话框：页签计数 n/3；README 页签出现 fr 列
   assert.match(html, /README（0\/3）/, '页签计数按语言数');
   assert.ok((html.match(/bld-review-col/g) || []).length >= 3, 'README 页签按语言集展开全语言列');
@@ -447,8 +461,12 @@ t('L6-1 i18n：语言集新词条中英同步；固定「8」旧词条随界面�
   for (const k of mustHave) {
     assert.ok(k in EN || k in EN_DYNAMIC, `缺少词条：${k}`);
   }
+  // REQ-20260921-012：门禁词条随三阶段口径迁移（旧「全部文件已通过审查」两条键清理）
+  for (const k of ['提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。', '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 提交禁用，尚缺：◇。']) {
+    assert.ok(k in EN_DYNAMIC, `动态门禁新口径词条：${k}`);
+  }
   for (const k of ['提交门禁：◇/◇ 已审核 —— 全部文件已通过审查，可提交到本地 dev 分支。', '提交门禁：◇/◇ 已审核 —— 提交按钮禁用，尚缺：◇']) {
-    assert.ok(k in EN_DYNAMIC, `动态门禁词条应保留（键不变）：${k}`);
+    assert.ok(!(k in EN_DYNAMIC), `旧门禁键应清理：${k.slice(0, 18)}…`);
   }
   // 旧固定「八个」词条随界面更新清理（不再被 build.js 引用）
   for (const k of [

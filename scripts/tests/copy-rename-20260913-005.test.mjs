@@ -63,7 +63,7 @@ t('W1b app.js 用户可见文案：页签/筛选档/徽标/弹窗/toast/空态/�
     ['完善中，待本轮批量完善结束后再驳回', '完善中，待本轮 AI 分析结束后再驳回'],
     ["{ key: 'develop', label: '批量开发' }", "{ key: 'develop', label: 'AI 开发' }"],
     ["{ key: 'refine', label: '批量完善' }", "{ key: 'refine', label: 'AI 分析' }"],
-    ['GLOBAL_KIND_LABEL = { develop: \'批量开发\', refine: \'批量完善\' }', "GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结' }"],
+    ['GLOBAL_KIND_LABEL = { develop: \'批量开发\', refine: \'批量完善\' }', "GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结', translate: 'AI 翻译' }"],
     ['可启动新的批量开发 / 批量完善任务', '可启动新的 AI 开发 / AI 分析任务'],
     ['data-bmode="refine">批量完善<', 'data-bmode="refine">AI 分析<'],
     ['data-bmode="develop">批量开发<', 'data-bmode="develop">AI 开发<'],

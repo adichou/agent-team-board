@@ -177,7 +177,7 @@ t('C2 服务端命令清单 / 白名单执行 / 互斥 / run-status 全链路', 
     // C2a 命令清单：分组 / 命令 / 参数元数据；排除三组不出现
     let r = await req(port, 'GET', '/api/cli/commands');
     assert.equal(r.status, 200, `清单应可用：${r.text}`);
-    assert.ok(Array.isArray(r.json.groups) && r.json.groups.length === 11, `分组数应 11（数据与分发…终端命令，含发布文档 AI 总结）：${r.json.groups?.length}`);
+    assert.ok(Array.isArray(r.json.groups) && r.json.groups.length === 12, `分组数应 12（数据与分发…终端命令，含发布文档 AI 总结 / AI 翻译）：${r.json.groups?.length}`);
     const flat = r.json.groups.flatMap((g) => g.commands.map((c) => c.name));
     assert.ok(flat.includes('batch delete') && flat.includes('commit which') && flat.includes('prune-locks'));
     assert.ok(!flat.some((n) => /^(oncall|disc|growth)\b/.test(n)), '排除三组恒不出现');
