@@ -165,6 +165,7 @@
     <span class="lbl">模拟开关：</span>
     <button type="button" class="btn" id="simRefreshFail">刷新读取失败：关</button>
     <button type="button" class="btn" id="simTaskFail">任务中断：关</button>
+    <button type="button" class="btn" id="simBaseEdit">模拟外部编辑器改默认语言文档</button>
     <button type="button" class="btn" id="simScopeStale">模拟发布范围变化</button>
     <span style="flex:1"></span>
     <button type="button" class="btn" id="themeBtn">深浅色切换</button>
@@ -270,10 +271,11 @@ const ICON = { untrans: '○', summarizing: '◐', summarized: '●', reviewed: 
 let S; // 演示状态
 function initState() {
   const files = {};
+  const now = Date.now();
   for (const key of DOC_KEYS) {
-    files[fileOf(key, defLang())] = { role: 'def', lang: defLang(), key, file: fileOf(key, defLang()), state: 'untrans', content: docText(defLang(), key) };
+    files[fileOf(key, defLang())] = { role: 'def', lang: defLang(), key, file: fileOf(key, defLang()), state: 'untrans', content: docText(defLang(), key), mtime: now };
     for (const lang of remLangs()) {
-      files[fileOf(key, lang)] = { role: 'rem', lang, key, file: fileOf(key, lang), state: 'untrans', content: '' };
+      files[fileOf(key, lang)] = { role: 'rem', lang, key, file: fileOf(key, lang), state: 'untrans', content: '', mtime: null };
     }
   }
   S = {
@@ -283,6 +285,7 @@ function initState() {
     overall: { done: false, at: null },
     committed: null,       // { hash }
     scopeStale: false, staleReason: null,
+    baseStale: null,       // { count } 基准变更检测命中（默认语言文档 mtime 晚于翻译稿）
     refreshing: false, loadErr: false,
     sim: { refreshFail: false, taskFail: false },
     review: { open: false, tab: 'README', modes: {}, },
@@ -308,6 +311,25 @@ const stageOf = () => {
 function missingDef() { return defFiles().filter((f) => f.state !== 'reviewed').map((f) => `${f.file}（${ST.def.label[f.state]}）`); }
 function missingRem() { return remFiles().filter((f) => f.state !== 'reviewed').map((f) => `${f.file}（${ST.rem.label[f.state]}）`); }
 const missingAll = () => totalFiles() - defReviewed() - remReviewed();
+/* 基准变更检测（mtime 对比）：同类型下默认语言文档比剩余语言文档新 → 剩余语言文档回退「未翻译」，提醒重新 AI 翻译；
+   不依赖界面保存按钮（外部编辑器 / IDE 直接落盘同样捕获） */
+function detectBaseChange() {
+  let n = 0;
+  for (const lang of remLangs()) {
+    for (const k of DOC_KEYS) {
+      const f = S.files[fileOf(k, lang)];
+      const d = S.files[fileOf(k, defLang())];
+      if ((f.state === 'summarized' || f.state === 'reviewed') && f.mtime != null && d.mtime > f.mtime) {
+        f.state = 'untrans'; f.content = ''; f.mtime = null; n++;
+      }
+    }
+  }
+  if (n > 0) {
+    S.baseStale = { count: n };
+    if (S.overall.done) S.overall = { done: false, at: null };
+  }
+  return n;
+}
 
 /* ---------- 渲染 ---------- */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -414,6 +436,7 @@ function gateHtml() {
   const parts = [];
   if (defReviewed() < DOC_KEYS.length) parts.push(`默认语言尚缺 ${DOC_KEYS.length - defReviewed()} 个文件审核（${missingDef().join('、')}）`);
   if (remReviewed() < remTotal()) parts.push(canTranslate() ? `剩余语言尚缺 ${remTotal() - remReviewed()} 个文件审核（${missingRem().join('、')}）` : 'AI 翻译未解锁（需默认语言 4/4 已审核）');
+  if (S.baseStale) parts.push(`默认语言文档已更新（mtime 晚于翻译稿）：${S.baseStale.count} 个翻译文档已回退「未翻译」，需重新 AI 翻译`);
   if (allReviewed() && !S.overall.done) parts.push('整体审查未完结');
   if (S.scopeStale) parts.push(`发布范围已变化（${S.staleReason || '条目或提交变化'}），审核与完结已失效，需重新审查与完结`);
   return `<div class="gate" role="note">提交门禁：默认语言 ${defReviewed()}/4 · 剩余语言 ${remReviewed()}/${remTotal()} 已审核 —— 提交按钮禁用：${parts.join('；')}。</div>`;
@@ -474,9 +497,19 @@ function doRefresh() {
     return;
   }
   S.loadErr = false; S.refreshing = true; render();
-  setTimeout(() => { S.refreshing = false; render(); toast(`✓ 已重新读取 ${totalFiles()} 个文件内容与状态`); }, 800);
+  setTimeout(() => {
+    S.refreshing = false;
+    const n = detectBaseChange(); // 求值读盘时同步做基准变更检测（mtime 对比）
+    render();
+    toast(`✓ 已重新读取 ${totalFiles()} 个文件内容与状态`);
+    if (n > 0) toast(`检测到默认语言文档更新（磁盘 mtime 对比）：${n} 个剩余语言文档已回退「未翻译」，请重新执行 AI 翻译`, 'fail');
+  }, 800);
 }
 function startTask(kind) {
+  if (kind === 'translate') {
+    const n = detectBaseChange(); // 启动前基准变更检测：基准更新则提示，并按最新基准翻译
+    if (n > 0) { render(); toast(`检测到默认语言文档更新：${n} 个翻译文档已回退，本轮以最新基准翻译`, 'fail'); }
+  }
   const list = kind === 'summary' ? defFiles() : remFiles();
   const todo = list.filter((f) => f.state !== 'reviewed');
   if (!todo.length) { toast(kind === 'summary' ? '默认语言四文件均已审核：无需再总结' : '剩余语言文件均已审核：无需再翻译'); return; }
@@ -497,6 +530,7 @@ function runNext(kind, todo) {
   if (!todo.length) {
     const name = kind === 'summary' ? 'AI 总结' : 'AI 翻译';
     S.task = null; S.taskDone = { kind, ok: true, reason: null };
+    if (kind === 'translate') S.baseStale = null; // 已按最新基准重翻，基准变更提示消除
     render(); toast(`${name}已完成：待审文件均进入「${kind === 'summary' ? '已总结待审核' : '已翻译待审核'}」，等待人工审查`);
     return;
   }
@@ -514,7 +548,7 @@ function runNext(kind, todo) {
       return;
     }
     S.files[f.file].state = 'summarized';
-    if (f.role === 'rem') S.files[f.file].content = docText(f.lang, f.key);
+    if (f.role === 'rem') { S.files[f.file].content = docText(f.lang, f.key); S.files[f.file].mtime = Date.now(); }
     S.task = null;
     runNext(kind, todo.slice(1));
   }, 1100);
@@ -601,6 +635,7 @@ function bindReview() {
       if (!ta) { toast('请先切换到编辑模式再保存', 'fail'); return; }
       const was = S.files[file].state;
       S.files[file].content = ta.value;
+      S.files[file].mtime = Date.now(); // 经界面保存同样落盘更新 mtime，纳入同一对比口径
       if (was === 'reviewed') {
         S.files[file].state = 'summarized';
         const overallWasDone = S.overall.done;
@@ -701,6 +736,11 @@ document.getElementById('simTaskFail').onclick = function () {
   this.textContent = `任务中断：${S.sim.taskFail ? '开' : '关'}`;
   toast(`模拟任务中断已${S.sim.taskFail ? '开启：启动 AI 总结 / AI 翻译会在中途失败' : '关闭'}`);
 };
+document.getElementById('simBaseEdit').onclick = () => {
+  const now = Date.now();
+  for (const k of DOC_KEYS) S.files[fileOf(k, defLang())].mtime = now; // 模拟外部编辑器保存默认语言文档（磁盘 mtime 更新，不经界面保存按钮）
+  toast('已模拟外部编辑器保存默认语言四文档（磁盘 mtime 已更新）：点击「刷新」或启动 AI 翻译时检测');
+};
 document.getElementById('simScopeStale').onclick = () => {
   S.scopeStale = true; S.staleReason = '演示：增删条目 / 换 commit';
   // 审核整体失效：已审核回退待审核；完结失效
@@ -709,6 +749,7 @@ document.getElementById('simScopeStale').onclick = () => {
   }
   S.overall = { done: false, at: null };
   S.committed = null;
+  S.baseStale = null;
   render();
   toast('发布范围已变化：逐文件审核与整体完结失效回退，需重新审查与完结', 'fail');
 };
