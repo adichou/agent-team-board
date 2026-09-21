@@ -3049,15 +3049,14 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text);
 }
 .bld-desc-block { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
-/* REQ-20260921-014 概况页签显式编辑：描述块头部行（标签 + 「编辑」按钮）与就地编辑表单
-   （名称 + 描述同一表单 + 计数器 + 就地错误区）；输入控件复用 .field，深浅色沿用变量 */
-.bld-desc-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* REQ-20260921-014 概况页签显式编辑就地编辑表单（名称 + 描述同一表单 + 计数器 + 就地错误区）；
+   输入控件复用 .field，深浅色沿用变量 */
 .bld-plan-edit { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; background: var(--panel); }
 .bld-plan-count { margin: 0; }
-/* REQ-20260921-016 概况描述块头部操作组：「AI 完善」紧邻「编辑」左边（右对齐，头部行
-   space-between）；窄屏空间不足自动换行，仍保持 AI 完善在编辑左侧 */
-.bld-desc-block-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
-.bld-desc-block-acts .btn { flex: none; white-space: nowrap; }
+/* BUG-20260921-016 概况内容区顶部操作行：「AI 完善」+「编辑」同排右对齐（AI 完善在左）；
+   窄屏空间不足自动换行，不遮挡下方描述与五步导航 */
+.bld-plan-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+.bld-plan-acts .btn { flex: none; white-space: nowrap; }
 /* 关联条目与 commit 区（REQ-20260915-003：头部行加搜索控件并允许换行；全量过滤后分页） */
 .bld-items { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .bld-items-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
