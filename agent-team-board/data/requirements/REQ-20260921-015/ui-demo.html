@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260921-015 · 合并入 main 页精简与一键加入依赖提交演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #d9dee4; --text: #1f2430; --muted: #6b7280;
+    --ok: #16794c; --ok-bg: #e3f4ea; --run: #9a6700; --run-bg: #fff3d6;
+    --warn: #b3261e; --warn-bg: #fdebea; --primary: #2563eb; --primary-bg: #dbeafe;
+    --code-bg: #f0f2f5; --new-bg: #ecfdf3; --shadow: 0 10px 30px rgba(15, 23, 42, .14);
+  }
+  html[data-theme="dark"] {
+    --bg: #14161a; --card: #1d2026; --line: #34383f; --text: #e6e8ec; --muted: #9aa1ab;
+    --ok: #5bd695; --ok-bg: #12331f; --run: #e3b341; --run-bg: #3a2f10;
+    --warn: #f08a84; --warn-bg: #3a1715; --primary: #6ea8ff; --primary-bg: #16294d;
+    --code-bg: #262a31; --new-bg: #10281b; --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  code { background: var(--code-bg); border-radius: 4px; padding: 0 5px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+
+  /* 演示控制条 */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  button.btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button.btn:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--primary); color: var(--primary); }
+  button.btn.on { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  html[data-theme="dark"] button.btn.primary { color: #0d1220; }
+  button.btn:disabled, button.btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+  button.btn.warn-line { border-color: var(--warn); color: var(--warn); }
+
+  /* 详情头部 + 五步导航 */
+  .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .top .name { font-weight: 600; font-size: 15px; }
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+  .steps button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px;
+    padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .steps button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  /* 状态徽标 */
+  .st { display: inline-flex; align-items: center; gap: 4px; border-radius: 99px; padding: 1px 9px; font-size: 11.5px; white-space: nowrap; }
+  .st-ok { color: var(--ok); background: var(--ok-bg); }
+  .st-run { color: var(--run); background: var(--run-bg); }
+  .st-mute { color: var(--muted); background: var(--code-bg); }
+  .st-warn { color: var(--warn); background: var(--warn-bg); }
+
+  /* 合并页分节 */
+  .pane { display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
+  .pane section { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .pane ul { margin: 2px 0 0; padding-left: 18px; }
+  .pane li { margin: 2px 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .err { color: var(--warn); font-size: 13px; }
+  .oneline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .item-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .item-row .id { font-weight: 600; }
+  .item-row.is-new { background: var(--new-bg); border-radius: 6px; padding: 2px 8px; margin: 0 -8px; }
+  .tag-new { color: var(--ok); font-size: 11.5px; border: 1px dashed var(--ok); border-radius: 99px; padding: 0 7px; }
+
+  /* 依赖明细折叠 */
+  details.deps { border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; }
+  details.deps summary { cursor: pointer; color: var(--muted); font-size: 12.5px; user-select: none; }
+
+  /* 简洁状态行（新态：替代红字长文） */
+  .state-line { display: flex; align-items: flex-start; gap: 8px; border-radius: 8px; padding: 6px 10px; font-size: 12.5px; }
+  .state-line.warn { color: var(--warn); background: var(--warn-bg); }
+  .state-line.info { color: var(--muted); background: var(--code-bg); }
+  .state-line.ok { color: var(--ok); background: var(--ok-bg); }
+  .state-line .q { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+  /* 改前对照横幅 */
+  .old-banner { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; margin-bottom: 4px; }
+  .new-banner { background: var(--primary-bg); color: var(--primary); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; margin-bottom: 4px; }
+
+  /* toast */
+  .toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .toast { background: var(--card); color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--primary);
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; box-shadow: var(--shadow); max-width: 420px; }
+  .toast.err { border-left-color: var(--warn); }
+  .toast.ok { border-left-color: var(--ok); }
+
+  .note-card h2 { font-size: 14px; margin: 0 0 6px; }
+  .note-card ul { margin: 0; padding-left: 18px; }
+  .note-card li { margin: 3px 0; font-size: 12.5px; color: var(--muted); }
+  .footer-note { text-align: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260921-015 · 「合并入 main」页精简 + 一键加入所有依赖提交</h1>
+  <p class="sub">演示范围：版本计划详情第 4 步「合并入 main」页——去掉隔离分析区域的大段红色告警长文，改为简洁汇总 + 「一键加入所有依赖提交」按钮。数据为演示假数据。</p>
+
+  <div class="demo-bar" id="demoBar">
+    <span class="lbl">场景：</span>
+    <button class="btn on" data-sc="deps">有依赖（主场景）</button>
+    <button class="btn" data-sc="clean">无依赖</button>
+    <button class="btn" data-sc="mixed">混合提交（阻止）</button>
+    <button class="btn" data-sc="gate">门禁锁定（文档未提交）</button>
+    <button class="btn" data-sc="loading">分析加载中</button>
+    <button class="btn" data-sc="error">分析失败</button>
+    <span class="lbl" style="margin-left:10px">对照：</span>
+    <button class="btn" id="oldToggle">显示现状（改前红字长文）</button>
+    <button class="btn" id="themeToggle">深浅色</button>
+    <button class="btn" id="resetBtn">重置演示</button>
+  </div>
+
+  <div class="card" id="detail"></div>
+
+  <div class="card note-card">
+    <h2>演示说明</h2>
+    <ul>
+      <li>主场景（有依赖）：点击「一键加入所有依赖提交」→ 执行中反馈 → 2 个依赖条目进入「发布范围」（标「新加入」）→ 隔离分析收敛为「无未选祖先」→ 按既有机制提示文档需重新核对 / 提交，「合并入 main」主按钮进入门禁态（点击仍有原因反馈）。</li>
+      <li>「显示现状（改前）」：以改前渲染方式呈现同一场景——隔离分析为灰色长句 + 逐条目重复的长括号说明与提交清单；混合提交 / 门禁锁定场景下另有红色告警长段（即需求要去掉的「一大堆红色字体的文字」）。</li>
+      <li>改后阻止性信息（混合提交 / 门禁 / 不在 dev / 合并失败）收敛为单行简洁状态 + 按钮 title + 点击 toast，具体形态标注「待确认」（设计阶段定稿）；服务端守卫不弱化。</li>
+      <li>依赖提交无法归属条目 / 条目未 done 或已被其他版本占用时的一键加入处理口径：待确认（见 README 设计待确认点）。</li>
+    </ul>
+  </div>
+  <p class="footer-note">REQ-20260921-015 · 单文件交互演示 · 无外网依赖</p>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 演示数据（假数据，形态对齐 scripts/web/build.js renderMergePane 现状文案） ---------- */
+  var DATA = {
+    ver: { id: 'BLD-20260921-014', name: '发布流程优化', status: '计划中' },
+    items: [
+      { id: 'REQ-20260921-013', commit: 'e87a35f2', title: '分支浏览 git 提交树可视化', merged: false },
+      { id: 'BUG-20260921-002', commit: '4f2c91b7', title: '五步导航跳转异常', merged: false }
+    ],
+    docsCommit: '77d0e2a1',
+    deps: [
+      { id: 'REQ-20260920-018', commit: '9ab3f175', subject: 'feat: 官网同步检测窗口起点 REQ-20260920-018', ref: 'REQ-20260921-013' },
+      { id: 'BUG-20260920-017', commit: 'c45d92e3', subject: 'fix: 主分支推送远端选择记忆 BUG-20260920-017', ref: 'BUG-20260921-002' }
+    ],
+    mixed: { commit: '3d1b77c2', ids: ['REQ-20260921-011', 'REQ-20260921-010'] }
+  };
+
+  var STEP_LABELS = ['版本计划', '关联条目与提交', '文档编写', '合并入 main', '正式发布'];
+  var STEP_KEYS = ['plan', 'link', 'docs', 'merge', 'release'];
+  var PLACEHOLDER = {
+    plan: '第 1 步「版本计划」：名称 / 描述编辑（本演示聚焦第 4 步，此处从简）。',
+    link: '第 2 步「关联条目与提交」：关联条目列表 + 搜索 + 「＋ 添加条目」侧拉面板（改前化解依赖的唯一手工路径；本单不改此步行为）。',
+    docs: '第 3 步「文档编写」：三阶段文档流水线（见 REQ-20260921-012 演示；本单不改此步行为）。',
+    release: '第 5 步「正式发布」：推送主分支 → 官网 AI 写作 → 同步检测（本单不改此步行为）。'
+  };
+
+  var state = {
+    scenario: 'deps',   // deps | clean | mixed | gate | loading | error
+    oldMode: false,
+    step: 'merge',
+    added: false,        // 一键加入已完成（deps 场景）
+    adding: false,       // 一键加入执行中
+    retrying: false,     // 分析失败重试中
+    theme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'
+  };
+  var timers = [];
+
+  /* ---------- 工具 ---------- */
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function toast(msg, kind) {
+    var box = document.getElementById('toasts');
+    var t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = msg;
+    box.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3400);
+  }
+  function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+  /* ---------- 现状（改前）渲染：红字长文 + 重复长句 ---------- */
+  function oldIsoSection() {
+    var parts = [];
+    if (state.scenario === 'mixed') {
+      parts.push('<p class="err" role="alert">' + esc('同一提交 3d1b77c2a9e4 关联多个条目（REQ-20260921-011、REQ-20260921-010）：混合提交无法安全拆分，请调整关联或先合并为一个条目') + '</p>');
+    }
+    if (state.scenario === 'deps' && !state.added) {
+      parts.push('<p class="muted small">' + esc('所选提交存在 2 个未选祖先提交：普通 merge 会一并带入 main，隔离合并不带入；若所选改动依赖这些内容，执行时将冲突阻止并说明原因') + '</p>');
+      parts.push('<ul>' + DATA.deps.map(function (d) {
+        return '<li>' + esc(d.ref) + '：1 个未选祖先提交（普通 merge 会一并带入 main；隔离合并不带入，依赖其内容将冲突阻止）' +
+          '<ul><li><code>' + esc(d.commit.slice(0, 7)) + '</code> ' + esc(d.subject) + '</li></ul></li>';
+      }).join('') + '</ul>');
+    }
+    if (state.scenario === 'clean' || (state.scenario === 'deps' && state.added)) {
+      parts.push('<p class="muted small">所选提交无未选祖先：变更可独立进入主分支。</p>');
+    }
+    return '<section><strong>隔离分析</strong>' + parts.join('') + '</section>';
+  }
+
+  /* ---------- 目标（改后）渲染：简洁汇总 + 一键加入 ---------- */
+  function newIsoSection() {
+    if (state.scenario === 'deps' && !state.added) {
+      var btn = state.adding
+        ? '<button type="button" class="btn primary" disabled>加入中…</button>'
+        : '<button type="button" class="btn primary" id="addDepsBtn">一键加入所有依赖提交</button>';
+      return '<section><strong>隔离分析</strong>' +
+        '<div class="oneline"><span>发现 <strong>2</strong> 个未选祖先（依赖）提交 · 涉及 <strong>2</strong> 个条目</span>' + btn + '</div>' +
+        '<details class="deps"><summary>查看依赖明细</summary><ul>' +
+        DATA.deps.map(function (d) {
+          return '<li><code>' + esc(d.commit.slice(0, 7)) + '</code> ' + esc(d.subject) + '<br><span class="muted small">归属条目 ' + esc(d.id) + ' · 为 ' + esc(d.ref) + ' 的依赖</span></li>';
+        }).join('') +
+        '</ul><p class="muted small" style="margin:6px 0 0">一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。</p></details>' +
+        '</section>';
+    }
+    if (state.scenario === 'mixed') {
+      return '<section><strong>隔离分析</strong>' +
+        '<div class="state-line warn"><span>⚠ 1 个混合提交无法安全拆分（' + esc(DATA.mixed.commit.slice(0, 7)) + ' 关联 2 个条目）：请调整关联或先合并为一个条目</span><span class="q">简洁单行 · 形态待确认</span></div>' +
+        '</section>';
+    }
+    if (state.scenario === 'gate') {
+      return '<section><strong>隔离分析</strong><p class="muted small">所选提交无未选祖先：变更可独立进入主分支。</p></section>';
+    }
+    return '<section><strong>隔离分析</strong><p class="muted small">所选提交无未选祖先：变更可独立进入主分支。</p></section>';
+  }
+
+  function scopeRows() {
+    var rows = DATA.items.map(function (it) {
+      return '<div class="item-row"><span class="id">' + esc(it.id) + '</span><code>' + esc(it.commit.slice(0, 7)) + '</code>' +
+        '<span class="muted small">' + esc(it.title) + '</span>' +
+        (it.merged ? '<span class="st st-ok">已合并</span>' : '') + '</div>';
+    }).join('');
+    if (state.added) {
+      rows += DATA.deps.map(function (d) {
+        return '<div class="item-row is-new"><span class="id">' + esc(d.id) + '</span><code>' + esc(d.commit.slice(0, 7)) + '</code>' +
+          '<span class="muted small">' + esc(d.subject.replace(/^(feat|fix): /, '')) + '</span><span class="tag-new">新加入</span></div>';
+      }).join('');
+    }
+    return rows || '<li class="muted small">（无关联条目：回到「关联条目与提交」步骤关联）</li>';
+  }
+
+  function gateLine() {
+    if (state.scenario === 'mixed') {
+      return state.oldMode
+        ? '<p class="err" role="alert">暂不可合并：同一提交 ' + esc(DATA.mixed.commit) + ' 关联多个条目（' + esc(DATA.mixed.ids.join('、')) + '）：混合提交无法安全拆分，请调整关联或先合并为一个条目</p>'
+        : '<div class="state-line warn"><span>⚠ 暂不可合并：存在混合提交（见上方隔离分析）</span><span class="q">点击主按钮仍有原因反馈</span></div>';
+    }
+    if (state.scenario === 'gate' || (state.added && state.scenario === 'deps')) {
+      var reason = state.added ? '发布范围已变化，文档需重新核对 / 编写并重新提交' : '文档尚未编写提交（合并前置：所需文档已完成且最新变化已提交）';
+      return state.oldMode
+        ? '<p class="err" role="alert">暂不可合并：' + esc(reason) + '</p>'
+        : '<div class="state-line warn"><span>⚠ 暂不可合并：' + esc(reason) + '</span><span class="q">简洁单行 · 形态待确认</span></div>';
+    }
+    return '';
+  }
+
+  function mergeBtnHtml() {
+    var blocked = state.scenario === 'mixed' || state.scenario === 'gate' || (state.added && state.scenario === 'deps') || state.adding;
+    var title = '';
+    if (state.scenario === 'mixed') title = '存在混合提交，无法安全拆分';
+    else if (state.scenario === 'gate') title = '文档尚未编写提交';
+    else if (state.added) title = '发布范围已变化：文档需重新核对 / 编写并重新提交';
+    else if (state.adding) title = '请先完成依赖加入';
+    return '<button type="button" class="btn primary" id="mergeBtn"' +
+      (blocked ? ' aria-disabled="true" title="' + esc(title) + '"' : '') + '>合并入 main</button>';
+  }
+
+  function renderMergePane() {
+    if (state.scenario === 'loading' || state.retrying) {
+      return '<div class="pane"><p class="muted" role="status">正在加载合并分析…</p></div>';
+    }
+    if (state.scenario === 'error') {
+      return '<div class="pane"><p class="err" role="alert">合并分析读取失败：git 读取超时（演示数据）</p>' +
+        '<p><button type="button" class="btn" id="retryBtn"' + (state.retrying ? ' disabled' : '') + '>重试</button></p></div>';
+    }
+    var banner = state.oldMode
+      ? '<div class="old-banner">▾ 改前现状：隔离分析以长文呈现（混合提交 / 门禁为红色长段）——本单要去掉的形态</div>'
+      : '<div class="new-banner">▴ 改后目标：简洁汇总 + 一键加入（阻止性信息单行呈现，形态待确认）</div>';
+    var scopeStale = (state.added && !state.oldMode)
+      ? '<div class="state-line info"><span>ℹ 发布范围已变化：文档需重新核对 / 编写并重新提交（' + esc('scopeStale') + ' 既有口径）</span></div>'
+      : '';
+    return '<div class="pane">' + banner +
+      '<section><strong>发布范围</strong>' + scopeRows() +
+      (state.scenario !== 'mixed' ? '<p class="small muted">文档提交：<code>' + esc(DATA.docsCommit.slice(0, 7)) + '</code>（只随本版发布最新文档提交）' +
+        (state.added ? ' <span class="st st-warn">已失效 · 需重新提交</span>' : '') + '</p>' : '') +
+      '</section>' +
+      (state.oldMode ? oldIsoSection() : newIsoSection()) +
+      scopeStale +
+      '<p class="small muted">当前分支 dev · 目标主分支 main（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>' +
+      gateLine() +
+      '<p class="oneline">' + mergeBtnHtml() +
+      '<span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>' +
+      '</div>';
+  }
+
+  function render() {
+    document.documentElement.setAttribute('data-theme', state.theme);
+    document.querySelectorAll('#demoBar [data-sc]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-sc') === state.scenario && !(state.scenario === 'deps' && state.added));
+    });
+    var oldBtn = document.getElementById('oldToggle');
+    oldBtn.classList.toggle('on', state.oldMode);
+    oldBtn.textContent = state.oldMode ? '隐藏现状（回到改后目标）' : '显示现状（改前红字长文）';
+    document.getElementById('themeToggle').textContent = state.theme === 'dark' ? '浅色' : '深色';
+
+    var steps = STEP_KEYS.map(function (k, i) {
+      return '<button type="button" data-step="' + k + '" class="' + (state.step === k ? 'active' : '') + '">' + STEP_LABELS[i] + '</button>';
+    }).join('');
+    var body = state.step === 'merge'
+      ? renderMergePane()
+      : '<p class="muted">' + esc(PLACEHOLDER[state.step]) + '</p><p class="muted small">（本演示聚焦第 4 步「合并入 main」，点击页签返回。）</p>';
+    document.getElementById('detail').innerHTML =
+      '<div class="top"><span class="name">' + esc(DATA.ver.name) + '</span>' +
+      '<span><span class="st st-run">' + esc(DATA.ver.status) + '</span> <span class="muted small">' + esc(DATA.ver.id) + ' · 版本号 20260921-014</span></span></div>' +
+      '<nav class="steps" role="tablist" aria-label="发布五步流程">' + steps + '</nav>' + body;
+    bind();
+  }
+
+  function bind() {
+    document.querySelectorAll('#detail [data-step]').forEach(function (b) {
+      b.addEventListener('click', function () { state.step = b.getAttribute('data-step'); render(); });
+    });
+    var addBtn = document.getElementById('addDepsBtn');
+    if (addBtn) {
+      addBtn.addEventListener('click', function () {
+        if (state.adding || state.added) return;
+        state.adding = true;
+        render();
+        timers.push(setTimeout(function () {
+          state.adding = false;
+          state.added = true;
+          render();
+          toast('✓ 已加入 2 个依赖条目（REQ-20260920-018、BUG-20260920-017）', 'ok');
+          toast('发布范围已变化：文档需重新核对 / 编写并重新提交', 'err');
+        }, 900));
+      });
+    }
+    var retryBtn = document.getElementById('retryBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', function () {
+        state.retrying = true;
+        render();
+        timers.push(setTimeout(function () {
+          state.retrying = false;
+          state.scenario = 'deps';
+          render();
+          toast('✓ 合并分析已重新加载');
+        }, 800));
+      });
+    }
+    var mergeBtn = document.getElementById('mergeBtn');
+    if (mergeBtn) {
+      mergeBtn.addEventListener('click', function () {
+        if (mergeBtn.getAttribute('aria-disabled') === 'true') {
+          var reason = mergeBtn.getAttribute('title') || '前置条件未满足';
+          toast('✕ ' + reason, 'err');
+          return;
+        }
+        toast('演示：此处打开「合并入 main 确认」弹窗（既有交互，不在本单改动范围）');
+      });
+    }
+  }
+
+  /* ---------- 控制条 ---------- */
+  document.querySelectorAll('#demoBar [data-sc]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      clearTimers();
+      state.scenario = b.getAttribute('data-sc');
+      state.added = false;
+      state.adding = false;
+      state.retrying = false;
+      state.step = 'merge';
+      render();
+    });
+  });
+  document.getElementById('oldToggle').addEventListener('click', function () {
+    state.oldMode = !state.oldMode;
+    state.step = 'merge';
+    render();
+  });
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    render();
+  });
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    clearTimers();
+    state.scenario = 'deps';
+    state.oldMode = false;
+    state.step = 'merge';
+    state.added = false;
+    state.adding = false;
+    state.retrying = false;
+    render();
+    toast('已重置演示');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
