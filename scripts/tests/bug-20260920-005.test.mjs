@@ -226,13 +226,14 @@ t('U3 详情「关联条目与提交」步：merged 未推送增删 / 换 commit
   assert.match(inner, /id="bldAddItem"\s*>＋ 添加条目/, 'merged 未推送「＋ 添加条目」可用');
   assert.doesNotMatch(inner, /id="bldAddItem" disabled/, 'merged 未推送添加条目不再禁用');
   assert.doesNotMatch(inner, /data-remove-item="REQ-20260920-005" disabled/, 'merged 未推送移出可用');
-  assert.doesNotMatch(inner, /data-commit-item="REQ-20260920-005" disabled/, 'merged 未推送换 commit 下拉可用');
+  // BUG-20260921-015：条目行改为展示全部提交（chips，title 说明），锁定态经 title 说明体现
+  assert.match(inner, /title="该条目关联的全部提交"/, 'merged 未推送提交清单可用（无锁定说明）');
   h.run(`window.ATBBuild.selectVersion('BLD-PUSHED')`);
   h.run(`window.ATBBuild.setStep('link')`);
   inner = h.inner();
   assert.match(inner, /id="bldAddItem" disabled title="已正式发布，条目已锁定"/, '推送完成后添加条目禁用并说明');
   assert.match(inner, /data-remove-item="REQ-20260920-005" disabled title="已正式发布，条目已锁定"/, '推送完成后移出禁用并说明');
-  assert.match(inner, /data-commit-item="REQ-20260920-005" disabled/, '推送完成后换 commit 下拉禁用');
+  assert.match(inner, /该条目关联的全部提交（已正式发布，条目已锁定）/, '推送完成后提交清单锁定并说明');
 });
 
 /* ---------- I1 i18n ---------- */

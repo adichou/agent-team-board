@@ -59,7 +59,8 @@ t('A1 从 merged BLD 创建：冻结完整、versionName/version 分开、draft�
   assert.equal(run.frozen.mainSha, '1'.repeat(40));
   assert.equal(run.frozen.devSha, '2'.repeat(40));
   assert.equal(run.frozen.remote, 'origin');
-  assert.deepEqual(run.frozen.items, [{ itemId: 'REQ-20260915-001', title: '示例', commit: 'a'.repeat(40) }]);
+  // BUG-20260921-015：一条目多提交——冻结快照带 commits 全量（commit 保留首个提交别名）
+  assert.deepEqual(run.frozen.items, [{ itemId: 'REQ-20260915-001', title: '示例', commit: 'a'.repeat(40), commits: ['a'.repeat(40)] }]);
   assert.equal(run.frozen.homepage.contentDir, '/tmp/homepage/demo-app/');
   assert.equal(run.targets.webapp.status, 'pending');
   assert.equal(run.targets.site.status, 'pending');
