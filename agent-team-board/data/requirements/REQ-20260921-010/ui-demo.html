@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260921-010 界面演示 — 文档编写界面语言集输入框</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e3e6ea; --text: #24292f;
+    --muted: #6a737d; --primary: #1f6feb; --warn: #bf8700; --err: #cf222e;
+    --info-bg: #ddf4ff; --ok-bg: #dafbe1; --warn-bg: #fff8c5; --err-bg: #ffebe9;
+    --ctrl-bg: #ffffff; --hover: #f6f8fa; --code-bg: #f6f8fa;
+  }
+  body.dark {
+    --bg: #0d1117; --card: #161b22; --line: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --primary: #4493f8; --warn: #d29922; --err: #f85149;
+    --info-bg: #121d2f; --ok-bg: #12261e; --warn-bg: #2a230f; --err-bg: #2d1517;
+    --ctrl-bg: #0d1117; --hover: #1c2128; --code-bg: #1c2128;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--text); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  .demo-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 16px; background: #24292f; color: #fff; position: sticky; top: 0; z-index: 5; }
+  body.dark .demo-top { background: #010409; }
+  .demo-top .title { font-weight: 600; }
+  .demo-top .title .small { display: block; font-weight: 400; opacity: .75; }
+  .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .top-actions .mode-btn { border: 1px solid #ffffff55; background: transparent; color: #fffa; border-radius: 6px; padding: 4px 12px; }
+  .top-actions .mode-btn:hover { background: #ffffff14; }
+  .fail-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #fffa; }
+  .fail-switch input { accent-color: var(--err); }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 14px 16px 60px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .panel > strong { display: block; margin-bottom: 8px; }
+
+  .btn { border: 1px solid var(--line); background: var(--ctrl-bg); color: var(--text); border-radius: 6px; padding: 4px 12px; }
+  .btn.small { padding: 2px 8px; font-size: 12px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.on { background: var(--info-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  select, input[type="text"], textarea { font: inherit; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--ctrl-bg); color: var(--text); }
+  textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
+  textarea[readonly] { background: var(--code-bg); }
+
+  .note ul { margin: 4px 0 0; padding-left: 20px; }
+  .note li { margin: 2px 0; }
+
+  .doc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .doc-head > strong { margin: 0; }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  #langSet { width: 170px; }
+  #langSet.err { border-color: var(--err); box-shadow: 0 0 0 3px var(--err-bg); }
+  .mode-group { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .mode-group button { border: 0; background: transparent; color: var(--muted); padding: 3px 12px; }
+  .mode-group button.on { background: var(--info-bg); color: var(--primary); font-weight: 600; }
+  .lang-set-err { color: var(--err); margin: 2px 0 8px; }
+
+  #editorWrap { position: relative; }
+  #editor { min-height: 200px; }
+  #preview { min-height: 200px; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--code-bg); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-word; overflow: auto; }
+  #preview a { color: var(--primary); }
+  .loading-box { min-height: 200px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); }
+  .status { margin: 8px 0 0; }
+  .status.ok { color: #1a7f37; }
+  body.dark .status.ok { color: #3fb950; }
+  .status.fail { color: var(--err); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 3px 10px; font-size: 13px; cursor: pointer; color: var(--text); }
+  .chip:hover { background: var(--hover); }
+  .chip.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--info-bg); }
+  .chip code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .st { font-size: 12px; border-radius: 4px; padding: 0 6px; margin-left: 4px; }
+  .st-mute { background: var(--hover); color: var(--muted); }
+  .st-run { background: var(--info-bg); color: var(--primary); }
+  .st-ok { background: var(--ok-bg); color: #1a7f37; }
+  body.dark .st-ok { color: #3fb950; }
+  .st-wait { background: var(--warn-bg); color: var(--warn); }
+
+  .gate { border-radius: 8px; padding: 8px 12px; margin: 10px 0; background: var(--warn-bg); }
+  .gate.pass { background: var(--ok-bg); }
+  .gate p { margin: 2px 0; }
+
+  .switch-line { padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--code-bg); }
+  .switch-line .cur { font-weight: 600; }
+  .switch-line a { color: var(--primary); cursor: pointer; text-decoration: underline; }
+  .switch-line .sep { color: var(--muted); margin: 0 6px; }
+
+  #toast { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 20; }
+  .toast-item { background: #24292f; color: #fff; border-radius: 8px; padding: 8px 14px; font-size: 13px; box-shadow: 0 4px 14px #0003; max-width: 420px; }
+  .toast-item.fail { background: var(--err); }
+</style>
+</head>
+<body>
+<header class="demo-top">
+  <div class="title">REQ-20260921-010 界面演示
+    <span class="small">文档编写界面 · 国际化语言集输入框（需求演示，非真实功能；正式实现文案须中英同步）</span>
+  </div>
+  <div class="top-actions">
+    <label class="fail-switch"><input type="checkbox" id="failSwitch">模拟保存 / 提交失败</label>
+    <button type="button" class="mode-btn" id="themeBtn">深色</button>
+    <button type="button" class="mode-btn" id="resetBtn">重置演示</button>
+  </div>
+</header>
+<main>
+  <section class="panel note">
+    <strong>演示要点</strong>
+    <ul>
+      <li>「文档」标题行新增<strong>语言集</strong>输入框（默认 <code>cn,en</code>）：回车或失焦确认；改成如 <code>cn,en,fr,jp</code> 后，语言下拉、下方文档 chips、门禁清单与 README 链接提示全部联动展开。</li>
+      <li>文件命名规则：第一个语言不带后缀（<code>README.md</code>），其余带后缀（<code>README_en.md</code>、<code>README_fr.md</code>…）；调整语言顺序后默认语言随之改变。</li>
+      <li>非法输入演示：清空后确认、或输入 <code>cn,,en</code>、<code>cn,en,cn</code>、<code>中,en</code> 等会被拦截并提示，界面保持上次有效状态。</li>
+      <li>保存 / 提交：加载中按钮禁用；保存已提交文档会转「需重新编写」；全部提交后门禁变绿；勾选顶部「模拟失败」可体验失败与重试反馈；全部未编写时提交按钮禁用（空态）。</li>
+      <li>底部「文档内多语言切换行」演示需求第 3 点：切换行涵盖语言集全部语言，点击语言链接跳到对应文档。</li>
+      <li>后缀分隔符（下划线 vs 存量点号 <code>.en.md</code>）、语言缩写口径（cn / zh）等仍为「待确认」项，本演示按需求原文口径呈现。</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <strong>AI 写作</strong>
+    <p class="muted small">由「技术写作人员」角色的子代理完成当前版本文档任务（演示：提示词文档清单随语言集展开）。</p>
+    <textarea id="aiPrompt" rows="5" readonly></textarea>
+    <p><button type="button" class="btn small primary" id="copyPrompt">复制提示词</button></p>
+  </section>
+
+  <section class="panel">
+    <div class="doc-head">
+      <strong>文档</strong>
+      <label class="field-inline">类型
+        <select id="docKey"></select></label>
+      <label class="field-inline">语言集
+        <input id="langSet" type="text" value="cn,en" autocomplete="off" spellcheck="false"></label>
+      <label class="field-inline">语言
+        <select id="docLang"></select></label>
+      <span class="mode-group" role="group" aria-label="编辑或预览">
+        <button type="button" id="modeEdit" class="on">编辑</button>
+        <button type="button" id="modePreview">预览</button>
+      </span>
+      <button type="button" class="btn small primary" id="saveBtn">保存</button>
+    </div>
+    <p class="lang-set-err small hidden" id="langSetErr"></p>
+    <div id="editorWrap">
+      <textarea id="editor" spellcheck="false"></textarea>
+      <pre id="preview" class="hidden"></pre>
+    </div>
+    <p class="small status hidden" id="savedMsg"></p>
+    <p class="muted small" id="readmeHint"></p>
+  </section>
+
+  <section class="panel">
+    <div class="chips" id="chips"></div>
+    <div class="gate" id="gateBar"></div>
+    <p><button type="button" class="btn primary" id="commitBtn">提交文档到 Git</button>
+      <span class="muted small">只提交语言集内文档，不夹带业务源码；无变化不空提交。</span></p>
+    <p class="small status hidden" id="commitMsg"></p>
+  </section>
+
+  <section class="panel">
+    <strong>文档内多语言切换行（README.md 内容首行，随语言集生成）</strong>
+    <div class="switch-line" id="switchLine"></div>
+    <p class="muted small">当前语言为纯文本、其余语言为链接，指向对应语言的文档文件；需求要求切换行涵盖语言集输入框的全部语言。点击链接可切换到该语言文档。</p>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ---------- 常量与工具 ----------
+var KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+var DOC_STATE_LABEL = { unwritten: '未编写', uncommitted: '未提交', committed: '已提交', 'needs-rewrite': '需重新编写' };
+var DOC_STATE_CLS = { unwritten: 'st-mute', uncommitted: 'st-run', committed: 'st-ok', 'needs-rewrite': 'st-wait' };
+var LANG_NAMES = { cn: '中文', zh: '中文', en: 'English', fr: 'Français', jp: '日本語', ja: '日本語',
+  de: 'Deutsch', es: 'Español', ko: '한국어', ru: 'Русский', it: 'Italiano', pt: 'Português' };
+function langName(l) { return LANG_NAMES[l] || l; }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function $(id) { return document.getElementById(id); }
+function fileOf(key, lang, langs) {
+  return lang === langs[0] ? key + '.md' : key + '_' + lang + '.md';
+}
+function randomHash() {
+  var s = '';
+  for (var i = 0; i < 12; i++) s += '0123456789abcdef'[Math.floor(Math.random() * 16)];
+  return s;
+}
+
+// ---------- 演示状态 ----------
+function initialStates() {
+  // 模拟一个进行中的版本：中文四类已提交、英文 README/CHANGELOG 已保存未提交、英文 FEATURES/AGENTS 未编写
+  return {
+    'README.md': 'committed', 'CHANGELOG.md': 'committed', 'FEATURES.md': 'committed', 'AGENTS.md': 'committed',
+    'README_en.md': 'uncommitted', 'CHANGELOG_en.md': 'uncommitted',
+    'FEATURES_en.md': 'unwritten', 'AGENTS_en.md': 'unwritten'
+  };
+}
+var state = newState();
+function newState() {
+  return {
+    langs: ['cn', 'en'],
+    type: 'README',
+    lang: 'cn',
+    mode: 'edit',
+    docStates: initialStates(),
+    drafts: {},
+    busy: false,
+    loading: false,
+    savedMsg: null,
+    commitMsg: null,
+    langSetErr: null
+  };
+}
+
+function curFile() { return fileOf(state.type, state.lang, state.langs); }
+function allFiles() {
+  var out = [];
+  KEYS.forEach(function (k) { state.langs.forEach(function (l) { out.push(fileOf(k, l, state.langs)); }); });
+  return out;
+}
+
+// ---------- 模拟文档内容 ----------
+function switchLineText(forLang) {
+  return state.langs.map(function (l) {
+    return l === forLang ? langName(l) : '[' + langName(l) + '](./' + fileOf('README', l, state.langs) + ')';
+  }).join(' | ');
+}
+function contentOf(file) {
+  var key = file.replace(/(?:_[a-z]{2,3})?\.md$/i, '');
+  var m = /_([a-z]{2,3})\.md$/i.exec(file);
+  var lang = m ? m[1] : state.langs[0];
+  if (key === 'README') {
+    return '# 项目名（' + langName(lang) + '）\n\n' + switchLineText(lang) + '\n\n## 简介\n\n（演示内容）本项目是一个示例，用于演示文档编写界面按语言集生成多语言文档。\n\n## 快速开始\n\n（演示内容）安装、运行与配置说明。\n';
+  }
+  if (key === 'CHANGELOG') return '# 更新日志（' + langName(lang) + '）\n\n## v1.2.0\n\n-（演示内容）本版本变更说明。\n';
+  if (key === 'FEATURES') return '# 功能特性（' + langName(lang) + '）\n\n-（演示内容）功能一：……\n-（演示内容）功能二：……\n';
+  return '# 协作规则（' + langName(lang) + '）\n\n（演示内容）适用于本仓库的 Agent 与人协作规则。\n';
+}
+
+// ---------- 渲染 ----------
+function render() {
+  renderLangSet();
+  renderSelectors();
+  renderEditor();
+  renderChips();
+  renderGate();
+  renderAiPrompt();
+  renderReadmeHint();
+  renderSwitchLine();
+}
+function renderLangSet() {
+  var box = $('langSet');
+  if (document.activeElement !== box) box.value = state.langs.join(',');
+  box.classList.toggle('err', !!state.langSetErr);
+  var err = $('langSetErr');
+  err.textContent = state.langSetErr || '';
+  err.classList.toggle('hidden', !state.langSetErr);
+}
+function renderSelectors() {
+  var keySel = $('docKey');
+  keySel.innerHTML = KEYS.map(function (k) {
+    return '<option value="' + k + '"' + (k === state.type ? ' selected' : '') + '>' + k + '.md</option>';
+  }).join('');
+  var langSel = $('docLang');
+  langSel.innerHTML = state.langs.map(function (l, i) {
+    var label = (i === 0 ? langName(l) + '（默认）' : langName(l));
+    return '<option value="' + esc(l) + '"' + (l === state.lang ? ' selected' : '') + '>' + esc(label) + '</option>';
+  }).join('');
+  $('modeEdit').classList.toggle('on', state.mode === 'edit');
+  $('modePreview').classList.toggle('on', state.mode === 'preview');
+  var saveBtn = $('saveBtn');
+  saveBtn.disabled = state.busy;
+  saveBtn.textContent = state.busy ? '处理中…' : '保存';
+}
+function renderEditor() {
+  var wrap = $('editorWrap'), box = $('editor'), pre = $('preview');
+  if (state.loading) {
+    box.classList.add('hidden'); pre.classList.add('hidden');
+    var lb = wrap.querySelector('.loading-box');
+    if (!lb) { lb = document.createElement('div'); lb.className = 'loading-box'; wrap.appendChild(lb); }
+    lb.textContent = '正在加载 ' + curFile() + '…';
+    lb.classList.remove('hidden');
+    return;
+  }
+  var lb2 = wrap.querySelector('.loading-box');
+  if (lb2) lb2.classList.add('hidden');
+  if (state.mode === 'edit') {
+    pre.classList.add('hidden');
+    box.classList.remove('hidden');
+    if (document.activeElement !== box) box.value = state.drafts[curFile()] != null ? state.drafts[curFile()] : contentOf(curFile());
+    box.disabled = state.busy;
+  } else {
+    box.classList.add('hidden');
+    pre.classList.remove('hidden');
+    var text = state.drafts[curFile()] != null ? state.drafts[curFile()] : contentOf(curFile());
+    // 预览把 [语言](./文件) 链接渲染为可点击（点击即切换到该文档）
+    pre.innerHTML = esc(text).replace(/\[([^\]]+)\]\(\.\/([^)]+)\)/g, function (_, name, file) {
+      return '<a data-doc-file="' + esc(file) + '">' + name + '</a>';
+    }) || '（空文档）';
+  }
+  var sm = $('savedMsg');
+  sm.textContent = state.savedMsg || '';
+  sm.className = 'small status' + (state.savedMsg ? (state.savedMsg.indexOf('失败') >= 0 ? ' fail' : ' ok') : '');
+  sm.classList.toggle('hidden', !state.savedMsg);
+}
+function renderChips() {
+  var cur = curFile();
+  $('chips').innerHTML = allFiles().map(function (f) {
+    var st = state.docStates[f] || 'unwritten';
+    return '<span class="chip' + (f === cur ? ' active' : '') + '" data-doc-file="' + esc(f) + '" tabindex="0" role="button" title="' + esc(DOC_STATE_LABEL[st]) + '">' +
+      '<code>' + esc(f) + '</code><span class="st ' + DOC_STATE_CLS[st] + '">' + esc(DOC_STATE_LABEL[st]) + '</span></span>';
+  }).join('');
+}
+function renderGate() {
+  var files = allFiles();
+  var unwritten = files.filter(function (f) { return (state.docStates[f] || 'unwritten') === 'unwritten'; });
+  var pending = files.filter(function (f) { var s = state.docStates[f] || 'unwritten'; return s === 'uncommitted' || s === 'needs-rewrite'; });
+  var bar = $('gateBar');
+  var pass = !unwritten.length && !pending.length;
+  bar.className = 'gate' + (pass ? ' pass' : '');
+  if (pass) {
+    bar.innerHTML = '<p class="small">文档已提交（' + esc(state.lastCommitHash || randomHash()) + '）：满足合并前置</p>';
+  } else {
+    var reasons = [];
+    if (unwritten.length) reasons.push('<p class="small">未编写 ' + unwritten.length + ' 个：' + unwritten.map(esc).join('、') + '</p>');
+    if (pending.length) reasons.push('<p class="small">未提交 ' + pending.length + ' 个：' + pending.map(esc).join('、') + '</p>');
+    bar.innerHTML = reasons.join('') || '<p class="small">文档未完成提交，暂不可合并</p>';
+  }
+  var anySaved = files.some(function (f) { return (state.docStates[f] || 'unwritten') !== 'unwritten'; });
+  var btn = $('commitBtn');
+  btn.disabled = state.busy || !anySaved;
+  btn.textContent = state.busy ? '提交中…' : '提交文档到 Git';
+  if (!anySaved) btn.title = '先编写并保存文档'; else btn.title = '';
+  var cm = $('commitMsg');
+  cm.textContent = state.commitMsg || '';
+  cm.className = 'small status' + (state.commitMsg ? (state.commitMsg.indexOf('失败') >= 0 ? ' fail' : ' ok') : '');
+  cm.classList.toggle('hidden', !state.commitMsg);
+}
+function renderAiPrompt() {
+  var files = allFiles();
+  var lines = [];
+  lines.push('请逐个总结以下 ' + files.length + ' 个文档（语言集 ' + state.langs.join(',') + '，' + KEYS.length + ' 类 × ' + state.langs.length + ' 语言），每个文件总结完成后其状态变为「已总结待审核」，等待人工审查：');
+  files.forEach(function (f) { lines.push('- ' + f); });
+  lines.push('');
+  lines.push('README 按语言链接同语言 CHANGELOG 与 FEATURES，文档内多语言切换行涵盖语言集全部语言。');
+  $('aiPrompt').value = lines.join('\n');
+}
+function renderReadmeHint() {
+  var hint = $('readmeHint');
+  if (state.type === 'README') {
+    var c = fileOf('CHANGELOG', state.lang, state.langs);
+    var f = fileOf('FEATURES', state.lang, state.langs);
+    hint.textContent = 'README 需链接同语言 CHANGELOG 与 FEATURES（' + c + '、' + f + '）。';
+  } else {
+    hint.textContent = '';
+  }
+}
+function renderSwitchLine() {
+  var cur = state.lang === state.langs[0] ? 'README.md' : 'README_' + state.lang + '.md';
+  $('switchLine').innerHTML = state.langs.map(function (l, i) {
+    var label = esc(langName(l)) + (i === 0 ? ' <span class="muted small">(' + esc(l) + '，默认)</span>' : ' <span class="muted small">(' + esc(l) + ')</span>');
+    var piece = l === state.lang
+      ? '<span class="cur">' + label + '</span>'
+      : '<a data-switch-lang="' + esc(l) + '">' + label + '</a>';
+    return piece;
+  }).join('<span class="sep">|</span>');
+  $('switchLine').dataset.for = cur;
+}
+
+// ---------- 交互 ----------
+function toast(msg, fail) {
+  var item = document.createElement('div');
+  item.className = 'toast-item' + (fail ? ' fail' : '');
+  item.textContent = msg;
+  $('toast').appendChild(item);
+  setTimeout(function () { item.remove(); }, 2600);
+}
+
+function validateLangSet(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return { err: '语言集不能为空（至少一个语言缩写，如 cn,en）' };
+  var parts = s.split(',').map(function (x) { return x.trim(); });
+  var seen = {};
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i];
+    if (!p) return { err: '存在空的语言项（连续逗号）：第 ' + (i + 1) + ' 项为空' };
+    if (!/^[a-zA-Z]{2,3}$/.test(p)) return { err: '存在非法缩写「' + p + '」：语言缩写以国际规范为准（2–3 个字母，如 cn / zh / en / fr / ja）' };
+    var low = p.toLowerCase();
+    if (seen[low]) return { err: '语言重复：「' + low + '」出现多次' };
+    seen[low] = true;
+  }
+  return { langs: parts.map(function (x) { return x.toLowerCase(); }) };
+}
+
+function applyLangSet(raw) {
+  var r = validateLangSet(raw);
+  if (r.err) {
+    state.langSetErr = r.err;   // 不应用非法值，界面保持上次有效状态
+    renderLangSet();
+    toast('✕ 语言集未应用：' + r.err, true);
+    return;
+  }
+  var old = state.langs.join(',');
+  state.langs = r.langs;
+  state.langSetErr = null;
+  if (state.langs.indexOf(state.lang) < 0) state.lang = state.langs[0]; // 当前语言不在新语言集：回落默认语言
+  loadFile(curFile(), true);
+  toast('✓ 语言集已应用：' + state.langs.join(',') + '（文档清单 ' + KEYS.length + ' 类 × ' + state.langs.length + ' 语言）' + (old !== state.langs.join(',') ? '' : ''));
+}
+
+var loadTimer = null;
+function loadFile(file, silent) {
+  // 解析文件名 → 类型 + 语言（用于 chips / 预览链接点击）
+  var m = /^([A-Z]+?)(?:_([a-z]{2,3}))?\.md$/.exec(file);
+  if (!m) { toast('未知文档：' + file, true); return; }
+  state.type = KEYS.indexOf(m[1]) >= 0 ? m[1] : 'README';
+  if (m[2] && state.langs.indexOf(m[2]) >= 0) state.lang = m[2];
+  else if (!m[2]) state.lang = state.langs[0];
+  state.savedMsg = null;
+  state.loading = true;
+  clearTimeout(loadTimer);
+  render();
+  loadTimer = setTimeout(function () {
+    state.loading = false;
+    render();
+    if (!silent) toast('已打开 ' + file);
+  }, 320);
+}
+
+function saveDoc() {
+  if (state.busy) return;
+  if (state.mode === 'edit') {
+    var box = $('editor');
+    state.drafts[curFile()] = box.value;
+  }
+  var file = curFile();
+  state.busy = true; state.savedMsg = null; render();
+  setTimeout(function () {
+    state.busy = false;
+    if ($('failSwitch').checked) {
+      state.savedMsg = '保存失败：演示失败（内容已保留，可重试）';
+      toast('✕ 保存失败：' + file, true);
+    } else {
+      var prev = state.docStates[file] || 'unwritten';
+      // 保存后状态流转：未编写→未提交；已提交→需重新编写；其余保持
+      state.docStates[file] = prev === 'committed' ? 'needs-rewrite' : 'uncommitted';
+      state.savedMsg = '已保存 ' + file + '（未提交：需「提交文档到 Git」后才能合并）' + (prev === 'committed' ? '；原已提交版本需重新提交' : '');
+      toast('✓ 已保存 ' + file);
+    }
+    render();
+  }, 620);
+}
+
+function commitDocs() {
+  if (state.busy) return;
+  var files = allFiles();
+  var pending = files.filter(function (f) { var s = state.docStates[f] || 'unwritten'; return s === 'uncommitted' || s === 'needs-rewrite'; });
+  var anySaved = files.some(function (f) { return (state.docStates[f] || 'unwritten') !== 'unwritten'; });
+  if (!anySaved) { toast('先编写并保存文档', true); return; }
+  state.busy = true; state.commitMsg = null; render();
+  setTimeout(function () {
+    state.busy = false;
+    if ($('failSwitch').checked) {
+      state.commitMsg = '提交失败：演示失败（内容已保留，可重试）';
+      toast('✕ 文档提交失败：演示失败', true);
+    } else if (!pending.length) {
+      state.commitMsg = '文档没有变化，未制造空提交';
+      toast('文档无变化，未空提交');
+    } else {
+      pending.forEach(function (f) { state.docStates[f] = 'committed'; });
+      var hash = randomHash();
+      state.lastCommitHash = hash;
+      state.commitMsg = '已提交文档（' + hash + '；范围：' + pending.join('、') + '）';
+      toast('✓ 文档已提交到 Git（' + hash.slice(0, 8) + '）');
+    }
+    render();
+  }, 820);
+}
+
+// ---------- 事件绑定 ----------
+$('langSet').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); applyLangSet(this.value); this.blur(); }
+});
+$('langSet').addEventListener('blur', function () { applyLangSet(this.value); });
+$('docKey').addEventListener('change', function () { loadFile(fileOf(this.value, state.lang, state.langs)); });
+$('docLang').addEventListener('change', function () { loadFile(fileOf(state.type, this.value, state.langs)); });
+$('modeEdit').addEventListener('click', function () { state.mode = 'edit'; render(); });
+$('modePreview').addEventListener('click', function () { state.mode = 'preview'; render(); });
+$('saveBtn').addEventListener('click', saveDoc);
+$('commitBtn').addEventListener('click', commitDocs);
+$('editor').addEventListener('input', function () { state.drafts[curFile()] = this.value; });
+$('chips').addEventListener('click', function (e) {
+  var chip = e.target.closest('[data-doc-file]');
+  if (chip) loadFile(chip.dataset.docFile);
+});
+$('preview').addEventListener('click', function (e) {
+  var a = e.target.closest('a[data-doc-file]');
+  if (a) loadFile(a.dataset.docFile);
+});
+$('switchLine').addEventListener('click', function (e) {
+  var a = e.target.closest('[data-switch-lang]');
+  if (a) loadFile(fileOf('README', a.dataset.switchLang, state.langs));
+});
+$('copyPrompt').addEventListener('click', function () {
+  var box = $('aiPrompt');
+  box.focus(); box.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+  if (ok) toast('✓ AI 写作提示词已复制（演示）');
+  else toast('复制不可用：请在文本框中全选（⌘A / Ctrl+A）手动复制', true);
+});
+$('themeBtn').addEventListener('click', function () {
+  document.body.classList.toggle('dark');
+  this.textContent = document.body.classList.contains('dark') ? '浅色' : '深色';
+});
+$('resetBtn').addEventListener('click', function () {
+  state = newState();
+  clearTimeout(loadTimer);
+  render();
+  toast('演示已重置：语言集恢复 cn,en，文档状态恢复初始进度');
+});
+
+render();
+</script>
+</body>
+</html>
