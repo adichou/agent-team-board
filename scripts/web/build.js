@@ -3154,14 +3154,21 @@ ${langsField}
     const blockedLine = (an.blocked || []).length
       ? `<p class="bld-iso-note" role="alert" title="${esc((an.blocked || []).join('；'))}">⚠ ${(an.blocked || []).length} 处混合提交无法安全拆分，合并将被阻止</p>`
       : '';
+    // BUG-20260921-018：已在目标分支上的共享提交豁免混合判定（服务端同口径放行）——
+    // 单行提示（非 alert：不是阻断），title 附提交与关联条目数明细，不静默。
+    const exemptLine = (an.exempted || []).length
+      ? `<p class="bld-iso-note" title="${esc((an.exempted || []).map((s) => `${short(s.commit)}（关联 ${(s.itemIds || []).length} 个条目）`).join('；'))}">已豁免 ${(an.exempted || []).length} 处共享提交的混合判定（提交已在 ${esc(p.mainBranch || 'main')} 上，合并时幂等记成功）</p>`
+      : '';
     let isoBody;
     if (depN) {
       isoBody = `<p class="bld-iso-sum"><span class="small">发现 ${depN} 个未选祖先（依赖）提交 · 影响 ${depItems.length} 个所选条目</span>${depBtn}</p>
         ${depDetails}
         ${skipList}
-        ${blockedLine}`;
+        ${blockedLine}
+        ${exemptLine}`;
     } else {
       isoBody = `${blockedLine || '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>'}
+        ${exemptLine}
         ${skipList}`;
     }
     const devBar = onDev
