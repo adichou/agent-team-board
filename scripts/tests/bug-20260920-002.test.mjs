@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // BUG-20260920-002 main 分支的 git log 显示优化（main ∪ dev 双支并集 + 分支头标签 +
 // 分支配色 + merge-base 汇聚标注）
-// —— B 组：build-git 真实临时仓库（并集 / heads / mergeBase / side / 对称性 / 单支回退 /
-//   搜索 / 分页 / 已合并 / 无共同祖先 / master 回退）；G 组：logGraph 纯函数分支稳定配色与
-//   汇聚标记；R 组：vm 渲染（分支头标签 / Merge-base 标注 / 并集提示 / 详情标注 / 单支零回归）；
-//   S 组：样式与静态契约；I 组：i18n 中英同步。
+// —— B 组：build-git 真实临时仓库（并集 / heads / mergeBase / side / dev 单支口径
+//   （BUG-20260921-006）/ 单支回退 / 搜索 / 分页 / 已合并 / 无共同祖先 / master 回退）；G 组：
+//   logGraph 纯函数分支稳定配色与汇聚标记；R 组：vm 渲染（分支头标签 / Merge-base 标注 /
+//   并集提示 / 详情标注 / 单支零回归）；S 组：样式与静态契约；I 组：i18n 中英同步。
 // 用法：node scripts/tests/bug-20260920-002.test.mjs
 
 import assert from 'node:assert/strict';
@@ -109,15 +109,19 @@ t('B1 branchLog 并集：选中 main 返回 main∪dev（集合与次序 = git l
   }
 });
 
-t('B2 对称性：选中 dev 与选中 main 的并集 / heads / mergeBase 完全一致（仅 branch 字段不同）', () => {
-  const { root } = mkParallelRepo();
+t('B2 BUG-20260921-006：选中 dev 走单支口径（dev 可达集合，不含 main 独有），main 维持并集不回归', () => {
+  const { root, m2 } = mkParallelRepo();
   const a = buildGit.branchLog(root, 'main', { limit: 50 });
   const b = buildGit.branchLog(root, 'dev', { limit: 50 });
   assert.equal(b.branch, 'dev');
-  assert.deepEqual(b.commits, a.commits, '切换 main/dev 选择不改变可见集合与排序');
-  assert.deepEqual(b.heads, a.heads);
-  assert.equal(b.mergeBase, a.mergeBase);
-  assert.equal(b.total, a.total);
+  const expect = git(root, ['log', 'dev', '--format=%H']).stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+  assert.equal(b.total, 4, 'dev total = dev 可达数（rev-list --count dev）');
+  assert.deepEqual(b.commits.map((c) => c.hash), expect, 'dev 集合与次序 = git log dev（main 独有 m2 不混入）');
+  assert.ok(!b.commits.some((c) => c.hash === m2), 'main 独有提交不出现在 dev 视图');
+  assert.ok(!('heads' in b) && !('mergeBase' in b), 'dev 单支响应不带 heads / mergeBase');
+  assert.ok(b.commits.every((c) => !('side' in c)), 'dev 单支响应不带 side');
+  assert.equal(a.total, 5, 'main 仍为并集（BUG-20260920-002 口径不回归）');
+  assert.ok(Array.isArray(a.heads) && a.heads.length === 2, 'main 响应仍附 heads');
 });
 
 t('B3 单支回退：无 dev / 无 main / 选其他分支时保持既有单支口径（无 heads / mergeBase / side）', () => {
@@ -166,11 +170,12 @@ t('B4 branchSearchLog 并集搜索：命中含 dev 独有提交且带 side / hea
   assert.equal(sh.mode, 'highlight');
   assert.equal(sh.matchedHashes.length, 2, '全量命中清单 = dev 独有两条');
   assert.equal(sh.commits.length, 5, '数据集 = 默认并集（不过滤）');
-  // subject 之外字段命中（作者）
+  // subject 之外字段命中（作者）；BUG-20260921-006：dev 单支口径（不含 main 独有 m2）
   const s2 = buildGit.branchSearchLog(root, 'dev', { q: 't' });
-  assert.equal(s2.matchedTotal, 5, '作者命中并集全部');
-  assert.equal(s2.total, 5);
+  assert.equal(s2.matchedTotal, 4, '作者命中 dev 可达全部（单支）');
+  assert.equal(s2.total, 4);
   assert.equal(s2.branch, 'dev');
+  assert.ok(!('heads' in s2) && !('mergeBase' in s2), 'dev 搜索响应不带 heads / mergeBase');
   // 空白 q → 默认并集分页（无 query 字段）
   const s3 = buildGit.branchSearchLog(root, 'main', { q: '   ' });
   assert.equal(s3.total, 5);
