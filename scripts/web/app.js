@@ -7333,7 +7333,7 @@ function renderSummaryPanel() {
   if (!run) {
     return `
       <section class="batch-create summary-create">
-        <p class="muted small" style="margin:0 0 6px">AI 总结：发布文档流水线「总结 → 审查 → 提交」的第一段——对当前版本八个发布文档（README / CHANGELOG / FEATURES / AGENTS 中英）逐文件总结，完成后进入人工审查。使用独立锁（summary.lock），与 AI 分析、AI 开发互不占用，三者可同时进行。</p>
+        <p class="muted small" style="margin:0 0 6px">AI 总结：发布文档流水线「总结 → 审查 → 提交」的第一段——对当前版本发布文档（README / CHANGELOG / FEATURES / AGENTS × 语言集，默认中英）逐文件总结，完成后进入人工审查。使用独立锁（summary.lock），与 AI 分析、AI 开发互不占用，三者可同时进行。</p>
         <div class="notice">暂无进行中的 AI 总结任务（空态）——到发布模块「文档编写」页点击「AI 总结」启动。</div>
       </section>`;
   }

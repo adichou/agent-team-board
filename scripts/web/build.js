@@ -1307,6 +1307,9 @@ const ATBBuild = (() => {
       busy: false, commitMsg: null, refreshing: false,
       // AI 总结：start 后的提示词预览 { text }（复制到剪贴板交给 AI Agent 执行）
       prompt: null,
+      // REQ-20260921-010 语言集输入：langsInput（输入中草稿，重渲染不丢字）、langsErr
+      //（行内校验 / 保存错误）、langsBusy（保存中禁用）
+      langsInput: null, langsErr: null, langsBusy: false,
       // 审查对话框：{ open, key（文档类型页签）, modes: { file: 'edit'|'preview' },
       // contents: { file: 文本 }, busy }；编辑态草稿经 syncReviewDrafts 回同步防丢
       review: null,
@@ -1345,7 +1348,7 @@ const ATBBuild = (() => {
     render();
   }
 
-  // REQ-20260921-008「刷新」：重新从磁盘读取八个文件内容与状态（外部 IDE 修改后取回最新）；
+  // REQ-20260921-008「刷新」：重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新）；
   // 加载期间按钮禁用 + 列表读取中反馈；失败走 pf.phase=error（副标题按钮保留 + 错误横幅 + 重试）
   async function refreshDocsPane() {
     const v = selVersion();
@@ -1357,9 +1360,55 @@ const ATBBuild = (() => {
     try {
       await ensurePublishPlan(true);
       if (pf.review?.open) await loadReviewPair(pf.review.key);
-      toast('已刷新：八个文件已同步为磁盘最新内容');
+      const n = (pf.plan?.docsFlow?.files || []).length || docFilesOf(pf.plan?.langs).length;
+      toast(`已刷新：${n} 个文件已同步为磁盘最新内容`);
     } finally {
       pf.refreshing = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  // REQ-20260921-010「语言集」应用（回车 / 失焦确认）：客户端镜像校验先行（非法就地报错、
+  // 不发请求、界面保持上次有效状态），合法则保存到版本记录并强制刷新五步装配——文件列表、
+  // 门禁、审查对话框列、AI 总结提示词全部按新语言集联动。
+  async function applyDocLangs(raw) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.langsBusy || !state.project || pf.phase !== 'ready') return;
+    const cur = (pf.plan?.langs || DEFAULT_DOC_LANGS).join(',');
+    const r = validateLangSetInput(raw);
+    if (r.error) {
+      pf.langsErr = r.error; // 不应用非法值，界面保持上次有效状态
+      if (state.pf === pf) render();
+      toast(`✕ 语言集未应用：${r.error}`, true);
+      return;
+    }
+    pf.langsErr = null;
+    const next = r.langs.join(',');
+    if (next === cur) {
+      pf.langsInput = null;
+      if (state.pf === pf) render();
+      return;
+    }
+    pf.langsBusy = true;
+    render();
+    try {
+      const resp = await fetch(`/api/build/docs/langs?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, langs: next }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || `保存失败（${resp.status}）`);
+      pf.langsInput = null;
+      if (pf.review?.open) { syncReviewDrafts(); pf.review.modes = {}; pf.review.contents = {}; } // 语言集变化：对话框按新清单重建
+      await ensurePublishPlan(true);
+      if (pf.review?.open) await loadReviewPair(pf.review.key);
+      toast(`✓ 语言集已应用：${next}（文档清单 4 类 × ${r.langs.length} 语言）`);
+    } catch (e) {
+      pf.langsErr = e.message; // 保存失败：保持上次有效语言集，可改后重试
+      toast(`✕ 语言集保存失败：${e.message}`, true);
+    } finally {
+      pf.langsBusy = false;
       if (state.pf === pf) render();
     }
   }
@@ -1403,7 +1452,7 @@ const ATBBuild = (() => {
       return;
     }
     const modes = {};
-    for (const f of DOC_FILES) modes[f.file] = 'preview';
+    for (const f of docFilesOf(pf.plan?.langs)) modes[f.file] = 'preview';
     pf.review = { open: true, key: 'README', modes, contents: {}, busy: false };
     render();
     loadReviewPair('README');
@@ -1428,12 +1477,13 @@ const ATBBuild = (() => {
     loadReviewPair(key);
   }
 
-  // 读取某类型页签的中英两文件（GET docs；content null 显示读取中）
+  // 读取某类型页签的全语言文件（GET docs；content null 显示读取中）；REQ-20260921-010 起
+  // 列随语言集动态（原中英双栏泛化为 N 栏）
   async function loadReviewPair(key) {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.review?.open || !state.project) return;
-    const pair = DOC_FILES.filter((f) => f.key === key);
+    const pair = docFilesOf(pf.plan?.langs).filter((f) => f.key === key);
     const stamp = ++pf.seq;
     await Promise.all(pair.map(async (f) => {
       try {
@@ -1512,7 +1562,8 @@ const ATBBuild = (() => {
       if (!r.ok) throw new Error(data.error || `审核失败（${r.status}）`);
       if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
       const n = data.docsFlow?.reviewedCount ?? 0;
-      toast(`✓ ${file} 已通过审核（${n}/8）`);
+      const total = data.docsFlow?.files?.length || docFilesOf(pf.plan?.langs).length;
+      toast(`✓ ${file} 已通过审核（${n}/${total}）`);
     } catch (e) {
       toast(`✕ 审核失败：${e.message}`, true);
     } finally {
@@ -2205,12 +2256,36 @@ const ATBBuild = (() => {
   const DOCS_FLOW_LABEL = { unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核' };
   const DOCS_FLOW_CLS = { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' };
   const DOCS_FLOW_ICON = { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' };
-  // 八文件清单（与 publish-flow.publishDocFiles 同源：四类 × 中英）
+  // REQ-20260921-010 文档清单按语言集动态展开（与 publish-flow 同口径）：
+  // 四类 × 语言集语言数，第一个语言（默认语言）不带后缀，其余 <KEY>_<lang>.md。
   const DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
-  const DOC_FILES = DOC_KEYS.flatMap((key) => [
-    { key, lang: 'zh', file: `${key}.md` },
-    { key, lang: 'en', file: `${key}.en.md` },
-  ]);
+  const DEFAULT_DOC_LANGS = ['cn', 'en'];
+  // 常见语言显示名（未命中原样显示缩写）；显示名随文件名 data-i18n-skip 豁免（标识不是文案）。
+  const LANG_NAMES = { cn: '中文', zh: '中文', en: 'English', fr: 'Français', jp: '日本語', ja: '日本語',
+    de: 'Deutsch', es: 'Español', ko: '한국어', ru: 'Русский', it: 'Italiano', pt: 'Português' };
+  function langNameOf(l) { return LANG_NAMES[String(l || '').toLowerCase()] || l || ''; }
+  // 语言集 → 文档清单（plan.langs 缺省回退 cn,en）
+  function docFilesOf(langs) {
+    const ls = Array.isArray(langs) && langs.length ? langs : DEFAULT_DOC_LANGS;
+    return DOC_KEYS.flatMap((key) => ls.map((lang, i) => ({ key, lang, file: `${key}${i === 0 ? '' : `_${lang}`}.md` })));
+  }
+  // 语言集客户端校验镜像（与服务端 normalizeDocLangs 同口径）：空值 / 空项 / 非 2–3 字母 /
+  // 重复项拦截，不应用非法值、界面保持上次有效状态。
+  function validateLangSetInput(raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return { error: '语言集不能为空（至少一个语言缩写，如 cn,en）' };
+    const parts = s.split(',').map((x) => x.trim());
+    const seen = {};
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (!p) return { error: `存在空的语言项（连续逗号）：第 ${i + 1} 项为空` };
+      if (!/^[a-zA-Z]{2,3}$/.test(p)) return { error: `存在非法缩写「${p.slice(0, 20)}」：语言缩写以国际规范为准（2–3 个字母，如 cn / zh / en / fr / ja）` };
+      const low = p.toLowerCase();
+      if (seen[low]) return { error: `语言重复：「${low}」出现多次` };
+      seen[low] = true;
+    }
+    return { langs: parts.map((x) => x.toLowerCase()) };
+  }
   const SITE_STATE_LABEL = { waiting: '等待官网同步', scanning: '扫描中', missed: '未命中（可继续检测）', hit: '已检测到官网同步', failed: '读取失败' };
 
   function renderStepNav(v) {
@@ -2228,29 +2303,44 @@ const ATBBuild = (() => {
   }
 
   // REQ-20260921-008 文档编写步重构：副标题 + 四按钮（刷新 / AI 总结 / 审查 / 提交）+
-  // 八文件四态列表 + 提交门禁条（替代原「AI 写作 / 文档编辑 / 提交」三段布局；编辑收敛进审查对话框）。
+  // 文件四态列表 + 提交门禁条（编辑收敛进审查对话框）。REQ-20260921-010：副标题行新增
+  // 「语言集」输入框（默认 cn,en，逗号分隔缩写），文件清单 / 门禁 / 审查对话框列随语言集
+  // 动态展开（4 类 × N；首语言无后缀，其余 KEY_lang.md）。
   // - 刷新 / AI 总结 / 审查三按钮恒可用（数据加载失败给错误反馈而非隐藏按钮）；
-  // - 提交按钮仅 8/8 已审核可用（aria-disabled + title 缺口明细，模式同 BUG-20260920-006）；
+  // - 提交按钮仅全部已审核可用（aria-disabled + title 缺口明细，模式同 BUG-20260920-006）；
   // - 文件名是标识不是文案：一律 data-i18n-skip（BUG-20260921-004 口径，防反向词典误译）。
   function renderDocsPane(v) {
     const pf = pfOf(v);
     if (!pf) return '<div class="bld-docs-pane"><p class="muted" role="status">正在加载发布流程数据…</p></div>';
+    // 语言集（加载 / 失败态按缺省口径展示输入框；值 = 输入中草稿优先，回显上次有效语言集）
+    const langs = pf?.plan?.langs || DEFAULT_DOC_LANGS;
+    const docTotal = DOC_KEYS.length * langs.length;
+    const langsValue = pf.langsInput != null ? pf.langsInput : langs.join(',');
+    const langsField = `
+        <div class="bld-docs-langset">
+          <label class="field-inline" for="bldDocLangs">语言集</label>
+          <input id="bldDocLangs" data-pf-langs type="text" value="${esc(langsValue)}" autocomplete="off" spellcheck="false"${pf.langsBusy ? ' disabled' : ''}${pf.phase === 'ready' ? '' : ' disabled'} title="逗号分隔的语言缩写（2–3 个字母，国际规范）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用">
+          <span class="muted small">第一个为默认语言（不带后缀），其余为 KEY_lang.md；回车 / 失焦应用</span>
+          ${pf.langsBusy ? '<span class="muted small" role="status">保存中…</span>' : ''}
+        </div>
+        ${pf.langsErr ? `<p class="rel-form-err small bld-docs-langset-err" role="alert">${esc(pf.langsErr)}</p>` : ''}`;
     // 副标题 + 四按钮恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）
     const actionsHtml = `
           <div class="bld-docs-actions">
-            <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取八个文件内容与状态（外部 IDE 修改后取回最新内容）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
+            <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
             <button type="button" class="btn small" data-pf-summary${pf.busy ? ' disabled' : ''} title="复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结（已审核文件跳过；也可不经 AI 总结直接审查）">${summaryBtnText(pf)}</button>
-            <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型四页签、中英双栏同步滚动对比，逐文件编辑 / 保存 / 通过审核">审查</button>
+            <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型四页签、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核">审查</button>
             ${commitBtnHtml(pf)}
           </div>`;
     const subBar = `
         <div class="bld-docs-sub">
           <div class="bld-docs-subtitle">
             <strong>文档编写 · AI 总结</strong>
-            <p class="muted small">围绕本版本八个发布文档（README / CHANGELOG / FEATURES / AGENTS 中英）完成 AI 总结、人工审查与提交到本地 dev 分支；可不经 AI 总结直接审查修改。</p>
+            <p class="muted small">围绕本版本 ${docTotal} 个发布文档（README / CHANGELOG / FEATURES / AGENTS × 语言集 ${esc(langs.join('、'))}）完成 AI 总结、人工审查与提交到本地 dev 分支；可不经 AI 总结直接审查修改。</p>
           </div>
           ${actionsHtml}
-        </div>`;
+        </div>
+        ${langsField}`;
     if (pf.phase === 'loading') return `<div class="bld-docs-pane">${subBar}<p class="muted" role="status">正在加载发布流程数据…</p></div>`;
     if (pf.phase === 'error' || !pf.plan) {
       return `<div class="bld-docs-pane">${subBar}
@@ -2259,8 +2349,8 @@ const ATBBuild = (() => {
     }
     const p = pf.plan;
     const docs = p.docs || { files: [], overall: 'none', reasons: [] };
-    const flowEval = p.docsFlow || { files: DOC_FILES.map((f) => ({ ...f, state: 'unsummarized' })), reviewedCount: 0, canCommit: false, missing: [] };
-    // 八文件列表（恒八行；AI 总结运行中附带当前文件标注；图标独立元素保证状态文字整节点可翻译）
+    const flowEval = p.docsFlow || { files: docFilesOf(p.langs).map((f) => ({ ...f, state: 'unsummarized' })), reviewedCount: 0, canCommit: false, missing: [] };
+    // 文件列表（4 类 × 语言集语言数；AI 总结运行中附带当前文件标注；图标独立元素保证状态文字整节点可翻译）
     const sum = p.summary || null;
     const flowChip = (state, extra = '') => `<span class="st ${DOCS_FLOW_CLS[state] || 'st-mute'}" title="${esc(DOCS_FLOW_LABEL[state] || state)}"><i class="st-ico" aria-hidden="true">${DOCS_FLOW_ICON[state] || ''}</i>${esc(DOCS_FLOW_LABEL[state] || state)}${extra}</span>`;
     const rowsHtml = flowEval.files.map((f) => {
@@ -2269,17 +2359,18 @@ const ATBBuild = (() => {
         : '';
       return `
           <li class="bld-doc-row">
-            <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}${f.lang === 'zh' ? '（中）' : '（英）'}</span>
+            <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}（${esc(langNameOf(f.lang))}）</span>
             <span class="bld-doc-row-st">${flowChip(f.state)}${progress}</span>
           </li>`;
     }).join('');
-    // 门禁条：已提交终态 > 8/8 可提交 > 缺口明细
+    // 门禁条：已提交终态 > 全部可提交 > 缺口明细（计数 X/N 按语言集动态）
+    const total = flowEval.files.length;
     const committed = docs.overall === 'committed' && docs.commitHash;
     const gateBar = committed
-      ? `<div class="bld-docs-gate ok" role="note">已提交到本地 dev 分支（hash ${esc(short(docs.commitHash))}，仅八个文档 pathspec）：满足「合并入 main」前置。</div>`
+      ? `<div class="bld-docs-gate ok" role="note">已提交到本地 dev 分支（hash ${esc(short(docs.commitHash))}，仅语言集内文档 pathspec）：满足「合并入 main」前置。</div>`
       : flowEval.canCommit
-        ? `<div class="bld-docs-gate ok" role="note">提交门禁：${flowEval.reviewedCount}/8 已审核 —— 全部文件已通过审查，可提交到本地 dev 分支。</div>`
-        : `<div class="bld-docs-gate" role="note">提交门禁：${flowEval.reviewedCount}/8 已审核 —— 提交按钮禁用，尚缺：${flowEval.missing.map((m) => `${esc(m.file)}（${esc(DOCS_FLOW_LABEL[m.state] || m.state)}）`).join('、')}${flowEval.scopeStale ? '；发布范围已变化，审核已失效需重新审查' : ''}。</div>`;
+        ? `<div class="bld-docs-gate ok" role="note">提交门禁：${flowEval.reviewedCount}/${total} 已审核 —— 全部文件已通过审查，可提交到本地 dev 分支。</div>`
+        : `<div class="bld-docs-gate" role="note">提交门禁：${flowEval.reviewedCount}/${total} 已审核 —— 提交按钮禁用，尚缺：${flowEval.missing.map((m) => `${esc(m.file)}（${esc(DOCS_FLOW_LABEL[m.state] || m.state)}）`).join('、')}${flowEval.scopeStale ? '；发布范围已变化，审核已失效需重新审查' : ''}。</div>`;
     // AI 总结提示词预览（点击「AI 总结」后展示；已复制口径）
     const promptBox = pf.prompt
       ? `<details class="bld-docs-prompt-box" open>
@@ -2311,14 +2402,15 @@ const ATBBuild = (() => {
       </div>`;
   }
 
-  // AI 总结按钮文案：运行中显示进度（总结中 x/8）
+  // AI 总结按钮文案：运行中显示进度（总结中 x/N，N = 4 类 × 语言集语言数）
   function summaryBtnText(pf) {
     const sum = pf?.plan?.summary;
     return sum && sum.phase === 'running' ? `总结中 ${sum.counts.summarized}/${sum.counts.total}` : 'AI 总结';
   }
 
-  // 提交按钮：8/8 已审核才可用（aria-disabled：HTML disabled 不派发 click，点击由 commitDocs
-  // 守卫 toast 真实缺口）；已提交 / 提交中 / 可提交三态文案；数据未就绪（加载 / 失败态）给明确 title
+  // 提交按钮：全部已审核（X/X，X = 4 类 × 语言集语言数）才可用（aria-disabled：HTML disabled
+  // 不派发 click，点击由 commitDocs 守卫 toast 真实缺口）；已提交 / 提交中 / 可提交三态文案；
+  // 数据未就绪（加载 / 失败态）给明确 title
   function commitBtnHtml(pf) {
     if (!pf?.plan) return '<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">提交</button>';
     const flowEval = pf.plan.docsFlow || {};
@@ -2327,25 +2419,28 @@ const ATBBuild = (() => {
     if (pf.busy) return '<button type="button" class="btn small primary" data-pf-commit disabled>提交中…</button>';
     const ok = flowEval.canCommit === true;
     const missing = flowEval.missing || [];
-    const reason = ok ? '把八个文档提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
+    const reason = ok ? '把语言集内文档提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
       : `还需 ${missing.length} 个文件通过审查：${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}`;
     return `<button type="button" class="btn small primary" data-pf-commit${ok ? '' : ' aria-disabled="true"'} title="${esc(reason)}">提交</button>`;
   }
 
-  // REQ-20260921-008 审查对话框：按文档类型四页签，页签内中英双栏并排（八个文件全部可达）；
-  // 每栏独立 编辑/预览 切换、保存、通过审核；双栏同步滚动（bindReviewSyncScroll 按比例跟随）；
+  // REQ-20260921-008 审查对话框：按文档类型四页签，页签内全语言栏并排（语言集内全部文件
+  // 可达；REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，栅格列数 = 语言数）；
+  // 每栏独立 编辑/预览 切换、保存、通过审核；各栏同步滚动（bindReviewSyncScroll 按比例跟随）；
   // 编辑已审核文件保存后回退「已总结待审核」需重新审查。文件名 data-i18n-skip（标识豁免）。
   function renderReviewModal(v) {
     const pf = v ? pfOf(v) : null;
     const rv = pf?.review;
     if (!rv?.open) return '';
-    const flowEval = pf.plan?.docsFlow || { files: [], reviewedCount: 0 };
+    const flowEval = pf.plan?.docsFlow || { files: docFilesOf(pf?.plan?.langs).map((f) => ({ ...f, state: 'unsummarized' })), reviewedCount: 0 };
     const stateOf = (file) => (flowEval.files.find((f) => f.file === file) || {}).state || 'unsummarized';
+    const docFiles = flowEval.files.length ? flowEval.files : docFilesOf(pf?.plan?.langs);
     const tabsHtml = DOC_KEYS.map((k) => {
-      const n = DOC_FILES.filter((f) => f.key === k && stateOf(f.file) === 'reviewed').length;
-      return `<button type="button" class="rel-tab${rv.key === k ? ' active' : ''}" data-review-tab="${k}" role="tab" aria-selected="${rv.key === k}">${k}（${n}/2）</button>`;
+      const per = docFiles.filter((f) => f.key === k);
+      const n = per.filter((f) => stateOf(f.file) === 'reviewed').length;
+      return `<button type="button" class="rel-tab${rv.key === k ? ' active' : ''}" data-review-tab="${k}" role="tab" aria-selected="${rv.key === k}">${k}（${n}/${per.length}）</button>`;
     }).join('');
-    const pair = DOC_FILES.filter((f) => f.key === rv.key);
+    const pair = docFiles.filter((f) => f.key === rv.key);
     const colsHtml = pair.map((f) => {
       const mode = rv.modes[f.file] === 'edit' ? 'edit' : 'preview';
       const st = stateOf(f.file);
@@ -2358,7 +2453,7 @@ const ATBBuild = (() => {
       return `
             <div class="bld-review-col" data-col="${esc(f.file)}">
               <div class="bld-review-col-head">
-                <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}${f.lang === 'zh' ? '（中）' : '（英）'}</span>
+                <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}（${esc(langNameOf(f.lang))}）</span>
                 <span class="st ${DOCS_FLOW_CLS[st] || 'st-mute'}"><i class="st-ico" aria-hidden="true">${DOCS_FLOW_ICON[st] || ''}</i>${esc(DOCS_FLOW_LABEL[st] || st)}</span>
                 <div class="bld-review-col-acts">
                   <span class="bld-doc-mode" role="group" aria-label="编辑或预览">
@@ -2381,9 +2476,9 @@ const ATBBuild = (() => {
             <button type="button" class="btn small quiet" data-review-close aria-label="关闭对话框">✕ 关闭</button>
           </header>
           <nav class="rel-tabs bld-review-tabs" role="tablist" aria-label="文档类型页签">${tabsHtml}</nav>
-          <div class="bld-review-cols">${colsHtml}</div>
+          <div class="bld-review-cols"${pair.length ? ` style="grid-template-columns:repeat(${pair.length},minmax(0,1fr))"` : ''}>${colsHtml}</div>
           <footer class="bld-review-foot">
-            <span>全部 ${flowEval.reviewedCount}/8 已审核 · 本页签 ${pairReviewed}/2 · 双栏同步滚动：一侧滚动另一侧按比例跟随</span>
+            <span>全部 ${flowEval.reviewedCount}/${docFiles.length} 已审核 · 本页签 ${pairReviewed}/${pair.length} · 各栏同步滚动：一侧滚动其余按比例跟随</span>
             <button type="button" class="btn small" data-review-close>关闭</button>
           </footer>
         </div>
@@ -3137,6 +3232,14 @@ const ATBBuild = (() => {
     q('[data-pf-summary]')?.addEventListener('click', startSummary);
     q('[data-pf-review]')?.addEventListener('click', openReview);
     q('[data-pf-commit]')?.addEventListener('click', commitDocs);
+    // REQ-20260921-010 语言集输入框：输入草稿回写（重渲染不丢字）；回车触发失焦统一走应用；
+    // 失焦应用（校验镜像 + 保存 + 联动刷新）
+    const langsBox = q('[data-pf-langs]');
+    if (langsBox) {
+      langsBox.addEventListener('input', () => { const pf = state.pf; if (pf) pf.langsInput = langsBox.value; });
+      langsBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); langsBox.blur(); } });
+      langsBox.addEventListener('blur', () => { const pf = state.pf; if (pf) applyDocLangs(langsBox.value); });
+    }
     q('[data-pf-copy-prompt]')?.addEventListener('click', async () => {
       const box = q('.bld-docs-prompt');
       const ok = await copyText(box?.value || '');

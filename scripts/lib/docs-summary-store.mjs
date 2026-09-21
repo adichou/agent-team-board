@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { AtbError, acquireLock, writeJsonAtomic } from './core.mjs';
-import { publishDocFiles, isPublishDocFile } from './publish-flow.mjs';
+import { publishDocFiles, docLangsOf } from './publish-flow.mjs';
 
 export const SUMMARY_FILE_STATES = ['pending', 'summarizing', 'summarized'];
 export const SUMMARY_RUN_PHASES = ['running', 'done', 'failed'];
@@ -110,9 +110,10 @@ export function latestSummaryRun(dataDir, verId = null) {
 
 // ---------- 生命周期 ----------
 
-// 启动一轮 AI 总结：八文件全部 pending，占用独立锁。同一时间至多一个进行中的 run
-// （锁单一，跨版本亦互斥）；重复 start 报错不排队。
-export function createSummaryRun(dataDir, { verId, owner } = {}) {
+// 启动一轮 AI 总结：按语言集展开文件全部 pending（REQ-20260921-010 起文档清单随语言集
+// 动态，缺省 cn,en），占用独立锁。同一时间至多一个进行中的 run（锁单一，跨版本亦互斥）；
+// 重复 start 报错不排队。
+export function createSummaryRun(dataDir, { verId, owner, langs } = {}) {
   const id = String(verId || '').trim();
   if (!/^BLD-\d{8}-\d{3,}$/.test(id)) throw new AtbError(`版本计划号非法：${id || '（空）'}（形如 BLD-YYYYMMDD-NNN）`);
   ensureDocsSummary(dataDir);
@@ -125,7 +126,7 @@ export function createSummaryRun(dataDir, { verId, owner } = {}) {
   }
   const runId = newRunId();
   const files = {};
-  for (const f of publishDocFiles()) files[f.file] = 'pending';
+  for (const f of publishDocFiles(docLangsOf({ langs }))) files[f.file] = 'pending';
   const run = {
     version: 1,
     runId,
@@ -146,13 +147,16 @@ export function createSummaryRun(dataDir, { verId, owner } = {}) {
   return run;
 }
 
-// 逐文件进度回执：summarizing（开始总结该文件）/ summarized（该文件总结完成，待人工审核）
+// 逐文件进度回执：summarizing（开始总结该文件）/ summarized（该文件总结完成，待人工审核）。
+// REQ-20260921-010：按 run 自身 files 账本校验（语言集随版本可变，不依赖全局固定白名单）。
 export function markSummaryFile(dataDir, runId, file, state) {
-  if (!isPublishDocFile(file)) throw new AtbError(`非发布文档文件：${file}（仅八个发布文档可回执）`);
   if (!SUMMARY_FILE_STATES.includes(state) || state === 'pending') {
     throw new AtbError(`state 必须是 ${SUMMARY_FILE_STATES.filter((s) => s !== 'pending').join(' | ')}，得到：${state}`);
   }
   const run = getSummaryRun(dataDir, runId);
+  if (!Object.prototype.hasOwnProperty.call(run.files || {}, String(file || ''))) {
+    throw new AtbError(`非发布文档文件：${file}（仅语言集内发布文档可回执）`);
+  }
   if (run.phase !== 'running') throw new AtbError(`运行 ${runId} 已收尾（${run.phase}）：不能再回执文件进度`);
   run.files[file] = state;
   saveSummaryRun(dataDir, run);
@@ -216,12 +220,13 @@ export function summaryMarksForVer(dataDir, verId) {
 
 // ---------- 视图（文档编写页 / 任务模块） ----------
 
-// 面板视图：进度计数 + 当前文件 + 独立锁标注数据。
+// 面板视图：进度计数（total 按账本文件数动态——语言集 4 × N）+ 当前文件 + 独立锁标注数据。
 export function summaryRunView(run) {
   if (!run) return null;
   const files = Object.entries(run.files || {});
   const summarized = files.filter(([, s]) => s === 'summarized').length;
   const summarizingFile = files.find(([, s]) => s === 'summarizing');
+  const total = files.length;
   return {
     runId: run.runId,
     verId: run.verId,
@@ -229,7 +234,7 @@ export function summaryRunView(run) {
     phase: run.phase,
     lock: 'summary', // 独立锁标注（与 AI 分析 / AI 开发隔离）
     files: { ...(run.files || {}) },
-    counts: { summarized, pending: 8 - summarized - (summarizingFile ? 1 : 0), total: 8 },
+    counts: { summarized, pending: total - summarized - (summarizingFile ? 1 : 0), total },
     currentFile: summarizingFile ? summarizingFile[0] : null,
     reason: run.reason || null,
     summary: run.summary || null,

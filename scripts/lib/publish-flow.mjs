@@ -4,8 +4,8 @@
 // 覆盖口径（README 落定）：
 //   - 版本号：从计划编号后两段提取（BLD-20260920-001 → 20260920-001），保留前导零，
 //     界面各处复用同一提取，不另让用户重复输入；
-//   - 发布文档：README / CHANGELOG / FEATURES / AGENTS 四类 × 中英共八个文件；README 按
-//     语言链接 CHANGELOG 与 FEATURES（双语互链）；
+//   - 发布文档：README / CHANGELOG / FEATURES / AGENTS 四类 × 语言集（REQ-20260921-010，
+//     默认 cn,en，可配置）动态展开；README 按语言链接 CHANGELOG 与 FEATURES（同语言互链）；
 //   - AI 写作提示词：技术写作人员角色 + 子代理流程 + 项目路径 / 计划号 / 版本号 / 关联范围 /
 //     文档清单 / 写作约束（简练通俗、不罗列原文、不编造）；
 //   - 官网提示词：在官网仓库执行、读已发布版本 CHANGELOG / FEATURES 双语材料、提交消息带
@@ -27,40 +27,98 @@ export function versionNumberOf(planId) {
   return `${m[1]}-${m[2]}`;
 }
 
-// ---------- 发布文档清单 ----------
+// ---------- 发布文档清单（REQ-20260921-010 按语言集动态展开） ----------
 
 export const PUBLISH_DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
-export const PUBLISH_DOC_LANGS = ['zh', 'en'];
+// 默认语言集按需求原文 cn,en；语言缩写以国际规范为准（2–3 个字母），cn / zh、jp / ja 均合法。
+export const DEFAULT_DOC_LANGS = ['cn', 'en'];
 
-// 八个已确认文件（人工确认：中文 <KEY>.md、英文 <KEY>.en.md；CHANGEME.log /「三个文档」为笔误）。
-export function publishDocFiles() {
+const LANG_CODE_RE = /^[a-zA-Z]{2,3}$/;
+
+// 语言集校验（列表项）：空项（连续逗号）、非 2–3 字母缩写、重复项（不自动去重）均报错；
+// 返回 { langs }（小写归一）或 { langs: null, error }。
+function validateLangParts(parts) {
+  const seen = new Set();
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (!p) return { langs: null, error: `存在空的语言项（连续逗号）：第 ${i + 1} 项为空` };
+    if (!LANG_CODE_RE.test(p)) {
+      return { langs: null, error: `存在非法缩写「${p.slice(0, 20)}」：语言缩写以国际规范为准（2–3 个字母，如 cn / zh / en / fr / ja）` };
+    }
+    const low = p.toLowerCase();
+    if (seen.has(low)) return { langs: null, error: `语言重复：「${low}」出现多次` };
+    seen.add(low);
+  }
+  return { langs: parts.map((p) => p.toLowerCase()), error: null };
+}
+
+// 语言集数组入参（v.langs 健壮读取 / 服务端保存共用）。
+export function normalizeLangsList(list) {
+  if (!Array.isArray(list) || !list.length) {
+    return { langs: null, error: '语言集不能为空（至少一个语言缩写，如 cn,en）' };
+  }
+  return validateLangParts(list.map((x) => String(x ?? '').trim()));
+}
+
+// 语言集字符串入参（输入框原文，逗号分隔）：空白容错 + 大小写归一。
+export function normalizeDocLangs(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return { langs: null, error: '语言集不能为空（至少一个语言缩写，如 cn,en）' };
+  return validateLangParts(s.split(',').map((x) => x.trim()));
+}
+
+// 版本记录取语言集：v.langs 合法（数组或逗号串）则用之；缺失 / 非法整体回退默认 cn,en
+//（求值入口统一从这里取，语言集是文件清单的唯一事实源）。
+export function docLangsOf(v) {
+  const raw = v?.langs;
+  if (raw == null) return [...DEFAULT_DOC_LANGS];
+  const r = Array.isArray(raw) ? normalizeLangsList(raw) : normalizeDocLangs(raw);
+  return r.langs || [...DEFAULT_DOC_LANGS];
+}
+
+// 文档清单 = 4 类 × 语言集全部语言：第一个语言（默认语言）不带后缀，其余 <KEY>_<lang>.md
+//（REQ-20260921-010 需求原文命名；存量 <KEY>.en.md 点号命名不迁移、不并存识别）。
+export function publishDocFiles(langs = DEFAULT_DOC_LANGS) {
+  const ls = docLangsOf({ langs });
   const out = [];
   for (const key of PUBLISH_DOC_KEYS) {
-    for (const lang of PUBLISH_DOC_LANGS) {
-      out.push({ key, lang, file: `${key}${lang === 'en' ? '.en' : ''}.md` });
-    }
+    ls.forEach((lang, i) => {
+      out.push({ key, lang, file: `${key}${i === 0 ? '' : `_${lang}`}.md` });
+    });
   }
   return out;
 }
 
-export function docFileOf(key, lang) {
+export function docFileOf(key, lang, langs = DEFAULT_DOC_LANGS) {
   const k = String(key || '').trim().toUpperCase();
   const l = String(lang || '').trim().toLowerCase();
-  if (!PUBLISH_DOC_KEYS.includes(k) || !PUBLISH_DOC_LANGS.includes(l)) return null;
-  return `${k}${l === 'en' ? '.en' : ''}.md`;
+  const idx = docLangsOf({ langs }).indexOf(l);
+  if (!PUBLISH_DOC_KEYS.includes(k) || idx < 0) return null;
+  return `${k}${idx === 0 ? '' : `_${l}`}.md`;
 }
 
-export function isPublishDocFile(file) {
+export function isPublishDocFile(file, langs = DEFAULT_DOC_LANGS) {
   const name = String(file || '').trim();
-  return publishDocFiles().some((f) => f.file === name);
+  return publishDocFiles(langs).some((f) => f.file === name);
+}
+
+// 常见语言显示名（未命中原样显示缩写）；显示名随文件名一并 data-i18n-skip 豁免（标识不是文案）。
+const LANG_NAMES = {
+  cn: '中文', zh: '中文', en: 'English', fr: 'Français', jp: '日本語', ja: '日本語',
+  de: 'Deutsch', es: 'Español', ko: '한국어', ru: 'Русский', it: 'Italiano', pt: 'Português',
+};
+export function langNameOf(lang) {
+  const l = String(lang || '').trim().toLowerCase();
+  return LANG_NAMES[l] || l;
 }
 
 // README 按语言链接 CHANGELOG 与 FEATURES（同语言互链）；其余文档无链接要求。
+// README.md → 无后缀互链；README_<lang>.md → 同后缀互链。
 export function readmeDocLinks(file) {
-  const name = String(file || '').trim();
-  if (name === 'README.md') return ['CHANGELOG.md', 'FEATURES.md'];
-  if (name === 'README.en.md') return ['CHANGELOG.en.md', 'FEATURES.en.md'];
-  return [];
+  const m = /^README(_[a-z]{2,3})?\.md$/.exec(String(file || '').trim());
+  if (!m) return [];
+  const suffix = m[1] || '';
+  return [`CHANGELOG${suffix}.md`, `FEATURES${suffix}.md`];
 }
 
 // ---------- 提示词装配 ----------
@@ -68,11 +126,18 @@ export function readmeDocLinks(file) {
 const shortHash = (h) => String(h || '').slice(0, 12);
 
 // AI 总结提示词（REQ-20260921-008，原 buildDocWritingPrompt 更名并按新工作流调整）：
-// 主会话派发给「技术写作人员」角色的子代理，逐文件总结当前版本八个发布文档；子代理经
+// 主会话派发给「技术写作人员」角色的子代理，逐文件总结当前版本发布文档；子代理经
 // atb summary CLI 逐文件回执进度（正在总结 → 已总结待审核），完成后交短回执。
-// 必带：项目路径、计划号、版本号、关联范围（条目 + 实际提交）、文档清单、进度回执指令、写作约束。
-export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, atbPath = 'node scripts/atb.mjs' } = {}) {
+// 必带：项目路径、计划号、版本号、关联范围（条目 + 实际提交）、文档清单（REQ-20260921-010
+// 起按语言集 4 类 × N 展开）、进度回执指令、写作约束。
+export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, atbPath = 'node scripts/atb.mjs' } = {}) {
   const version = versionNumberOf(planId) || planId;
+  const ls = docLangsOf({ langs });
+  const docFiles = publishDocFiles(ls);
+  const readmePairs = ls.map((_, i) => {
+    const suffix = i === 0 ? '' : `_${ls[i]}`;
+    return `README${suffix}.md → CHANGELOG${suffix}.md / FEATURES${suffix}.md`;
+  });
   const lines = [];
   lines.push(`你是技术写作人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 总结任务；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
   lines.push('');
@@ -82,8 +147,8 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
   lines.push('关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：');
   for (const it of items) lines.push(`- ${it.itemId}（commit ${shortHash(it.commit)}）${it.title || ''}`);
   lines.push('');
-  lines.push('请逐个总结以下八个文档（中文 / 英文各四类），每个文件总结完成后其状态变为「已总结待审核」，等待人工审查：');
-  for (const f of publishDocFiles()) lines.push(`- ${f.file}（${f.lang === 'zh' ? '中' : '英'}文 / ${f.key}）`);
+  lines.push(`请逐个总结以下 ${docFiles.length} 个文档（${PUBLISH_DOC_KEYS.length} 类 × ${ls.length} 语言，语言集 ${ls.join(',')}），每个文件总结完成后其状态变为「已总结待审核」，等待人工审查：`);
+  for (const f of docFiles) lines.push(`- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`);
   lines.push('');
   if (runId) {
     lines.push('逐文件进度回执（在项目根执行；atb 指 ' + atbPath + '，下同）：');
@@ -91,12 +156,12 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
     lines.push(`2. 该文件总结完成：atb summary file ${runId} --file <文件名> --state summarized`);
     lines.push(`3. 全部完成：atb summary done ${runId} --summary "<一两句要点>"`);
     lines.push(`4. 中断 / 无法完成：atb summary fail ${runId} --reason "<短句原因>"`);
-    lines.push('已审核（reviewed）的文件跳过不再总结；不修改八个文档以外的任何文件。');
+    lines.push(`已审核（reviewed）的文件跳过不再总结；不修改上述 ${docFiles.length} 个文档以外的任何文件。`);
     lines.push('');
   }
   lines.push('写作约束：');
   lines.push('- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。');
-  lines.push('- README 按语言链接同语言 CHANGELOG 与 FEATURES（README.md → CHANGELOG.md / FEATURES.md；README.en.md → CHANGELOG.en.md / FEATURES.en.md），链接必须真实可达。');
+  lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${readmePairs.join('；')}），链接必须真实可达。`);
   lines.push('- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。');
   lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
   lines.push('- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。');
@@ -197,14 +262,15 @@ export const DOCS_FLOW_LABEL = {
 // 判定优先级：正在总结 > 已审核（hash 一致且未 scopeStale）> 已总结待审核（任一 run 曾标记完成，
 // 或审核记录存在但内容已变——再次编辑 / 外部 IDE 修改自动回退）> 未总结。
 // scopeStale 口径（design.md 落定）：发布范围变化时审核整体失效（回退待审核），不弱化提交门禁。
-// 输出：files（八行恒定）、reviewedCount、canCommit（8/8 已审核）、missing（未审核文件 + 状态）。
+// 输出：files（4 类 × 语言集语言数，REQ-20260921-010 动态）、reviewedCount、canCommit
+//（全部已审核）、missing（未审核文件 + 状态）。
 export function evaluateDocsFlow(v, readFile, marks = {}) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const scopeStale = !!(v?.docs && v.docs.scopeStale);
   const reviewFiles = (v?.review && v.review.files) || {};
   const summarizing = new Set(marks.summarizing || []);
   const summarizedMarks = new Set(marks.summarized || []);
-  const files = publishDocFiles().map((f) => {
+  const files = publishDocFiles(docLangsOf(v)).map((f) => {
     let text = null;
     try { text = read(f.file); } catch { text = null; }
     const diskHash = text == null ? null : hashOf(text);
@@ -243,7 +309,8 @@ const hashOf = (s) => crypto.createHash('sha256').update(String(s ?? '')).digest
 export function evaluateDocsState(v, readFile) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const record = v?.docs || null;
-  const files = publishDocFiles().map((f) => {
+  const langs = docLangsOf(v);
+  const files = publishDocFiles(langs).map((f) => {
     const text = (() => { try { return read(f.file); } catch { return null; } })();
     const exists = text != null;
     const diskHash = exists ? hashOf(text) : null;
@@ -260,8 +327,8 @@ export function evaluateDocsState(v, readFile) {
   if (!record) {
     const written = files.filter((f) => f.exists).length;
     reasons.push(written
-      ? `已编写 ${written}/8 个文档，尚未提交到 Git（提交后才能合并）`
-      : '尚未编写发布文档（README / CHANGELOG / FEATURES / AGENTS 中英共八个文件）');
+      ? `已编写 ${written}/${files.length} 个文档，尚未提交到 Git（提交后才能合并）`
+      : `尚未编写发布文档（README / CHANGELOG / FEATURES / AGENTS × 语言集 ${langs.join(',')} 共 ${files.length} 个文件）`);
   } else {
     if (record.scopeStale) reasons.push(`发布范围已变化（${record.staleReason || '条目或提交变化'}），文档需重新核对 / 编写后重新提交`);
     for (const f of files) {
@@ -287,14 +354,14 @@ export function evaluateDocsState(v, readFile) {
   };
 }
 
-// 范围指纹：所选条目 + 每条提交 hash + 文档基准（当前八文件内容 hash）共同构成发布范围。
-// 任一变化（增删条目 / 换 commit / 修改文档）→ 指纹变化 → 旧提交标识不放行。
-export function publishScopeFingerprint(items, readFile) {
+// 范围指纹：所选条目 + 每条提交 hash + 文档基准（当前语言集全文件内容 hash）共同构成发布范围。
+// 任一变化（增删条目 / 换 commit / 修改文档 / 语言集变化）→ 指纹变化 → 旧提交标识不放行。
+export function publishScopeFingerprint(items, readFile, langs = DEFAULT_DOC_LANGS) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const part = (Array.isArray(items) ? items : [])
     .map((it) => `${it.itemId}:${String(it.commit || '').toLowerCase()}`)
     .sort();
-  const docs = publishDocFiles().map((f) => {
+  const docs = publishDocFiles(langs).map((f) => {
     let h = null;
     try { const t = read(f.file); h = t == null ? null : hashOf(t); } catch { h = null; }
     return `${f.file}:${h}`;
