@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // REQ-20260921-016 版本计划列表中的操作按钮优化——列表卡片精简（移除 AI 完善 / 合并入 main
 // （含失败重试）/ 创建并预检 / 查看发布记录四键与 card-acts 操作行），「删除」迁至卡片标题行
-// 右端；详情概况描述块头部右侧「AI 完善」紧邻「编辑」左边（取代原 bld-plan-acts 顶部操作行）。
+// 右端；详情概况「AI 完善」紧邻「编辑」左边。BUG-20260921-016 布局再调整：两键同排于概况
+// 顶部一行右对齐操作行（bld-plan-acts，元信息行与「描述」标签行删除），断言已同步。
 // 合并 / 创建并预检 / 发布记录入口仍分别位于详情「合并入 main」「正式发布」步。
 // T1~T8 vm 行为（加载实际 build.js，假 DOM 口径同 req-20260921-013）+ S1 静态契约。
 // 用法：node scripts/tests/req-20260921-016.test.mjs
@@ -155,23 +156,21 @@ t('T2 删除迁标题行右端：每张卡片删除键位于自身标题行（.t
   }
 });
 
-t('T3 详情概况描述头：头部右侧「AI 完善」紧邻「编辑」左边（bld-desc-block-acts 内两键顺序固定）；bld-plan-acts 顶部操作行移除', async () => {
+t('T3 详情概况操作行（BUG-20260921-016 布局调整后）：顶部一行右对齐 bld-plan-acts 内「AI 完善」紧邻「编辑」左边；无「描述」标签行与元信息行', async () => {
   const h = setup();
   await h.enter(); // 选中 BLD-DRAFT，plan 步
   let detail = detailPart(h.inner());
-  assert.ok(!detail.includes('bld-plan-acts'), '概况顶部操作行（bld-plan-acts）移除');
-  // 描述块头部：左侧「描述」标签，右侧操作组内 AI 完善 → 编辑 顺序
-  assert.match(detail, /bld-desc-block-head/, '描述块头部存在');
-  assert.match(detail, /bld-desc-block-acts/, '头部右侧操作组存在');
-  const head = detail.slice(detail.indexOf('bld-desc-block-head'), detail.indexOf('bld-desc-block-head') + 700);
-  const iLabel = head.indexOf('>描述</span>');
-  const iAnswer = head.indexOf('data-ver-answer="BLD-DRAFT"');
-  const iEdit = head.indexOf('id="bldEditInfo"');
-  assert.ok(iLabel !== -1 && iAnswer !== -1 && iEdit !== -1, '头部含标签与两键');
-  assert.ok(iLabel < iAnswer && iAnswer < iEdit, '顺序：描述 → AI 完善 → 编辑（AI 完善紧邻编辑左边）');
-  assert.equal((head.match(/<button/g) || []).length, 2, '头部操作组仅两键（AI 完善 / 编辑）');
+  // BUG-20260921-016：概况顶部操作行恢复（元信息行 / 描述标签行删除）
+  assert.match(detail, /bld-plan-acts/, '概况顶部操作行（bld-plan-acts）存在');
+  assert.ok(!detail.includes('bld-desc-block-head'), '描述块头部行移除（BUG-20260921-016）');
+  const acts = detail.slice(detail.indexOf('bld-plan-acts'), detail.indexOf('</div>', detail.indexOf('bld-plan-acts')));
+  const iAnswer = acts.indexOf('data-ver-answer="BLD-DRAFT"');
+  const iEdit = acts.indexOf('id="bldEditInfo"');
+  assert.ok(iAnswer !== -1 && iEdit !== -1, '操作行含两键');
+  assert.ok(iAnswer < iEdit, '顺序：AI 完善 → 编辑（AI 完善紧邻编辑左边）');
+  assert.equal((acts.match(/<button/g) || []).length, 2, '操作行仅两键（AI 完善 / 编辑）');
   assert.match(detail, /data-ver-answer="BLD-DRAFT"/, 'AI 完善绑定当前选中版本');
-  // 切至其他步骤入口隐藏（描述块属概况步）；切回恢复
+  // 切至其他步骤入口隐藏（操作行属概况步）；切回恢复
   for (const step of ['link', 'docs', 'merge', 'release']) {
     h.select('BLD-DRAFT', step);
     assert.ok(!detailPart(h.inner()).includes('data-ver-answer'), `切至 ${step} 步后概况入口隐藏`);
@@ -180,14 +179,14 @@ t('T3 详情概况描述头：头部右侧「AI 完善」紧邻「编辑」左�
   assert.ok(detailPart(h.inner()).includes('data-ver-answer'), '切回概况入口恢复');
 });
 
-t('T4 编辑表单并存口径：进入就地编辑表单时两入口随描述块替换隐藏，取消后恢复；编辑键原有 merging 禁用规则不变（pushed 不禁用）', async () => {
+t('T4 编辑表单并存口径（BUG-20260921-016 让位规则）：进入就地编辑表单时操作行「编辑」键让位、「AI 完善」保留原位，取消后恢复；编辑键原有 merging 禁用规则不变（pushed 不禁用）', async () => {
   const h = setup();
   await h.enter(); // 选中 BLD-DRAFT
   h.el('#bldEditInfo').listeners.click(); // 打开就地编辑表单
   let detail = detailPart(h.inner());
   assert.match(detail, /bld-plan-edit/, '编辑表单打开');
-  assert.ok(!detail.includes('data-ver-answer'), '表单打开时 AI 完善入口隐藏（描述块被表单替换）');
-  assert.ok(!detail.includes('id="bldEditInfo"'), '表单打开时编辑键隐藏');
+  assert.match(detail, /data-ver-answer="BLD-DRAFT"/, '表单打开时 AI 完善保留原位（操作行仍在，BUG-20260921-016）');
+  assert.ok(!detail.includes('id="bldEditInfo"'), '表单打开时编辑键让位（表单自带保存 / 取消）');
   h.el('#bldPlanCancel').listeners.click(); // 取消
   detail = detailPart(h.inner());
   assert.ok(!detail.includes('bld-plan-edit'), '表单关闭');
@@ -268,11 +267,12 @@ t('S1 静态契约：renderVersionList 不再产出合并 / 发布入口与 card
   for (const k of ['data-ver-answer', 'data-ver-merge', 'data-ver-delete', 'data-ver-release']) {
     assert.match(buildJs, new RegExp(`view\\.querySelectorAll\\('\\[${k}\\]'\\)`), `bindCommon 循环绑定 ${k} 保留`);
   }
-  // CSS：卡片标题行删除右端对齐 + 描述块头部操作组；bld-plan-acts / rel-card card-acts 样式移除
+  // CSS：卡片标题行删除右端对齐；概况操作行样式（BUG-20260921-016 恢复 bld-plan-acts，
+  // 描述块头部行 bld-desc-block-head / bld-desc-block-acts 移除）；rel-card card-acts 样式移除
   assert.match(styleCss, /\.rel-card \.t \.bld-card-title/, '卡片标题行标题侧样式存在');
   assert.match(styleCss, /\.rel-card \.t \.bld-ver-del/, '标题行删除键右端对齐样式存在');
-  assert.match(styleCss, /\.bld-desc-block-acts/, '描述块头部操作组样式存在');
-  assert.ok(!styleCss.includes('.bld-plan-acts'), 'bld-plan-acts 样式移除');
+  assert.match(styleCss, /\.bld-plan-acts \{/, '概况顶部操作行样式存在（BUG-20260921-016 恢复）');
+  assert.ok(!styleCss.includes('.bld-desc-block-head') && !styleCss.includes('.bld-desc-block-acts'), '描述块头部行样式移除（BUG-20260921-016）');
   assert.ok(!/\.rel-card \.card-acts/.test(styleCss), '版本卡片 card-acts 样式移除');
 });
 
