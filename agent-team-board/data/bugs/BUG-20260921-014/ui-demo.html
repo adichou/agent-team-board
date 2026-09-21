@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260921-014 演示 · 合并入 main 页签去掉「发布范围」区域</title>
+<style>
+  /* ---------- 主题变量（深浅色随系统自动适配） ---------- */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e3e6ea; --ink: #24292f; --muted: #6b7280;
+    --accent: #2563eb; --accent-ink: #ffffff; --ok: #1a7f37; --ok-bg: #e6f4ea;
+    --fail: #c0392b; --fail-bg: #fdecea; --run: #9a6700; --run-bg: #fff3cd;
+    --mute-bg: #eceef1; --chip-wait: #8250df; --chip-wait-bg: #f0e7fb;
+    --shadow: 0 8px 28px rgba(20, 30, 50, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181f; --panel: #1d232c; --line: #31394476; --ink: #e6e9ee; --muted: #98a1ad;
+      --accent: #5b8dff; --accent-ink: #0e1420; --ok: #4cc38a; --ok-bg: #12291d;
+      --fail: #ff7b72; --fail-bg: #301a18; --run: #e3b341; --run-bg: #2d2410;
+      --mute-bg: #262d37; --chip-wait: #c69bff; --chip-wait-bg: #241b38;
+      --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--mute-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+  /* ---------- 演示控制条 ---------- */
+  .demo-bar { position: sticky; top: 0; z-index: 30; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; box-shadow: var(--shadow); }
+  .demo-bar h1 { font-size: 15px; margin: 0 0 8px; }
+  .demo-bar h1 .tag { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 8px; }
+  .demo-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .demo-controls .grp { display: flex; align-items: center; gap: 6px; }
+  .demo-controls .lbl { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--ink); padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .demo-note { font-size: 12px; color: var(--muted); }
+  .demo-note.diff { color: var(--fail); font-weight: 600; }
+  .demo-note.ok { color: var(--ok); font-weight: 600; }
+
+  /* ---------- 舞台布局 ---------- */
+  .stage { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 14px; max-width: 1060px; margin: 16px auto; padding: 0 14px; align-items: start; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .ver-list h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .ver-card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
+  .ver-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .ver-card .id { font-size: 12px; color: var(--muted); }
+  .ver-card .nm { font-weight: 600; }
+
+  /* ---------- 右侧详情 ---------- */
+  .rel-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .rel-detail-head h3 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .rel-detail-head .sub { margin: 2px 0 10px; font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 12px; }
+  .tabs button { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 5px 13px; cursor: pointer; font-size: 13px; }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .pane section { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .pane section > strong:first-child { display: block; margin-bottom: 6px; }
+  .pane ul { margin: 4px 0; padding-left: 20px; }
+  .pane li { margin: 3px 0; }
+  .pane .small { font-size: 12.5px; }
+  .muted { color: var(--muted); }
+
+  /* 状态 chip 三重区分（图标 + 颜色 + 文字） */
+  .st { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+  .st-ok   { background: var(--ok-bg);   color: var(--ok); }
+  .st-fail { background: var(--fail-bg); color: var(--fail); }
+  .st-run  { background: var(--run-bg);  color: var(--run); }
+  .st-mute { background: var(--mute-bg); color: var(--muted); }
+  .st-wait { background: var(--chip-wait-bg); color: var(--chip-wait); }
+
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+  .err { background: var(--fail-bg); color: var(--fail); border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; }
+
+  /* 缺陷区块高亮（仅演示：缺陷现状下的「发布范围」打标） */
+  .defect-mark { outline: 2px dashed var(--fail); outline-offset: 3px; position: relative; }
+  .defect-mark::after { content: "冗余区块（本 Bug 移除对象）"; position: absolute; top: -10px; right: 10px; background: var(--fail); color: #fff; font-size: 11px; border-radius: 6px; padding: 0 7px; }
+
+  /* 关联条目行（link 页签对照） */
+  .item-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; margin: 6px 0; }
+  .item-row .id { font-weight: 600; font-size: 12.5px; }
+  .item-row .tt { color: var(--muted); font-size: 12.5px; flex: 1; min-width: 120px; }
+
+  /* ---------- 弹窗与 toast ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 15, 25, .45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal-wrap.open { display: flex; }
+  .modal { background: var(--panel); color: var(--ink); border-radius: 14px; box-shadow: var(--shadow); max-width: 520px; width: 100%; padding: 16px 18px; }
+  .modal h3 { margin: 0 0 10px; font-size: 15px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); background: var(--panel); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 10px; padding: 9px 18px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 60; max-width: 86vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.fail { border-color: var(--fail); color: var(--fail); }
+
+  .legend { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .placeholder-pane p { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header class="demo-bar">
+  <h1>BUG-20260921-014 <span class="tag">「合并入 main」页签去掉「发布范围」区域 · 可交互演示（数据为演示虚构）</span></h1>
+  <div class="demo-controls">
+    <div class="grp">
+      <span class="lbl">对比</span>
+      <div class="seg" id="modeSeg" role="group" aria-label="缺陷现状或修复后">
+        <button type="button" data-mode="defect" class="on">缺陷现状</button>
+        <button type="button" data-mode="fixed">修复后（期望）</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lbl">场景</span>
+      <div class="seg" id="scnSeg" role="group" aria-label="合并页签场景">
+        <button type="button" data-scn="ready" class="on">就绪·有关联条目</button>
+        <button type="button" data-scn="empty">空关联</button>
+        <button type="button" data-scn="loading">加载中</button>
+        <button type="button" data-scn="error">读取失败</button>
+        <button type="button" data-scn="failed">合并失败</button>
+        <button type="button" data-scn="merged">已合并</button>
+      </div>
+    </div>
+    <span class="demo-note" id="modeNote"></span>
+  </div>
+  <p class="legend">左侧为构建模块版本列表示意；右侧为选中版本的详情五步导航。页签可点击切换（「关联条目与提交」页签用于对照：信息移除后仍完整可见）。深浅色随系统自动适配。</p>
+</header>
+
+<main class="stage">
+  <aside class="ver-list card" aria-label="版本列表示意">
+    <h2>版本计划</h2>
+    <div class="ver-card sel" id="verCard">
+      <div class="nm">九月第三周日发布</div>
+      <div class="id">BLD-20260920-001 · <span id="verChip"></span></div>
+    </div>
+    <div class="ver-card" title="演示聚焦选中版本，此卡仅作列表示意">
+      <div class="nm">文档流水线修复版</div>
+      <div class="id">BLD-20260913-002 · <span class="st st-mute">计划中</span></div>
+    </div>
+  </aside>
+
+  <section class="rel-detail" aria-label="版本详情">
+    <header class="rel-detail-head">
+      <h3>九月第三周日发布 <span id="headChip"></span></h3>
+      <p class="sub">BLD-20260920-001 · 版本号 20260920-001 · 目标分支 main · 来源分支 dev</p>
+    </header>
+    <nav class="tabs" id="stepTabs" role="tablist" aria-label="发布五步流程"></nav>
+    <div class="pane" id="paneBody" role="tabpanel"></div>
+  </section>
+</main>
+
+<!-- 合并确认弹窗（REQ-20260920-003「合并前列出」由弹窗承担，不受本 Bug 影响） -->
+<div class="modal-wrap" id="mergeModal" role="dialog" aria-modal="true" aria-label="合并入 main 确认">
+  <div class="modal">
+    <h3>合并入 main 确认（BLD-20260920-001）</h3>
+    <p>将把以下提交逐条合并入 <strong>main</strong>（--no-ff，在临时工作树执行，不影响当前分支与未提交改动）：</p>
+    <ul id="mergeList"></ul>
+    <p class="muted small">确认即授权本合并计划；合并中不可重复触发或增删条目。</p>
+    <div class="modal-foot">
+      <button type="button" class="btn" id="mergeCancel">取消</button>
+      <button type="button" class="btn primary" id="mergeGo">确认合并</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+// ---------- 演示数据（虚构） ----------
+const ITEMS_READY = [
+  { id: 'REQ-20260921-008', title: '文档编写三段式流水线', hash: 'a1b2c3d4e5f6…', merged: false },
+  { id: 'BUG-20260921-003', title: '分步导航焦点丢失', hash: '9f8e7d6c5b4a…', merged: false },
+];
+const ITEMS_FAILED = [
+  { id: 'REQ-20260921-008', title: '文档编写三段式流水线', hash: 'a1b2c3d4e5f6…', merged: true },
+  { id: 'BUG-20260921-003', title: '分步导航焦点丢失', hash: '9f8e7d6c5b4a…', merged: true },
+  { id: 'REQ-20260919-001', title: '看板筛选持久化', hash: 'c4d5e6f70819…', merged: false, error: '与未选变更 c0ffee 冲突' },
+];
+const DOC_COMMIT = '5a6b7c8d9e0f…';
+const STEPS = [['plan', '版本计划'], ['link', '关联条目与提交'], ['docs', '文档编写'], ['merge', '合并入 main'], ['release', '正式发布']];
+
+// ---------- 状态 ----------
+const state = {
+  mode: 'defect',          // defect = 缺陷现状；fixed = 修复后（期望）
+  scenario: 'ready',       // ready | empty | loading | error | failed | merged
+  step: 'merge',
+  phase: 'ready',          // publish-plan 加载态（loading 场景驱动）
+  merging: false,          // 演示中的合并执行中
+  mergedDone: false,       // 演示中已点了合并并成功（随场景/模式重置）
+};
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function items() {
+  if (state.scenario === 'empty') return [];
+  if (state.scenario === 'failed') return ITEMS_FAILED;
+  return ITEMS_READY;
+}
+function verStatus() {
+  if (state.merging) return ['合并中', 'st-run'];
+  if (state.mergedDone || state.scenario === 'merged') return ['已合并', 'st-ok'];
+  if (state.scenario === 'failed') return ['失败', 'st-fail'];
+  return ['计划中', 'st-mute'];
+}
+function toast(msg, fail) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'show' + (fail ? ' fail' : '');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+// ---------- 渲染 ----------
+function render() {
+  // 版本状态 chip
+  const [stLabel, stCls] = verStatus();
+  const chip = (cls, txt) => `<span class="st ${cls}">${txt}</span>`;
+  $('#verChip').innerHTML = chip(stCls, stLabel);
+  $('#headChip').innerHTML = chip(stCls, stLabel);
+
+  // 对比说明
+  $('#modeNote').textContent = state.mode === 'defect'
+    ? '当前：缺陷现状 —— 「合并入 main」页签首屏被冗余「发布范围」区块占据'
+    : '当前：修复后 —— 「发布范围」区块已移除，首屏直达隔离分析与合并操作';
+  $('#modeNote').className = 'demo-note ' + (state.mode === 'defect' ? 'diff' : 'ok');
+
+  // 五步页签
+  $('#stepTabs').innerHTML = STEPS.map(([k, label]) =>
+    `<button type="button" role="tab" aria-selected="${state.step === k}" class="${state.step === k ? 'active' : ''}" data-step="${k}">${label}</button>`).join('');
+
+  $('#paneBody').innerHTML = state.step === 'merge' ? renderMergePane()
+    : state.step === 'link' ? renderLinkPane()
+    : renderPlaceholder(state.step);
+}
+
+// 「合并入 main」页签：renderMergePane 的演示镜像
+function renderMergePane() {
+  if (state.scenario === 'loading' || state.phase === 'loading') {
+    return '<p class="muted" role="status">正在加载合并分析…</p>';
+  }
+  if (state.scenario === 'error' || state.phase === 'error') {
+    return `<p class="err" role="alert">合并分析读取失败：演示网络中断（错误码 500）</p>
+      <p><button type="button" class="btn small" data-act="retry">重试</button></p>`;
+  }
+  const its = items();
+  const mergedAll = state.mergedDone || state.scenario === 'merged';
+  // —— 缺陷区块：仅 defect 模式渲染（fixed 模式整个 section 不出现，不留空壳标题）——
+  const scopeSection = state.mode === 'defect'
+    ? `<section class="defect-mark"><strong>发布范围</strong>
+        <ul>${its.length
+            ? its.map((it) => `<li>${esc(it.id)} <code>${esc(it.hash.slice(0, 7))}</code> ${it.merged ? '<span class="st st-ok">已合并</span>' : ''}${it.error ? `<span class="st st-fail" title="${esc(it.error)}">失败</span>` : ''}</li>`).join('')
+            : '<li class="muted small">（无关联条目：回到「关联条目与提交」步骤关联）</li>'}</ul>
+        ${mergedAll || state.scenario === 'failed' ? `<p class="small muted">文档提交：<code>${DOC_COMMIT.slice(0, 7)}</code>（只随本版发布最新文档提交）</p>` : ''}
+      </section>`
+    : '';
+  const interRows = its.length
+    ? `<li>REQ-20260919-001：1 个未选祖先提交（普通 merge 会一并带入 main；隔离合并不带入，依赖其内容将冲突阻止）
+        <ul><li><code>77aa88b</code> 看板筛选持久化（未选）</li></ul></li>`
+    : '';
+  const mergeState = state.scenario === 'failed' && !state.mergedDone
+    ? `<p class="err" role="alert">合并失败：与未选变更 c0ffee 冲突（可重试，只补未合并条目）</p>` : '';
+  const mergedNote = mergedAll
+    ? `<p class="small muted">合并完成：主分支头 <code>1f2e3d4c5b6a</code>；重放证据 ${its.length} 条。</p>` : '';
+  const btnLabel = state.merging ? '合并中…' : (state.scenario === 'failed' && !state.mergedDone) ? '重试合并入 main' : '合并入 main';
+  const emptyBlock = !its.length && !mergedAll
+    ? `<p class="err" role="alert">暂不可合并：前置条件未满足（无关联条目：请先在「关联条目与提交」步骤关联）</p>` : '';
+  return `
+    <div class="bld-merge-pane">
+      ${scopeSection}
+      <section><strong>隔离分析</strong>
+        ${interRows ? `<ul>${interRows}</ul>` : '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>'}
+      </section>
+      <p class="small muted">当前分支 dev · 目标主分支 main（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>
+      ${emptyBlock}
+      ${mergeState}
+      <p><button type="button" class="btn primary" id="mergeBtn" ${state.merging ? 'disabled' : ''} ${!its.length && !mergedAll ? 'aria-disabled="true" title="暂不可合并：前置条件未满足（无关联条目）"' : ''}>${btnLabel}</button>
+        <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>
+      ${mergedNote}
+    </div>`;
+}
+
+// 「关联条目与提交」页签：对照——移除发布范围区块后信息仍完整可见
+function renderLinkPane() {
+  const its = items();
+  const rows = its.map((it) => `
+    <div class="item-row">
+      <span class="id">${esc(it.id)}</span>
+      <span class="tt" title="${esc(it.title)}">${esc(it.title)}</span>
+      <code>${esc(it.hash.slice(0, 7))}</code>
+      ${it.merged ? '<span class="st st-ok" title="已合并入 main">✓</span>' : it.error ? `<span class="st st-fail" title="${esc(it.error)}">✕</span>` : ''}
+      <button type="button" class="btn small quiet" title="演示：此操作与本 Bug 无关">移出</button>
+    </div>`).join('');
+  return `
+    <div>
+      <p><strong>关联条目与 commit</strong></p>
+      ${rows || '<p class="muted small">暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单</p>'}
+      <p class="legend">对照说明：原「合并入 main」页签「发布范围」区块的条目 + commit + 已合并 / 失败信息，在本页签完整保留并可操作。</p>
+    </div>`;
+}
+
+function renderPlaceholder(step) {
+  const map = {
+    plan: '版本计划（信息编辑）：演示聚焦「合并入 main」页签，本页从略。',
+    docs: '文档编写（三阶段：总结 → 翻译与审查 → 整体审查完结）：文档提交 hash 在本页提交门禁条展示（「已提交到本地 dev 分支（hash …）：满足「合并入 main」前置」），移除发布范围区块后信息不丢失。',
+    release: '正式发布（推送主分支 → 官网 AI 写作 → 官网同步检测）：演示聚焦「合并入 main」页签，本页从略。',
+  };
+  return `<div class="placeholder-pane"><p>${map[step]}</p></div>`;
+}
+
+// ---------- 交互 ----------
+$('#modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b) return;
+  state.mode = b.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  render();
+});
+$('#scnSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-scn]');
+  if (!b) return;
+  state.scenario = b.dataset.scn;
+  state.phase = 'ready';
+  state.merging = false;
+  state.mergedDone = b.dataset.scn === 'merged';   // merged 场景直接呈现终态
+  state.step = 'merge';
+  document.querySelectorAll('#scnSeg button').forEach((x) => x.classList.toggle('on', x === b));
+  if (state.scenario === 'loading') {
+    render();
+    setTimeout(() => {                             // 加载场景 1.2s 后自动就绪，便于观察状态切换
+      if (state.scenario === 'loading') { state.scenario = 'ready'; state.mergedDone = false;
+        document.querySelectorAll('#scnSeg button').forEach((x) => x.classList.toggle('on', x.dataset.scn === 'ready')); render(); }
+    }, 1200);
+    return;
+  }
+  render();
+});
+$('#stepTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-step]');
+  if (!b) return;
+  state.step = b.dataset.step;
+  render();
+});
+$('#paneBody').addEventListener('click', (e) => {
+  if (e.target.closest('[data-act="retry"]')) {    // 读取失败 → 重试 → 加载 → 就绪
+    state.phase = 'loading';
+    render();
+    setTimeout(() => { state.phase = 'ready'; render(); }, 1000);
+    return;
+  }
+  const mb = e.target.closest('#mergeBtn');
+  if (mb) {
+    if (mb.getAttribute('aria-disabled') === 'true') { toast(mb.title || '暂不可合并', true); return; }
+    const its = items();
+    if (!its.length || state.mergedDone || state.merging) return;
+    $('#mergeList').innerHTML = its.map((it) => `<li>${esc(it.id)} ${esc(it.hash.slice(0, 7))} ${esc(it.title)}</li>`).join('');
+    $('#mergeModal').classList.add('open');
+  }
+});
+$('#mergeCancel').addEventListener('click', () => $('#mergeModal').classList.remove('open'));
+$('#mergeGo').addEventListener('click', () => {
+  $('#mergeModal').classList.remove('open');
+  state.merging = true;
+  render();
+  setTimeout(() => {                                // 模拟隔离合并执行（约 1.4s）
+    state.merging = false;
+    state.mergedDone = true;
+    render();
+    toast('✓ 已合并入 main（BLD-20260920-001）');
+  }, 1400);
+});
+
+render();
+</script>
+</body>
+</html>
