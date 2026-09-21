@@ -461,24 +461,129 @@ const ATBBuild = (() => {
   const TREE_COLORS_LIGHT = ['#2563eb', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#16a34a'];
   const TREE_COLORS_DARK = ['#60a5fa', '#fbbf24', '#a78bfa', '#22d3ee', '#f87171', '#4ade80'];
 
+  // BUG-20260921-007：双支并集泳道名判定——heads 双支在位且行数据带 side 时返回
+  // [主分支名, 'dev']（主分支取非 dev 头，dev 头按 DEV_BRANCH 命名；服务端口径 [main, dev]），
+  // 否则 null（单支模式）。treeData 与 mountTree 共用，保证数据面与渲染面判定一致。
+  function dualLogNames(heads, commits) {
+    const hs = (Array.isArray(heads) ? heads : []).filter((x) => x && x.name && x.hash);
+    if (hs.length < 2) return null;
+    if (!(Array.isArray(commits) ? commits : []).some((c) => c && (c.side === 'main' || c.side === 'dev'))) return null;
+    const dev = hs.find((x) => x.name === 'dev') || hs[1];
+    const main = hs.find((x) => x !== dev) || hs[0];
+    return [main.name, dev.name];
+  }
+
+  // BUG-20260921-007：泳道序比较器（gitgraph compareBranchesOrder）——主分支恒 0（蓝）、
+  // dev 恒 1（黄），不随页内首次出现顺序跳变（翻页 / 搜索 / 刷新颜色稳定）；其余名排后。
+  function laneOrderOf(names) {
+    const order = (n) => (n === names[0] ? 0 : n === names[1] ? 1 : 2);
+    return (a, b) => order(a) - order(b);
+  }
+
   // 纯函数：commits（新→旧，含 parents / tags / side / heads 上下文）→ @gitgraph/js import()
   // 支持的扁平 DAG 数组（git2json 形态：author 为对象、refs 数组、`tag: ` 前缀识别标签）。
-  // - refs：双支 heads 命中行带分支名（main/dev 标签）；单支模式（无 heads）最新行带选中分支名；
-  //   tags 以 `tag: <名>` 进入 refs（gitgraph 渲染 tag 标签）。
-  // - parents 截断到集合内：页边界 / 闭包外的父不外连（gitgraph 无法画页外虚线桩，
-  //   页边界提示由「父提交在后续页，轨道继续」行补充）。
-  // - merge 行附 mergeParents（集合内父计数，供渲染层合并标识与详情）。
+  // BUG-20260921-007 根因与修复（两缺陷同源：gitgraph 只渲染「分支 ref 沿首父链可达 ∪ 合并
+  // 闭包」的提交，且泳道色按分支名首次出现顺序分配）：
+  // - 双支并集（heads ≥2 且带 side）：每侧以「本页该侧最新行」为锚（heads 命中页内即头行——
+  //   第 1 页行为不变；第 2 页起仍有身份，dev 不再变蓝），并把 parents[0] 改写为同侧页内链
+  //   （同侧真实父优先，否则接到下方最近同侧行），保证整页提交从本侧锚首父可达（零丢弃）；
+  //   跨侧父保留为附加父（合并 / 分叉曲线由 gitgraph 绘制）；最老 main 行补挂主分支名锚，
+  //   使共享历史的 branchToDisplay 恒为主分支名（主蓝 / dev 黄不随页内交错顺序翻转）。
+  // - 单支（无 side）：parents 仍按集合内截断保真（REQ-20260920-001 G 组「不虚构父边」口径），
+  //   页外断层泳道（合并提交在更早页、gitgraph 锚链与合并闭包均不可达）以「分支名·n」续锚
+  //   补覆盖，杜绝第 3 页起空白。
+  // - refs：锚行带分支名（gitgraph 渲染分支名标签，标签只出现在 ref 最终指向的头行）；
+  //   tags 以 `tag: <名>` 进入 refs。
+  // - mergeParents 仍按原集合内父计数（渲染层合并标识与详情口径不变）。
   function treeData(commits, { heads = [], branchName = null } = {}) {
     const list = Array.isArray(commits) ? commits : [];
     const shown = new Set(list.map((c) => c && c.hash));
     const headByHash = new Map((Array.isArray(heads) ? heads : [])
       .filter((x) => x && x.name && x.hash).map((x) => [x.hash, x.name]));
+    const dualNames = dualLogNames(heads, list);
+    const anchorAt = new Map(); // 行序号 -> 泳道锚分支名
+    let rewired = null; // hash -> 双支模式改写后的 parents
+    if (dualNames) {
+      const [mainName, devName] = dualNames;
+      const nameOfSide = { main: mainName, dev: devName };
+      const sideOf = (c) => (c && c.side === 'dev' ? 'dev' : 'main');
+      for (const side of ['main', 'dev']) {
+        const idx = list.findIndex((c) => sideOf(c) === side);
+        if (idx >= 0) anchorAt.set(idx, nameOfSide[side]);
+      }
+      // 最老 main 行补挂主分支名（import 按旧→新序 set ref，主名先入 → 共享历史 walk 序恒主侧先）
+      const oldestMain = [...list].reverse().find((c) => sideOf(c) === 'main');
+      if (oldestMain) {
+        const idx = list.indexOf(oldestMain);
+        if (!anchorAt.has(idx)) anchorAt.set(idx, mainName);
+      }
+      rewired = new Map();
+      list.forEach((c, i) => {
+        const side = sideOf(c);
+        const inPage = (Array.isArray(c.parents) ? c.parents : []).filter((p) => shown.has(p));
+        // 严格同侧显示序链：parents[0] = 下方最近同侧行（同侧真实父可能跳过交错的同侧段行，
+        // 以真实父为首父会留下不可达行 = gitgraph 静默丢弃，即本 Bug 第 3 页起空白的根因）
+        let chain = null;
+        for (let j = i + 1; j < list.length; j++) {
+          if (sideOf(list[j]) === side) { chain = list[j].hash; break; }
+        }
+        const ps = [];
+        if (chain) ps.push(chain);
+        for (const p of inPage) if (!ps.includes(p)) ps.push(p); // 真实父（同侧跨行 / 跨侧）保留为附加父
+        rewired.set(c.hash, ps);
+      });
+    } else {
+      // 单支：既有锚（heads 命中行 / 无 heads 时首行选中分支名）+ gitgraph 可达覆盖镜像
+      list.forEach((c, i) => {
+        const headName = headByHash.get(c.hash);
+        if (headName) anchorAt.set(i, headName);
+        else if (i === 0 && branchName && !headByHash.size) anchorAt.set(i, String(branchName));
+      });
+      const byHash = new Map(list.map((c) => [c.hash, c]));
+      const inPageParents = (c) => (Array.isArray(c.parents) ? c.parents : []).filter((p) => shown.has(p));
+      const covered = new Set();
+      const walkChain = (hash) => {
+        const stack = [hash];
+        while (stack.length) {
+          const h = stack.pop();
+          const c = byHash.get(h);
+          if (!h || !c || covered.has(h)) continue;
+          covered.add(h);
+          const ps = inPageParents(c);
+          if (ps[0]) stack.push(ps[0]);
+        }
+      };
+      for (const idx of anchorAt.keys()) walkChain(list[idx].hash);
+      // gitgraph 合并闭包镜像：合并行次父起沿首父链收「未被锚覆盖」的提交
+      for (const c of list) {
+        const ps = inPageParents(c);
+        if (ps.length < 2) continue;
+        for (const p of ps.slice(1)) {
+          let cur = byHash.get(p);
+          while (cur && !covered.has(cur.hash)) {
+            covered.add(cur.hash);
+            const cpp = inPageParents(cur);
+            cur = cpp[0] ? byHash.get(cpp[0]) : null;
+          }
+        }
+      }
+      // 剩余未覆盖 = 页外断层泳道顶（合并提交在更早页）：「分支名·n」续锚补覆盖
+      if (branchName) {
+        let n = 1;
+        list.forEach((c, i) => {
+          if (covered.has(c.hash) || anchorAt.has(i)) return;
+          n += 1;
+          anchorAt.set(i, `${String(branchName)}·${n}`);
+          walkChain(c.hash);
+        });
+      }
+    }
     return list.map((c, i) => {
-      const parents = (Array.isArray(c.parents) ? c.parents : []).filter((p) => shown.has(p));
+      const orig = (Array.isArray(c.parents) ? c.parents : []).filter((p) => shown.has(p));
+      const parents = rewired ? (rewired.get(c.hash) || []) : orig;
       const refs = [];
-      const headName = headByHash.get(c.hash);
-      if (headName) refs.push(headName);
-      else if (i === 0 && branchName && !headByHash.size) refs.push(String(branchName));
+      const anchor = anchorAt.get(i);
+      if (anchor) refs.push(anchor);
       for (const tg of Array.isArray(c.tags) ? c.tags : []) refs.push(`tag: ${tg}`);
       const row = {
         hash: c.hash,
@@ -487,17 +592,20 @@ const ATBBuild = (() => {
         subject: `${c.short || String(c.hash).slice(0, 7)} ${c.subject || ''}`,
         refs,
       };
-      if (parents.length >= 2) row.mergeParents = parents.length;
+      if (orig.length >= 2) row.mergeParents = orig.length;
       return row;
     });
   }
 
   // gitgraph metro 模板定制（commit spacing / dot 尺寸 / message 等宽字体 + 短 hash 前缀已拼进
   // subject、不展示作者；分支线宽）。浅深两套色板由 prefersDark 决定。
-  function treeTemplate(dark) {
+  // BUG-20260921-007：colors 由 mountTree 按视图形态计算传入——单支单色板（全部泳道同色，
+  // 翻页 / 断层续锚不跳变）；双支并集按「本页出现的 side」排色序（仅 dev 在页时 dev 色打头，
+  // 避免单分支占 colors[0] 错染主分支蓝），配合 compareBranchesOrder 钉 main 恒蓝 / dev 恒黄。
+  function treeTemplate(dark, colors) {
     const GG = window.GitgraphJS;
     return GG.templateExtend(GG.metroTemplate, {
-      colors: dark ? TREE_COLORS_DARK : TREE_COLORS_LIGHT,
+      colors,
       branch: { lineWidth: 2 },
       commit: {
         spacing: 34,
@@ -561,6 +669,11 @@ const ATBBuild = (() => {
   // 树挂载（bindCommon 渲染后调用）：vendor 脚本在位时以 import() 喂扁平 DAG（refs 自动出
   // 分支名 / tag 标签，泳道布局由库完成），每条提交注入 onClick（click 切换选中详情，
   // REQ-20260920-001 口径）；vendor 加载失败 / 渲染异常降级为行式列表（fallbackTreeHtml）。
+  // BUG-20260921-007：vendor 渲染经 setTimeout 异步调度（next()），异步回调内的异常与
+  // 「提交被可达过滤静默丢弃」都逃逸同步 try/catch——追加一个更晚的保底核查 tick：树容器
+  // 无 SVG 或提交圆点数不足时降级行式列表，绝不出现空白内容区；渲染成功则补挂高亮 /
+  // 选中 / 合并标识（decorateTree 在异步渲染完成后才有效）。双支并集传 compareBranchesOrder
+  // 钉泳道色序，单支用单色板。
   function mountTree(view) {
     const GG = (typeof window !== 'undefined' && window.GitgraphJS) || null;
     const box = view.querySelector('#bldTreeBox');
@@ -568,19 +681,45 @@ const ATBBuild = (() => {
     const commits = state.branchLog?.commits || [];
     if (!commits.length || !state.logBranch) return;
     const heads = Array.isArray(state.branchLog?.heads) ? state.branchLog.heads : [];
+    const dualNames = dualLogNames(heads, commits);
+    // BUG-20260921-007：色板按本页 side 出现情况排头（仅 dev 在页 → dev 色打头；仅 main → 主色打头；
+    // 双侧 → 全色板 + 比较器钉序）；单支单色板。同一提交在任何页码恒得本侧颜色。
+    const base = prefersDark() ? TREE_COLORS_DARK : TREE_COLORS_LIGHT;
+    const colors = dualNames
+      ? (commits.some((c) => c.side === 'dev')
+        ? (commits.some((c) => c.side !== 'dev') ? base : [base[1], ...base.slice(2), base[0]])
+        : base)
+      : [base[0]];
     const data = treeData(commits, { heads, branchName: state.logBranch });
     for (const c of data) c.onClick = () => selectLogRow(c.hash, { toggle: true });
     try {
       box.innerHTML = '';
       const graph = GG.createGitgraph(box, {
         orientation: 'vertical-reverse',
-        template: treeTemplate(prefersDark()),
+        template: treeTemplate(prefersDark(), colors),
         author: 'atb <atb@local>',
+        ...(dualNames ? { compareBranchesOrder: laneOrderOf(dualNames) } : {}),
       });
       graph.import(data);
     } catch {
       box.innerHTML = fallbackTreeHtml(commits);
       return;
+    }
+    if (typeof setTimeout === 'function') {
+      // 保底核查：注册晚于 vendor 的渲染 tick（同延迟 FIFO），在其后执行
+      setTimeout(() => {
+        try {
+          const svg = box.querySelector('svg');
+          const dots = svg ? svg.querySelectorAll('circle').length : 0;
+          if (!svg || dots < commits.length) {
+            box.innerHTML = fallbackTreeHtml(commits);
+            return;
+          }
+          decorateTree(box, commits);
+        } catch {
+          box.innerHTML = fallbackTreeHtml(commits);
+        }
+      }, 0);
     }
     decorateTree(box, commits);
     watchTreeTheme();
