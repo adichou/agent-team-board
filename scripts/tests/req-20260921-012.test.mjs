@@ -568,9 +568,12 @@ t('L4-1 renderDocsPane：阶段条三阶段 + 六按钮 + 语言成组文件列�
   for (const btn of ['data-pf-refresh', 'data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-finalize', 'data-pf-commit']) {
     assert.ok(html.includes(btn), `按钮 ${btn} 存在`);
   }
-  // 语言成组：默认语言组头 + 剩余语言组头；剩余语言文件行
-  assert.match(html, /默认语言（/, '默认语言组头');
-  assert.match(html, /剩余语言（/, '剩余语言组头');
+  // 语言分组（BUG-20260921-013 起由语言页签承载，替代平铺组头行）：每语言一个页签、
+  // 默认语言恒为第一页签并标「（默认）」；剩余语言文件行在对应语言面板（非激活 hidden 保留在 DOM）
+  assert.match(html, /role="tablist" aria-label="文档语言页签"/, '语言页签行');
+  assert.ok(html.includes('data-doc-lang="cn"') && html.includes('data-doc-lang="en"'), '每语言一个页签');
+  assert.ok(html.includes('（默认）'), '默认语言页签标记');
+  assert.ok(!html.includes('bld-doc-group') && !html.includes('剩余语言（'), '平铺分组标题行已由页签替代');
   assert.ok(html.includes('README_en.md'));
   // 七态文案（剩余语言三态出现）
   for (const label of ['未翻译', '正在翻译', '已翻译待审核', '已审核']) {
@@ -711,13 +714,20 @@ t('L6-1 i18n：新增文案中英词条齐备；门禁动态键随口径迁移�
     '提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。',
     '默认语言文档已更新：◇ 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）',
     '文件（◇ · 默认语言 ◇/◇ 已审核 · 剩余语言 ◇/◇ 已审核）',
-    '默认语言（◇，文件不带后缀）', '剩余语言（◇ · AI 翻译）',
+    // BUG-20260921-013：组头两条随分组标题行删除清理（语言分组改由页签承载）
     '整体审查完结（◇）', '默认语言文件已全部审核（◇/◇）', '剩余语言文件已全部审核（◇/◇）',
     'AI 翻译未解锁：默认语言尚缺 ◇ 个文件审核（◇）',
     '整体审查未解锁：尚缺 ◇ 个文件审核（◇）',
     '整体审查已完结 ✓（时间 ◇；提交已解锁）',
   ];
   for (const k of dynamics) assert.ok(k in EN_DYNAMIC, `动态词条缺失：${k}`);
+  // BUG-20260921-013：旧组头动态键随语言页签化清理；页签新静态词条中英同步
+  for (const k of ['默认语言（◇，文件不带后缀）', '剩余语言（◇ · AI 翻译）']) {
+    assert.ok(!(k in EN_DYNAMIC), `旧组头键应清理：${k.slice(0, 12)}…`);
+  }
+  for (const k of ['（默认）', '文档语言页签']) {
+    assert.ok(typeof EN[k] === 'string' && EN[k], `页签静态词条缺失：${k}`);
+  }
   // 旧门禁动态键随口径迁移清理
   for (const k of [
     '提交门禁：◇/◇ 已审核 —— 全部文件已通过审查，可提交到本地 dev 分支。',
