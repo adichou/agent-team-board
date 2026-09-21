@@ -157,10 +157,11 @@ t('B5 双支并集：filter / highlight 两模式口径一致（heads / mergeBas
   assert.ok(f.heads && f.mergeBase, 'filter 模式保留 heads / mergeBase');
   assert.equal(f.commits.find((x) => x.hash === d).side, 'dev', 'side 字段保留');
   // 搜 REQ-2：message 命中 D，闭包同上；highlight 模式清单只含 D
+  //（BUG-20260921-006：dev 为单支口径；本夹具 dev ⊇ main，单支集合与并集相同）
   const h = buildGit.branchSearchLog(root, 'dev', { q: 'REQ-2', mode: 'highlight', limit: 50 });
   assert.deepEqual(h.matchedHashes, [d]);
-  assert.deepEqual(h.commits.map((x) => x.hash).sort(), [a, b, d].sort(), 'highlight 数据集 = 默认并集分页');
-  assert.equal(h.branch, 'dev', '选中 dev 与选中 main 同一并集口径');
+  assert.deepEqual(h.commits.map((x) => x.hash).sort(), [a, b, d].sort(), 'highlight 数据集 = 默认 dev 分页');
+  assert.equal(h.branch, 'dev', 'dev 搜索口径（fixture dev ⊇ main，集合恰同并集）');
 });
 
 t('B6 边界：无匹配 filter 空集 + matchedTotal=0；highlight 清单为空但默认数据保留；mode 非法回退 filter；q 空白走默认分页', () => {
