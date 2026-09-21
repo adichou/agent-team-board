@@ -36,6 +36,9 @@
       <!-- REQ-20260913-001 构建模块；REQ-20260920-003 入口更名为「发布」（版本计划 → 关联 → 文档 → 合并 → 正式发布） -->
       <button type="button" class="view-tab" data-view="build">发布</button>
       <button type="button" class="view-tab" data-view="runs">任务</button>
+      <!-- REQ-20260920-004 命令模块：atb 命令统一入口（左缘竖排页签：最近执行 / 全部命令；
+           白名单下发同一 CLI 入口，serve 影响告知 / cli 组终端指引 / 高危二次确认） -->
+      <button type="button" class="view-tab" data-view="commands">命令</button>
       <button type="button" class="view-tab nav-extra" data-view="settings">设置</button>
     </nav>
     <div class="top-actions">
@@ -187,6 +190,11 @@
   <section id="runsView" class="runs-view hidden" aria-label="任务">
     <aside id="batchDrawer" class="batch-drawer" aria-label="任务面板"></aside>
   </section>
+
+  <!-- REQ-20260920-004 命令模块：atb 命令界面按钮下发——左侧竖排页签（最近执行默认 / 全部命令）
+       + 命令列表，右侧所选命令详情与执行（说明—参数—预览—执行—输出），下方执行历史（最近 20 次）；
+       内容动态渲染于 commands.js（服务端白名单校验 + 参数数组传递 + --dir 绑定当前项目） -->
+  <section id="commandsView" class="commands-view hidden" aria-label="命令"></section>
 
   <!-- REQ-20260910-019 营销模块：概览 / 定位与定价 / 渠道与行动 / 效果与复盘四页签，
        后两页由关联需求（020 / 021）交付，当前禁用并标注暂不可用；
@@ -511,6 +519,8 @@
        须在 build.js 之前加载，加载失败时 build.js 降级为行式列表，不出失效入口） -->
   <script src="/gitgraph.umd.min.js"></script>
   <script src="/build.js"></script>
+  <!-- REQ-20260920-004 命令模块：atb 命令统一入口（在 app.js 之前加载，挂载 window.ATBCommands） -->
+  <script src="/commands.js"></script>
   <!-- REQ-20260916-006 挂起确认「查看差异」语义渲染层（在 app.js 之前加载，挂载 window.ATBDiffView） -->
   <script src="/diff-view.js"></script>
   <script src="/app.js"></script>
