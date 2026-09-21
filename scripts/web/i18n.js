@@ -138,6 +138,9 @@ const EN = {
   '版本名称不超过 80 字': 'Version name must be 80 characters or fewer',
   '版本描述不超过 4000 字': 'Version description must be 4000 characters or fewer',
   '版本合并中，暂不可修改': 'Version merge in progress — editing unavailable',
+  // REQ-20260921-016：概况描述块头部显式「编辑」按钮 title（REQ-20260921-014 引入时漏登记，
+  // 入口迁至描述头后补齐，英文界面悬停不再残留中文）
+  '编辑版本名称与描述': 'Edit version name and description',
   '✓ 已保存版本信息': '✓ Version info saved',
   '（无描述）': '(No description)',
   '编辑版本信息': 'Edit version info',

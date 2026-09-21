@@ -2928,10 +2928,12 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .rel-card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rel-card .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rel-card .meta.err { color: var(--warn); white-space: normal; }
-/* BUG-20260913-004：版本卡片行内操作（参照需求列表 .req-row .row-acts 口径）——
-   小号按钮独立成行，长版本名换行不破版；深浅色沿用 .btn 主题变量 */
-.rel-card .card-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.rel-card .card-acts .btn { flex: none; white-space: nowrap; }
+/* REQ-20260921-016 列表卡片精简：操作行（card-acts）移除，「删除」迁至标题行右端——
+   标题侧可伸缩换行（长版本名 overflow-wrap 不断版，完整名走 strong title），
+   删除键 flex:none + margin-left:auto 不被挤出；窄屏空间不足整行换行仍保持右对齐 */
+.rel-card .t .bld-card-title { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.rel-card .t .bld-card-title strong { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+.rel-card .t .bld-ver-del { flex: none; margin-left: auto; white-space: nowrap; }
 .chip.git { background: var(--info-bg); color: var(--info-text); }
 .chip.apple { background: var(--ok-bg); color: var(--ok-text); }
 /* REQ-20260910-030 桌面应用（Electron）：与 Git / Apple 并列的第三种目标 chip 配色（主题变量，深浅色随系统） */
@@ -3052,10 +3054,10 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-desc-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .bld-plan-edit { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; background: var(--panel); }
 .bld-plan-count { margin: 0; }
-/* REQ-20260921-013 概况内容区顶部操作行：右对齐「AI 完善」入口；窄屏空间不足自动换行，
-   不遮挡下方计划号 / 描述信息与五步导航 */
-.bld-plan-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
-.bld-plan-acts .btn { flex: none; white-space: nowrap; }
+/* REQ-20260921-016 概况描述块头部操作组：「AI 完善」紧邻「编辑」左边（右对齐，头部行
+   space-between）；窄屏空间不足自动换行，仍保持 AI 完善在编辑左侧 */
+.bld-desc-block-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-desc-block-acts .btn { flex: none; white-space: nowrap; }
 /* 关联条目与 commit 区（REQ-20260915-003：头部行加搜索控件并允许换行；全量过滤后分页） */
 .bld-items { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .bld-items-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
@@ -3621,8 +3623,8 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px dashed var(--border, #d0d7de); border-radius: 8px; }
 .rel-prod-config.rel-empty-mini { display: block; }
 .rel-prod-config code { word-break: break-all; }
-/* REQ-20260915-003：构建模块详情底部产品发布操作区（bld-release-block）已迁入左侧版本
-   卡片按钮区（.rel-card .card-acts 自带 flex-wrap，容纳五键空间不足自动换行），样式随之移除 */
+/* REQ-20260915-003：构建模块详情底部产品发布操作区（bld-release-block）迁入版本卡片区后样式移除
+   （REQ-20260921-016 列表卡片操作区再次整体移除，发布入口只保留详情「正式发布」步） */
 
 /* ===== REQ-20260916-006 挂起确认面板：文件差异语义渲染（行级着色 / 行号 / 上下文折叠 / 统一并排 / 字符级高亮） ===== */
 .dv-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
