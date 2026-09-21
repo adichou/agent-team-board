@@ -3326,9 +3326,9 @@ const ATBBuild = (() => {
           ? `<div class="bld-log-count small" role="status">高亮 ${Number(state.branchLog.matchedTotal ?? 0)} 处匹配（message / 分支名 / tag）</div>`
           : `<div class="bld-log-count small" role="status">匹配 ${Number(state.branchLog?.matchedTotal ?? 0)} 条 · 保留 ${Number(state.branchLog?.total ?? 0)}/${Number(state.branchLog?.allTotal ?? state.branchLog?.total ?? 0)} 条（含祖先，泳道连通）</div>`)
         : '';
-      // BUG-20260920-002：双支并集上下文——载荷含 heads（≥2 支本地头）即双支模式（BUG-20260921-006
-      // 起仅主分支选择进入该模式；dev 单支口径，载荷无 heads）；分支名标签（gitgraph refs /
-      // 降级列表徽标）与 side 稳定配色。
+      // BUG-20260920-002：双支并集上下文——载荷含 heads（≥2 支本地头）即双支模式（渲染按载荷
+      // 驱动；BUG-20260921-008 起服务端所有分支一律单支口径、不再下发 heads / mergeBase /
+      // side，本分支仅作载荷兼容保留）；分支名标签（gitgraph refs / 降级列表徽标）与 side 稳定配色。
       const heads = Array.isArray(state.branchLog?.heads) ? state.branchLog.heads.filter((x) => x && x.name && x.hash) : [];
       const dual = heads.length >= 2;
       const mergeBase = state.branchLog?.mergeBase || null;

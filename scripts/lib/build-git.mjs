@@ -79,19 +79,18 @@ export function listBranches(root) {
 // 连线以真实父子关系为据，不得从主题文本 / 行序推测。
 // REQ-20260921-002：每条 commit 附 tags（指向该提交的标签名数组；无标签为 []）——提交树
 // tag 标签与「message / 分支名 / tag」搜索以此为准。
-// BUG-20260920-002：所选分支为主分支（解析结果）且与 dev 两支本地并存时走双支并集口径
-//（branchUnionLog，响应附 heads / mergeBase / 逐提交 side）。
-// BUG-20260921-006：dev 改回单支口径——浏览 dev 只显示 dev 可达提交（等价 git log dev），
-// 不再混入 main 独有提交（含「合并入 main」产生的版本合并提交），也不附并集专属字段；
-// 其余分支保持单支口径不变。
+// BUG-20260921-006：dev 单支口径——浏览 dev 只显示 dev 可达提交（等价 git log dev），
+// 不再混入 main 独有提交（含「合并入 main」产生的版本合并提交），也不附并集专属字段。
+// BUG-20260921-008：main（含 master 回退）也改回单支口径——回退 BUG-20260920-002 为主分支
+// 引入的 main∪dev 双支并集（dualBranchScope / branchUnionLog 随之移除），所有分支一律
+// 单支可达集合，响应不再附 heads / mergeBase / side；已并入 main 的 dev 提交经合并提交
+// 自然可达，仍会出现在 main 视图。
 export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   const ref = assertRefName(branch);
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
   const n = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
   const skip = Math.max(0, Math.floor(Number(offset) || 0));
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
-  const scope = dualBranchScope(root, ref);
-  if (scope) return branchUnionLog(root, ref, scope, { limit: n, offset: skip });
   const total = Number(gitOk(root, ['rev-list', '--count', ref], '统计提交总数').trim()) || 0;
   const out = gitOk(root, ['log', ref, '-n', String(n), '--skip', String(skip), '--format=%H%x09%h%x09%an%x09%aI%x09%P%x09%s'], '读取提交记录');
   const tagMap = readCommitTags(root);
@@ -129,11 +128,14 @@ function readCommitTags(root) {
 
 // 只读：指定分支提交记录关键词搜索，双模式（REQ-20260914-002 搜索能力，REQ-20260921-002 升级）。
 // 匹配字段（大小写不敏感固定子串，非正则）：提交说明 subject / 作者 author / 短 hash / 完整 hash
-// / 标签名 tags（REQ-20260921-002）/ 分支名（选中分支名命中 ⇒ 数据集全部提交；双支 heads 名
-// 命中 ⇒ 对应 side 的提交）。关键词不进 git 参数（无注入面），一次读全量提交元数据在 Node 侧匹配。
+// / 标签名 tags（REQ-20260921-002）/ 分支名（选中分支名命中 ⇒ 数据集全部提交）。关键词不进
+// git 参数（无注入面），一次读全量提交元数据在 Node 侧匹配。
+// BUG-20260921-008：随 main 单支口径回退 BUG-20260920-002 的双支并集搜索语义——数据集恒为
+// 所选分支单支可达集合（等价 git log <branch>），不再按双支 heads 名命中 side，响应不附
+// heads / mergeBase / side（BUG-20260920-002 引入、BUG-20260921-006 起 dev 侧已无）。
 // - mode=filter（默认）：保留集 = 匹配 ∪ 祖先闭包（沿 parents 回溯到根），在保留集上分页；
 //   响应 { branch, query, mode, commits, total=保留集数, matchedTotal=匹配数, allTotal=全量数,
-//   limit, offset }（双支并集范围附 heads / mergeBase / 逐提交 side）——泳道连通不断线。
+//   limit, offset }——泳道连通不断线。
 // - mode=highlight：数据集与默认分页一致（不过滤），附全量命中清单 matchedHashes（数据集顺序）
 //   与 matchedTotal，前端渲染后高亮定位；total 为全量数（分页条口径不变）。
 // q 空白（trim 后空）走 branchLog 默认分页；mode 非法值归一为 filter。校验口径与 branchLog
@@ -146,43 +148,20 @@ export function branchSearchLog(root, branch, { q, mode = 'filter', limit = 50, 
   const n = Math.max(1, Math.min(500, Math.floor(Number(limit) || 50)));
   const skip = Math.max(0, Math.floor(Number(offset) || 0));
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${ref}`], '分支不存在');
-  const scope = dualBranchScope(root, ref);
-  const refs = scope ? [scope.main, scope.dev] : [ref];
-  // 全量读取（含 parents / tags / side），匹配与闭包在 Node 侧完成
+  // 全量读取（含 parents / tags），匹配与闭包在 Node 侧完成
   const tagMap = readCommitTags(root);
-  const out = gitOk(root, ['log', ...refs, '--format=%H%x09%h%x09%an%x09%aI%x09%P%x09%s'], '搜索提交记录');
-  const devOnly = scope
-    ? new Set(String(gitOk(root, ['rev-list', `${scope.main}..${scope.dev}`], '读取 dev 独有提交') || '')
-      .split('\n').map((s) => s.trim()).filter(Boolean))
-    : null;
+  const out = gitOk(root, ['log', ref, '--format=%H%x09%h%x09%an%x09%aI%x09%P%x09%s'], '搜索提交记录');
   const all = [];
   for (const line of out.split('\n')) {
     if (!line.trim()) continue;
     const row = parseLogLine(line);
-    all.push({
-      ...row,
-      tags: tagMap.get(row.hash) || [],
-      ...(scope ? { side: devOnly.has(row.hash) ? 'dev' : 'main' } : {}),
-    });
+    all.push({ ...row, tags: tagMap.get(row.hash) || [] });
   }
-  const heads = scope
-    ? refs.map((name) => ({ name, hash: gitOk(root, ['rev-parse', name], '读取分支头').trim() }))
-    : null;
-  const mergeBase = (() => {
-    if (!scope) return null;
-    const mb = gitRaw(root, ['merge-base', scope.main, scope.dev]);
-    return mb.status === 0 ? (String(mb.stdout || '').trim() || null) : null;
-  })();
-  // 匹配集（六字段 + 分支名两类语义）
+  // 匹配集（六字段 + 选中分支名语义）
   const lower = kw.toLowerCase();
   const branchHit = ref.toLowerCase().includes(lower);
-  const sideHits = scope
-    ? heads.filter((x) => x.name.toLowerCase().includes(lower))
-      .map((x) => (x.name === DEV_BRANCH ? 'dev' : 'main'))
-    : [];
   const matched = all.filter((c) => {
     if (branchHit) return true;
-    if (sideHits.includes(c.side)) return true;
     return c.subject.toLowerCase().includes(lower)
       || c.author.toLowerCase().includes(lower)
       || c.short.toLowerCase().includes(lower)
@@ -200,10 +179,6 @@ export function branchSearchLog(root, branch, { q, mode = 'filter', limit = 50, 
     limit: n,
     offset: skip,
   };
-  if (scope) {
-    payload.heads = heads;
-    payload.mergeBase = mergeBase;
-  }
   if (modeN === 'highlight') {
     payload.commits = all.slice(skip, skip + n);
     payload.total = all.length;
@@ -227,51 +202,8 @@ export function branchSearchLog(root, branch, { q, mode = 'filter', limit = 50, 
   return payload;
 }
 
-// BUG-20260920-002：双支并集范围判定（固定 main+dev 双分支模型）——所选分支为主分支解析结果
-//（优先 main、本地仅 master 回退 master），且与 dev 两支本地引用均存在时返回 { main, dev }；
-// BUG-20260921-006：dev 及其余分支一律返回 null 走单支口径（浏览 dev 只显示 dev 可达提交，
-// 不再与 main 取并集）；无 dev / 无主分支 / 远端分支名同样返回 null。
-function dualBranchScope(root, ref) {
-  const mainBranch = resolveMainBranch(root);
-  if (!mainBranch || mainBranch === DEV_BRANCH) return null;
-  if (ref !== mainBranch) return null; // BUG-20260921-006：仅主分支选择走双支并集
-  const exists = (b) => gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`]).status === 0;
-  if (!exists(mainBranch) || !exists(DEV_BRANCH)) return null;
-  return { main: mainBranch, dev: DEV_BRANCH };
-}
-
-// BUG-20260920-002：main ∪ dev 双支并集读取（只读）——refs 顺序固定 [main, dev]；BUG-20260921-006
-// 起仅主分支选择进入本函数（dev 单支口径，见 dualBranchScope），排序仍等价
-// `git log <main> <dev>` 的可达集合（默认日期序并行交错）。
-// 逐提交附 side：dev 独有（`rev-list <main>..<dev>` 命中）为 'dev'、其余（含共享历史与
-// merge-base）为 'main'——前端据此做分支稳定配色（同 hash 恒同色，翻页 / 搜索不跳变）。
-// 响应附 heads（两支本地头 [{name, hash}]，供分支头名称标签）与 mergeBase（`git merge-base`
-// 计算结果；无共同祖先为 null，不虚构汇聚点）。REQ-20260921-002：每条 commit 附 tags；
-// 搜索（q）路径由 branchSearchLog 统一处理（双模式），本函数仅默认分页口径。
-// limit/offset 归一由调用方（branchLog）完成，口径与单支一致。
-function branchUnionLog(root, ref, scope, { limit, offset } = {}) {
-  const refs = [scope.main, scope.dev];
-  const total = Number(gitOk(root, ['rev-list', '--count', ...refs], '统计提交总数').trim()) || 0;
-  const devOnly = new Set(String(gitOk(root, ['rev-list', `${scope.main}..${scope.dev}`], '读取 dev 独有提交') || '')
-    .split('\n').map((s) => s.trim()).filter(Boolean));
-  const heads = refs.map((name) => ({ name, hash: gitOk(root, ['rev-parse', name], '读取分支头').trim() }));
-  const mb = gitRaw(root, ['merge-base', scope.main, scope.dev]);
-  const mergeBase = mb.status === 0 ? (String(mb.stdout || '').trim() || null) : null;
-  const out = gitOk(root, ['log', ...refs, '-n', String(limit), '--skip', String(offset),
-    '--format=%H%x09%h%x09%an%x09%aI%x09%P%x09%s'], '读取提交记录');
-  const tagMap = readCommitTags(root);
-  const commits = [];
-  for (const line of out.split('\n')) {
-    if (!line.trim()) continue;
-    const row = parseLogLine(line);
-    commits.push({
-      ...row,
-      tags: tagMap.get(row.hash) || [],
-      side: devOnly.has(row.hash) ? 'dev' : 'main',
-    });
-  }
-  return { branch: ref, commits, total, limit, offset, heads, mergeBase };
-}
+// （BUG-20260920-002 引入的 main∪dev 双支并集读取——dualBranchScope / branchUnionLog
+//  ——已随 BUG-20260921-008「main 单支口径」整段移除：所有分支一律单支可达集合。）
 
 // 受限写：同步远端（fetch --all --prune；附带清理失效远端分支引用——design.md 落定口径）。
 export function fetchRemote(root) {
