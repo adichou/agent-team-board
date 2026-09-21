@@ -163,13 +163,20 @@ export function createProductRun(dataDir, { productId, bld, freeze, version, ver
   const ver = String(version || '').trim();
   if (!VERSION_RE.test(ver)) throw new AtbError('发行版本号非法（形如 1.2.0 / v1.2.0，字母数字 . _ + -）');
   // 条目快照来自 BLD（创建即冻结；来源计划后续改名/删除不影响本快照）
-  const items = (Array.isArray(bld.items) ? bld.items : []).map((it) => ({
-    itemId: String(it.itemId || ''),
-    title: String(it.title || ''),
-    commit: String(it.commit || '').toLowerCase(),
-  }));
+  // BUG-20260921-015：一条目多提交——快照带 commits 全量（commit 保留首个提交别名）；
+  // 旧单提交快照（仅 commit）读取方按 commits || [commit] 兜底，数据兼容。
+  const items = (Array.isArray(bld.items) ? bld.items : []).map((it) => {
+    const commits = [...new Set((Array.isArray(it?.commits) && it.commits.length ? it.commits : [it?.commit])
+      .map((h) => String(h || '').trim().toLowerCase()).filter(Boolean))];
+    return {
+      itemId: String(it.itemId || ''),
+      title: String(it.title || ''),
+      commit: commits[0] || '',
+      commits,
+    };
+  });
   if (!items.length) throw new AtbError('冻结失败：版本计划无关联条目快照');
-  if (items.some((it) => !HASH_RE.test(it.commit))) throw new AtbError('冻结失败：条目快照缺少有效 commit');
+  if (items.some((it) => !it.commits.length || it.commits.some((c) => !HASH_RE.test(c)))) throw new AtbError('冻结失败：条目快照缺少有效 commit');
   const fz = normalizeFreeze(freeze);
   fz.items = items;
   // 同产品活动运行互斥

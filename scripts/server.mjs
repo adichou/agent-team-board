@@ -2126,11 +2126,11 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
       const devSha = await prelGit.branchHead(root, realExec, 'dev');
       if (!mainSha) throw new core.AtbError(`${mainBranch} 分支缺失：无法冻结（发布必须冻结 ${mainBranch} 分支头）`);
       if (!devSha) throw new core.AtbError('dev 分支缺失：主分支/dev 双分支推送前置，无法冻结');
-      const items = bld.items.map((x) => ({ itemId: x.itemId, commit: x.commit }));
+      const items = bld.items.map((x) => ({ itemId: x.itemId, commits: buildStore.commitsOf(x) }));
       const replays = bld.merge?.replays || []; // REQ-20260920-003：隔离合并重放证据
       const contain = await prelGit.verifyItemsOnMain(root, realExec, items, mainSha, replays);
       if (!contain.ok) throw new core.AtbError(`计划条目不在 ${mainBranch} 历史内（含重放证据核对）：${contain.missing.join('、')}（请确认版本已完整合并）`);
-      const extraCommits = await prelGit.collectExtraCommits(root, realExec, { mainSha, itemCommits: items.map((x) => x.commit), replayCommits: replays.map((r) => r.replayed), bldId: bld.id });
+      const extraCommits = await prelGit.collectExtraCommits(root, realExec, { mainSha, itemCommits: items.flatMap((x) => x.commits), replayCommits: replays.map((r) => r.replayed), bldId: bld.id });
       const cfg = releaseStore.readModuleConfig(board);
       let homepage = { repoRoot: cfg.homepageRepoRoot || '', branch: 'main', contentDir: '' };
       if (cfg.homepageRepoRoot) {
@@ -2445,6 +2445,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   // 按「添加条目」同口径校验后一次性纳入；无法纳入的依赖逐条进 skipped 清单（含原因），不静默
   // 丢失。纳入沿用 addItems：成功后 markDocsScopeStale 联动（文档需重新核对 / 提交）；
   // merging / 已正式发布锁定（BuildConflictError → 409，与 addItems 同文案）。
+  // BUG-20260921-015：按提交 hash 去重（不按条目去重）——归属条目已在本版本时，把该条目
+  // 其余符合纳入条件的依赖提交补入其提交集合（appendItemCommits，保留原有关联）；同一新
+  // 依赖条目有多个依赖提交时全部保留（不再只取「最新」一个）。响应 added = 新入条目
+  //（含 commits 全量），appended = 既有条目补入清单。
   if (req.method === 'POST' && pathname === '/api/build/version/add-dependencies') {
     return runPost(async (body) => {
       const board = requireBoard();
@@ -2453,7 +2457,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，条目不可增删');
       if (buildStore.isPushed(v)) throw new buildStore.BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
       const analysis = buildGit.analyzePublishIsolation(root, v.items);
-      // 依赖集：跨所选条目去重（hash → { subject, date, owner }；owner = 该依赖隶属的所选条目）
+      // 依赖集：跨所选条目按提交 hash 去重（hash → { subject, date, owner }；owner = 该依赖隶属的所选条目）
       const deps = new Map();
       for (const per of analysis.perItem || []) {
         for (const dep of per.intermediates || []) {
@@ -2463,7 +2467,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         }
       }
       if (!deps.size) {
-        return sendJson(res, 200, { version: v, added: [], skipped: [], note: '所选提交无未选祖先提交，无需加入' });
+        return sendJson(res, 200, { version: v, added: [], appended: [], skipped: [], note: '所选提交无未选祖先提交，无需加入' });
       }
       // 归因反查：itemCommitStatusIndex（itemId → commits）翻转为 commit → 归属条目集合
       const ownersByCommit = new Map();
@@ -2477,10 +2481,11 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       }
       const itemsAll = new Map(core.listItems(board).map((it) => [it.id, it]));
       const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
-      const inVersion = new Set(v.items.map((x) => x.itemId));
+      const inVersion = new Map(v.items.map((x) => [x.itemId, x]));
       const occupied = buildStore.occupiedItemMap(board, { excludeVersionId: v.id });
       const skipped = [];
-      const pick = new Map(); // itemId → { commit, date }（同条目多依赖提交取最新）
+      const appendPick = new Map(); // itemId（已在本版本）→ hash[]（收集后统一补入）
+      const newPick = new Map(); // itemId（新条目）→ hash[]（全部保留，不再只取最新）
       for (const [hash, meta] of deps) {
         const owners = ownersByCommit.get(hash);
         if (!owners || !owners.size) {
@@ -2493,7 +2498,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         }
         const itemId = [...owners][0];
         if (inVersion.has(itemId)) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 已在本版本（当前关联另一提交）` });
+          // BUG-20260921-015：条目已在本版本 → 补入该条目的其余依赖提交（保留原有关联），
+          // 不再因「当前关联另一提交」跳过；hash 已在条目提交集合中时（防御）忽略。
+          const have = new Set(buildStore.commitsOf(inVersion.get(itemId)));
+          if (!have.has(hash)) {
+            if (!appendPick.has(itemId)) appendPick.set(itemId, []);
+            appendPick.get(itemId).push(hash);
+          }
           continue;
         }
         const boardItem = itemsAll.get(itemId);
@@ -2509,15 +2520,20 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
           skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 已纳入版本 ${occupied.get(itemId)}，不可重复纳入` });
           continue;
         }
-        const prev = pick.get(itemId);
-        if (!prev || String(meta.date || '') > String(prev.date || '')) {
-          pick.set(itemId, { commit: hash, date: meta.date || '' });
-        }
+        if (!newPick.has(itemId)) newPick.set(itemId, []);
+        newPick.get(itemId).push(hash);
       }
-      const added = [...pick.entries()].map(([itemId, pk]) => ({ itemId, commit: pk.commit, title: titles.get(itemId) || '' }));
+      // 依赖按 git log 新→旧收集；反转成 旧→新（与提交时间顺序一致，主提交取最早一个）
+      const oldestFirst = (hs) => [...hs].reverse();
+      const added = [...newPick.entries()].map(([itemId, hs]) => {
+        const commits = oldestFirst(hs);
+        return { itemId, commit: commits[0], commits, title: titles.get(itemId) || '' };
+      });
+      const appended = [...appendPick.entries()].map(([itemId, hs]) => ({ itemId, commits: oldestFirst(hs) }));
       let version = v;
       if (added.length) version = buildStore.addItems(board, v.id, added, { by: 'board' });
-      return sendJson(res, 200, { version, added, skipped });
+      if (appended.length) version = buildStore.appendItemCommits(board, v.id, appended, { by: 'board' });
+      return sendJson(res, 200, { version, added, appended, skipped });
     });
   }
   if (req.method === 'POST' && pathname === '/api/build/version/merge') {
@@ -2554,12 +2570,24 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       try {
         // REQ-20260920-003 隔离合并：cherry-pick 重放只发布所选提交自身变更，不夹带未选祖先；
         // 冲突即中止并说明原因；重试只补未合并条目（幂等续传）。
+        // BUG-20260921-015：一条目多提交逐提交展开并按 Git 依赖顺序重放；既有 replays 证据
+        // 一并传入（已重放提交幂等记成功，不重复 cherry-pick）。
         const pending = v.items.filter((x) => !x.mergedAt);
-        const r = buildGit.mergeIsolatedIntoMain(root, { versionId: v.id, versionName: v.name, items: pending });
+        const r = buildGit.mergeIsolatedIntoMain(root, {
+          versionId: v.id,
+          versionName: v.name,
+          items: pending,
+          replays: v.merge?.replays || [],
+        });
         // REQ-20260915-002：全量合并成功时记录最终主分支头（作为发布冻结证据；
         // 旧计划无 merge.mainSha 时按「候选 + 额外提交」口径展示）。
         // REQ-20260916-005：主分支头按解析结果读取（仅 master 历史仓库为 master 头）。
-        const allMerged = v.items.every((it) => (r.results || []).some((x) => x.itemId === it.itemId && x.ok) || it.mergedAt);
+        // BUG-20260921-015：逐提交结果按条目聚合判定（任一提交失败即条目未全并）。
+        const itemOk = new Map();
+        for (const x of r.results || []) {
+          itemOk.set(x.itemId, itemOk.get(x.itemId) !== false && x.ok === true);
+        }
+        const allMerged = v.items.every((it) => it.mergedAt || itemOk.get(it.itemId) === true);
         let mainSha = null;
         if (allMerged) {
           const sha = spawnSync('git', ['rev-parse', `refs/heads/${gitFlow.resolveMainBranch(root) || 'main'}`], { cwd: root, encoding: 'utf8', timeout: 15000 });

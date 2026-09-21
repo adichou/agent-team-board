@@ -3075,6 +3075,12 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   font: inherit; font-size: 12.5px; padding: 3px 6px; max-width: 130px;
   border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text);
 }
+/* BUG-20260921-015 条目多提交：关联列表以 chips 展示全部提交（短 hash 逐个） */
+.bld-item-commits { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 260px; flex-wrap: wrap; justify-content: flex-end; }
+.bld-item-commit {
+  font-size: 12px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); white-space: nowrap;
+}
 .bld-merge-note { margin: 6px 0 0; }
 /* BUG-20260915-014：版本详情「概况 / 发布」页签与发布页签布局（复用 .rel-tabs/.rel-tab 既有样式，
    详情页签行紧凑化）；发布区左运行列表 + 右运行详情分栏，窄屏纵向堆叠 */

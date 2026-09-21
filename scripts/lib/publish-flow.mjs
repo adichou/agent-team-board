@@ -519,12 +519,17 @@ export function evaluateDocsState(v, readFile) {
   };
 }
 
-// 范围指纹：所选条目 + 每条提交 hash + 文档基准（当前语言集全文件内容 hash）共同构成发布范围。
-// 任一变化（增删条目 / 换 commit / 修改文档 / 语言集变化）→ 指纹变化 → 旧提交标识不放行。
+// 范围指纹：所选条目 + 每条全部提交 hash + 文档基准（当前语言集全文件内容 hash）共同构成发布范围。
+// 任一变化（增删条目 / 换 commit / 补入提交 / 修改文档 / 语言集变化）→ 指纹变化 → 旧提交标识不放行。
+// BUG-20260921-015：一条目多提交全量参与指纹（补入提交即范围变化）；旧单提交形态兜底 [commit]。
 export function publishScopeFingerprint(items, readFile, langs = DEFAULT_DOC_LANGS) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const part = (Array.isArray(items) ? items : [])
-    .map((it) => `${it.itemId}:${String(it.commit || '').toLowerCase()}`)
+    .map((it) => {
+      const commits = [...new Set((Array.isArray(it?.commits) && it.commits.length ? it.commits : [it?.commit])
+        .map((h) => String(h || '').toLowerCase()).filter(Boolean))];
+      return `${it.itemId}:${commits.join(',')}`;
+    })
     .sort();
   const docs = publishDocFiles(langs).map((f) => {
     let h = null;

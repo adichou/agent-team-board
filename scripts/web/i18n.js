@@ -32,6 +32,9 @@ const EN = {
   '一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。': 'After adding, the scope change is flagged by the existing mechanism (docs need re-review / re-commit).',
   '把全部依赖提交对应的条目与提交纳入本版本发布范围；加入后发布范围变化，文档需重新核对 / 提交': 'Bring the items and commits behind all dependency commits into this version\u2019s release scope; the scope changes once added — docs need re-review / re-commit',
   '⚠ 未能加入任何依赖提交（原因见隔离分析清单）': '⚠ No dependency commits could be added (see the list in the isolation analysis)',
+  // BUG-20260921-015 条目多提交：关联列表展示全部提交（chips）与移出提示
+  '该条目关联的全部提交': 'All commits linked to this item',
+  '移出该条目（连同全部 commit 关联）': 'Remove this item (with all its commit associations)',
   // BUG-20260913-004：「提示词与回答回填」更名「AI 完善」（按钮迁入版本卡片，弹窗标题同步）
   'AI 完善': 'AI refine',
   '复制提示词': 'Copy prompt',
@@ -1493,6 +1496,11 @@ const EN_DYNAMIC = {
   '⚠ 以下 ◇ 个依赖未能纳入：': '⚠ The following $1 dependency commit(s) could not be added:',
   '✓ 已加入 ◇ 个依赖条目：发布范围已变化，文档需重新核对 / 提交': '✓ Added $1 dependency items: the release scope has changed — docs need re-review / re-commit',
   '✓ 已加入 ◇ 个依赖条目，跳过 ◇ 个（原因见隔离分析清单）': '✓ Added $1 dependency items, skipped $2 (see the list in the isolation analysis)',
+  // BUG-20260921-015 一键加入按提交补入：新入条目 + 既有条目补入的混合反馈（动态拼接）
+  '✓ 已加入 ◇ 个依赖条目、补入 ◇ 个依赖提交，跳过 ◇ 个（原因见隔离分析清单）': '✓ Added $1 dependency items and appended $2 dependency commits, skipped $3 (see the list in the isolation analysis)',
+  '✓ 已加入 ◇ 个依赖条目、补入 ◇ 个依赖提交：发布范围已变化，文档需重新核对 / 提交': '✓ Added $1 dependency items and appended $2 dependency commits: the release scope has changed — docs need re-review / re-commit',
+  '✓ 已补入 ◇ 个依赖提交，跳过 ◇ 个（原因见隔离分析清单）': '✓ Appended $1 dependency commits, skipped $2 (see the list in the isolation analysis)',
+  '✓ 已补入 ◇ 个依赖提交：发布范围已变化，文档需重新核对 / 提交': '✓ Appended $1 dependency commits: the release scope has changed — docs need re-review / re-commit',
   '✕ 一键加入失败：◇': '✕ Failed to add dependencies: $1',
   '合并分析读取失败：◇': 'Failed to load the merge analysis: $1',
   // BUG-20260915-014 构建模块版本详情发布页签：读取失败 / 详情失败 / 创建与动作反馈（动态拼接）
