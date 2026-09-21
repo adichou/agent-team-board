@@ -2049,6 +2049,9 @@ const ATBBuild = (() => {
   }
 
   // 文档编写步：上部 AI 写作（提示词 + IDE 入口），下部文档与语言选择、编辑 / 预览、提交状态与 Git 按钮
+  // BUG-20260921-004：类型下拉选项文本用完整文件名（README.md…，与底部文档 chips 口径一致，
+  // value 保持裸键供保存逻辑拼文件名），并声明 data-i18n-skip 豁免翻译——文件名是标识不是文案，
+  // 避免 zh 反向词典命中「说明: README」词条（条目详情抽屉页签）的逆映射把 README 误译成「说明」。
   function renderDocsPane(v) {
     const pf = pfOf(v);
     if (!pf || pf.phase === 'loading') return '<div class="bld-docs-pane"><p class="muted" role="status">正在加载发布流程数据…</p></div>';
@@ -2084,7 +2087,7 @@ const ATBBuild = (() => {
           <div class="bld-docs-head">
             <strong>文档</strong>
             <label class="small">类型
-              <select class="bld-doc-key">${['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].map((k) => `<option value="${k}"${k === key ? ' selected' : ''}>${k}</option>`).join('')}</select></label>
+              <select class="bld-doc-key" data-i18n-skip>${['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].map((k) => `<option value="${k}"${k === key ? ' selected' : ''}>${k}.md</option>`).join('')}</select></label>
             <label class="small">语言
               <select class="bld-doc-lang"><option value="zh"${lang === 'zh' ? ' selected' : ''}>中文</option><option value="en"${lang === 'en' ? ' selected' : ''}>英文</option></select></label>
             <div class="bld-doc-mode" role="group" aria-label="编辑或预览">
