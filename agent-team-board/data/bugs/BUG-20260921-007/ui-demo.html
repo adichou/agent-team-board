@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260921-007 界面演示 · 分支浏览提交记录（分页 / 泳道配色）</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --panel: #ffffff; --text: #24292f; --muted: #57606a; --line: #d0d7de;
+    --git-lg0: #2563eb;  /* main 泳道：蓝 */
+    --git-lg1: #d97706;  /* dev 泳道：黄 */
+    --err-bg: #fef2f2; --err-fg: #b91c1c; --err-line: #fecaca;
+    --sel-bg: #fff8eb; --sel-line: #d97706;
+    --note-bg: #fffbeb; --note-line: #f59e0b; --note-fg: #92400e;
+    --btn: #eaeef2; --btn-hover: #dde3ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --text: #cccccc; --muted: #8b949e; --line: #30363d;
+      --git-lg0: #60a5fa; --git-lg1: #fbbf24;
+      --err-bg: #3a1d1d; --err-fg: #f87171; --err-line: #5c2b2b;
+      --sel-bg: #2b2313; --sel-line: #fbbf24;
+      --note-bg: #2b2313; --note-line: #b45309; --note-fg: #fbbf24;
+      --btn: #21262d; --btn-hover: #2d333b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  code, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 16px; }
+
+  /* ---- 演示控制区（非真实界面部分） ---- */
+  .demo-head { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+  .demo-head h1 { font-size: 16px; margin: 0 0 4px; }
+  .demo-head p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; vertical-align: middle; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 5px 14px; cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--git-lg0); color: #fff; }
+  .seg.warn button.on { background: #dc2626; }
+  .ctl-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
+  .legend { display: inline-flex; gap: 12px; align-items: center; color: var(--muted); font-size: 12px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+
+  /* ---- 复刻「发布 → 分支浏览」两栏布局 ---- */
+  .split { display: flex; gap: 12px; align-items: stretch; }
+  .col-list { width: 220px; flex: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .col-log { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .tools { display: flex; gap: 6px; margin-bottom: 6px; }
+  .btn { border: 1px solid var(--line); background: var(--btn); color: var(--text); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+  .btn:hover:not(:disabled) { background: var(--btn-hover); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .sync-note { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+  .group-head { color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); padding-bottom: 2px; margin: 10px 0 6px; }
+  .branch { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+  .branch:hover { background: var(--btn); }
+  .branch.sel { background: var(--sel-bg); outline: 1px solid var(--sel-line); }
+  .branch.remote { color: var(--muted); cursor: default; }
+  .branch.remote:hover { background: transparent; }
+  .st { font-size: 11px; border-radius: 999px; padding: 0 8px; }
+  .st-run { background: #dbecdb; color: #116329; }
+  @media (prefers-color-scheme: dark) { .st-run { background: #1c3a24; color: #4ade80; } }
+
+  /* ---- 提交记录区 ---- */
+  .log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+  .log-head strong { font-size: 15px; }
+  .search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .search input[type="search"] { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 3px 8px; width: 210px; font-size: 12px; }
+  .modes { display: inline-flex; gap: 8px; font-size: 12px; color: var(--muted); }
+  .modes label { display: inline-flex; gap: 3px; align-items: center; }
+  .hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
+  .detail { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 6px 10px; margin: 6px 0; font-size: 13px; }
+  .merge-tag { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); margin-left: 6px; }
+  .err { border: 1px solid var(--err-line); background: var(--err-bg); color: var(--err-fg); border-radius: 6px; padding: 6px 10px; margin: 6px 0; font-size: 13px; }
+  .note { border: 1px dashed var(--note-line); background: var(--note-bg); color: var(--note-fg); border-radius: 6px; padding: 5px 10px; margin: 6px 0; font-size: 12px; }
+  .blank { border: 1px dashed var(--err-line); border-radius: 6px; min-height: 200px; display: flex; align-items: center; justify-content: center; color: var(--err-fg); font-size: 13px; }
+  .log-body { margin: 4px 0; }
+  .log-row { display: flex; align-items: center; gap: 4px; padding: 0 6px 0 0; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .log-row:hover { background: var(--btn); }
+  .log-row.sel { background: var(--sel-bg); border-color: var(--sel-line); }
+  .log-row svg { flex: none; display: block; }
+  .log-row .msg { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+  .log-row .msg code { color: var(--muted); margin-right: 6px; }
+  .log-row .meta { flex: none; color: var(--muted); font-size: 11px; }
+  mark { background: transparent; color: var(--git-lg1); font-weight: 700; }
+  .lane-main { stroke: var(--git-lg0); stroke-width: 2; }
+  .lane-dev { stroke: var(--git-lg1); stroke-width: 2; }
+  .dot-main { fill: var(--git-lg0); }
+  .dot-dev { fill: var(--git-lg1); }
+  .chip rect { fill: var(--git-lg0); }
+  .chip.dev rect { fill: var(--git-lg1); }
+  .chip text { fill: #fff; font-size: 10px; font-family: ui-monospace, Menlo, monospace; }
+  .tree-svg text { fill: var(--muted); font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+
+  /* ---- 分页条 ---- */
+  .pager { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; font-size: 12px; }
+  .pager .num { min-width: 26px; text-align: center; }
+  .pager .num.on { background: var(--git-lg0); color: #fff; border-color: var(--git-lg0); }
+  .pager .gap { color: var(--muted); padding: 0 2px; }
+  .pager select { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); padding: 2px 4px; }
+  .range { color: var(--muted); margin-left: auto; }
+  .demo-foot { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  @media (max-width: 860px) { .split { flex-direction: column; } .col-list { width: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="demo-head">
+    <h1>BUG-20260921-007 界面演示 · 分支浏览提交记录</h1>
+    <p>对照展示两个缺陷与修复后状态：<b>①</b> 翻到第 3 页及以后提交记录区域无数据；<b>②</b> 第 2 页起 dev 泳道应由黄色变为蓝色（缺陷）→ 应恒为黄色（修复）。下方两栏复刻「发布 → 分支浏览」布局，右栏可翻页 / 选中提交 / 搜索高亮 / 切换接口状态。</p>
+    <div class="ctl-row">
+      <span>演示模式：</span>
+      <span class="seg warn" id="segMode">
+        <button type="button" data-mode="defect" class="on">缺陷复现</button>
+        <button type="button" data-mode="fixed">修复后</button>
+      </span>
+      <span>接口状态：</span>
+      <span class="seg" id="segApi">
+        <button type="button" data-api="normal" class="on">正常</button>
+        <button type="button" data-api="empty">空</button>
+        <button type="button" data-api="hold">加载驻留</button>
+        <button type="button" data-api="fail">失败</button>
+      </span>
+      <span class="legend">
+        <span><i class="sw" style="background:var(--git-lg0)"></i>main 泳道（--git-lg0 蓝）</span>
+        <span><i class="sw" style="background:var(--git-lg1)"></i>dev 泳道（--git-lg1 黄）</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="split">
+    <aside class="col-list" aria-label="分支列表">
+      <div class="tools">
+        <button type="button" class="btn" id="syncBtn" title="fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致">⟳ 和远端同步</button>
+        <button type="button" class="btn" id="branchRefresh">刷新</button>
+      </div>
+      <p class="sync-note">同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。</p>
+      <div class="group-head">本地</div>
+      <div class="branch sel" data-branch="dev" role="button" tabindex="0"><span>dev</span><span class="st st-run">当前</span></div>
+      <div class="branch" data-branch="main" role="button" tabindex="0"><span>main</span></div>
+      <div class="group-head">远端</div>
+      <div class="branch remote" title="演示聚焦本地 main/dev 并集视图，远端分支不可选"><span>origin/dev</span></div>
+      <div class="branch remote" title="演示聚焦本地 main/dev 并集视图，远端分支不可选"><span>origin/main</span></div>
+    </aside>
+
+    <section class="col-log" aria-label="提交记录">
+      <div class="log-head">
+        <strong id="logBranch">dev</strong>
+        <div class="search" role="search">
+          <input type="search" id="qInput" placeholder="搜 message / 分支 / tag / 作者 / hash…" aria-label="搜索提交记录">
+          <span class="modes" role="radiogroup" aria-label="搜索模式">
+            <label><input type="radio" name="mode" checked>高亮定位</label>
+            <label><input type="radio" name="mode">过滤（保留祖先）</label>
+          </span>
+          <button type="button" class="btn" id="qGo">搜索</button>
+          <button type="button" class="btn" id="qClear" style="display:none">清除</button>
+        </div>
+        <button type="button" class="btn" id="logRefresh">刷新</button>
+      </div>
+      <div id="logContent"></div>
+    </section>
+  </div>
+
+  <p class="demo-foot">演示说明：提交数据为确定性模拟（共 387 条，仿真实仓库 main∪dev 并集：dev 独有提交分布在最新约 88 条内，其后为单线主干）；缺陷一按「数据接口正常但前端未渲染」复现（与登记排查一致：数据层各页均返回数据）；搜索为演示简化——仅对当前页做高亮定位（真实界面为全量搜索 + 双模式）；「和远端同步」为布局占位，不发起真实操作。</p>
+</div>
+
+<script>
+'use strict';
+/* ================= 确定性模拟数据（仿 main∪dev 并集，新→旧） ================= */
+var TOTAL = 387;
+var DEV_SPAN = 87;   /* 最新 0..87 内 i%3===0 为 dev 独有；i=88 为 dev 并回 main 的合并提交 */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+var rnd = mulberry32(20260921);
+var POOL = [
+  'fix: 修复列表翻页越界回退', 'feat: 支持版本计划关联提交选择', 'docs: 补充分支浏览说明',
+  'chore: 升级依赖版本', 'refactor: 抽离分页纯函数', 'feat: 提交记录关键词搜索',
+  'fix: 同步推送失败提示列明分支', 'test: 补充分页边界用例', 'feat: 历史拓扑图选中详情',
+  'docs: 中英文案同步', 'fix: 空态文案区分', 'chore: 清理临时工作树', 'feat: 双支并集视图',
+  'fix: 页边界父提交提示', 'refactor: 树数据适配纯函数', 'test: 泳道配色回归用例'
+];
+var NAMES = ['adi', 'lin', 'tong'];
+var commits = [];
+(function(){
+  var hx = '0123456789abcdef';
+  for (var i = 0; i < TOTAL; i++) {
+    var h = '';
+    for (var k = 0; k < 40; k++) h += hx[Math.floor(rnd() * 16)];
+    var devSide = i <= DEV_SPAN && i % 3 === 0;
+    var d = new Date(2026, 8, 21, 10, 0, 0).getTime() - i * 3600e3 * 7;
+    commits.push({
+      i: i, hash: h, short: h.slice(0, 7),
+      subject: POOL[Math.floor(rnd() * POOL.length)],
+      author: NAMES[Math.floor(rnd() * NAMES.length)],
+      date: new Date(d).toISOString().replace('T', ' ').slice(0, 16),
+      side: devSide ? 'dev' : 'main',
+      merge: i === DEV_SPAN + 1
+    });
+  }
+})();
+function parentsOf(c) {
+  if (c.i === TOTAL - 1) return [];
+  if (c.merge) return [commits[c.i + 1].hash, commits[DEV_SPAN].hash];
+  return [commits[c.i + 1].hash];
+}
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function markMatch(text, q) {
+  var s = String(text || ''), kw = String(q || '').trim();
+  if (!kw) return esc(s);
+  var lower = s.toLowerCase(), k = kw.toLowerCase(), i = lower.indexOf(k);
+  if (i < 0) return esc(s);
+  return esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, i + kw.length)) + '</mark>' + markMatch(s.slice(i + kw.length), kw);
+}
+
+/* ================= 演示状态 ================= */
+var S = {
+  mode: 'defect',   /* defect | fixed */
+  api: 'normal',    /* normal | empty | hold | fail */
+  branch: 'dev',
+  page: 1, size: 50,
+  loading: false,
+  empty: false, failFirst: false, inlineErr: false, retryTarget: null,
+  selected: null,
+  q: '', qDraft: ''
+};
+var lastGood = null; /* 最近一次成功渲染的页（翻页失败保留旧内容用） */
+
+/* ================= 工具 ================= */
+function pagesOf(){ return Math.max(1, Math.ceil(TOTAL / S.size)); }
+function rowsOf(page){ var st = (page - 1) * S.size; return commits.slice(st, st + S.size); }
+function pagerHtml() {
+  var pages = pagesOf(), p = S.page, want = [];
+  for (var i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - p) <= 1) want.push(i);
+    else if (want[want.length - 1] !== '…') want.push('…');
+  }
+  var nums = want.map(function(w){
+    return w === '…' ? '<span class="gap">…</span>'
+      : '<button type="button" class="btn num' + (w === p ? ' on' : '') + '" data-pg="' + w + '"' + (S.loading ? ' disabled' : '') + ' aria-current="' + (w === p) + '">' + w + '</button>';
+  }).join('');
+  var sizes = [20, 50, 100].map(function(n){
+    return '<option value="' + n + '"' + (n === S.size ? ' selected' : '') + '>' + n + ' 条/页</option>';
+  }).join('');
+  var start = (p - 1) * S.size, len = Math.max(0, Math.min(S.size, TOTAL - start));
+  return '<div class="pager" role="navigation" aria-label="提交记录分页">'
+    + '<button type="button" class="btn" data-pg="prev"' + (p <= 1 || S.loading ? ' disabled' : '') + '>上一页</button>'
+    + nums
+    + '<button type="button" class="btn" data-pg="next"' + (p >= pages || S.loading ? ' disabled' : '') + '>下一页</button>'
+    + '<select id="sizeSel" aria-label="每页条数"' + (S.loading ? ' disabled' : '') + '>' + sizes + '</select>'
+    + '<span class="range">第 ' + (start + 1) + '–' + (start + len) + ' 条 / 共 ' + TOTAL + ' 条</span></div>';
+}
+
+/* 单行 SVG：泳道线 + 圆点 + 分支头标签（main=lane0 x20 蓝；dev=lane1 x56 黄） */
+var LANE0 = 20, LANE1 = 56, SVGW = 150;
+function rowSvg(c, opt) {
+  var single = opt.single;                 /* 缺陷态（页内无分支头）：单泳道恒蓝 */
+  var devLane = single ? false : c.i <= DEV_SPAN + 1;
+  var s = '<svg width="' + SVGW + '" height="26" viewBox="0 0 ' + SVGW + ' 26" aria-hidden="true">';
+  s += '<line class="lane-main" x1="' + LANE0 + '" y1="0" x2="' + LANE0 + '" y2="26"/>';
+  if (devLane) {
+    var y2 = c.merge ? 13 : 26;            /* 合并行：dev 泳道并入 main 后终止 */
+    s += '<line class="lane-dev" x1="' + LANE1 + '" y1="0" x2="' + LANE1 + '" y2="' + y2 + '"/>';
+    if (c.merge) s += '<path class="lane-dev" fill="none" d="M ' + LANE1 + ' 0 C ' + LANE1 + ' 8, ' + LANE0 + ' 5, ' + LANE0 + ' 13"/>';
+  }
+  var isDev = !single && c.side === 'dev';
+  var cx = isDev ? LANE1 : LANE0, cls = isDev ? 'dot-dev' : 'dot-main';
+  s += '<circle class="' + cls + '" cx="' + cx + '" cy="13" r="5"' + (c.merge ? ' stroke="#fff" stroke-width="1.5"' : '') + '/>';
+  if (opt.chip) {
+    var x = (opt.chipSide === 'dev' && !single) ? LANE1 : LANE0;
+    s += '<g class="chip' + ((opt.chipSide === 'dev' && !single) ? ' dev' : '') + '" transform="translate(' + (x + 8) + ',5)">'
+      + '<rect width="46" height="16" rx="4"/><text x="6" y="12">' + esc(opt.chip) + '</text></g>';
+  }
+  return s + '</svg>';
+}
+
+function logBodyHtml(page) {
+  var rows = rowsOf(page);
+  var defect = S.mode === 'defect';
+  var single = defect && page >= 2;        /* 缺陷二：第 2 页起图内只剩所选分支单泳道（恒蓝） */
+  var blank = defect && page >= 3;         /* 缺陷一：第 3 页起内容区无数据渲染 */
+  var out = '';
+  if (single) out += '<div class="note">演示标注：缺陷——本页不含 main / dev 分支头，gitgraph 图内只剩 1 个分支，整树恒取 colors[0] 蓝色，dev 泳道由黄变蓝。</div>';
+  if (blank) {
+    out += '<div class="blank">演示标注：缺陷——提交树区域空白，无任何数据渲染（数据接口实测正常返回本页 50 条）。</div>'
+      + '<p class="hint" role="note">父提交在后续页，轨道继续；此处不是历史起点。</p>' + pagerHtml();
+    return out;
+  }
+  var hit = 0;
+  var body = rows.map(function(c){
+    var chip = null, chipSide = null;
+    if (!single && page === 1) {           /* 第 1 页：双支头标签（行 0 = dev 头，行 1 = main 头） */
+      if (c.i === 0) { chip = 'dev'; chipSide = 'dev'; }
+      else if (c.i === 1) { chip = 'main'; chipSide = 'main'; }
+    } else if (single) {
+      chip = S.branch; chipSide = 'main';  /* 缺陷态：本页首行标注所选分支名（蓝色） */
+    }
+    var m = S.q && c.subject.toLowerCase().indexOf(S.q.toLowerCase()) >= 0;
+    if (m) hit++;
+    return '<div class="log-row' + (S.selected === c.hash ? ' sel' : '') + '" data-hash="' + c.hash + '" role="button" tabindex="0">'
+      + rowSvg(c, { single: single, chip: chip, chipSide: chipSide })
+      + '<span class="msg"><code>' + esc(c.short) + '</code>' + markMatch(c.subject, S.q) + (c.merge ? '<span class="merge-tag">合并 · 2 父提交</span>' : '') + '</span>'
+      + '<span class="meta">' + esc(c.author) + ' · ' + esc(c.date) + '</span></div>';
+  }).join('');
+  out += '<div class="hint" role="note">并集视图：同时显示 main 与 dev 的提交（含未合并提交）</div>';
+  if (S.q) out += '<div class="hint" role="status">高亮 ' + hit + ' 处匹配（message / 分支名 / tag）—— 演示简化：仅当前页</div>';
+  var sel = S.selected ? rows.find(function(c){ return c.hash === S.selected; }) : null;
+  if (sel) {
+    var ps = parentsOf(sel);
+    out += '<div class="detail" role="status"><code>' + esc(sel.short) + '</code> ' + esc(sel.subject) + '；'
+      + (ps.length ? '<span>父提交：</span>' + ps.map(function(p){ return '<code>' + esc(p.slice(0, 8)) + '</code>'; }).join(' ') : '<span>无父提交（根提交）</span>')
+      + (sel.merge ? '<span class="merge-tag">合并 · 2 父提交</span>' : '') + '</div>';
+  }
+  out += '<div class="log-body">' + body + '</div>';
+  if (page === pagesOf()) out += '<p class="hint" role="note">已到末尾 · 共 ' + TOTAL + ' 条提交（可翻至分支首个提交）</p>';
+  else out += '<p class="hint" role="note">父提交在后续页，轨道继续；此处不是历史起点。</p>';
+  if (!defect && page >= 2) out += '<div class="note">演示标注：修复后——泳道按 side 稳定配色，dev 恒黄（--git-lg1）/ main 恒蓝（--git-lg0），翻页不跳变。</div>';
+  out += pagerHtml();
+  return out;
+}
+
+/* ================= 渲染 ================= */
+var logContent = document.getElementById('logContent');
+var qInput = document.getElementById('qInput');
+var branchEl = document.getElementById('logBranch');
+function render() {
+  branchEl.textContent = S.branch;
+  qInput.value = S.qDraft;
+  qInput.disabled = S.loading;
+  document.getElementById('qGo').disabled = S.loading;
+  document.getElementById('qClear').style.display = S.q ? '' : 'none';
+  document.getElementById('logRefresh').disabled = S.loading;
+  document.querySelectorAll('.branch[data-branch]').forEach(function(el){
+    el.classList.toggle('sel', el.dataset.branch === S.branch);
+  });
+  if (S.loading) { logContent.innerHTML = '<p class="hint" role="status">加载提交记录中…</p>'; return; }
+  if (S.failFirst) {
+    logContent.innerHTML = '<p class="err" role="alert">提交记录读取失败：模拟接口错误（500）—— 可点右上「刷新」或切换接口状态后重试</p>';
+    return;
+  }
+  if (S.empty) { logContent.innerHTML = '<p class="hint">该分支暂无提交</p>'; return; }
+  var html = '';
+  if (S.inlineErr) {
+    html += '<p class="err" role="alert">提交记录读取失败：模拟接口错误（500） <button type="button" class="btn" id="logRetry">重试</button></p>'
+      + '<div class="hint" role="note">已保留上一页内容（重试将重发目标页 第 ' + S.retryTarget + ' 页）</div>';
+  }
+  logContent.innerHTML = html + logBodyHtml(S.page);
+}
+
+/* ================= 加载 / 导航（模拟接口：正常 / 空 / 加载驻留 / 失败） ================= */
+function nav(page) {
+  if (S.loading) return;
+  S.page = Math.max(1, Math.min(pagesOf(), page));
+  S.loading = true; S.inlineErr = false; S.failFirst = false; S.empty = false;
+  render();
+  if (S.api === 'hold') return;            /* 驻留观察加载态 */
+  setTimeout(function() {
+    S.loading = false;
+    if (S.api === 'empty') { S.empty = true; }
+    else if (S.api === 'fail') {
+      if (lastGood && lastGood.branch === S.branch && !S.empty) {
+        S.page = lastGood.page; S.inlineErr = true; S.retryTarget = page;
+      } else { S.failFirst = true; }
+    } else { lastGood = { page: S.page, branch: S.branch }; }
+    render();
+  }, 450);
+}
+function setApi(v) {
+  S.api = v;
+  document.querySelectorAll('#segApi button').forEach(function(b){ b.classList.toggle('on', b.dataset.api === v); });
+  if (v === 'hold') { S.loading = true; S.inlineErr = false; S.failFirst = false; S.empty = false; render(); return; }
+  S.loading = false; S.inlineErr = false; S.failFirst = false; S.retryTarget = null;
+  if (v === 'empty') { S.empty = true; lastGood = null; }
+  else if (v === 'normal') { S.empty = false; lastGood = { page: S.page, branch: S.branch }; }
+  else { S.empty = false; }                /* fail：等待下一次导航 / 刷新触发 */
+  render();
+}
+
+/* ================= 事件绑定 ================= */
+document.querySelectorAll('#segMode button').forEach(function(b){
+  b.addEventListener('click', function(){
+    S.mode = b.dataset.mode;
+    document.querySelectorAll('#segMode button').forEach(function(x){ x.classList.toggle('on', x === b); });
+    S.selected = null;
+    render();
+  });
+});
+document.querySelectorAll('#segApi button').forEach(function(b){
+  b.addEventListener('click', function(){ setApi(b.dataset.api); });
+});
+document.querySelectorAll('.branch[data-branch]').forEach(function(el){
+  el.addEventListener('click', function(){
+    if (S.loading || el.dataset.branch === S.branch) return;
+    S.branch = el.dataset.branch; S.selected = null; S.q = ''; S.qDraft = '';
+    nav(1);
+  });
+});
+logContent.addEventListener('click', function(e){
+  var pg = e.target.closest('[data-pg]');
+  if (pg && !pg.disabled) {
+    var v = pg.dataset.pg;
+    nav(v === 'prev' ? S.page - 1 : v === 'next' ? S.page + 1 : Number(v));
+    return;
+  }
+  var retry = e.target.closest('#logRetry');
+  if (retry) { var t = S.retryTarget; S.inlineErr = false; nav(t || S.page); return; }
+  var row = e.target.closest('.log-row');
+  if (row) { S.selected = (S.selected === row.dataset.hash ? null : row.dataset.hash); render(); }
+});
+logContent.addEventListener('change', function(e){
+  if (e.target.id === 'sizeSel') { S.size = Number(e.target.value) || 50; nav(1); }
+});
+qInput.addEventListener('input', function(){ S.qDraft = qInput.value; });
+qInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') { S.q = String(S.qDraft || '').trim(); render(); } });
+document.getElementById('qGo').addEventListener('click', function(){ S.q = String(S.qDraft || '').trim(); render(); });
+document.getElementById('qClear').addEventListener('click', function(){ S.q = ''; S.qDraft = ''; render(); });
+document.getElementById('logRefresh').addEventListener('click', function(){ S.failFirst = false; S.inlineErr = false; nav(S.page); });
+document.getElementById('branchRefresh').addEventListener('click', function(){ nav(1); });
+document.getElementById('syncBtn').addEventListener('click', function(){
+  logContent.insertAdjacentHTML('afterbegin', '<p class="note" id="syncTip">演示占位：真实界面此处执行 fetch --all --prune 并推送除 main 外的本地分支，完成后自动刷新列表与提交记录。</p>');
+  setTimeout(function(){ var t = document.getElementById('syncTip'); if (t) t.remove(); }, 2600);
+});
+
+/* 初始：进入分支浏览即选中 dev 并加载第 1 页 */
+nav(1);
+</script>
+</body>
+</html>
