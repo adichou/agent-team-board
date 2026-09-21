@@ -241,51 +241,71 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.deepEqual(r.json.commits, [], 'offset 超过 total 返回空页不报错');
     assert.equal(r.json.total, 64, '超界响应 total 仍正确');
 
-    // S12 REQ-20260914-002 提交记录关键词搜索（q 扩展 branch-log：服务端全量过滤分页，只读）
+    // S12 REQ-20260914-002 提交记录关键词搜索（q 扩展 branch-log：服务端匹配分页，只读）；
+    // REQ-20260921-002 升级双模式：q 缺省 mode=filter（保留集 = 匹配 ∪ 祖先闭包）/
+    // mode=highlight（数据集不变 + 全量命中清单）。long 分支线性历史（init→单号→bulk1..62），
+    // 闭包沿链收敛 ⇒ bulk 命中的保留集恒为全量 64 条，匹配数另以 matchedTotal 断言。
     // D5 q 缺省 / 空白走默认分页（既有口径零回归）
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=`);
     assert.equal(r.json.total, 64, '空 q 走默认全量口径');
     assert.ok(!r.json.query, '默认模式不带 query');
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=%20%20%20`);
     assert.equal(r.json.total, 64, '空白 q（trim 后空）走默认口径');
-    // D1 跨页命中：q=bulk 62 条命中，默认页 50 条、total=62、新→旧
+    // D1 filter 模式（默认）：q=bulk 匹配 62 条、闭包保留集 64 条；首页命中按新→旧
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=bulk`);
     assert.equal(r.status, 200);
-    assert.equal(r.json.total, 62, 'q=bulk 命中 bulk 1..62');
+    assert.equal(r.json.mode, 'filter', 'q 默认走 filter（保留祖先）');
+    assert.equal(r.json.matchedTotal, 62, 'q=bulk 匹配 bulk 1..62');
+    assert.equal(r.json.total, 64, '保留集 = 匹配 + 祖先（单号与 init）= 全量 64');
+    assert.equal(r.json.allTotal, 64, '全量数据集数');
     assert.equal(r.json.limit, 50, '搜索态默认 limit=50');
     assert.equal(r.json.commits.length, 50);
-    assert.equal(r.json.commits[0].subject, 'bulk 62', '命中按新→旧排列');
-    assert.equal(r.json.commits[49].subject, 'bulk 13', '首页末条为第 50 命中');
-    assert.ok(r.json.commits.every((c) => c.subject.includes('bulk')), '全部命中含关键词');
+    assert.equal(r.json.commits[0].subject, 'bulk 62', '保留集按新→旧排列');
+    assert.equal(r.json.commits[49].subject, 'bulk 13', '首页末条为第 50 条');
+    assert.ok(r.json.commits.every((c) => c.subject.includes('bulk')), '首页命中段全部含关键词');
     assert.equal(r.json.query, 'bulk', '响应回显关键词');
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=bulk&limit=20&offset=40`);
-    assert.equal(r.json.total, 62, '搜索态 total 不随分页变');
-    assert.equal(r.json.commits.length, 20, 'limit=20&offset=40 取 20 条命中');
-    assert.equal(r.json.commits[0].subject, 'bulk 22', 'offset 偏移后从第 41 命中开始（新→旧）');
-    assert.equal(r.json.commits[19].subject, 'bulk 3', '页尾为第 60 命中');
-    // D2 匹配口径四字段：subject（旧位置单号）/ author / 短 hash / 完整 hash 前缀
-    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${encodeURIComponent(reqA.id)}`);
-    assert.equal(r.json.total, 1, '旧位置单号（默认分页第 2 页以远）仍能命中（subject）');
-    assert.match(r.json.commits[0].subject, new RegExp(reqA.id));
-    assert.equal(r.json.commits[0].hash, commit1, 'subject 命中条目 hash 一致');
+    assert.equal(r.json.total, 64, '搜索态 total 不随分页变');
+    assert.equal(r.json.commits.length, 20, 'limit=20&offset=40 取保留集 20 条');
+    assert.equal(r.json.commits[0].subject, 'bulk 22', 'offset 偏移后从第 41 条开始（新→旧）');
+    assert.equal(r.json.commits[19].subject, 'bulk 3', '页尾为第 60 条');
+    // D1b highlight 模式：数据集与默认分页一致 + 全量命中清单（前端高亮定位依据）
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=bulk&mode=highlight`);
+    assert.equal(r.json.mode, 'highlight');
+    assert.equal(r.json.matchedTotal, 62, '命中数');
+    assert.equal(r.json.matchedHashes.length, 62, '全量命中清单（数据集顺序）');
+    assert.equal(r.json.total, 64, '数据集 = 全量（不过滤），分页条口径不变');
+    assert.equal(r.json.commits.length, 50, '默认分页首页');
+    assert.ok(r.json.commits.every((c) => Array.isArray(c.tags)), '提交树 tags 字段全链路附带');
+    // D1c 非法 mode 归一为 filter
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=bulk&mode=weird`);
+    assert.equal(r.json.mode, 'filter', '非法 mode 回退 filter');
+    // D2 匹配口径：subject（旧位置单号）/ author / 短 hash / 完整 hash 前缀 + tag 名 + 分支名
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${encodeURIComponent(reqA.id)}&mode=highlight`);
+    assert.equal(r.json.matchedTotal, 1, '旧位置单号（默认分页第 2 页以远）仍能命中（subject）');
+    assert.equal(r.json.matchedHashes[0], commit1, 'subject 命中条目 hash 一致');
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=T`);
-    assert.equal(r.json.total, 64, '作者 T 命中分支全部提交');
+    assert.equal(r.json.matchedTotal, 64, '作者 T 命中分支全部提交');
+    assert.equal(r.json.total, 64, '闭包保留集 = 全量');
     const longHead = git(projA, ['rev-parse', 'long']);
-    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${git(projA, ['rev-parse', '--short=7', 'long'])}`);
-    assert.equal(r.json.total, 1, '短 hash 前缀恰命中 1 条');
-    assert.equal(r.json.commits[0].hash, longHead, '短 hash 命中对应提交');
-    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${longHead.slice(0, 12)}`);
-    assert.equal(r.json.total, 1, '完整 hash 前缀命中同一条');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${git(projA, ['rev-parse', '--short=7', 'long'])}&mode=highlight`);
+    assert.equal(r.json.matchedTotal, 1, '短 hash 前缀恰命中 1 条');
+    assert.equal(r.json.matchedHashes[0], longHead, '短 hash 命中对应提交');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${longHead.slice(0, 12)}&mode=highlight`);
+    assert.equal(r.json.matchedTotal, 1, '完整 hash 前缀命中同一条');
+    r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=long&mode=highlight`);
+    assert.equal(r.json.matchedTotal, 64, '选中分支名命中 ⇒ 该分支全部提交匹配');
     // D3 大小写不敏感
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=BULK`);
-    assert.equal(r.json.total, 62, '大写关键词命中小写 subject');
+    assert.equal(r.json.matchedTotal, 62, '大写关键词命中小写 subject');
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=t`);
-    assert.equal(r.json.total, 64, '小写关键词命中大写作者名 T');
+    assert.equal(r.json.matchedTotal, 64, '小写关键词命中大写作者名 T');
     // D4 无命中
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=long&q=${encodeURIComponent('不存在的关键词xyz')}`);
     assert.equal(r.status, 200);
-    assert.deepEqual(r.json.commits, [], '无命中返回空页');
+    assert.deepEqual(r.json.commits, [], '无命中返回空页（闭包为空）');
     assert.equal(r.json.total, 0, '无命中 total=0');
+    assert.equal(r.json.matchedTotal, 0, '无命中 matchedTotal=0');
     // D6 非法输入：ref 注入 / 不存在分支 / limit 归一 / 超长 q 截断
     r = await req(port, 'GET', `/api/build/branch-log${P}&branch=--upload-pack%3Devil&q=bulk`);
     assert.equal(r.status, 400, '搜索态非法 ref 同样拒绝');
