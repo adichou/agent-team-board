@@ -170,39 +170,47 @@ function docScopeLines(items = []) {
 //（语言集首语言）四个文件；子代理经 atb summary CLI 逐文件回执进度（正在总结 → 已总结
 // 待审核），完成后交短回执。剩余语言文档由阶段二 AI 翻译（buildDocTranslatePrompt）产出，
 // 不在本提示词范围内。
+// REQ-20260921-006 提示词缓存命中优化：重组为「静态段在前 + 尾部运行参数区」——角色/阶段说明/
+// 恒定回执命令段（<执行编号>/<文件名> 占位）/写作约束构成稳定公共前缀（有无 runId 均恒定形态）；
+// 项目路径、计划号/版本号、执行编号、CLI 入口、默认语言文档清单、关联范围清单收敛到尾部参数区。
+// 回执命令、CLI 参数与语义不变。
 export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, atbPath = 'node scripts/atb.mjs' } = {}) {
   const version = versionNumberOf(planId) || planId;
   const ls = docLangsOf({ langs });
   const docFiles = defaultDocFiles(ls);
+  const docCount = PUBLISH_DOC_KEYS.length;
   const readmePair = 'README.md → CHANGELOG.md / FEATURES.md';
-  const lines = [];
-  lines.push(`你是技术写作人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
-  lines.push('');
-  lines.push(`项目路径：${projectRoot || '（未提供）'}`);
-  lines.push(`发布计划号：${planId}（版本号 ${version}）`);
-  if (runId) lines.push(`执行编号：${runId}`);
-  lines.push('关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：');
-  lines.push(...docScopeLines(items));
-  lines.push('');
-  lines.push(`本阶段只总结默认语言（语言集首语言 ${ls[0]}）的 ${docFiles.length} 个文档（${PUBLISH_DOC_KEYS.length} 类 × 1）；语言集 ${ls.join(',')} 的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围：`);
-  for (const f of docFiles) lines.push(`- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`);
-  lines.push('');
-  if (runId) {
-    lines.push('逐文件进度回执（在项目根执行；atb 指 ' + atbPath + '，下同）：');
-    lines.push(`1. 开始总结某文件：atb summary file ${runId} --file <文件名> --state summarizing`);
-    lines.push(`2. 该文件总结完成：atb summary file ${runId} --file <文件名> --state summarized`);
-    lines.push(`3. 全部完成：atb summary done ${runId} --summary "<一两句要点>"`);
-    lines.push(`4. 中断 / 无法完成：atb summary fail ${runId} --reason "<短句原因>"`);
-    lines.push(`已审核（reviewed）的文件跳过不再总结；不修改上述 ${docFiles.length} 个文档以外的任何文件。`);
-    lines.push('');
-  }
-  lines.push('写作约束：');
-  lines.push('- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。');
-  lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${readmePair}），链接必须真实可达。`);
-  lines.push('- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。');
-  lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
-  lines.push('- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。');
-  return lines.join('\n');
+  const common = [
+    `你是技术写作人员，以子代理身份完成当前版本发布文档的 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`,
+    `本阶段只总结默认语言（语言集首语言，见运行参数）的 ${docCount} 个文档（${docCount} 类 × 1）；语言集的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围（文档清单见运行参数）。`,
+    '关联范围按实际代码与提交核实变化，不简单罗列需求 / Bug 原文（清单见运行参数）。',
+    '',
+    '逐文件进度回执（在项目根执行；atb 指运行参数「CLI 入口」给出的命令，下同）：',
+    '1. 开始总结某文件：atb summary file <执行编号> --file <文件名> --state summarizing',
+    '2. 该文件总结完成：atb summary file <执行编号> --file <文件名> --state summarized',
+    '3. 全部完成：atb summary done <执行编号> --summary "<一两句要点>"',
+    '4. 中断 / 无法完成：atb summary fail <执行编号> --reason "<短句原因>"',
+    `已审核（reviewed）的文件跳过不再总结；不修改本阶段 ${docCount} 个文档以外的任何文件。`,
+    '',
+    '写作约束：',
+    '- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。',
+    `- README 按语言链接同语言 CHANGELOG 与 FEATURES（${readmePair}），链接必须真实可达。`,
+    '- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。',
+    '- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。',
+    '- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。',
+  ];
+  const params = [
+    '运行参数（随任务变化，命令占位符以本区实际值为准）：',
+    `项目路径：${projectRoot || '（未提供）'}`,
+    `发布计划号：${planId}（版本号 ${version}）`,
+    `执行编号：${runId || '（未提供——进度回执命令需执行编号，请先经看板启动 AI 总结获取）'}`,
+    `CLI 入口：${atbPath}`,
+    `默认语言文档清单（语言集首语言 ${ls[0]}，共 ${docFiles.length} 个文档，${docCount} 类 × 1）：`,
+    ...docFiles.map((f) => `- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`),
+    '关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：',
+    ...docScopeLines(items),
+  ];
+  return [...common, '', ...params].join('\n');
 }
 
 // AI 翻译提示词（REQ-20260921-012 阶段二）：以**已审核的默认语言文档磁盘内容为唯一翻译
