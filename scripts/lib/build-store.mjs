@@ -364,6 +364,29 @@ function markDocsScopeStale(dataDir, v, reason) {
   return writeVersion(dataDir, v);
 }
 
+// REQ-20260921-008 人工通过审核（审查对话框「通过审核」）：在版本记录顶层 v.review 固化
+// 审核时点磁盘内容 sha256——与 v.docs（提交记录语义）隔离，避免未提交版本被误判 uncommitted。
+// 求值侧（publish-flow.evaluateDocsFlow）：内容再变（内部编辑 / 外部 IDE 修改）hash 不一致即
+// 自动回退「已总结待审核」；scopeStale 时整体失效。hash 缺省按 readFile（缺省读项目根磁盘）
+// 现算当前内容。
+export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
+  const v = readVersion(dataDir, id);
+  if (!flow.isPublishDocFile(file)) throw new AtbError(`非发布文档文件：${file || '（空）'}（仅八个已确认文档可审核）`);
+  let h = String(hash || '');
+  if (!h) {
+    const read = typeof readFile === 'function'
+      ? readFile
+      : (f) => { try { return fs.readFileSync(path.join(projectRootGuess(dataDir), f), 'utf8'); } catch { return null; } };
+    const text = read(file);
+    if (text == null) throw new AtbError(`${file} 不存在或不可读：先编写并保存再通过审核`);
+    h = crypto.createHash('sha256').update(text).digest('hex');
+  }
+  if (!/^[0-9a-f]{64}$/.test(h)) throw new AtbError('审核记录缺少有效内容 hash（sha256）');
+  v.review = { files: { ...((v.review && v.review.files) || {}), [file]: { hash: h.toLowerCase(), at: nowIso() } } };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
 // 合并前置门禁（REQ-20260920-003）：无条目 / 文档未完成（未提交、外部修改未提交、范围过期）
 // → AtbError（HTTP 400/409 由调用方映射），错误信息按最差项说明。
 export function assertMergeDocsGate(dataDir, id, readFile) {

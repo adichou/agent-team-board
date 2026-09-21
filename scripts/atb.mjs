@@ -28,6 +28,10 @@ import * as rebuild from './lib/rebuild.mjs';
 import { packPlugin } from './lib/plugin-pack.mjs';
 // BUG-20260915-007：无 run 手动 report 的系统收口提交编排（复用批量 autoCommitForRun 内核）。
 import * as manualCloseout from './lib/manual-closeout.mjs';
+// REQ-20260921-008：发布文档 AI 总结执行账本（独立锁 summary.lock，与实施/完善互斥隔离）。
+import * as docsSummary from './lib/docs-summary-store.mjs';
+import * as buildStore from './lib/build-store.mjs';
+import * as publishFlow from './lib/publish-flow.mjs';
 
 const args = process.argv.slice(2);
 
@@ -145,6 +149,15 @@ Oncall 咨询看板（REQ-20260907-001；咨询单独立 ASK 序列，不进 REQ
   atb refine pause [--off] [--batch ID]      暂停/恢复后续领取
   atb refine abort [--batch ID]              终止任务（剩余项出局；在途需在对应子代理会话人工停止）
   atb refine records [--batch ID] [--offset N] [--limit N]  执行记录分页
+
+发布文档 AI 总结（REQ-20260921-008；发布流水线「总结 → 审查 → 提交」第一段；独立锁 summary.lock，
+与 AI 分析 / AI 开发互不占用；只总结八个发布文档，人工审查与提交在看板「文档编写」页执行）：
+  atb summary start --id <BLD-ID> [--by 会话]  启动一轮 AI 总结（返回 runId + 提示词）
+  atb summary file <RUN-ID> --file <文件名> --state <summarizing|summarized>
+                                              逐文件进度回执（正在总结 / 已总结待审核）
+  atb summary done <RUN-ID> --summary <要点>   完成回执
+  atb summary fail <RUN-ID> --reason <短句>    中断回执（不悬挂「正在总结」，可重启续跑）
+  atb summary show [RUN-ID]                    进度视图（x/8、当前文件、锁占用）
 
 提交索引（REQ-20260911-009；条目 ↔ commit 双向查询，只读）：
   atb commit log <ITEM-ID>                     查该单全部提交（hash+消息；账本与 git 历史合并）
@@ -458,6 +471,13 @@ async function main() {
 
   if (cmd === 'refine') {
     await refineCmd(rest);
+    return;
+  }
+
+  // ---------- 发布文档 AI 总结（REQ-20260921-008） ----------
+
+  if (cmd === 'summary') {
+    await summaryCmd(rest);
     return;
   }
 
@@ -1156,6 +1176,96 @@ async function refineCmd(rest) {
   }
 
   die(`未知子命令：refine ${sub}\n\n${REFINE_USAGE}`);
+}
+
+// ---------- 发布文档 AI 总结（REQ-20260921-008）：summary 子命令 ----------
+// 供「AI 总结」提示词派发的技术写作子代理逐文件回执进度（独立锁 summary.lock，与 AI 开发 /
+// AI 分析互不占用）；看板轮询同一账本展示进度（文档编写页 / 任务模块 / 全局任务面板）。
+
+const SUMMARY_USAGE = `用法：
+  atb summary start --id <BLD-ID> [--by 会话]   启动一轮 AI 总结（八文件 pending；返回 runId + 提示词）
+  atb summary file <RUN-ID> --file <文件名> --state <summarizing|summarized>
+                                               逐文件进度回执（正在总结 / 已总结待审核）
+  atb summary done <RUN-ID> --summary <要点>    完成回执（本轮待总结文件均进入已总结待审核）
+  atb summary fail <RUN-ID> --reason <短句>     中断回执（残留「正在总结」回退，不悬挂）
+  atb summary show [RUN-ID]                     进度视图（x/8、当前文件、锁占用；缺省最新 run）
+
+口径：发布文档流水线「总结 → 审查 → 提交」的第一段；只总结八个发布文档
+（README / CHANGELOG / FEATURES / AGENTS 中英），人工审查与 Git 提交在看板「文档编写」页执行。`;
+
+async function summaryCmd(rest) {
+  const [sub, ...subRest] = rest;
+  if (!sub) die(SUMMARY_USAGE);
+  const dataDir = core.requireDataDir(cwd);
+  const projectRoot = core.projectRootOfBoard(dataDir);
+
+  if (sub === 'start') {
+    const { opts } = parseOpts(subRest, new Set(['id', 'by']));
+    if (!opts.id) die('用法：atb summary start --id <BLD-ID> [--by 会话]');
+    const v = buildStore.readVersion(dataDir, opts.id);
+    const run = docsSummary.createSummaryRun(dataDir, { verId: v.id, owner: opts.by || 'summary' });
+    const prompt = publishFlow.buildDocSummaryPrompt({
+      projectRoot,
+      planId: v.id,
+      items: v.items,
+      runId: run.runId,
+      atbPath: 'node scripts/atb.mjs',
+    });
+    const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt };
+    if (jsonOut) { console.log(JSON.stringify(payload)); return; }
+    console.log(`✓ 已启动 AI 总结执行：${run.runId}（版本 ${v.id}，独立锁 summary.lock）`);
+    console.log('  逐文件进度回执：atb summary file <RUN-ID> --file <文件名> --state summarizing|summarized');
+    console.log('  提示词（复制后在当前项目的 Agent 会话发送）：');
+    console.log('  -----');
+    for (const line of prompt.split('\n')) console.log(`  ${line}`);
+    console.log('  -----');
+    return;
+  }
+
+  if (sub === 'file') {
+    const { pos, opts } = parseOpts(subRest, new Set(['file', 'state']));
+    const runId = pos[0];
+    if (!runId || !opts.file || !opts.state) die('用法：atb summary file <RUN-ID> --file <文件名> --state <summarizing|summarized>');
+    const run = docsSummary.markSummaryFile(dataDir, runId, opts.file, opts.state);
+    if (jsonOut) { console.log(JSON.stringify(docsSummary.summaryRunView(run))); return; }
+    console.log(`✓ ${opts.file} → ${opts.state === 'summarizing' ? '正在总结' : '已总结待审核'}（${run.runId}）`);
+    return;
+  }
+
+  if (sub === 'done' || sub === 'fail') {
+    const { pos, opts } = parseOpts(subRest, new Set(['summary', 'reason']));
+    const runId = pos[0];
+    if (!runId) die(sub === 'done' ? '用法：atb summary done <RUN-ID> --summary <要点>' : '用法：atb summary fail <RUN-ID> --reason <短句>');
+    const run = sub === 'done'
+      ? docsSummary.finishSummaryRun(dataDir, runId, { result: 'done', summary: opts.summary || '' })
+      : docsSummary.finishSummaryRun(dataDir, runId, { result: 'failed', reason: opts.reason || '' });
+    if (jsonOut) { console.log(JSON.stringify(docsSummary.summaryRunView(run))); return; }
+    console.log(sub === 'done'
+      ? `✓ AI 总结完成（${run.runId}）：待总结文件均进入「已总结待审核」，等待人工审查`
+      : `✓ AI 总结中断（${run.runId}）：${run.reason}；文件状态不悬挂「正在总结」，可重新启动续跑`);
+    return;
+  }
+
+  if (sub === 'show') {
+    const { pos } = parseOpts(subRest, new Set());
+    const run = pos[0] ? docsSummary.getSummaryRun(dataDir, pos[0]) : docsSummary.latestSummaryRun(dataDir);
+    if (!run) {
+      if (jsonOut) { console.log(JSON.stringify({ run: null })); return; }
+      console.log('（暂无 AI 总结执行：看板「文档编写」页点击 AI 总结，或 atb summary start --id <BLD-ID>）');
+      return;
+    }
+    const view = docsSummary.summaryRunView(run);
+    if (jsonOut) { console.log(JSON.stringify(view)); return; }
+    const PHASE_LABEL = { running: '进行中', done: '已完成', failed: '失败' };
+    console.log(`AI 总结 ${run.runId}（版本 ${run.verId}，owner ${run.owner}）：${PHASE_LABEL[run.phase] || run.phase}`);
+    console.log(`  进度 ${view.counts.summarized}/${view.counts.total}${view.currentFile ? ` · 当前：${view.currentFile}（正在总结）` : ''}`);
+    if (view.reason) console.log(`  原因：${view.reason}`);
+    if (view.summary) console.log(`  要点：${view.summary}`);
+    console.log('  锁：summary（独立锁，与 AI 分析 / AI 开发互不占用）');
+    return;
+  }
+
+  die(SUMMARY_USAGE);
 }
 
 // ---------- 提交索引查询（REQ-20260911-009）：commit 子命令 ----------

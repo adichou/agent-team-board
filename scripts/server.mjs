@@ -10,6 +10,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as core from './lib/core.mjs';
@@ -34,6 +35,7 @@ import * as growth from './lib/growth-store.mjs';
 import * as migrateLayout from './lib/migrate-layout.mjs';
 import * as reqdisc from './lib/req-disc-store.mjs';
 import * as refine from './lib/refine-store.mjs';
+import * as docsSummary from './lib/docs-summary-store.mjs';
 // REQ-20260911-010：commit-store（提交规范内核/已提交索引）不再被服务端直接引用——
 // /api/commit/item-status 已换源至 gitFlow.itemCommitStatusIndex（REQ-20260911-009 索引）。
 import * as refineStates from './lib/refine-states.mjs';
@@ -294,18 +296,21 @@ function corruptBatchIds(batchesDir) {
   return out;
 }
 
-// 单项目聚合：开发批次 + 完善批次简报（均为只读 brief，不触发核对/结算/锁）。
+// 单项目聚合：开发批次 + 完善批次 + AI 总结 run 简报（均为只读 brief，不触发核对/结算/锁）。
 // REQ-20260913-003：去批次概念——简报不再透出批次号，也不补「排队中」标记（存量排队账本
 // 仍逐条入列，前端按状态归「待启动」档展示；同一时间只有一轮执行）。
 // REQ-20260911-010：批量 Commit（CMT）批次简报随人工批量提交流程回退移除。
+// REQ-20260921-008：AI 总结（独立锁 summary.lock）进入全局聚合——进行中展示、收尾移出。
 function projectTaskRows(root) {
   const dataDir = core.dataDirFrom(root);
   if (!dataDir) return []; // 未初始化注册项目：按「该项目无任务」处理而非报错（README 边界）
   const devBatches = batch.unfinishedBatches(dataDir).filter((b) => !b.aborted);
   const rfBatches = refine.unfinishedRefineBatches(dataDir).filter((b) => !b.aborted);
+  const sumRuns = docsSummary.unfinishedSummaryRuns(dataDir);
   const rows = [];
   devBatches.forEach((b) => rows.push(batch.batchBrief(dataDir, b)));
   rfBatches.forEach((b) => rows.push(refine.refineBatchBrief(dataDir, b)));
+  sumRuns.forEach((r) => rows.push(docsSummary.summaryBrief(r)));
   return rows;
 }
 
@@ -2502,8 +2507,11 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     try { return fs.readFileSync(path.join(root, f), 'utf8'); } catch { return null; }
   };
 
-  // GET /api/build/publish-plan?id=：五步导航装配（版本号 / 步骤门禁 / 文档状态 / AI 写作与
+  // GET /api/build/publish-plan?id=：五步导航装配（版本号 / 步骤门禁 / 文档状态 / AI 总结与
   // 官网提示词 / 合并影响分析 / 当前分支与主分支 / 发布状态），只读。
+  // REQ-20260921-008：新增 docsFlow（八文件四态求值：未总结/正在总结/已总结待审核/已审核）与
+  // summary（该版本最新 AI 总结 run 视图）；docsPrompt 移除（提示词改由 docs-summary/start
+  // 按需生成——须带回执 runId）。
   if (req.method === 'GET' && pathname === '/api/build/publish-plan') {
     const board = requireBoard();
     const v = buildStore.readVersion(board, String(u.searchParams.get('id') || ''));
@@ -2519,7 +2527,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       versionNumber: flow.versionNumberOf(v.id),
       steps: flow.publishStepsState(v, docsEval),
       docs: docsEval,
-      docsPrompt: flow.buildDocWritingPrompt({ projectRoot: root, planId: v.id, items: v.items }),
+      docsFlow: flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(dataDir, v.id)),
+      summary: docsSummary.summaryRunView(docsSummary.latestSummaryRun(dataDir, v.id)),
       sitePrompt: config.homepageRepoRoot
         ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
         : null,
@@ -2545,10 +2554,71 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       content: docReadFile(file),
       links: flow.readmeDocLinks(file),
       docs: docsEval,
+      docsFlow: flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(board, v.id)),
+    });
+  }
+
+  // REQ-20260921-008 AI 总结流水线：启动一轮逐文件总结（独立锁 summary.lock，与 AI 分析 /
+  // AI 开发互不占用）；返回 runId 与提示词（含 atb summary 逐文件进度回执指令），前端复制到
+  // 剪贴板交给 AI Agent 执行。
+  if (req.method === 'POST' && pathname === '/api/build/docs-summary/start') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可启动 AI 总结');
+      const run = docsSummary.createSummaryRun(board, { verId: v.id, owner: 'summary' });
+      const prompt = flow.buildDocSummaryPrompt({
+        projectRoot: root,
+        planId: v.id,
+        items: v.items,
+        runId: run.runId,
+        atbPath: `node ${JSON.stringify(ATB_CLI)}`,
+      });
+      return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsSummary.summaryRunView(run) });
+    });
+  }
+
+  // REQ-20260921-008 AI 总结进度：最新 run 视图 + 该版本四态求值（文档编写页 15s 轮询一次
+  // 更新进度与文件状态；任务模块只消费 run）；可选 id= 过滤指定版本，缺省取项目内最新（任意版本）。
+  if (req.method === 'GET' && pathname === '/api/build/docs-summary/current') {
+    const board = requireBoard();
+    const idParam = u.searchParams.get('id');
+    const latest = docsSummary.latestSummaryRun(board, idParam);
+    const verId = idParam || latest?.verId || null;
+    let docsFlow = null;
+    if (verId) {
+      try {
+        const v = buildStore.readVersion(board, verId);
+        docsFlow = flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(board, verId));
+      } catch { /* 版本读取失败不阻塞进度展示 */ }
+    }
+    return sendJson(res, 200, { run: docsSummary.summaryRunView(latest), docsFlow });
+  }
+
+  // REQ-20260921-008 人工通过审核（审查对话框「通过审核」）：固化当前磁盘内容 hash；
+  // 内容此后再变（内部编辑 / 外部 IDE 修改）由求值自动回退「已总结待审核」。
+  if (req.method === 'POST' && pathname === '/api/build/docs/review') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可审核文档');
+      const file = String(body.file || '');
+      if (!flow.isPublishDocFile(file)) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅八个已确认文档可审核）`);
+      const text = docReadFile(file);
+      if (text == null) throw new core.AtbError(`${file} 不存在或不可读：先编写并保存再通过审核`);
+      const hash = crypto.createHash('sha256').update(text).digest('hex');
+      buildStore.recordDocsReview(board, body.id, { file, hash });
+      return sendJson(res, 200, {
+        ok: true,
+        file,
+        docsFlow: flow.evaluateDocsFlow(buildStore.readVersion(board, body.id), docReadFile, docsSummary.summaryMarksForVer(board, body.id)),
+      });
     });
   }
 
   // POST /api/build/docs/save {id, file, content}：保存单个发布文档（白名单限定，≤ 2 MiB）。
+  // REQ-20260921-008：响应附 docsFlow（审查对话框保存后前端即时更新四态——已审核文件编辑
+  // 保存即回退「已总结待审核」）。
   if (req.method === 'POST' && pathname === '/api/build/docs/save') {
     return runPost((body) => {
       const board = requireBoard();
@@ -2559,18 +2629,35 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const content = String(body.content ?? '');
       if (Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) throw new core.AtbError('文档内容过大（上限 2 MiB）');
       fs.writeFileSync(path.join(root, file), content);
-      return sendJson(res, 200, { ok: true, file, docs: flow.evaluateDocsState(buildStore.readVersion(board, body.id), docReadFile) });
+      const v2 = buildStore.readVersion(board, body.id);
+      return sendJson(res, 200, {
+        ok: true,
+        file,
+        docs: flow.evaluateDocsState(v2, docReadFile),
+        docsFlow: flow.evaluateDocsFlow(v2, docReadFile, docsSummary.summaryMarksForVer(board, body.id)),
+      });
     });
   }
 
   // POST /api/build/docs/commit {id}：提交文档到 Git（pathspec 限定八个文档，不夹带业务源码；
   // 无变化不空提交；成功返回 hash 并固化范围快照；失败保留内容可重试）。
+  // REQ-20260921-008 新增两道前置：① 八文件全部「已审核」（evaluateDocsFlow.canCommit，缺口
+  // 明细随错误返回）；② 当前分支必须是 dev（assertOnDev，不在 dev 阻止并提示自行切换——沿用
+  // 发布模块「不自动切分支」口径）。
   if (req.method === 'POST' && pathname === '/api/build/docs/commit') {
     return runPost(async (body) => {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可提交文档');
       if (!v.items.length) throw new core.AtbError('版本暂无关联条目：请先关联条目再编写并提交文档');
+      const flowEval = flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(board, body.id));
+      if (!flowEval.canCommit) {
+        const detail = flowEval.missing
+          .map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`)
+          .join('、');
+        throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/8 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交`);
+      }
+      buildGit.assertOnDev(root);
       const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${v.id}` });
       if (r.noop) {
         return sendJson(res, 200, { ok: true, noop: true, files: r.files, version: buildStore.readVersion(board, body.id) });
