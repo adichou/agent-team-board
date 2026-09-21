@@ -2337,12 +2337,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/branch-log') {
     const branch = u.searchParams.get('branch') || '';
     // BUG-20260914-009：limit/offset 分页参数（缺省/非法由数据层归一：默认 50/0，负数 clamp）
-    // REQ-20260914-002：可选 q 关键词 → 搜索模式（subject/author/hash 大小写不敏感子串匹配，
-    // 服务端全量过滤后按 limit/offset 分页，total 为命中总数；q 空白走默认分页，只读口径不变）
+    // REQ-20260914-002：可选 q 关键词 → 搜索模式（subject/author/hash/tags/分支名大小写不敏感
+    // 子串匹配，服务端全量匹配后分页；q 空白走默认分页，只读口径不变）
+    // REQ-20260921-002：可选 mode 双模式——filter（默认：保留集 = 匹配 ∪ 祖先闭包）/
+    // highlight（数据集不变 + 全量命中清单 matchedHashes）；非法值由数据层归一为 filter
     const q = (u.searchParams.get('q') || '').trim();
     if (q) {
+      const modeRaw = u.searchParams.get('mode') || '';
+      const mode = modeRaw === 'highlight' ? 'highlight' : 'filter';
       return sendJson(res, 200, buildGit.branchSearchLog(root, branch, {
         q,
+        mode,
         limit: u.searchParams.get('limit'),
         offset: u.searchParams.get('offset'),
       }));

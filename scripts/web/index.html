@@ -506,6 +506,10 @@
   <!-- REQ-20260910-029 发布模块：Git 远端 / Apple App Store 发布流水线（在 app.js 之前加载，挂载 window.ATBRelease） -->
   <script src="/release.js"></script>
   <!-- REQ-20260913-001 构建模块：版本管理 + 分支浏览与同步（在 app.js 之前加载，挂载 window.ATBBuild） -->
+  <!-- REQ-20260921-002 分支浏览提交树渲染：vendored @gitgraph/js 1.4.0 官方 UMD min 构建产物
+       （vendor 例外与 License 记录见 agent-team-board/data/requirements/REQ-20260921-002/licenses.md；
+       须在 build.js 之前加载，加载失败时 build.js 降级为行式列表，不出失效入口） -->
+  <script src="/gitgraph.umd.min.js"></script>
   <script src="/build.js"></script>
   <!-- REQ-20260916-006 挂起确认「查看差异」语义渲染层（在 app.js 之前加载，挂载 window.ATBDiffView） -->
   <script src="/diff-view.js"></script>
