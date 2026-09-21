@@ -104,11 +104,12 @@ t('B1 branchLog：merge 提交附双父、普通提交单父、根提交空数�
   }
 });
 
-t('B2 branchSearchLog 与分页 offset>0 页均附 parents', () => {
+t('B2 branchSearchLog 双模式与分页 offset>0 页均附 parents', () => {
   const { root, c0, c1, c2, c3 } = mkMergeRepo();
-  const s = buildGit.branchSearchLog(root, 'main', { q: 'feature' });
-  assert.deepEqual(s.commits.map((c) => c.hash).sort(), [c1, c3].sort(), '命中 merge 与 feature 提交');
-  for (const c of s.commits) assert.ok(Array.isArray(c.parents), '搜索命中同样附 parents 数组');
+  // REQ-20260921-002：highlight 模式数据集不变 + 全量命中清单（过滤语义见 req-20260921-002 B 组）
+  const s = buildGit.branchSearchLog(root, 'main', { q: 'feature', mode: 'highlight' });
+  assert.deepEqual([...s.matchedHashes].sort(), [c1, c3].sort(), '命中 merge 与 feature 提交（清单）');
+  for (const c of s.commits) assert.ok(Array.isArray(c.parents), '数据集行同样附 parents 数组');
   const merge = s.commits.find((c) => c.hash === c3);
   assert.deepEqual(merge.parents, [c2, c1], '搜索命中的 merge 提交双父完整');
   const p2 = buildGit.branchLog(root, 'main', { limit: 2, offset: 2 });
@@ -131,7 +132,8 @@ t('B4 octopus 多头合并：parents 含 HEAD 与全部三个分支头（共 4 �
   assert.equal(new Set(m.parents).size, 4, '四父互不重复');
 });
 
-/* ---------- G 组：logGraph 纯函数 ---------- */
+/* ---------- G 组：treeData 纯函数（REQ-20260921-002 渲染层升级 @gitgraph/js 后的适配层；
+   原 logGraph 轨道布局断言随自研行内 SVG 移除，拓扑正确性改由 parents 保真 + 集合内截断承载） ---------- */
 
 // vm 装载 build.js（最小 document 桩，只取导出的纯函数）
 function loadBuild() {
@@ -144,7 +146,7 @@ function loadBuild() {
   const document = { addEventListener() {}, body: el(), querySelector: () => null, querySelectorAll: () => [] };
   const sandbox = {
     document, console, URLSearchParams,
-    setTimeout: () => 0, clearTimeout() {},
+    setTimeout: () => 0, clearTimeout: () => {},
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     navigator: {},
     CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o && o.detail; } },
@@ -159,92 +161,73 @@ function loadBuild() {
 // 短前缀可区分的 40 位 hash（slice(0,7) 各不相同）
 const H = (i) => i.toString(16).padStart(4, '0').repeat(10);
 const sc = (i, parents = [], subject = `提交 ${i}`) => ({
-  hash: H(i), short: H(i).slice(0, 7), parents, subject, author: 'T', date: '2026-09-20T00:00:00.000Z',
+  hash: H(i), short: H(i).slice(0, 7), parents, subject, author: 'T', date: '2026-09-20T00:00:00.000Z', tags: [],
 });
 
-t('G1 logGraph 线性历史：全程单轨道、无合并、根行无向下虚构连线', () => {
+t('G1 treeData 线性历史：parents 全保真（主线直下由 gitgraph 泳道表达）、无合并标记', () => {
   const ATB = loadBuild();
   const commits = [sc(3, [H(2)]), sc(2, [H(1)]), sc(1, [])];
-  const g = ATB.logGraph(commits);
-  assert.equal(g.rows.length, 3, '节点数=提交数');
-  assert.ok(g.rows.every((r) => r.lane === 0), '线性历史全部在同一轨道');
-  assert.ok(g.rows.every((r) => !r.merge), '无合并节点');
-  assert.equal(g.laneCount, 1);
-  assert.equal(g.rows[2].segments.length, 0, '根提交无任何向下边（不虚构连线）');
-  assert.ok(g.rows[0].segments.some((s) => s.fromNode && !s.dashed), 'HEAD 行有真实父边');
-  assert.ok(g.rows.every((r) => !r.stubAbove), '完整视图无上方虚线桩');
+  const d = ATB.treeData(commits, { heads: [], branchName: 'main' });
+  assert.equal(d.length, 3, '节点数=提交数');
+  assert.deepEqual([...d[0].parents], [H(2)], '真实父边保真（不虚构 / 不丢）');
+  assert.deepEqual([...d[1].parents], [H(1)]);
+  assert.deepEqual([...d[2].parents], [], '根提交无父');
+  assert.ok(d.every((x) => x.mergeParents === undefined), '无合并标记');
 });
 
-t('G2 logGraph 两父合并：合并行 2 条真实父边、分支轨道分出并汇回、无假连线', () => {
+t('G2 treeData 两父合并：双父完整保留并标记 mergeParents（分支轨道分出汇回由 gitgraph 渲染）', () => {
   const ATB = loadBuild();
   // demo 结构：M=[B,C]；C=[D]；D=[E]；B=[E]；E=[]（新→旧：M,C,D,B,E）
   const commits = [sc(1, [H(2), H(3)], '合并 feature'), sc(3, [H(4)], 'feature 提交'), sc(4, [H(5)]), sc(2, [H(5)], 'main 提交'), sc(5, [], '共同祖先')];
-  const g = ATB.logGraph(commits);
-  assert.equal(g.rows.length, 5);
-  const [rM, , , rB, rE] = g.rows;
-  assert.equal(rM.merge, true, '合并标记');
-  assert.equal(rM.parentCount, 2);
-  const edges = rM.segments.filter((s) => s.fromNode);
-  assert.equal(edges.length, 2, '合并行两条真实父边全部画出');
-  assert.ok(edges.every((s) => !s.dashed), '父边均为实线');
-  assert.deepEqual([...new Set(edges.map((s) => s.x2))].sort(), [0, 1], '两条父边分别落在主线与分支轨道');
-  assert.equal(rB.merge, false, '普通提交不误标合并');
-  assert.equal(rE.segments.length, 0, '根行无向下边');
-  assert.ok(g.rows.every((r) => r.segments.every((s) => !s.dashed)), '完整历史无虚线');
-  assert.equal(g.laneCount, 2, '主线 + 一条并行分支轨道');
-  assert.equal(new Set(g.rows.map((r) => r.hash)).size, 5, '同页不重复节点');
+  const d = ATB.treeData(commits, { heads: [], branchName: 'main' });
+  assert.equal(d.length, 5);
+  const by = new Map(d.map((x) => [x.hash, x]));
+  assert.equal(by.get(H(1)).mergeParents, 2, '合并行标记双父');
+  assert.deepEqual([...by.get(H(1)).parents], [H(2), H(3)], '两父保真');
+  assert.equal(by.get(H(2)).mergeParents, undefined, '普通提交不误标合并');
+  assert.deepEqual([...by.get(H(5)).parents], [], '根行无父');
+  assert.equal(new Set(d.map((x) => x.hash)).size, 5, '同页不重复节点');
 });
 
-t('G3 logGraph 多父（octopus 4 父）：四条父边全部画出', () => {
+t('G3 treeData 多父（octopus 4 父）：四父保真 + mergeParents=4', () => {
   const ATB = loadBuild();
   const commits = [sc(1, [H(2), H(3), H(4), H(5)], '四父合并'), sc(5, [H(6)]), sc(4, [H(6)]), sc(3, [H(6)]), sc(2, [H(6)]), sc(6, [])];
-  const g = ATB.logGraph(commits);
-  const edges = g.rows[0].segments.filter((s) => s.fromNode);
-  assert.equal(edges.length, 4, '四父边不丢');
-  assert.ok(edges.every((s) => !s.dashed));
-  assert.equal(g.rows[0].parentCount, 4);
-  assert.equal(new Set([...edges.map((s) => s.x2)]).size, 4, '四父各落一条轨道');
+  const d = ATB.treeData(commits, { heads: [], branchName: 'main' });
+  const by = new Map(d.map((x) => [x.hash, x]));
+  assert.deepEqual([...by.get(H(1)).parents], [H(2), H(3), H(4), H(5)], '四父不丢');
+  assert.equal(by.get(H(1)).mergeParents, 4);
 });
 
-t('G4 logGraph 已删除分支可达历史：分支提交与汇回边仍完整（不丢父边、不丢轨道）', () => {
+t('G4 treeData 已删除分支可达历史：分支提交与父边仍完整（不丢父、不丢节点）', () => {
   const ATB = loadBuild();
   // 与 G2 同构：feature 分支删除后，其提交（3、4）仍在 main 可达历史中
   const commits = [sc(1, [H(2), H(3)], '合并 feature'), sc(3, [H(4)], 'feature 提交'), sc(4, [H(5)]), sc(2, [H(5)], 'main 提交'), sc(5, [], '共同祖先')];
-  const g = ATB.logGraph(commits);
-  const featRows = g.rows.filter((r) => [H(3), H(4)].includes(r.hash));
-  assert.equal(featRows.length, 2, '已删除分支的提交仍逐行展示');
-  assert.ok(featRows.every((r) => r.lane === 1), '分支提交保持独立轨道');
-  const mergeEdges = g.rows[0].segments.filter((s) => s.fromNode);
-  assert.equal(mergeEdges.length, 2, '合并行父边不因分支删除而丢失');
+  const d = ATB.treeData(commits, { heads: [], branchName: 'main' });
+  const by = new Map(d.map((x) => [x.hash, x]));
+  assert.equal(d.filter((x) => [H(3), H(4)].includes(x.hash)).length, 2, '已删除分支的提交仍逐节点保留');
+  assert.deepEqual([...by.get(H(1)).parents], [H(2), H(3)], '合并行父边不因分支删除而丢失');
 });
 
-t('G5 logGraph 搜索断档：隐藏中间提交不误连实线，父边转虚线并计数', () => {
+t('G5 treeData 搜索断档：集合外父截断（不外连误画）；集合内父保真（REQ-20260921-002 过滤模式闭包保证连通）', () => {
   const ATB = loadBuild();
-  // 搜索命中 [M, C, E]（B、D 被隐藏）：M 的父 B、C 的父 D 不在展示集合
+  // 搜索命中 [M, C, E]（B、D 不在展示集合）：M 的父 B、C 的父 D 不在集合
   const commits = [sc(1, [H(2), H(3)], '合并 feature'), sc(3, [H(4)], 'feature 提交'), sc(5, [], '共同祖先')];
-  const g = ATB.logGraph(commits);
-  const [rM, rC, rE] = g.rows;
-  const hiddenEdgesM = rM.segments.filter((s) => s.dashed);
-  assert.ok(hiddenEdgesM.length >= 1, 'M 行存在虚线父边（B 隐藏）');
-  assert.ok(hiddenEdgesM.every((s) => s.fromNode), '虚线父边从节点出发');
-  assert.deepEqual([...rM.hiddenParents], [H(2)], '隐藏父提交如实计数（B）');
-  const solidEdgesM = rM.segments.filter((s) => s.fromNode && !s.dashed);
-  assert.equal(solidEdgesM.length, 1, '展示中的父 C 仍以实线直连（真实父子才连线）');
-  assert.ok(rC.segments.every((s) => s.dashed), 'C 行父边全为虚线（D 隐藏，不与 E 误连实线）');
-  assert.deepEqual([...rC.hiddenParents], [H(4)], 'C 行隐藏父 D 计数');
-  assert.ok(!rE.stubAbove, '根提交即使行序靠中也不画上方延续桩（它确实是历史起点）');
-  assert.equal(rE.segments.length, 0, '根行不虚构向下连线');
+  const d = ATB.treeData(commits, { heads: [], branchName: 'main' });
+  const by = new Map(d.map((x) => [x.hash, x]));
+  assert.deepEqual([...by.get(H(1)).parents], [H(3)], '集合内父 C 保真、集合外父 B 截断（不误连）');
+  assert.deepEqual([...by.get(H(3)).parents], [], 'C 行集合外父 D 截断（不与 E 误连）');
+  assert.deepEqual([...by.get(H(5)).parents], [], '根行无父');
+  assert.equal(by.get(H(1)).mergeParents, undefined, '截断后单父不标合并');
 });
 
-t('G6 logGraph 页边界：跨页首行有父提交画上方虚线桩（不误判根）；节点唯一', () => {
+t('G6 treeData 页边界：跨页首行集合外父截断（页边界提示由渲染层补充）；节点唯一', () => {
   const ATB = loadBuild();
   // 第 2 页首行：父提交（H(9)）在上一页未随行加载
-  const g = ATB.logGraph([sc(8, [H(9)], '跨页首行')], { hasAbove: true });
-  assert.equal(g.rows[0].stubAbove, true, '有父提交且上方上下文未加载 → 上方虚线桩');
-  assert.deepEqual([...g.rows[0].hiddenParents], [H(9)], '页边界父提交未加载 → 虚线延续计数');
-  // 同一输入去重防御：logGraph 不制造重复节点
-  const g2 = ATB.logGraph([sc(1, [H(2)]), sc(2, [])]);
-  assert.equal(new Set(g2.rows.map((r) => r.hash)).size, g2.rows.length, '节点唯一');
+  const d = ATB.treeData([sc(8, [H(9)], '跨页首行')], { heads: [], branchName: 'main' });
+  assert.deepEqual([...d[0].parents], [], '页边界父提交未加载 → 截断（配合「父提交在后续页」提示，不误画）');
+  // 同一输入去重防御：treeData 不制造重复节点
+  const d2 = ATB.treeData([sc(1, [H(2)]), sc(2, [])], { heads: [], branchName: 'main' });
+  assert.equal(new Set(d2.map((x) => x.hash)).size, d2.length, '节点唯一');
 });
 
 /* ---------- R 组：vm 渲染 ---------- */
@@ -268,7 +251,8 @@ function element() {
 
 const ST = { initialized: true, isRepo: true, currentBranch: 'dev', versions: [] };
 
-// 提交记录桩：num<total 时父为 num+1（合成链，页边界天然断档）；q 按 subject/author/hash 过滤。
+// 提交记录桩：num<total 时父为 num+1（合成链，页边界天然断档）；q 双模式（REQ-20260921-002）：
+// highlight = 默认分页数据 + 全量命中清单；filter（默认）= 匹配 ∪ 祖先闭包（链 ⇒ 最老匹配..total）。
 function graphStub(h, st, { total = 137 } = {}) {
   h.sandbox.__branches = { isRepo: true, current: 'dev', local: ['dev', 'main'], remote: [] };
   h.sandbox.__logReqs = [];
@@ -285,29 +269,46 @@ function graphStub(h, st, { total = 137 } = {}) {
       const limit = Number(up.searchParams.get('limit') || 50);
       const offset = Number(up.searchParams.get('offset') || 0);
       const q = String(up.searchParams.get('q') || '').trim().toLowerCase();
+      const mode = String(up.searchParams.get('mode') || 'filter') === 'highlight' ? 'highlight' : 'filter';
       const mk = (num) => ({
         hash: H(num), short: H(num).slice(0, 7),
         subject: num === 120 ? 'fix: 跨页关键词 REQ-OLD-1201' : `提交 ${num}`,
         author: 'T', date: '2026-09-20T00:00:00.000Z',
         parents: num < total_ ? [H(num + 1)] : [],
+        tags: [],
       });
-      let page;
-      let totalOut = total_;
+      const pageOf = (list) => list.slice(offset, offset + limit);
       if (!q) {
         const n = Math.max(0, Math.min(limit, total_ - offset));
-        page = Array.from({ length: n }, (_, i) => mk(offset + i + 1));
-      } else {
-        const matched = [];
-        for (let num = 1; num <= total_; num++) {
-          const c = mk(num);
-          if (`${c.subject}\t${c.author}\t${c.short}\t${c.hash}`.toLowerCase().includes(q)) matched.push(c);
-        }
-        totalOut = matched.length;
-        page = matched.slice(offset, offset + limit);
+        return {
+          ok: true,
+          json: async () => ({ branch: up.searchParams.get('branch'), commits: Array.from({ length: n }, (_, i) => mk(offset + i + 1)), total: total_, limit, offset }),
+        };
       }
+      const matched = [];
+      for (let num = 1; num <= total_; num++) {
+        const c = mk(num);
+        if (`${c.subject}\t${c.author}\t${c.short}\t${c.hash}`.toLowerCase().includes(q)) matched.push(num);
+      }
+      if (mode === 'highlight') {
+        const n = Math.max(0, Math.min(limit, total_ - offset));
+        return {
+          ok: true,
+          json: async () => ({
+            branch: up.searchParams.get('branch'), query: up.searchParams.get('q').trim(), mode: 'highlight',
+            commits: Array.from({ length: n }, (_, i) => mk(offset + i + 1)),
+            total: total_, matchedHashes: matched.map((num) => H(num)), matchedTotal: matched.length, limit, offset,
+          }),
+        };
+      }
+      const oldest = matched.length ? Math.min(...matched) : null;
+      const kept = oldest == null ? [] : Array.from({ length: total_ - oldest + 1 }, (_, i) => mk(oldest + i));
       return {
         ok: true,
-        json: async () => ({ branch: up.searchParams.get('branch'), ...(q ? { query: up.searchParams.get('q').trim() } : {}), commits: page, total: totalOut, limit, offset }),
+        json: async () => ({
+          branch: up.searchParams.get('branch'), query: up.searchParams.get('q').trim(), mode: 'filter',
+          commits: pageOf(kept), total: kept.length, matchedTotal: matched.length, allTotal: total_, limit, offset,
+        }),
       };
     }
     return { ok: true, json: async () => ({}) };
@@ -343,14 +344,13 @@ async function branchesView(h) {
   return () => h.run(`document.querySelector('#buildView').innerHTML`);
 }
 
-t('R1 渲染：每行图形列 SVG + 行节点按钮（data-log-row）；节点数=提交数；合并行文字标签', async () => {
+t('R1 渲染：树容器 + 行节点按钮（data-log-row，vendor 缺失降级列表）；节点数=提交数；合并行文字标签', async () => {
   const h = setup();
   graphStub(h, ST, { total: 3 });
   const inner = await branchesView(h);
   const html = inner();
+  assert.match(html, /id="bldTreeBox"/, '提交树容器（REQ-20260921-002：vendor 在位时 bindCommon 后画 gitgraph 树）');
   assert.equal((html.match(/data-log-row="/g) || []).length, 3, '每行一个节点按钮（节点数=提交数）');
-  assert.match(html, /<svg[^>]*class="bld-graph"/, '每行左侧固定图形列');
-  assert.match(html, /viewBox/, 'SVG 轨道视窗');
   // 合并行标签：手写含 merge 的 payload
   const h2 = setup();
   h2.sandbox.__branches = { isRepo: true, current: 'dev', local: ['dev'], remote: [] };
@@ -360,10 +360,10 @@ t('R1 渲染：每行图形列 SVG + 行节点按钮（data-log-row）；节点�
     if (up.pathname === '/api/build/branches') return { ok: true, json: async () => JSON.parse(JSON.stringify(h2.sandbox.__branches)) };
     if (up.pathname === '/api/build/branch-log') {
       return { ok: true, json: async () => ({ branch: 'dev', commits: [
-        { hash: H(1), short: H(1).slice(0, 7), subject: '合并 feature', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [H(2), H(3)] },
-        { hash: H(3), short: H(3).slice(0, 7), subject: 'feature 提交', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [H(4)] },
-        { hash: H(2), short: H(2).slice(0, 7), subject: 'main 提交', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [H(4)] },
-        { hash: H(4), short: H(4).slice(0, 7), subject: '根', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [] },
+        { hash: H(1), short: H(1).slice(0, 7), subject: '合并 feature', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [H(2), H(3)], tags: [] },
+        { hash: H(3), short: H(3).slice(0, 7), subject: 'feature 提交', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [H(4)], tags: [] },
+        { hash: H(2), short: H(2).slice(0, 7), subject: 'main 提交', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [H(4)], tags: [] },
+        { hash: H(4), short: H(4).slice(0, 7), subject: '根', author: 'T', date: '2026-09-20T00:00:00.000Z', parents: [], tags: [] },
       ], total: 4, limit: 50, offset: 0 }) };
     }
     return { ok: true, json: async () => ({}) };
@@ -372,7 +372,6 @@ t('R1 渲染：每行图形列 SVG + 行节点按钮（data-log-row）；节点�
   const html2 = inner2();
   assert.match(html2, /合并 · 2 父提交/, '合并行有非颜色文字标签');
   assert.equal((html2.match(/data-log-row="/g) || []).length, 4, '合并图节点数=提交数');
-  assert.ok(!/stroke-dasharray/.test(html2), '完整加载页无断档虚线');
 });
 
 t('R2 选择反馈：选中节点 → 详情区显示该提交与父提交标识；根提交显示无父提交；选中行高亮', async () => {
@@ -390,40 +389,40 @@ t('R2 选择反馈：选中节点 → 详情区显示该提交与父提交标识
   assert.match(inner(), /class="bld-log-row sel"/, '选中行高亮');
 });
 
-t('R3 搜索隐藏上下文：断档行虚线 + 顶部说明 + 行内提示；清除恢复', async () => {
+t('R3 过滤模式祖先闭包：跨页命中保留集含全部祖先（无断线断档语义）；清除恢复', async () => {
   const h = setup();
   graphStub(h, ST, { total: 137 });
   await branchesView(h);
   const inner = () => h.run(`document.querySelector('#buildView').innerHTML`);
-  // 搜 REQ-OLD-1201 → 仅命中 120，其父 121 不在结果（父子断档）
+  // 搜 REQ-OLD-1201（filter 模式）→ 命中 1 条；闭包沿链收敛 #120..#137 共 18 条（含祖先）
+  h.run(`window.ATBBuild.setLogSearchMode('filter')`);
+  await new Promise((r) => setTimeout(r, 10));
   const el = (sel) => h.run(`document.querySelector('#buildView').querySelector(${JSON.stringify(sel)})`);
   const input = el('#bldLogSearchInput');
   input.value = 'REQ-OLD-1201';
   input.listeners.input();
   el('#bldLogSearchGo').listeners.click();
   await new Promise((r) => setTimeout(r, 10));
-  assert.match(inner(), /搜索已隐藏中间提交/, '顶部隐藏上下文说明');
-  assert.match(inner(), /stroke-dasharray/, '断档父边以虚线绘制');
-  assert.match(inner(), /个父提交未显示/, '行内隐藏父提交文字说明');
-  // 清除恢复：顶部说明消失
+  assert.match(inner(), /匹配 1 条 · 保留 18\/137 条（含祖先，泳道连通）/, '过滤计数（匹配 + 闭包保留集）');
+  assert.equal((inner().match(/data-log-row="/g) || []).length, 18, '保留集逐节点展示（不断线）');
+  assert.ok(!/搜索已隐藏中间提交/.test(inner()), '闭包保留后无「隐藏中间提交」断档说明');
+  // 清除恢复：回默认全量第一页
   h.run(`window.ATBBuild.clearLogSearch()`);
   await new Promise((r) => setTimeout(r, 10));
-  assert.ok(!/搜索已隐藏中间提交/.test(inner()), '清除后说明消失');
+  assert.equal((inner().match(/data-log-row="/g) || []).length, 50, '清除恢复默认分页首页');
 });
 
-t('R4 页边界：未到末页显示延续提示与虚线；末页不显示提示但跨页首行有上方虚线桩', async () => {
+t('R4 页边界：未到末页显示延续提示；末页不显示提示（页外父截断由 treeData 承载，不误画）', async () => {
   const h = setup();
   graphStub(h, ST, { total: 137 });
   await branchesView(h);
   const inner = () => h.run(`document.querySelector('#buildView').innerHTML`);
-  // 第 1 页（共 3 页）：最老行父提交在下一页 → 延续提示 + 该行虚线父边
+  // 第 1 页（共 3 页）：最老行父提交在下一页 → 延续提示（父截断不画向页外，见 G6）
   assert.match(inner(), /父提交在后续页，轨道继续/, '非末页显示延续提示');
-  assert.match(inner(), /stroke-dasharray/, '页边界行虚线父边（不误画成根）');
-  // 末页：不再显示延续提示；首行（上一页延续而来）有上方虚线桩
+  // 末页：不再显示延续提示
   h.run(`window.ATBBuild.gotoLogPage(3)`);
   await new Promise((r) => setTimeout(r, 10));
   assert.ok(!/父提交在后续页，轨道继续/.test(inner()), '末页无延续提示');
-  assert.match(inner(), /stroke-dasharray/, '跨页首行上方虚线桩（有父提交、上下文在上一页）');
 });
 
 t('R5 状态回归：空历史 / 翻页失败保留旧内容+重试 / 搜索无结果口径不回归', async () => {
@@ -446,8 +445,10 @@ t('R5 状态回归：空历史 / 翻页失败保留旧内容+重试 / 搜索无�
   assert.match(html, /提交 1</, '翻页失败保留第 1 页内容');
   assert.match(html, /提交记录读取失败：boom/, '失败原因展示');
   assert.match(html, /id="bldLogRetry"/, '重试入口');
-  // 搜索无结果
+  // 搜索无结果（filter 模式：highlight 无命中数据集不变，不出空态）
   h2.sandbox.__logFail = false;
+  h2.run(`window.ATBBuild.setLogSearchMode('filter')`);
+  await new Promise((r) => setTimeout(r, 10));
   const el = (sel) => h2.run(`document.querySelector('#buildView').querySelector(${JSON.stringify(sel)})`);
   const input = el('#bldLogSearchInput');
   input.value = 'zzz-no-hit';
@@ -459,40 +460,43 @@ t('R5 状态回归：空历史 / 翻页失败保留旧内容+重试 / 搜索无�
 
 /* ---------- S 组：样式契约 ---------- */
 
-t('S1 style.css：轨道调色板浅 / 深两套 + 图形列 / 行按钮 / 合并标签 / 详情区样式', () => {
-  assert.equal((css.match(/--git-lg0:/g) || []).length, 2, '调色板变量浅色与深色各定义一次');
-  assert.match(css, /\.bld-graph/, '图形列样式');
-  assert.match(css, /\.bld-graph \{[^}]*flex-shrink: 0/, '图形列固定不压缩（行对齐前提）');
+t('S1 style.css：轨道调色板浅 / 深两套 + 树容器 / 行按钮 / 合并标签 / 详情区样式', () => {
+  assert.equal((css.match(/--git-lg0:/g) || []).length, 2, '调色板变量浅色与深色各定义一次（降级标签与树色板同源）');
+  assert.match(css, /\.bld-tree/, '提交树容器样式（REQ-20260921-002）');
   assert.match(css, /\.bld-log-row/, '行节点按钮样式');
   assert.match(css, /\.bld-merge-tag/, '合并标签样式');
   assert.match(css, /\.bld-log-detail/, '选择详情区样式');
 });
 
-t('S2 build.js 静态契约：logGraph 纯函数导出 + bindCommon 绑定 data-log-row（click / focus）', () => {
-  assert.match(buildJs, /function logGraph\(/, 'logGraph 纯函数');
-  assert.match(buildJs, /logGraph,/, '经 window.ATBBuild 导出（测试接缝）');
+t('S2 build.js 静态契约：treeData 纯函数导出 + bindCommon 绑定 data-log-row（click / focus）与树挂载', () => {
+  assert.match(buildJs, /function treeData\(/, 'treeData 纯函数（git2json 适配）');
+  assert.match(buildJs, /treeData,/, '经 window.ATBBuild 导出（测试接缝）');
+  assert.match(buildJs, /function mountTree\(/, 'mountTree 树挂载入口');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-log-row\]'\)/, 'bindCommon 循环绑定节点按钮');
   assert.match(buildJs, /selectLogRow/, '选择行为接缝');
 });
 
 /* ---------- I 组：i18n 中英同步 ---------- */
 
-t('I1 i18n：拓扑图新增文案进 EN / EN_DYNAMIC（值无中文、静态值唯一）', async () => {
+t('I1 i18n：拓扑图文案（REQ-20260921-002 树化后保留口径）进 EN / EN_DYNAMIC（值无中文、静态值唯一；虚线断档词条已清理）', async () => {
   await import('../web/i18n.js');
   const I = globalThis.ATBI18N;
   const { EN, EN_DYNAMIC } = I._dict;
-  for (const k of ['父提交：', '无父提交（根提交）', '搜索已隐藏中间提交：虚线不表示直接父子关系。', '父提交在后续页，轨道继续；此处不是历史起点。']) {
+  for (const k of ['父提交：', '无父提交（根提交）', '父提交在后续页，轨道继续；此处不是历史起点。']) {
     assert.ok(EN[k], `EN 应含「${k}」`);
     assert.ok(!/[\u4e00-\u9fff]/.test(EN[k]), `EN 值不含中文：${k}`);
   }
-  for (const k of ['合并 · ◇ 父提交', '◇ 个父提交未显示（虚线延续）']) {
+  for (const k of ['合并 · ◇ 父提交']) {
     assert.ok(EN_DYNAMIC[k], `EN_DYNAMIC 应含「${k}」`);
     assert.ok(!/[\u4e00-\u9fff]/.test(EN_DYNAMIC[k]), `EN_DYNAMIC 值不含中文：${k}`);
   }
   const values = Object.values(EN);
-  for (const k of ['父提交：', '无父提交（根提交）', '搜索已隐藏中间提交：虚线不表示直接父子关系。', '父提交在后续页，轨道继续；此处不是历史起点。']) {
+  for (const k of ['父提交：', '无父提交（根提交）', '父提交在后续页，轨道继续；此处不是历史起点。']) {
     assert.equal(values.filter((v) => v === EN[k]).length, 1, `EN 值唯一（无重复）：${k}`);
   }
+  // REQ-20260921-002：过滤模式闭包保留（无断线）后虚线断档语义清理，词条不再存在
+  assert.ok(!('搜索已隐藏中间提交：虚线不表示直接父子关系。' in EN), '旧断档说明词条已清理');
+  assert.ok(!('◇ 个父提交未显示（虚线延续）' in EN_DYNAMIC), '旧隐藏父提交词条已清理');
 });
 
 /* ---------- 执行 ---------- */

@@ -151,15 +151,25 @@ t('B3 单支回退：无 dev / 无 main / 选其他分支时保持既有单支�
 
 t('B4 branchSearchLog 并集搜索：命中含 dev 独有提交且带 side / heads / mergeBase；空白 q 走默认并集', () => {
   const { root, m1 } = mkParallelRepo();
+  // REQ-20260921-002：q 默认 filter（保留祖先闭包）——命中 dev 独有两条，
+  // 闭包沿 d1→d0→m1→m0 收敛（main 独有 m2 不在闭包内）= 4 条
   const s = buildGit.branchSearchLog(root, 'main', { q: 'dev 提交' });
   assert.equal(s.query, 'dev 提交');
-  assert.equal(s.total, 2, '命中 dev 独有两条');
-  assert.ok(s.commits.length === 2 && s.commits.every((c) => c.side === 'dev'), '命中行带 side=dev');
+  assert.equal(s.mode, 'filter');
+  assert.equal(s.matchedTotal, 2, '命中 dev 独有两条');
+  assert.equal(s.total, 4, '保留集 = 命中 + 祖先闭包（d1,d0,m1,m0；不含 main 独有 m2）');
+  assert.ok(s.commits.length === 4 && s.commits.filter((c) => c.side === 'dev').length === 2, '命中行带 side=dev 且祖先共享历史保留');
   assert.ok(Array.isArray(s.heads) && s.heads.length === 2, '搜索态同样附 heads');
   assert.equal(s.mergeBase, m1, '搜索态同样附 mergeBase');
+  // highlight 模式：数据集不变 + 命中清单（dev 独有两条）
+  const sh = buildGit.branchSearchLog(root, 'main', { q: 'dev 提交', mode: 'highlight' });
+  assert.equal(sh.mode, 'highlight');
+  assert.equal(sh.matchedHashes.length, 2, '全量命中清单 = dev 独有两条');
+  assert.equal(sh.commits.length, 5, '数据集 = 默认并集（不过滤）');
   // subject 之外字段命中（作者）
   const s2 = buildGit.branchSearchLog(root, 'dev', { q: 't' });
-  assert.equal(s2.total, 5, '作者命中并集全部');
+  assert.equal(s2.matchedTotal, 5, '作者命中并集全部');
+  assert.equal(s2.total, 5);
   assert.equal(s2.branch, 'dev');
   // 空白 q → 默认并集分页（无 query 字段）
   const s3 = buildGit.branchSearchLog(root, 'main', { q: '   ' });
@@ -224,7 +234,8 @@ t('B8 主分支 master 回退仓库：并集 / heads（master + dev）/ mergeBas
   assert.equal(side.get(c0), 'main');
 });
 
-/* ---------- G 组：logGraph 纯函数（分支稳定配色 + 汇聚标记） ---------- */
+/* ---------- G 组：treeData 纯函数（REQ-20260921-002 树化后：双支身份经 refs 进入 gitgraph；
+   原 logGraph colorOf/mergeBase 轨道断言随自研行内 SVG 移除，同 hash 身份稳定性由数据层 side/heads 保证） ---------- */
 
 function loadBuild() {
   const el = () => ({
@@ -253,44 +264,34 @@ const sc = (i, parents = [], subject = `提交 ${i}`) => ({
   hash: H(i), short: H(i).slice(0, 7), parents, subject, author: 'T', date: '2026-09-20T00:00:00.000Z',
 });
 
-t('G1 分支配色：colorOf 命中时节点按分支色（dev=1 / main=0），同 hash 子集不跳变；汇聚点不因上线 dev 色误染', () => {
+t('G1 双支身份：treeData 把 heads 命中行标为分支（main/dev 分支名标签经 gitgraph refs 渲染）；同 hash 子集身份稳定', () => {
   const ATB = loadBuild();
-  // dev 领先型并集（新→旧）：d1←d0←mb←m0，d1/d0 side=dev、mb/m0 side=main
-  const commits = [sc(1, [H(2)], 'dev 头'), sc(2, [H(5)], 'dev 中间'), sc(5, [H(6)], '汇聚点'), sc(6, [], '根')];
-  const colorOf = (h) => (h === H(1) || h === H(2) ? 1 : 0);
-  const g = ATB.logGraph(commits, { colorOf, mergeBase: H(5) });
-  const [r1, r2, r5, r6] = g.rows;
-  assert.equal(r1.color, 1, 'dev 头 dev 色');
-  assert.equal(r2.color, 1, 'dev 中间 dev 色');
-  assert.equal(r5.color, 0, '汇聚点（共享历史）按 main 侧配色');
-  assert.equal(r6.color, 0);
-  // 稳定性：搜索 / 翻页子集同 hash 同色
-  const g2 = ATB.logGraph([commits[0], commits[2]], { colorOf });
-  assert.equal(g2.rows[0].color, 1, '子集中 dev 头仍 dev 色');
-  assert.equal(g2.rows[1].color, 0, '子集中汇聚点仍 main 色');
+  // dev 领先型并集（新→旧）：d1←mb←m0（d1 side=dev、mb/m0 side=main）
+  const commits = [
+    { ...sc(1, [H(5)], 'dev 头'), side: 'dev' },
+    { ...sc(2, [H(5)], 'main 头'), side: 'main' },
+    { ...sc(5, [H(6)], '汇聚点'), side: 'main' },
+    { ...sc(6, [], '根'), side: 'main' },
+  ];
+  const heads = [{ name: 'main', hash: H(2) }, { name: 'dev', hash: H(1) }];
+  const d = ATB.treeData(commits, { heads, branchName: 'main' });
+  const by = new Map(d.map((x) => [x.hash, x]));
+  assert.deepEqual([...by.get(H(1)).refs], ['dev'], 'dev 头行带 dev 分支名');
+  assert.deepEqual([...by.get(H(2)).refs], ['main'], 'main 头行带 main 分支名');
+  assert.deepEqual([...by.get(H(5)).refs], [], '共享历史行不误挂分支名（汇聚点不因上线 dev 色误染）');
+  // 稳定性：搜索 / 翻页子集同 hash 同身份（refs 由 heads 数据决定，不跳变）
+  const d2 = ATB.treeData([commits[0], commits[2]], { heads, branchName: 'main' });
+  assert.deepEqual([...d2[0].refs], ['dev'], '子集中 dev 头仍 dev 分支名');
+  assert.deepEqual([...d2[1].refs], [], '子集中汇聚点仍无分支名');
 });
 
-t('G2 汇聚标记：mergeBase 命中行 mergeBase=true 且 mbTo 指向另一车道；未传 mergeBase 无标记', () => {
-  const ATB = loadBuild();
-  const commits = [sc(1, [H(2)]), sc(2, [H(5)]), sc(5, [H(6)]), sc(6, [])];
-  const g = ATB.logGraph(commits, { colorOf: (h) => (h === H(1) || h === H(2) ? 1 : 0), mergeBase: H(5) });
-  const mbRow = g.rows.find((r) => r.hash === H(5));
-  assert.equal(mbRow.mergeBase, true, 'merge-base 行带标记');
-  assert.ok(Number.isInteger(mbRow.mbTo) && mbRow.mbTo !== mbRow.lane, '汇聚横线指向另一车道');
-  assert.ok(g.laneCount >= mbRow.mbTo + 1, 'laneCount 覆盖汇聚横线车道');
-  assert.ok(g.rows.filter((r) => r.hash !== H(5)).every((r) => !r.mergeBase), '其余行无标记');
-  const g3 = ATB.logGraph(commits, { colorOf: (h) => (h === H(1) || h === H(2) ? 1 : 0) });
-  assert.ok(g3.rows.every((r) => !r.mergeBase && r.mbTo == null), '未传 mergeBase 时无标记');
-});
-
-t('G3 单支零回归：不传 colorOf / mergeBase 时槽位配色与既有行为一致（无标记 / 无 mbTo）', () => {
+t('G2 单支零回归：无 heads 时不编造分支名（仅选中分支名挂最新行）；数据行不带双支 refs', () => {
   const ATB = loadBuild();
   const commits = [sc(1, [H(2), H(3)], '合并 feature'), sc(3, [H(4)]), sc(2, [H(4)]), sc(4, [])];
-  const g = ATB.logGraph(commits);
-  assert.ok(g.rows.every((r) => Number.isInteger(r.color) && r.color >= 0 && r.color < 6), '槽位色号合法');
-  assert.ok(g.rows.every((r) => !r.mergeBase && r.mbTo == null), '无汇聚标记');
-  assert.equal(g.rows[0].merge, true, '合并节点口径不变');
-  assert.equal(g.rows[0].segments.filter((s) => s.fromNode).length, 2, '父边口径不变');
+  const d = ATB.treeData(commits, { heads: [], branchName: 'feature' });
+  assert.deepEqual([...d[0].refs], ['feature'], '单支最新行 = 选中分支头');
+  assert.ok(d.slice(1).every((x) => x.refs.length === 0), '其余行无分支名（不编造）');
+  assert.equal(d[0].mergeParents, 2, '合并节点口径不变（双父保真）');
 });
 
 /* ---------- R 组：vm 渲染 ---------- */
@@ -374,7 +375,7 @@ function dualPayload(over = {}) {
   };
 }
 
-t('R1 双支并集渲染：分支头标签（main/dev 按轨道色）、Merge-base 标注、汇聚横线、头节点外圈、并集提示', async () => {
+t('R1 双支并集渲染：分支头标签（main/dev 按轨道色）+ Merge-base 标注（降级列表）+ 树路径 refs（gitgraph 分支标签）+ 并集提示', async () => {
   const h = setup();
   logStub(h, ST);
   h.sandbox.__logPayload = dualPayload();
@@ -384,9 +385,24 @@ t('R1 双支并集渲染：分支头标签（main/dev 按轨道色）、Merge-ba
   assert.match(html, /<span class="bld-branch-tag bt-dev">dev<\/span>/, 'dev 分支头标签');
   assert.match(html, /<span class="bld-branch-tag bt-main">main<\/span>/, 'main 分支头标签');
   assert.match(html, /<span class="bld-branch-tag bt-mb" title="main 与 dev 的汇聚点（merge-base）">Merge-base<\/span>/, 'Merge-base 文字标注（非颜色提示）');
-  assert.match(html, /class="lg-mb"/, '汇聚水平虚线路径');
-  assert.equal((html.match(/class="lg-head"/g) || []).length, 2, '两支分支头节点外圈');
   assert.equal((html.match(/并集视图：同时显示 main 与 dev 的提交（含未合并提交）/g) || []).length, 1, '并集提示恰一条');
+  // 树路径（vendor 在位）：mountTree import 的 refs 携带 main/dev 分支名（gitgraph 渲染分支标签）
+  const h2 = setup();
+  logStub(h2, ST);
+  h2.sandbox.__logPayload = dualPayload();
+  const treeCalls = [];
+  h2.sandbox.GitgraphJS = {
+    createGitgraph() {
+      return { import(data) { treeCalls.push(data); return this; } };
+    },
+    templateExtend() { return {}; },
+    metroTemplate: 'metro',
+  };
+  await branchesView(h2);
+  assert.ok(treeCalls.length >= 1, '树挂载 import 数据');
+  const by = new Map(treeCalls[0].map((x) => [x.hash, x]));
+  assert.deepEqual([...by.get(H(1)).refs], ['dev'], '树数据 dev 头行带 dev 分支名（gitgraph 分支标签）');
+  assert.deepEqual([...by.get(H(2)).refs], ['main'], '树数据 main 头行带 main 分支名');
 });
 
 t('R2 单支载荷零回归：无 heads 时不渲染分支标签 / Merge-base 标注 / 并集提示（不编造分支名）', async () => {
@@ -402,7 +418,6 @@ t('R2 单支载荷零回归：无 heads 时不渲染分支标签 / Merge-base �
   assert.ok(!/bld-branch-tag/.test(html), '单支无分支头标签');
   assert.ok(!/Merge-base/.test(html), '单支无汇聚标注');
   assert.ok(!/并集视图/.test(html), '单支无并集提示');
-  assert.ok(!/lg-mb/.test(html) && !/lg-head/.test(html), '单支无汇聚线与头外圈');
 });
 
 t('R3 详情区：选中 merge-base 提交显示「main ∩ dev 汇聚点」标注；选中普通提交不显示', async () => {
@@ -417,26 +432,36 @@ t('R3 详情区：选中 merge-base 提交显示「main ∩ dev 汇聚点」标�
   assert.ok(!/main ∩ dev 汇聚点/.test(inner()), '普通提交详情不带汇聚点标注');
 });
 
-t('R4 搜索态双支：过滤后命中行保留分支头标签与并集提示（不错位 / 不丢身份）', async () => {
+t('R4 搜索态双支（filter 闭包）：命中行保留分支头标签与并集提示（不错位 / 不丢身份）', async () => {
   const h = setup();
   logStub(h, ST);
+  // REQ-20260921-002：filter 模式响应（匹配 + 祖先闭包保留集分页）
   h.sandbox.__logPayload = (up) => {
     const q = String(up.searchParams.get('q') || '').trim();
     if (!q) return dualPayload();
     const all = dualPayload().commits;
     const hits = all.filter((c) => c.subject.includes(q));
-    return { ...dualPayload(), query: q, commits: hits, total: hits.length };
+    const kept = new Set(hits.map((c) => c.hash));
+    const byHash = new Map(all.map((c) => [c.hash, c]));
+    const stack = [...kept];
+    while (stack.length) {
+      for (const p of byHash.get(stack.pop()).parents) if (!kept.has(p)) { kept.add(p); stack.push(p); }
+    }
+    const keptList = all.filter((c) => kept.has(c.hash));
+    return { ...dualPayload(), query: q, mode: 'filter', commits: keptList, total: keptList.length, matchedTotal: hits.length, allTotal: all.length };
   };
   await branchesView(h);
   const inner = () => h.run(`document.querySelector('#buildView').innerHTML`);
   const el = (sel) => h.run(`document.querySelector('#buildView').querySelector(${JSON.stringify(sel)})`);
+  h.run(`window.ATBBuild.setLogSearchMode('filter')`);
+  await new Promise((r) => setTimeout(r, 10));
   const input = el('#bldLogSearchInput');
   input.value = 'dev 提交';
   input.listeners.input();
   el('#bldLogSearchGo').listeners.click();
   await new Promise((r) => setTimeout(r, 10));
   const html = inner();
-  assert.match(html, /共 1 条匹配（关键词：dev 提交）/, '命中计数');
+  assert.match(html, /匹配 1 条 · 保留 3\/4 条（含祖先，泳道连通）/, '过滤计数（命中 1 + 祖先 2 条）');
   assert.match(html, /<span class="bld-branch-tag bt-dev">dev<\/span>/, '过滤后分支头标签保留');
   assert.match(html, /并集视图：同时显示 main 与 dev 的提交（含未合并提交）/, '并集提示保留');
 });
@@ -454,19 +479,19 @@ t('R5 master 回退仓库：heads 首支名为 master 时标签文字如实（bt
 
 /* ---------- S 组：样式与静态契约 ---------- */
 
-t('S1 style.css：分支头标签 / Merge-base 标注 / 汇聚线 / 头外圈 / 并集提示样式类存在', () => {
+t('S1 style.css：分支头标签 / Merge-base 标注 / 并集提示样式类存在（REQ-20260921-002 树化后行内 SVG 类清理）', () => {
   assert.match(css, /\.bld-branch-tag/, '分支头标签样式');
   assert.match(css, /\.bld-branch-tag\.bt-main/, 'main 侧标签配色（轨道 lg0）');
   assert.match(css, /\.bld-branch-tag\.bt-dev/, 'dev 侧标签配色（轨道 lg1）');
   assert.match(css, /\.bld-branch-tag\.bt-mb/, 'Merge-base 标注样式（虚线描边非颜色提示）');
-  assert.match(css, /\.bld-graph \.lg-mb/, '汇聚水平虚线样式');
-  assert.match(css, /\.bld-graph \.lg-head/, '分支头节点外圈样式');
   assert.match(css, /\.bld-log-union/, '并集提示样式');
+  assert.match(css, /\.bld-tree/, '提交树容器样式');
+  assert.ok(!/\.bld-graph/.test(css), '自研行内 SVG 图形列样式已清理（渲染层归 gitgraph）');
 });
 
-t('S2 build.js 静态契约：logGraph 支持 colorOf / mergeBase；渲染读取 heads / mergeBase / side', () => {
-  assert.match(buildJs, /function logGraph\(commits, \{ hasAbove = false, colorOf = null, mergeBase = null \}/, 'logGraph 新参数');
-  assert.match(buildJs, /state\.branchLog\?\.heads/, '渲染读取 heads');
+t('S2 build.js 静态契约：treeData 消费 heads（双支身份）/ 渲染读取 mergeBase / side', () => {
+  assert.match(buildJs, /function treeData\(/, 'treeData 数据适配纯函数');
+  assert.match(buildJs, /heads = Array\.isArray\(state\.branchLog\?\.heads\)/, '渲染读取 heads');
   assert.match(buildJs, /state\.branchLog\?\.mergeBase/, '渲染读取 mergeBase');
   assert.match(buildJs, /c\.side/, '渲染使用 side 分类');
 });
