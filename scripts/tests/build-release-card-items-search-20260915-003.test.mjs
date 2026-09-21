@@ -105,13 +105,17 @@ t('R1 每张版本卡片按钮区含「创建发布」「查看发布记录」�
     assert.match(inner, new RegExp(`aria-label="创建发布 ${id}"`), '创建发布 aria-label 带版本号');
     assert.match(inner, new RegExp(`aria-label="查看发布记录 ${id}"`), '查看发布记录 aria-label 带版本号');
   }
-  // 按钮在卡片 card-acts 区内，与既有操作集中展示（AI 完善 → 合并 → 创建发布 → 查看发布记录 → 删除）
+  // 按钮在卡片 card-acts 区内，与既有操作集中展示（REQ-20260921-013：AI 完善迁入详情概况后
+  // 卡片顺序为 合并 → 创建发布 → 查看发布记录 → 删除；切片止于右侧详情，不混入概况入口）
   const card2 = inner.slice(inner.indexOf('data-ver-id="BLD-20260915-002"'), inner.indexOf('关联条目与 commit'));
-  const acts = card2.slice(card2.indexOf('card-acts'));
-  const order = ['data-ver-answer', 'data-ver-merge', 'data-ver-release=', 'data-ver-release-view', 'data-ver-delete']
+  const actsStart = card2.indexOf('card-acts');
+  const actsEnd = card2.indexOf('rel-detail');
+  const acts = card2.slice(actsStart, actsEnd > actsStart ? actsEnd : undefined);
+  assert.ok(!acts.includes('data-ver-answer'), '卡片不再含 AI 完善（REQ-20260921-013 迁入详情概况）');
+  const order = ['data-ver-merge', 'data-ver-release=', 'data-ver-release-view', 'data-ver-delete']
     .map((k) => acts.indexOf(k));
   assert.ok(order.every((i) => i !== -1) && order.every((i, idx) => idx === 0 || i > order[idx - 1]),
-    `卡片按钮顺序应为 AI 完善 → 合并 → 创建发布 → 查看发布记录 → 删除：${order}`);
+    `卡片按钮顺序应为 合并 → 创建发布 → 查看发布记录 → 删除：${order}`);
   // 详情不再渲染产品发布操作区（原 bld-release-block 移除，按钮模板不在 renderDetail 内）
   const detail = inner.slice(inner.indexOf('rel-detail'));
   assert.doesNotMatch(detail, /bld-release-block/, '详情不渲染产品发布操作区');

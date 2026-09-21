@@ -623,13 +623,14 @@ t('N9a 版本卡片第三个操作键「删除」：quiet 弱化、位于合并�
     assert.match(inner, new RegExp(`data-ver-delete="${id}"`), `${id} 卡片应有删除键`);
     assert.match(inner, new RegExp(`aria-label="删除 ${id}"`), `${id} 删除键 aria-label 带版本号`);
   }
-  // 顺序：AI 完善 → 合并入 main → 删除（同行 card-acts 末位，quiet 弱化不抢主操作）
+  // 顺序：合并入 main → … → 删除（同行 card-acts 末位，quiet 弱化不抢主操作；
+  // REQ-20260921-013：AI 完善迁入详情概况，卡片不再含该键）
   const card1 = inner.slice(inner.indexOf('data-ver-id="BLD-20260913-001"'), inner.indexOf('data-ver-id="BLD-20260913-002"'));
   const acts = card1.slice(card1.indexOf('card-acts'));
-  const iAnswer = acts.indexOf('data-ver-answer');
+  assert.ok(!acts.includes('data-ver-answer'), '卡片不再含 AI 完善（REQ-20260921-013 迁入详情概况）');
   const iMerge = acts.indexOf('data-ver-merge');
   const iDel = acts.indexOf('data-ver-delete');
-  assert.ok(iAnswer !== -1 && iMerge !== -1 && iDel !== -1 && iAnswer < iMerge && iMerge < iDel, '删除键应排在 AI 完善 / 合并入 main 之后');
+  assert.ok(iMerge !== -1 && iDel !== -1 && iMerge < iDel, '删除键应排在合并入 main 之后（card-acts 末位）');
   const delBtnHtml = acts.slice(acts.lastIndexOf('<button', iDel), acts.indexOf('</button>', iDel));
   assert.match(delBtnHtml, /btn small quiet/, '删除键为 quiet 弱化样式');
   assert.match(inner, />删除<\/button>/, '删除键文案');
