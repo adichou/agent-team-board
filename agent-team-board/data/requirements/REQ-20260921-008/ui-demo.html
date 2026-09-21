@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260921-008 文档编写页签优化 · 交互演示</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2328; --muted:#6a737d; --line:#d8dee4;
+    --brand:#3b82f6; --ok:#1a9e56; --warn:#c2780a; --err:#c4322f; --run:#2563eb;
+    --chip-ok:#e6f6ec; --chip-warn:#fdf3e0; --chip-run:#e8f0fe; --chip-mute:#eef0f3;
+    --shadow:0 8px 28px rgba(20,30,45,.14);
+  }
+  html.dark{
+    --bg:#10141a; --card:#1a2029; --ink:#e6e9ee; --muted:#98a2ad; --line:#2c343f;
+    --brand:#60a5fa; --ok:#3ecf7e; --warn:#e8a33d; --err:#f0736f; --run:#7ba6ff;
+    --chip-ok:#12281c; --chip-warn:#2d2310; --chip-run:#16233d; --chip-mute:#222933;
+    --shadow:0 8px 28px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  .page{max-width:1180px;margin:0 auto;padding:20px 20px 60px;}
+  .muted{color:var(--muted)}
+  .small{font-size:12.5px}
+  .hidden{display:none !important}
+
+  /* ---------- 页头与演示工具 ---------- */
+  .demo-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+  .demo-head h1{font-size:19px;margin:0 0 4px}
+  .demo-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;padding:8px 12px;}
+  .demo-tools label{display:inline-flex;gap:5px;align-items:center;font-size:12.5px;color:var(--muted);cursor:pointer}
+
+  /* ---------- 按钮 ---------- */
+  .btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);
+    border-radius:8px;padding:6px 14px;font-size:13.5px;cursor:pointer;transition:.15s filter, .15s opacity;}
+  .btn:hover{filter:brightness(.97)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.quiet{border-color:transparent;color:var(--muted)}
+  .btn.small{padding:3px 10px;font-size:12.5px;border-radius:6px}
+  .btn.on{background:var(--chip-run);border-color:var(--run);color:var(--run)}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}
+  @media (max-width:960px){.layout{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .card h2{font-size:14.5px;margin:0 0 10px}
+
+  /* ---------- 五步导航 ---------- */
+  .steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .steps button{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;
+    padding:6px 14px;font-size:13.5px;cursor:pointer}
+  .steps button.active{border-color:var(--brand);color:var(--brand);font-weight:600;
+    box-shadow:inset 0 -2px 0 var(--brand)}
+
+  /* ---------- 副标题 + 四按钮 ---------- */
+  .sub-bar{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;}
+  .subtitle strong{display:block;font-size:15px}
+  .subtitle span{display:block;color:var(--muted);font-size:12.5px;max-width:560px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  /* ---------- 横幅 / 提示词 ---------- */
+  .banner{display:flex;gap:10px;align-items:center;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:13px}
+  .banner.err{background:var(--chip-warn);border:1px solid var(--warn);color:var(--warn)}
+  .banner.ok{background:var(--chip-ok);border:1px solid var(--ok);color:var(--ok)}
+  .banner .btn{margin-left:auto}
+  .prompt-box{margin-top:12px;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;background:var(--card)}
+  .prompt-box summary{cursor:pointer;font-size:13px;color:var(--muted)}
+  .prompt-box textarea{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--ink);padding:8px;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+
+  /* ---------- 文件列表 ---------- */
+  .files{margin-top:12px;position:relative}
+  .files-head{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);
+    padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .files ul{list-style:none;margin:0;padding:0}
+  .files li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 2px;
+    border-bottom:1px solid var(--line)}
+  .files li:last-child{border-bottom:none}
+  .fname{font:13px ui-monospace,Menlo,Consolas,monospace}
+  .list-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:color-mix(in srgb, var(--card) 78%, transparent);border-radius:12px;color:var(--muted);font-size:13px}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--brand);
+    border-radius:50%;margin-right:8px;animation:spin .8s linear infinite;vertical-align:-2px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- 状态 chip ---------- */
+  .st{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 10px;font-size:12px;white-space:nowrap}
+  .st-mute{background:var(--chip-mute);color:var(--muted)}
+  .st-run{background:var(--chip-run);color:var(--run)}
+  .st-run::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--run);animation:pulse 1s ease infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .st-wait{background:var(--chip-warn);color:var(--warn)}
+  .st-ok{background:var(--chip-ok);color:var(--ok)}
+
+  /* ---------- 门禁条 / 提交结果 ---------- */
+  .gate{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;color:var(--muted)}
+  .gate.ok{border-color:var(--ok);color:var(--ok);background:var(--chip-ok)}
+  .commit-done{margin-top:12px;border:1px solid var(--ok);background:var(--chip-ok);color:var(--ok);
+    border-radius:10px;padding:10px 14px;font-size:13px}
+
+  /* ---------- 侧栏 ---------- */
+  .side{display:grid;gap:14px}
+  .task-line{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;margin-bottom:6px}
+  .bar{height:8px;border-radius:6px;background:var(--chip-mute);overflow:hidden;margin:6px 0}
+  .bar i{display:block;height:100%;background:var(--run);transition:width .4s}
+  .task-note{font-size:12px;color:var(--muted);margin-top:6px}
+  .global-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--line);
+    border-radius:8px;font-size:12.5px;margin-bottom:6px}
+  .global-empty{color:var(--muted);font-size:12.5px}
+  .lock-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .lock-row:last-of-type{border-bottom:none}
+  .lock-row .grow{flex:1}
+  .lock-file{font:11.5px ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+
+  /* ---------- 审查对话框 ---------- */
+  .modal-mask{position:fixed;inset:0;background:rgba(10,14,20,.55);display:flex;align-items:center;
+    justify-content:center;z-index:50;padding:20px}
+  .modal{background:var(--card);border-radius:14px;box-shadow:var(--shadow);width:min(1020px,96vw);
+    max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+  .modal header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;
+    border-bottom:1px solid var(--line);font-weight:600}
+  .modal .tabs{display:flex;gap:6px;padding:10px 18px 0;flex-wrap:wrap}
+  .modal .tabs button{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px 8px 0 0;
+    padding:6px 14px;font-size:13px;cursor:pointer}
+  .modal .tabs button.active{border-color:var(--brand);color:var(--brand);font-weight:600}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:0;overflow:hidden;flex:1;min-height:0}
+  @media (max-width:760px){.cols{grid-template-columns:1fr}}
+  .col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line);min-height:0}
+  .col:last-child{border-right:none}
+  .col-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+  .col-head .fname{font-weight:600}
+  .col-head .right{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .col-body{flex:1;min-height:0;display:flex}
+  .col-body textarea{flex:1;border:none;outline:none;resize:none;background:var(--bg);color:var(--ink);
+    padding:12px;font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospace;min-height:300px}
+  .col-body pre{flex:1;margin:0;overflow:auto;background:var(--bg);color:var(--ink);padding:12px;
+    font:12.5px/1.7 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;min-height:300px}
+  .mode-seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .mode-seg button{border:none;background:var(--card);color:var(--muted);padding:3px 10px;font-size:12px;cursor:pointer}
+  .mode-seg button.on{background:var(--chip-run);color:var(--run)}
+  .modal footer{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:10px 18px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+
+  /* ---------- toast ---------- */
+  #toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:99;max-width:380px}
+  .toast{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--brand);
+    border-radius:10px;padding:9px 14px;font-size:13px;box-shadow:var(--shadow);animation:tin .2s ease}
+  .toast.err{border-left-color:var(--err)}
+  @keyframes tin{from{transform:translateY(8px);opacity:0}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="demo-head">
+    <div>
+      <h1>发布模块 · 「文档编写」页签优化</h1>
+      <p class="muted small">REQ-20260921-008 可交互演示 · 演示版本 BLD-20260921-001（数据为演示样例）· 单文件 HTML / 无外网依赖 / 无构建</p>
+    </div>
+    <div class="demo-tools" role="group" aria-label="演示模拟开关">
+      <label><input type="checkbox" id="simReadFail"> 模拟读取失败</label>
+      <label><input type="checkbox" id="simCommitFail"> 模拟提交失败</label>
+      <label><input type="checkbox" id="simSumFail"> 模拟总结中断</label>
+      <button type="button" class="btn small quiet" id="resetBtn">重置演示</button>
+      <button type="button" class="btn small quiet" id="themeBtn">深色模式</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <!-- 五步导航（现状保留，演示仅激活「文档编写」） -->
+      <nav class="steps" role="tablist" aria-label="发布五步流程">
+        <button type="button" data-step="plan">版本计划</button>
+        <button type="button" data-step="link">关联条目与提交</button>
+        <button type="button" class="active" data-step="docs" aria-selected="true">文档编写</button>
+        <button type="button" data-step="merge">合并入 main</button>
+        <button type="button" data-step="release">正式发布</button>
+      </nav>
+
+      <!-- 副标题 + 四按钮 -->
+      <div class="sub-bar">
+        <div class="subtitle">
+          <strong>文档编写</strong>
+          <span>围绕本版本八个发布文档（README / CHANGELOG / FEATURES / AGENTS 中英）完成 AI 总结、人工审查与提交到本地 dev 分支；可不经 AI 总结直接审查修改。</span>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn" id="refreshBtn">刷新</button>
+          <button type="button" class="btn" id="sumBtn">AI 总结</button>
+          <button type="button" class="btn" id="reviewBtn">审查</button>
+          <button type="button" class="btn primary" id="commitBtn">提交</button>
+        </div>
+      </div>
+
+      <!-- 错误 / 成功横幅 -->
+      <div id="bannerArea"></div>
+
+      <!-- AI 总结提示词（复制预览） -->
+      <details class="prompt-box hidden" id="promptBox">
+        <summary>AI 总结提示词（已复制到剪贴板，交给 AI Agent 执行；本演示随后本地模拟逐文件推进）</summary>
+        <textarea rows="7" readonly id="promptText"></textarea>
+      </details>
+
+      <!-- 八文件列表 -->
+      <section class="files card" aria-label="发布文档文件列表">
+        <div class="files-head"><span>文件（8）</span><span>状态</span></div>
+        <ul id="fileList"></ul>
+        <div class="list-loading hidden" id="listLoading" role="status"><span class="spin"></span>正在读取最新内容…</div>
+      </section>
+
+      <!-- 提交门禁条 -->
+      <div class="gate" id="gateBar" role="note"></div>
+
+      <!-- 提交结果 -->
+      <div id="commitResult"></div>
+    </main>
+
+    <aside class="side">
+      <section class="card" aria-label="任务模块 AI 总结进度">
+        <h2>「任务」页签 · AI 总结</h2>
+        <div id="taskCard"></div>
+      </section>
+      <section class="card" aria-label="全局任务面板">
+        <h2>全局任务面板（顶栏「全局」）</h2>
+        <div id="globalPanel"></div>
+      </section>
+      <section class="card" aria-label="锁隔离演示">
+        <h2>锁隔离（AI 总结独立锁）</h2>
+        <div id="lockPanel"></div>
+        <p class="task-note">AI 总结使用独立锁：与 AI 分析、AI 开发互不占用，三者可同时进行（开关可验证）。</p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<!-- 审查对话框 -->
+<div class="modal-mask hidden" id="modalMask">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="审查发布文档">
+    <header>
+      <span>审查发布文档（BLD-20260921-001）</span>
+      <button type="button" class="btn small quiet" id="modalClose" aria-label="关闭对话框">✕ 关闭</button>
+    </header>
+    <nav class="tabs" id="modalTabs" role="tablist" aria-label="文档类型页签"></nav>
+    <div class="cols" id="modalCols"></div>
+    <footer>
+      <span id="modalProgress"></span>
+      <button type="button" class="btn" id="modalCloseBtn">关闭</button>
+    </footer>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ================= 演示状态 ================= */
+const DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+const STATE_LABEL = { unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核' };
+const STATE_CLS = { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' };
+const STATE_ICON = { unsummarized: '○', summarizing: '', summarized: '●', reviewed: '✔' };
+// 初始状态对应 README 线框：3 已审核 / 1 已总结待审核 / 4 未总结
+const INIT_STATES = {
+  'README.md': 'summarized', 'README.en.md': 'unsummarized',
+  'CHANGELOG.md': 'unsummarized', 'CHANGELOG.en.md': 'reviewed',
+  'FEATURES.md': 'unsummarized', 'FEATURES.en.md': 'reviewed',
+  'AGENTS.md': 'reviewed', 'AGENTS.en.md': 'unsummarized',
+};
+
+let files, running, currentFile, refreshing, committing, committed, commitHash,
+    taskFailed, taskDone, locks, modalKey, colModes, syncingScroll;
+
+function sampleContent(file, lang) {
+  const zh = lang === 'zh';
+  const L = [];
+  L.push(`# ${file} — ${zh ? '中文演示样例' : 'English sample'}（BLD-20260921-001）`);
+  L.push('');
+  L.push(zh ? '本文件为发布文档演示内容，用于验证审查对话框的中英双栏对比与同步滚动。'
+            : 'This file is demo content for release docs, used to verify the zh/en dual-column compare and synced scrolling.');
+  for (let s = 1; s <= 6; s++) {
+    L.push('');
+    L.push(`## ${zh ? '第' : 'Section'} ${s} ${zh ? '节' : 'outline'}`);
+    for (let i = 1; i <= 5; i++) {
+      L.push(zh ? `- 要点 ${s}-${i}：行内容足够长以便观察滚动跟随效果，两侧按比例同步滚动。`
+                : `- Point ${s}-${i}: line long enough to observe scroll following; both sides sync proportionally.`);
+    }
+  }
+  L.push('');
+  L.push(zh ? '- README 按语言链接同语言 CHANGELOG 与 FEATURES（演示占位说明）。'
+            : '- README links same-language CHANGELOG and FEATURES (demo placeholder).');
+  L.push('');
+  L.push(zh ? '（演示数据，非真实文档）' : '(demo data, not real docs)');
+  return L.join('\n');
+}
+
+function makeFiles() {
+  const out = [];
+  for (const key of DOC_KEYS) {
+    for (const lang of ['zh', 'en']) {
+      const file = `${key}${lang === 'en' ? '.en' : ''}.md`;
+      const content = sampleContent(file, lang);
+      out.push({ key, lang, file, state: INIT_STATES[file] || 'unsummarized', content, disk: content });
+    }
+  }
+  return out;
+}
+
+function resetState() {
+  files = makeFiles();
+  running = false; currentFile = null; refreshing = false; committing = false;
+  committed = false; commitHash = null; taskFailed = false; taskDone = false;
+  locks = { develop: false, refine: false };
+  modalKey = 'README';
+  colModes = {};
+  for (const f of files) colModes[f.file] = 'preview';
+  hideBanner('read'); hideBanner('commit');
+  document.getElementById('commitResult').innerHTML = '';
+  document.getElementById('promptBox').classList.add('hidden');
+  closeModal();
+  renderAll();
+}
+
+/* ================= 工具 ================= */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const chipHtml = (st) => `<span class="st ${STATE_CLS[st]}">${STATE_ICON[st] ? STATE_ICON[st] + ' ' : ''}${STATE_LABEL[st]}</span>`;
+const reviewedCount = () => files.filter((f) => f.state === 'reviewed').length;
+const progressedCount = () => files.filter((f) => f.state === 'summarized' || f.state === 'reviewed').length;
+const randHash = () => Array.from({ length: 7 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3400);
+}
+
+function showBanner(type, msg, retryFn) {
+  const area = $('bannerArea');
+  let el = document.querySelector(`.banner[data-type="${type}"]`);
+  if (!el) { el = document.createElement('div'); el.className = 'banner err'; el.dataset.type = type; area.appendChild(el); }
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `<span>${esc(msg)}</span>`;
+  if (retryFn) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn small'; b.textContent = '重试';
+    b.addEventListener('click', retryFn);
+    el.appendChild(b);
+  }
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'btn small quiet'; x.textContent = '✕'; x.setAttribute('aria-label', '关闭提示');
+  x.addEventListener('click', () => hideBanner(type));
+  el.appendChild(x);
+}
+function hideBanner(type) {
+  const el = document.querySelector(`.banner[data-type="${type}"]`);
+  if (el) el.remove();
+}
+
+/* ================= 渲染 ================= */
+function renderAll() {
+  renderList(); renderButtons(); renderGate(); renderTaskCard(); renderGlobalPanel(); renderLockPanel();
+  if (!$('modalMask').classList.contains('hidden')) renderModal();
+}
+
+function renderList() {
+  $('fileList').innerHTML = files.map((f) => `
+    <li>
+      <span class="fname">${esc(f.file)}${f.lang === 'zh' ? '（中）' : '（英）'}</span>
+      ${chipHtml(f.state)}
+    </li>`).join('');
+  $('listLoading').classList.toggle('hidden', !refreshing);
+}
+
+function canCommit() { return files.every((f) => f.state === 'reviewed') && !committed && !committing; }
+
+function commitDisabledReason() {
+  if (committed) return '已提交到本地 dev 分支';
+  if (committing) return '提交中…';
+  const missing = files.filter((f) => f.state !== 'reviewed');
+  if (missing.length) {
+    return '还需 ' + missing.length + ' 个文件通过审查：'
+      + missing.map((f) => f.file + '（' + STATE_LABEL[f.state] + '）').join('、');
+  }
+  return '';
+}
+
+function renderButtons() {
+  $('refreshBtn').textContent = refreshing ? '正在读取…' : '刷新';
+  $('refreshBtn').disabled = refreshing;
+  $('sumBtn').textContent = running ? `总结中 ${progressedCount()}/8` : 'AI 总结';
+  $('sumBtn').disabled = running;
+  const cb = $('commitBtn');
+  if (committed) { cb.textContent = '已提交 ✓'; }
+  else if (committing) { cb.textContent = '提交中…'; }
+  else { cb.textContent = '提交'; }
+  const ok = canCommit();
+  if (ok) { cb.removeAttribute('aria-disabled'); cb.removeAttribute('title'); }
+  else { cb.setAttribute('aria-disabled', 'true'); cb.setAttribute('title', commitDisabledReason()); }
+}
+
+function renderGate() {
+  const n = reviewedCount();
+  const g = $('gateBar');
+  if (committed) {
+    g.className = 'gate ok';
+    g.innerHTML = `已提交到本地 dev 分支（hash <code>${esc(commitHash)}</code>，仅八个文档 pathspec）：满足「合并入 main」前置。`;
+    $('commitResult').innerHTML = `<div class="commit-done" role="status">提交完成：<code>docs: 发布文档 BLD-20260921-001</code> · <code>${esc(commitHash)}</code> · 八个文件已进入本地 dev 分支。</div>`;
+    return;
+  }
+  if (n === 8) {
+    g.className = 'gate ok';
+    g.innerHTML = '提交门禁：8/8 已审核 —— 全部文件已通过审查，可提交到本地 dev 分支。';
+    return;
+  }
+  const missing = files.filter((f) => f.state !== 'reviewed');
+  g.className = 'gate';
+  g.innerHTML = `提交门禁：${n}/8 已审核 —— 提交按钮禁用，尚缺：`
+    + missing.map((f) => `${esc(f.file)}（${STATE_LABEL[f.state]}）`).join('、');
+}
+
+function renderTaskCard() {
+  const el = $('taskCard');
+  if (running) {
+    const n = progressedCount();
+    el.innerHTML = `
+      <div class="task-line"><span>AI 总结 · BLD-20260921-001</span>${chipHtml('summarizing')}</div>
+      <div class="bar"><i style="width:${(n / 8) * 100}%"></i></div>
+      <p class="small" style="margin:4px 0">进度 ${n}/8 · 当前：<code>${esc(currentFile || '—')}</code>（正在总结）</p>
+      <p class="task-note">锁：AI 总结独立锁（与 AI 分析 / AI 开发隔离，互不占用）。</p>`;
+    return;
+  }
+  if (taskFailed) {
+    el.innerHTML = `
+      <div class="task-line"><span>AI 总结 · BLD-20260921-001</span><span class="st st-wait">失败</span></div>
+      <p class="small" style="margin:4px 0">中断原因：演示模拟中断。文件状态未悬挂在「正在总结」，可再次点击「AI 总结」续跑。</p>`;
+    return;
+  }
+  if (taskDone) {
+    el.innerHTML = `
+      <div class="task-line"><span>AI 总结 · BLD-20260921-001</span>${chipHtml('reviewed')}</div>
+      <p class="small" style="margin:4px 0">已完成 ${progressedCount()}/8：待审查文件均已进入「已总结待审核」。</p>`;
+    return;
+  }
+  el.innerHTML = `<p class="global-empty">暂无进行中的 AI 总结任务（空态）——点击主区「AI 总结」启动。</p>`;
+}
+
+function renderGlobalPanel() {
+  const items = [];
+  if (locks.develop) items.push(['AI 开发', 'st-run', '进行中']);
+  if (locks.refine) items.push(['AI 分析', 'st-run', '进行中']);
+  if (running) items.push(['AI 总结', 'st-run', `进行中 ${progressedCount()}/8`]);
+  else if (taskFailed) items.push(['AI 总结', 'st-wait', '失败（演示中断）']);
+  const el = $('globalPanel');
+  if (!items.length) {
+    el.innerHTML = `<p class="global-empty">所有项目的批量任务均已收尾（空态）——新任务运行后会自动出现在这里。</p>`;
+    return;
+  }
+  el.innerHTML = items.map(([kind, cls, st]) => `
+    <div class="global-item"><span>agent-team-board · ${kind}</span><span class="st ${cls}" style="margin-left:auto">${st}</span></div>`).join('');
+}
+
+function renderLockPanel() {
+  const rows = [
+    ['AI 开发', 'impl.lock', locks.develop],
+    ['AI 分析', 'refine.lock', locks.refine],
+    ['AI 总结', '独立锁（本单新增）', running || taskFailed],
+  ];
+  $('lockPanel').innerHTML = rows.map(([name, lock, on], i) => `
+    <div class="lock-row">
+      <span class="grow">${name}<br><span class="lock-file">${esc(lock)}</span></span>
+      <span class="st ${on ? 'st-run' : 'st-mute'}">${on ? '占用' : '空闲'}</span>
+      ${i < 2 ? `<button type="button" class="btn small" data-lock="${i === 0 ? 'develop' : 'refine'}">${on ? '停止' : '模拟启动'}</button>` : ''}
+    </div>`).join('');
+  $('lockPanel').querySelectorAll('[data-lock]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const k = b.dataset.lock;
+      locks[k] = !locks[k];
+      renderGlobalPanel(); renderLockPanel();
+    });
+  });
+}
+
+/* ================= 刷新 ================= */
+function refresh() {
+  if (refreshing) return;
+  refreshing = true; hideBanner('read'); renderAll();
+  setTimeout(() => {
+    refreshing = false;
+    if ($('simReadFail').checked) {
+      showBanner('read', '读取失败：模拟磁盘读取故障（列表保持原状态，可重试）。', refresh);
+      renderAll();
+      return;
+    }
+    files.forEach((f) => { f.content = f.disk; }); // 未保存的编辑被磁盘最新内容覆盖（外部 IDE 修改由此取回）
+    toast('已刷新：8 个文件已同步为磁盘最新内容');
+    renderAll();
+  }, 700);
+}
+
+/* ================= AI 总结 ================= */
+function buildPrompt() {
+  const lines = [];
+  lines.push('你是技术写作子代理，以 AI 总结身份完成「BLD-20260921-001」（版本号 20260921-001）的发布文档总结任务。');
+  lines.push('');
+  lines.push('请逐个总结以下八个文档（中文 / 英文各四类），每个文件完成后其状态变为「已总结待审核」，等待人工审查：');
+  for (const f of files) lines.push(`- ${f.file}（${f.lang === 'zh' ? '中' : '英'}文 / ${f.key}）`);
+  lines.push('');
+  lines.push('约束：简练通俗、不编造已实现能力；README 按语言链接同语言 CHANGELOG 与 FEATURES；');
+  lines.push('逐文件回执进度（当前总结到哪个文件），完成后交短回执。');
+  return lines.join('\n');
+}
+
+function startSummary() {
+  if (running || committed) return;
+  hideBanner('read');
+  taskFailed = false; taskDone = false;
+  const prompt = buildPrompt();
+  $('promptText').value = prompt;
+  $('promptBox').classList.remove('hidden');
+  $('promptBox').open = true;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(prompt).catch(() => {});
+  }
+  toast('提示词已复制：交给 AI Agent 执行（本演示随后本地模拟逐文件推进）');
+  const queue = files.filter((f) => f.state === 'unsummarized' || f.state === 'summarized');
+  if (!queue.length) { toast('八个文件均已有总结或已审核：无需再次总结'); return; }
+  running = true;
+  processNext(queue, 0);
+}
+
+function processNext(queue, i) {
+  if (i >= queue.length) {
+    running = false; currentFile = null; taskDone = true;
+    toast('AI 总结完成：本轮待总结文件已全部进入「已总结待审核」');
+    renderAll();
+    return;
+  }
+  const f = queue[i];
+  const prev = f.state;
+  currentFile = f.file; f.state = 'summarizing'; renderAll();
+  setTimeout(() => {
+    if ($('simSumFail').checked && i === 1) {
+      f.state = prev; running = false; currentFile = null; taskFailed = true;
+      toast('AI 总结已中断（演示）：文件状态回退，不悬挂在「正在总结」，可重试续跑', true);
+      renderAll();
+      return;
+    }
+    f.state = 'summarized';
+    renderAll();
+    setTimeout(() => processNext(queue, i + 1), 260);
+  }, 900);
+}
+
+/* ================= 审查对话框 ================= */
+function openModal() {
+  $('modalMask').classList.remove('hidden');
+  renderModal();
+}
+function closeModal() { $('modalMask').classList.add('hidden'); }
+
+function renderModal() {
+  // 页签（按文档类型四页签；页签内即中英双栏 → 八个文件全部可达）
+  $('modalTabs').innerHTML = DOC_KEYS.map((k) => {
+    const pair = files.filter((f) => f.key === k);
+    const n = pair.filter((f) => f.state === 'reviewed').length;
+    return `<button type="button" role="tab" aria-selected="${modalKey === k}" class="${modalKey === k ? 'active' : ''}" data-tab="${k}">${k}（${n}/2）</button>`;
+  }).join('');
+  $('modalTabs').querySelectorAll('[data-tab]').forEach((b) => {
+    b.addEventListener('click', () => { modalKey = b.dataset.tab; renderModal(); });
+  });
+
+  const pair = files.filter((f) => f.key === modalKey);
+  $('modalCols').innerHTML = pair.map((f) => colHtml(f)).join('');
+  pair.forEach((f) => bindCol(f));
+  bindSyncScroll();
+  $('modalProgress').textContent = `全部 ${reviewedCount()}/8 已审核 · 本页签 ${pair.filter((f) => f.state === 'reviewed').length}/2`;
+}
+
+function colHtml(f) {
+  const mode = colModes[f.file] || 'preview';
+  const body = mode === 'edit'
+    ? `<textarea spellcheck="false" data-file="${esc(f.file)}">${esc(f.content)}</textarea>`
+    : `<pre data-file="${esc(f.file)}">${esc(f.content) || '（空文档）'}</pre>`;
+  return `
+  <div class="col" data-col="${esc(f.file)}">
+    <div class="col-head">
+      <span class="fname">${esc(f.file)}</span>
+      <span data-chip="${esc(f.file)}">${chipHtml(f.state)}</span>
+      <div class="right">
+        <span class="mode-seg" role="group" aria-label="编辑或预览">
+          <button type="button" class="${mode === 'edit' ? 'on' : ''}" data-mode="edit">编辑</button>
+          <button type="button" class="${mode === 'preview' ? 'on' : ''}" data-mode="preview">预览</button>
+        </span>
+        <button type="button" class="btn small" data-act="save">保存</button>
+        <button type="button" class="btn small quiet" data-act="clear" title="清空本栏内容（演示空文档态）">清空</button>
+        <button type="button" class="btn small primary" data-act="review" ${f.state === 'reviewed' ? 'disabled' : ''}>${f.state === 'reviewed' ? '✔ 已审核' : '通过审核'}</button>
+      </div>
+    </div>
+    <div class="col-body">${body}</div>
+  </div>`;
+}
+
+function bindCol(f) {
+  const col = document.querySelector(`.col[data-col="${CSS.escape(f.file)}"]`);
+  if (!col) return;
+  col.querySelectorAll('[data-mode]').forEach((b) => {
+    b.addEventListener('click', () => { colModes[f.file] = b.dataset.mode; renderModal(); });
+  });
+  const reviewBtn = col.querySelector('[data-act="review"]');
+  reviewBtn.addEventListener('click', () => {
+    if (f.state === 'reviewed') return;
+    f.state = 'reviewed';
+    toast(`${f.file} 已通过审核（${reviewedCount()}/8）`);
+    refreshAfterFileChange();
+  });
+  col.querySelector('[data-act="save"]').addEventListener('click', () => {
+    const ta = col.querySelector('textarea');
+    if (ta) { f.content = ta.value; }
+    f.disk = f.content;
+    toast(`已保存 ${f.file}（写入磁盘，≤ 2 MiB 白名单口径）`);
+  });
+  col.querySelector('[data-act="clear"]').addEventListener('click', () => {
+    const ta = col.querySelector('textarea');
+    if (ta) { ta.value = ''; }
+    f.content = '';
+    onEditFile(f);
+    if (colModes[f.file] === 'preview') renderModal();
+  });
+  const ta = col.querySelector('textarea');
+  if (ta) ta.addEventListener('input', () => { f.content = ta.value; onEditFile(f); });
+}
+
+// 编辑已审核文件 → 回退「已总结待审核」，需重新审查（不整建对话框，保 textarea 焦点）
+function onEditFile(f) {
+  if (f.state === 'reviewed') {
+    f.state = 'summarized';
+    toast(`${f.file} 内容已修改：回到「已总结待审核」，需重新审查`, true);
+  }
+  const chip = document.querySelector(`[data-chip="${CSS.escape(f.file)}"]`);
+  if (chip) chip.innerHTML = chipHtml(f.state);
+  const col = document.querySelector(`.col[data-col="${CSS.escape(f.file)}"]`);
+  const rb = col && col.querySelector('[data-act="review"]');
+  if (rb) { rb.disabled = false; rb.textContent = '通过审核'; }
+  const pair = files.filter((x) => x.key === modalKey);
+  $('modalProgress').textContent = `全部 ${reviewedCount()}/8 已审核 · 本页签 ${pair.filter((x) => x.state === 'reviewed').length}/2`;
+  const tab = document.querySelector(`[data-tab="${modalKey}"]`);
+  if (tab) {
+    const n = pair.filter((x) => x.state === 'reviewed').length;
+    tab.textContent = `${modalKey}（${n}/2）`;
+  }
+  renderList(); renderButtons(); renderGate();
+}
+function refreshAfterFileChange() { renderModal(); renderList(); renderButtons(); renderGate(); renderTaskCard(); }
+
+/* 双栏同步滚动：编辑态同步 textarea、预览态同步内容区，按比例跟随 */
+function bindSyncScroll() {
+  const bodies = [...document.querySelectorAll('#modalCols .col-body textarea, #modalCols .col-body pre')];
+  bodies.forEach((el) => {
+    el.addEventListener('scroll', () => {
+      if (syncingScroll) return;
+      syncingScroll = true;
+      const max = el.scrollHeight - el.clientHeight;
+      const ratio = max > 0 ? el.scrollTop / max : 0;
+      bodies.forEach((other) => {
+        if (other === el) return;
+        const omax = other.scrollHeight - other.clientHeight;
+        if (omax > 0) other.scrollTop = ratio * omax;
+      });
+      setTimeout(() => { syncingScroll = false; }, 0);
+    });
+  });
+}
+
+/* ================= 提交 ================= */
+function commit() {
+  if (!canCommit()) {
+    toast(commitDisabledReason() || '当前不可提交', true);
+    return;
+  }
+  committing = true; hideBanner('commit'); renderAll();
+  setTimeout(() => {
+    committing = false;
+    if ($('simCommitFail').checked) {
+      showBanner('commit', '提交失败：模拟 git 故障（内容已保留，可重试；提交前校验当前分支为 dev）。', commit);
+      renderAll();
+      return;
+    }
+    committed = true; commitHash = randHash();
+    files.forEach((f) => { f.disk = f.content; });
+    toast(`已提交到本地 dev 分支：docs: 发布文档 BLD-20260921-001（${commitHash}）`);
+    renderAll();
+  }, 900);
+}
+
+/* ================= 事件绑定 ================= */
+$('refreshBtn').addEventListener('click', refresh);
+$('sumBtn').addEventListener('click', startSummary);
+$('reviewBtn').addEventListener('click', openModal);
+$('commitBtn').addEventListener('click', commit);
+$('modalClose').addEventListener('click', closeModal);
+$('modalCloseBtn').addEventListener('click', closeModal);
+$('resetBtn').addEventListener('click', () => { resetState(); toast('演示已重置'); });
+$('themeBtn').addEventListener('click', () => {
+  document.documentElement.classList.toggle('dark');
+  $('themeBtn').textContent = document.documentElement.classList.contains('dark') ? '浅色模式' : '深色模式';
+});
+document.querySelectorAll('.steps [data-step]').forEach((b) => {
+  if (b.dataset.step !== 'docs') b.addEventListener('click', () => toast('演示仅覆盖「文档编写」页签（其余四步为现状保留）'));
+});
+
+resetState();
+</script>
+</body>
+</html>
