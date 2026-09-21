@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260921-016 演示 · 概况页签删除冗余标签，AI 完善与编辑同行</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d9dde3; --text: #1f2430; --muted: #6b7280;
+    --primary: #2563eb; --primary-weak: #e8effd; --ok: #15803d; --ok-bg: #e7f6ec;
+    --run: #b45309; --run-bg: #fdf1e0; --fail: #b91c1c; --fail-bg: #fdeaea;
+    --warn-bg: #fff7e6; --warn-border: #e2b93b; --shadow: 0 8px 28px rgba(15, 23, 42, .18);
+  }
+  html[data-theme="dark"] {
+    --bg: #14171d; --panel: #1d222b; --border: #333a46; --text: #e5e9f0; --muted: #97a1af;
+    --primary: #5b8cf5; --primary-weak: #24304a; --ok: #4ade80; --ok-bg: #17301f;
+    --run: #f0b45c; --run-bg: #38290f; --fail: #f27b7b; --fail-bg: #3a1a1a;
+    --warn-bg: #33290f; --warn-border: #a3842c; --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+    font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  button { font: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 7px; padding: 4px 11px; }
+  .btn:hover:not(:disabled) { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.quiet { color: var(--muted); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.small { padding: 2px 8px; font-size: 12.5px; border-radius: 6px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示控制台（仅演示用） ---------- */
+  .console { border: 1px dashed var(--warn-border); background: var(--warn-bg); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .console .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .console .lbl { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 4px 12px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+
+  /* ---------- 模拟构建模块「版本计划」页签 ---------- */
+  .mock { border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+    padding: 14px; max-width: 1080px; }
+  .bld-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .bld-tabs .tab { border: 1px solid var(--border); border-radius: 999px; padding: 3px 14px;
+    background: transparent; color: var(--muted); }
+  .bld-tabs .tab.on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .rel-split { display: grid; grid-template-columns: 330px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 780px) { .rel-split { grid-template-columns: 1fr; } }
+  .rel-list { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+  .rel-card { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; cursor: pointer; }
+  .rel-card:hover { border-color: var(--primary); }
+  .rel-card.sel { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+  .rel-card .t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rel-card .t b { font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rel-card .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .st { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .st-mute { background: var(--bg); color: var(--muted); }
+  .st-run  { background: var(--run-bg); color: var(--run); }
+  .st-ok   { background: var(--ok-bg); color: var(--ok); }
+  .rel-detail { border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-height: 300px; }
+  .rel-detail-head h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rel-detail-head .meta { color: var(--muted); font-size: 12.5px; margin: 0; }
+  .rel-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  .rel-tab { border: 1px solid var(--border); border-radius: 999px; padding: 3px 13px;
+    background: transparent; color: var(--muted); }
+  .rel-tab.active { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+  /* ---------- 概况内容区（本演示核心） ---------- */
+  .pane { display: flex; flex-direction: column; gap: 6px; }
+  /* REQ-20260921-013 操作行：右对齐、flex-wrap */
+  .bld-plan-acts { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 4px; }
+  .bld-plan-acts .btn { flex: none; white-space: nowrap; }
+  .bld-desc { display: inline-block; font-size: 13.5px; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere;
+    cursor: pointer; border-radius: 6px; padding: 1px 4px; }
+  .bld-desc:hover { background: var(--bg); }
+  /* 缺陷态专属：描述块头行（修复后不再渲染） */
+  .bld-desc-block { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+  .bld-desc-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  /* 就地编辑表单（REQ-20260921-014 口径不变） */
+  .bld-plan-edit { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 4px; margin: 4px 0; background: var(--panel); }
+  .bld-plan-count { margin: 0; }
+  .bld-edit-row { display: flex; gap: 8px; align-items: center; }
+  .field { display: block; font-size: 12.5px; color: var(--muted); }
+  .field input[type="text"], textarea { width: 100%; font: inherit; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
+  textarea { resize: vertical; }
+  .form-err { color: var(--fail); background: var(--fail-bg); border-radius: 6px; padding: 5px 9px; font-size: 12.5px; margin: 4px 0; }
+  .hidden { display: none !important; }
+  .merge-note { margin: 4px 0 0; }
+  .rel-center { padding: 40px 10px; text-align: center; color: var(--muted); }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 弹窗 ---------- */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 22, .45); display: flex;
+    align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: min(620px, 100%); max-height: 88vh; overflow: auto; padding: 14px 16px; }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .prompt-box, .answer-box { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+  .prompt-box textarea { font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  .copy-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .preview { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: 12.5px; }
+
+  .demo-note { margin-top: 10px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 8px; }
+
+  /* ---------- toast ---------- */
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); border-radius: 8px; padding: 7px 16px;
+    font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 90; max-width: 82vw; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>BUG-20260921-016 · 概况页签删除冗余标签，AI 完善与编辑同行</h1>
+<p class="sub">演示构建模块「版本计划」右侧详情第一步「概况」页签的布局对照与交互。数据为模拟，不连真实看板、不发真实请求、不执行真实 git 操作。</p>
+
+<div class="console">
+  <div class="grp"><span class="lbl">布局对照</span>
+    <span class="seg" id="segMode">
+      <button data-mode="bug" class="on">当前（缺陷）</button>
+      <button data-mode="fix">修复后（期望）</button>
+    </span>
+  </div>
+  <div class="grp"><span class="lbl">版本状态</span>
+    <span class="seg" id="segStatus">
+      <button data-status="draft" class="on">计划中</button>
+      <button data-status="merging">合并中</button>
+      <button data-status="merged">已合并（未推送）</button>
+      <button data-status="pushed">已推送（正式发布）</button>
+    </span>
+  </div>
+  <div class="grp"><span class="lbl">详情数据</span>
+    <span class="seg" id="segData">
+      <button data-data="normal" class="on">正常</button>
+      <button data-data="empty">无描述</button>
+      <button data-data="loading">加载中</button>
+      <button data-data="error">加载失败</button>
+    </span>
+  </div>
+  <div class="grp"><span class="lbl">主题</span>
+    <span class="seg" id="segTheme">
+      <button data-theme="system" class="on">跟随系统</button>
+      <button data-theme="light">浅色</button>
+      <button data-theme="dark">深色</button>
+    </span>
+  </div>
+</div>
+
+<div class="mock">
+  <div class="bld-tabs">
+    <button class="tab on" type="button">版本计划</button>
+    <button class="tab" type="button">发布记录</button>
+  </div>
+  <div class="rel-split">
+    <div class="rel-list" id="verList"></div>
+    <div class="rel-detail" id="detail"></div>
+  </div>
+  <p class="demo-note">对照说明——「当前（缺陷）」：AI 完善独占一行，其下是与头部重复的「计划号 · 版本号 · 目标分支」元信息行，再下是「描述」标签行与「编辑」按钮分处两行；「修复后（期望）」：冗余标签行全部删除，「AI 完善」与「编辑」同排一行右对齐，描述正文直接呈现。按钮锁定口径（合并中 / 已推送）与就地编辑表单为既有口径，修复后保持不变。</p>
+</div>
+
+<div id="toast" role="status"></div>
+<div id="modalHost"></div>
+
+<script>
+(function () {
+  'use strict';
+  var NAME_MAX = 80, DESC_MAX = 4000; // 与 build.js INFO_NAME_MAX / INFO_DESC_MAX 一致
+
+  // 模拟版本数据（左列卡片；选中卡片受控制台「版本状态」联动）
+  var versions = [
+    { id: 'BLD-20260920-001', name: '全功能基线版：需求看板 · AI 分析和开发 · 版本发布',
+      desc: '需求看板、AI 分析和开发、版本发布三大模块首个贯通基线：条目流转、批量完善、五步发布流程全链路可用。',
+      updatedAt: '2026-09-21 10:52', count: 3 },
+    { id: 'BLD-20260919-002', name: '文档编写三阶段视图与多语言页签',
+      desc: '文档编写步按「默认语言先行 → AI 翻译与审查 → 整体审查完结」三阶段推进，文件列表按语言分页签展示。',
+      updatedAt: '2026-09-20 17:31', count: 2 },
+    { id: 'BLD-20260918-001', name: '版本卡片行内操作与阶段展示',
+      desc: '左侧版本卡片集中展示计划号、提取版本号与阶段，行内提供合并、删除等操作入口。',
+      updatedAt: '2026-09-19 09:12', count: 1 }
+  ];
+  var ST_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', pushed: '已合并' };
+
+  var state = {
+    mode: 'bug',          // bug = 当前（缺陷）；fix = 修复后（期望）
+    status: 'draft',      // 选中版本状态（控制台联动）
+    data: 'normal',       // 详情数据态：normal / empty / loading / error
+    sel: 0,               // 选中版本下标
+    step: 'plan',         // 详情步骤页签（本演示聚焦 plan＝概况）
+    editing: false,       // 概况就地编辑表单开关
+    editName: '', editDesc: '',
+    modal: false,         // AI 完善弹窗
+    answer: '', copied: false, parsed: null, pName: '', pDesc: '', ansErr: ''
+  };
+  var themeMode = 'system';
+
+  function $(s) { return document.querySelector(s); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  /* ---------- 主题 ---------- */
+  function applyTheme() {
+    var dark = themeMode === 'dark' ||
+      (themeMode === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+
+  /* ---------- 锁定口径（与 build.js 一致） ---------- */
+  // AI 完善：merging 禁用；推送完成（正式发布）禁用（BUG-20260920-005）；merged 未推送可用
+  function answerLock() {
+    if (state.status === 'merging') return '合并中，请稍候……';
+    if (state.status === 'pushed') return '已正式发布，不允许再 AI 完善';
+    return '';
+  }
+  // 编辑：merging 禁用（REQ-20260921-014）；其余状态可用
+  function editLock() { return state.status === 'merging' ? '版本合并中，暂不可修改' : ''; }
+
+  function verNum(id) { var m = /^BLD-(\d{8}-\d{3})$/.exec(id); return m ? m[1] : ''; }
+  function cur() { return versions[state.sel]; }
+
+  /* ---------- 左侧卡片 ---------- */
+  function renderList() {
+    $('#verList').innerHTML = versions.map(function (v, i) {
+      var chip = i === state.sel
+        ? '<span class="st ' + (state.status === 'merging' ? 'st-run' : state.status === 'draft' ? 'st-mute' : 'st-ok') + '">' + esc(ST_LABEL[state.status]) + (state.status === 'pushed' ? ' · 已推送' : '') + '</span>'
+        : '<span class="st st-mute">' + esc(i === 1 ? '已合并' : '计划中') + '</span>';
+      return '<div class="rel-card' + (i === state.sel ? ' sel' : '') + '" data-sel="' + i + '">' +
+        '<div class="t"><b title="' + esc(v.name) + '">' + esc(v.name) + '</b>' + chip + '</div>' +
+        '<div class="meta">' + esc(v.id) + ' · 版本号 ' + esc(verNum(v.id)) + ' · ' +
+        (i === state.sel ? (state.status === 'pushed' ? '阶段 正式发布' : state.status === 'merged' || state.status === 'merging' ? '阶段 合并入 main' : '阶段 计划') : (i === 1 ? '阶段 合并入 main' : '阶段 计划')) +
+        ' · ' + v.count + ' 关联</div></div>';
+    }).join('');
+  }
+
+  /* ---------- 概况内容区 ---------- */
+  function descBody() {
+    var v = cur();
+    var empty = state.data === 'empty';
+    return '<span class="bld-desc" id="descText" title="点击编辑描述（遗留快捷路径，修复后保留）">' +
+      (empty || !v.desc ? '<span class="muted">（无描述）</span>' : esc(v.desc)) + '</span>';
+  }
+  function editForm() {
+    var n = state.editName, d = state.editDesc;
+    var nOver = n.length > NAME_MAX, dOver = d.length > DESC_MAX;
+    return '<div class="bld-plan-edit" role="form" aria-label="编辑版本信息">' +
+      '<label class="field">版本名称<input type="text" id="fName" value="' + esc(n) + '" autocomplete="off"></label>' +
+      '<p class="small muted bld-plan-count">' + n.length + ' / ' + NAME_MAX + '</p>' +
+      '<label class="field">版本描述<textarea id="fDesc" rows="4">' + esc(d) + '</textarea></label>' +
+      '<p class="small muted bld-plan-count">' + d.length + ' / ' + DESC_MAX + '</p>' +
+      (nOver ? '<p class="form-err" role="alert">版本名称不超过 ' + NAME_MAX + ' 字</p>' : '') +
+      (dOver ? '<p class="form-err" role="alert">版本描述不超过 ' + DESC_MAX + ' 字</p>' : '') +
+      (n.trim() === '' ? '<p class="form-err" role="alert">版本名称不能为空</p>' : '') +
+      '<div class="bld-edit-row"><button type="button" class="btn small primary" id="fSave"' +
+      (n.trim() === '' || nOver || dOver ? ' disabled title="请先修正表单错误"' : '') + '>保存</button>' +
+      '<button type="button" class="btn small" id="fCancel">取消</button></div></div>';
+  }
+  function planPane() {
+    var v = cur(), aLock = answerLock(), eLock = editLock();
+    var aBtn = '<button type="button" class="btn small" id="btnAnswer"' + (aLock ? ' disabled title="' + esc(aLock) + '"' : ' title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"') + '>AI 完善</button>';
+    var eBtn = '<button type="button" class="btn small quiet" id="btnEdit"' + (eLock ? ' disabled title="' + esc(eLock) + '"' : ' title="编辑版本名称与描述"') + '>编辑</button>';
+
+    if (state.mode === 'bug') {
+      // 缺陷态：AI 完善独占一行 → 重复元信息行 → 「描述 | 编辑」头行 → 描述正文；
+      // 编辑态时头行 + 正文整体被就地表单替换（与现状 renderPlanEditForm 口径一致）
+      return '<div class="pane">' +
+        '<div class="bld-plan-acts">' + aBtn + '</div>' +
+        '<p class="muted small" style="margin:0">计划号 ' + esc(v.id) + ' · 版本号 ' + esc(verNum(v.id)) + ' · 目标分支 main</p>' +
+        (state.editing ? editForm() :
+          '<div class="bld-desc-block"><div class="bld-desc-block-head"><span class="muted small">描述</span>' + eBtn + '</div>' +
+          descBody() + '</div>') +
+        mergeNote() + '</div>';
+    }
+    // 修复后：一行右对齐「AI 完善 + 编辑」，标签行删除，描述正文直接呈现；
+    // 编辑态就地展开表单，「编辑」键随表单让位（表单自带保存 / 取消），「AI 完善」保留原位
+    return '<div class="pane">' +
+      '<div class="bld-plan-acts">' + (state.editing ? aBtn : aBtn + eBtn) + '</div>' +
+      (state.editing ? editForm() : descBody()) +
+      mergeNote() + '</div>';
+  }
+  function mergeNote() {
+    if (state.status === 'merging')
+      return '<p class="muted small merge-note">合并中，请稍候……（执行中已禁用重复触发与条目编辑）</p>';
+    return '';
+  }
+  function stepPlaceholder() {
+    return '<div class="rel-center muted">本演示聚焦「概况」页签布局对照，该步骤内容略。</div>';
+  }
+
+  /* ---------- 右侧详情 ---------- */
+  function renderDetail() {
+    var v = cur();
+    var body;
+    if (state.step !== 'plan') body = stepPlaceholder();
+    else if (state.data === 'loading') body = '<div class="rel-center"><span class="spin"></span>正在加载版本信息…</div>';
+    else if (state.data === 'error') body = '<div class="rel-center"><p class="form-err" role="alert">加载版本信息失败：模拟网络错误（演示）</p><p><button type="button" class="btn small" id="btnRetry">重试</button></p></div>';
+    else body = planPane();
+
+    var chip = '<span class="st ' + (state.status === 'merging' ? 'st-run' : state.status === 'draft' ? 'st-mute' : 'st-ok') + '">' + esc(ST_LABEL[state.status]) + (state.status === 'pushed' ? ' · 已推送' : '') + '</span>';
+    var tabs = [['plan', '概况'], ['link', '关联条目与提交'], ['docs', '文档编写'], ['merge', '合并入 main'], ['release', '正式发布']]
+      .map(function (t) { return '<button type="button" class="rel-tab' + (state.step === t[0] ? ' active' : '') + '" data-step="' + t[0] + '">' + t[1] + '</button>'; }).join('');
+
+    $('#detail').innerHTML =
+      '<div class="rel-detail-head"><h3>' + esc(v.name) + ' ' + chip + '</h3>' +
+      '<p class="meta">' + esc(v.id) + ' · 版本号 ' + esc(verNum(v.id)) + ' · 更新 ' + esc(v.updatedAt) + '</p></div>' +
+      '<nav class="rel-tabs" role="tablist" aria-label="发布五步流程">' + tabs + '</nav>' + body;
+    bindDetail();
+  }
+
+  /* ---------- AI 完善弹窗（两段式，模拟） ---------- */
+  function renderModal() {
+    var host = $('#modalHost');
+    if (!state.modal) { host.innerHTML = ''; return; }
+    var v = cur();
+    host.innerHTML =
+      '<div class="modal-wrap" id="ansWrap"><div class="modal" role="dialog" aria-label="AI 完善">' +
+      '<h3>AI 完善（' + esc(v.id) + '）</h3>' +
+      '<p class="muted small">上段：复制提示词交给 Agent；下段：把回答粘贴回来，解析预览后应用——全程无需关闭本弹窗。</p>' +
+      '<div class="prompt-box"><textarea rows="6" readonly>请根据本项目已发布的 CHANGELOG / FEATURES 材料完善版本计划 ' + esc(v.id) + ' 的名称与描述……（演示文案）\n版本名称：…\n版本描述：…</textarea>' +
+      '<div class="copy-row"><button type="button" class="btn small primary" id="mCopy">复制提示词</button>' +
+      (state.copied ? '<span class="muted small">已复制 ✓</span>' : '') + '</div></div>' +
+      '<div class="answer-box"><label class="field">Agent 回答（粘贴后点「解析并预览」）' +
+      '<textarea id="mAns" rows="4" placeholder="版本名称：…&#10;版本描述：…">' + esc(state.answer) + '</textarea></label>' +
+      (state.ansErr ? '<p class="form-err" role="alert">' + esc(state.ansErr) + '</p>' : '') +
+      (state.parsed ? '<div class="preview"><p class="muted small">解析结果可直接修改，点「应用」保存修改后的值</p>' +
+        '<label class="field">版本名称（当前：' + esc(v.name) + '）<input type="text" id="mName" value="' + esc(state.pName) + '"></label>' +
+        '<label class="field">版本描述（当前：' + esc(v.desc || '（空）') + '）<textarea id="mDesc" rows="3">' + esc(state.pDesc) + '</textarea></label></div>' : '') +
+      '</div>' +
+      '<div class="foot"><button type="button" class="btn" id="mClose">关闭</button>' +
+      '<button type="button" class="btn" id="mParse">解析并预览</button>' +
+      '<button type="button" class="btn primary" id="mApply"' + (state.parsed ? '' : ' disabled') + '>应用</button></div>' +
+      '</div></div>';
+    bindModal();
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  function bindDetail() {
+    var a = $('#btnAnswer'), e = $('#btnEdit'), d = $('#descText');
+    if (a) a.onclick = function () {
+      state.copied = false; state.answer = ''; state.parsed = false; state.pName = ''; state.pDesc = ''; state.ansErr = '';
+      state.modal = true; renderModal();
+    };
+    if (e && !e.disabled) e.onclick = openEdit;
+    if (d && !state.editing) {
+      // 遗留快捷路径：点击描述正文进入编辑（现状与修复后均保留；无描述时引导走「编辑」按钮）
+      d.onclick = function () {
+        if (state.data === 'empty') { toast('（无描述）请点「编辑」补写版本描述', true); return; }
+        openEdit();
+      };
+    }
+    var retry = $('#btnRetry');
+    if (retry) retry.onclick = function () {
+      state.data = 'loading'; syncSeg(); renderDetail();
+      setTimeout(function () { state.data = 'normal'; syncSeg(); renderDetail(); toast('✓ 版本信息已重新加载'); }, 900);
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('.rel-tab'), function (t) {
+      t.onclick = function () { state.step = t.getAttribute('data-step'); state.editing = false; renderDetail(); };
+    });
+    if (document.querySelector('.bld-plan-edit')) bindEditForm(); // 就地编辑表单（两种布局对照态共用）
+  }
+  function openEdit() {
+    var v = cur();
+    state.editing = true; state.editName = v.name; state.editDesc = state.data === 'empty' ? '' : v.desc;
+    renderDetail();
+    var f = $('#fName'); if (f) f.focus();
+  }
+  function bindEditForm() {
+    var f = $('#fName'), fd = $('#fDesc');
+    if (f) f.oninput = function () { state.editName = f.value; refreshCounts(); };
+    if (fd) fd.oninput = function () { state.editDesc = fd.value; refreshCounts(); };
+    var s = $('#fSave'), c = $('#fCancel');
+    if (s) s.onclick = function () {
+      var v = cur();
+      v.name = state.editName.trim();
+      if (state.data !== 'empty') v.desc = state.editDesc; else if (state.editDesc) { v.desc = state.editDesc; state.data = 'normal'; syncSeg(); }
+      v.updatedAt = '2026-09-21 11:0' + (Math.floor(Math.random() * 9) + 1);
+      state.editing = false; renderList(); renderDetail();
+      toast('✓ 版本名称与描述已更新');
+    };
+    if (c) c.onclick = function () { state.editing = false; renderDetail(); };
+  }
+  function refreshCounts() {
+    // 仅就地重渲染表单块以更新计数 / 错误区，并恢复输入焦点与光标位置
+    var box = document.querySelector('.bld-plan-edit'); if (!box) return;
+    var ae = document.activeElement;
+    var activeId = ae && (ae.id === 'fName' || ae.id === 'fDesc') ? ae.id : null;
+    var pos = null;
+    if (activeId) { try { pos = ae.selectionStart; } catch (e) {} }
+    var tmp = document.createElement('div'); tmp.innerHTML = editForm();
+    box.parentNode.replaceChild(tmp.firstChild, box);
+    bindEditForm();
+    if (activeId) {
+      var el = document.getElementById(activeId);
+      if (el) { el.focus(); if (pos != null) { try { el.setSelectionRange(pos, pos); } catch (e) {} } }
+    }
+  }
+  function bindModal() {
+    var cp = $('#mCopy'); if (cp) cp.onclick = function () {
+      state.copied = true; renderModal();
+      try { navigator.clipboard.writeText(document.querySelector('.prompt-box textarea').value); } catch (e) {}
+      toast('✓ 提示词已复制（演示）');
+    };
+    var ans = $('#mAns'); if (ans) ans.oninput = function () { state.answer = ans.value; };
+    $('#mParse').onclick = function () {
+      var text = state.answer;
+      var name = '', descs = [];
+      text.split(/\r?\n/).forEach(function (line) {
+        var m1 = /^\s*版本名称[:：]\s*(.*)$/.exec(line);
+        var m2 = /^\s*版本描述[:：]\s*(.*)$/.exec(line);
+        if (m1) name = m1[1].trim(); else if (m2) descs.push(m2[1].trim());
+      });
+      if (!name && !descs.length) { state.parsed = false; state.ansErr = '未解析到「版本名称：」/「版本描述：」行（回答需以二者开头，演示口径）'; renderModal(); return; }
+      state.ansErr = ''; state.parsed = true; state.pName = name || cur().name; state.pDesc = descs.join('\n');
+      renderModal();
+    };
+    $('#mApply').onclick = function () {
+      var v = cur(); v.name = state.pName.trim(); v.desc = state.pDesc; v.updatedAt = '2026-09-21 11:0' + (Math.floor(Math.random() * 9) + 1);
+      state.modal = false; renderList(); renderDetail(); toast('✓ 已应用 AI 完善结果：版本名称与描述已更新');
+    };
+    $('#mClose').onclick = function () { state.modal = false; renderModal(); };
+  }
+
+  /* ---------- 控制台 ---------- */
+  function segBind(id, attr, fn) {
+    var seg = $(id);
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) {
+      b.onclick = function () { fn(b.getAttribute(attr)); syncSeg(); };
+    });
+  }
+  function syncSeg() {
+    [['#segMode', 'data-mode', state.mode], ['#segStatus', 'data-status', state.status],
+     ['#segData', 'data-data', state.data], ['#segTheme', 'data-theme', themeMode]]
+      .forEach(function (x) {
+        Array.prototype.forEach.call($(x[0]).querySelectorAll('button'), function (b) {
+          b.classList.toggle('on', b.getAttribute(x[1]) === x[2]);
+        });
+      });
+  }
+  segBind('#segMode', 'data-mode', function (m) { state.mode = m; state.editing = false; renderDetail(); });
+  segBind('#segStatus', 'data-status', function (s) { state.status = s; state.editing = false; renderDetail(); renderList(); });
+  segBind('#segData', 'data-data', function (d) { state.data = d; state.editing = false; renderDetail(); });
+  segBind('#segTheme', 'data-theme', function (t) { themeMode = t; applyTheme(); });
+
+  // 卡片选择：切换选中版本，状态 / 数据态保持控制台当前值
+  $('#verList').addEventListener('click', function (ev) {
+    var card = ev.target.closest('.rel-card'); if (!card) return;
+    state.sel = parseInt(card.getAttribute('data-sel'), 10);
+    state.editing = false; state.modal = false; renderModal(); renderList(); renderDetail();
+  });
+
+  // 渲染钩子：renderDetail 后若存在编辑表单则绑定（renderDetail 内 bindDetail 绑定按钮 / 步骤页签）
+  applyTheme(); renderList(); renderDetail(); renderModal();
+})();
+</script>
+</body>
+</html>
