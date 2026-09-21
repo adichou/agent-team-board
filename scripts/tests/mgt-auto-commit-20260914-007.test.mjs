@@ -229,11 +229,13 @@ async function mkVersionProject(tag, { onMain = false } = {}) {
 
 t('R3 版本合并无管理提交：合并响应/详情不带 mgtCommit、无版本管理提交（REQ-20260920-003 起合并前置要求工作目录在 dev；非 dev 阻止口径由 req-20260920-003.test.mjs 覆盖）', async () => {
   const { root, dataDir, item, v } = await mkVersionProject('r3');
-  // REQ-20260920-003：合并前置 = 八个发布文档已提交（pathspec 限定，无管理提交语义）
-  for (const file of ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md']) {
+  // REQ-20260920-003：合并前置 = 八个发布文档已提交（pathspec 限定，无管理提交语义）；
+  // REQ-20260921-010 起默认语言集 cn,en、英文文件下划线命名，提交清单显式传入
+  const DOCS8 = ['README.md', 'README_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'AGENTS.md', 'AGENTS_en.md'];
+  for (const file of DOCS8) {
     fs.writeFileSync(path.join(root, file), `# ${file} (${v.id})`);
   }
-  const docsCommit = buildGit.commitPublishDocs(root, { message: 'docs: 发布文档基线' });
+  const docsCommit = buildGit.commitPublishDocs(root, { message: 'docs: 发布文档基线', files: DOCS8 });
   buildStore.recordDocsCommit(dataDir, v.id, { commitHash: docsCommit.commitHash, files: docsCommit.hashes, scopeFp: null });
   const { server, port } = await bootServer(root);
   try {

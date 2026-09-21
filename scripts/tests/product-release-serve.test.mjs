@@ -123,11 +123,12 @@ function mkFixture(name) {
   return { tmp, proj, projB, projC, remote, homepage, dataDir, version: v };
 }
 
-// REQ-20260920-003：合并前置 = 八个发布文档已提交（pathspec 限定，不夹带其他改动）
+// REQ-20260920-003：合并前置 = 八个发布文档已提交（pathspec 限定，不夹带其他改动）；
+// REQ-20260921-010 起默认语言集 cn,en、英文文件下划线命名，提交清单显式传入
 function writePublishDocs(root, dataDir, verId) {
-  const files = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
+  const files = ['README.md', 'README_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'AGENTS.md', 'AGENTS_en.md'];
   for (const f of files) fs.writeFileSync(path.join(root, f), `# ${f} (${verId})\n`);
-  const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${verId}` });
+  const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${verId}`, files });
   if (r.noop) throw new Error('文档提交不应为空提交');
   buildStore.recordDocsCommit(dataDir, verId, { commitHash: r.commitHash, files: r.hashes, scopeFp: null });
   return r.commitHash;
