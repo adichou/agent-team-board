@@ -264,10 +264,10 @@ t('P3 发布成功版本：左侧卡片标签替换为绿色「已发布」（st
   assert.match(card, /title="[^"]*BPUB-20260917-0a1[^"]*"/, 'title 提示成功运行编号');
   assert.match(card, /1\.2\.0/, 'title / 提示含发行版本号');
   assert.doesNotMatch(card, /已合并(?!入 main)/, '卡片标题行不再显示「已合并」标签（按钮 disabled title 除外）');
-  // BUG-20260920-005：合并键锁定基准后移到推送完成——merged（未推送）不再禁用（产品发布
-  // published 不计入推送口径，见该单待确认第 1 条默认）
-  assert.match(card, /data-ver-merge="BLD-A"(?![^>]*disabled)/, '合并键按推送完成锁定（merged 未推送仍可用）');
-  assert.match(card, /data-ver-release="BLD-A"(?![^>]*disabled)/, '创建发布键仍可用（merged 未锁）');
+  // REQ-20260921-016：合并 / 创建发布键已从卡片移除（迁详情合并步 / 正式发布步）——
+  // BUG-20260920-005 推送完成锁定口径在详情步骤入口上核验（见 U1 / M1 等回归），卡片不再断言
+  assert.ok(!card.includes('data-ver-merge'), '卡片不再有合并键（REQ-20260921-016 精简）');
+  assert.ok(!card.includes('data-ver-release'), '卡片不再有创建发布键（REQ-20260921-016 精简）');
 });
 
 t('P3b 未发布成功版本不误显「已发布」：无运行（release null / 缺省）与各中间态保持原四态标签；防御 published 非真值', async () => {
@@ -342,7 +342,10 @@ t('P5 静态契约：卡片标签经 versionChip（发布成功替换）；发�
   assert.ok(paneFn, '缺少 refreshReleasePane');
   assert.match(paneFn[0], /refresh\(\)/, '刷新状态入口应一并刷新构建 state');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-act\]'\)/, '发布动作绑定不回归');
-  assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release-view\]'\)/, '查看发布记录绑定不回归');
+  // REQ-20260921-016：「查看发布记录」卡片按钮及其绑定移除（发布记录直接展示在正式发布步，
+  // openReleaseTab 仍为程序化激活入口）；「创建并预检」绑定随详情步入口保留
+  assert.ok(!buildJs.includes('data-ver-release-view'), '查看发布记录卡片按钮与绑定移除（REQ-20260921-016）');
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release\]'\)/, '创建并预检（正式发布步）绑定不回归');
 });
 
 let failed = 0;

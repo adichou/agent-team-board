@@ -610,7 +610,7 @@ const ver = (id, name, status = 'draft') => ({
   createdAt: '2026-09-13T01:00:00.000Z', updatedAt: '2026-09-13T02:00:00.000Z', merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
 });
 
-t('N9a 版本卡片第三个操作键「删除」：quiet 弱化、位于合并键之后；merging 禁用 title；mergeBusy 全局禁用口径', async () => {
+t('N9a 版本卡片删除键（REQ-20260921-016 迁卡片标题行右端）：quiet 弱化、位于标题行内名称之后；merging 禁用 title；mergeBusy 全局禁用口径', async () => {
   const h = setup({ state: statePayload({ versions: [
     ver('BLD-20260913-001', 'v1.0', 'draft'),
     ver('BLD-20260913-002', 'v2.0', 'merging'),
@@ -623,15 +623,18 @@ t('N9a 版本卡片第三个操作键「删除」：quiet 弱化、位于合并�
     assert.match(inner, new RegExp(`data-ver-delete="${id}"`), `${id} 卡片应有删除键`);
     assert.match(inner, new RegExp(`aria-label="删除 ${id}"`), `${id} 删除键 aria-label 带版本号`);
   }
-  // 顺序：合并入 main → … → 删除（同行 card-acts 末位，quiet 弱化不抢主操作；
-  // REQ-20260921-013：AI 完善迁入详情概况，卡片不再含该键）
+  // 位置：标题行（.t）内、名称之后；REQ-20260921-016 后卡片操作行（card-acts）整体移除，
+  // AI 完善 / 合并 / 发布入口迁右侧详情对应步骤
   const card1 = inner.slice(inner.indexOf('data-ver-id="BLD-20260913-001"'), inner.indexOf('data-ver-id="BLD-20260913-002"'));
-  const acts = card1.slice(card1.indexOf('card-acts'));
-  assert.ok(!acts.includes('data-ver-answer'), '卡片不再含 AI 完善（REQ-20260921-013 迁入详情概况）');
-  const iMerge = acts.indexOf('data-ver-merge');
-  const iDel = acts.indexOf('data-ver-delete');
-  assert.ok(iMerge !== -1 && iDel !== -1 && iMerge < iDel, '删除键应排在合并入 main 之后（card-acts 末位）');
-  const delBtnHtml = acts.slice(acts.lastIndexOf('<button', iDel), acts.indexOf('</button>', iDel));
+  assert.ok(!card1.includes('card-acts'), '卡片操作行整体移除（REQ-20260921-016）');
+  const tStart = card1.indexOf('<div class="t"');
+  const tEnd = card1.indexOf('</div>', tStart);
+  const titleRow = card1.slice(tStart, tEnd);
+  const iName = titleRow.indexOf('<strong');
+  const iDel = titleRow.indexOf('data-ver-delete');
+  assert.ok(iName !== -1 && iDel !== -1 && iName < iDel, '删除键位于标题行内名称之后（右端）');
+  assert.ok(!card1.slice(tEnd).includes('data-ver-delete'), '删除键不在标题行外的其他行');
+  const delBtnHtml = titleRow.slice(titleRow.lastIndexOf('<button', iDel), titleRow.indexOf('</button>', iDel));
   assert.match(delBtnHtml, /btn small quiet/, '删除键为 quiet 弱化样式');
   assert.match(inner, />删除<\/button>/, '删除键文案');
   // 状态口径：merging 禁用；draft / merged / failed 可用

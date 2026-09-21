@@ -145,18 +145,14 @@ const basePlans = () => ({
   'BLD-PUSHED': plan({ mergeLocked: true, reason: PUSHED_REASON }),
 });
 
-// 详情步面板内主按钮（区别于卡片行内按钮：btn primary 无 small、位于 bld-merge-pane 内）
+// 详情步面板内主按钮（REQ-20260921-016 列表卡片合并键移除后为唯一合并入口：btn primary、
+// 位于 bld-merge-pane 内）
 function detailBtn(inner, id) {
   const i = inner.indexOf('bld-merge-pane');
   assert.ok(i >= 0, '应渲染合并步面板');
   const seg = inner.slice(i, i + 6000);
   const j = seg.indexOf(`data-ver-merge="${id}"`);
   return j >= 0 ? seg.slice(j, seg.indexOf('</button>', j)) : '';
-}
-// 卡片行内按钮（bld-ver-merge 类名所在段）
-function cardBtn(inner, id) {
-  const j = inner.indexOf(`data-ver-merge="${id}"`);
-  return j >= 0 ? inner.slice(j, inner.indexOf('</button>', j)) : '';
 }
 
 t('M1 详情页主按钮五状态 title 归因准确：aria-disabled 且与真实原因一一对应，不再回落「前置条件未满足」', async () => {
@@ -179,15 +175,13 @@ t('M1 详情页主按钮五状态 title 归因准确：aria-disabled 且与真�
   }
 });
 
-t('M2 可合并状态零回归：详情主按钮与卡片按钮均可用（无 aria-disabled），点击打开确认弹窗', async () => {
+t('M2 可合并状态零回归：详情主按钮可用（无 aria-disabled；REQ-20260921-016 后为唯一合并入口），点击打开确认弹窗', async () => {
   const h = setup({ versions: baseVersions(), plans: basePlans() });
   await h.enter();
   await h.detailAt('BLD-OK');
   const inner = h.inner();
   const d = detailBtn(inner, 'BLD-OK');
   assert.ok(d && !/aria-disabled/.test(d), '可合并时详情主按钮可用');
-  const c = cardBtn(inner, 'BLD-OK');
-  assert.ok(c && !/aria-disabled/.test(c), '可合并时卡片按钮可用');
   h.run(`window.ATBBuild.openMergeConfirm('BLD-OK')`);
   assert.match(h.inner(), /合并入 main 确认（BLD-OK）/, '可合并版本点击 → 确认弹窗（链路零回归）');
   assert.deepEqual(h.toasts.filter((x) => x.m.includes('合并')), [], '可合并路径不产生拦截 toast');
@@ -215,23 +209,28 @@ t('M3 点击必反馈：不可合并状态点击入口 → 错误 toast 给出�
   assert.ok(h.toasts.some((x) => x.m === GONE_REASON && x.isErr), '版本不存在（竞态残留 DOM）点击反馈刷新提示，不再静默');
 });
 
-t('M4 两处入口口径一致：同状态（文档未提交 / 不在 dev）卡片按钮与详情按钮同为禁用 + 同一 title', async () => {
+t('M4 唯一入口口径（REQ-20260921-016 列表卡片合并键移除后合并步主按钮为唯一入口）：各状态禁用 title 与真实原因一一对应；计划无关态（merging / 已正式发布）同样生效', async () => {
   const h = setup({ versions: baseVersions(), plans: basePlans() });
   await h.enter();
   for (const [id, reason] of [['BLD-DOCS', DOCS_REASON], ['BLD-MAIN', NOT_DEV_MAIN]]) {
     await h.detailAt(id);
     const inner = h.inner();
-    const c = cardBtn(inner, id);
-    assert.ok(c, `${id} 卡片应有合并按钮`);
-    assert.match(c, /aria-disabled="true"/, `${id} 卡片按钮同口径禁用（不再一端可点一端禁用）`);
-    assert.match(c, new RegExp(`title="${reason.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), `${id} 卡片按钮 title 与详情按钮同因`);
-    assert.doesNotMatch(c, /\sdisabled(=|\s|>)/, `${id} 卡片按钮不用 HTML disabled`);
+    const c = detailBtn(inner, id);
+    assert.ok(c, `${id} 合并步应有主按钮`);
+    assert.match(c, /aria-disabled="true"/, `${id} 主按钮同口径禁用`);
+    assert.match(c, new RegExp(`title="${reason.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), `${id} 主按钮 title 为真实原因`);
+    assert.doesNotMatch(c, /\sdisabled(=|\s|>)/, `${id} 主按钮不用 HTML disabled`);
   }
-  // 计划无关三态（merging / 已正式发布）在任何卡片上都生效（无需装配加载）
+  // 计划无关三态（merging / 已正式发布）在任何版本上都生效（mergeBlockReason 先于装配检查）
+  for (const [id, title] of [['BLD-MERGING', BUSY_REASON], ['BLD-PUSHED', PUSHED_REASON]]) {
+    await h.detailAt(id);
+    assert.match(detailBtn(h.inner(), id), new RegExp(`aria-disabled="true" title="${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), `${id} 主按钮禁用与 title 口径`);
+  }
+  // 列表卡片不再渲染合并入口（REQ-20260921-016 精简，防口径回流的静态位）
   const h2 = setup({ versions: baseVersions() }); // 无 publish-plan 配置
   await h2.enter();
-  assert.match(cardBtn(h2.inner(), 'BLD-MERGING'), /aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 卡片禁用与 title 口径（无装配）');
-  assert.match(cardBtn(h2.inner(), 'BLD-PUSHED'), new RegExp(`aria-disabled="true" title="${PUSHED_REASON.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`), '已正式发布卡片禁用与 title 口径（无装配）');
+  const cards = h2.inner().slice(h2.inner().indexOf('rel-list'), h2.inner().indexOf('rel-detail'));
+  assert.ok(!cards.includes('data-ver-merge'), '卡片不再渲染合并键（唯一入口在详情合并步）');
 });
 
 t('M5 合并执行中（mergeBusy）：执行期间两入口禁用 + 勿重复触发 title，再次点击守卫 toast，完成后恢复', async () => {
@@ -249,7 +248,9 @@ t('M5 合并执行中（mergeBusy）：执行期间两入口禁用 + 勿重复�
   await h.tick();
   const inner = h.inner();
   assert.match(detailBtn(inner, 'BLD-OK') || '', /aria-disabled="true" title="合并中，请勿重复触发"/, '执行期间详情主按钮（选中版本）禁用 + 勿重复触发 title（真实原因，非「前置条件未满足」）');
-  assert.match(cardBtn(inner, 'BLD-OK2'), /aria-disabled="true" title="合并中，请勿重复触发"/, '执行期间卡片按钮禁用 + 同因 title');
+  // 执行中切换到另一版本（REQ-20260921-016 后合并步主按钮为唯一入口）：同样禁用 + 同因 title
+  await h.detailAt('BLD-OK2');
+  assert.match(detailBtn(h.inner(), 'BLD-OK2'), /aria-disabled="true" title="合并中，请勿重复触发"/, '执行期间另一版本主按钮禁用 + 同因 title');
   // 执行中点击另一版本入口：守卫 toast，不弹确认框
   h.run(`window.ATBBuild.openMergeConfirm('BLD-OK2')`);
   assert.doesNotMatch(h.inner(), /合并入 main 确认（BLD-OK2）/, '执行中不开新确认框');
@@ -261,8 +262,9 @@ t('M5 合并执行中（mergeBusy）：执行期间两入口禁用 + 勿重复�
   release();
   await h.tick(4);
   assert.ok(h.toasts.some((x) => x.m === '✓ 已合并入 main（BLD-OK）'), '合并成功 toast 维持');
-  const after = cardBtn(h.inner(), 'BLD-OK2');
-  assert.ok(after && !/aria-disabled/.test(after), '合并完成后卡片按钮恢复可用');
+  await h.detailAt('BLD-OK2');
+  const after = detailBtn(h.inner(), 'BLD-OK2');
+  assert.ok(after && !/aria-disabled/.test(after), '合并完成后主按钮恢复可用');
 });
 
 t('M6 doMerge 版本不存在守卫：确认后版本被删（刷新后残留触发）→ 提示刷新而非静默', async () => {
@@ -301,19 +303,20 @@ t('M7 i18n：新增 title / toast 文案中英同步（静态 + 动态分支句�
   assert.equal(t(NOT_DEV_MAIN), NOT_DEV_MAIN, '中文界面原文保持');
 });
 
-t('S1 静态契约：mergeBlockReason 双入口共用；合并按钮不再输出 HTML disabled；CSS 禁用样式覆盖 aria-disabled', () => {
+t('S1 静态契约：mergeBlockReason 由详情主按钮与守卫共用；合并按钮不再输出 HTML disabled；CSS 禁用样式覆盖 aria-disabled', () => {
   const reasonFn = buildJs.match(/function mergeBlockReason\(v\) \{[\s\S]*?\n  \}/);
   assert.ok(reasonFn, '缺少 mergeBlockReason');
+  // REQ-20260921-016：列表卡片合并键移除，renderVersionList 不再调用 mergeBlockReason
   const listFn = buildJs.match(/function renderVersionList\(\) \{[\s\S]*?\n  \}/);
   assert.ok(listFn, '缺少 renderVersionList');
-  assert.match(listFn[0], /mergeBlockReason\(v\)/, '卡片按钮共用 mergeBlockReason');
+  assert.ok(!listFn[0].includes('data-ver-merge'), 'renderVersionList 不再渲染合并键（REQ-20260921-016）');
   const mergePane = buildJs.match(/function renderMergePane\(v\) \{[\s\S]*?\n  \}/);
   assert.ok(mergePane, '缺少 renderMergePane');
   assert.match(mergePane[0], /mergeBlockReason\(v\)/, '详情主按钮共用 mergeBlockReason');
   assert.match(mergePane[0], /aria-disabled="true"/, '详情主按钮以 aria-disabled 呈现禁用');
-  // data-ver-merge 按钮模板不再拼 HTML disabled（两处模板均无）
+  // data-ver-merge 按钮模板不再拼 HTML disabled（合并步模板，REQ-20260921-016 后唯一模板）
   const btnTpls = [...buildJs.matchAll(/data-ver-merge="\$\{esc\(v\.id\)\}"[\s\S]{0,220}?<\/button>/g)].map((m) => m[0]);
-  assert.ok(btnTpls.length >= 2, '应找到两处合并按钮模板');
+  assert.ok(btnTpls.length >= 1, '应找到合并按钮模板');
   for (const tpl of btnTpls) assert.doesNotMatch(tpl, /\sdisabled/, '合并按钮模板不输出 HTML disabled');
   assert.match(buildJs, /openMergeConfirm[\s\S]{0,400}?mergeBlockReason\(v\)/, 'openMergeConfirm 守卫引用真实原因');
   assert.match(buildJs, /async function doMerge\(\) \{[\s\S]{0,600}?(state\.mergeBusy|GONE|未找到该版本)/, 'doMerge 守卫补反馈');
