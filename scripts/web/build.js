@@ -2557,8 +2557,9 @@ const ATBBuild = (() => {
 
   // REQ-20260921-012 文档编写步三阶段视图：阶段条（① 默认语言先行 → ② AI 翻译与审查 →
   // ③ 整体审查完结）+ 六按钮（刷新 / AI 总结 / AI 翻译 / 审查 / 整体审查 / 提交）+ 按语言
-  // 成组的文件七态列表 + 门禁条（编辑收敛进审查对话框）。在 REQ-20260921-008 三段布局与
-  // REQ-20260921-010 语言集动态清单（4 类 × N）之上落位。
+  // 页签的文件七态列表（BUG-20260921-013：每语言一个页签，替代平铺单列分组标题行）+
+  // 门禁条（编辑收敛进审查对话框）。在 REQ-20260921-008 三段布局与 REQ-20260921-010
+  // 语言集动态清单（4 类 × N）之上落位。
   // - 刷新 / AI 总结 / 审查三按钮恒可用（数据加载失败给错误反馈而非隐藏按钮）；
   // - AI 翻译在默认语言 4/4 已审核前禁用（aria-disabled + title 列默认语言缺口，模式同
   //   BUG-20260920-006）；整体审查在语言集内全部文件已审核前禁用；提交需「全部已审核 +
@@ -2631,13 +2632,30 @@ ${langsField}
             <span class="bld-doc-row-st">${flowChip(f.state)}${sumProgress}${trProgress}</span>
           </li>`;
     };
-    // 默认语言组 + 各剩余语言组（组数与计数随语言集动态；默认语言不一定是中文）
-    const groupHtml = (header, files) => `
-          <li class="bld-doc-group" role="presentation"><span class="muted small">${esc(header)}</span></li>
-          ${files.map(rowOf).join('')}`;
-    const restLangs = langs.slice(1);
-    const rowsHtml = groupHtml(`默认语言（${langNameOf(langs[0])}，文件不带后缀）`, flowEval.defaultFiles)
-      + restLangs.map((l) => groupHtml(`剩余语言（${l} · AI 翻译）`, flowEval.restFiles.filter((f) => f.lang === l))).join('');
+    // BUG-20260921-013 文件区域语言页签：每语言一个页签（默认语言恒为第一个，标「默认」+
+    // 该语言审核计数角标 x/4），激活语言记忆于 pf.docLang（不在语言集时渲染端回落默认语言，
+    // 切换版本随 pf 重建自然回落）；非激活面板 hidden——全部语言面板均渲染，文件行七态 chip
+    // 与 AI 进度标注对所有语言保留在 DOM，切页签即时可见；表头汇总 / 阶段条 / 门禁条恒为
+    // 语言集全局，不受页签切换影响。
+    const activeDocLang = langs.includes(pf.docLang) ? pf.docLang : langs[0];
+    // AI 总结 / AI 翻译运行中的当前文件所在语言若非激活页签：页签尾部 ◐ 运行角标提示
+    //（不自动切换页签，避免打断浏览；激活页签内行内进度标注已可见，不加冗余角标）
+    const langOfFile = (file) => (flowEval.files.find((f) => f.file === file) || {}).lang || null;
+    const sumBadgeLang = sum && sum.phase === 'running' ? langOfFile(sum.currentFile) : null;
+    const trBadgeLang = tr && tr.phase === 'running' ? langOfFile(tr.currentFile) : null;
+    const runBadgeOf = (l) => {
+      if (activeDocLang === l) return '';
+      if (sumBadgeLang === l) return '<span class="st st-run" title="AI 总结进行中：当前文件在该语言页签"><i class="st-ico" aria-hidden="true">◐</i></span>';
+      if (trBadgeLang === l) return '<span class="st st-run" title="AI 翻译进行中：当前文件在该语言页签"><i class="st-ico" aria-hidden="true">◐</i></span>';
+      return '';
+    };
+    const filesOfLang = (l, i) => (i === 0 ? flowEval.defaultFiles : flowEval.restFiles.filter((f) => f.lang === l));
+    const langTabsHtml = langs.map((l, i) => {
+      const files = filesOfLang(l, i);
+      const reviewed = files.filter((f) => f.state === 'reviewed').length;
+      return `<button type="button" class="rel-tab${activeDocLang === l ? ' active' : ''}" data-doc-lang="${esc(l)}" role="tab" aria-selected="${activeDocLang === l}" id="bldDocTab_${esc(l)}" aria-controls="bldDocPanel_${esc(l)}"><span data-i18n-skip>${esc(l)} · ${esc(langNameOf(l))}</span>${i === 0 ? '<span>（默认）</span>' : ''}<span class="bld-doc-tab-count${files.length && reviewed === files.length ? ' ok' : ''}">${reviewed}/${files.length}</span>${runBadgeOf(l)}</button>`;
+    }).join('');
+    const langPanelsHtml = langs.map((l, i) => `<ul class="bld-docs-list" role="tabpanel" id="bldDocPanel_${esc(l)}" aria-labelledby="bldDocTab_${esc(l)}"${activeDocLang === l ? '' : ' hidden'}>${filesOfLang(l, i).map(rowOf).join('')}</ul>`).join('');
     // 门禁条：已提交终态 > 全部可提交 > 缺口明细（默认语言 / 剩余语言分组计数 + 完结缺口）
     const total = flowEval.files.length;
     const defTotal = flowEval.defaultFiles.length;
@@ -2698,7 +2716,8 @@ ${langsField}
         ${baselineNote}
         <section class="bld-docs-files" aria-label="发布文档文件列表">
           <div class="bld-docs-files-head"><span>文件（${total} · 默认语言 ${flowEval.defaultReviewedCount}/${defTotal} 已审核 · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核）</span><span>状态</span></div>
-          <ul class="bld-docs-list">${rowsHtml}</ul>
+          <nav class="rel-tabs bld-doc-lang-tabs" role="tablist" aria-label="文档语言页签">${langTabsHtml}</nav>
+          ${langPanelsHtml}
           ${pf.refreshing ? '<div class="bld-docs-loading" role="status">正在读取最新内容…</div>' : ''}
         </section>
         ${gateBar}
@@ -3692,6 +3711,15 @@ ${langsField}
     }
     // REQ-20260921-008 文档编写页按钮：刷新 / AI 总结 / 审查 / 提交；
     // REQ-20260921-012 新增 AI 翻译（默认语言全审后解锁）与整体审查（全部已审核后解锁）
+    // BUG-20260921-013 语言页签切换：激活语言记忆于 pf.docLang（重渲染保持；语言集变化后
+    // 不在新集合内由渲染端回落默认语言）；键盘可达沿用既有页签口径（原生 button）
+    for (const el of view.querySelectorAll('[data-doc-lang]')) {
+      el.addEventListener('click', () => {
+        const pf = state.pf;
+        const lang = el.dataset.docLang;
+        if (pf && lang) { pf.docLang = lang; render(); }
+      });
+    }
     q('[data-pf-refresh]')?.addEventListener('click', refreshDocsPane);
     q('[data-pf-summary]')?.addEventListener('click', startSummary);
     q('[data-pf-translate]')?.addEventListener('click', startTranslation);

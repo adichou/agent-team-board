@@ -1141,6 +1141,13 @@ const EN = {
   '① 默认语言先行': '① default language first',
   '② AI 翻译与审查': '② AI translation & review',
   '③ 整体审查完结': '③ final review completion',
+  // BUG-20260921-013 文件区域语言页签：默认语言标记 / 页签行 aria-label / 运行角标 title
+  //（组头词条「默认语言（◇，文件不带后缀）」「剩余语言（◇ · AI 翻译）」随分组标题行
+  // 删除，已在 EN_DYNAMIC 清理）
+  '（默认）': ' (default)',
+  '文档语言页签': 'Document language tabs',
+  'AI 总结进行中：当前文件在该语言页签': 'AI summary in progress: the current file is in this language tab',
+  'AI 翻译进行中：当前文件在该语言页签': 'AI translation in progress: the current file is in this language tab',
   '进行中': 'In progress',
   '未解锁': 'Locked',
   '文档编写三阶段推进': 'Docs-writing three-stage progress',
@@ -1361,8 +1368,6 @@ const EN_DYNAMIC = {
   '默认语言文档已更新：◇ 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）': 'Default-language docs updated: $1 translated doc(s) need re-translation via AI (baseline changed; related approvals reverted)',
   '尚不可提交：默认语言文档已更新（基准变更），◇ 个翻译文档需重新 AI 翻译并审核': 'Cannot commit yet: default-language docs updated (baseline changed); $1 translated doc(s) need re-translation and review',
   '文件（◇ · 默认语言 ◇/◇ 已审核 · 剩余语言 ◇/◇ 已审核）': 'Files ($1 · default language $2/$3 approved · remaining languages $4/$5 approved)',
-  '默认语言（◇，文件不带后缀）': 'Default language ($1, files without suffix)',
-  '剩余语言（◇ · AI 翻译）': 'Remaining language ($1 · AI translation)',
   '整体审查完结（◇）': 'Final review completion ($1)',
   '默认语言文件已全部审核（◇/◇）': 'All default-language files approved ($1/$2)',
   '剩余语言文件已全部审核（◇/◇）': 'All remaining-language files approved ($1/$2)',

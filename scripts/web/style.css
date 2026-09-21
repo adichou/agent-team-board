@@ -3729,10 +3729,14 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 }
 .bld-docs-stages .bld-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .bld-docs-stages .st { font-size: 12px; }
-/* 文件列表按语言成组：组头行（默认语言组 + 各剩余语言组）弱化呈现，不与文件行争视觉 */
-.bld-doc-group { padding: 6px 2px 2px; border-bottom: 1px dashed var(--border); list-style: none; }
-.bld-doc-group span { font-size: 12px; letter-spacing: 0.02em; }
-.bld-doc-group + .bld-doc-row { border-top: none; }
+/* BUG-20260921-013 文件区域语言页签：每语言一个页签（复用 .rel-tabs/.rel-tab，含窄屏
+   flex-wrap 换行不横向溢出）；审核计数角标弱化呈现（全审绿色强调），运行中 ◐ 角标提示
+   非激活页签的 AI 当前文件（不自动切换页签） */
+.bld-doc-lang-tabs { margin: 8px 0 0; padding-bottom: 6px; }
+.bld-doc-lang-tabs .rel-tab { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; }
+.bld-doc-tab-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bld-doc-tab-count.ok { color: var(--ok, #16a34a); }
+.bld-doc-lang-tabs .st-run .st-ico { margin-right: 0; }
 /* 整体审查完结对核对话框（沿用审查对话框布局骨架） */
 .bld-finalize-wrap { z-index: 60; }
 .bld-finalize-modal { max-width: 640px; }
