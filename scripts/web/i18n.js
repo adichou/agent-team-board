@@ -1114,7 +1114,6 @@ const EN = {
   // REQ-20260921-010：文档清单按语言集动态展开——固定「八个 / 中英」词条随界面更新为
   // 语言集口径（计数词条迁 EN_DYNAMIC，见下方动态词典）。
   'AI 总结': 'AI summary',
-  '文档编写 · 三阶段': 'Docs writing · three stages',
   '刷新': 'Refresh',
   '正在读取…': 'Reading…',
   '正在读取最新内容…': 'Reading the latest content…',
@@ -1137,7 +1136,6 @@ const EN = {
   // REQ-20260921-010 语言集输入框（文档编写页副标题区；默认 cn,en，逗号分隔缩写）
   '语言集': 'Language set',
   '逗号分隔的语言缩写（2–3 个字母，国际规范）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用': 'Comma-separated language codes (2–3 letters, per international standard); the first language is the default (its file has no suffix), the others are KEY_lang.md; press Enter or blur to apply',
-  '第一个为默认语言（不带后缀），其余为 KEY_lang.md；回车 / 失焦应用': 'First is the default language (no suffix), the rest are KEY_lang.md; Enter / blur to apply',
   '保存中…': 'Saving…',
   '语言集不能为空（至少一个语言缩写，如 cn,en）': 'The language set cannot be empty (at least one language code, e.g. cn,en)',
   '提交中…': 'Committing…',
@@ -1189,7 +1187,6 @@ const EN = {
   '进行中': 'In progress',
   '未解锁': 'Locked',
   '文档编写三阶段推进': 'Docs-writing three-stage progress',
-  '先总结审查默认语言四文档，审核完毕后 AI 翻译生成剩余语言文档，逐语言审查，最后整体审查完结后方可提交。': 'Summarize and review the four default-language docs first; once they are all approved, AI-translate the remaining-language docs, review each language, then complete the final review before committing.',
   'AI 翻译提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb translate 逐文件回执，本页自动刷新）': 'AI translation prompt (copied to the clipboard — hand it to an AI Agent; progress is reported per file via atb translate and this page refreshes automatically)',
   'AI 翻译已完成：待翻译文件均进入「已翻译待审核」，等待人工审查。': 'AI translation finished: translated files are now "translated, awaiting review".',
   '复制 AI 翻译提示词到剪贴板：以已审核的默认语言文档为唯一基准，交给 AI Agent 逐文件翻译剩余语言文档（默认语言全部审核后解锁）': 'Copy the AI translation prompt: the approved default-language docs are the sole baseline — hand it to an AI Agent to translate the remaining-language docs file by file (unlocked once the default language is fully approved)',
