@@ -88,6 +88,7 @@ t('L1-4 AI 总结提示词（REQ-20260921-008 更名自 AI 写作）：技术写
     assert.ok(p.includes(s), `提示词应含 ${s}`);
   }
   for (const f of flow.defaultDocFiles().map((x) => x.file)) assert.ok(p.includes(`${f}（`), `提示词应列默认语言 ${f}`);
+  assert.ok(!p.includes('示例'), 'BUG-20260921-005：关联范围不内嵌条目标题');
   assert.ok(!p.includes('README_en.md'), 'REQ-20260921-012：总结清单收窄为默认语言（剩余语言走 AI 翻译）');
   assert.ok(p.includes('summarizing') && p.includes('summarized'), 'REQ-20260921-008：逐文件进度回执指令');
 });

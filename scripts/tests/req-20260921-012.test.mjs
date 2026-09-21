@@ -99,6 +99,7 @@ t('L1-3 提示词：AI 总结仅默认语言 4 文件；AI 翻译以已审核默
     assert.ok(p.includes(`${f}（`), `总结清单含默认语言 ${f}`);
   }
   assert.ok(!p.includes('README_en.md') && !p.includes('_en.md'), '总结清单不再包含剩余语言文件');
+  assert.ok(!p.includes('三阶段流程'), 'BUG-20260921-005：关联范围不内嵌条目标题');
 
   const base = {
     'README.md': '# 默认语言基准内容\n[更新日志](CHANGELOG.md)\n',
@@ -112,6 +113,7 @@ t('L1-3 提示词：AI 总结仅默认语言 4 文件；AI 翻译以已审核默
     atbPath: '/tmp/atb.mjs',
   });
   assert.ok(tp.includes('tr-20260921-010101-cd01'), '翻译提示词带 runId');
+  assert.ok(!tp.includes('三阶段流程'), 'BUG-20260921-005：翻译提示词关联范围同样不内嵌标题');
   assert.ok(tp.includes('# 默认语言基准内容'), '翻译基准（已审核默认语言全文）嵌入提示词');
   assert.ok(tp.includes('唯一') && tp.includes('基准'), '声明唯一基准约束');
   for (const f of ['README_en.md', 'CHANGELOG_en.md', 'FEATURES_en.md', 'AGENTS_en.md']) {
