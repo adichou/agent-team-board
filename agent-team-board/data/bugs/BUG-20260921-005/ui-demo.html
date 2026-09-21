@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260921-005 演示 · AI 总结提示词精简（文档编写页）</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #d8dde3; --text: #1f2430; --muted: #6b7480;
+    --accent: #2563eb; --accent-soft: #e3ebfd; --ok: #16794c; --ok-soft: #e2f3ea;
+    --err: #b3261e; --err-soft: #fbe9e7; --run-soft: #fdf1dc; --run: #9a6700;
+    --code-bg: #f0f2f5; --shadow: 0 1px 3px rgba(16, 24, 40, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --panel: #1d2129; --border: #343b46; --text: #e6e9ef; --muted: #9aa3b0;
+      --accent: #7aa5f8; --accent-soft: #22304d; --ok: #6fd0a0; --ok-soft: #1d3a2c;
+      --err: #f2a49e; --err-soft: #44211e; --run-soft: #3d3116; --run: #e0b45c;
+      --code-bg: #262b34; --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  header.demo h1 { font-size: 18px; margin: 0 0 4px; }
+  header.demo p.sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+
+  /* 切换：缺陷现象 / 修复后 */
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); box-shadow: var(--shadow); }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 8px 18px; font-size: 14px; cursor: pointer; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { .seg button.active { color: #10131a; } }
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .demo-bar .hint { color: var(--muted); font-size: 13px; }
+  label.sim { font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+  /* 页面骨架（模拟看板「构建与发布 → 文档编写」页） */
+  .page { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+  .page-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  .page-head .ver { font-weight: 600; }
+  .page-head .meta { color: var(--muted); font-size: 13px; }
+  .stages { display: flex; gap: 6px; padding: 12px 18px 0; font-size: 12.5px; flex-wrap: wrap; }
+  .stage { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .stage.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .actions { padding: 14px 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 7px 16px; font-size: 14px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .btn.primary { color: #10131a; } }
+  .btn.small { padding: 4px 12px; font-size: 13px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  .status-line { padding: 0 18px; font-size: 13px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; padding: 1px 8px; font-size: 12.5px; }
+  .badge.run { background: var(--run-soft); color: var(--run); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.err { background: var(--err-soft); color: var(--err); }
+  .spinner { width: 12px; height: 12px; border: 2px solid var(--run); border-top-color: transparent; border-radius: 50%; display: inline-block; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 空态 / 加载 / 失败 */
+  .empty { margin: 14px 18px 20px; border: 1px dashed var(--border); border-radius: 8px; padding: 22px; text-align: center; color: var(--muted); }
+  .loading { margin: 14px 18px; display: flex; gap: 8px; align-items: center; color: var(--muted); }
+  .alert-err { margin: 14px 18px; background: var(--err-soft); color: var(--err); border-radius: 8px; padding: 10px 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+  /* 提示词预览框 */
+  details.prompt-box { margin: 14px 18px 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); }
+  details.prompt-box summary { cursor: pointer; padding: 10px 14px; font-weight: 600; font-size: 13.5px; }
+  .prompt-inner { padding: 0 14px 14px; }
+  textarea.prompt { width: 100%; min-height: 260px; resize: vertical; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; padding: 10px; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+  .prompt-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .stats { font-size: 12.5px; color: var(--muted); }
+  .stats b { color: var(--text); }
+
+  /* 文件列表（简化示意） */
+  .files { margin: 0 18px 18px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .files .row { display: flex; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .files .row:last-child { border-bottom: 0; }
+  .files .row code { background: var(--code-bg); border-radius: 4px; padding: 0 5px; }
+  .gate { margin: 0 18px 18px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; color: var(--muted); }
+
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); padding: 8px 18px; border-radius: 999px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .25s ease; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  footer.demo { margin-top: 16px; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="demo">
+    <h1>BUG-20260921-005 · AI 总结提示词精简（交互演示）</h1>
+    <p class="sub">模拟看板「构建与发布 → 文档编写」页的 AI 总结提示词预览：切换「缺陷现象 / 修复后」对比提示词体量与内容形态。演示数据为示意（版本 BLD-20260920-001 实际关联 341 条：REQ 165 / BUG 176），修复后形态以开发实现为准。</p>
+  </header>
+
+  <div class="demo-bar">
+    <div class="seg" role="tablist" aria-label="对比模式">
+      <button type="button" id="modeBug" class="active" role="tab" aria-selected="true">缺陷现象</button>
+      <button type="button" id="modeFixed" role="tab" aria-selected="false">修复后</button>
+    </div>
+    <label class="sim"><input type="checkbox" id="simFail"> 模拟启动失败（下次点击「AI 总结」时接口报错）</label>
+    <button type="button" class="btn small" id="reset">重置演示</button>
+    <span class="hint" id="modeHint"></span>
+  </div>
+
+  <div class="page">
+    <div class="page-head">
+      <span class="ver">BLD-20260920-001</span>
+      <span class="meta">关联条目 341（需求 165 / Bug 176）· 语言集 cn,en</span>
+    </div>
+    <div class="stages">
+      <span class="stage">① 版本计划</span><span class="stage">② 关联条目与提交</span><span class="stage on">③ 文档编写</span><span class="stage">④ 合并入 main</span><span class="stage">⑤ 正式发布</span>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="startBtn">AI 总结</button>
+      <button type="button" class="btn" id="translateBtn" title="AI 翻译同样精简，本演示以 AI 总结为例">AI 翻译（同样精简，示意）</button>
+    </div>
+
+    <div class="status-line" id="statusLine"></div>
+    <div id="mount"></div>
+
+    <div class="files">
+      <div class="row"><span><code>README.md</code>（中文 / 默认语言）</span><span class="badge" id="f1">未总结</span></div>
+      <div class="row"><span><code>CHANGELOG.md</code>（中文 / 默认语言）</span><span class="badge" id="f2">未总结</span></div>
+      <div class="row"><span><code>FEATURES.md</code>（中文 / 默认语言）</span><span class="badge" id="f3">未总结</span></div>
+      <div class="row"><span><code>AGENTS.md</code>（中文 / 默认语言）</span><span class="badge" id="f4">未总结</span></div>
+    </div>
+    <div class="gate">提交门禁：默认语言 0/4 · 剩余语言 0/4 已审核 —— 提交禁用，尚缺全部文件（未总结）。</div>
+  </div>
+
+  <footer class="demo">演示范围：提示词预览框内容与体量对比、启动加载 / 空 / 失败状态、复制反馈；页面其余区域为静态示意，不代表真实数据。</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 演示数据（示意：由 341 条版本记录生成条目清单） ----------
+  var REQ_TITLES = [
+    '看板页面自适应布局，铺满整个窗口',
+    '根据当前会话所在项目自动切换看板项目',
+    'File Board：浏览项目相关文件夹并支持语法高亮',
+    '/dev 支持 loop：连续开发直到所有已接受条目完成',
+    '看板卡片一键复制 REQ/BUG 单号',
+    '详情页支持上一条/下一条快速浏览',
+    '提供 CI Board，支持常见项目的构建自动化命令',
+    '为看板增加 Electron 桌面壳（内嵌现有 Node 服务）',
+    '一键派发升级：深链拉起 codex 新会话预填提示词',
+    '看板页面重新设计：竖屏操作不友好',
+    '需求登记时强制写清 UI 与交互设计',
+    '认领者统一显示会话名',
+    '发布文档三阶段：总结 → 翻译 → 审查'
+  ];
+  var BUG_TITLES = [
+    '顶栏「看板/文件」按钮在窄窗口遮挡路径文字',
+    'File Board 文件树与深色主题割裂且缺图标/展开箭头',
+    '守卫 Bash 模式误报：命令文本提及看板目录即被拦',
+    '认领锁永不清理，源码守卫被长期放行',
+    '文件视图暗色模式下滚动条为亮白色，与主题割裂',
+    'atb claim 成功提示文案残留「待对齐」措辞',
+    'default-port 测试在 8888 被占用时必失败',
+    'Electron 壳窗口交通灯与看板顶栏文字重叠'
+  ];
+  function hash(i) { var s = (0x9e3779b9 * (i + 7) >>> 0).toString(16); while (s.length < 12) s = '0' + s; return s.slice(0, 12); }
+  function day(i) { var d = 29 + (i % 23); return '202608' + (d <= 31 ? String(d).padStart(2, '0') : String(d - 31).padStart(2, '0')); }
+  var items = [];
+  for (var i = 0; i < 165; i++) items.push({ type: 'REQ', id: 'REQ-' + day(i) + '-' + String((i % 20) + 1).padStart(3, '0'), commit: hash(i), title: REQ_TITLES[i % REQ_TITLES.length] });
+  for (var j = 0; j < 176; j++) items.push({ type: 'BUG', id: 'BUG-' + day(j + 5) + '-' + String((j % 20) + 1).padStart(3, '0'), commit: hash(j + 200), title: BUG_TITLES[j % BUG_TITLES.length] });
+
+  var RUN_ID = 'sum-20260921-211047-5d52';
+  var PROJECT_ROOT = '/Users/demo/src/agent-team-board';
+
+  // ---------- 提示词装配（对照 scripts/lib/publish-flow.mjs 结构） ----------
+  function promptBuggy() {
+    var lines = [];
+    lines.push('你是技术写作人员，以子代理身份完成「BLD-20260920-001」（版本号 20260920-001）的发布文档 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。');
+    lines.push('');
+    lines.push('项目路径：' + PROJECT_ROOT);
+    lines.push('发布计划号：BLD-20260920-001（版本号 20260920-001）');
+    lines.push('执行编号：' + RUN_ID);
+    lines.push('关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：');
+    items.forEach(function (it) { lines.push('- ' + it.id + '（commit ' + it.commit + '）' + it.title); });
+    lines.push('');
+    lines.push('本阶段只总结默认语言（语言集首语言 cn）的 4 个文档（4 类 × 1）；语言集 cn,en 的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围：');
+    ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md'].forEach(function (f) { lines.push('- ' + f + '（中文 / ' + f.replace('.md', '') + '）'); });
+    lines.push('');
+    lines.push('逐文件进度回执（在项目根执行；atb 指 node scripts/atb.mjs，下同）：');
+    lines.push('1. 开始总结某文件：atb summary file ' + RUN_ID + ' --file <文件名> --state summarizing');
+    lines.push('2. 该文件总结完成：atb summary file ' + RUN_ID + ' --file <文件名> --state summarized');
+    lines.push('3. 全部完成：atb summary done ' + RUN_ID + ' --summary "<一两句要点>"');
+    lines.push('4. 中断 / 无法完成：atb summary fail ' + RUN_ID + ' --reason "<短句原因>"');
+    lines.push('已审核（reviewed）的文件跳过不再总结；不修改上述 4 个文档以外的任何文件。');
+    lines.push('');
+    lines.push('写作约束：');
+    lines.push('- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。');
+    lines.push('- README 按语言链接同语言 CHANGELOG 与 FEATURES（README.md → CHANGELOG.md / FEATURES.md），链接必须真实可达。');
+    lines.push('- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。');
+    lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
+    lines.push('- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。');
+    return lines.join('\n');
+  }
+
+  function promptFixed() {
+    var reqs = items.filter(function (it) { return it.type === 'REQ'; });
+    var bugs = items.filter(function (it) { return it.type === 'BUG'; });
+    var lines = [];
+    lines.push('你是技术写作人员，以子代理身份完成「BLD-20260920-001」（版本号 20260920-001）的发布文档 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。');
+    lines.push('');
+    lines.push('项目路径：' + PROJECT_ROOT);
+    lines.push('发布计划号：BLD-20260920-001（版本号 20260920-001）');
+    lines.push('执行编号：' + RUN_ID);
+    lines.push('关联范围（本版共 341 条：需求 165 项、Bug 176 项；提示词不罗列条目标题，写作前按下述指引自行读取）：');
+    lines.push('- 需求（REQ，共 165 项）：只列编号不带标题；请逐条读取条目说明文件了解语境——路径规则 ' + PROJECT_ROOT + '/agent-team-board/data/requirements/<REQ-ID>/（README.md 为需求描述与验收标准，design.md 为方案）。编号清单：');
+    var ids = reqs.map(function (it) { return it.id; });
+    for (var k = 0; k < ids.length; k += 8) lines.push('  ' + ids.slice(k, k + 8).join('、'));
+    lines.push('- Bug（BUG，共 ' + bugs.length + ' 项）：不逐条读取、不罗列标题，文档中统一总结为「修复了若干 bug」即可。');
+    lines.push('');
+    lines.push('本阶段只总结默认语言（语言集首语言 cn）的 4 个文档（4 类 × 1）；语言集 cn,en 的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围：');
+    ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md'].forEach(function (f) { lines.push('- ' + f + '（中文 / ' + f.replace('.md', '') + '）'); });
+    lines.push('');
+    lines.push('逐文件进度回执（在项目根执行；atb 指 node scripts/atb.mjs，下同）：');
+    lines.push('1. 开始总结某文件：atb summary file ' + RUN_ID + ' --file <文件名> --state summarizing');
+    lines.push('2. 该文件总结完成：atb summary file ' + RUN_ID + ' --file <文件名> --state summarized');
+    lines.push('3. 全部完成：atb summary done ' + RUN_ID + ' --summary "<一两句要点>"');
+    lines.push('4. 中断 / 无法完成：atb summary fail ' + RUN_ID + ' --reason "<短句原因>"');
+    lines.push('已审核（reviewed）的文件跳过不再总结；不修改上述 4 个文档以外的任何文件。');
+    lines.push('');
+    lines.push('写作约束：');
+    lines.push('- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。');
+    lines.push('- README 按语言链接同语言 CHANGELOG 与 FEATURES（README.md → CHANGELOG.md / FEATURES.md），链接必须真实可达。');
+    lines.push('- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。');
+    lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
+    lines.push('- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。');
+    return lines.join('\n');
+  }
+
+  var PROMPTS = { bug: promptBuggy(), fixed: promptFixed() };
+  var MODE_HINTS = {
+    bug: '当前：缺陷现象 —— 关联范围逐条内嵌 341 行条目标题（165 需求 + 176 Bug），提示词体量庞大。',
+    fixed: '当前：修复后 —— REQ 仅列编号并引导子代理读取条目文件；BUG 汇总为「修复了若干 bug」一句，标题全部不再内嵌。'
+  };
+
+  // ---------- 状态与渲染 ----------
+  var mode = 'bug';       // bug | fixed
+  var phase = 'empty';    // empty | loading | ready | error
+  var mount = document.getElementById('mount');
+  var statusLine = document.getElementById('statusLine');
+  var startBtn = document.getElementById('startBtn');
+
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('show'); }, 1600);
+  }
+  function render() {
+    document.getElementById('modeHint').textContent = MODE_HINTS[mode];
+    startBtn.disabled = (phase === 'loading');
+    if (phase === 'empty') {
+      statusLine.innerHTML = '';
+      mount.innerHTML = '<div class="empty">（尚未启动 AI 总结——点击上方「AI 总结」生成提示词）</div>';
+      return;
+    }
+    if (phase === 'loading') {
+      statusLine.innerHTML = '<span class="badge run"><span class="spinner"></span> 正在启动 AI 总结（创建 run、装配提示词）…</span>';
+      mount.innerHTML = '<div class="loading"><span class="spinner"></span> 正在请求 /api/build/docs-summary/start …</div>';
+      return;
+    }
+    if (phase === 'error') {
+      statusLine.innerHTML = '<span class="badge err">启动失败</span>';
+      mount.innerHTML = '<div class="alert-err"><span>启动失败：POST /api/build/docs-summary/start 500 —— 模拟接口异常（演示失败态）。</span><button type="button" class="btn small" id="retry">重试</button></div>';
+      document.getElementById('retry').addEventListener('click', start);
+      return;
+    }
+    // phase === 'ready'
+    var text = PROMPTS[mode];
+    var chars = text.length;
+    var scopeLines = text.split('\n').filter(function (l) { return /^- (REQ|BUG)-/.test(l); }).length;
+    var titleLines = text.split('\n').filter(function (l) { return /^- (REQ|BUG)-.*（commit [0-9a-f]+）.+/.test(l); }).length;
+    statusLine.innerHTML = '<span class="badge ok">AI 总结已启动（' + RUN_ID + '）</span>';
+    mount.innerHTML =
+      '<details class="prompt-box" open>' +
+      '<summary>AI 总结提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb summary 逐文件回执，本页自动刷新）</summary>' +
+      '<div class="prompt-inner">' +
+      '<textarea class="prompt" id="promptText" readonly>' + esc(text) + '</textarea>' +
+      '<div class="prompt-actions">' +
+      '<button type="button" class="btn small" id="copyBtn">复制提示词</button>' +
+      '<span class="stats">提示词 <b>' + chars.toLocaleString() + '</b> 字符 · 内嵌条目标题行 <b>' + titleLines + '</b> 行' +
+      (mode === 'bug' ? '（关联范围共 341 条全部展开）' : '（REQ 仅编号不带标题；BUG 不展开，汇总一句）') + '</span>' +
+      '</div></div></details>';
+    document.getElementById('copyBtn').addEventListener('click', function () { copyText(text); });
+  }
+
+  function copyText(text) {
+    var done = function (ok) { toast(ok ? '已复制提示词到剪贴板' : '复制失败：请手动全选 textarea 复制'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { fallbackCopy(text, done); });
+    } else { fallbackCopy(text, done); }
+  }
+  function fallbackCopy(text, done) {
+    try {
+      var ta = document.getElementById('promptText');
+      ta.focus(); ta.select();
+      done(document.execCommand('copy'));
+    } catch (e) { done(false); }
+  }
+
+  function start() {
+    phase = 'loading'; render();
+    setTimeout(function () {
+      if (document.getElementById('simFail').checked) {
+        phase = 'error'; render();
+        document.getElementById('simFail').checked = false;
+        return;
+      }
+      phase = 'ready'; render();
+      copyText(PROMPTS[mode]);
+    }, 900);
+  }
+
+  startBtn.addEventListener('click', start);
+  document.getElementById('translateBtn').addEventListener('click', function () {
+    toast('AI 翻译提示词同样精简（同一「关联范围」装配口径），本演示以 AI 总结为例');
+  });
+  document.getElementById('modeBug').addEventListener('click', function () { setMode('bug'); });
+  document.getElementById('modeFixed').addEventListener('click', function () { setMode('fixed'); });
+  function setMode(m) {
+    if (mode === m) return;
+    mode = m;
+    document.getElementById('modeBug').classList.toggle('active', m === 'bug');
+    document.getElementById('modeFixed').classList.toggle('active', m === 'fixed');
+    document.getElementById('modeBug').setAttribute('aria-selected', m === 'bug');
+    document.getElementById('modeFixed').setAttribute('aria-selected', m === 'fixed');
+    render();
+    if (phase === 'ready') toast('已切换为「' + (m === 'bug' ? '缺陷现象' : '修复后') + '」提示词形态');
+  }
+  document.getElementById('reset').addEventListener('click', function () { phase = 'empty'; render(); toast('已重置演示'); });
+
+  render();
+})();
+</script>
+</body>
+</html>
