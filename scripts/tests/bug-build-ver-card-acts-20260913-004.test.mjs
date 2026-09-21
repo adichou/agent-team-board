@@ -78,23 +78,36 @@ function setup({ versions = [ver('BLD-A', 'v1.0'), ver('BLD-B', 'v2.0 后备')],
   };
 }
 
-t('B1 每张版本卡片内渲染「AI 完善」与「合并入 main」两个行内按钮（aria-label/title 齐备，未选中也有）', async () => {
+// 选中版本并落概况步，返回详情区 HTML（REQ-20260921-013：AI 完善入口迁入概况内容区）
+const detailAt = (h, id) => {
+  h.run(`window.ATBBuild.selectVersion(${JSON.stringify(id)}); window.ATBBuild.setStep('plan')`);
+  const inner = h.inner();
+  const i = inner.indexOf('rel-detail');
+  assert.ok(i >= 0, '应渲染右侧详情');
+  return inner.slice(i);
+};
+
+t('B1 版本卡片保留「合并入 main」等行内按钮（aria-label/title 齐备，未选中也有）；「AI 完善」已迁入详情概况页签（REQ-20260921-013）', async () => {
   const h = await setup();
   await h.enter();
   const inner = h.inner();
+  const cards = inner.slice(inner.indexOf('rel-list'), inner.indexOf('rel-detail'));
+  assert.ok(!cards.includes('data-ver-answer'), '卡片不再渲染 AI 完善（迁移后无重复入口）');
   for (const id of ['BLD-A', 'BLD-B']) {
-    assert.match(inner, new RegExp(`data-ver-answer="${id}"`), `${id} 卡片应有 AI 完善按钮`);
-    assert.match(inner, new RegExp(`data-ver-merge="${id}"`), `${id} 卡片应有合并入 main 按钮`);
-    assert.match(inner, new RegExp(`aria-label="AI 完善 ${id}"`), 'AI 完善 aria-label 带版本号');
-    assert.match(inner, new RegExp(`aria-label="合并入 main ${id}"`), '合并 aria-label 带版本号');
+    assert.match(cards, new RegExp(`data-ver-merge="${id}"`), `${id} 卡片应有合并入 main 按钮`);
+    assert.match(cards, new RegExp(`aria-label="合并入 main ${id}"`), '合并 aria-label 带版本号');
   }
-  assert.match(inner, /title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'AI 完善 title 说明动作');
-  assert.match(inner, />AI 完善<\/button>/, '按钮文案为「AI 完善」');
-  assert.match(inner, />合并入 main<\/button>/, '合并按钮文案');
+  // 详情概况：唯一 AI 完善入口绑定选中版本（enter 后自动选中 BLD-A）
+  const detail = detailAt(h, 'BLD-A');
+  assert.match(detail, /data-ver-answer="BLD-A"/, '概况内容区有 AI 完善（绑定当前版本）');
+  assert.match(detail, /aria-label="AI 完善 BLD-A"/, 'AI 完善 aria-label 带版本号');
+  assert.match(detail, /title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'AI 完善 title 说明动作');
+  assert.match(detail, />AI 完善<\/button>/, '按钮文案为「AI 完善」');
   assert.doesNotMatch(inner, /提示词与回答回填/, '旧文案不再出现');
+  assert.match(cards, />合并入 main<\/button>/, '合并按钮文案');
 });
 
-t('B2 状态口径逐卡继承：merging 两键禁用；merged 未推送两键可用（BUG-20260920-005 基准后移）；推送完成后两键禁用并说明已正式发布；failed 显「重试合并入 main」', async () => {
+t('B2 状态口径逐卡继承：合并键 merging 禁用；merged 未推送可用（BUG-20260920-005 基准后移）；推送完成后禁用并说明已正式发布；failed 显「重试合并入 main」；AI 完善锁定口径随入口迁入概况保持（REQ-20260921-013）', async () => {
   const h = await setup({ versions: [
     ver('BLD-DRAFT', 'd1', 'draft'),
     ver('BLD-MERGING', 'd2', 'merging'),
@@ -104,24 +117,24 @@ t('B2 状态口径逐卡继承：merging 两键禁用；merged 未推送两键�
   ] });
   await h.enter();
   const inner = h.inner();
-  assert.match(inner, /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 的 AI 完善可用（无 disabled）');
   assert.match(inner, /data-ver-merge="BLD-DRAFT" aria-label/, 'draft 的合并键可用');
-  assert.match(inner, /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging 的 AI 完善禁用并提示');
   assert.match(inner, /data-ver-merge="BLD-MERGING" aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 的合并键禁用并提示');
   // BUG-20260920-005：merged（已合并未推送）两类键放开（补关联后可重开合并 / AI 完善）
-  assert.match(inner, /data-ver-answer="BLD-MERGED"[^>]*title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'merged 未推送的 AI 完善带可用 title');
   assert.match(inner, /data-ver-merge="BLD-MERGED" aria-label/, 'merged 未推送的合并键可用（增量重开合并）');
   assert.doesNotMatch(inner, /data-ver-merge="BLD-MERGED" disabled/, 'merged 未推送的合并不再禁用');
   // BUG-20260920-005：推送完成（正式发布）后两键禁用，title 说明已正式发布
   // BUG-20260920-006：合并键禁用从 HTML disabled 改 aria-disabled（点击可捕获反馈），title 升为完整归因
-  assert.match(inner, /data-ver-answer="BLD-PUSHED" disabled title="已正式发布，不允许再 AI 完善"/, '推送完成后的 AI 完善禁用且 title 说明');
   assert.match(inner, /data-ver-merge="BLD-PUSHED" aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '推送完成后的合并键禁用且 title 说明');
   assert.match(inner, /data-ver-merge="BLD-FAILED" aria-label="重试合并入 main BLD-FAILED"/, 'failed 的合并键 aria 口径');
   assert.match(inner, />重试合并入 main<\/button>/, 'failed 的合并键文案');
-  // 回归：merging 详情提示保留
-  h.run(`window.ATBBuild.restoreView({ tab: 'versions', selVerId: 'BLD-MERGING' })`);
-  await h.run(`window.ATBBuild.refresh()`);
-  assert.match(h.inner(), /合并中，请稍候……/, 'merging 详情提示不回归');
+  // AI 完善锁定口径迁入详情概况后逐态核验（口径不变，位置变）
+  assert.match(detailAt(h, 'BLD-DRAFT'), /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 的 AI 完善可用（无 disabled）');
+  assert.match(detailAt(h, 'BLD-MERGING'), /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging 的 AI 完善禁用并提示');
+  assert.match(detailAt(h, 'BLD-MERGED'), /data-ver-answer="BLD-MERGED"[^>]*title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'merged 未推送的 AI 完善带可用 title');
+  assert.match(detailAt(h, 'BLD-PUSHED'), /data-ver-answer="BLD-PUSHED" disabled title="已正式发布，不允许再 AI 完善"/, '推送完成后的 AI 完善禁用且 title 说明');
+  // 回归：merging 详情提示保留（概况步内容区）
+  const mergingDetail = detailAt(h, 'BLD-MERGING');
+  assert.match(mergingDetail, /合并中，请稍候……/, 'merging 详情提示不回归');
 });
 
 t('B3 移动而非复制：详情底部不再渲染操作按钮（无 rel-acts / bldAnswerBtn / bldMergeBtn），详情其余区块不受影响', async () => {
@@ -137,18 +150,18 @@ t('B3 移动而非复制：详情底部不再渲染操作按钮（无 rel-acts /
   assert.match(h.inner(), /bldAddItem/, '「关联条目与提交」步「＋ 添加条目」保留');
 });
 
-t('B4 卡片按钮操作所在卡片版本且不改变选中：对非选中版本 B 开弹窗，内容对 B，选中态保持 A', async () => {
+t('B4 按目标版本打开且不改变选中：openAnswerModal 带参对非选中版本 B 开弹窗内容对 B，选中态保持 A（REQ-20260921-013 后入口绑定选中版本，带参直调口径保留）', async () => {
   const h = await setup();
   await h.enter(); // selVerId 自动为 BLD-A
   h.run(`window.ATBBuild.openAnswerModal('BLD-B')`);
   let inner = h.inner();
-  assert.match(inner, /AI 完善（BLD-B）/, '弹窗标题对应卡片版本 B');
+  assert.match(inner, /AI 完善（BLD-B）/, '弹窗标题对应目标版本 B');
   assert.match(inner, /v2\.0 后备/, '提示词内容为 B 的名称/描述');
-  assert.doesNotMatch(inner, /rel-card sel" data-ver-id="BLD-B"/, 'B 卡片未因点按钮而选中');
+  assert.doesNotMatch(inner, /rel-card sel" data-ver-id="BLD-B"/, 'B 卡片未因打开弹窗而选中');
   assert.match(inner, /rel-card sel" data-ver-id="BLD-A"/, 'A 选中态保持');
   h.run(`window.ATBBuild.openMergeConfirm('BLD-B')`);
   inner = h.inner();
-  assert.match(inner, /合并入 main 确认（BLD-B）/, '合并确认框对应卡片版本 B');
+  assert.match(inner, /合并入 main 确认（BLD-B）/, '合并确认框对应目标版本 B');
 });
 
 t('B5 无参调用兼容：无参对应当前选中版本；带参但版本不存在时不弹窗', async () => {
