@@ -230,7 +230,8 @@ export async function refreezeProductRun({ dataDir, projectRoot, runId, exec }) 
   const v = await prelGit.verifyItemsOnMain(projectRoot, exec, run.frozen.items, mainSha, run.frozen.replays);
   if (!v.ok) throw new AtbError(`重新冻结失败：计划条目 ${v.missing.join('、')} 不在当前 ${mainBranch} 历史内（含重放证据核对）`);
   const extras = await prelGit.collectExtraCommits(projectRoot, exec, {
-    mainSha, itemCommits: run.frozen.items.map((x) => x.commit), replayCommits: (run.frozen.replays || []).map((r) => r.replayed), bldId: run.bldId,
+    // BUG-20260921-015：一条目多提交全量参与额外提交剔除（旧快照 commit 兜底）
+    mainSha, itemCommits: run.frozen.items.flatMap((x) => ((x.commits && x.commits.length) ? x.commits : [x.commit])), replayCommits: (run.frozen.replays || []).map((r) => r.replayed), bldId: run.bldId,
   });
   return store.mutateProductRun(dataDir, runId, (r) => {
     r.frozen.mainBranch = mainBranch;

@@ -71,6 +71,16 @@ function defaultName() {
 }
 
 // 归一化 + 校验条目（itemId 格式 / commit 形态 / 去重）。title 可选（看板带入展示用）。
+// BUG-20260921-015：一条目可关联多个提交——入参支持 commit（单提交，向后兼容）或
+// commits（数组，至少一个）；落盘形态 commits 数组 + commit 别名（= 首个提交，旧读取方
+// 向后兼容）。同一条目内提交按 hash 去重。
+export function commitsOf(it) {
+  const arr = Array.isArray(it?.commits) && it.commits.length
+    ? it.commits
+    : (it?.commit ? [it.commit] : []);
+  return [...new Set(arr.map((h) => String(h || '').trim().toLowerCase()).filter(Boolean))];
+}
+
 function normalizeItems(items, existingIds = new Set()) {
   if (!Array.isArray(items) || !items.length) {
     throw new AtbError('版本至少关联一个条目（需求单 / Bug 单）');
@@ -78,20 +88,31 @@ function normalizeItems(items, existingIds = new Set()) {
   const out = [];
   for (const raw of items) {
     const itemId = String(raw?.itemId || '').trim();
-    const commit = String(raw?.commit || '').trim().toLowerCase();
     if (!ITEM_ID_RE.test(itemId)) throw new AtbError(`条目编号不合法：${itemId || '（空）'}`);
-    if (!HASH_RE.test(commit)) throw new AtbError(`${itemId} 缺少有效的关联 commit（40 位提交号）`);
+    const commits = commitsOf(raw);
+    if (!commits.length || commits.some((c) => !HASH_RE.test(c))) {
+      throw new AtbError(`${itemId} 缺少有效的关联 commit（40 位提交号）`);
+    }
     if (existingIds.has(itemId)) throw new AtbError(`${itemId} 已在本版本中，不可重复添加`);
     if (out.some((x) => x.itemId === itemId)) throw new AtbError(`${itemId} 重复提交`);
     out.push({
       itemId,
-      commit,
+      commit: commits[0],
+      commits,
       title: String(raw?.title || '').slice(0, 200),
       mergedAt: raw?.mergedAt ?? null,
       mergeError: raw?.mergeError ?? null,
     });
   }
   return out;
+}
+
+// BUG-20260921-015 读路径迁移：旧单提交数据（items[].commit，无 commits）读取时补全
+// commits 数组（[commit]），不落盘、不抛错——旧版本数据零迁移即可在新模型下工作；任一
+// 后续写操作（saveInfo / addItems / appendItemCommits …）都会以新形态整体写回。
+function migrateItems(items) {
+  if (!Array.isArray(items)) return items;
+  return items.map((it) => (it && Array.isArray(it.commits) && it.commits.length ? it : { ...it, commits: commitsOf(it) }));
 }
 
 function validateInfo({ name, description }) {
@@ -110,16 +131,22 @@ export function listVersions(dataDir) {
   for (const name of names) {
     if (!/^BLD-\d{8}-\d{3}$/.test(name)) continue;
     const v = readJsonSafe(path.join(root, name, 'version.json'));
-    if (v) list.push(v);
+    if (v) list.push(migrateVersion(v));
   }
   // 创建倒序（同日编号越大越新；跨日按日期戳倒序）
   return list.sort((a, b) => stampOf(b.id).localeCompare(stampOf(a.id)));
 }
 
+// BUG-20260921-015：读取归一（items 迁移出 commits 数组），写操作整体写回新形态。
+function migrateVersion(v) {
+  if (!v || !Array.isArray(v.items)) return v;
+  return { ...v, items: migrateItems(v.items) };
+}
+
 export function readVersion(dataDir, id) {
   const v = readJsonSafe(path.join(versionsRoot(dataDir), String(id || ''), 'version.json'));
   if (!v) throw new AtbError(`找不到版本计划：${id}`);
-  return v;
+  return migrateVersion(v);
 }
 
 // BUG-20260914-004：跨版本占用索引——itemId → 所在版本 id（任一状态：draft/merging/merged/failed
@@ -229,7 +256,9 @@ export function removeItems(dataDir, id, itemIds, { by = 'board' } = {}) {
   return v;
 }
 
-// 换选条目 commit（BUG-20260920-005：合并中与推送完成后锁定，merged 未推送仍可修正关联）
+// 换选条目 commit（BUG-20260920-005：合并中与推送完成后锁定，merged 未推送仍可修正关联）。
+// BUG-20260921-015：换选 = 整体替换该条目的提交集合（单提交语义，与旧口径一致）；补齐
+// 多提交场景走 appendItemCommits（保留原有关联追加）。
 export function setItemCommit(dataDir, id, itemId, commit, { by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   assertItemsEditable(v);
@@ -239,11 +268,43 @@ export function setItemCommit(dataDir, id, itemId, commit, { by = 'board' } = {}
   if (!HASH_RE.test(h)) throw new AtbError(`${itemId} 缺少有效的关联 commit（40 位提交号）`);
   const prev = it.commit;
   it.commit = h;
+  it.commits = [h];
   it.mergedAt = null;
   it.mergeError = null;
   v.by = by;
   // REQ-20260920-003：更换 commit → 发布范围变化，旧文档提交标识失效（需重新核对）
   if (prev !== h) markDocsScopeStale(dataDir, v, `条目 ${it.itemId} 更换了关联提交`);
+  return v;
+}
+
+// BUG-20260921-015 补入条目其余依赖提交：additions = [{ itemId, commits: [hash…] }]，仅适用
+// 已在本版本的条目（新条目走 addItems）。保留条目原有关联与顺序，追加未持有的提交（按
+// hash 去重，幂等）；实际补入时该条目需重新合并（mergedAt / mergeError 复位）；发布范围
+// 变化联动 markDocsScopeStale（文档需重新核对 / 提交）。锁定口径与 addItems 一致。
+export function appendItemCommits(dataDir, id, additions, { by = 'board' } = {}) {
+  const v = readVersion(dataDir, id);
+  assertItemsEditable(v);
+  const rows = Array.isArray(additions) ? additions : [];
+  if (!rows.length) return v;
+  const appended = [];
+  for (const row of rows) {
+    const it = v.items.find((x) => x.itemId === String(row?.itemId || ''));
+    if (!it) throw new AtbError(`${row?.itemId || '（空）'} 不在本版本中`);
+    const have = new Set(commitsOf(it));
+    const add = commitsOf(row).filter((h) => {
+      if (!HASH_RE.test(h)) throw new AtbError(`${it.itemId} 缺少有效的关联 commit（40 位提交号）`);
+      return !have.has(h);
+    });
+    if (!add.length) continue;
+    it.commits = [...have, ...add];
+    it.mergedAt = null; // 条目提交集合变化 → 需重新合并（已并入提交幂等记成功）
+    it.mergeError = null;
+    appended.push({ itemId: it.itemId, commits: add });
+  }
+  if (!appended.length) return v;
+  v.by = by;
+  // REQ-20260920-003：补入提交 → 发布范围变化，旧文档提交标识失效（需重新核对）
+  markDocsScopeStale(dataDir, v, `补入依赖提交：${appended.map((x) => `${x.itemId}（+${x.commits.length}）`).join('、')}`);
   return v;
 }
 
@@ -269,12 +330,20 @@ export function beginMerge(dataDir, id, { baseBranch = null, by = 'board' } = {}
 }
 
 // 逐条目结果落盘：全成功 → merged；任一失败 → failed（成功条目保持已合并，重试只补未合并）。
+// BUG-20260921-015：results 按（itemId, commit）逐提交一行——同一条目多行结果聚合判定：
+// 任一行失败即条目失败（保留首个失败原因），全部成功才记条目已合并；无结果的条目保持
+// 原状（重试新增 / 中止未覆盖）。
 // REQ-20260915-002：可选 mainSha 记录合并完成后的 main 分支头（新计划作为冻结证据；
 // 旧计划无此字段时按「候选 + 额外提交」口径展示，不用时间戳或登记时 tip 代替冻结证据）。
 export function finishMerge(dataDir, id, { results = [], mainSha = null, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status !== 'merging') throw new BuildConflictError('版本不在合并中，无法写入合并结果');
-  const byItem = new Map(results.map((r) => [String(r.itemId), r]));
+  const byItem = new Map();
+  for (const r of Array.isArray(results) ? results : []) {
+    const key = String(r.itemId);
+    const prev = byItem.get(key);
+    byItem.set(key, { ok: (prev ? prev.ok : true) && r.ok === true, error: (prev && prev.error) || (r.ok === true ? null : String(r.error || '合并失败')) });
+  }
   for (const it of v.items) {
     const r = byItem.get(it.itemId);
     if (!r) continue; // 未覆盖到的条目（如重试新增）保持原状
@@ -283,7 +352,7 @@ export function finishMerge(dataDir, id, { results = [], mainSha = null, by = 'b
       it.mergeError = null;
     } else {
       it.mergedAt = null;
-      it.mergeError = String(r.error || '合并失败');
+      it.mergeError = r.error;
     }
   }
   const allOk = v.items.every((x) => x.mergedAt);
@@ -326,10 +395,11 @@ export function deleteVersion(dataDir, id) {
 
 /* ---------- REQ-20260920-003 发布流程：文档 / 推送 / 官网检测状态 ---------- */
 
-// 范围指纹：条目 + 每条提交 hash（发布范围骨架）。文档基准由 recordDocsCommit 时的
-// publishScopeFingerprint（含八文件内容 hash）另行固化，两者共同构成「旧快照不放行」依据。
+// 范围指纹：条目 + 每条全部提交 hash（BUG-20260921-015：一条目多提交全量参与，补入提交
+// 即范围变化）。文档基准由 recordDocsCommit 时的 publishScopeFingerprint（含八文件内容
+// hash）另行固化，两者共同构成「旧快照不放行」依据。
 export function scopeFingerprintOf(v) {
-  const part = (v?.items || []).map((it) => `${it.itemId}:${String(it.commit || '').toLowerCase()}`).sort();
+  const part = (v?.items || []).map((it) => `${it.itemId}:${commitsOf(it).join(',')}`).sort();
   return crypto.createHash('sha256').update(JSON.stringify(part)).digest('hex');
 }
 

@@ -173,15 +173,22 @@ const ATBBuild = (() => {
     return (items || []).filter((x) => Array.isArray(x.commits) && x.commits.length > 0);
   }
 
-  // REQ-20260915-003：关联条目联合行过滤（纯函数，渲染与测试共用）——一条关联单及其所选
+  // BUG-20260921-015：版本条目多提交口径（纯函数）——条目关联的全部提交 = commits 数组
+  //（服务端补齐），旧单提交形态兜底 [commit]；关联列表 / 搜索 / 合并确认清单均按此展开。
+  function commitsOf(it) {
+    return Array.isArray(it?.commits) && it.commits.length ? it.commits : (it?.commit ? [it.commit] : []);
+  }
+
+  // REQ-20260915-003：关联条目联合行过滤（纯函数，渲染与测试共用）——一条关联单及其全部
   // commit 为一个联合行；关键词覆盖条目 ID、标题与完整/短 commit 哈希（短哈希是完整哈希的
   // 前缀，包含匹配天然覆盖）；忽略英文大小写、去首尾空白、按包含关系匹配、保持原顺序。
   // 字段间以 \t 分隔，避免标题结尾与哈希开头在拼接边界串出假词误命中。
+  // BUG-20260921-015：多提交条目按全部提交哈希参与匹配。
   function filterVersionItems(items, q) {
     const list = items || [];
     const kw = String(q || '').trim().toLowerCase();
     if (!kw) return list;
-    return list.filter((it) => `${it.itemId}\t${it.title || ''}\t${it.commit || ''}`.toLowerCase().includes(kw));
+    return list.filter((it) => `${it.itemId}\t${it.title || ''}\t${commitsOf(it).join('\t')}`.toLowerCase().includes(kw));
   }
 
   // REQ-20260915-003：关联列表分页（纯函数）——页码从 1 起；页码越界回落最后有效页
@@ -242,7 +249,7 @@ const ATBBuild = (() => {
     lines.push(`请为看板版本 ${v.id} 生成「版本名称」与「版本描述」。`);
     lines.push(`当前信息：名称「${v.name || '（空）'}」；描述「${v.description || '（空）'}」。`);
     lines.push('关联条目：');
-    for (const it of v.items || []) lines.push(`- ${it.itemId} ${it.title || ''}（commit ${short(it.commit)}）`);
+    for (const it of v.items || []) lines.push(`- ${it.itemId} ${it.title || ''}（commit ${commitsOf(it).map((h) => short(h)).join(' ')}）`);
     lines.push('请综合以上条目给出更完整的版本名称与描述；只按以下格式回答，不要附加其他内容：');
     lines.push('版本名称：<一行>');
     lines.push('版本描述：<可多行>');
@@ -1369,8 +1376,15 @@ const ATBBuild = (() => {
       if (!r.ok) throw new Error(data.error || `一键加入失败（${r.status}）`);
       const added = data.added || [];
       const skipped = data.skipped || [];
+      // BUG-20260921-015：按提交补入（appended = 已在本版本条目补齐的其余依赖提交）与
+      // 新入条目（added）分别计数，反馈覆盖混合场景；无补入时保持既有文案不变。
+      const appendedN = (data.appended || []).reduce((n, a) => n + (Array.isArray(a.commits) ? a.commits.length : 0), 0);
       pf.depSkip = skipped.length ? skipped : null;
-      if (added.length && skipped.length) toast(`✓ 已加入 ${added.length} 个依赖条目，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      if (added.length && appendedN && skipped.length) toast(`✓ 已加入 ${added.length} 个依赖条目、补入 ${appendedN} 个依赖提交，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      else if (added.length && appendedN) toast(`✓ 已加入 ${added.length} 个依赖条目、补入 ${appendedN} 个依赖提交：发布范围已变化，文档需重新核对 / 提交`);
+      else if (appendedN && skipped.length) toast(`✓ 已补入 ${appendedN} 个依赖提交，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      else if (appendedN) toast(`✓ 已补入 ${appendedN} 个依赖提交：发布范围已变化，文档需重新核对 / 提交`);
+      else if (added.length && skipped.length) toast(`✓ 已加入 ${added.length} 个依赖条目，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
       else if (added.length) toast(`✓ 已加入 ${added.length} 个依赖条目：发布范围已变化，文档需重新核对 / 提交`);
       else if (skipped.length) toast('⚠ 未能加入任何依赖提交（原因见隔离分析清单）', true);
       await refresh(); // 发布范围列表（关联条目）更新
@@ -3265,11 +3279,9 @@ ${langsField}
       <div class="bld-item-row" data-row-item="${esc(it.itemId)}">
         <span class="bld-item-id">${esc(it.itemId)}</span>
         <span class="bld-item-title" title="${esc(it.title || '')}">${esc(it.title || '')}</span>
-        <select class="bld-commit-sel" data-commit-item="${esc(it.itemId)}" ${lockItems ? `disabled title="${itemsLockTitle}"` : ''}>
-          <option value="${esc(it.commit)}">${esc(short(it.commit))}</option>
-        </select>
+        <span class="bld-item-commits" title="该条目关联的全部提交${lockItems ? `（${itemsLockTitle}）` : ''}">${commitsOf(it).map((h) => `<code class="bld-item-commit" data-i18n-skip>${esc(short(h))}</code>`).join('')}</span>
         ${it.mergedAt ? `<span class="st st-ok" title="已合并入 main">✓</span>` : it.mergeError ? `<span class="st st-fail" title="${esc(it.mergeError)}">✕</span>` : ''}
-        <button type="button" class="btn small quiet bld-item-remove" data-remove-item="${esc(it.itemId)}" ${lockItems ? `disabled title="${itemsLockTitle}"` : 'title="移出该条目（连同 commit 关联）"'}>移出</button>
+        <button type="button" class="btn small quiet bld-item-remove" data-remove-item="${esc(it.itemId)}" ${lockItems ? `disabled title="${itemsLockTitle}"` : 'title="移出该条目（连同全部 commit 关联）"'}>移出</button>
       </div>`).join('');
     // 计数行：搜索态显示「匹配 X / 共 Y 条」（零结果显示 0 条，不伪装成空数据），默认显示总数
     const countBar = searching || pg.total
@@ -3410,7 +3422,7 @@ ${langsField}
           <h3>合并入 main 确认（${esc(v.id)}）</h3>
           <div class="rel-modal-body">
             <p>将把以下提交逐条合并入 <strong>main</strong>（--no-ff，在临时工作树执行，不影响当前分支与未提交改动）：</p>
-            <ul>${v.items.map((it) => `<li>${esc(it.itemId)} ${esc(short(it.commit))} ${esc(it.title || '')}</li>`).join('')}</ul>
+            <ul>${v.items.map((it) => `<li>${esc(it.itemId)} ${commitsOf(it).map((h) => esc(short(h))).join(' ')} ${esc(it.title || '')}</li>`).join('')}</ul>
             <p class="muted small">确认即授权本合并计划；合并中不可重复触发或增删条目。</p>
           </div>
           <footer class="modal-foot">

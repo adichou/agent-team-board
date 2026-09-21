@@ -277,6 +277,16 @@ export function pushBranch(root, { remote, branch } = {}) {
   return { ok: true, setUpstream: !(hadUpstream && hadUpstream.remote === rm), remoteBranch: `${rm}/${ref}`, hadUpstream: !!hadUpstream };
 }
 
+// BUG-20260921-015：条目多提交口径——items[].commits（数组）为事实源，旧单提交形态
+//（items[].commit）读取时兜底为 [commit]；隔离分析 / 合并重放 / 前置校验均按展开后的
+// 提交集合工作（与 build-store.commitsOf 同语义，Git 层不依赖数据层）。
+function commitsOf(it) {
+  const arr = Array.isArray(it?.commits) && it.commits.length
+    ? it.commits
+    : (it?.commit ? [it.commit] : []);
+  return [...new Set(arr.map((h) => String(h || '').trim().toLowerCase()).filter(Boolean))];
+}
+
 // 合并前置校验（只读，状态变更前由服务端调用）：非仓库 / 主分支缺失 / 提交缺失 / detached。
 // 工作区不再要求干净：合并经临时工作树执行（见 mergeCommitsIntoMain），不触碰当前工作区。
 // 返回当前分支（仅用于记录 baseBranch；合并本身不切分支）。
@@ -289,10 +299,40 @@ export function precheckMerge(root, items = []) {
   if (!baseBranch) throw new AtbError('当前处于 detached HEAD，无法自动合并；请先切到一个本地分支');
   gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${resolveMainBranch(root) || 'main'}`], 'main 分支不存在');
   for (const it of items) {
-    const r = gitRaw(root, ['rev-parse', '--verify', '--quiet', `${it.commit}^{commit}`]);
-    if (r.status !== 0) throw new AtbError(`提交不存在：${it.itemId} → ${String(it.commit).slice(0, 12)}`);
+    for (const c of commitsOf(it)) {
+      const r = gitRaw(root, ['rev-parse', '--verify', '--quiet', `${c}^{commit}`]);
+      if (r.status !== 0) throw new AtbError(`提交不存在：${it.itemId} → ${c.slice(0, 12)}`);
+    }
   }
   return baseBranch;
+}
+
+// BUG-20260921-015：把（条目 × 提交）展开为逐提交行，并按 Git 依赖顺序（祖先在前）排序，
+// 供合并重放使用——补入的提交与原关联提交必须按真实父子顺序重放，乱序存储在同文件连续
+// 变更场景会冲突。排序实现：rev-list --topo-order --reverse（新→旧反转即父先于子）从全部
+// 所选提交出发、排除目标分支可达历史后过滤回所选集合；已在目标分支内的提交不在输出中
+//（执行侧 isAncestorOf 幂等跳过），按输入顺序追加在末尾。rev-list 失败时回退输入顺序
+//（保留旧行为，不因排序失败阻塞合并）。
+function replayPairsOrdered(root, items, targetBranch) {
+  const pairs = [];
+  for (const it of items || []) {
+    for (const c of commitsOf(it)) pairs.push({ itemId: String(it.itemId || ''), commit: c });
+  }
+  if (pairs.length < 2) return pairs;
+  const unique = [...new Set(pairs.map((p) => p.commit))];
+  let seq = [];
+  try {
+    const out = gitOk(root, ['rev-list', '--topo-order', '--reverse', `^${targetBranch}`, ...unique], '依赖排序');
+    const inSet = new Set(unique);
+    seq = out.split('\n').map((s) => s.trim().toLowerCase()).filter((h) => h && inSet.has(h));
+  } catch { /* 排序失败回退输入顺序 */ }
+  if (seq.length !== unique.length) {
+    const seen = new Set(seq);
+    seq = [...seq, ...unique.filter((h) => !seen.has(h))];
+  }
+  const rank = new Map(seq.map((h, i) => [h, i]));
+  return pairs.map((p, i) => ({ ...p, i })).sort((a, b) => (rank.get(a.commit) ?? a.i) - (rank.get(b.commit) ?? b.i))
+    .map(({ i, ...p }) => p);
 }
 
 // 受限写：把版本所选条目的 commit 逐条合并入主分支（--no-ff 保留合并语义，消息含版本与条目号）。
@@ -318,17 +358,21 @@ export function mergeCommitsIntoMain(root, { versionId, versionName, items = [] 
   }
   const cwd = inPlace ? root : wt;
   try {
+    // BUG-20260921-015：一条目多提交逐条展开合并（it.commit 单提交路径等价保留）
+    outer:
     for (const it of items) {
-      const msg = `build: ${versionName || versionId} 合并 ${it.itemId}（${versionId}）`;
-      const r = gitRaw(cwd, ['merge', '--no-ff', '-m', msg, it.commit]);
-      if (r.status === 0) {
-        results.push({ itemId: it.itemId, commit: it.commit, ok: true });
-        continue;
+      for (const commit of commitsOf(it)) {
+        const msg = `build: ${versionName || versionId} 合并 ${it.itemId}（${versionId}）`;
+        const r = gitRaw(cwd, ['merge', '--no-ff', '-m', msg, commit]);
+        if (r.status === 0) {
+          results.push({ itemId: it.itemId, commit, ok: true });
+          continue;
+        }
+        const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+        gitRaw(cwd, ['merge', '--abort']); // 冲突现场清理（best-effort，不吞并报错）
+        results.push({ itemId: it.itemId, commit, ok: false, error: detail.slice(0, 300) || '合并失败' });
+        break outer; // 逐条推进：一条失败即中止，保留已成功条目供重试续传
       }
-      const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
-      gitRaw(cwd, ['merge', '--abort']); // 冲突现场清理（best-effort，不吞并报错）
-      results.push({ itemId: it.itemId, commit: it.commit, ok: false, error: detail.slice(0, 300) || '合并失败' });
-      break; // 逐条推进：一条失败即中止，保留已成功条目供重试续传
     }
   } finally {
     if (wt) {
@@ -368,15 +412,19 @@ export function isAncestorOf(root, commit, ref) {
 // 只读影响分析（合并前展示）：对每个所选提交列出「目标分支可达之外、又不属于所选集合」的
 // 祖先提交（普通 merge 会把它们一并带入；隔离合并不带入，若所选改动依赖其内容将在执行时
 // 冲突阻止）。同一 commit 关联多个条目视为混合提交，列入 blocked（无法安全拆分）。
+// BUG-20260921-015：所选集合 = 全部条目的全部提交（一条目多提交按提交 hash 去重展开，
+// 不按条目去重）；perItem 按条目聚合其全部提交的未选祖先（hash 去重），commit 字段保留
+// 首个提交（展示兼容），与「一键加入」、合并执行使用同一提交集合，分析口径一致收敛。
 export function analyzePublishIsolation(root, items = []) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法分析发布范围');
   const targetBranch = resolveMainBranch(root) || 'main';
-  const selected = new Set(items.map((it) => String(it.commit || '').toLowerCase()));
+  const selected = new Set(items.flatMap((it) => commitsOf(it)));
   const byCommit = new Map();
   for (const it of items) {
-    const c = String(it.commit || '').toLowerCase();
-    if (!byCommit.has(c)) byCommit.set(c, []);
-    byCommit.get(c).push(it.itemId);
+    for (const c of commitsOf(it)) {
+      if (!byCommit.has(c)) byCommit.set(c, []);
+      if (!byCommit.get(c).includes(it.itemId)) byCommit.get(c).push(it.itemId);
+    }
   }
   const shared = [...byCommit.entries()]
     .filter(([, ids]) => ids.length > 1)
@@ -384,18 +432,23 @@ export function analyzePublishIsolation(root, items = []) {
   const blocked = shared.map((s) => `同一提交 ${s.commit.slice(0, 12)} 关联多个条目（${s.itemIds.join('、')}）：混合提交无法安全拆分，请调整关联或先合并为一个条目`);
   const perItem = items.map((it) => {
     const intermediates = [];
-    try {
-      // REQ-20260921-015：intermediates 附提交时间 %cI（date）——「一键加入所有依赖提交」对
-      // 同一条目落在依赖集合的多个提交取最新时以此比较；字段向后兼容（既有调用方不读）。
-      const out = gitOk(root, ['log', `${targetBranch}..${String(it.commit)}`, '--format=%H%x09%cI%x09%s'], '读取范围提交');
-      for (const line of out.split('\n')) {
-        if (!line.trim()) continue;
-        const [hash, date, ...rest] = line.split('\t');
-        if (selected.has(hash.toLowerCase())) continue;
-        intermediates.push({ hash, date: date || '', subject: rest.join('\t') });
-      }
-    } catch { /* 单条读取失败不阻塞整体分析（执行前 precheckMerge 兜底） */ }
-    return { itemId: it.itemId, commit: String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };
+    const seen = new Set();
+    for (const commit of commitsOf(it)) {
+      try {
+        // REQ-20260921-015：intermediates 附提交时间 %cI（date）——「一键加入所有依赖提交」对
+        // 同一条目落在依赖集合的多个提交取最新时以此比较；字段向后兼容（既有调用方不读）。
+        const out = gitOk(root, ['log', `${targetBranch}..${commit}`, '--format=%H%x09%cI%x09%s'], '读取范围提交');
+        for (const line of out.split('\n')) {
+          if (!line.trim()) continue;
+          const [hash, date, ...rest] = line.split('\t');
+          const h = String(hash || '').toLowerCase();
+          if (selected.has(h) || seen.has(h)) continue;
+          seen.add(h);
+          intermediates.push({ hash: h, date: date || '', subject: rest.join('\t') });
+        }
+      } catch { /* 单条读取失败不阻塞整体分析（执行前 precheckMerge 兜底） */ }
+    }
+    return { itemId: it.itemId, commit: commitsOf(it)[0] || String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };
   });
   const notes = [];
   const totalInter = perItem.reduce((n, x) => n + x.count, 0);
@@ -409,11 +462,19 @@ export function analyzePublishIsolation(root, items = []) {
 // 工作树检出主分支执行，全程不切换、不触碰用户当前工作区；单条冲突即 cherry-pick --abort
 // 并中止（已成功条目保持，重试只补未合并）；返回 replays（original → replayed）作为重放
 // 证据，发布包含性检验据此认可（原始 commit 不再是 main 祖先）。
-export function mergeIsolatedIntoMain(root, { versionId, versionName, items = [] } = {}) {
+// BUG-20260921-015：一条目多提交逐提交展开重放，且按 Git 依赖顺序（祖先在前）执行；
+// replays 为既有重放证据（original → replayed，重试续传时传入）：原始提交或其重放提交
+// 已在主分支 → 幂等记成功（alreadyIncluded），不重复 cherry-pick（重复重放会因补丁已
+// 应用变成空提交而失败）。
+export function mergeIsolatedIntoMain(root, { versionId, versionName, items = [], replays = [] } = {}) {
   const baseBranch = precheckMerge(root, items);
   const targetBranch = resolveMainBranch(root) || 'main';
+  const knownReplays = new Map((Array.isArray(replays) ? replays : [])
+    .filter((r) => r && r.original && r.replayed)
+    .map((r) => [String(r.original).toLowerCase(), String(r.replayed).toLowerCase()]));
+  const ordered = replayPairsOrdered(root, items, targetBranch);
   const results = [];
-  const replays = [];
+  const replayRows = [];
   const warnings = [];
   const inPlace = baseBranch === targetBranch; // 理论上 dev 前置下不出现；保留与旧实现一致的兜底
   let wt = null;
@@ -427,24 +488,29 @@ export function mergeIsolatedIntoMain(root, { versionId, versionName, items = []
   }
   const cwd = inPlace ? root : wt;
   try {
-    for (const it of items) {
-      const commit = String(it.commit || '').toLowerCase();
+    for (const { itemId, commit } of ordered) {
       // 幂等续传：原始提交已是主分支祖先（旧 --no-ff 版本 / 已并入）→ 记成功不重放
       if (isAncestorOf(cwd, commit, targetBranch)) {
-        results.push({ itemId: it.itemId, commit, ok: true, alreadyIncluded: true });
+        results.push({ itemId, commit, ok: true, alreadyIncluded: true });
+        continue;
+      }
+      // 幂等续传：该提交此前已重放（重放提交在主分支）→ 记成功不重放（补丁已在 main）
+      const replayedKnown = knownReplays.get(commit);
+      if (replayedKnown && isAncestorOf(cwd, replayedKnown, targetBranch)) {
+        results.push({ itemId, commit, ok: true, alreadyIncluded: true });
         continue;
       }
       const r = gitRaw(cwd, ['cherry-pick', '-x', commit]);
       if (r.status === 0) {
         const replayed = String(gitRaw(cwd, ['rev-parse', 'HEAD']).stdout || '').trim().toLowerCase();
-        results.push({ itemId: it.itemId, commit, ok: true });
-        replays.push({ itemId: it.itemId, original: commit, replayed });
+        results.push({ itemId, commit, ok: true });
+        replayRows.push({ itemId, original: commit, replayed });
         continue;
       }
       const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
       gitRaw(cwd, ['cherry-pick', '--abort']); // 冲突现场清理（best-effort，不吞并报错）
       results.push({
-        itemId: it.itemId, commit, ok: false,
+        itemId, commit, ok: false,
         error: `隔离合并冲突或依赖未选变化（${detail || '冲突'}）`.slice(0, 300),
       });
       break; // 逐条推进：一条失败即中止，保留已成功条目供重试续传
@@ -458,7 +524,7 @@ export function mergeIsolatedIntoMain(root, { versionId, versionName, items = []
       }
     }
   }
-  return { results, replays, baseBranch, warnings };
+  return { results, replays: replayRows, baseBranch, warnings };
 }
 
 // 受限写（正式发布第一步）：把本地主分支（解析结果 main / master）推送到所选远端。

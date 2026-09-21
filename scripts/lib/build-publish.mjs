@@ -67,7 +67,10 @@ export async function inputs(root,run){
 }
 // REQ-20260920-003：包含性检验适配重放证据——隔离合并以 cherry-pick 重放提交进 main，原始
 // commit 不再是 main 祖先；认可「原始提交为祖先」或「记录的重放提交为祖先」两种证据。
-async function assertItemsIncluded(root, items, mainSha, replays = []) {
+// BUG-20260921-015：一条目多提交——条目的全部提交逐一核验（旧单提交形态兜底 [commit]），
+// 与隔离分析 / 合并执行使用同一提交集合；任一提交缺失即报错。
+const itemCommitsAll=(items)=>(Array.isArray(items)?items:[]).flatMap((it)=>[...new Set((Array.isArray(it?.commits)&&it.commits.length?it.commits:[it?.commit]).map((h)=>String(h||'').toLowerCase()).filter(Boolean))]);
+export async function assertItemsIncluded(root, items, mainSha, replays = []) {
   const rs = (replays || []).map((r) => ({ ...r, original: String(r.original || '').toLowerCase() }));
   const included = async (commit) => {
     try { await git(root, 'merge-base', '--is-ancestor', commit, mainSha); return true; } catch {}
@@ -77,8 +80,11 @@ async function assertItemsIncluded(root, items, mainSha, replays = []) {
     return false;
   };
   for (const item of items) {
-    if (!(await included(item.commit))) {
-      throw new AtbError(`条目 ${item.itemId} 的提交（${String(item.commit).slice(0, 12)}）未包含在主分支（含重放证据核对）`);
+    const commits = itemCommitsAll([item]);
+    for (const commit of commits) {
+      if (!(await included(commit))) {
+        throw new AtbError(`条目 ${item.itemId} 的提交（${String(commit).slice(0, 12)}）未包含在主分支（含重放证据核对）`);
+      }
     }
   }
 }
@@ -87,7 +93,7 @@ export async function create(dataDir,root,bld,version){
  const seed={productId:path.basename(root),bldId:bld.id,bldName:bld.name,version};
  const current=await inputs(root,seed);
  await assertItemsIncluded(root,bld.items,current.mainSha,bld.merge?.replays);
- const extra=await git(root,'log',current.mainSha,'--not',...bld.items.map(i=>i.commit),...(bld.merge?.replays||[]).map(r=>r.replayed),'--format=%H %s');
+ const extra=await git(root,'log',current.mainSha,'--not',...itemCommitsAll(bld.items),...(bld.merge?.replays||[]).map(r=>r.replayed),'--format=%H %s');
  return store.createRun(dataDir,{...seed,frozen:{...current,items:bld.items,replays:bld.merge?.replays||[],extraCommits:extra.split('\n').filter(Boolean)}});
 }
 function assertIdle(dataDir,id){
@@ -128,7 +134,7 @@ export async function refreeze(dataDir,root,id){
  if(run.stages.some(s=>s.status==='done'))throw new AtbError('已有执行证据，请创建新发行版本，不能替换历史冻结');
  const current=await inputs(root,run);
  await assertItemsIncluded(root,run.frozen.items,current.mainSha,run.frozen.replays);
- const extra=await git(root,'log',current.mainSha,'--not',...run.frozen.items.map(i=>i.commit),...(run.frozen.replays||[]).map(r=>r.replayed),'--format=%H %s');
+ const extra=await git(root,'log',current.mainSha,'--not',...itemCommitsAll(run.frozen.items),...(run.frozen.replays||[]).map(r=>r.replayed),'--format=%H %s');
  return store.updateRun(dataDir,id,r=>{r.frozen={...r.frozen,...current,extraCommits:extra.split('\n').filter(Boolean)};r.precheck=null;r.status='draft';});
 }
 export async function plan(dataDir,root,id){

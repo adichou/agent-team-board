@@ -73,26 +73,33 @@ export async function branchHead(projectRoot, exec, branch) {
   return sha ? sha.toLowerCase() : null;
 }
 
-// 条目包含性：每个计划条目 commit 必须是 main 的祖先（发布范围确实包含计划条目）。
+// 条目包含性：每个计划条目的全部 commit 必须是 main 的祖先（发布范围确实包含计划条目）。
 // REQ-20260920-003：隔离合并以 cherry-pick 重放提交进入 main，原始 commit 不再是祖先——
 // 认可「原始提交为祖先」或「记录的重放提交（replays: original → replayed）为祖先」两种证据。
+// BUG-20260921-015：一条目多提交——按 commits 全量逐提交核验（旧快照仅 commit 时兜底
+// [commit]），任一提交缺失即该条目计入 missing。
 export async function verifyItemsOnMain(projectRoot, exec, items, mainSha, replays = []) {
   const rs = new Map((Array.isArray(replays) ? replays : [])
     .filter((r) => r && r.original && r.replayed)
     .map((r) => [String(r.original).toLowerCase(), String(r.replayed).toLowerCase()]));
   const missing = [];
   for (const it of items) {
-    const c = String(it.commit).toLowerCase();
-    let ok = false;
-    try {
-      const r = await exec('git', ['merge-base', '--is-ancestor', c, String(mainSha)], { cwd: projectRoot });
-      ok = r.code === 0;
-    } catch { ok = false; }
-    if (!ok && rs.has(c)) {
+    const commits = [...new Set((Array.isArray(it?.commits) && it.commits.length ? it.commits : [it?.commit])
+      .map((c) => String(c || '').trim().toLowerCase()).filter(Boolean))];
+    let ok = commits.length > 0;
+    for (const c of commits) {
+      let one = false;
       try {
-        const r2 = await exec('git', ['merge-base', '--is-ancestor', rs.get(c), String(mainSha)], { cwd: projectRoot });
-        ok = r2.code === 0;
-      } catch { ok = false; }
+        const r = await exec('git', ['merge-base', '--is-ancestor', c, String(mainSha)], { cwd: projectRoot });
+        one = r.code === 0;
+      } catch { one = false; }
+      if (!one && rs.has(c)) {
+        try {
+          const r2 = await exec('git', ['merge-base', '--is-ancestor', rs.get(c), String(mainSha)], { cwd: projectRoot });
+          one = r2.code === 0;
+        } catch { one = false; }
+      }
+      if (!one) { ok = false; break; }
     }
     if (!ok) missing.push(it.itemId);
   }
