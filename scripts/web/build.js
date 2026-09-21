@@ -3074,7 +3074,8 @@ ${langsField}
     const gate = (p.steps || []).find((s) => s.key === 'merge');
     const an = p.mergeAnalysis || { perItem: [], blocked: [], notes: [] };
     const onDev = p.currentBranch === 'dev';
-    const scopeRows = (v.items || []).map((it) => `<li>${esc(it.itemId)} <code>${esc(short(it.commit))}</code> ${it.mergedAt ? '<span class="st st-ok">已合并</span>' : ''}${it.mergeError ? `<span class="st st-fail" title="${esc(it.mergeError)}">失败</span>` : ''}</li>`).join('');
+    // BUG-20260921-014：移除「发布范围」区块——关联条目 / 文档提交信息与
+    //「关联条目与提交」「文档编写」页签及合并确认弹窗完全重复，首屏让位给隔离分析。
     const interRows = (an.perItem || []).filter((x) => (x.intermediates || []).length).map((x) => `
       <li>${esc(x.itemId)}：${x.count} 个未选祖先提交（普通 merge 会一并带入 main；隔离合并不带入，依赖其内容将冲突阻止）
         <ul>${(x.intermediates || []).slice(0, 5).map((i) => `<li><code>${esc(short(i.hash))}</code> ${esc(i.subject || '')}</li>`).join('')}</ul></li>`).join('');
@@ -3088,10 +3089,6 @@ ${langsField}
     const mergeReason = mergeBlockReason(v);
     return `
       <div class="bld-merge-pane">
-        <section><strong>发布范围</strong>
-          <ul>${scopeRows || '<li class="muted small">（无关联条目：回到「关联条目与提交」步骤关联）</li>'}</ul>
-          ${p.docs?.commitHash ? `<p class="small muted">文档提交：<code>${esc(short(p.docs.commitHash))}</code>（只随本版发布最新文档提交）</p>` : ''}
-        </section>
         <section><strong>隔离分析</strong>
           ${(an.blocked || []).length ? `<p class="rel-form-err" role="alert">${(an.blocked || []).map((x) => esc(x)).join('；')}</p>` : ''}
           ${(an.notes || []).map((x) => `<p class="small muted">${esc(x)}</p>`).join('')}
