@@ -174,6 +174,7 @@ const ATBCommands = (() => {
       search.addEventListener('input', () => { state.query = search.value; renderList(); });
     }
     renderList();
+    renderRecent(); // render() 重建 DOM 后「最近执行」容器随之清空：必须重渲染（BUG-20260921-009）
     renderDetail();
     renderOutput();
     renderHistory();
