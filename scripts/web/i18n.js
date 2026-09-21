@@ -1080,7 +1080,6 @@ const EN = {
   '第一步 · 推送主分支': 'Step 1 · Push the main branch',
   '第二步 · 官网 AI 写作': 'Step 2 · Website AI writing',
   '第三步 · 官网同步检测': 'Step 3 · Website sync detection',
-  '发布范围': 'Release scope',
   '隔离分析': 'Isolation analysis',
   '目标远端': 'Target remote',
   '（空文档）': '(empty document)',
