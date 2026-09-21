@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260921-012 · 文档编写分语言流水线演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #d9dee4; --text: #1f2430; --muted: #6b7280;
+    --ok: #16794c; --ok-bg: #e3f4ea; --run: #9a6700; --run-bg: #fff3d6;
+    --wait: #a16207; --wait-bg: #fdf0d5; --mute: #6b7280; --mute-bg: #eef0f3;
+    --fail: #b3261e; --fail-bg: #fdebea; --primary: #2563eb; --primary-bg: #dbeafe;
+    --stage-done: #16794c; --stage-cur: #9a6700; --stage-todo: #9ca3af;
+    --code-bg: #f0f2f5; --shadow: 0 10px 30px rgba(15, 23, 42, .14);
+  }
+  html[data-theme="dark"] {
+    --bg: #14161a; --card: #1d2026; --line: #34383f; --text: #e6e8ec; --muted: #9aa1ab;
+    --ok: #5bd695; --ok-bg: #12331f; --run: #e3b341; --run-bg: #3a2f10;
+    --wait: #d9a441; --wait-bg: #33290f; --mute: #9aa1ab; --mute-bg: #262a31;
+    --fail: #f08a84; --fail-bg: #3a1715; --primary: #6ea8ff; --primary-bg: #16294d;
+    --stage-done: #5bd695; --stage-cur: #e3b341; --stage-todo: #5b626c;
+    --code-bg: #262a31; --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub-title-note { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+  .top .vid { font-weight: 600; font-size: 15px; }
+  .top .ver { color: var(--muted); font-size: 12.5px; }
+
+  /* 五步导航 */
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+  .steps button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px;
+    padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .steps button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .steps button.locked { opacity: .55; }
+
+  /* 阶段条 */
+  .stagebar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stage { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 12px; font-size: 12.5px; }
+  .stage.done { color: var(--stage-done); border-color: var(--stage-done); }
+  .stage.cur { color: var(--stage-cur); border-color: var(--stage-cur); font-weight: 600; }
+  .stage.todo { color: var(--stage-todo); }
+  .stage .ico { font-style: normal; }
+  .arrow { color: var(--muted); }
+  .stage-note { width: 100%; color: var(--muted); font-size: 12px; }
+
+  /* 副标题 + 动作区 */
+  .docs-sub { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .docs-sub strong { font-size: 13.5px; }
+  .docs-sub p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; max-width: 460px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  button.btn, select.btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button.btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  html[data-theme="dark"] button.btn.primary { color: #0d1220; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn[aria-disabled="true"] { opacity: .45; }
+
+  /* 任务简报 */
+  .task-brief { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+  .task-brief .run { color: var(--run); }
+  .task-brief .err { color: var(--fail); }
+
+  /* 提示词预览 */
+  details.prompt { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  details.prompt summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  details.prompt textarea { width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--code-bg); color: var(--text); font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; padding: 8px; }
+
+  /* 文件列表 */
+  .files-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  ul.files { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.files li { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px;
+    border-bottom: 1px solid var(--line); gap: 10px; }
+  ul.files li.group { color: var(--muted); font-size: 12px; border-bottom: 1px dashed var(--line); padding-top: 10px; }
+  .fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .fname .lang { color: var(--muted); font-family: inherit; }
+  .st { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 10px; font-size: 12px; white-space: nowrap; }
+  .st i { font-style: normal; }
+  .st-ok { color: var(--ok); background: var(--ok-bg); }
+  .st-run { color: var(--run); background: var(--run-bg); }
+  .st-wait { color: var(--wait); background: var(--wait-bg); }
+  .st-mute { color: var(--mute); background: var(--mute-bg); }
+  .cur-file { color: var(--muted); font-size: 12px; }
+
+  /* 门禁条 */
+  .gate { border-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin-top: 12px; border: 1px solid var(--line); background: var(--mute-bg); }
+  .gate.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+  .gate.fail { border-color: var(--fail); background: var(--fail-bg); color: var(--fail); }
+  .loading { color: var(--muted); font-size: 12.5px; padding: 8px 4px; }
+
+  /* 对话框 */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 20, .5); display: flex;
+    align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal-wrap[hidden] { display: none; }
+  .modal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    width: min(880px, 100%); max-height: 88vh; display: flex; flex-direction: column; }
+  .modal.narrow { width: min(560px, 100%); }
+  .modal header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); font-weight: 600; }
+  .modal .tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-wrap: wrap; }
+  .modal .tabs button { border: 1px solid var(--line); background: transparent; color: var(--text);
+    border-radius: 8px 8px 0 0; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .modal .tabs button.active { border-bottom-color: transparent; background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+  /* 全语言栏：栏数 = 语言集语言数，语言多时可横向滚动兜底 */
+  .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 0;
+    overflow-x: auto; border-top: 1px solid var(--line); }
+  .col { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
+  .col:last-child { border-right: none; }
+  .col-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--code-bg); }
+  .col-head .lft { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .col-acts { display: flex; gap: 4px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: transparent; color: var(--text); padding: 3px 10px; cursor: pointer; font-size: 12px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  html[data-theme="dark"] .seg button.on { color: #0d1220; }
+  .col-body { flex: 1; overflow: auto; max-height: 46vh; }
+  .col-body textarea { width: 100%; height: 100%; min-height: 280px; border: none; resize: none;
+    background: var(--card); color: var(--text); font: 12.5px/1.7 ui-monospace, Menlo, Consolas, monospace; padding: 12px; }
+  .col-body pre { margin: 0; padding: 12px; font: 12.5px/1.7 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  .col-body .empty { color: var(--muted); font-size: 12.5px; padding: 12px; }
+  .modal footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  .checklist { padding: 8px 16px 4px; overflow: auto; }
+  .checklist label { display: flex; gap: 8px; align-items: flex-start; padding: 7px 0; border-bottom: 1px dashed var(--line); cursor: default; }
+  .checklist input[type=checkbox] { margin-top: 4px; }
+  .checklist .why { color: var(--muted); font-size: 12px; }
+  .modal .hint { padding: 8px 16px; color: var(--muted); font-size: 12px; }
+  .modal .foot-actions { display: flex; gap: 8px; justify-content: flex-end; width: 100%; }
+
+  /* toast */
+  #toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 99; }
+  .toast { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--primary);
+    border-radius: 8px; padding: 9px 14px; font-size: 12.5px; box-shadow: var(--shadow); max-width: 360px; }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.fail { border-left-color: var(--fail); }
+  .tbd { color: var(--muted); font-size: 11.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260921-012 · 文档编写分语言流水线演示（ui-demo）</h1>
+  <p class="sub-title-note">演示「先写默认语言（语言集首语言）→ 审核完毕 → AI 翻译编写剩余语言 → 再审查 → 整体审查完结 → 提交」的分阶段流程；语言集遵循 REQ-20260921-010 口径（发布计划级可配置，默认 <code>cn,en</code>）——默认语言不一定是中文，可用页内「语言集示例」切换；单文件 HTML、无外网依赖；标注「待确认」处为示意口径，以设计阶段定稿为准。</p>
+
+  <div class="demo-bar">
+    <span class="lbl">语言集示例（默认语言 = 首语言）：</span>
+    <select class="btn" id="langSetSel">
+      <option value="cn,en">cn,en（默认语言 = 中文）</option>
+      <option value="en,cn">en,cn（默认语言 = 英文）</option>
+      <option value="cn,en,fr">cn,en,fr（三语言）</option>
+    </select>
+    <span style="width:12px"></span>
+    <span class="lbl">模拟开关：</span>
+    <button type="button" class="btn" id="simRefreshFail">刷新读取失败：关</button>
+    <button type="button" class="btn" id="simTaskFail">任务中断：关</button>
+    <button type="button" class="btn" id="simScopeStale">模拟发布范围变化</button>
+    <span style="flex:1"></span>
+    <button type="button" class="btn" id="themeBtn">深浅色切换</button>
+    <button type="button" class="btn" id="resetBtn">重置演示</button>
+  </div>
+
+  <div class="card">
+    <div class="top">
+      <span class="vid">发布模块 · BLD-20260921-001</span>
+      <span class="ver">版本号 20260921-001 · 当前分支 dev</span>
+    </div>
+    <nav class="steps" id="stepsNav"></nav>
+    <div id="docsPane"></div>
+  </div>
+</div>
+
+<!-- 审查对话框 -->
+<div class="modal-wrap" id="reviewWrap" hidden>
+  <div class="modal">
+    <header><span id="reviewTitle">审查发布文档（BLD-20260921-001）</span>
+      <button type="button" class="btn" data-close-review>✕ 关闭</button></header>
+    <nav class="tabs" id="reviewTabs"></nav>
+    <div class="cols" id="reviewCols"></div>
+    <footer><span id="reviewFoot"></span><button type="button" class="btn" data-close-review>关闭</button></footer>
+  </div>
+</div>
+
+<!-- 整体审查完结对话框 -->
+<div class="modal-wrap" id="overallWrap" hidden>
+  <div class="modal narrow">
+    <header><span>整体审查完结（BLD-20260921-001）</span>
+      <button type="button" class="btn" data-close-overall>✕ 关闭</button></header>
+    <div class="checklist" id="overallList"></div>
+    <p class="hint">提示：完结是人工确认动作，完结后「提交」方可使用；发布范围变化会使逐文件审核与整体完结一并失效回退。<span class="tbd">（完结形态为示意，待确认）</span></p>
+    <footer>
+      <span class="tbd">核对项为演示示意</span>
+      <span class="foot-actions">
+        <button type="button" class="btn" data-close-overall>取消</button>
+        <button type="button" class="btn primary" id="confirmOverall">确认完结</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* ---------- 语言集与文档模型（REQ-20260921-010 口径：默认语言 = 首语言，无后缀；其余语言 <KEY>_<lang>.md） ---------- */
+const DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+/* 语言内容包：同一份内容在「默认语言位」与「翻译产出位」两种用途下复用；
+   README 内的同语言链接用占位符，按当前位置的实际文件名展开 */
+const PACKS = {
+  cn: {
+    name: '中文',
+    docs: {
+      README: '# Agent Team Board（智能体团队看板）\n\nZCode 插件：需求 / Bug 文件化管理 + Agent TDD 流程 + 本地看板。\n\n- 更新日志：[{{CHANGELOG}}](./{{CHANGELOG}})\n- 功能一览：[{{FEATURES}}](./{{FEATURES}})\n\n本版：文档编写流程分语言阶段推进。',
+      CHANGELOG: '# 更新日志\n\n## 20260921-001\n\n- 文档编写改为分语言流水线：默认语言先行、审核完毕后 AI 翻译、逐语言审查、整体审查完结。',
+      FEATURES: '# 功能一览\n\n- 五步发布流程（版本计划 → 关联 → 文档编写 → 合并 → 发布）\n- 文档编写三阶段推进（本版新增）',
+      AGENTS: '# 协作规则\n\n- 文档与当前版本范围一致，未纳入本版的功能不得写成已发布。\n- README 按语言互链同语言 CHANGELOG 与 FEATURES。',
+    },
+  },
+  en: {
+    name: 'English',
+    docs: {
+      README: '# Agent Team Board\n\nZCode plugin: file-based requirement/bug management + Agent TDD workflow + local status board.\n\n- Changelog: [{{CHANGELOG}}](./{{CHANGELOG}})\n- Features: [{{FEATURES}}](./{{FEATURES}})\n\nThis version: docs writing pipeline advances by language stage.',
+      CHANGELOG: '# Changelog\n\n## 20260921-001\n\n- Docs writing now advances by language: default language first, AI translation after review, per-language review, overall review closure.',
+      FEATURES: '# Features\n\n- Five-step release flow (plan → link → docs → merge → release)\n- Docs writing three-stage advance (new in this version)',
+      AGENTS: '# Collaboration Rules\n\n- Docs must match the current release scope; unreleased features must not be documented as released.\n- README links the same-language CHANGELOG and FEATURES.',
+    },
+  },
+  fr: {
+    name: 'Français',
+    docs: {
+      README: '# Agent Team Board\n\nPlugiciel ZCode : gestion des exigences / bugs par fichiers + flux TDD Agent + tableau de bord local.\n\n- Journal : [{{CHANGELOG}}](./{{CHANGELOG}})\n- Fonctions : [{{FEATURES}}](./{{FEATURES}})\n\nCette version : la rédaction des documents avance par étape de langue.',
+      CHANGELOG: '# Journal des modifications\n\n## 20260921-001\n\n- La rédaction avance par langue : langue par défaut d’abord, traduction IA après revue, revue par langue, clôture globale.',
+      FEATURES: '# Fonctionnalités\n\n- Flux de publication en cinq étapes (plan → liaison → docs → fusion → publication)\n- Avancement de la rédaction en trois étapes (nouveau dans cette version)',
+      AGENTS: '# Règles de collaboration\n\n- Les documents doivent correspondre au périmètre de la version ; toute fonction non incluse ne doit pas être présentée comme publiée.\n- Le README lie le CHANGELOG et les FEATURES de la même langue.',
+    },
+  },
+};
+let LANGS = ['cn', 'en']; // 当前语言集（演示固定三组示例，实际按 REQ-20260921-010 发布计划级可配）
+const defLang = () => LANGS[0];
+const remLangs = () => LANGS.slice(1);
+const fileOf = (key, lang) => (lang === LANGS[0] ? `${key}.md` : `${key}_${lang}.md`);
+const totalFiles = () => DOC_KEYS.length * LANGS.length;
+const remTotal = () => DOC_KEYS.length * (LANGS.length - 1);
+function docText(lang, key) {
+  let t = PACKS[lang].docs[key];
+  if (key === 'README') {
+    t = t.split('{{CHANGELOG}}').join(fileOf('CHANGELOG', lang)).split('{{FEATURES}}').join(fileOf('FEATURES', lang));
+  }
+  return t;
+}
+
+/* 四态：默认语言侧为总结四态，剩余语言侧为翻译四态（语义一一对应） */
+const ST = {
+  def: { label: { untrans: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核' } },
+  rem: { label: { untrans: '未翻译', summarizing: '正在翻译', summarized: '已翻译待审核', reviewed: '已审核' } },
+};
+const CLS = { untrans: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' };
+const ICON = { untrans: '○', summarizing: '◐', summarized: '●', reviewed: '✔' };
+
+let S; // 演示状态
+function initState() {
+  const files = {};
+  for (const key of DOC_KEYS) {
+    files[fileOf(key, defLang())] = { role: 'def', lang: defLang(), key, file: fileOf(key, defLang()), state: 'untrans', content: docText(defLang(), key) };
+    for (const lang of remLangs()) {
+      files[fileOf(key, lang)] = { role: 'rem', lang, key, file: fileOf(key, lang), state: 'untrans', content: '' };
+    }
+  }
+  S = {
+    files,
+    task: null,            // { kind:'summary'|'translate', file, done, total }
+    taskDone: null,        // { kind, ok, reason }
+    overall: { done: false, at: null },
+    committed: null,       // { hash }
+    scopeStale: false, staleReason: null,
+    refreshing: false, loadErr: false,
+    sim: { refreshFail: false, taskFail: false },
+    review: { open: false, tab: 'README', modes: {}, },
+    overallOpen: false,
+  };
+}
+
+/* ---------- 求值 ---------- */
+const defFiles = () => DOC_KEYS.map((k) => S.files[fileOf(k, defLang())]);
+const remFiles = () => { const out = []; for (const lang of remLangs()) for (const k of DOC_KEYS) out.push(S.files[fileOf(k, lang)]); return out; };
+const defReviewed = () => defFiles().filter((f) => f.state === 'reviewed').length;
+const remReviewed = () => remFiles().filter((f) => f.state === 'reviewed').length;
+const allReviewed = () => defReviewed() === DOC_KEYS.length && remReviewed() === remTotal();
+const canTranslate = () => defReviewed() === DOC_KEYS.length;
+const canOverall = () => allReviewed();
+const canCommit = () => allReviewed() && S.overall.done;
+const stageOf = () => {
+  if (S.overall.done) return 3; // 全部完成
+  if (allReviewed()) return 3;
+  if (canTranslate()) return 2;
+  return 1;
+};
+function missingDef() { return defFiles().filter((f) => f.state !== 'reviewed').map((f) => `${f.file}（${ST.def.label[f.state]}）`); }
+function missingRem() { return remFiles().filter((f) => f.state !== 'reviewed').map((f) => `${f.file}（${ST.rem.label[f.state]}）`); }
+const missingAll = () => totalFiles() - defReviewed() - remReviewed();
+
+/* ---------- 渲染 ---------- */
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function chip(role, state, extra) {
+  return `<span class="st ${CLS[state]}" title="${esc(ST[role].label[state])}"><i>${ICON[state]}</i>${esc(ST[role].label[state])}${extra || ''}</span>`;
+}
+function renderSteps() {
+  const defs = [['plan', '版本计划'], ['link', '关联条目与提交'], ['docs', '文档编写'], ['merge', '合并入 main'], ['release', '正式发布']];
+  document.getElementById('stepsNav').innerHTML = defs.map(([k, l]) => {
+    const active = k === 'docs';
+    const locked = (k === 'merge' && !S.committed) || (k === 'release' && true);
+    const title = locked ? '前置条件未满足（演示仅开放文档编写步骤）' : '';
+    return `<button type="button" class="${active ? 'active' : ''} ${locked ? 'locked' : ''}" title="${title}">${l}</button>`;
+  }).join('');
+}
+function render() {
+  renderSteps();
+  const pane = document.getElementById('docsPane');
+  if (S.refreshing) { pane.innerHTML = '<p class="loading">正在读取最新内容…</p>'; return; }
+  if (S.loadErr) {
+    pane.innerHTML = `
+      <p class="gate fail" role="alert">发布流程数据读取失败：模拟磁盘读取错误（演示开关已开启）</p>
+      <p><button type="button" class="btn" id="retryBtn">重试</button></p>`;
+    bindPane();
+    return;
+  }
+  const stage = stageOf();
+  const st = (n, name, done, cur) => {
+    const cls = done ? 'done' : cur ? 'cur' : 'todo';
+    const ico = done ? '✔' : cur ? '●' : (n === 2 && !canTranslate() ? '🔒' : '○');
+    return `<span class="stage ${cls}"><i class="ico">${ico}</i> ${name}</span>`;
+  };
+  const stageHtml = `
+    <div class="stagebar">
+      ${st(1, `① 默认语言先行（${defLang()} 总结与审查）`, defReviewed() === DOC_KEYS.length, stage === 1)}
+      <span class="arrow">──</span>
+      ${st(2, '② AI 翻译与审查（剩余语言）', remReviewed() === remTotal(), stage === 2)}
+      <span class="arrow">──</span>
+      ${st(3, '③ 整体审查完结', S.overall.done, stage === 3)}
+      <span class="stage-note">${stageHint(stage)}</span>
+    </div>`;
+  const actions = `
+    <div class="actions">
+      <button type="button" class="btn" id="refreshBtn" ${S.refreshing ? 'disabled' : ''}>刷新</button>
+      <button type="button" class="btn" id="summaryBtn" ${S.task ? 'disabled' : ''} title="${summaryTitle()}">${summaryBtnText()}</button>
+      <button type="button" class="btn" id="translateBtn" ${(!canTranslate() || S.task) ? 'aria-disabled="true"' : ''} title="${translateTitle()}">${translateBtnText()}</button>
+      <button type="button" class="btn" id="reviewBtn" title="打开审查对话框：类型四页签、全语言栏同步滚动（栏数 = 语言集语言数），逐文件编辑 / 保存 / 通过审核">审查</button>
+      <button type="button" class="btn" id="overallBtn" ${!canOverall() ? 'aria-disabled="true"' : ''} title="${overallTitle()}">整体审查${S.overall.done ? ' ✔已完结' : ''}</button>
+      <button type="button" class="btn primary" id="commitBtn" ${!canCommit() || S.committed ? 'aria-disabled="true"' : ''} title="${commitTitle()}">${commitBtnText()}</button>
+    </div>`;
+  const sub = `
+    <div class="docs-sub">
+      <div>
+        <strong>文档编写 · 分语言流水线（语言集 ${LANGS.join(',')}）</strong>
+        <p>先 AI 总结并审查默认语言（${defLang()} · ${PACKS[defLang()].name}）四文档；审核完毕后解锁 AI 翻译生成剩余语言文档并逐文件审查；${totalFiles()} 个文件全部审核后整体审查完结，方可提交到本地 dev 分支。</p>
+      </div>
+      ${actions}
+    </div>`;
+  const brief = taskBriefHtml();
+  const promptBox = S.taskDone && S.taskDone.prompt
+    ? `<details class="prompt" open><summary>${S.taskDone.prompt.title}（已复制到剪贴板，交给 AI Agent 执行；进度逐文件回执，本页自动刷新）</summary>
+       <textarea rows="6" readonly>${esc(S.taskDone.prompt.text)}</textarea></details>` : '';
+  const rows = [
+    `<li class="group">— 默认语言（语言集首语言 ${defLang()} · ${PACKS[defLang()].name}，无后缀，AI 总结范围 4 文件）—</li>`,
+    ...defFiles().map((f) => rowHtml(f)),
+    ...remLangs().flatMap((lang) => [
+      `<li class="group">— ${lang} · ${PACKS[lang].name}（剩余语言，AI 翻译生成 4 文件）—</li>`,
+      ...DOC_KEYS.map((k) => rowHtml(S.files[fileOf(k, lang)])),
+    ]),
+  ].join('');
+  pane.innerHTML = `
+    ${stageHtml}${sub}${promptBox}${brief}
+    <div class="files-head"><span>文件（4×${LANGS.length}=${totalFiles()} · 默认语言 ${defReviewed()}/4 已审核 · 剩余语言 ${remReviewed()}/${remTotal()} 已审核）</span><span>状态</span></div>
+    <ul class="files">${rows}</ul>
+    ${gateHtml()}`;
+  bindPane();
+}
+function rowHtml(f) {
+  const running = S.task && S.task.file === f.file;
+  const extra = running ? ` · ${S.task.kind === 'summary' ? 'AI 总结' : 'AI 翻译'} ${S.task.done + 1}/${S.task.total}` : '';
+  return `<li><span class="fname">${esc(f.file)}<span class="lang">（${f.lang}）</span></span>
+    <span style="display:flex;align-items:center;gap:8px">${chip(f.role, f.state, extra)}</span></li>`;
+}
+function stageHint(stage) {
+  if (S.overall.done) return '三阶段全部完成：文档编写已完结，可提交（或已提交）。';
+  if (stage === 1) return `阶段一进行中：AI 总结仅覆盖默认语言（${defLang()}）四文件；默认语言 ${defReviewed()}/4 已审核——全部审核后解锁 AI 翻译。`;
+  if (stage === 2) return `阶段二进行中：AI 翻译以已审核默认语言（${defLang()}）文档为基准生成剩余语言 ${remTotal()} 个文件；剩余语言 ${remReviewed()}/${remTotal()} 已审核。`;
+  return `${totalFiles()} 个文件全部已审核：可进行整体审查完结（完结后「提交」解锁）。`;
+}
+function taskBriefHtml() {
+  if (S.task) {
+    const name = S.task.kind === 'summary' ? 'AI 总结' : 'AI 翻译';
+    return `<p class="task-brief"><span class="run">${name}进行中：${S.task.done}/${S.task.total} · 当前：<code>${esc(S.task.file)}</code>（${S.task.kind === 'summary' ? '正在总结' : '正在翻译'}）</span> · 独立锁 ${S.task.kind === 'summary' ? 'summary' : 'translate（示意）'}，与 AI 分析 / AI 开发互不占用</p>`;
+  }
+  if (S.taskDone && !S.taskDone.ok) {
+    const name = S.taskDone.kind === 'summary' ? 'AI 总结' : 'AI 翻译';
+    return `<p class="task-brief"><span class="err">${name}中断：${esc(S.taskDone.reason)}（文件状态不悬挂「正在…」，可再次点击续跑）</span></p>`;
+  }
+  return '<p class="task-brief">暂无进行中的文档任务（任务模块 / 全局任务面板同口径：进行中展示、收尾移出）</p>';
+}
+function gateHtml() {
+  if (S.committed) return `<div class="gate ok" role="note">已提交到本地 dev 分支（hash ${esc(S.committed.hash)}，仅 ${totalFiles()} 个文档 pathspec）：满足「合并入 main」前置。</div>`;
+  if (canCommit()) return `<div class="gate ok" role="note">整体审查已完结：${totalFiles()}/${totalFiles()} 已审核 · 完结于 ${esc(S.overall.at)} —— 可提交到本地 dev 分支。</div>`;
+  const parts = [];
+  if (defReviewed() < DOC_KEYS.length) parts.push(`默认语言尚缺 ${DOC_KEYS.length - defReviewed()} 个文件审核（${missingDef().join('、')}）`);
+  if (remReviewed() < remTotal()) parts.push(canTranslate() ? `剩余语言尚缺 ${remTotal() - remReviewed()} 个文件审核（${missingRem().join('、')}）` : 'AI 翻译未解锁（需默认语言 4/4 已审核）');
+  if (allReviewed() && !S.overall.done) parts.push('整体审查未完结');
+  if (S.scopeStale) parts.push(`发布范围已变化（${S.staleReason || '条目或提交变化'}），审核与完结已失效，需重新审查与完结`);
+  return `<div class="gate" role="note">提交门禁：默认语言 ${defReviewed()}/4 · 剩余语言 ${remReviewed()}/${remTotal()} 已审核 —— 提交按钮禁用：${parts.join('；')}。</div>`;
+}
+function summaryTitle() {
+  return `复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结默认语言（${defLang()}）四文件（已审核文件跳过；也可不经 AI 总结直接审查）`;
+}
+function summaryBtnText() {
+  if (S.task && S.task.kind === 'summary') return `总结中 ${S.task.done}/${S.task.total}`;
+  return 'AI 总结';
+}
+function translateTitle() {
+  if (!canTranslate()) return `AI 翻译未解锁：还需默认语言 ${DOC_KEYS.length - defReviewed()} 个文件通过审查（${missingDef().join('、')}）`;
+  return `复制 AI 翻译提示词到剪贴板：以已审核默认语言（${defLang()}）文档为基准，交 AI Agent 逐文件生成剩余语言 ${remTotal()} 个文件`;
+}
+function translateBtnText() {
+  if (S.task && S.task.kind === 'translate') return `翻译中 ${S.task.done}/${S.task.total}`;
+  return canTranslate() ? 'AI 翻译' : 'AI 翻译 🔒';
+}
+function overallTitle() {
+  if (S.overall.done) return '整体审查已完结：发布范围变化会使其失效回退';
+  if (!canOverall()) return `还需 ${missingAll()} 个文件通过审查：${[...missingDef(), ...missingRem()].join('、')}`;
+  return '打开整体审查完结对话框：核对各语言一致 / 按语言互链 / 范围一致后确认完结（完结后「提交」解锁）';
+}
+function commitTitle() {
+  if (S.committed) return `已提交到本地 dev 分支（${S.committed.hash}）`;
+  if (!allReviewed()) return `还需 ${missingAll()} 个文件通过审查：${[...missingDef(), ...missingRem()].join('、')}`;
+  if (!S.overall.done) return '整体审查完结后才可提交（在全部文件已审核门禁之上叠加完结条件）';
+  return `把语言集内全部文档（${totalFiles()} 个）提交到本地 dev 分支（pathspec 限定，不夹带业务源码）`;
+}
+function commitBtnText() {
+  if (S.committed) return '已提交 ✓';
+  return canCommit() ? '提交' : '提交 🔒';
+}
+
+/* ---------- 事件绑定 ---------- */
+function bindPane() {
+  const $ = (id) => document.getElementById(id);
+  if ($('retryBtn')) $('retryBtn').onclick = () => { doRefresh(); };
+  if ($('refreshBtn')) $('refreshBtn').onclick = () => { doRefresh(); };
+  if ($('summaryBtn')) $('summaryBtn').onclick = () => { startTask('summary'); };
+  if ($('translateBtn')) $('translateBtn').onclick = () => {
+    if (!canTranslate()) { toast(`AI 翻译未解锁：还需默认语言 ${DOC_KEYS.length - defReviewed()} 个文件通过审查（${missingDef().join('、')}）`, 'fail'); return; }
+    if (S.task) return;
+    startTask('translate');
+  };
+  if ($('reviewBtn')) $('reviewBtn').onclick = openReview;
+  if ($('overallBtn')) $('overallBtn').onclick = () => {
+    if (!canOverall()) { toast(`整体审查未解锁：还需 ${missingAll()} 个文件通过审查`, 'fail'); return; }
+    openOverall();
+  };
+  if ($('commitBtn')) $('commitBtn').onclick = doCommit;
+}
+function doRefresh() {
+  if (S.sim.refreshFail) {
+    S.loadErr = true; S.refreshing = false; render();
+    toast('发布流程数据读取失败：模拟磁盘读取错误', 'fail');
+    return;
+  }
+  S.loadErr = false; S.refreshing = true; render();
+  setTimeout(() => { S.refreshing = false; render(); toast(`✓ 已重新读取 ${totalFiles()} 个文件内容与状态`); }, 800);
+}
+function startTask(kind) {
+  const list = kind === 'summary' ? defFiles() : remFiles();
+  const todo = list.filter((f) => f.state !== 'reviewed');
+  if (!todo.length) { toast(kind === 'summary' ? '默认语言四文件均已审核：无需再总结' : '剩余语言文件均已审核：无需再翻译'); return; }
+  const name = kind === 'summary' ? 'AI 总结' : 'AI 翻译';
+  S.taskDone = {
+    kind, ok: null, prompt: {
+      title: `${name}提示词`,
+      text: kind === 'summary'
+        ? `你是技术写作人员，以子代理身份完成「BLD-20260921-001」的发布文档 AI 总结任务。\n请逐个总结以下四个${PACKS[defLang()].name}文档（仅默认语言 ${defLang()}；剩余语言文件不在本轮范围）：\n${DOC_KEYS.map((k) => `- ${fileOf(k, defLang())}`).join('\n')}\n逐文件回执：atb summary file <RUN-ID> --file <文件名> --state summarizing|summarized\n写作约束：简练通俗、不编造；README 链接同语言 CHANGELOG 与 FEATURES（按语言集命名）。`
+        : `你是翻译人员，以子代理身份完成「BLD-20260921-001」的剩余语言发布文档 AI 翻译任务（语言集 ${LANGS.join(',')}）。\n翻译基准：已审核的四个${PACKS[defLang()].name}文档（唯一基准，不得引入基准外信息）：\n${remLangs().map((l) => DOC_KEYS.map((k) => `- ${fileOf(k, defLang())} → ${fileOf(k, l)}`).join('\n')).join('\n')}\n逐文件回执：atb translate file <RUN-ID> --file <文件名> --state translating|translated（账本与 CLI 形态待确认）\n翻译约束：语义一致、术语统一；README 链接同语言 CHANGELOG 与 FEATURES（如 README_${remLangs()[0]} 链接 CHANGELOG_${remLangs()[0]} / FEATURES_${remLangs()[0]}）。`,
+    },
+  };
+  toast(`✓ ${name}提示词已复制：交给 AI Agent 逐文件执行，进度在本页自动刷新`);
+  runNext(kind, todo);
+}
+function runNext(kind, todo) {
+  const total = kind === 'summary' ? DOC_KEYS.length : remTotal();
+  if (!todo.length) {
+    const name = kind === 'summary' ? 'AI 总结' : 'AI 翻译';
+    S.task = null; S.taskDone = { kind, ok: true, reason: null };
+    render(); toast(`${name}已完成：待审文件均进入「${kind === 'summary' ? '已总结待审核' : '已翻译待审核'}」，等待人工审查`);
+    return;
+  }
+  const f = todo[0];
+  const failHere = S.sim.taskFail && todo.length >= 2; // 中断在当前文件（演示：仅剩 1 个时不中断）
+  S.task = { kind, file: f.file, done: total - todo.length, total };
+  S.files[f.file].state = 'summarizing';
+  render();
+  setTimeout(() => {
+    if (failHere) {
+      S.files[f.file].state = 'untrans'; // 不悬挂「正在…」
+      S.taskDone = { kind, ok: false, reason: '模拟任务中断（演示开关已开启）' };
+      S.task = null; render();
+      toast(`${kind === 'summary' ? 'AI 总结' : 'AI 翻译'}中断：文件状态已回落，可再次点击续跑`, 'fail');
+      return;
+    }
+    S.files[f.file].state = 'summarized';
+    if (f.role === 'rem') S.files[f.file].content = docText(f.lang, f.key);
+    S.task = null;
+    runNext(kind, todo.slice(1));
+  }, 1100);
+}
+function doCommit() {
+  if (S.committed) { toast('已提交到本地 dev 分支'); return; }
+  if (!canCommit()) {
+    if (!allReviewed()) toast(`提交被阻止：还需 ${missingAll()} 个文件通过审查`, 'fail');
+    else toast('提交被阻止：整体审查完结后才可提交', 'fail');
+    return;
+  }
+  toast('提交中…');
+  setTimeout(() => {
+    S.committed = { hash: 'a1b2c3d4e5f6' };
+    render(); toast(`✓ 已提交到本地 dev 分支（hash a1b2c3d，仅 ${totalFiles()} 个文档 pathspec）：满足「合并入 main」前置`);
+  }, 900);
+}
+
+/* ---------- 审查对话框（全语言栏：栏数 = 语言集语言数） ---------- */
+function openReview() {
+  S.review = { open: true, tab: S.review.tab || 'README', modes: S.review.modes || {} };
+  renderReview();
+  document.getElementById('reviewWrap').hidden = false;
+}
+function closeReview() {
+  S.review.open = false;
+  document.getElementById('reviewWrap').hidden = true;
+  render();
+}
+function renderReview() {
+  const tabs = DOC_KEYS.map((k) => {
+    const n = LANGS.filter((lang) => S.files[fileOf(k, lang)].state === 'reviewed').length;
+    return `<button type="button" class="${S.review.tab === k ? 'active' : ''}" data-tab="${k}">${k}（${n}/${LANGS.length}）</button>`;
+  }).join('');
+  document.getElementById('reviewTabs').innerHTML = tabs;
+  const k = S.review.tab;
+  const cols = LANGS.map((lang) => {
+    const file = fileOf(k, lang);
+    const f = S.files[file];
+    const isDef = lang === defLang();
+    const mode = S.review.modes[file] === 'edit' ? 'edit' : 'preview';
+    const body = mode === 'edit'
+      ? `<textarea data-file="${file}" spellcheck="false">${esc(f.content)}</textarea>`
+      : f.content ? `<pre data-file="${file}">${esc(f.content)}</pre>`
+        : `<p class="empty" data-file="${file}">（尚未生成：待 AI 翻译产出；也可直接切换编辑后手写，走「不经 AI」路径）</p>`;
+    return `
+      <div class="col" data-col="${file}">
+        <div class="col-head">
+          <span class="lft"><span class="fname">${esc(file)}<span class="lang">（${isDef ? `默认语言 ${lang}` : lang}）</span></span>${chip(f.role, f.state)}</span>
+          <span class="col-acts">
+            <span class="seg">
+              <button type="button" data-mode="${file}:edit" class="${mode === 'edit' ? 'on' : ''}">编辑</button>
+              <button type="button" data-mode="${file}:preview" class="${mode === 'preview' ? 'on' : ''}">预览</button>
+            </span>
+            <button type="button" class="btn" data-save="${file}">保存</button>
+            <button type="button" class="btn primary" data-approve="${file}" ${f.state === 'reviewed' ? 'disabled title="已审核：编辑保存后才会回退待审核"' : ''}>${f.state === 'reviewed' ? '✔ 已审核' : '通过审核'}</button>
+          </span>
+        </div>
+        <div class="col-body" data-body="${file}">${body}</div>
+      </div>`;
+  }).join('');
+  document.getElementById('reviewCols').innerHTML = cols;
+  const tabN = LANGS.filter((lang) => S.files[fileOf(k, lang)].state === 'reviewed').length;
+  document.getElementById('reviewFoot').textContent =
+    `全部 ${defReviewed() + remReviewed()}/${totalFiles()} 已审核 · 本页签 ${tabN}/${LANGS.length} · 多栏同步滚动：一侧滚动其余按比例跟随`;
+  bindReview();
+}
+function bindReview() {
+  document.querySelectorAll('#reviewTabs button').forEach((b) => {
+    b.onclick = () => { S.review.tab = b.dataset.tab; renderReview(); };
+  });
+  document.querySelectorAll('[data-mode]').forEach((b) => {
+    b.onclick = () => {
+      const [file, mode] = b.dataset.mode.split(':');
+      // 编辑切预览时未保存的改动仅丢弃（演示口径：以「保存」为准）
+      S.review.modes[file] = mode;
+      renderReview();
+    };
+  });
+  document.querySelectorAll('[data-save]').forEach((b) => {
+    b.onclick = () => {
+      const file = b.dataset.save;
+      const ta = document.querySelector(`textarea[data-file="${CSS.escape(file)}"]`);
+      if (!ta) { toast('请先切换到编辑模式再保存', 'fail'); return; }
+      const was = S.files[file].state;
+      S.files[file].content = ta.value;
+      if (was === 'reviewed') {
+        S.files[file].state = 'summarized';
+        const overallWasDone = S.overall.done;
+        if (overallWasDone) { S.overall = { done: false, at: null }; }
+        toast(`${file} 内容已修改：回到「${ST[S.files[file].role].label.summarized}」，需重新审查${overallWasDone ? '；整体完结已失效' : ''}`, 'fail');
+      } else {
+        toast(`✓ ${file} 已保存（白名单限定、≤ 2 MiB 口径）`);
+      }
+      renderReview(); render();
+    };
+  });
+  document.querySelectorAll('[data-approve]').forEach((b) => {
+    b.onclick = () => {
+      const file = b.dataset.approve;
+      // 保存编辑中的内容再审核
+      const ta = document.querySelector(`textarea[data-file="${CSS.escape(file)}"]`);
+      if (ta) S.files[file].content = ta.value;
+      S.files[file].state = 'reviewed';
+      toast(`✓ ${file} 已通过审核（默认语言 ${defReviewed()}/4 · 剩余语言 ${remReviewed()}/${remTotal()}）`);
+      renderReview(); render();
+    };
+  });
+  document.querySelectorAll('[data-close-review]').forEach((b) => { b.onclick = closeReview; });
+  // 全语言栏同步滚动（一侧滚动，其余按比例跟随）
+  const bodies = [...document.querySelectorAll('.col-body')];
+  if (bodies.length > 1) {
+    let lock = null;
+    for (const b of bodies) {
+      b.onscroll = () => {
+        if (lock && lock !== b) return;
+        lock = b;
+        const r = b.scrollTop / Math.max(1, b.scrollHeight - b.clientHeight);
+        for (const o of bodies) {
+          if (o !== b) o.scrollTop = r * (o.scrollHeight - o.clientHeight);
+        }
+        setTimeout(() => { lock = null; }, 60);
+      };
+    }
+  }
+}
+/* ---------- 整体审查完结对话框 ---------- */
+function openOverall() {
+  S.overallOpen = true;
+  renderOverall();
+  document.getElementById('overallWrap').hidden = false;
+}
+function closeOverall() {
+  S.overallOpen = false;
+  document.getElementById('overallWrap').hidden = true;
+}
+function renderOverall() {
+  const linkHint = ['README.md → CHANGELOG.md / FEATURES.md',
+    ...remLangs().map((l) => `README_${l}.md → CHANGELOG_${l}.md / FEATURES_${l}.md`)].join('；');
+  const items = [
+    { ok: defReviewed() === DOC_KEYS.length, t: `默认语言四文件已全部审核（${defReviewed()}/4）`, w: '默认语言先行阶段的完成条件' },
+    { ok: remReviewed() === remTotal(), t: `剩余语言文件已全部审核（${remReviewed()}/${remTotal()}，随语言集动态）`, w: 'AI 翻译与审查阶段的完成条件' },
+    { ok: defReviewed() === DOC_KEYS.length && remReviewed() === remTotal(), t: '各语言内容语义一致（以已审核默认语言为基准）', w: '翻译稿与基准逐段核对' },
+    { ok: defReviewed() === DOC_KEYS.length && remReviewed() === remTotal(), t: 'README 按语言互链真实可达（按语言集全语言互链）', w: linkHint },
+    { ok: !S.scopeStale, t: '文档内容与本版发布范围一致', w: S.scopeStale ? `发布范围已变化（${S.staleReason || ''}）` : '未纳入本版的功能不得写成已发布' },
+  ];
+  document.getElementById('overallList').innerHTML = items.map((it) => `
+    <label><input type="checkbox" ${it.ok ? 'checked' : ''} disabled><span>${it.ok ? '' : '（未满足）'}${esc(it.t)}<br><span class="why">${esc(it.w)}</span></span></label>`).join('');
+  const btn = document.getElementById('confirmOverall');
+  const allOk = items.every((it) => it.ok);
+  btn.disabled = !allOk || S.overall.done;
+  btn.textContent = S.overall.done ? '已完结 ✓' : '确认完结';
+  document.querySelectorAll('[data-close-overall]').forEach((b) => { b.onclick = closeOverall; });
+  btn.onclick = () => {
+    if (!allOk || S.overall.done) return;
+    S.overall = { done: true, at: new Date().toLocaleTimeString('zh-CN', { hour12: false }) };
+    closeOverall(); render();
+    toast('✓ 整体审查已完结：文档编写步骤完结，「提交」已解锁');
+  };
+}
+
+/* ---------- 模拟开关与工具 ---------- */
+function toast(msg, cls) {
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast ' + (cls || 'ok');
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => { el.remove(); }, 3600);
+}
+document.getElementById('langSetSel').onchange = function () {
+  LANGS = this.value.split(',');
+  initState();
+  render();
+  toast(`语言集已切换为 ${LANGS.join(',')}：默认语言 = ${defLang()}（${PACKS[defLang()].name}），文档清单 ${totalFiles()} 个（4 × ${LANGS.length}），阶段状态重置`);
+};
+document.getElementById('simRefreshFail').onclick = function () {
+  S.sim.refreshFail = !S.sim.refreshFail;
+  this.textContent = `刷新读取失败：${S.sim.refreshFail ? '开' : '关'}`;
+  toast(`模拟刷新读取失败已${S.sim.refreshFail ? '开启：点击「刷新 / 重试」看失败态' : '关闭'}`);
+};
+document.getElementById('simTaskFail').onclick = function () {
+  S.sim.taskFail = !S.sim.taskFail;
+  this.textContent = `任务中断：${S.sim.taskFail ? '开' : '关'}`;
+  toast(`模拟任务中断已${S.sim.taskFail ? '开启：启动 AI 总结 / AI 翻译会在中途失败' : '关闭'}`);
+};
+document.getElementById('simScopeStale').onclick = () => {
+  S.scopeStale = true; S.staleReason = '演示：增删条目 / 换 commit';
+  // 审核整体失效：已审核回退待审核；完结失效
+  for (const f of Object.values(S.files)) {
+    if (f.state === 'reviewed') f.state = 'summarized';
+  }
+  S.overall = { done: false, at: null };
+  S.committed = null;
+  render();
+  toast('发布范围已变化：逐文件审核与整体完结失效回退，需重新审查与完结', 'fail');
+};
+document.getElementById('themeBtn').onclick = function () {
+  const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = cur;
+  this.textContent = cur === 'dark' ? '浅色模式' : '深色模式';
+};
+document.getElementById('resetBtn').onclick = () => {
+  initState();
+  document.getElementById('simRefreshFail').textContent = '刷新读取失败：关';
+  document.getElementById('simTaskFail').textContent = '任务中断：关';
+  closeReview(); closeOverall();
+  render();
+  toast(`演示已重置：默认语言「未总结」× 4 · 剩余语言「未翻译」× ${remTotal()}（空态）`);
+};
+
+/* ---------- 启动 ---------- */
+initState();
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.dataset.theme = 'dark';
+  document.getElementById('themeBtn').textContent = '浅色模式';
+}
+render();
+</script>
+</body>
+</html>
