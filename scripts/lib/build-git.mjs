@@ -385,12 +385,14 @@ export function analyzePublishIsolation(root, items = []) {
   const perItem = items.map((it) => {
     const intermediates = [];
     try {
-      const out = gitOk(root, ['log', `${targetBranch}..${String(it.commit)}`, '--format=%H%x09%s'], '读取范围提交');
+      // REQ-20260921-015：intermediates 附提交时间 %cI（date）——「一键加入所有依赖提交」对
+      // 同一条目落在依赖集合的多个提交取最新时以此比较；字段向后兼容（既有调用方不读）。
+      const out = gitOk(root, ['log', `${targetBranch}..${String(it.commit)}`, '--format=%H%x09%cI%x09%s'], '读取范围提交');
       for (const line of out.split('\n')) {
         if (!line.trim()) continue;
-        const [hash, ...rest] = line.split('\t');
+        const [hash, date, ...rest] = line.split('\t');
         if (selected.has(hash.toLowerCase())) continue;
-        intermediates.push({ hash, subject: rest.join('\t') });
+        intermediates.push({ hash, date: date || '', subject: rest.join('\t') });
       }
     } catch { /* 单条读取失败不阻塞整体分析（执行前 precheckMerge 兜底） */ }
     return { itemId: it.itemId, commit: String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };

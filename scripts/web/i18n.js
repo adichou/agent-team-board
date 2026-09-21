@@ -22,6 +22,16 @@ const EN = {
   '添加所选条目': 'Add selected items',
   '合并入 main': 'Merge into main',
   '重试合并入 main': 'Retry merge into main',
+  // REQ-20260921-015 合并页简洁隔离分析 + 一键加入所有依赖提交（静态文案；插值句见 EN_DYNAMIC）
+  '一键加入所有依赖提交': 'Add all dependency commits',
+  '加入中…': 'Adding dependencies…',
+  '正在执行一键加入，请稍候': 'Adding dependencies — please wait',
+  '查看依赖明细': 'View dependency details',
+  '所选提交无未选祖先：变更可独立进入主分支。': 'Selected commits have no unselected ancestors: the changes can enter the main branch independently.',
+  '正在加载合并分析…': 'Loading merge analysis…',
+  '一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。': 'After adding, the scope change is flagged by the existing mechanism (docs need re-review / re-commit).',
+  '把全部依赖提交对应的条目与提交纳入本版本发布范围；加入后发布范围变化，文档需重新核对 / 提交': 'Bring the items and commits behind all dependency commits into this version\u2019s release scope; the scope changes once added — docs need re-review / re-commit',
+  '⚠ 未能加入任何依赖提交（原因见隔离分析清单）': '⚠ No dependency commits could be added (see the list in the isolation analysis)',
   // BUG-20260913-004：「提示词与回答回填」更名「AI 完善」（按钮迁入版本卡片，弹窗标题同步）
   'AI 完善': 'AI refine',
   '复制提示词': 'Copy prompt',
@@ -1458,6 +1468,19 @@ const EN_DYNAMIC = {
   '匹配 ◇ / 共 ◇ 条': '$1 of $2 matched',
   '第 ◇ / ◇ 页': 'Page $1 of $2',
   '没有匹配的关联条目（关键词：◇）': 'No matching linked items (keyword: $1)',
+  // REQ-20260921-015 合并页简洁隔离分析 + 一键加入所有依赖提交（汇总行 / 单行阻止反馈 /
+  // 明细归属 / 跳过清单 / toast 与读取失败，动态拼接）
+  '发现 ◇ 个未选祖先（依赖）提交 · 影响 ◇ 个所选条目': 'Found $1 unselected ancestor (dependency) commits · affecting $2 selected items',
+  '（其余 ◇ 个略）': '(another $1 omitted)',
+  '为 ◇ 的依赖': 'dependency of $1',
+  '⚠ ◇ 处混合提交无法安全拆分，合并将被阻止': '⚠ $1 mixed commit(s) cannot be split safely — merge will be blocked',
+  '⚠ 暂不可合并：◇': '⚠ Cannot merge yet: $1',
+  '⚠ 合并失败：◇（可重试，只补未合并条目）': '⚠ Merge failed: $1 (retryable; only unmerged items are retried)',
+  '⚠ 以下 ◇ 个依赖未能纳入：': '⚠ The following $1 dependency commit(s) could not be added:',
+  '✓ 已加入 ◇ 个依赖条目：发布范围已变化，文档需重新核对 / 提交': '✓ Added $1 dependency items: the release scope has changed — docs need re-review / re-commit',
+  '✓ 已加入 ◇ 个依赖条目，跳过 ◇ 个（原因见隔离分析清单）': '✓ Added $1 dependency items, skipped $2 (see the list in the isolation analysis)',
+  '✕ 一键加入失败：◇': '✕ Failed to add dependencies: $1',
+  '合并分析读取失败：◇': 'Failed to load the merge analysis: $1',
   // BUG-20260915-014 构建模块版本详情发布页签：读取失败 / 详情失败 / 创建与动作反馈（动态拼接）
   '发布记录读取失败：◇': 'Failed to load release records: $1',
   '详情读取失败：◇': 'Failed to load run details: $1',
