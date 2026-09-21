@@ -415,6 +415,11 @@ export function isAncestorOf(root, commit, ref) {
 // BUG-20260921-015：所选集合 = 全部条目的全部提交（一条目多提交按提交 hash 去重展开，
 // 不按条目去重）；perItem 按条目聚合其全部提交的未选祖先（hash 去重），commit 字段保留
 // 首个提交（展示兼容），与「一键加入」、合并执行使用同一提交集合，分析口径一致收敛。
+// BUG-20260921-018：共享 hash 已是目标分支祖先 → 不判混合提交，降级为 exempted + notes
+// 豁免提示——执行侧 mergeIsolatedIntoMain 对其幂等记成功（alreadyIncluded），分析口径与
+// 执行语义一致，不再把必然幂等成功的合并整体挡住；不在目标分支上的共享 hash 仍判混合并
+// 阻断（重放按（条目 × 提交）展开不跨条目去重，会双重 cherry-pick 失败，前置干净阻断
+// 优于执行中途失败）。
 export function analyzePublishIsolation(root, items = []) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法分析发布范围');
   const targetBranch = resolveMainBranch(root) || 'main';
@@ -429,7 +434,14 @@ export function analyzePublishIsolation(root, items = []) {
   const shared = [...byCommit.entries()]
     .filter(([, ids]) => ids.length > 1)
     .map(([commit, itemIds]) => ({ commit, itemIds }));
-  const blocked = shared.map((s) => `同一提交 ${s.commit.slice(0, 12)} 关联多个条目（${s.itemIds.join('、')}）：混合提交无法安全拆分，请调整关联或先合并为一个条目`);
+  const exempted = [];
+  const blocked = [];
+  for (const s of shared) {
+    // 豁免判定与执行侧同一函数同一口径（merge-base --is-ancestor），不存在「分析放行、
+    // 执行失败」的缝隙；豁免不静默，归入 exempted 明细与 notes 提示。
+    if (isAncestorOf(root, s.commit, targetBranch)) exempted.push(s);
+    else blocked.push(`同一提交 ${s.commit.slice(0, 12)} 关联多个条目（${s.itemIds.join('、')}）：混合提交无法安全拆分，请调整关联或先合并为一个条目`);
+  }
   const perItem = items.map((it) => {
     const intermediates = [];
     const seen = new Set();
@@ -451,9 +463,14 @@ export function analyzePublishIsolation(root, items = []) {
     return { itemId: it.itemId, commit: commitsOf(it)[0] || String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };
   });
   const notes = [];
+  // BUG-20260921-018：已在目标分支上的共享提交豁免混合判定——notes 提示（不静默），
+  // 明细见 exempted（前端合并页据此展示单行豁免说明）。
+  if (exempted.length) {
+    notes.push(`已豁免 ${exempted.length} 处共享提交的混合判定（提交已在 ${targetBranch} 上，合并时幂等记成功）：${exempted.map((s) => `${s.commit.slice(0, 12)}（关联 ${s.itemIds.length} 个条目）`).join('、')}`);
+  }
   const totalInter = perItem.reduce((n, x) => n + x.count, 0);
   if (totalInter) notes.push(`所选提交存在 ${totalInter} 个未选祖先提交：普通 merge 会一并带入 main，隔离合并不带入；若所选改动依赖这些内容，执行时将冲突阻止并说明原因`);
-  return { targetBranch, perItem, shared, blocked, notes };
+  return { targetBranch, perItem, shared, blocked, exempted, notes };
 }
 
 // 受限写（隔离合并）：把版本所选条目的 commit 逐条 cherry-pick 重放入主分支（-x 保留原始

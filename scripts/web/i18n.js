@@ -1488,6 +1488,9 @@ const EN_DYNAMIC = {
   '（其余 ◇ 个略）': '(another $1 omitted)',
   '为 ◇ 的依赖': 'dependency of $1',
   '⚠ ◇ 处混合提交无法安全拆分，合并将被阻止': '⚠ $1 mixed commit(s) cannot be split safely — merge will be blocked',
+  // BUG-20260921-018 已在目标分支上的共享提交豁免混合判定：单行豁免提示（动态拼接，
+  // 计数与目标分支名双插值；title 明细为标识不进翻译管线）
+  '已豁免 ◇ 处共享提交的混合判定（提交已在 ◇ 上，合并时幂等记成功）': 'Mixed-commit verdict exempted for $1 shared commit(s) (already on $2 — merge records idempotent success)',
   '⚠ 暂不可合并：◇': '⚠ Cannot merge yet: $1',
   '⚠ 合并失败：◇（可重试，只补未合并条目）': '⚠ Merge failed: $1 (retryable; only unmerged items are retried)',
   '⚠ 以下 ◇ 个依赖未能纳入：': '⚠ The following $1 dependency commit(s) could not be added:',

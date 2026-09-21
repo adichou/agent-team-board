@@ -2676,7 +2676,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
         : null,
       siteRepoRoot: config.homepageRepoRoot || null,
-      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, blocked: mergeAnalysis.blocked, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared } : null,
+      // BUG-20260921-018：exempted（已在目标分支上的共享提交豁免明细）透传，前端合并页
+      // 据此展示单行豁免说明（与 notes 同口径，不静默）。
+      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, blocked: mergeAnalysis.blocked, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared, exempted: mergeAnalysis.exempted } : null,
       analysisError,
       currentBranch: branches.current,
       mainBranch: branches.mainBranch,
