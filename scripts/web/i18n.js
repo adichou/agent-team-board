@@ -82,15 +82,20 @@ const EN = {
   '已合并': 'Merged',
   '关键词在版本列表内前端过滤（版本名 / 单号），不发请求': 'Keywords filter the version list client-side (name / item id); no request is made',
   // REQ-20260914-002 分支浏览提交记录搜索（搜索行静态文案；计数 / 空态 / 末页动态拼接见 EN_DYNAMIC）
-  '搜提交说明 / 作者 / hash…': 'Search subject / author / hash…',
+  // REQ-20260921-002：搜索范围扩展 message / 分支名 / tag（忽略大小写）+ 双模式 radio；
+  // 旧键「搜提交说明 / 作者 / hash…」随 placeholder 更新清理
+  '搜 message / 分支 / tag / 作者 / hash…': 'Search message / branch / tag / author / hash…',
   '搜索': 'Search',
   '清除': 'Clear',
   '搜索中…': 'Searching commits…',
-  // REQ-20260920-001 分支浏览历史拓扑图（合并标签 / 隐藏父提交计数等动态拼接见 EN_DYNAMIC；
-  // 详情区「父提交：」为独立文本节点后接父 hash code 列表，故为静态键）
+  // REQ-20260921-002 分支浏览提交树双模式搜索（模式 radio 静态文案；计数动态拼接见 EN_DYNAMIC）
+  '高亮定位': 'Highlight',
+  '过滤（保留祖先）': 'Filter (keep ancestors)',
+  '搜索模式': 'Search mode',
+  // REQ-20260920-001 分支浏览历史拓扑图（详情区「父提交：」为独立文本节点后接父 hash code 列表，
+  // 故为静态键；REQ-20260921-002 树化后详情口径保留，旧键「搜索已隐藏中间提交…」随虚线语义清理）
   '父提交：': 'Parents: ',
   '无父提交（根提交）': 'No parents (root commit)',
-  '搜索已隐藏中间提交：虚线不表示直接父子关系。': 'Search hides intermediate commits: dashed lines do not represent direct parent-child edges.',
   '父提交在后续页，轨道继续；此处不是历史起点。': 'Parent commits continue on the next page; the track continues — this is not the start of history.',
   // BUG-20260920-002 分支浏览双支并集（merge-base 悬停提示与详情区标注；并集提示行见 EN_DYNAMIC）
   'main 与 dev 的汇聚点（merge-base）': 'Convergence point of main and dev (merge-base)',
@@ -1085,13 +1090,16 @@ const EN_DYNAMIC = {
   // BUG-20260920-006：「合并入 main」入口不在 dev 的禁用 title / 点击 toast（真实分支名插值；
   // detached HEAD 回退句无插值，放静态 EN）
   '当前分支是 ◇，不在 dev：请自行切换回 dev 后重试（不自动切分支）': 'Current branch is $1, not dev: switch back to dev yourself and retry (no automatic branch switch)',
-  // REQ-20260914-002 分支浏览提交记录搜索：命中计数 / 无匹配空态 / 搜索态末页反馈（动态拼接）
-  '共 ◇ 条匹配（关键词：◇）': '$1 commits matched (keyword: $2)',
+  // REQ-20260914-002 分支浏览提交记录搜索：无匹配空态 / 搜索态末页反馈（动态拼接）；
+  // REQ-20260921-002：命中计数升级双模式（highlight 命中处数 / filter 匹配数 + 保留集与全量数），
+  // 旧键「共 ◇ 条匹配（关键词：◇）」随计数行升级清理
   '没有匹配的提交（关键词：◇）': 'No matching commits (keyword: $1)',
   '已到末尾 · 共 ◇ 条匹配': 'End of results · $1 matches in total',
-  // REQ-20260920-001 分支浏览历史拓扑图：合并标签 / 行内与详情区隐藏父提交说明（动态拼接）
+  '高亮 ◇ 处匹配（message / 分支名 / tag）': '$1 matches highlighted (message / branch / tag)',
+  '匹配 ◇ 条 · 保留 ◇/◇ 条（含祖先，泳道连通）': '$1 matched · $2/$3 kept (with ancestors, lanes connected)',
+  // REQ-20260920-001 分支浏览历史拓扑图：合并标签（动态拼接；REQ-20260921-002 树化后
+  // 详情区沿用；旧键「◇ 个父提交未显示（虚线延续）」随虚线语义清理）
   '合并 · ◇ 父提交': 'Merge · $1 parent commits',
-  '◇ 个父提交未显示（虚线延续）': '$1 parent commits not shown (dashed continuation)',
   // BUG-20260920-002 分支浏览双支并集：并集视图提示（真实分支名插值，master 回退仓库如实显示）
   '并集视图：同时显示 ◇ 与 ◇ 的提交（含未合并提交）': 'Union view: commits from both $1 and $2 (unmerged commits included)',
   // REQ-20260915-003 构建模块关联条目联合列表：搜索计数 / 页码 / 无匹配空态（动态拼接）

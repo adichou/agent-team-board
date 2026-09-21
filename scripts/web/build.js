@@ -101,10 +101,13 @@ const ATBBuild = (() => {
     // REQ-20260920-001：历史拓扑图选中节点（hash）；切换分支重置，跨页保留
     logSelected: null,
     // REQ-20260914-002：提交记录关键词搜索——logQuery 为已提交生效的关键词（空 = 默认分页列表，
-    // 搜索范围 = 当前所选分支全部提交，服务端过滤）；logQueryInput 为输入框草稿（重渲染回填防丢字），
+    // 搜索范围 = 当前所选分支全部提交，服务端匹配）；logQueryInput 为输入框草稿（重渲染回填防丢字），
     // 与顶部模块搜索 state.query 互不串扰
     logQuery: '',
     logQueryInput: '',
+    // REQ-20260921-002：搜索双模式——highlight（默认：数据集不变，命中高亮定位 + 滚动首条）/
+    // filter（保留集 = 匹配 ∪ 祖先闭包，泳道连通）；模式为用户视图偏好，切分支不重置
+    logSearchMode: 'highlight',
     syncBusy: false,
     pushBusy: false,
     // BUG-20260914-011：最近一次同步结果（{ pushed, failed, skipped, remote }）——空态细分依据；
@@ -366,7 +369,8 @@ const ATBBuild = (() => {
 
   // 加载指定页提交记录：请求带 limit/offset；翻页失败保留已加载内容（页码回退）+
   // 行内错误与重试入口；首次加载失败维持原口径（清空 + error 态）。
-  // REQ-20260914-002：logQuery 非空时请求附加 q（服务端全量过滤分页，能命中当前页之外的提交）。
+  // REQ-20260914-002：logQuery 非空时请求附加 q（服务端全量匹配分页，能命中当前页之外的提交）。
+  // REQ-20260921-002：搜索请求附 mode（highlight = 数据集不变 + 命中清单；filter = 祖先闭包保留集）。
   async function loadLog(page = 1) {
     const branch = state.logBranch;
     if (!branch) return;
@@ -377,7 +381,7 @@ const ATBBuild = (() => {
     render();
     try {
       const size = state.logPageSize;
-      const q = state.logQuery ? `&q=${encodeURIComponent(state.logQuery)}` : '';
+      const q = state.logQuery ? `&q=${encodeURIComponent(state.logQuery)}&mode=${state.logSearchMode}` : '';
       const r = await api(`/branch-log?branch=${encodeURIComponent(branch)}&limit=${size}&offset=${(state.logPage - 1) * size}${q}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
@@ -396,6 +400,16 @@ const ATBBuild = (() => {
         state.logPhase = 'error';
       }
     }
+    render();
+  }
+
+  // REQ-20260921-002：切换搜索模式——radio change 触发；已有生效关键词时带词重查回第一页
+  //（两模式服务端口径不同：闭包保留集 vs 命中清单），无关键词仅切视图。
+  function setLogSearchMode(mode) {
+    const m = mode === 'filter' ? 'filter' : 'highlight';
+    if (m === state.logSearchMode) return;
+    state.logSearchMode = m;
+    if (state.logQuery) return loadLog(1);
     render();
   }
 
@@ -437,136 +451,154 @@ const ATBBuild = (() => {
     if (state.logBranch) loadLog(1); // 换每页条数回第一页
   }
 
-  /* ---------- REQ-20260920-001 历史拓扑图（logGraph 纯函数 + 行内 SVG + 节点选择） ---------- */
+  /* ---------- REQ-20260921-002 提交树（vendored @gitgraph/js 渲染 + 数据适配纯函数） ---------- */
 
-  // 轨道调色板类数（lg-c0..lg-c5 循环，颜色走 style.css 的 --git-lg*，深浅色自适应）
-  const GRAPH_LANES = 6;
-  const GRAPH_ROW_H = 30;  // 行内图形高度（与 .bld-graph 样式一致）
-  const GRAPH_LANE_W = 13; // 每条轨道列宽
+  // 泳道配色（浅 / 深两套，与 --git-lg* 调色板同源；gitgraph 模板需具体色值，深浅切换重画树）
+  const TREE_COLORS_LIGHT = ['#2563eb', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#16a34a'];
+  const TREE_COLORS_DARK = ['#60a5fa', '#fbbf24', '#a78bfa', '#22d3ee', '#f87171', '#4ade80'];
 
-  // 纯函数：按真实父子关系计算每行轨道与连线（新→旧 commits，含 hash / parents；缺 parents 视为无父）。
-  // 布局同 `git log --graph` 直觉：lanes 为跨行延续的线（下标即列位），提交命中已有线则该线终止于节点，
-  // 第一父优先复用节点原槽位（主线直下），其余父向右分叉或汇入已有线；父提交不在当前展示集合
-  //（搜索过滤 / 页边界未加载）时不画实线直连，改虚线延续并计入 hiddenParents。根提交（无父）无向下边。
-  // hasAbove：首行上方是否还有未随行加载的上下文（翻页 offset>0 或搜索态）——有真实父提交时画上方虚线桩，
-  // 不把页边界提交误判成根。
-  // BUG-20260920-002：colorOf(hash) → 色号（可选）——按分支身份稳定配色（main→0 / dev→1）：
-  // 命中时节点与父边用分支色（同 hash 恒同色，翻页 / 搜索子集不跳变；节点在 dev 色线上时仍按
-  // 自身 side 配色，汇聚点不误染）；未命中（单支 / 缺 side 的隐藏上下文）回落既有槽位分配。
-  // mergeBase（可选）：命中行的 mergeBase=true 并给 mbTo（水平汇聚虚线目标车道——取该行上方
-  // 其他延续线中最近的车道，单线汇聚时用相邻车道），供渲染层画汇聚连线与「Merge-base」标注。
-  // 输出 { rows, laneCount }；row = { hash, lane, color, merge, parentCount,
-  // hiddenParents, stubAbove, segments, mergeBase, mbTo }；segment = { x1, x2, color, dashed, fromNode }
-  //（x 为列号；fromNode=父边自节点半高处出发，否则为贯穿行的延续线；dashed=上下文缺失虚线）。
-  function logGraph(commits, { hasAbove = false, colorOf = null, mergeBase = null } = {}) {
+  // 纯函数：commits（新→旧，含 parents / tags / side / heads 上下文）→ @gitgraph/js import()
+  // 支持的扁平 DAG 数组（git2json 形态：author 为对象、refs 数组、`tag: ` 前缀识别标签）。
+  // - refs：双支 heads 命中行带分支名（main/dev 标签）；单支模式（无 heads）最新行带选中分支名；
+  //   tags 以 `tag: <名>` 进入 refs（gitgraph 渲染 tag 标签）。
+  // - parents 截断到集合内：页边界 / 闭包外的父不外连（gitgraph 无法画页外虚线桩，
+  //   页边界提示由「父提交在后续页，轨道继续」行补充）。
+  // - merge 行附 mergeParents（集合内父计数，供渲染层合并标识与详情）。
+  function treeData(commits, { heads = [], branchName = null } = {}) {
     const list = Array.isArray(commits) ? commits : [];
-    const shown = new Set(list.map((c) => c.hash));
-    const tint = (hash, fallback) => { // 分支色优先，未命中回落槽位（fallback 惰性求值保持 nextColor 语义）
-      if (colorOf) {
-        const n = colorOf(hash);
-        if (Number.isInteger(n)) return n;
-      }
-      return fallback();
-    };
-    let lanes = []; // 上一行底部延续下来的线：{ hash, color }
-    let nextColor = 0;
-    let laneCount = 1;
-    const rows = list.map((c, i) => {
-      const parents = Array.isArray(c.parents) ? c.parents : [];
-      let nodeX;
-      let ownColor;
-      const kept = []; // 本节点以下继续的线（保持相对顺序；节点所在线终止于节点）
-      lanes.forEach((l) => {
-        if (nodeX === undefined && l.hash === c.hash) { nodeX = kept.length; ownColor = l.color; return; }
-        kept.push(l);
-      });
-      const stubAbove = nodeX === undefined && parents.length > 0 && (i > 0 || hasAbove);
-      const ownTint = colorOf ? colorOf(c.hash) : undefined;
-      if (nodeX === undefined) { nodeX = kept.length; ownColor = Number.isInteger(ownTint) ? ownTint : nextColor++ % GRAPH_LANES; }
-      else if (Number.isInteger(ownTint)) ownColor = ownTint; // 命中已有线也按分支色覆盖线色
-      const bottom = kept.slice(); // 底部线槽（顺序即下行位置；父边新槽插入其中）
-      const hiddenParents = [];
-      const hiddenEdges = [];
-      const parentEdges = [];
-      parents.forEach((p, pi) => {
-        const existIdx = bottom.findIndex((l) => l.hash === p);
-        if (!shown.has(p)) {
-          // 父提交不在展示集合：虚线延续（临时槽，不进入下一行状态）
-          hiddenParents.push(p);
-          return;
-        }
-        if (existIdx >= 0) {
-          // 汇入已有线（分支合并回该线）：沿用该线颜色
-          parentEdges.push({ target: existIdx, color: bottom[existIdx].color });
-          return;
-        }
-        // 新线：第一父复用节点原槽位（主线直下、同色），其余父新色右移
-        const color = pi === 0 ? ownColor : tint(p, () => nextColor++ % GRAPH_LANES);
-        const slot = Math.min(pi === 0 ? nodeX : bottom.length, bottom.length);
-        bottom.splice(slot, 0, { hash: p, color });
-        parentEdges.push({ target: slot, color });
-      });
-      // 隐藏父边落位在最右（绘制专用，不影响真实线）
-      hiddenParents.forEach(() => {
-        hiddenEdges.push({ target: bottom.length + hiddenEdges.length, color: ownColor });
-      });
-      // 延续线段：顶部位置（before 下标）→ 底部位置（bottom 下标）；位置变化画曲线绕行
-      const segments = kept.map((l) => ({
-        x1: lanes.indexOf(l), x2: bottom.indexOf(l), color: l.color, dashed: false, fromNode: false,
-      }));
-      for (const e of parentEdges) segments.push({ x1: nodeX, x2: e.target, color: e.color, dashed: false, fromNode: true });
-      for (const e of hiddenEdges) segments.push({ x1: nodeX, x2: e.target, color: e.color, dashed: true, fromNode: true });
-      // BUG-20260920-002：merge-base 行汇聚标记（mbTo = 上方其他延续线中最近车道；无则相邻车道）
-      let isMb = false;
-      let mbTo = null;
-      if (mergeBase && c.hash === mergeBase) {
-        isMb = true;
-        const others = [];
-        lanes.forEach((l, idx) => { if (l.hash !== c.hash) others.push(idx); });
-        mbTo = others.length
-          ? others.reduce((best, idx) => (Math.abs(idx - nodeX) < Math.abs(best - nodeX) ? idx : best))
-          : nodeX + 1;
-      }
-      laneCount = Math.max(laneCount, lanes.length, bottom.length + hiddenEdges.length, nodeX + 1, mbTo != null ? mbTo + 1 : 0);
-      lanes = bottom;
-      return {
-        hash: c.hash, lane: nodeX, color: ownColor, merge: parents.length >= 2, parentCount: parents.length,
-        hiddenParents, stubAbove, segments, mergeBase: isMb, mbTo,
+    const shown = new Set(list.map((c) => c && c.hash));
+    const headByHash = new Map((Array.isArray(heads) ? heads : [])
+      .filter((x) => x && x.name && x.hash).map((x) => [x.hash, x.name]));
+    return list.map((c, i) => {
+      const parents = (Array.isArray(c.parents) ? c.parents : []).filter((p) => shown.has(p));
+      const refs = [];
+      const headName = headByHash.get(c.hash);
+      if (headName) refs.push(headName);
+      else if (i === 0 && branchName && !headByHash.size) refs.push(String(branchName));
+      for (const tg of Array.isArray(c.tags) ? c.tags : []) refs.push(`tag: ${tg}`);
+      const row = {
+        hash: c.hash,
+        parents,
+        author: { name: String(c.author || ''), email: 'atb@local' },
+        subject: `${c.short || String(c.hash).slice(0, 7)} ${c.subject || ''}`,
+        refs,
       };
+      if (parents.length >= 2) row.mergeParents = parents.length;
+      return row;
     });
-    return { rows, laneCount };
   }
 
-  // 行内 SVG：每行固定高度、按 laneCount 自适应宽（flex 布局下列宽恒定，行不错位）。
-  // 合并节点双圈（非仅颜色），配合行内「合并 · N 父提交」文字标签。
-  // BUG-20260920-002：opts.head 画分支头节点外圈；mergeBase 行画水平汇聚虚线（lg-mb，宽度覆盖 mbTo）。
-  function graphSvg(row, laneCount, opts = {}) {
-    const w = Math.max(laneCount, row.lane + 1, row.mbTo != null ? row.mbTo + 1 : 0) * GRAPH_LANE_W + 4;
-    const mid = GRAPH_ROW_H / 2;
-    const x = (col) => col * GRAPH_LANE_W + 4;
-    const parts = row.segments.map((s) => {
-      const cls = `lg-c${s.color}`;
-      const dash = s.dashed ? ' stroke-dasharray="4 3"' : '';
-      if (s.fromNode) {
-        const d = s.x1 === s.x2
-          ? `M ${x(s.x1)} ${mid} V ${GRAPH_ROW_H}`
-          : `M ${x(s.x1)} ${mid} C ${x(s.x1)} ${mid + 7}, ${x(s.x2)} ${GRAPH_ROW_H - 8}, ${x(s.x2)} ${GRAPH_ROW_H}`;
-        return `<path d="${d}" class="${cls}"${dash}/>`;
-      }
-      const d = s.x1 === s.x2
-        ? `M ${x(s.x1)} 0 V ${GRAPH_ROW_H}`
-        : `M ${x(s.x1)} 0 C ${x(s.x1)} 8, ${x(s.x2)} ${mid - 7}, ${x(s.x2)} ${mid} L ${x(s.x2)} ${GRAPH_ROW_H}`;
-      return `<path d="${d}" class="${cls}"/>`;
+  // gitgraph metro 模板定制（commit spacing / dot 尺寸 / message 等宽字体 + 短 hash 前缀已拼进
+  // subject、不展示作者；分支线宽）。浅深两套色板由 prefersDark 决定。
+  function treeTemplate(dark) {
+    const GG = window.GitgraphJS;
+    return GG.templateExtend(GG.metroTemplate, {
+      colors: dark ? TREE_COLORS_DARK : TREE_COLORS_LIGHT,
+      branch: { lineWidth: 2 },
+      commit: {
+        spacing: 34,
+        dot: { size: 9 },
+        message: {
+          displayAuthor: false,
+          displayHash: false,
+          font: 'normal 12px ui-monospace, Menlo, monospace',
+          color: dark ? '#cccccc' : '#24292f',
+        },
+      },
     });
-    if (row.stubAbove) parts.push(`<path d="M ${x(row.lane)} 0 V ${mid}" class="lg-c${row.color}" stroke-dasharray="4 3"/>`);
-    const nx = x(row.lane);
-    const mb = row.mergeBase && row.mbTo != null && row.mbTo !== row.lane
-      ? `<path d="M ${nx} ${mid} H ${x(row.mbTo)}" class="lg-mb"/>` : '';
-    const node = row.merge
-      ? `<circle cx="${nx}" cy="${mid}" r="6" class="lg-node lg-c${row.color}"/><circle cx="${nx}" cy="${mid}" r="2.4" class="lg-dot" fill="var(--git-lg${row.color})"/>`
-      : `<circle cx="${nx}" cy="${mid}" r="4" class="lg-node lg-c${row.color}"/>`;
-    const headRing = opts.head ? `<circle cx="${nx}" cy="${mid}" r="8.5" class="lg-head"/>` : '';
-    return `<svg class="bld-graph" width="${w}" height="${GRAPH_ROW_H}" viewBox="0 0 ${w} ${GRAPH_ROW_H}" aria-hidden="true"><g class="lg-lines">${parts.join('')}</g>${mb}${node}${headRing}</svg>`;
+  }
+
+  function prefersDark() {
+    try {
+      return typeof matchMedia === 'function' && !!matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch { return false; }
+  }
+
+  // 系统外观变化 → 重画树（一次性注册；浅深模板色板不同，须整体重放）
+  let treeThemeWatched = false;
+  function watchTreeTheme() {
+    if (treeThemeWatched) return;
+    treeThemeWatched = true;
+    try {
+      const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+      mq?.addEventListener?.('change', () => render());
+    } catch { /* 测试桩环境无 matchMedia */ }
+  }
+
+  // 渲染后处理：高亮（highlight 模式命中清单）/ 选中 / 合并标识（message 文字样式 + 悬停说明）；
+  // 首条命中滚动定位（scrollIntoView，容器内居中）。message 文本 = `<short> <subject>`（与
+  // treeData 拼装口径一致，据此从 SVG text 反查提交）。
+  function decorateTree(box, commits) {
+    const matched = new Set(state.branchLog?.mode === 'highlight' && state.branchLog?.query === state.logQuery
+      ? (state.branchLog.matchedHashes || []) : []);
+    const msgOf = new Map(commits.map((c) => [`${c.short || String(c.hash).slice(0, 7)} ${c.subject || ''}`, c]));
+    let firstHit = null;
+    try {
+      for (const txt of box.querySelectorAll('svg text')) {
+        const c = msgOf.get(String(txt.textContent || '').trim());
+        if (!c) continue;
+        txt.classList?.toggle?.('hit', matched.has(c.hash));
+        txt.classList?.toggle?.('sel', state.logSelected === c.hash);
+        const pc = (Array.isArray(c.parents) ? c.parents : []).filter(Boolean).length;
+        if (pc >= 2) {
+          txt.classList?.add?.('gg-merge');
+          if (typeof document.createElementNS === 'function') {
+            const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            title.textContent = `合并 · ${pc} 父提交`;
+            txt.appendChild(title);
+          }
+        }
+        if (matched.has(c.hash) && !firstHit) firstHit = txt;
+      }
+      if (matched.size && firstHit && firstHit.scrollIntoView) firstHit.scrollIntoView({ block: 'center' });
+    } catch { /* 测试桩环境无完整 SVG DOM */ }
+  }
+
+  // 树挂载（bindCommon 渲染后调用）：vendor 脚本在位时以 import() 喂扁平 DAG（refs 自动出
+  // 分支名 / tag 标签，泳道布局由库完成），每条提交注入 onClick（click 切换选中详情，
+  // REQ-20260920-001 口径）；vendor 加载失败 / 渲染异常降级为行式列表（fallbackTreeHtml）。
+  function mountTree(view) {
+    const GG = (typeof window !== 'undefined' && window.GitgraphJS) || null;
+    const box = view.querySelector('#bldTreeBox');
+    if (!GG || !box) return;
+    const commits = state.branchLog?.commits || [];
+    if (!commits.length || !state.logBranch) return;
+    const heads = Array.isArray(state.branchLog?.heads) ? state.branchLog.heads : [];
+    const data = treeData(commits, { heads, branchName: state.logBranch });
+    for (const c of data) c.onClick = () => selectLogRow(c.hash, { toggle: true });
+    try {
+      box.innerHTML = '';
+      const graph = GG.createGitgraph(box, {
+        orientation: 'vertical-reverse',
+        template: treeTemplate(prefersDark()),
+        author: 'atb <atb@local>',
+      });
+      graph.import(data);
+    } catch {
+      box.innerHTML = fallbackTreeHtml(commits);
+      return;
+    }
+    decorateTree(box, commits);
+    watchTreeTheme();
+  }
+
+  // 降级行列表（vendor 脚本加载失败 / 渲染异常时保底可读可交互；与树共享同一数据与详情口径）
+  function fallbackTreeHtml(commits) {
+    const heads = Array.isArray(state.branchLog?.heads) ? state.branchLog.heads : [];
+    const dual = heads.length >= 2;
+    const mergeBase = state.branchLog?.mergeBase || null;
+    const sideMap = new Map(commits.map((c) => [c.hash, c.side]));
+    const headByHash = new Map(heads.map((x) => [x.hash, x.name]));
+    return `<ul class="bld-log">${commits.map((c) => {
+      const mergeTag = (Array.isArray(c.parents) ? c.parents : []).length >= 2
+        ? `<span class="bld-merge-tag">合并 · ${c.parents.length} 父提交</span>` : '';
+      const headName = dual ? headByHash.get(c.hash) : null;
+      const headTag = headName ? `<span class="bld-branch-tag bt-${sideMap.get(c.hash) === 'dev' ? 'dev' : 'main'}">${esc(headName)}</span>` : '';
+      const mbTag = dual && mergeBase && c.hash === mergeBase
+        ? '<span class="bld-branch-tag bt-mb" title="main 与 dev 的汇聚点（merge-base）">Merge-base</span>' : '';
+      const tagChips = (c.tags || []).map((tg) => `<span class="bld-tag-chip" title="标签">${esc(tg)}</span>`).join('');
+      return `<li><button type="button" class="bld-log-row${state.logSelected === c.hash ? ' sel' : ''}" data-log-row="${esc(c.hash)}"><code>${markMatch(c.short || c.hash.slice(0, 8), state.logQuery)}</code> ${headTag}${mbTag}${tagChips}<span>${markMatch(c.subject, state.logQuery)}</span>${mergeTag}<span class="muted small">${markMatch(c.author, state.logQuery)} · ${esc(fmtTime(c.date))}</span></button></li>`;
+    }).join('')}</ul>`;
   }
 
   // REQ-20260920-001：选中提交节点（click 切换 / focus 直选同一路径）——重渲染出详情区；
@@ -2441,8 +2473,10 @@ const ATBBuild = (() => {
       if (state.logPhase === 'error') return `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError || '')}</p>`;
       const commits = state.branchLog?.commits || [];
       const inSearch = !!state.logQuery;
-      // REQ-20260914-002：无命中空态（与「该分支暂无提交」区分；一键清除回默认列表）
-      if (inSearch && !commits.length && !state.logError) {
+      // REQ-20260914-002：无命中空态（与「该分支暂无提交」区分；一键清除回默认列表）。
+      // REQ-20260921-002：highlight 模式数据集不变（无命中仍显示全量 + 「高亮 0 处」计数），
+      // 空集仅出现在 filter（闭包保留集空 = 无匹配）或默认列表。
+      if (inSearch && !commits.length && !state.logError && state.branchLog?.mode !== 'highlight') {
         return `<p class="muted small">没有匹配的提交（关键词：${esc(state.logQuery)}）</p>
           <p><button type="button" class="btn small quiet" data-log-search-clear>清除</button></p>`;
       }
@@ -2450,61 +2484,42 @@ const ATBBuild = (() => {
       // BUG-20260914-009：分页展示全部提交（替代 50 条静默截断）——翻页失败保留旧内容时
       // 在列表上方显示行内错误 + 重试（重发失败时的目标页）
       const errBar = state.logError ? `<p class="rel-form-err" role="alert">提交记录读取失败：${esc(state.logError)} <button type="button" class="btn small" id="bldLogRetry">重试</button></p>` : '';
-      // REQ-20260914-002：命中计数行——仅在展示数据与当前关键词一致时显示（翻页失败保留旧
-      // 内容时不误报计数）；行渲染沿用既有口径 + 命中词高亮
+      // REQ-20260921-002：双模式计数行——仅在展示数据与当前关键词一致时显示（翻页失败保留旧
+      // 内容时不误报计数）；highlight = 命中处数（数据集为全量分页）；filter = 匹配数与
+      // 保留集（匹配 ∪ 祖先闭包）/全量数。
       const countBar = inSearch && state.branchLog?.query === state.logQuery && !state.logError
-        ? `<div class="bld-log-count small" role="status">共 ${state.branchLog.total} 条匹配（关键词：${esc(state.logQuery)}）</div>`
+        ? (state.branchLog?.mode === 'highlight'
+          ? `<div class="bld-log-count small" role="status">高亮 ${Number(state.branchLog.matchedTotal ?? 0)} 处匹配（message / 分支名 / tag）</div>`
+          : `<div class="bld-log-count small" role="status">匹配 ${Number(state.branchLog?.matchedTotal ?? 0)} 条 · 保留 ${Number(state.branchLog?.total ?? 0)}/${Number(state.branchLog?.allTotal ?? state.branchLog?.total ?? 0)} 条（含祖先，泳道连通）</div>`)
         : '';
       // BUG-20260920-002：双支并集上下文——载荷含 heads（≥2 支本地头）即双支模式（选中
-      // 主分支 / dev 且两支并存）。轨道颜色按提交 side 稳定分配（main→lg0 / dev→lg1：同 hash
-      // 恒同色，翻页 / 搜索子集不跳变）；mergeBase 行画水平汇聚虚线并加「Merge-base」文字标注。
+      // 主分支 / dev 且两支并存）；分支名标签（gitgraph refs / 降级列表徽标）与 side 稳定配色。
       const heads = Array.isArray(state.branchLog?.heads) ? state.branchLog.heads.filter((x) => x && x.name && x.hash) : [];
       const dual = heads.length >= 2;
       const mergeBase = state.branchLog?.mergeBase || null;
-      const sideMap = new Map(commits.map((c) => [c.hash, c.side]));
-      const headByHash = new Map(heads.map((x) => [x.hash, x.name]));
-      // REQ-20260920-001：历史拓扑图——按真实父子关系绘制轨道连线（logGraph）；
-      // 行内容为可聚焦按钮（click 切换选中 / focus 直选，键盘可达），选中行出详情区。
-      // hasAbove：翻页 offset>0 或搜索态时首行上方存在未随行加载的上下文（虚线桩，不误判根）。
-      const inSearchCtx = inSearch || Number(state.branchLog?.offset) > 0;
-      const g = logGraph(commits, {
-        hasAbove: inSearchCtx,
-        colorOf: dual ? (hsh) => (sideMap.get(hsh) === 'dev' ? 1 : sideMap.has(hsh) ? 0 : undefined) : null,
-        mergeBase: dual ? mergeBase : null,
-      });
       // 并集提示：双支模式常驻说明（真实分支名插值，含未合并提交口径）
       const unionHint = dual
         ? `<div class="bld-log-union muted small" role="note">并集视图：同时显示 ${esc(heads[0].name)} 与 ${esc(heads[1].name)} 的提交（含未合并提交）</div>`
         : '';
-      const selRow = state.logSelected ? g.rows.find((r) => r.hash === state.logSelected) : null;
-      const selCommit = selRow ? commits.find((c) => c.hash === selRow.hash) : null;
+      // REQ-20260921-002：选中详情区（click 切换选中，树路径与降级列表同口径）——父提交清单
+      // 如实列出（页外父也展示短 hash）；合并提交附「合并 · N 父提交」；双支 merge-base 标注。
+      const selCommit = state.logSelected ? commits.find((c) => c.hash === state.logSelected) : null;
       const detail = selCommit ? (() => {
-        const parentsPart = (selCommit.parents || []).length
-          ? `<span>父提交：</span>${selCommit.parents.map((p) => `<code>${esc(short(p))}</code>`).join(' ')}`
+        const parents = Array.isArray(selCommit.parents) ? selCommit.parents : [];
+        const parentsPart = parents.length
+          ? `<span>父提交：</span>${parents.map((p) => `<code>${esc(short(p))}</code>`).join(' ')}`
           : '<span>无父提交（根提交）</span>';
-        const hiddenPart = selRow.hiddenParents.length
-          ? ` <span class="muted">${selRow.hiddenParents.length} 个父提交未显示（虚线延续）</span>`
-          : '';
+        const mergePart = parents.length >= 2 ? ` <span class="bld-merge-tag">合并 · ${parents.length} 父提交</span>` : '';
         const mbPart = dual && mergeBase && selCommit.hash === mergeBase
           ? ' <span class="bld-branch-tag bt-mb" title="main 与 dev 的汇聚点（merge-base）">main ∩ dev 汇聚点</span>'
           : '';
-        return `<div class="bld-log-detail" id="bldLogDetail" role="status"><code>${esc(selCommit.short || selCommit.hash.slice(0, 8))}</code> ${esc(selCommit.subject)}；${parentsPart}${hiddenPart}${mbPart}</div>`;
+        return `<div class="bld-log-detail" id="bldLogDetail" role="status"><code>${esc(selCommit.short || selCommit.hash.slice(0, 8))}</code> ${esc(selCommit.subject)}；${parentsPart}${mergePart}${mbPart}</div>`;
       })() : '';
-      // 搜索隐藏中间提交：顶部统一说明（虚线语义）；无断档时不打扰
-      const searchHint = inSearch && g.rows.some((r) => r.hiddenParents.length)
-        ? '<div class="bld-log-eof muted small" role="note">搜索已隐藏中间提交：虚线不表示直接父子关系。</div>'
-        : '';
-      const listHtml = `<ul class="bld-log">${commits.map((c, i) => {
-        const row = g.rows[i];
-        const mergeTag = row.merge ? `<span class="bld-merge-tag">合并 · ${row.parentCount} 父提交</span>` : '';
-        const gapNote = row.hiddenParents.length ? `<span class="muted small">${row.hiddenParents.length} 个父提交未显示（虚线延续）</span>` : '';
-        // BUG-20260920-002：分支头名称标签（真实 heads 命中行；配色按 side 走轨道色）+
-        // merge-base 汇聚标注（虚线描边，非颜色提示；悬停说明）
-        const headName = dual ? headByHash.get(c.hash) : null;
-        const headTag = headName ? `<span class="bld-branch-tag bt-${sideMap.get(c.hash) === 'dev' ? 'dev' : 'main'}">${esc(headName)}</span>` : '';
-        const mbTag = row.mergeBase ? '<span class="bld-branch-tag bt-mb" title="main 与 dev 的汇聚点（merge-base）">Merge-base</span>' : '';
-        return `<li><button type="button" class="bld-log-row${state.logSelected === c.hash ? ' sel' : ''}" data-log-row="${esc(c.hash)}">${graphSvg(row, g.laneCount, { head: dual && headByHash.has(c.hash) })}<code>${markMatch(c.short || c.hash.slice(0, 8), state.logQuery)}</code> ${headTag}${mbTag}<span>${markMatch(c.subject, state.logQuery)}</span>${mergeTag}<span class="muted small">${markMatch(c.author, state.logQuery)} · ${esc(fmtTime(c.date))}</span>${gapNote}</button></li>`;
-      }).join('')}</ul>`;
+      // REQ-20260921-002：提交树——vendor @gitgraph/js 在位时空容器（bindCommon 后 mountTree
+      // 画树：泳道 / 圆点 / 分支合并曲线 / 分支名与 tag 标签 / message + 短 hash，浅深色跟随
+      // 系统）；vendor 加载失败降级行式列表（保底可读可交互）。
+      const hasGG = typeof window !== 'undefined' && !!window.GitgraphJS;
+      const treeBox = `<div class="bld-tree" id="bldTreeBox" role="list">${hasGG ? '' : fallbackTreeHtml(commits)}</div>`;
       const total = Number(state.branchLog?.total ?? commits.length);
       // 页边界延续提示：本页未到分支历史末尾时，最老行的父提交必在后续页（父提交恒更旧）——
       // 提示轨道继续，不把页边界提交画成根。
@@ -2521,15 +2536,21 @@ const ATBBuild = (() => {
           ? `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条匹配</div>`
           : `<div class="bld-log-eof muted small" role="note">已到末尾 · 共 ${total} 条提交（可翻至分支首个提交）</div>`)
         : '';
-      return errBar + countBar + unionHint + detail + searchHint + listHtml + boundary + eof + logPagerHtml(page, pages, size, total);
+      return errBar + countBar + unionHint + detail + treeBox + boundary + eof + logPagerHtml(page, pages, size, total);
     })() : '<div class="rel-detail muted">点击左侧分支查看提交记录</div>';
     // REQ-20260914-002：搜索控件——关键词输入 + 搜索触发 + 清除入口；执行中禁用防重复触发；
     // 清除入口仅在已有生效关键词时出现（无匹配空态内另有同口径入口）。
     // BUG-20260914-016：搜索控件并入 bld-log-head 头部行（与分支名同一行），
     // 不再在头部行下方独占一行；搜索行为与状态反馈口径不变。
+    // REQ-20260921-002：双模式 radio（高亮定位 / 过滤（保留祖先））——默认高亮定位，
+    // 模式为视图偏好（切分支不重置）；搜索范围 message / 分支名 / tag / 作者 / hash。
     const searchRow = state.logBranch ? `
           <div class="bld-log-search" role="search">
-            <input type="search" id="bldLogSearchInput" placeholder="搜提交说明 / 作者 / hash…" value="${esc(state.logQueryInput)}" aria-label="搜索提交记录"${state.logPhase === 'loading' ? ' disabled' : ''}>
+            <input type="search" id="bldLogSearchInput" placeholder="搜 message / 分支 / tag / 作者 / hash…" value="${esc(state.logQueryInput)}" aria-label="搜索提交记录"${state.logPhase === 'loading' ? ' disabled' : ''}>
+            <span class="bld-log-modes" role="radiogroup" aria-label="搜索模式">
+              <label class="bld-log-mode"><input type="radio" name="logSearchMode" value="highlight" data-log-mode="highlight"${state.logSearchMode !== 'filter' ? ' checked' : ''}${state.logPhase === 'loading' ? ' disabled' : ''}>高亮定位</label>
+              <label class="bld-log-mode"><input type="radio" name="logSearchMode" value="filter" data-log-mode="filter"${state.logSearchMode === 'filter' ? ' checked' : ''}${state.logPhase === 'loading' ? ' disabled' : ''}>过滤（保留祖先）</label>
+            </span>
             <button type="button" class="btn small" id="bldLogSearchGo"${state.logPhase === 'loading' ? ' disabled' : ''}>${state.logPhase === 'loading' ? '搜索中…' : '搜索'}</button>
             ${state.logQuery ? '<button type="button" class="btn small quiet" data-log-search-clear>清除</button>' : ''}
           </div>` : '';
@@ -2774,6 +2795,12 @@ const ATBBuild = (() => {
     for (const el of view.querySelectorAll('[data-log-search-clear]')) {
       el.addEventListener('click', clearLogSearch);
     }
+    // REQ-20260921-002：搜索模式 radio（highlight / filter）——切模式带词重查；树挂载在
+    // 全部行绑定之后（渲染后置，容器内容替换为 gitgraph 树）
+    for (const el of view.querySelectorAll('[data-log-mode]')) {
+      el.addEventListener('change', () => setLogSearchMode(el.dataset.logMode));
+    }
+    mountTree(view);
     // REQ-20260920-001：提交节点选择——click 切换选中 / focus 直选（键盘 Tab 即出详情）
     for (const el of view.querySelectorAll('[data-log-row]')) {
       el.addEventListener('click', () => selectLogRow(el.dataset.logRow, { toggle: true }));
@@ -2898,8 +2925,11 @@ const ATBBuild = (() => {
     gotoLogPage, setLogPageSize, retryLogPage,
     // REQ-20260914-002：提交记录搜索行为接缝（测试与搜索交互）
     submitLogSearch, clearLogSearch, markMatch,
-    // REQ-20260920-001：历史拓扑图纯函数与节点选择行为接缝（测试与交互）
-    logGraph, selectLogRow,
+    // REQ-20260921-002：提交树（vendored @gitgraph/js）——数据适配纯函数 / 挂载入口 /
+    // 搜索模式切换接缝（测试与交互）
+    treeData, mountTree, setLogSearchMode,
+    // REQ-20260920-001：节点选择行为接缝（测试与交互）
+    selectLogRow,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
     // REQ-20260915-003：关联条目联合列表搜索 / 分页纯函数与行为接缝（测试与交互）

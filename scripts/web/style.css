@@ -3142,43 +3142,49 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-log-pager button.on { background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; }
 .bld-log-pager button:disabled { opacity: 0.45; cursor: default; }
 .bld-log-gap { color: var(--muted); }
-/* REQ-20260920-001 历史拓扑图：行内 SVG 轨道 + 可聚焦行按钮 + 合并标签 + 选中详情区。
-   轨道颜色走 --git-lg* 调色板（浅 / 深两套）；虚线 = 上下文缺失（搜索过滤 / 页边界延续），
-   合并节点双圈 + 行内文字标签（非仅颜色传达）。 */
+/* REQ-20260921-002 提交树（vendored @gitgraph/js 渲染）：可聚焦行按钮（降级列表）+ 合并标签 +
+   选中详情区；树本体为 gitgraph 渲染的 SVG（泳道配色走模板色板，浅深重画），
+   渲染后处理给 message text 挂 .hit / .sel / .gg-merge。 */
 .bld-log-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; width: 100%; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
 .bld-log-row:hover { background: var(--info-bg); }
 .bld-log-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .bld-log-row.sel { background: var(--info-bg); }
 .bld-log-row .muted { margin-left: auto; }
-.bld-graph { flex-shrink: 0; align-self: center; display: block; overflow: visible; }
-.bld-graph .lg-lines path { fill: none; stroke-width: 2; }
-.bld-graph .lg-c0 { stroke: var(--git-lg0); }
-.bld-graph .lg-c1 { stroke: var(--git-lg1); }
-.bld-graph .lg-c2 { stroke: var(--git-lg2); }
-.bld-graph .lg-c3 { stroke: var(--git-lg3); }
-.bld-graph .lg-c4 { stroke: var(--git-lg4); }
-.bld-graph .lg-c5 { stroke: var(--git-lg5); }
-.bld-graph .lg-node { fill: var(--panel); stroke-width: 2; }
-.bld-graph .lg-dot { stroke: none; }
 .bld-merge-tag { flex: none; font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 99px; background: var(--info-bg); color: var(--info-text); }
-/* BUG-20260920-002 双支并集：分支头名称标签（main/dev 按轨道色 lg0/lg1 稳定配色）+
-   Merge-base 汇聚标注（虚线描边青色，非颜色提示另有文字）+ 汇聚水平虚线 + 分支头节点外圈 */
+/* BUG-20260920-002 双支并集：分支头名称标签（main/dev 按 --git-lg0/1 稳定配色）+
+   Merge-base 汇聚标注（虚线描边青色，非颜色提示另有文字）——树路径为 gitgraph 分支标签，
+   降级列表沿用徽标 */
 .bld-branch-tag { flex: none; align-self: center; border-radius: 4px; font-size: 11px; line-height: 17px; padding: 0 7px; color: #fff; }
 .bld-branch-tag.bt-main { background: var(--git-lg0); }
 .bld-branch-tag.bt-dev { background: var(--git-lg1); }
 .bld-branch-tag.bt-mb { border: 1px dashed #2dd4bf; color: #2dd4bf; background: transparent; }
-.bld-graph .lg-mb { fill: none; stroke: #2dd4bf; stroke-width: 1.6; stroke-dasharray: 4 3; }
-.bld-graph .lg-head { fill: none; stroke: var(--text); stroke-width: 1.2; opacity: .8; }
+/* REQ-20260921-002：降级列表 tag 徽标（tag 标签在树路径由 gitgraph tag 渲染） */
+.bld-tag-chip { flex: none; align-self: center; border-radius: 99px; font-size: 11px; line-height: 17px; padding: 0 8px; background: var(--info-bg); color: var(--info-text); border: 1px solid var(--border); }
 .bld-log-union { margin: 0 0 8px; }
 .bld-log-detail { font-size: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
 .bld-log-pager select { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
 .bld-log-range { color: var(--muted); font-size: 12px; margin-left: auto; }
 .bld-log-eof { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; }
+/* REQ-20260921-002 提交树容器：限高内滚动（长历史不把右栏无限推长），overflow-x 防车道溢出 */
+.bld-tree { margin: 0 0 4px; max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 6px 4px; background: var(--panel); }
+.bld-tree svg text { cursor: pointer; }
+/* 命中高亮（highlight 模式渲染后处理挂 .hit）浅 / 深两套 + 选中（.sel）+ 合并标识（.gg-merge） */
+.bld-tree svg text.hit { fill: #8250df !important; font-weight: 700; }
+.bld-tree svg text.sel { font-weight: 700; text-decoration: underline; }
+.bld-tree svg text.gg-merge { font-style: italic; }
+@media (prefers-color-scheme: dark) {
+  .bld-tree svg text.hit { fill: #d2a8ff !important; }
+}
 /* REQ-20260914-002 提交记录搜索控件 + 命中计数 + 高亮（跟随系统深浅色变量）；
-   BUG-20260914-016：并入头部行后不再独占一行，去掉自身 margin，弹性吃掉行内剩余宽度 */
+   BUG-20260914-016：并入头部行后不再独占一行，去掉自身 margin，弹性吃掉行内剩余宽度；
+   REQ-20260921-002：双模式 radio 组（高亮定位 / 过滤（保留祖先））随控件折行 */
 .bld-log-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 160px; min-width: 0; }
 .bld-log-search input[type="search"] { flex: 1 1 160px; min-width: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 8px; font-size: 12px; }
 .bld-log-search input[type="search"]:disabled { opacity: 0.55; }
+.bld-log-modes { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.bld-log-mode { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); white-space: nowrap; padding: 3px 7px; border-radius: 99px; border: 1px solid var(--border); }
+.bld-log-mode:has(input:checked) { color: var(--info-text); background: var(--info-bg); border-color: var(--info-text); }
+.bld-log-mode input { accent-color: var(--info-text); margin: 0; }
 .bld-log-count { margin-bottom: 8px; color: var(--muted); }
 .bld-log li mark { background: var(--info-bg); color: var(--info-text); border-radius: 3px; padding: 0 1px; }
 @media (max-width: 960px) {
