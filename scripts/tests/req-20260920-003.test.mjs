@@ -296,7 +296,9 @@ t('L3-3 隔离合并冲突：B 依赖 A（同文件同行）时阻止并保留�
   assert.equal(git(dir, ['branch', '--show-current']), 'dev');
 });
 
-t('L3-4 混合提交（同一 commit 关联多个条目）被分析阻止', () => {
+// BUG-20260921-018 拆分：共享 hash 按是否已在目标分支分流——不在 main 的仍阻断（原口径），
+// 已在 main 的豁免（与执行侧 alreadyIncluded 幂等语义一致）。
+t('L3-4a 混合提交（同一 commit 关联多个条目）不在目标分支上：被分析阻止（文案不变）', () => {
   const dir = mkRepo(tmpdir('atb-pf-git4-'));
   fs.writeFileSync(path.join(dir, 'x.txt'), 'x');
   git(dir, ['add', '-A']); git(dir, ['commit', '-m', 'init']);
@@ -309,6 +311,26 @@ t('L3-4 混合提交（同一 commit 关联多个条目）被分析阻止', () =
     { itemId: 'REQ-20260920-002', commit: c },
   ]);
   assert.ok(an.blocked.length >= 1 && /混|同一提交/.test(an.blocked[0]), '同一提交关联多条目应阻止并解释');
+  assert.equal((an.exempted || []).length, 0, '不在目标分支上的共享提交不豁免');
+});
+
+t('L3-4b 共享提交已在目标分支上（BUG-20260921-018）：豁免混合判定，不再阻断', () => {
+  const dir = mkRepo(tmpdir('atb-pf-git4b-'));
+  fs.writeFileSync(path.join(dir, 'x.txt'), 'x');
+  git(dir, ['add', '-A']); git(dir, ['commit', '-m', 'init']);
+  // 基线大提交直接落在 main 上：主题列两个单号 → 两条目共享同一 hash（已在目标分支）
+  fs.writeFileSync(path.join(dir, 'y.txt'), 'y');
+  git(dir, ['add', '-A']); git(dir, ['commit', '-m', 'feat: A+B REQ-20260920-001 REQ-20260920-002']);
+  const c = git(dir, ['rev-parse', 'HEAD']);
+  git(dir, ['switch', '-c', 'dev']);
+  const an = buildGit.analyzePublishIsolation(dir, [
+    { itemId: 'REQ-20260920-001', commit: c },
+    { itemId: 'REQ-20260920-002', commit: c },
+  ]);
+  assert.equal(an.blocked.length, 0, '已在 main 的共享提交不判混合（合并不被误阻断）');
+  assert.equal(an.shared.length, 1, 'shared 仍如实记录');
+  assert.equal(an.exempted.length, 1, '豁免明细记录');
+  assert.ok(an.notes.some((n) => /豁免/.test(n) && n.includes('main')), 'notes 豁免提示');
 });
 
 t('L3-5 主分支推送：只推 main（不推 dev）、不强推；仅 master 仓库以 master 为目标', () => {
