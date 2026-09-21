@@ -117,30 +117,32 @@ t('T1 页签改名：首个页签显示「概况」，其余四步名称与顺�
   assert.match(inner, /data-bld-tab="branches"[^>]*>分支浏览</, '外层「分支浏览」导航保留');
 });
 
-t('T2 卡片迁移：版本卡片不再渲染 AI 完善按钮；其余四键原位保留', async () => {
+t('T2 卡片迁移：版本卡片不再渲染 AI 完善按钮；合并 / 创建并预检 / 查看发布记录键随 REQ-20260921-016 一并移出卡片（迁往详情对应步骤），删除键随迁标题行保留', async () => {
   const h = setup();
   await h.enter();
   const inner = h.inner();
   const cards = listPart(inner);
   assert.ok(!cards.includes('data-ver-answer'), '卡片区不再有 AI 完善入口');
+  // REQ-20260921-016：列表卡片精简——合并 / 创建并预检 / 查看发布记录只保留详情步骤入口
+  for (const k of ['data-ver-merge', 'data-ver-release', 'data-ver-release-view']) {
+    assert.ok(!cards.includes(k), `卡片区不再有 ${k} 入口（迁往详情对应步骤）`);
+  }
   for (const id of ['BLD-DRAFT', 'BLD-MERGING', 'BLD-MERGED', 'BLD-PUSHED']) {
-    assert.match(cards, new RegExp(`data-ver-merge="${id}"`), `${id} 合并入 main 键保留`);
-    assert.match(cards, new RegExp(`data-ver-release="${id}"`), `${id} 创建并预检键保留`);
-    assert.match(cards, new RegExp(`data-ver-release-view="${id}"`), `${id} 查看发布记录键保留`);
-    assert.match(cards, new RegExp(`data-ver-delete="${id}"`), `${id} 删除键保留`);
+    assert.match(cards, new RegExp(`data-ver-delete="${id}"`), `${id} 删除键保留（REQ-20260921-016 迁标题行右端）`);
   }
 });
 
-t('T3 概况入口：概况内容区顶部操作行有唯一「AI 完善」按钮绑定当前版本；切至其余四步入口隐藏', async () => {
+t('T3 概况入口：概况描述块头部有唯一「AI 完善」按钮（REQ-20260921-016 迁至描述头、紧邻「编辑」左边）绑定当前版本；切至其余四步入口隐藏', async () => {
   const h = setup();
   await h.enter(); // 选中 BLD-DRAFT，plan 步
   let detail = detailPart(h.inner());
-  assert.match(detail, /class="bld-plan-acts"/, '概况内容区顶部有操作行容器');
+  assert.match(detail, /bld-desc-block-head/, '概况描述块头部存在（入口所在容器）');
   assert.match(detail, /data-ver-answer="BLD-DRAFT"/, '按钮绑定当前选中版本');
   assert.match(detail, /aria-label="AI 完善 BLD-DRAFT"/, '可访问名称带版本号');
   assert.equal((detail.match(/data-ver-answer=/g) || []).length, 1, '详情内唯一入口（无重复）');
-  // 操作行先于计划号信息行与描述块
-  assert.ok(detail.indexOf('bld-plan-acts') < detail.indexOf('计划号'), '操作行位于内容区顶部');
+  // 入口在描述块头部操作组内，且先于「编辑」键（紧邻其左）
+  const iHead = detail.indexOf('bld-desc-block-head');
+  assert.ok(iHead !== -1 && detail.indexOf('data-ver-answer="BLD-DRAFT"', iHead) < detail.indexOf('id="bldEditInfo"'), 'AI 完善位于编辑左边');
   // 切至其他步骤：入口不显示（对四个步骤逐一验证）
   for (const step of ['link', 'docs', 'merge', 'release']) {
     h.run(`window.ATBBuild.setStep(${JSON.stringify(step)})`);

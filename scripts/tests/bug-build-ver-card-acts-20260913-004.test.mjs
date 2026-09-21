@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // BUG-20260913-004 版本卡片行内操作按钮——「提示词与回答回填 / 合并入 main」两键从右侧详情底部
 // 迁入左侧版本列表每张卡片（参照需求列表 row-acts 口径），文案更名「AI 完善」，i18n 同步。
+// REQ-20260921-016 适配：列表卡片合并 / 发布键再迁回右侧详情对应步骤（合并步 / 正式发布步），
+// 删除键迁卡片标题行；本文件合并入口状态口径改在详情合并步主按钮核验。
 // B1~B5 vm 行为（加载实际 build.js，假 DOM 口径同 build-ui.test.mjs）；S1 静态契约；B6 i18n。
 // 用法：node scripts/tests/bug-build-ver-card-acts-20260913-004.test.mjs
 
@@ -65,6 +67,9 @@ function setup({ versions = [ver('BLD-A', 'v1.0'), ver('BLD-B', 'v2.0 后备')],
       const up = new URL(String(url), 'http://local');
       if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(state)) };
       if (up.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
+      // REQ-20260921-016：合并入口只剩详情「合并入 main」步主按钮（装配加载就绪后渲染；
+      // currentBranch=dev 与测试 state 口径一致，保证非锁定状态按钮可用）
+      if (up.pathname === '/api/build/publish-plan') return { ok: true, json: async () => ({ currentBranch: 'dev', mainBranch: 'main', steps: [], docs: { files: [], overall: 'none' }, mergeAnalysis: { perItem: [], blocked: [], notes: [] } }) };
       return { ok: true, json: async () => ({}) };
     },
   };
@@ -78,7 +83,8 @@ function setup({ versions = [ver('BLD-A', 'v1.0'), ver('BLD-B', 'v2.0 后备')],
   };
 }
 
-// 选中版本并落概况步，返回详情区 HTML（REQ-20260921-013：AI 完善入口迁入概况内容区）
+// 选中版本并落概况步，返回详情区 HTML（REQ-20260921-013：AI 完善 入口迁入概况；
+// REQ-20260921-016：再迁至概况描述块头部）
 const detailAt = (h, id) => {
   h.run(`window.ATBBuild.selectVersion(${JSON.stringify(id)}); window.ATBBuild.setStep('plan')`);
   const inner = h.inner();
@@ -87,27 +93,45 @@ const detailAt = (h, id) => {
   return inner.slice(i);
 };
 
-t('B1 版本卡片保留「合并入 main」等行内按钮（aria-label/title 齐备，未选中也有）；「AI 完善」已迁入详情概况页签（REQ-20260921-013）', async () => {
+// 选中版本并落「合并入 main」步，返回合并步主按钮 HTML（REQ-20260921-016 起列表卡片不再有
+// 合并键，合并入口状态口径在详情合并步主按钮上核验；步装配为按需异步加载，等就绪后取）
+const mergePaneAt = async (h, id) => {
+  h.run(`window.ATBBuild.selectVersion(${JSON.stringify(id)}); window.ATBBuild.setStep('merge')`);
+  for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0));
+  const inner = h.inner();
+  const p = inner.indexOf('bld-merge-pane');
+  assert.ok(p >= 0, '应渲染合并步面板');
+  const j = inner.indexOf(`data-ver-merge="${id}"`, p);
+  assert.ok(j >= 0, `${id} 合并步主按钮存在`);
+  const s = inner.lastIndexOf('<button', j);
+  return inner.slice(s, inner.indexOf('</button>', j));
+};
+
+t('B1 版本卡片不再有行内合并 / 发布键（REQ-20260921-016 精简，合并迁详情合并步）；「AI 完善」在详情概况描述块头部（REQ-20260921-013 迁入详情）', async () => {
   const h = await setup();
   await h.enter();
   const inner = h.inner();
   const cards = inner.slice(inner.indexOf('rel-list'), inner.indexOf('rel-detail'));
   assert.ok(!cards.includes('data-ver-answer'), '卡片不再渲染 AI 完善（迁移后无重复入口）');
-  for (const id of ['BLD-A', 'BLD-B']) {
-    assert.match(cards, new RegExp(`data-ver-merge="${id}"`), `${id} 卡片应有合并入 main 按钮`);
-    assert.match(cards, new RegExp(`aria-label="合并入 main ${id}"`), '合并 aria-label 带版本号');
+  for (const k of ['data-ver-merge', 'data-ver-release', 'data-ver-release-view']) {
+    assert.ok(!cards.includes(k), `卡片不再渲染 ${k}（REQ-20260921-016 迁往详情对应步骤）`);
   }
-  // 详情概况：唯一 AI 完善入口绑定选中版本（enter 后自动选中 BLD-A）
+  for (const id of ['BLD-A', 'BLD-B']) {
+    assert.match(cards, new RegExp(`data-ver-delete="${id}"`), `${id} 删除键保留（迁卡片标题行右端）`);
+  }
+  // 详情概况：唯一 AI 完善入口绑定选中版本（enter 后自动选中 BLD-A），位于描述块头部
   const detail = detailAt(h, 'BLD-A');
-  assert.match(detail, /data-ver-answer="BLD-A"/, '概况内容区有 AI 完善（绑定当前版本）');
+  assert.match(detail, /bld-desc-block-head/, '描述块头部存在（入口所在容器）');
+  assert.match(detail, /data-ver-answer="BLD-A"/, '概况描述头有 AI 完善（绑定当前版本）');
   assert.match(detail, /aria-label="AI 完善 BLD-A"/, 'AI 完善 aria-label 带版本号');
   assert.match(detail, /title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'AI 完善 title 说明动作');
   assert.match(detail, />AI 完善<\/button>/, '按钮文案为「AI 完善」');
   assert.doesNotMatch(inner, /提示词与回答回填/, '旧文案不再出现');
-  assert.match(cards, />合并入 main<\/button>/, '合并按钮文案');
+  // 合并入 main 入口仍在详情合并步（主按钮，文案保留）
+  assert.match(await mergePaneAt(h, 'BLD-A'), />合并入 main$/, '合并步主按钮文案');
 });
 
-t('B2 状态口径逐卡继承：合并键 merging 禁用；merged 未推送可用（BUG-20260920-005 基准后移）；推送完成后禁用并说明已正式发布；failed 显「重试合并入 main」；AI 完善锁定口径随入口迁入概况保持（REQ-20260921-013）', async () => {
+t('B2 状态口径继承（REQ-20260921-016 起在详情合并步主按钮核验）：merging 禁用；merged 未推送可用（BUG-20260920-005 基准后移）；推送完成后禁用并说明已正式发布；failed 显「重试合并入 main」；AI 完善锁定口径随入口迁入概况描述头保持', async () => {
   const h = await setup({ versions: [
     ver('BLD-DRAFT', 'd1', 'draft'),
     ver('BLD-MERGING', 'd2', 'merging'),
@@ -116,22 +140,20 @@ t('B2 状态口径逐卡继承：合并键 merging 禁用；merged 未推送可�
     ver('BLD-FAILED', 'd4', 'failed'),
   ] });
   await h.enter();
-  const inner = h.inner();
-  assert.match(inner, /data-ver-merge="BLD-DRAFT" aria-label/, 'draft 的合并键可用');
-  assert.match(inner, /data-ver-merge="BLD-MERGING" aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 的合并键禁用并提示');
-  // BUG-20260920-005：merged（已合并未推送）两类键放开（补关联后可重开合并 / AI 完善）
-  assert.match(inner, /data-ver-merge="BLD-MERGED" aria-label/, 'merged 未推送的合并键可用（增量重开合并）');
-  assert.doesNotMatch(inner, /data-ver-merge="BLD-MERGED" disabled/, 'merged 未推送的合并不再禁用');
-  // BUG-20260920-005：推送完成（正式发布）后两键禁用，title 说明已正式发布
-  // BUG-20260920-006：合并键禁用从 HTML disabled 改 aria-disabled（点击可捕获反馈），title 升为完整归因
-  assert.match(inner, /data-ver-merge="BLD-PUSHED" aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '推送完成后的合并键禁用且 title 说明');
-  assert.match(inner, /data-ver-merge="BLD-FAILED" aria-label="重试合并入 main BLD-FAILED"/, 'failed 的合并键 aria 口径');
-  assert.match(inner, />重试合并入 main<\/button>/, 'failed 的合并键文案');
-  // AI 完善锁定口径迁入详情概况后逐态核验（口径不变，位置变）
+  const btn = (id) => mergePaneAt(h, id);
+  assert.match(await btn('BLD-DRAFT'), /^<button type="button" class="btn primary" data-ver-merge="BLD-DRAFT">/, 'draft 的合并主按钮可用（无 aria-disabled）');
+  assert.match(await btn('BLD-MERGING'), /aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 的合并主按钮禁用并提示');
+  // BUG-20260920-005：merged（已合并未推送）放开（补关联后可重开合并 / AI 完善）
+  assert.match(await btn('BLD-MERGED'), /^<button type="button" class="btn primary" data-ver-merge="BLD-MERGED">/, 'merged 未推送的合并主按钮可用（增量重开合并）');
+  // BUG-20260920-005：推送完成（正式发布）后禁用，title 说明已正式发布
+  // BUG-20260920-006：禁用从 HTML disabled 改 aria-disabled（点击可捕获反馈），title 升为完整归因
+  assert.match(await btn('BLD-PUSHED'), /aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '推送完成后的合并主按钮禁用且 title 说明');
+  assert.match(await btn('BLD-FAILED'), />重试合并入 main$/, 'failed 的合并主按钮文案为「重试合并入 main」');
+  // AI 完善锁定口径迁入详情概况描述头后逐态核验（口径不变，位置变）
   assert.match(detailAt(h, 'BLD-DRAFT'), /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 的 AI 完善可用（无 disabled）');
   assert.match(detailAt(h, 'BLD-MERGING'), /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging 的 AI 完善禁用并提示');
   assert.match(detailAt(h, 'BLD-MERGED'), /data-ver-answer="BLD-MERGED"[^>]*title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'merged 未推送的 AI 完善带可用 title');
-  assert.match(detailAt(h, 'BLD-PUSHED'), /data-ver-answer="BLD-PUSHED" disabled title="已正式发布，不允许再 AI 完善"/, '推送完成后的 AI 完善禁用且 title 说明');
+  assert.match(detailAt(h, 'BLD-PUSHED'), /data-ver-answer="BLD-PUSHED" disabled title="已正式发布，不允许再 AI 完善"/, '推送完成的 AI 完善禁用且 title 说明');
   // 回归：merging 详情提示保留（概况步内容区）
   const mergingDetail = detailAt(h, 'BLD-MERGING');
   assert.match(mergingDetail, /合并中，请稍候……/, 'merging 详情提示不回归');

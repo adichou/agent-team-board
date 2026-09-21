@@ -128,10 +128,11 @@ const node = (h, sel) => h.document.querySelector('#releaseView').querySelector(
 
 /* ---------- 静态契约 ---------- */
 
-t('H1 build.js：merged 版本详情提供「创建发布 / 查看发布记录」；未合并禁用并说明前置条件', () => {
+t('H1 build.js：merged 版本详情提供「创建发布」入口（正式发布步）；发布记录就地展示；未合并禁用并说明前置条件', () => {
   assert.ok(/创建发布/.test(buildJs), '存在「创建发布」入口');
-  assert.ok(/查看发布记录/.test(buildJs), '存在「查看发布记录」入口');
-  // 未 merged 的禁用与前置条件说明（disabled + title 文案含「合并」）
+  // REQ-20260921-016：「查看发布记录」卡片按钮移除，发布记录直接展示在详情正式发布步
+  assert.ok(/发布记录/.test(buildJs), '存在「发布记录」展示区（正式发布步就地渲染）');
+  // 未 merged 的禁用与前置条件说明（disabled + title 文案含「合并」；正式发布步创建入口模板）
   const m = buildJs.match(/data-ver-release="[^"]*"[\s\S]{0,300}/g) || [];
   assert.ok(m.some((x) => /disabled/.test(x) && /合并/.test(x)), '未合并版本禁用创建发布并说明前置条件');
   // BUG-20260916-001：构建内创建发布改走独立 /api/build-publish/from-build（不再复用产品发布模块）
