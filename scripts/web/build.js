@@ -2549,27 +2549,13 @@ const ATBBuild = (() => {
         ? '<div class="rel-empty-mini muted">没有匹配的版本（按名称 / 单号过滤）</div>'
         : '<div class="rel-empty-mini muted">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
     }
-    // BUG-20260913-004：版本操作直接放在每张卡片内（参照需求列表 row-acts 口径），
-    // 状态禁用/文案规则逐卡继承原详情底部逻辑；mergeBusy 为全局口径（执行中禁所有卡片的合并键）。
-    // REQ-20260921-013：「AI 完善」迁入右侧详情概况页签（操作对象与展示信息一致），卡片不再保留。
+    // REQ-20260921-016：列表卡片精简为「信息 + 删除」——AI 完善（概况描述头，REQ-20260921-013
+    // 引入详情后本次迁至描述块头部）、合并入 main（含失败重试，详情「合并入 main」步）、
+    // 创建并预检与发布记录（详情「正式发布」步）集中在右侧详情步骤，列表不再重复入口，
+    // card-acts 操作行整体移除（无留白）；删除仍属各自卡片，迁至标题行右端。
     return versions.map((v) => {
-      const mergeLabel = v.status === 'failed' ? '重试合并入 main' : '合并入 main';
-      // BUG-20260920-006：合并键禁用改 aria-disabled（HTML disabled 不派发 click，点击无反馈），
-      // 原因统一走 mergeBlockReason 与详情页主按钮同口径（含全局合并执行中 / 已正式发布 /
-      // 五步门禁 / 不在 dev，选中版本装配已加载时同查门禁与分支）；点击由 openMergeConfirm
-      // 守卫 toast 真实原因，防重复触发仍由 state.mergeBusy 状态守卫保证。
-      const mergeReason = mergeBlockReason(v);
-      const mergeBtn = `<button type="button" class="btn small primary bld-ver-merge" data-ver-merge="${esc(v.id)}"${mergeReason ? ` aria-disabled="true" title="${esc(mergeReason)}"` : ''} aria-label="${mergeLabel} ${esc(v.id)}">${mergeLabel}</button>`;
-      // REQ-20260915-003：产品发布操作迁入版本卡片按钮区（与 AI 完善 / 合并 / 删除集中展示），
-      // 右侧详情不再重复显示发布操作区。创建发布仅 merged 可用；draft / merging / failed 禁用并
-      // 可见说明「请先完成合并入 main」；沿用 openReleaseConfirm 既有发布校验与核对弹层，
-      // 按所在卡片版本绑定（data-ver-release 带卡片 id），不依赖右侧选中态。
-      const releaseLocked = v.status !== 'merged';
-      const releaseBtn = `<button type="button" class="btn small primary bld-ver-release" data-ver-release="${esc(v.id)}"${releaseLocked ? ` disabled title="请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）"` : ` title="从本版本创建产品发布草稿（自动带入条目与冻结信息）"`} aria-label="创建发布 ${esc(v.id)}">创建并预检</button>`;
-      // BUG-20260915-014：「查看发布记录」就地激活所在卡片版本的发布页签（不跳隐藏模块）
-      const releaseViewBtn = `<button type="button" class="btn small bld-ver-release-view" data-ver-release-view="${esc(v.id)}" title="在当前版本详情的「发布」页签查看本版本的发布记录" aria-label="查看发布记录 ${esc(v.id)}">查看发布记录</button>`;
-      // REQ-20260913-004 删除键：排在两键之后、quiet 危险弱化样式（不抢主操作）；
-      // merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（与合并键一并禁用）。
+      // REQ-20260913-004 删除键（REQ-20260921-016 迁至标题行右端）：quiet 危险弱化样式
+      // （不抢主操作）；merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（一并禁用）。
       const delDisabled = v.status === 'merging' || state.mergeBusy;
       const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
       // REQ-20260920-003：列表展示计划号 + 提取版本号（保留前导零）+ 阶段
@@ -2577,9 +2563,8 @@ const ATBBuild = (() => {
       const stage = v.status === 'merged' ? '正式发布' : v.status === 'merging' ? '合并中' : v.status === 'failed' ? '失败（可重试）' : '计划中';
       return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
-        <div class="t"><strong>${esc(v.name || v.id)}</strong> ${versionChip(v)}</div>
+        <div class="t"><span class="bld-card-title"><strong title="${esc(v.name || v.id)}">${esc(v.name || v.id)}</strong> ${versionChip(v)}</span>${delBtn}</div>
         <div class="meta">${esc(v.id)}${verNo ? ` · 版本号 ${esc(verNo)}` : ''} · 阶段 ${esc(stage)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
-        <div class="card-acts">${mergeBtn}${releaseBtn}${releaseViewBtn}${delBtn}</div>
       </div>`;
     }).join('');
   }
@@ -3315,26 +3300,26 @@ ${langsField}
     const versionNumber = (v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '';
     // REQ-20260921-014：概况页签显式编辑——描述块头部行放可见「编辑」按钮（merging 禁用 +
     // title 文字原因），点开就地替换描述块为名称 + 描述同一表单（见 renderPlanEditForm）；
-    // 与遗留行内点击编辑并存（快捷路径，见 bindCommon 绑定）
+    // 与遗留行内点击编辑并存（快捷路径，见 bindCommon 绑定）。
+    // REQ-20260921-016：「AI 完善」自概况顶部操作行迁入描述块头部，紧邻「编辑」左边
+    // （操作对象与所读信息一致）；锁定口径原样迁移（BUG-20260920-005 基准：merging 禁用、
+    // 推送完成即正式发布后禁用并说明，merged 未推送可用），编辑键原有 merging 禁用规则不变。
+    // data-ver-answer 行为标记与绑定循环保留，openAnswerModal(verId) 仍按当前版本打开。
     const planEdit = planEditOf(v);
+    const answerLocked = v.status === 'merging' || pushedOf(v);
+    const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${pushedOf(v) ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
+    const editBtn = v.status === 'merging'
+      ? '<button type="button" class="btn small quiet" id="bldEditInfo" disabled title="版本合并中，暂不可修改">编辑</button>'
+      : '<button type="button" class="btn small quiet" id="bldEditInfo" title="编辑版本名称与描述">编辑</button>';
     const descBlock = planEdit
       ? renderPlanEditForm(planEdit)
       : `<div class="bld-desc-block">
             <div class="bld-desc-block-head">
               <span class="muted small">描述</span>
-              ${v.status === 'merging'
-                ? '<button type="button" class="btn small quiet" id="bldEditInfo" disabled title="版本合并中，暂不可修改">编辑</button>'
-                : '<button type="button" class="btn small quiet" id="bldEditInfo" title="编辑版本名称与描述">编辑</button>'}
+              <span class="bld-desc-block-acts">${answerBtn}${editBtn}</span>
             </div>
             ${descCell}</div>`;
-    // REQ-20260921-013：「AI 完善」从版本卡片迁入概况内容区顶部操作行（右对齐）——
-    // 用户先选版本再完善，操作对象与展示信息一致；锁定口径原样迁移（BUG-20260920-005
-    // 基准：merging 禁用、推送完成即正式发布后禁用并说明，merged 未推送可用），
-    // data-ver-answer 行为标记与绑定循环保留，openAnswerModal(verId) 仍按当前版本打开。
-    const answerLocked = v.status === 'merging' || pushedOf(v);
-    const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${pushedOf(v) ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
     const planBody = `
-        <div class="bld-plan-acts">${answerBtn}</div>
         <p class="muted small">计划号 ${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 目标分支 ${esc(v.targetBranch || 'main')}${v.merge?.baseBranch ? ` · 来源分支 ${esc(v.merge.baseBranch)}` : ''}</p>
         ${descBlock}
         ${mergeState}`;
@@ -3954,14 +3939,12 @@ ${langsField}
     }
     q('#bldPushCancel')?.addEventListener('click', () => { state.pushConfirm = null; render(); });
     q('#bldPushGo')?.addEventListener('click', doPush);
-    // REQ-20260915-002 产品发布入口（REQ-20260915-003 迁入版本卡片按钮区）：
-    // merged 卡片「创建发布」打开核对弹层（按所在卡片版本绑定）；
-    // BUG-20260915-014：「查看发布记录」不再跳转被隐藏的发布模块——就地激活所在卡片版本的发布页签
+    // REQ-20260915-002 产品发布入口：详情「正式发布」步「创建并预检」（relCreateBtnHtml 同键
+    // data-ver-release → openReleaseConfirm 同一校验弹层，REQ-20260921-016 列表卡片入口移除
+    // 后该步为唯一入口）；「查看发布记录」按钮随卡片入口一并移除（发布记录直接展示在
+    // 正式发布步，openReleaseTab 仍作为程序化激活入口保留）。
     for (const el of view.querySelectorAll('[data-ver-release]')) {
       el.addEventListener('click', () => openReleaseConfirm(el.dataset.verRelease));
-    }
-    for (const el of view.querySelectorAll('[data-ver-release-view]')) {
-      el.addEventListener('click', () => openReleaseTab(el.dataset.verReleaseView));
     }
     q('#bldRelCancel')?.addEventListener('click', () => { state.releaseConfirm = null; render(); });
     q('#bldRelGo')?.addEventListener('click', doCreateRelease);
