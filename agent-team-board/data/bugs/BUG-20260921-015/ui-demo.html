@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260921-015 演示 · 一键加入依赖对同条目多提交的跳过</title>
+<style>
+  /* ---------- 主题变量（深浅色随系统自动适配） ---------- */
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e3e6ea; --ink: #24292f; --muted: #6b7280;
+    --accent: #2563eb; --accent-ink: #ffffff; --ok: #1a7f37; --ok-bg: #e6f4ea;
+    --fail: #c0392b; --fail-bg: #fdecea; --run: #9a6700; --run-bg: #fff3cd;
+    --mute-bg: #eceef1; --shadow: 0 8px 28px rgba(20, 30, 50, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181f; --panel: #1d232c; --line: #31394476; --ink: #e6e9ee; --muted: #98a1ad;
+      --accent: #5b8dff; --accent-ink: #0e1420; --ok: #4cc38a; --ok-bg: #12291d;
+      --fail: #ff7b72; --fail-bg: #301a18; --run: #e3b341; --run-bg: #2d2410;
+      --mute-bg: #262d37; --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--mute-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+
+  /* ---------- 演示控制条 ---------- */
+  .demo-bar { position: sticky; top: 0; z-index: 30; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; box-shadow: var(--shadow); }
+  .demo-bar h1 { font-size: 15px; margin: 0 0 8px; }
+  .demo-bar h1 .tag { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 8px; }
+  .demo-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .demo-controls .grp { display: flex; align-items: center; gap: 6px; }
+  .demo-controls .lbl { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--ink); padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .demo-note { font-size: 12px; margin-top: 6px; }
+  .demo-note.diff { color: var(--fail); font-weight: 600; }
+  .demo-note.ok { color: var(--ok); font-weight: 600; }
+  .demo-controls input[type="checkbox"] { accent-color: var(--accent); }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.quiet { color: var(--muted); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+  /* ---------- 舞台布局 ---------- */
+  .stage { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 14px; max-width: 1060px; margin: 16px auto; padding: 0 14px; align-items: start; }
+  @media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .ver-list h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .ver-card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
+  .ver-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .ver-card .id { font-size: 12px; color: var(--muted); }
+  .ver-card .nm { font-weight: 600; }
+  .ver-card .meta { font-size: 12px; color: var(--muted); }
+
+  /* ---------- 右侧详情（五步导航） ---------- */
+  .rel-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .rel-detail-head h3 { margin: 0; font-size: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .rel-detail-head .sub { margin: 2px 0 10px; font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 12px; }
+  .tabs button { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 5px 13px; cursor: pointer; font-size: 13px; }
+  .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+  /* ---------- 合并入 main：隔离分析节 ---------- */
+  .pane section { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
+  .pane section > strong:first-child { display: block; margin-bottom: 6px; }
+  .iso-sum { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0; }
+  details.iso-deps { margin: 6px 0; }
+  details.iso-deps summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  details.iso-deps ul { margin: 6px 0 4px; padding-left: 20px; }
+  details.iso-deps li, .iso-skip li { margin: 3px 0; }
+  .iso-note { background: var(--run-bg); color: var(--run); border-radius: 8px; padding: 6px 10px; margin: 8px 0; font-size: 13px; }
+  .iso-skip { background: var(--fail-bg); border-radius: 8px; padding: 6px 10px 6px 30px; margin: 6px 0; }
+  .iso-skip .hdr { color: var(--fail); font-weight: 600; margin: 0 0 4px; list-style: none; margin-left: -22px; }
+  .iso-ok { color: var(--ok); }
+  .dev-bar { font-size: 12.5px; color: var(--muted); margin: 8px 0; }
+
+  /* ---------- 关联条目与提交 ---------- */
+  .items-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .items-head .search { display: flex; gap: 6px; align-items: center; }
+  .items-head input[type="search"] { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 4px 8px; font-size: 12.5px; }
+  .item-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding: 7px 2px; }
+  .item-row .id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .item-row .commits { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; font-size: 12px; background: var(--mute-bg); }
+  .chip.added { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: var(--ok-bg); }
+  .chip .who { font-size: 11px; color: var(--muted); }
+  .chip.added .who { color: var(--ok); }
+  select.commit-sel { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 3px 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .count { font-size: 12.5px; color: var(--muted); }
+
+  /* ---------- toast ---------- */
+  .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: 380px; }
+  .toast { border-radius: 10px; padding: 9px 13px; font-size: 13px; box-shadow: var(--shadow); border: 1px solid var(--line); background: var(--panel); animation: slidein .18s ease-out; }
+  .toast.err { background: var(--fail-bg); border-color: color-mix(in srgb, var(--fail) 40%, var(--line)); color: var(--fail); }
+  .toast.ok { background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); color: var(--ok); }
+  @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .foot-note { max-width: 1060px; margin: 0 auto 24px; padding: 0 14px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <h1>BUG-20260921-015 演示<span class="tag">一键加入依赖跳过已关联条目的其他提交</span></h1>
+  <div class="demo-controls">
+    <span class="grp">
+      <span class="lbl">对照模式</span>
+      <span class="seg" id="modeSeg">
+        <button type="button" data-mode="bug" class="on">缺陷现状</button>
+        <button type="button" data-mode="fix">修复期望</button>
+      </span>
+    </span>
+    <label class="grp"><input type="checkbox" id="failSim"> <span class="lbl">模拟接口失败（演示失败可重试）</span></label>
+    <button type="button" class="btn small" id="resetBtn">重置演示</button>
+  </div>
+  <p class="demo-note diff" id="demoNote"></p>
+</div>
+
+<div class="stage">
+  <aside class="card ver-list">
+    <h2>版本计划</h2>
+    <div class="ver-card sel">
+      <div class="nm">2026-09-20 批次 <span class="meta">（名称示意）</span></div>
+      <div class="id">BLD-20260920-001</div>
+      <div class="meta">版本号 20260920-001 · 阶段 计划中 · 6 个关联单</div>
+    </div>
+  </aside>
+
+  <div class="rel-detail">
+    <header class="rel-detail-head">
+      <h3>2026-09-20 批次（名称示意）</h3>
+      <p class="sub">BLD-20260920-001 · 版本号 20260920-001</p>
+    </header>
+    <nav class="tabs" id="stepTabs">
+      <button type="button" data-step="plan">概况</button>
+      <button type="button" data-step="link">关联条目与提交</button>
+      <button type="button" data-step="docs">文档编写</button>
+      <button type="button" data-step="merge" class="active">合并入 main</button>
+      <button type="button" data-step="release">正式发布</button>
+    </nav>
+    <div class="pane" id="pane"></div>
+  </div>
+</div>
+
+<p class="foot-note">
+  演示数据取自 README「已核验的复现证据」：6 个条目 / 12 个未选祖先提交（hash 真实，提交主题为示意）。
+  「修复期望」态的 toast 文案与关联列表多提交形态属开发阶段产出（待确认）。其余页签（概况 / 文档编写 / 正式发布）非本 Bug 界面，未纳入演示。
+</p>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+
+/* ---------- 数据（README 已核验证据） ---------- */
+const ITEMS = [
+  { id: 'REQ-20260920-001', sel: 'efd44bca', selType: 'feat', missing: [{ h: '9207daec', t: 'test' }, { h: 'ecc94b7b', t: 'doc' }] },
+  { id: 'REQ-20260919-002', sel: '86cc81d7', selType: 'doc',  missing: [{ h: '8167441a', t: 'feat' }, { h: '99e69313', t: 'test' }] },
+  { id: 'BUG-20260920-001', sel: '8d52cc54', selType: 'doc',  missing: [{ h: '31aafda1', t: 'fix'  }, { h: 'db86e6c9', t: 'test' }] },
+  { id: 'BUG-20260920-002', sel: '580ffbca', selType: 'fix',  missing: [{ h: '19cf8320', t: 'test' }, { h: 'c67b7461', t: 'doc'  }] },
+  { id: 'REQ-20260920-002', sel: '8757a50c', selType: 'doc',  missing: [{ h: 'fa8a8b24', t: 'feat' }, { h: 'ad41a1e0', t: 'test' }] },
+  { id: 'REQ-20260920-003', sel: '26fec855', selType: 'doc',  missing: [{ h: '58bfd1e1', t: 'feat' }, { h: 'febd028a', t: 'test' }] },
+];
+const subject = (id, t) => `${t}: ${id} 相关提交（主题示意）`;
+
+/* 依赖集：未选祖先（跨条目按 hash 去重，owner = 归属所选条目） */
+function depsOf() {
+  const m = new Map();
+  for (const it of ITEMS) for (const d of it.missing) if (!m.has(d.h)) m.set(d.h, { ...d, owner: it.id });
+  return [...m.values()];
+}
+
+/* ---------- 演示状态机 ---------- */
+const state = { mode: 'bug', step: 'merge', phase: 'ready', busy: false, added: false, skip: null, failSim: false };
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(msg, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (kind || '');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3800);
+}
+
+/* ---------- 渲染 ---------- */
+function renderNote() {
+  const n = $('#demoNote');
+  if (state.mode === 'bug') {
+    n.className = 'demo-note diff';
+    n.textContent = '缺陷现状：同条目其余提交因「条目已在本版本」被跳过，12 条警告常驻，重复点击不收敛。';
+  } else {
+    n.className = 'demo-note ok';
+    n.textContent = state.added
+      ? '修复期望（已加入）：同条目全部依赖提交补入发布范围，隔离分析收敛为无未选祖先。'
+      : '修复期望：一键加入按提交 hash 去重，保留原关联并补齐同条目其余提交（点击按钮体验）。';
+  }
+}
+
+function renderMergePane() {
+  if (state.phase === 'loading') {
+    return '<section><strong>隔离分析</strong><p class="muted" role="status">正在加载合并分析…</p></section>';
+  }
+  const deps = (state.mode === 'fix' && state.added) ? [] : depsOf();
+  const depOwners = new Set(deps.map((d) => d.owner));
+  const depBtn = deps.length
+    ? `<button type="button" class="btn small primary" id="addDeps" ${state.busy ? 'disabled' : ''}>${state.busy ? '加入中…' : '一键加入所有依赖提交'}</button>`
+    : '';
+  const depDetails = deps.length
+    ? `<details class="iso-deps"><summary>查看依赖明细</summary>
+        <ul>${deps.map((d) => `<li><code>${esc(d.h)}</code> <span>${esc(subject(d.owner, d.t))}</span><br><span class="muted small">为 ${esc(d.owner)} 的依赖</span></li>`).join('')}</ul>
+        <p class="muted small">一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。</p>
+      </details>`
+    : '';
+  const skipList = (state.skip && state.skip.length)
+    ? `<p class="iso-note">⚠ 以下 ${state.skip.length} 个依赖未能纳入：</p>
+      <ul class="iso-skip"><li class="hdr">跳过清单</li>${state.skip.map((s) => `<li><code>${esc(s.h)}</code> <span>${esc(s.subject)}</span><br><span class="muted small">${esc(s.reason)}</span></li>`).join('')}</ul>`
+    : '';
+  const isoBody = deps.length
+    ? `<p class="iso-sum"><span class="small">发现 ${deps.length} 个未选祖先（依赖）提交 · 影响 ${depOwners.size} 个所选条目</span>${depBtn}</p>
+        ${depDetails}
+        ${skipList}`
+    : `<p class="small iso-ok">所选提交无未选祖先：变更可独立进入主分支。</p>
+        ${skipList}`;
+  const gate = (state.mode === 'fix' && state.added)
+    ? '<p class="iso-note" role="alert">⚠ 暂不可合并：文档未提交（发布范围已变化，审核已失效需重新审查）（示意）</p>'
+    : '';
+  return `
+    <section><strong>隔离分析</strong>${isoBody}</section>
+    <p class="dev-bar">当前分支 dev · 目标主分支 main（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>
+    ${gate}
+    <p><button type="button" class="btn primary" id="mergeBtn">合并入 main</button>
+      <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>`;
+}
+
+function renderLinkPane() {
+  const fixed = state.mode === 'fix' && state.added;
+  const rows = ITEMS.map((it) => {
+    const commits = fixed
+      ? `<span class="commits">
+          <span class="chip"><code>${it.sel}</code><span class="who">${it.selType} · 原关联</span></span>
+          ${it.missing.map((d) => `<span class="chip added"><code>${d.h}</code><span class="who">${d.t} · 一键加入补入</span></span>`).join('')}
+        </span>`
+      : `<select class="commit-sel" title="${fixed ? '' : '当前版本模型：一条目一 commit（本 Bug 待修复点）'}"><option>${it.sel}（${it.selType}）</option></select>`;
+    return `<div class="item-row">
+      <span class="id">${esc(it.id)}</span>
+      <span class="commits">${commits}</span>
+      <button type="button" class="btn small quiet rm">移出</button>
+    </div>`;
+  }).join('');
+  return `
+    <div class="items-head">
+      <strong>关联条目与 commit</strong>
+      <span class="search"><input type="search" placeholder="搜单号 / 标题 / commit…" aria-label="搜索"><button type="button" class="btn small">搜索</button></span>
+      <button type="button" class="btn small">＋ 添加条目</button>
+    </div>
+    <div class="count" role="status">共 ${ITEMS.length} 条${fixed ? ' · 一键加入已补齐 12 个依赖提交' : ''}</div>
+    ${rows}`;
+}
+
+function render() {
+  renderNote();
+  for (const b of document.querySelectorAll('#stepTabs button')) b.classList.toggle('active', b.dataset.step === state.step);
+  $('#pane').innerHTML = state.step === 'merge' ? renderMergePane() : state.step === 'link' ? renderLinkPane()
+    : '<p class="muted small">（本演示聚焦「关联条目与提交」与「合并入 main」两步，此页签非本 Bug 界面。）</p>';
+}
+
+/* ---------- 交互 ---------- */
+function addDependencies() {
+  if (state.busy) return;
+  state.busy = true;
+  render();
+  setTimeout(() => {
+    state.busy = false;
+    if (state.failSim) {
+      toast('✕ 一键加入失败：模拟接口故障（可重试）', 'err');
+    } else if (state.mode === 'bug') {
+      state.skip = depsOf().map((d) => ({ h: d.h, subject: subject(d.owner, d.t), reason: `条目 ${d.owner} 已在本版本（当前关联另一提交）` }));
+      toast('⚠ 未能加入任何依赖提交（原因见隔离分析清单）', 'err');
+    } else {
+      state.added = true;
+      state.skip = null;
+      toast('✓ 已加入 6 个条目的 12 个依赖提交：发布范围已变化，文档需重新核对 / 提交（示意）', 'ok');
+    }
+    render();
+  }, 800);
+}
+
+$('#modeSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mode]');
+  if (!b || state.busy) return;
+  state.mode = b.dataset.mode;
+  state.added = false;
+  state.skip = null;
+  for (const x of document.querySelectorAll('#modeSeg button')) x.classList.toggle('on', x === b);
+  render();
+});
+$('#stepTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-step]');
+  if (!b || state.busy) return;
+  state.step = b.dataset.step;
+  if (state.step === 'merge') {           // 进入合并步：短暂加载态（对齐真实 UI 的按需自愈加载）
+    state.phase = 'loading';
+    render();
+    setTimeout(() => { state.phase = 'ready'; render(); }, 450);
+    return;
+  }
+  render();
+});
+$('#pane').addEventListener('click', (e) => {
+  if (e.target.closest('#addDeps')) { addDependencies(); return; }
+  if (e.target.closest('#mergeBtn')) {
+    toast(state.mode === 'fix' && state.added ? '⚠ 暂不可合并：文档未提交（示意）' : '演示环境：合并流程不在本演示范围', 'err');
+    return;
+  }
+  if (e.target.closest('.rm')) toast('演示环境：操作不可用');
+});
+$('#pane').addEventListener('change', (e) => {
+  if (e.target.matches('select.commit-sel')) toast('当前版本模型：一条目仅一个 commit 可选（本 Bug 待修复点）');
+});
+$('#failSim').addEventListener('change', (e) => { state.failSim = e.target.checked; });
+$('#resetBtn').addEventListener('click', () => {
+  Object.assign(state, { mode: 'bug', step: 'merge', phase: 'loading', busy: false, added: false, skip: null, failSim: false });
+  $('#failSim').checked = false;
+  for (const x of document.querySelectorAll('#modeSeg button')) x.classList.toggle('on', x.dataset.mode === 'bug');
+  render();
+  setTimeout(() => { state.phase = 'ready'; render(); }, 450);
+});
+
+render();
+</script>
+</body>
+</html>
