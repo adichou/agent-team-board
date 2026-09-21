@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260921-006 · 分支浏览 dev 只显示 dev 提交（交互演示）</title>
+<style>
+  :root[data-theme="dark"] {
+    --bg: #1c2128; --panel: #22282f; --panel2: #262d35; --border: #38414c;
+    --text: #d8dee6; --muted: #8b93a1; --code: #79b8ff;
+    --err: #ff8f8f; --errbg: #3a2326; --ok: #7ee2a8; --okbg: #1f3129;
+    --input-bg: #1a1f25; --hover: #2c3440; --sel: #24405e;
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f4f7; --panel: #ffffff; --panel2: #f6f8fa; --border: #d5dbe3;
+    --text: #24292f; --muted: #66707b; --code: #0969da;
+    --err: #b62324; --errbg: #ffebe9; --ok: #1a7f37; --okbg: #dafbe1;
+    --input-bg: #ffffff; --hover: #eaeef2; --sel: #d8e5f5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--code); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ---- 顶栏 ---- */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  .title .badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: 12px; }
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 5px 14px; }
+  .seg button.on { background: #4f8ef7; color: #fff; }
+  .controls select, .controls > button.plain { background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+  .controls label { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ---- 主布局：左分支 / 右提交记录 ---- */
+  .split { display: flex; gap: 12px; padding: 12px 16px; align-items: flex-start; flex-wrap: wrap; }
+  .branches { flex: 0 0 230px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+  .tools { display: flex; gap: 6px; margin-bottom: 6px; }
+  .tools button, .loghead button, .err button, .btn { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; font-size: 12px; }
+  .tools button:disabled { opacity: .45; cursor: not-allowed; }
+  .branches .note { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
+  .group { margin-bottom: 10px; }
+  .ghead { color: var(--muted); font-size: 12px; margin: 8px 0 4px; }
+  .branch { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+  .branch:hover { background: var(--hover); }
+  .branch.on { background: var(--sel); }
+  .branch.inert { cursor: default; color: var(--muted); }
+  .branch.inert:hover { background: none; }
+  .chip-cur { margin-left: auto; background: #2ea04326; color: var(--ok); border: 1px solid #2ea04366; border-radius: 10px; font-size: 11px; padding: 0 7px; }
+
+  /* ---- 右侧提交记录 ---- */
+  .logpane { flex: 1 1 520px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .loghead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .search { display: flex; align-items: center; gap: 6px; }
+  .search input { background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; width: 210px; }
+  .search input:disabled { opacity: .5; }
+  .banner { border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 12.5px; }
+  .banner.bad { background: var(--errbg); color: var(--err); border: 1px dashed var(--err); }
+  .banner.good { background: var(--okbg); color: var(--ok); border: 1px dashed var(--ok); }
+  .banner.plainb { background: var(--panel2); color: var(--muted); border: 1px dashed var(--border); }
+  .banner .lg { margin-top: 4px; opacity: .92; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; margin: 0 2px 0 6px; }
+  .unionhint { color: var(--muted); font-size: 12px; margin: 6px 0; }
+  .detail { border: 1px dashed var(--border); border-radius: 8px; background: var(--panel2); padding: 6px 10px; margin-bottom: 8px; font-size: 12.5px; }
+  .err { color: var(--err); background: var(--errbg); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+
+  ul.log { list-style: none; margin: 0; padding: 0; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; background: none; border: 0; border-bottom: 1px dashed var(--border); border-radius: 6px; padding: 2px 4px 6px; margin: 0; font: inherit; color: inherit; text-align: left; }
+  .row:hover { background: var(--hover); }
+  .row:focus-visible { outline: 2px solid #4f8ef7; outline-offset: 1px; }
+  .row.sel { background: var(--sel); }
+  .row.mainonly { box-shadow: inset 3px 0 0 var(--err); }
+  .row svg { flex: none; display: block; }
+  .row .subj { min-width: 120px; }
+  .row .meta { margin-left: auto; }
+  .mark-x { color: var(--err); font-weight: 700; font-size: 12px; flex: none; }
+  .tag-merge { border: 1px solid var(--border); color: var(--muted); border-radius: 4px; font-size: 11px; padding: 0 6px; }
+  .tag-head { border-radius: 4px; font-size: 11px; padding: 0 7px; color: #fff; }
+  .tag-head.main { background: #4f8ef7; }
+  .tag-head.dev { background: #d78a13; }
+  .tag-mb { border: 1px dashed #2dd4bf; color: #2dd4bf; border-radius: 4px; font-size: 11px; padding: 0 6px; }
+  .countbar { font-size: 12px; color: var(--muted); margin: 4px 0; }
+  .notebar { color: var(--muted); font-size: 12px; margin: 6px 0; }
+  .pager { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .pager button { min-width: 30px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  .pager button.on { background: #4f8ef7; border-color: #4f8ef7; color: #fff; cursor: default; }
+  .pager button:disabled { opacity: .45; cursor: default; }
+  footer { color: var(--muted); font-size: 12px; padding: 10px 16px 18px; }
+  svg .segline { fill: none; stroke-width: 2; }
+  svg .n-out { fill: none; stroke-width: 1.6; }
+  svg .n-head { fill: none; stroke: var(--text); stroke-width: 1.2; opacity: .85; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="title"><strong>BUG-20260921-006</strong> 分支浏览中 dev 只显示 dev 的提交<span class="badge">交互演示 · 数据为虚构提交</span></div>
+  <div class="controls">
+    <div class="seg" role="radiogroup" aria-label="对照模式">
+      <button type="button" data-mode="defect" class="on">缺陷现状</button><button type="button" data-mode="expected">期望效果</button>
+    </div>
+    <label>状态
+      <select id="stateSel">
+        <option value="normal">正常</option>
+        <option value="empty">空</option>
+        <option value="loading">加载</option>
+        <option value="error">失败</option>
+      </select>
+    </label>
+    <button type="button" class="plain" id="themeBtn">切换深浅色</button>
+  </div>
+</header>
+
+<main class="split">
+  <aside class="branches" aria-label="分支列表（模拟）">
+    <div class="tools">
+      <button type="button" disabled title="演示不执行真实网络操作">⟳ 和远端同步</button>
+      <button type="button" id="branchRefresh">刷新</button>
+    </div>
+    <p class="note">同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。</p>
+    <div class="group">
+      <div class="ghead">本地</div>
+      <div class="branch on" data-branch="dev" role="button" tabindex="0"><span>dev</span><span class="chip-cur">当前</span></div>
+      <div class="branch" data-branch="main" role="button" tabindex="0"><span>main</span></div>
+    </div>
+    <div class="group">
+      <div class="ghead">远端</div>
+      <div class="branch inert" title="远端分支视图不在本单演示范围（本单聚焦本地 dev / main）"><span>origin/dev</span></div>
+      <div class="branch inert" title="远端分支视图不在本单演示范围（本单聚焦本地 dev / main）"><span>origin/main</span></div>
+    </div>
+  </aside>
+
+  <section class="logpane" aria-label="提交记录（模拟）">
+    <div class="loghead">
+      <strong id="logTitle">dev</strong>
+      <div class="search" role="search">
+        <input type="search" id="qInput" placeholder="搜 message / 作者 / hash…" aria-label="搜索提交记录">
+        <button type="button" class="btn" id="qGo">搜索</button>
+        <button type="button" class="btn" id="qClear" hidden>清除</button>
+      </div>
+      <button type="button" class="btn" id="logRefresh">刷新</button>
+    </div>
+    <div id="banner"></div>
+    <div id="detail"></div>
+    <div id="logBody"></div>
+  </section>
+</main>
+
+<footer>单文件 · 内联 CSS/JS · 无外网依赖 · 浏览器直接打开。演示中的提交、hash、作者均为虚构标注数据，非真实项目历史；真实仓库实测（2026-09-21）：dev 自身 335 条 / 并集 387 条 / main 独有 52 条。搜索为简化过滤（真实实现 filter 模式保留祖先闭包）。</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 虚构提交数据（演示用，非真实历史） ----------
+     历史结构：main（车道0）经两次「合并入 main」产生仅 main 可达的合并提交；
+     dev（车道1）承载开发提交；merge-base(main, dev) = d4e6f30。 */
+  var C = {
+    'a1b2c30': { short: 'a1b2c30', lane: 0, subject: 'chore: 初始化项目骨架', author: '林一', date: '2026-09-10 09:12', parents: [] },
+    'b2c4d10': { short: 'b2c4d10', lane: 1, subject: 'feat: REQ-20260914-002 提交关键词搜索', author: '林一', date: '2026-09-12 14:03', parents: ['a1b2c30'] },
+    'c3d5e20': { short: 'c3d5e20', lane: 0, subject: 'build: v0.4.0 合并 REQ-20260914-002（BLD-20260914-002）', author: 'agent-team-board', date: '2026-09-12 18:00', parents: ['a1b2c30', 'b2c4d10'] },
+    'd4e6f30': { short: 'd4e6f30', lane: 1, subject: 'fix: BUG-20260920-003 分支空态文案', author: '林二', date: '2026-09-15 10:05', parents: ['b2c4d10'] },
+    'e5f7a40': { short: 'e5f7a40', lane: 0, subject: 'build: v0.4.1 合并 BUG-20260920-003（BLD-20260916-001）', author: 'agent-team-board', date: '2026-09-15 18:00', parents: ['c3d5e20', 'd4e6f30'] },
+    'f6a8b50': { short: 'f6a8b50', lane: 1, subject: 'feat: REQ-20260920-001 历史拓扑图', author: '林一', date: '2026-09-18 16:40', parents: ['d4e6f30'] }
+  };
+  var HEAD_MAIN = 'e5f7a40', HEAD_DEV = 'f6a8b50';
+  var MERGE_BASE = 'd4e6f30'; // 本虚构仓库中 merge-base(main, dev) = d4e6f30
+  var MAIN_ONLY = { 'c3d5e20': 1, 'e5f7a40': 1 }; // dev 不可达、仅 main 可达（dev..main）
+
+  /* 视图 = 有序提交（新→旧）+ 逐行线段（手工核对，连线只按真实父子关系）
+     segs：{k:'pass'|'top'|'down', l:车道} 垂直线；{k:'in', a, b} 上边界 a 道弯入本行 b 道节点；
+           {k:'out', a, b} 本行 a 道节点弯向下边界 b 道 */
+  var UNION = [ // main ∪ dev 并集（缺陷现状的 dev 视图 = 两种模式的 main 视图）
+    { h: 'f6a8b50', segs: [{ k: 'down', l: 1 }] },
+    { h: 'e5f7a40', segs: [{ k: 'pass', l: 1 }, { k: 'down', l: 0 }, { k: 'out', a: 0, b: 1 }] },
+    { h: 'd4e6f30', segs: [{ k: 'pass', l: 0 }, { k: 'top', l: 1 }, { k: 'down', l: 1 }] },
+    { h: 'c3d5e20', segs: [{ k: 'pass', l: 1 }, { k: 'top', l: 0 }, { k: 'down', l: 0 }, { k: 'out', a: 0, b: 1 }] },
+    { h: 'b2c4d10', segs: [{ k: 'in', a: 0, b: 1 }, { k: 'top', l: 1 }, { k: 'out', a: 1, b: 0 }] },
+    { h: 'a1b2c30', segs: [{ k: 'top', l: 0 }] }
+  ];
+  var DEVONLY = [ // 期望：选中 dev —— 仅 dev 可达（等价 git log dev）
+    { h: 'f6a8b50', segs: [{ k: 'down', l: 1 }] },
+    { h: 'd4e6f30', segs: [{ k: 'top', l: 1 }, { k: 'down', l: 1 }] },
+    { h: 'b2c4d10', segs: [{ k: 'top', l: 1 }, { k: 'out', a: 1, b: 0 }] },
+    { h: 'a1b2c30', segs: [{ k: 'top', l: 0 }] }
+  ];
+
+  /* ---------- 图形几何 ---------- */
+  var X = [13, 29], ROW_H = 30, W = 42;
+  var C_MAIN = '#4f8ef7', C_DEV = '#f5a623', C_ONE = '#4f8ef7'; // 并集按分支配色；dev 单支视图单一颜色
+
+  var state = { mode: 'defect', branch: 'dev', uiState: 'normal', query: '', input: '', sel: null };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  /* 当前视图：期望模式 + dev = 仅 dev 可达；其余（缺陷模式 dev / 两种模式 main）= 并集 */
+  function isDevSingle() { return state.mode === 'expected' && state.branch === 'dev'; }
+  function viewRows() { return isDevSingle() ? DEVONLY : UNION; }
+  function laneColor(l) { return isDevSingle() ? C_ONE : (l === 0 ? C_MAIN : C_DEV); }
+
+  function segSvg(s) {
+    if (s.k === 'pass') return '<path class="segline" style="stroke:' + laneColor(s.l) + '" d="M ' + X[s.l] + ' 0 V 30"/>';
+    if (s.k === 'top') return '<path class="segline" style="stroke:' + laneColor(s.l) + '" d="M ' + X[s.l] + ' 0 V 15"/>';
+    if (s.k === 'down') return '<path class="segline" style="stroke:' + laneColor(s.l) + '" d="M ' + X[s.l] + ' 15 V 30"/>';
+    if (s.k === 'in') return '<path class="segline" style="stroke:' + laneColor(s.a) + '" d="M ' + X[s.a] + ' 0 L ' + X[s.a] + ' 5 Q ' + X[s.a] + ' 15 ' + X[s.b] + ' 15"/>';
+    if (s.k === 'out') return '<path class="segline" style="stroke:' + laneColor(s.b) + '" d="M ' + X[s.a] + ' 15 L ' + X[s.a] + ' 25 Q ' + X[s.a] + ' 30 ' + X[s.b] + ' 30"/>';
+    return '';
+  }
+  function nodeSvg(c, head) {
+    var cx = X[c.lane], p = [];
+    if (c.parents.length > 1) p.push('<circle class="n-out" style="stroke:' + laneColor(c.lane) + '" cx="' + cx + '" cy="15" r="6.5"/>');
+    p.push('<circle style="fill:' + laneColor(c.lane) + '" cx="' + cx + '" cy="15" r="' + (c.parents.length > 1 ? 3 : 4.5) + '"/>');
+    if (head) p.push('<circle class="n-head" cx="' + cx + '" cy="15" r="9"/>');
+    return p.join('');
+  }
+  function rowSvg(row, opts) {
+    var c = C[row.h];
+    var inner = row.segs.map(segSvg).join('') + nodeSvg(c, opts.head);
+    return '<svg width="' + W + '" height="' + ROW_H + '" viewBox="0 0 ' + W + ' ' + ROW_H + '" aria-hidden="true">' + inner + '</svg>';
+  }
+
+  /* ---------- 渲染 ---------- */
+  var $ = function (id) { return document.getElementById(id); };
+
+  function bannerHtml() {
+    if (state.branch !== 'dev') {
+      /* 两种模式下 main 均为并集：BUG-20260920-002 落定的预期行为，不在本单范围 */
+      return '<div class="banner plainb" role="note"><strong>说明</strong> · 选中 main 维持双支并集口径（BUG-20260920-002 用户诉求：main 要显示 dev 和 main 两条分支的提交历史），本单不改。<div class="lg small">请切回左侧 dev 查看缺陷与期望对照。</div></div>';
+    }
+    if (state.mode === 'defect') {
+      return '<div class="banner bad" role="note"><strong>缺陷现状</strong> · 选中 dev 却按并集 <code>git log main dev</code> 读取：列表混入 main 独有提交（本例 2 条，红色左边线标注）、出现「并集视图」提示、main 分支头标签与 Merge-base 标注，分页按并集总数计（6 条 vs dev 自身 4 条）。'
+        + '<div class="lg small">真实仓库实测（2026-09-21）：dev 自身 335 条 / 并集 387 条 / main 独有 52 条。对照：切到「期望效果」。</div></div>';
+    }
+    return '<div class="banner good" role="note"><strong>期望效果</strong> · 选中 dev 只显示 dev 可达提交（等价 <code>git log dev</code>）：无并集提示、无 main 分支头标签与 merge-base 标注，分页按 dev 单支总数计（本例 4 条）。'
+      + '<div class="lg"><span class="dot" style="background:#4f8ef7"></span>单支视图（dev 历史，不做 main/dev 区分）<span class="dot" style="background:#2dd4bf"></span>仅并集视图出现的汇聚点标注</div></div>';
+  }
+
+  function rowHtml(row, opts) {
+    var c = C[row.h];
+    var headChip = opts.head ? '<span class="tag-head ' + (row.h === HEAD_MAIN ? 'main' : 'dev') + '">' + (row.h === HEAD_MAIN ? 'main' : 'dev') + '</span>' : '';
+    var mbChip = opts.dual && row.h === MERGE_BASE ? '<span class="tag-mb" title="main 与 dev 的汇聚点（merge-base）">Merge-base</span>' : '';
+    var mergeTag = c.parents.length > 1 ? '<span class="tag-merge">合并 · ' + c.parents.length + ' 父提交</span>' : '';
+    var mainOnly = opts.markMainOnly && MAIN_ONLY[row.h]
+      ? '<span class="mark-x" title="main 独有提交：dev 不可达（git log dev 中不存在）">✕ main 独有</span>' : '';
+    return '<li><button type="button" class="row' + (state.sel === row.h ? ' sel' : '') + (mainOnly ? ' mainonly' : '') + '" data-h="' + row.h + '" aria-label="提交 ' + c.short + ' ' + esc(c.subject) + '">'
+      + rowSvg(row, opts) + '<code>' + c.short + '</code>' + mainOnly + headChip + mbChip + mergeTag
+      + '<span class="subj">' + esc(c.subject) + '</span>'
+      + '<span class="meta muted small">' + esc(c.author) + ' · ' + esc(c.date) + '</span></button></li>';
+  }
+
+  function logHtml() {
+    if (state.uiState === 'loading') return '<p class="muted">' + (state.query ? '搜索中…' : '加载提交记录中…') + '</p>';
+    if (state.uiState === 'empty') return '<p class="muted small">该分支暂无提交</p>';
+    if (state.uiState === 'error') {
+      return '<div class="err" role="alert">提交记录读取失败：模拟服务错误（演示） <button type="button" class="btn" data-retry>重试</button></div>';
+    }
+    var dual = !isDevSingle(); // 并集视图：提示行 + 双分支头标签 + merge-base 标注
+    var unionHint = dual
+      ? '<div class="unionhint" role="note">并集视图：同时显示 main 与 dev 的提交（含未合并提交）</div>'
+      : '';
+    var rows = viewRows();
+    var markMainOnly = state.mode === 'defect' && state.branch === 'dev'; // 缺陷模式才把 main 独有提交标红
+    if (state.query) {
+      var kw = state.query.toLowerCase();
+      var hit = rows.filter(function (r) {
+        var c = C[r.h];
+        return (c.subject + ' ' + c.author + ' ' + c.short + ' ' + r.h).toLowerCase().indexOf(kw) >= 0;
+      });
+      if (!hit.length) {
+        return unionHint + '<p class="muted small">没有匹配的提交（关键词：' + esc(state.query) + '）</p>'
+          + '<p><button type="button" class="btn" data-log-search-clear>清除</button></p>';
+      }
+      var countBar = '<div class="countbar" role="status">共 ' + hit.length + ' 条匹配（关键词：' + esc(state.query) + '）</div>';
+      var list = '<ul class="log">' + hit.map(function (r) {
+        return rowHtml(r, { dual: dual, head: dual && (r.h === HEAD_MAIN || r.h === HEAD_DEV), markMainOnly: markMainOnly });
+      }).join('') + '</ul>';
+      return unionHint + countBar + list;
+    }
+    var list2 = '<ul class="log">' + rows.map(function (r) {
+      return rowHtml(r, { dual: dual, head: dual && (r.h === HEAD_MAIN || r.h === HEAD_DEV), markMainOnly: markMainOnly });
+    }).join('') + '</ul>';
+    var eof = '<div class="notebar" role="note">已到末尾 · 共 ' + rows.length + ' 条提交（可翻至分支首个提交）</div>';
+    var pager = '<div class="pager" role="navigation" aria-label="提交记录分页"><button type="button" disabled>‹</button><button type="button" class="on">1</button><button type="button" disabled>›</button><span class="muted small">每页 20 条 · 第 1–' + rows.length + ' 条 / 共 ' + rows.length + ' 条</span></div>';
+    return unionHint + list2 + eof + pager;
+  }
+
+  function detailHtml() {
+    if (state.uiState !== 'normal' || !state.sel) return '';
+    var c = C[state.sel];
+    if (!c) return '';
+    var dual = !isDevSingle();
+    var parents = c.parents.length
+      ? '<span>父提交：</span>' + c.parents.map(function (p) { return '<code>' + (C[p] ? C[p].short : p) + '</code>'; }).join(' ')
+      : '<span>无父提交（根提交）</span>';
+    var mergePart = c.parents.length > 1 ? ' <span class="tag-merge">合并 · ' + c.parents.length + ' 父提交</span>' : '';
+    var mbPart = dual && state.sel === MERGE_BASE ? ' <span class="tag-mb">main ∩ dev 汇聚点</span>' : '';
+    var onlyPart = dual && state.mode === 'defect' && state.branch === 'dev' && MAIN_ONLY[state.sel]
+      ? ' <span class="mark-x">main 独有提交 · dev 不可达</span>' : '';
+    return '<div class="detail" role="status"><code>' + c.short + '</code> ' + esc(c.subject) + '；' + parents + mergePart + mbPart + onlyPart + '</div>';
+  }
+
+  function render() {
+    $('logTitle').textContent = state.branch;
+    $('banner').innerHTML = bannerHtml();
+    $('detail').innerHTML = detailHtml();
+    $('logBody').innerHTML = logHtml();
+    var loading = state.uiState === 'loading';
+    $('qInput').value = state.input;
+    $('qInput').disabled = loading;
+    $('qGo').disabled = loading;
+    $('qGo').textContent = loading ? '搜索中…' : '搜索';
+    $('qClear').hidden = !state.query;
+    document.querySelectorAll('.branch[data-branch]').forEach(function (el) {
+      el.classList.toggle('on', el.getAttribute('data-branch') === state.branch);
+    });
+    document.querySelectorAll('.seg button').forEach(function (el) {
+      el.classList.toggle('on', el.getAttribute('data-mode') === state.mode);
+    });
+  }
+
+  /* ---------- 交互 ---------- */
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest ? ev.target.closest('[data-mode],[data-branch],[data-h],[data-retry],[data-log-search-clear],#qGo,#qClear,#logRefresh,#branchRefresh,#themeBtn') : null;
+    if (!t) return;
+    if (t.hasAttribute('data-mode')) {
+      state.mode = t.getAttribute('data-mode');
+      state.query = ''; state.input = ''; state.sel = null;
+    } else if (t.hasAttribute('data-branch')) {
+      state.branch = t.getAttribute('data-branch');
+      state.query = ''; state.input = ''; state.sel = null; // 切分支重置搜索与选中（口径同现有实现）
+    } else if (t.hasAttribute('data-h')) {
+      state.sel = state.sel === t.getAttribute('data-h') ? null : t.getAttribute('data-h'); // click 切换选中
+    } else if (t.hasAttribute('data-retry')) {
+      state.uiState = 'normal'; $('stateSel').value = 'normal';
+    } else if (t.hasAttribute('data-log-search-clear') || t.id === 'qClear') {
+      state.query = ''; state.input = ''; state.sel = null;
+    } else if (t.id === 'qGo') {
+      state.input = $('qInput').value;
+      state.query = state.input.trim(); // 空白等同清除
+      state.sel = null;
+    } else if (t.id === 'logRefresh' || t.id === 'branchRefresh') {
+      // 模拟一次真实刷新：短暂加载态后回正常（不重置关键词，口径同现有实现）
+      var prev = state.uiState;
+      state.uiState = 'loading'; render();
+      setTimeout(function () { state.uiState = (prev === 'error' || prev === 'empty') ? 'normal' : prev; $('stateSel').value = state.uiState; render(); }, 450);
+      return;
+    } else if (t.id === 'themeBtn') {
+      var root = document.documentElement;
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+    render();
+  });
+
+  $('qInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { state.input = this.value; state.query = this.value.trim(); state.sel = null; render(); }
+  });
+  $('stateSel').addEventListener('change', function () {
+    state.uiState = this.value; state.sel = null; render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
