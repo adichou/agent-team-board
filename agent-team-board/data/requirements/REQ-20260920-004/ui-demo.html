@@ -18,7 +18,7 @@ aside select{font:inherit;background:var(--panel2);color:var(--text);border:1px 
 .cmd:hover{background:var(--panel2)}.cmd.on{background:var(--panel2);border-color:var(--accent)}
 .cmd code{font-family:ui-monospace,Menlo,monospace;color:#a9d1ff}
 .cmd .tag{float:right;font-size:11px;padding:1px 7px;border-radius:9px;margin-left:6px}
-.tag.danger{background:#5b2727;color:#ffb3b3}.tag.disabled{background:#3a4150;color:#9aa4b2}
+.tag.danger{background:#5b2727;color:#ffb3b3}.tag.disabled{background:#3a4150;color:#9aa4b2}.tag.warn{background:#4d4222;color:#e6c26a}
 .cmd:disabled{cursor:not-allowed;opacity:.55}.cmd:disabled code{color:var(--muted)}
 .notice{padding:14px;border:1px solid var(--line2);border-radius:9px;color:var(--muted);background:var(--panel2)}
 h2{font-size:17px;margin:4px 0 6px}h3{font-size:15px;margin:14px 0 6px}
@@ -87,7 +87,7 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
     </div>
   </div>
 </div>
-<footer>演示要点：分组命令按钮与搜索、参数表单与实时命令预览、高危命令二次确认、serve / cli 组禁用指引、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、执行历史回看。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
+<footer>演示要点：分组命令按钮与搜索、参数表单与实时命令预览、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、执行历史回看。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
 <script>
 const GROUPS=[
  {g:'数据与分发',items:[
@@ -144,7 +144,7 @@ const GROUPS=[
   {c:'commit log',d:'查该单全部提交（账本与 git 历史合并）',a:[{k:'ITEM-ID',r:1,p:'REQ-…'}],out:'abc1234 feat: … REQ-…（模拟）'},
   {c:'commit which',d:'从提交反查条目',a:[{k:'HASH或消息',r:1,p:'abc1234'}],out:'→ REQ-…（模拟）'}]},
  {g:'服务',items:[
-  {c:'serve',d:'后台启动看板服务 —— 界面本身由 serve 提供，能打开即已在运行：重复执行只是复用提示；版本过旧时还会杀掉正在响应本请求的服务进程；请在终端按需启动',dis:1}]},
+  {c:'serve',d:'后台启动看板服务（已运行则复用；版本过旧自动重启）—— 高频命令，界面可直接执行',warn:1,o:'--port N --log FILE',out:'✓ 看板已在运行（复用现有实例）：http://127.0.0.1:8888（模拟）'}]},
  {g:'终端命令',items:[
   {c:'cli install',d:'安装终端命令（写 PATH，属本机终端操作）—— 请在终端执行',dis:1,o:'--to 目录'},
   {c:'cli uninstall',d:'卸载终端命令 —— 请在终端执行',dis:1,o:'--to 目录'},
@@ -159,7 +159,7 @@ function renderList(){const sc=$('#scene').value,q=$('#q').value.trim().toLowerC
  if(sc==='loading'){L.innerHTML='<div class="notice">正在读取命令清单…</div>';return}
  if(sc==='error'){L.innerHTML='<div class="notice">命令清单读取失败：模拟服务异常。<br><button type="button" class="ghost" id="retryList">重试</button></div>';$('#retryList').onclick=()=>{$('#scene').value='normal';renderList()};return}
  let any=false;L.innerHTML=GROUPS.map(g=>{const its=g.items.filter(i=>!q||(i.c+' '+i.d).toLowerCase().includes(q));if(!its.length)return '';any=any||!!its.length;
-  return '<p class="grp">'+g.g+'</p>'+its.map(i=>'<button type="button" class="cmd'+(sel===i.c?' on':'')+'" data-c="'+i.c+'"'+(i.dis?' disabled':'')+' aria-label="atb '+i.c+'"><code>atb '+i.c+'</code>'+(i.danger?'<span class="tag danger">需确认</span>':'')+(i.dis?'<span class="tag disabled">终端执行</span>':'')+'</button>').join('')}).join('');
+  return '<p class="grp">'+g.g+'</p>'+its.map(i=>'<button type="button" class="cmd'+(sel===i.c?' on':'')+'" data-c="'+i.c+'"'+(i.dis?' disabled':'')+' aria-label="atb '+i.c+'"><code>atb '+i.c+'</code>'+(i.danger?'<span class="tag danger">需确认</span>':'')+(i.warn?'<span class="tag warn">影响提示</span>':'')+(i.dis?'<span class="tag disabled">终端执行</span>':'')+'</button>').join('')}).join('');
  if(!any)L.innerHTML='<div class="notice">无匹配命令。<button type="button" class="ghost" id="clearQ">清除搜索</button></div>',$('#clearQ').onclick=()=>{$('#q').value='';renderList()};
  L.querySelectorAll('.cmd:not(:disabled)').forEach(b=>b.onclick=()=>{sel=b.dataset.c;vals={};extra='';renderList();renderDetail()})}
 function renderDetail(){const i=find(sel);if(!i)return;const miss=(i.a||[]).filter(x=>x.r&&!vals[i.c+'|'+x.k]);
@@ -169,6 +169,7 @@ function renderDetail(){const i=find(sel);if(!i)return;const miss=(i.a||[]).filt
  +'<label class="f" style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)">附加参数（可选，空格分隔）<input id="extra" placeholder="--json --by demo" value="'+extra.replace(/"/g,'&quot;')+'"></label>'
  +'<div class="preview" id="prev"></div>'
  +(i.dis?'<div class="notice">该命令面向本机终端环境（PATH / 常驻服务），不适合经网页下发；请在终端执行：<code>node scripts/atb.mjs '+i.c+'</code></div><div class="row"><button type="button" class="act" disabled>执行</button><span class="feedback warn">界面已禁用执行入口</span></div>'
+ +(i.warn?'<div class="notice">执行影响：版本一致时为「复用现有实例」的空操作，正常回显输出；磁盘代码较新时服务自动重启——本次响应会丢失、界面短暂断连，属预期而非执行失败，重启完成后界面自动恢复。</div>':'')
  :'<div class="row"><button type="button" class="act" id="run"'+(miss.length||running?' disabled':'')+'>'+((i.a||[]).some(x=>x.r)?'核对参数后执行':'执行')+'</button>'+(miss.length?'<span class="feedback warn">必填项缺失：'+miss.map(x=>x.k).join('、')+'</span>':'')+(i.long?'<span class="feedback">长耗时命令：异步执行，不阻塞看板轮询（模拟）</span>':'')+'</div>')
  +'<p class="feedback" id="dfb" role="status" aria-live="polite"></p>';
  $('#prev').textContent='$ '+cmdText(i);
