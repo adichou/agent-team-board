@@ -323,7 +323,9 @@ t('T1 treeData：refs 组装（heads 命中行带分支名 / 单支最新行带�
   const by = new Map(d.map((x) => [x.hash, x]));
   assert.deepEqual([...by.get(H(2)).refs], ['main', 'tag: v0.1.0'], 'heads 命中行带分支名 + tag 前缀');
   assert.deepEqual([...by.get(H(3)).refs], ['dev'], '第二支头标签');
-  assert.deepEqual([...by.get(H(1)).refs], [], '非头提交无 ref');
+  // BUG-20260921-007：未被锚链 / 合并闭包覆盖的断层泳道顶（此处为最新合并行，heads 均在其下）
+  // 以「分支名·2」续锚补 gitgraph 可达覆盖——该行旧实现被静默丢弃，现整页零丢弃
+  assert.deepEqual([...by.get(H(1)).refs], ['dev·2'], '断层泳道顶带续锚（gitgraph 可达覆盖，不丢提交）');
   assert.equal(by.get(H(1)).subject, `${H(1).slice(0, 7)} merge: 合并`, 'subject 前缀短 hash');
   assert.equal(by.get(H(1)).author.name, 'T', 'author 对象形态（git2json 校验要求）');
   // 单支：最新行带选中分支名
@@ -469,7 +471,8 @@ t('R5 深浅色：matchMedia(prefers-color-scheme) 选浅 / 深两套模板配�
   const calls = fakeGitgraph(h);
   await branchesView(h);
   const lightColors = calls.createGitgraph[0].options.template.opts.colors;
-  assert.ok(Array.isArray(lightColors) && lightColors.length >= 4, '浅色模板色板');
+  // BUG-20260921-007：单支模式传单色板（全部泳道同色，翻页 / 断层续锚不跳变），长度 1
+  assert.ok(Array.isArray(lightColors) && lightColors.length >= 1, '浅色模板色板');
   const h2 = setup(ST, { matchMedia: (q) => mk(true) });
   searchStub(h2, ST);
   const calls2 = fakeGitgraph(h2);
