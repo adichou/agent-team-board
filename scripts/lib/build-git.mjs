@@ -79,8 +79,11 @@ export function listBranches(root) {
 // 连线以真实父子关系为据，不得从主题文本 / 行序推测。
 // REQ-20260921-002：每条 commit 附 tags（指向该提交的标签名数组；无标签为 []）——提交树
 // tag 标签与「message / 分支名 / tag」搜索以此为准。
-// BUG-20260920-002：所选分支为主分支（解析结果）或 dev 且两支本地并存时走双支并集口径
-//（branchUnionLog，响应附 heads / mergeBase / 逐提交 side）；其余分支保持单支口径不变。
+// BUG-20260920-002：所选分支为主分支（解析结果）且与 dev 两支本地并存时走双支并集口径
+//（branchUnionLog，响应附 heads / mergeBase / 逐提交 side）。
+// BUG-20260921-006：dev 改回单支口径——浏览 dev 只显示 dev 可达提交（等价 git log dev），
+// 不再混入 main 独有提交（含「合并入 main」产生的版本合并提交），也不附并集专属字段；
+// 其余分支保持单支口径不变。
 export function branchLog(root, branch, { limit = 50, offset = 0 } = {}) {
   const ref = assertRefName(branch);
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法读取提交记录');
@@ -225,19 +228,21 @@ export function branchSearchLog(root, branch, { q, mode = 'filter', limit = 50, 
 }
 
 // BUG-20260920-002：双支并集范围判定（固定 main+dev 双分支模型）——所选分支为主分支解析结果
-//（优先 main、本地仅 master 回退 master）或 dev，且两支本地引用均存在时返回 { main, dev }；
-// 其余（无 dev / 无主分支 / 选了第三支 / 远端分支名）返回 null，走既有单支口径。
+//（优先 main、本地仅 master 回退 master），且与 dev 两支本地引用均存在时返回 { main, dev }；
+// BUG-20260921-006：dev 及其余分支一律返回 null 走单支口径（浏览 dev 只显示 dev 可达提交，
+// 不再与 main 取并集）；无 dev / 无主分支 / 远端分支名同样返回 null。
 function dualBranchScope(root, ref) {
   const mainBranch = resolveMainBranch(root);
   if (!mainBranch || mainBranch === DEV_BRANCH) return null;
-  if (ref !== mainBranch && ref !== DEV_BRANCH) return null;
+  if (ref !== mainBranch) return null; // BUG-20260921-006：仅主分支选择走双支并集
   const exists = (b) => gitRaw(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`]).status === 0;
   if (!exists(mainBranch) || !exists(DEV_BRANCH)) return null;
   return { main: mainBranch, dev: DEV_BRANCH };
 }
 
-// BUG-20260920-002：main ∪ dev 双支并集读取（只读）——refs 顺序固定 [main, dev]：main / dev
-// 两种选择得到同一并集与同一排序（等价 `git log <main> <dev>` 的可达集合，默认日期序并行交错）。
+// BUG-20260920-002：main ∪ dev 双支并集读取（只读）——refs 顺序固定 [main, dev]；BUG-20260921-006
+// 起仅主分支选择进入本函数（dev 单支口径，见 dualBranchScope），排序仍等价
+// `git log <main> <dev>` 的可达集合（默认日期序并行交错）。
 // 逐提交附 side：dev 独有（`rev-list <main>..<dev>` 命中）为 'dev'、其余（含共享历史与
 // merge-base）为 'main'——前端据此做分支稳定配色（同 hash 恒同色，翻页 / 搜索不跳变）。
 // 响应附 heads（两支本地头 [{name, hash}]，供分支头名称标签）与 mergeBase（`git merge-base`
