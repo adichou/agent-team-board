@@ -112,13 +112,14 @@ t('L1-4 readmeDocLinks：README 按语言链接同语言 CHANGELOG / FEATURES', 
 t('L1-5 buildDocSummaryPrompt：清单按语言集的默认语言（首语言）展开（REQ-20260921-012 阶段一收窄）', () => {
   const p = flow.buildDocSummaryPrompt({
     projectRoot: '/tmp/proj-x', planId: 'BLD-20260921-010',
-    items: [{ itemId: 'REQ-20260921-010', commit: 'a'.repeat(40), title: '语言集' }],
+    items: [{ itemId: 'REQ-20260921-010', commit: 'a'.repeat(40), title: '语言集条目标题（不应内嵌）' }],
     langs: ['cn', 'en', 'fr', 'jp'],
   });
   for (const f of ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md']) {
     assert.ok(p.includes(`${f}（`), `提示词应含默认语言 ${f}`);
   }
   assert.ok(!p.includes('README_en.md') && !p.includes('_fr.md') && !p.includes('_jp.md'), '总结清单不含剩余语言文件');
+  assert.ok(!p.includes('语言集条目标题（不应内嵌）'), 'BUG-20260921-005：关联范围不内嵌条目标题');
   assert.ok(p.includes('4 个文档') && p.includes('4 类 × 1'), '文件数与阶段说明与实际一致');
   assert.ok(p.includes('README.md → CHANGELOG.md / FEATURES.md'), 'README 链接提示按默认语言命名');
   assert.ok(!p.includes('八个'), '不再硬编码「八个」');
