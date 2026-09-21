@@ -487,11 +487,15 @@ t('L4-2 提交按钮门禁与失败态：aria-disabled + title 缺口；加载�
 
 t('L4-3 审查对话框：四类型页签 × 中英双栏 / 编辑预览 / 保存 / 通过审核 / 同步滚动绑定', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const html = vmRun(extractFn(source, 'renderReviewModal'), {
-    pfOf: (v) => v.pf,
-    esc: (s) => String(s),
-    ...FLOW_STUB,
-  }, `renderReviewModal({
+  // REQ-20260921-011：预览态改 Markdown 富文本渲染，renderReviewModal 新依赖 renderMd /
+  // sanitizeHtml 一并提取（本 vm 上下文无 window，renderMd 自动落入源码回退分支，断言口径不变）
+  const html = vmRun(
+    [extractFn(source, 'sanitizeHtml'), extractFn(source, 'renderMd'), extractFn(source, 'renderReviewModal')].join('\n'),
+    {
+      pfOf: (v) => v.pf,
+      esc: (s) => String(s),
+      ...FLOW_STUB,
+    }, `renderReviewModal({
     id: 'BLD-20260921-001',
     pf: {
       review: { open: true, key: 'README', modes: { 'README.md': 'preview', 'README_en.md': 'edit' },
