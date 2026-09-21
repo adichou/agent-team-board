@@ -259,7 +259,45 @@ const CLI_GROUPS = [
           { label: '短句', required: true, flag: '--reason', placeholder: '中断原因短句' },
         ],
       },
-      { name: 'summary show', desc: '进度视图（x/8、当前文件、锁占用）' },
+      { name: 'summary show', desc: '进度视图（x/4、当前文件、锁占用）' },
+    ],
+  },
+  {
+    id: 'translate',
+    label: '发布文档 AI 翻译',
+    commands: [
+      {
+        name: 'translate start',
+        desc: '启动一轮 AI 翻译（默认语言 4/4 已审核才可启动；独立锁 translate，与总结 / 分析 / 开发互不占用）',
+        args: [{ label: 'BLD-ID', required: true, flag: '--id', placeholder: 'BLD-20260921-001' }],
+        options: '--by 会话',
+      },
+      {
+        name: 'translate file',
+        desc: '逐文件进度回执（正在翻译 / 已翻译待审核）',
+        args: [
+          { label: 'RUN-ID', required: true, placeholder: 'tr-20260921-001' },
+          { label: '文件名', required: true, flag: '--file', placeholder: 'README_en.md' },
+          { label: '状态', required: true, flag: '--state', placeholder: 'translating|translated' },
+        ],
+      },
+      {
+        name: 'translate done',
+        desc: '完成回执',
+        args: [
+          { label: 'RUN-ID', required: true, placeholder: 'tr-20260921-001' },
+          { label: '要点', required: true, flag: '--summary', placeholder: '翻译要点' },
+        ],
+      },
+      {
+        name: 'translate fail',
+        desc: '中断回执（不悬挂「正在翻译」，可重启续跑）',
+        args: [
+          { label: 'RUN-ID', required: true, placeholder: 'tr-20260921-001' },
+          { label: '短句', required: true, flag: '--reason', placeholder: '中断原因短句' },
+        ],
+      },
+      { name: 'translate show', desc: '进度视图（x/N、当前文件、锁占用）' },
     ],
   },
   {
