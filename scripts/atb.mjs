@@ -1203,12 +1203,13 @@ async function summaryCmd(rest) {
     const { opts } = parseOpts(subRest, new Set(['id', 'by']));
     if (!opts.id) die('用法：atb summary start --id <BLD-ID> [--by 会话]');
     const v = buildStore.readVersion(dataDir, opts.id);
-    const run = docsSummary.createSummaryRun(dataDir, { verId: v.id, owner: opts.by || 'summary' });
+    const run = docsSummary.createSummaryRun(dataDir, { verId: v.id, owner: opts.by || 'summary', langs: publishFlow.docLangsOf(v) });
     const prompt = publishFlow.buildDocSummaryPrompt({
       projectRoot,
       planId: v.id,
       items: v.items,
       runId: run.runId,
+      langs: publishFlow.docLangsOf(v),
       atbPath: 'node scripts/atb.mjs',
     });
     const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt };

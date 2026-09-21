@@ -335,12 +335,13 @@ export function scopeFingerprintOf(v) {
 
 // 记录文档提交：files = { '<文件名>': '<内容 sha256>' }（提交时点磁盘内容），scopeFp 为
 // publish-flow.publishScopeFingerprint（条目 + 文档基准）计算值；清除范围过期标记。
+// REQ-20260921-010：白名单按版本语言集判定（docLangsOf）。
 export function recordDocsCommit(dataDir, id, { commitHash, files, scopeFp } = {}) {
   const v = readVersion(dataDir, id);
   if (!/^[0-9a-f]{40}$/i.test(String(commitHash || ''))) throw new AtbError('文档提交记录缺少有效 commit hash');
   if (!files || typeof files !== 'object') throw new AtbError('文档提交记录缺少文件清单');
   for (const name of Object.keys(files)) {
-    if (!flow.isPublishDocFile(name)) throw new AtbError(`非发布文档文件：${name}`);
+    if (!flow.isPublishDocFile(name, flow.docLangsOf(v))) throw new AtbError(`非发布文档文件：${name}`);
   }
   v.docs = {
     commitHash: String(commitHash).toLowerCase(),
@@ -371,7 +372,7 @@ function markDocsScopeStale(dataDir, v, reason) {
 // 现算当前内容。
 export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
   const v = readVersion(dataDir, id);
-  if (!flow.isPublishDocFile(file)) throw new AtbError(`非发布文档文件：${file || '（空）'}（仅八个已确认文档可审核）`);
+  if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) throw new AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);
   let h = String(hash || '');
   if (!h) {
     const read = typeof readFile === 'function'
@@ -384,6 +385,21 @@ export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
   if (!/^[0-9a-f]{64}$/.test(h)) throw new AtbError('审核记录缺少有效内容 hash（sha256）');
   v.review = { files: { ...((v.review && v.review.files) || {}), [file]: { hash: h.toLowerCase(), at: nowIso() } } };
   v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
+// REQ-20260921-010 文档语言集：保存到版本记录顶层 v.langs（发布计划级持久化，重新进入
+// 文档编写步回显）；merging / 已正式发布（pushed）锁定不可改（与五步门禁 docs 步锁定口径
+// 一致）；非法语言集报错不改盘。语言集是文档清单的唯一事实源（求值 / 审核白名单 / 提交
+// pathspec / AI 总结提示词均按其展开）。
+export function saveDocLangs(dataDir, id, { langs, by = 'board' } = {}) {
+  const v = readVersion(dataDir, id);
+  if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改文档语言集');
+  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+  const r = Array.isArray(langs) ? flow.normalizeLangsList(langs) : flow.normalizeDocLangs(langs);
+  if (r.error) throw new AtbError(r.error);
+  v.langs = r.langs;
+  v.by = by;
   return writeVersion(dataDir, v);
 }
 

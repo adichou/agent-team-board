@@ -567,12 +567,15 @@ export function siteEvidenceReachable(siteRoot, hash, branch) {
   return isAncestorOf(siteRoot, hash, b);
 }
 
-// 受限写（文档提交）：只提交本次确认的八个发布文档中已存在的文件——git add 与 git commit
+// 受限写（文档提交）：只提交给定清单（REQ-20260921-010 起由调用方按语言集展开，如
+// cn,en,fr → 4 × 3 共 12 个 <KEY>[_<lang>].md）中已存在的文件——git add 与 git commit
 // 均按 pathspec 限定，绝不夹带业务源码或其他工作区修改；无变化时不制造空提交（noop）。
+// files 缺省保留旧八字节点号清单（兼容既有调用方）。
 // 返回逐文件内容 sha256（供 recordDocsCommit 固化「提交时点磁盘内容」基准）。
-export function commitPublishDocs(root, { message } = {}) {
-  // REQ-20260920-003 已确认的八个发布文档（与 publish-flow.publishDocFiles 同源清单）
-  const DOC_FILES = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
+export function commitPublishDocs(root, { message, files } = {}) {
+  const DOC_FILES = Array.isArray(files) && files.length
+    ? [...new Set(files.map((f) => path.basename(String(f || ''))))]
+    : ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再提交文档');
   const existing = DOC_FILES.filter((f) => fs.existsSync(path.join(root, f)));
   if (!existing.length) throw new AtbError('尚无已编写的发布文档（先保存至少一个文档再提交）');

@@ -2525,6 +2525,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return sendJson(res, 200, {
       version: v,
       versionNumber: flow.versionNumberOf(v.id),
+      langs: flow.docLangsOf(v), // REQ-20260921-010 文档语言集（缺省 cn,en）
       steps: flow.publishStepsState(v, docsEval),
       docs: docsEval,
       docsFlow: flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(dataDir, v.id)),
@@ -2542,12 +2543,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
-  // GET /api/build/docs?id=&file=：单个文档内容 + 全部八文件状态（file 缺省 README.md）。
+  // GET /api/build/docs?id=&file=：单个文档内容 + 语言集全文件状态（file 缺省 README.md）；
+  // 白名单与 README 链接提示按版本语言集判定（REQ-20260921-010）。
   if (req.method === 'GET' && pathname === '/api/build/docs') {
     const board = requireBoard();
     const v = buildStore.readVersion(board, String(u.searchParams.get('id') || ''));
     const file = String(u.searchParams.get('file') || 'README.md');
-    if (!flow.isPublishDocFile(file)) return sendJson(res, 400, { error: `非发布文档文件：${file}` });
+    if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) return sendJson(res, 400, { error: `非发布文档文件：${file}` });
     const docsEval = flow.evaluateDocsState(v, docReadFile);
     return sendJson(res, 200, {
       file,
@@ -2555,6 +2557,24 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       links: flow.readmeDocLinks(file),
       docs: docsEval,
       docsFlow: flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(board, v.id)),
+    });
+  }
+
+  // POST /api/build/docs/langs {id, langs}：REQ-20260921-010 设置文档语言集（逗号分隔缩写，
+  // 如 cn,en,fr；保存到版本记录，缺省 cn,en）。merging / 已正式发布锁定；非法值 400 不改盘。
+  // 语言集是文档清单唯一事实源：文件命名（首语言无后缀，其余 KEY_lang.md）、门禁、提交
+  // pathspec 与 AI 总结提示词均随其展开。
+  if (req.method === 'POST' && pathname === '/api/build/docs/langs') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.saveDocLangs(board, String(body.id || ''), { langs: body.langs });
+      return sendJson(res, 200, {
+        ok: true,
+        langs: v.langs,
+        version: v,
+        docs: flow.evaluateDocsState(v, docReadFile),
+        docsFlow: flow.evaluateDocsFlow(v, docReadFile, docsSummary.summaryMarksForVer(board, v.id)),
+      });
     });
   }
 
@@ -2566,12 +2586,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可启动 AI 总结');
-      const run = docsSummary.createSummaryRun(board, { verId: v.id, owner: 'summary' });
+      const run = docsSummary.createSummaryRun(board, { verId: v.id, owner: 'summary', langs: flow.docLangsOf(v) });
       const prompt = flow.buildDocSummaryPrompt({
         projectRoot: root,
         planId: v.id,
         items: v.items,
         runId: run.runId,
+        langs: flow.docLangsOf(v),
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
       });
       return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsSummary.summaryRunView(run) });
@@ -2603,7 +2624,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可审核文档');
       const file = String(body.file || '');
-      if (!flow.isPublishDocFile(file)) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅八个已确认文档可审核）`);
+      if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);
       const text = docReadFile(file);
       if (text == null) throw new core.AtbError(`${file} 不存在或不可读：先编写并保存再通过审核`);
       const hash = crypto.createHash('sha256').update(text).digest('hex');
@@ -2625,7 +2646,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可修改文档');
       const file = String(body.file || '');
-      if (!flow.isPublishDocFile(file)) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅八个已确认文档可编辑）`);
+      if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可编辑）`);
       const content = String(body.content ?? '');
       if (Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) throw new core.AtbError('文档内容过大（上限 2 MiB）');
       fs.writeFileSync(path.join(root, file), content);
@@ -2655,14 +2676,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         const detail = flowEval.missing
           .map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`)
           .join('、');
-        throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/8 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交`);
+        throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交`);
       }
       buildGit.assertOnDev(root);
-      const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${v.id}` });
+      // REQ-20260921-010：提交范围按语言集展开（4 类 × N），pathspec 限定不夹带业务源码。
+      const langs = flow.docLangsOf(v);
+      const docFiles = flow.publishDocFiles(langs).map((f) => f.file);
+      const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${v.id}`, files: docFiles });
       if (r.noop) {
         return sendJson(res, 200, { ok: true, noop: true, files: r.files, version: buildStore.readVersion(board, body.id) });
       }
-      const scopeFp = flow.publishScopeFingerprint(v.items, docReadFile);
+      const scopeFp = flow.publishScopeFingerprint(v.items, docReadFile, langs);
       const version = buildStore.recordDocsCommit(board, body.id, { commitHash: r.commitHash, files: r.hashes, scopeFp });
       return sendJson(res, 200, { ok: true, commitHash: r.commitHash, files: r.files, version });
     });
