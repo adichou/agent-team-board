@@ -324,11 +324,14 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.match(r.json.error || '', /git|仓库/);
 
     // REQ-20260920-003：合并前置 = 文档已完成且最新变化已提交——先写八个文档并提交
+    //（REQ-20260921-008 起提交门禁：八文件需先全部通过人工审查）
     const DOCS8 = ['README.md', 'README.en.md', 'CHANGELOG.md', 'CHANGELOG.en.md', 'FEATURES.md', 'FEATURES.en.md', 'AGENTS.md', 'AGENTS.en.md'];
     const commitDocsFor = async (id) => {
       for (const file of DOCS8) {
         const r0 = await req(port, 'POST', `/api/build/docs/save${P}`, { id, file, content: `# ${file} (${id})` });
         if (r0.status !== 200) throw new Error(`docs save ${file}: ${r0.text}`);
+        const rv = await req(port, 'POST', `/api/build/docs/review${P}`, { id, file });
+        if (rv.status !== 200) throw new Error(`docs review ${file}: ${rv.text}`);
       }
       const r1 = await req(port, 'POST', `/api/build/docs/commit${P}`, { id });
       if (r1.status !== 200 || !r1.json.commitHash) throw new Error(`docs commit: ${r1.text}`);

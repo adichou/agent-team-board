@@ -192,13 +192,14 @@ t('R4 gotoRuns 导航口径与共用链路不回退：进入无 /api/batch/creat
 });
 
 // R5 既有机制不回退（静态契约）：轮询签名剪枝保留（不打断面板内输入）；手动页签切换仍无条件重渲染
-t('R5 既有机制不回退：refreshRefine/refreshBatch 签名剪枝保留；bindBatchDrawer 手动页签切换仍无条件 renderBatchDrawer + refreshBatch', () => {
+t('R5 既有机制不回退：refreshRefine/refreshBatch 签名剪枝保留；bindBatchDrawer 手动页签切换仍无条件 renderBatchDrawer + 即时拉取', () => {
   assert.match(source, /if \(sig === state\.refine\.sig\) return;/, 'refine 轮询剪枝保留');
   assert.match(source, /if \(sig === state\.batchSig\) return;/, 'develop 轮询剪枝保留');
-  const bind = source.match(/function bindBatchDrawer\(\)[\s\S]{0,900}/);
+  const bind = source.match(/function bindBatchDrawer\(\)[\s\S]{0,1100}/);
   assert.ok(bind, '应存在 bindBatchDrawer');
   assert.match(bind[0], /state\.batch\.mode = b\.dataset\.bmode;/, '页签点击切换 mode');
-  assert.match(bind[0], /renderBatchDrawer\(\);\s*\n\s*refreshBatch\(\);/, '手动切换仍无条件重渲染并即时拉取');
+  // REQ-20260921-008：AI 总结子面板走独立数据源（refreshSummary），其余仍 refreshBatch
+  assert.match(bind[0], /renderBatchDrawer\(\);\s*\n\s*\/\/ 切换子面板即时拉取[\s\S]*?\n\s*if \(state\.batch\.mode === 'summary'\) refreshSummary\(\);\s*\n\s*else refreshBatch\(\);/, '手动切换仍无条件重渲染并即时拉取');
 });
 
 let failed = 0;
