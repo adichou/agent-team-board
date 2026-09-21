@@ -366,11 +366,12 @@ t('R8 过滤/翻页后移出与 commit 换选绑定真实条目 ID；merging/mer
   h.el('#bldItemsSearchGo').listeners.click();
   let inner = h.inner();
   assert.match(inner, /data-remove-item="REQ-20260915-002"/, '过滤后移出按钮绑定命中条目');
-  assert.match(inner, /data-commit-item="REQ-20260915-005"/, '过滤后 commit 换选绑定命中条目');
+  // BUG-20260921-015：条目行改为展示全部提交（chips），行绑定按 data-row-item
+  assert.match(inner, /data-row-item="REQ-20260915-005"/, '过滤后行内提交清单绑定命中条目');
   assert.doesNotMatch(inner, /data-remove-item="REQ-20260915-001"/, '未命中条目不出现在当前页行内操作');
-  // BUG-20260920-005：条目锁基准后移——merged（未推送）移出 / commit 换选 / 添加条目可用
+  // BUG-20260920-005：条目锁基准后移——merged（未推送）移出 / 提交清单 / 添加条目可用
   assert.doesNotMatch(inner, /data-remove-item="REQ-20260915-002" disabled/, 'merged 未推送移出可用');
-  assert.doesNotMatch(inner, /data-commit-item="REQ-20260915-002" disabled/, 'merged 未推送 commit 换选可用');
+  assert.match(inner, /title="该条目关联的全部提交"/, 'merged 未推送提交清单可用（无锁定说明）');
   assert.doesNotMatch(inner, /id="bldAddItem" disabled/, 'merged 未推送添加条目可用');
   // 推送完成（正式发布）后锁定（搜索与翻页不绕过锁定）
   const hP = setup({ versions: [ver('BLD-PUSHED', 'p', 'merged', manyItems(12), { pushed: true })] });
@@ -378,7 +379,7 @@ t('R8 过滤/翻页后移出与 commit 换选绑定真实条目 ID；merging/mer
   hP.run(`window.ATBBuild.setStep('link')`);
   const innerP = hP.inner();
   assert.match(innerP, /data-remove-item="REQ-20260915-002" disabled title="已正式发布，条目已锁定"/, '推送完成后移出禁用并说明');
-  assert.match(innerP, /data-commit-item="REQ-20260915-002" disabled/, '推送完成后 commit 换选禁用');
+  assert.match(innerP, /该条目关联的全部提交（已正式发布，条目已锁定）/, '推送完成后提交清单锁定并说明');
   assert.match(innerP, /id="bldAddItem" disabled title="已正式发布，条目已锁定"/, '推送完成后添加条目禁用并说明');
   // merging 同口径
   const h2 = setup({ versions: [ver('BLD-MERGING', 'g', 'merging', manyItems(3))] });

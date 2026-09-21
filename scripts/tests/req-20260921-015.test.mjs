@@ -160,7 +160,7 @@ t('B1 一键加入：依赖条目与最新提交进版本、隔离分析收敛�
   }
 });
 
-t('B2 归因与校验：无归属 / 未 done / 被占用 / 已在本版本跳过并给原因；可归属取最新提交', async () => {
+t('B2 归因与校验：无归属 / 未 done / 被占用跳过并给原因；可归属取最新提交；已在本版本条目补入其余提交（BUG-20260921-015 修复后口径）', async () => {
   const h = await setupServer((c) => {
     const B = c.mkItem('requirement', '所选需求B');
     const C = c.mkItem('requirement', '未完成依赖C');
@@ -180,7 +180,7 @@ t('B2 归因与校验：无归属 / 未 done / 被占用 / 已在本版本跳过
     return { B, C, D, E, F, cU, cC, cD, cE1, cE2, cF0, cF1, cB, occId: occ.id };
   });
   try {
-    // 主版本：B@所选 + F@cF1（cF0 为其未选祖先 → 归属条目已在本版本）
+    // 主版本：B@所选 + F@cF1（cF0 为其未选祖先 → 归属条目已在本版本 → BUG-20260921-015 起补入而非跳过）
     const created = await req(h.port, 'POST', `/api/build/version${h.P}`, {
       items: [{ itemId: h.B.id, commit: h.cB }, { itemId: h.F.id, commit: h.cF1 }],
     });
@@ -188,7 +188,9 @@ t('B2 归因与校验：无归属 / 未 done / 被占用 / 已在本版本跳过
     const vid = created.json.version.id;
     const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
     assert.equal(r.status, 200, `一键加入应成功：${r.text}`);
-    assert.deepEqual((r.json.added || []).map((x) => ({ itemId: x.itemId, commit: x.commit })), [{ itemId: h.E.id, commit: h.cE2 }], '可归属依赖取该条目最新提交纳入');
+    // 可归属新条目：多个依赖提交全部保留（不再只取「最新」一个）
+    assert.deepEqual((r.json.added || []).map((x) => ({ itemId: x.itemId, commit: x.commit, commits: x.commits })),
+      [{ itemId: h.E.id, commit: h.cE1, commits: [h.cE1, h.cE2] }], '新依赖条目的全部提交纳入');
     const skipped = r.json.skipped || [];
     const byReason = (re) => skipped.filter((s) => re.test(s.reason || ''));
     assert.equal(byReason(/无法归属/).length, 1, '无单号提交以「无法归属」跳过');
@@ -197,11 +199,15 @@ t('B2 归因与校验：无归属 / 未 done / 被占用 / 已在本版本跳过
     assert.ok(byReason(/尚未完成/)[0].reason.includes(h.C.id), '跳过原因含条目号');
     assert.equal(byReason(/已纳入版本/).length, 1, '被占用条目以「已纳入版本」跳过');
     assert.ok(byReason(/已纳入版本/)[0].reason.includes(h.occId), '跳过原因含占用版本号');
-    assert.equal(byReason(/已在本版本/).length, 1, '归属条目已在本版本以「已在本版本」跳过');
-    assert.equal(byReason(/已在本版本/)[0].commit, h.cF0, '早提交依赖不覆盖本版本既有 commit 关联');
-    // 版本数据：E 已纳入，其余不动
+    assert.equal(byReason(/已在本版本/).length, 0, '不再按「已在本版本」跳过（补入该条目其余提交）');
+    // 已在本版本条目：补入清单（保留原关联 cF1，补 cF0）
+    assert.deepEqual(r.json.appended || [], [{ itemId: h.F.id, commits: [h.cF0] }], '早提交依赖补入本版本既有条目');
+    // 版本数据：E 已纳入（两提交），F 补齐两提交，其余不动
     const version = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
-    assert.ok(version.items.some((x) => x.itemId === h.E.id && x.commit === h.cE2), '依赖条目已入版本');
+    const eItem = version.items.find((x) => x.itemId === h.E.id);
+    assert.ok(eItem && Array.isArray(eItem.commits) && eItem.commits.length === 2, '依赖条目已入版本且保留两个提交');
+    const fItem = version.items.find((x) => x.itemId === h.F.id);
+    assert.ok(fItem && fItem.commit === h.cF1 && Array.isArray(fItem.commits) && fItem.commits.length === 2, '既有条目保留原关联并补齐提交');
     assert.equal(version.items.length, 3, '版本关联 3 条（B、F、新入 E）');
   } finally {
     await h.close();
