@@ -66,17 +66,17 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
 <main class="shell">
   <aside>
     <div class="ltabs" role="tablist" aria-label="左缘视图页签（竖排）">
-      <button type="button" id="tabAll" class="ltab on" role="tab" aria-selected="true">全部命令</button>
-      <button type="button" id="tabRecent" class="ltab" role="tab" aria-selected="false">最近执行</button>
+      <button type="button" id="tabRecent" class="ltab on" role="tab" aria-selected="true">最近执行</button>
+      <button type="button" id="tabAll" class="ltab" role="tab" aria-selected="false">全部命令</button>
     </div>
     <div class="lmain">
-      <div id="listCtl">
+      <div id="listCtl" class="hidden">
         <input id="q" type="search" placeholder="搜索命令或说明（按 / 聚焦）…" autocomplete="off" aria-label="搜索命令">
         <label>清单状态 <select id="scene"><option value="normal">正常</option><option value="loading">清单加载中</option><option value="error">清单读取失败</option></select></label>
       </div>
       <label>模拟结果 <select id="simres"><option value="ok">执行成功（有输出）</option><option value="empty">执行成功（无输出）</option><option value="fail">执行失败（退出码 ≠ 0）</option></select></label>
-      <div id="list" class="list" role="listbox" aria-label="命令列表"></div>
-      <div id="recent" class="list hidden" role="listbox" aria-label="最近执行列表（按命令去重前 10）"></div>
+      <div id="list" class="list hidden" role="listbox" aria-label="命令列表"></div>
+      <div id="recent" class="list" role="listbox" aria-label="最近执行列表（按命令去重前 10）"></div>
     </div>
   </aside>
   <section>
@@ -102,7 +102,7 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
     </div>
   </div>
 </div>
-<footer>演示要点：左缘竖排页签（全部命令 / 最近执行，参考需求模块纵向档位形态）、平铺命令列表点击在右侧显示详情与执行、最近执行按命令去重前 10（成功执行计入、点击在右侧回填参数快速再执行）、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引（右侧详情说明原因）、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、右侧下方执行历史（最近 20 次、无清空入口）。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
+<footer>演示要点：左缘竖排页签（最近执行在前且默认选中 / 全部命令，参考需求模块纵向档位形态，每次进入默认显示最近执行）、平铺命令列表点击在右侧显示详情与执行、最近执行按命令去重前 10（成功执行计入、点击在右侧回填参数快速再执行）、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引（右侧详情说明原因）、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、右侧下方执行历史（最近 20 次、无清空入口）。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
 <script>
 const GROUPS=[
  {g:'数据与分发',items:[
@@ -165,7 +165,7 @@ const GROUPS=[
   {c:'cli uninstall',d:'卸载终端命令 —— 请在终端执行',dis:1,o:'--to 目录'},
   {c:'cli status',d:'查看安装状态 —— 请在终端执行',dis:1}]}
 ];
-const $=s=>document.querySelector(s);let tab='all',sel=null,vals={},extra='',running=false,hist=[],recents=[];
+const $=s=>document.querySelector(s);let tab='recent',sel=null,vals={},extra='',running=false,hist=[],recents=[];
 function flat(){return GROUPS.flatMap(g=>g.items.map(i=>({g:g.g,...i})))}
 function find(c){return flat().find(i=>i.c===c)}
 function cmdText(i){const a=(i.a||[]).map(x=>vals[i.c+'|'+x.k]||('<'+x.k+'>')).join(' ');return 'atb '+i.c+(a?' '+a:'')+(extra?' '+extra:'')+' --dir /demo/project'}
@@ -201,7 +201,7 @@ function finish(i){setTimeout(()=>{running=false;const res=$('#simres').value,t=
  if(hist.length>20)hist.length=20;
  if(res!=='fail'){recents=recents.filter(r=>r.c!==i.c);recents.unshift({c:i.c,vals:{...vals},extra:extra,t:t});if(recents.length>10)recents.length=10;renderRecent()}
  $('#noout').classList.add('hidden');$('#outwrap').classList.remove('hidden');renderHist();const b=$('#run');if(b){b.disabled=false;b.textContent='执行';$('#dfb').textContent=res==='fail'?'执行失败，可重试（同命令同参数）。':''}},700)}
-function renderRecent(){const R=$('#recent');R.innerHTML=recents.length?recents.map(r=>cmdBtn(find(r.c),r.t)).join(''):'<div class="notice" style="padding:8px;font-size:12.5px">暂无最近执行：命令成功执行后，这里按命令去重展示最近 10 条，点击在右侧回填该次参数快速再执行。</div>';
+function renderRecent(){const R=$('#recent');R.innerHTML=recents.length?recents.map(r=>cmdBtn(find(r.c),r.t)).join(''):'<div class="notice" style="padding:8px;font-size:12.5px">暂无最近执行：命令成功执行后，这里按命令去重展示最近 10 条，点击在右侧回填该次参数快速再执行；也可切换「全部命令」页签选择命令。</div>';
  R.querySelectorAll('.cmd').forEach(b=>b.onclick=()=>{const r=recents.find(x=>x.c===b.dataset.c);sel=r.c;vals={...r.vals};extra=r.extra;renderRecent();renderDetail();$('#dfb').className='feedback';$('#dfb').textContent='已回填该命令最近一次执行参数，核对后可直接执行。'})}
 function renderTab(){if(tab==='all')renderList();else renderRecent()}
 function switchTab(t){if(tab===t)return;tab=t;$('#tabAll').classList.toggle('on',t==='all');$('#tabRecent').classList.toggle('on',t==='recent');$('#tabAll').setAttribute('aria-selected',String(t==='all'));$('#tabRecent').setAttribute('aria-selected',String(t==='recent'));$('#list').classList.toggle('hidden',t!=='all');$('#recent').classList.toggle('hidden',t!=='recent');$('#listCtl').classList.toggle('hidden',t!=='all');renderTab()}
