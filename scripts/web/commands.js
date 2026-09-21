@@ -41,6 +41,34 @@ const ATBCommands = (() => {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+
+  // ---------- 最近执行持久化（BUG-20260921-010：刷新后最近执行的命令看不见） ----------
+  // recents 原为模块级内存态，浏览器刷新后 JS 上下文重建即归零；服务端 /api/cli/run-status
+  // 仅存单槽内存 job（会话内口径），无可恢复清单。故按项目隔离持久化到 localStorage
+  // （key 惯例同 atb.req.sort / atb.project）：不可用（隐私模式等）或数据损坏时
+  // try-catch 静默降级为会话内行为，不阻塞执行。
+  const recentKey = (project) => `atb.cmd.recents:${project}`;
+
+  function loadRecents(project) {
+    if (!project) return [];
+    try {
+      const raw = localStorage.getItem(recentKey(project));
+      const data = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(data)) return [];
+      return data
+        .filter((r) => r && typeof r === 'object' && typeof r.name === 'string'
+          && r.vals && typeof r.vals === 'object' && !Array.isArray(r.vals)
+          && Object.values(r.vals).every((v) => typeof v === 'string')
+          && typeof r.extra === 'string' && typeof r.at === 'string')
+        .slice(0, RECENT_LIMIT);
+    } catch { return []; } // localStorage 不可用 / JSON 损坏：回退空（会话内口径）
+  }
+
+  function saveRecents(project, recents) {
+    if (!project) return;
+    try { localStorage.setItem(recentKey(project), JSON.stringify(recents)); } catch { /* 记忆失败不阻塞执行 */ }
+  }
+
   const toast = (m, isErr) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m, isErr); } catch { /* app.js 未加载 */ } };
   const fmtDur = (ms) => `${(Number(ms || 0) / 1000).toFixed(1)}s`;
   const nowTime = () => new Date().toLocaleTimeString();
@@ -94,6 +122,12 @@ const ATBCommands = (() => {
   async function enter(project) {
     state.project = project ?? null;
     state.tab = 'recent'; // 每次进入命令模块默认显示「最近执行」页签
+    // 持久化恢复（BUG-20260921-010）：页面刷新 / 切换项目时从 localStorage 恢复该项目
+    // 最近执行；同一会话内重复进入不覆盖（内存态含未落盘的降级数据，见 loadRecents 注释）
+    if (state.recentsProject !== (state.project || '')) {
+      state.recents = loadRecents(state.project);
+      state.recentsProject = state.project || '';
+    }
     if (state.phase === 'loading') { render(); return; }
     if (state.phase !== 'ready' || state.loadedProject !== project) await loadCatalog(true);
     else refreshBoardState();
@@ -436,6 +470,7 @@ const ATBCommands = (() => {
       state.recents = state.recents.filter((x) => x.name !== spec.name);
       state.recents.unshift({ name: spec.name, vals: { ...state.vals }, extra: state.extra, at: nowTime() });
       if (state.recents.length > 10) state.recents.length = 10;
+      saveRecents(state.project, state.recents); // 持久化（BUG-20260921-010）：刷新后仍可见
     }
     renderDetail();
     renderRecent();
