@@ -3310,29 +3310,28 @@ ${langsField}
     // 更名并迁入 AI 完善，信息编辑）→ 2 关联条目与提交（原概况的关联列表）→ 3 文档编写
     // → 4 合并入 main → 5 正式发布（含原产品发布记录页签）
     const versionNumber = (v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '';
-    // REQ-20260921-014：概况页签显式编辑——描述块头部行放可见「编辑」按钮（merging 禁用 +
-    // title 文字原因），点开就地替换描述块为名称 + 描述同一表单（见 renderPlanEditForm）；
-    // 与遗留行内点击编辑并存（快捷路径，见 bindCommon 绑定）。
-    // REQ-20260921-016：「AI 完善」自概况顶部操作行迁入描述块头部，紧邻「编辑」左边
-    // （操作对象与所读信息一致）；锁定口径原样迁移（BUG-20260920-005 基准：merging 禁用、
-    // 推送完成即正式发布后禁用并说明，merged 未推送可用），编辑键原有 merging 禁用规则不变。
-    // data-ver-answer 行为标记与绑定循环保留，openAnswerModal(verId) 仍按当前版本打开。
+    // REQ-20260921-014：概况页签显式编辑——可见「编辑」按钮（merging 禁用 + title 文字
+    // 原因），点开就地替换描述区为名称 + 描述同一表单（见 renderPlanEditForm）；与遗留
+    // 行内点击编辑并存（快捷路径，见 bindCommon 绑定）。
+    // BUG-20260921-016：概况内容区去冗余——删除元信息行（计划号 / 版本号 / 目标分支 /
+    // 来源分支，计划号与版本号详情头部已有）与「描述」标签行；顶部仅一行右对齐操作行
+    //（bld-plan-acts）「AI 完善」「编辑」同排（AI 完善在左）；编辑态「编辑」键随表单打开
+    // 让位（表单自带保存 / 取消），「AI 完善」保留原位。锁定口径不变：BUG-20260920-005
+    // 基准（merging 禁用、推送完成即正式发布后禁用并说明，merged 未推送可用）+
+    // REQ-20260921-014 编辑键 merging 禁用。data-ver-answer 行为标记与绑定循环保留，
+    // openAnswerModal(verId) 仍按当前版本打开。
     const planEdit = planEditOf(v);
     const answerLocked = v.status === 'merging' || pushedOf(v);
     const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${pushedOf(v) ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
     const editBtn = v.status === 'merging'
       ? '<button type="button" class="btn small quiet" id="bldEditInfo" disabled title="版本合并中，暂不可修改">编辑</button>'
       : '<button type="button" class="btn small quiet" id="bldEditInfo" title="编辑版本名称与描述">编辑</button>';
+    const planActs = `<div class="bld-plan-acts">${answerBtn}${planEdit ? '' : editBtn}</div>`;
     const descBlock = planEdit
       ? renderPlanEditForm(planEdit)
-      : `<div class="bld-desc-block">
-            <div class="bld-desc-block-head">
-              <span class="muted small">描述</span>
-              <span class="bld-desc-block-acts">${answerBtn}${editBtn}</span>
-            </div>
-            ${descCell}</div>`;
+      : `<div class="bld-desc-block">${descCell}</div>`;
     const planBody = `
-        <p class="muted small">计划号 ${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 目标分支 ${esc(v.targetBranch || 'main')}${v.merge?.baseBranch ? ` · 来源分支 ${esc(v.merge.baseBranch)}` : ''}</p>
+        ${planActs}
         ${descBlock}
         ${mergeState}`;
     const linkBody = `
