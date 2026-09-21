@@ -262,6 +262,9 @@ const state = {
   // （undefined=未知；loaded=探测完成；probing=探测进行中；failed=探测通道失败——不等于未安装）
   workspaceApps: { zcode: undefined, codex: undefined, loaded: false, probing: false, failed: false },
   projects: [],  // 已知项目（注册表）
+  // BUG-20260921-011：项目注册表加载状态（loading=请求中；ok=已加载非空；empty=确认无项目；
+  // error=健康检查失败——与空态严格区分，互不冒充），驱动顶栏项目选择器四态占位渲染
+  projectsState: 'loading',
   view: 'status', // status | oncall | runs | files | settings（REQ-20260907-004 五模块）
   reqFilter: LANES[0], // 需求状态筛选档（BUG-20260907-016：五档无「全部」，默认第一档「待接受」）
   reqSort: loadReqSort(), // REQ-20260908-002：列表排序键（localStorage 记忆，非法值回退默认）
@@ -599,29 +602,91 @@ function syncProjectUrl() {
   history.replaceState(null, '', location.pathname + (q ? `?${q}` : ''));
 }
 
+// BUG-20260921-011：项目注册表更新统一入口——赋值同时收敛加载状态（非空 ok / 空 empty），
+// 各局部路径（移出 / 初始化 / 导入 / 健康检查）不得绕过，避免残留 boot 阶段的 error/loading 态
+function setProjectList(list) {
+  state.projects = Array.isArray(list) ? list : [];
+  state.projectsState = state.projects.length ? 'ok' : 'empty';
+}
+
+// BUG-20260921-011：项目选择器四态渲染（loading / ok / empty / error）——刷新首帧到数据
+// 到达之间保持可见占位（配合 .project-sel 固定宽度，选择器不塌缩、模块页签不横移）；
+// 空态与失败态严格区分呈现，失败态选择器本身即重试入口（onProjectSelChange），
+// 任何状态都不隐藏选择器、不冒充成功、不自动切换项目
 function renderProjectSel() {
   const sel = $('#projectSel');
   if (!sel) return;
   const list = [...state.projects];
   if (state.project && !list.includes(state.project)) list.unshift(state.project);
   sel.innerHTML = '';
-  for (const p of list) {
-    const opt = document.createElement('option');
-    opt.value = p;
-    opt.textContent = shortProject(p);
-    opt.title = p;
-    opt.selected = p === state.project;
-    sel.appendChild(opt);
+  const placeholder = (text, title) => {
+    const o = document.createElement('option');
+    o.textContent = text;
+    o.title = title || text;
+    sel.appendChild(o);
+    return o;
+  };
+  if (state.projectsState === 'loading') {
+    // 尚不能确认项目：明确提示并禁用，不允许选择未加载的选项；
+    // 已知项目（URL 深链 / 上次选择）显示其名称并标明加载中
+    placeholder(
+      state.project ? `${shortProject(state.project)}（加载中…）` : '加载项目中…',
+      state.project || '正在加载项目列表…',
+    );
+    sel.disabled = true;
+    sel.title = state.project || '正在加载项目列表…';
+  } else if (state.projectsState === 'error') {
+    placeholder('加载失败，点此重试', '项目列表加载失败，点击本选择器重试').value = '__retry__';
+    sel.disabled = false; // 保留交互：选中占位即触发重试（见 onProjectSelChange）
+    sel.title = '项目列表加载失败，点击本选择器重试';
+  } else if (!list.length) {
+    placeholder('暂无项目', '暂无项目：打开「管理项目」初始化或导入');
+    sel.disabled = true; // 无可选项：禁用但保留占位，管理项目入口不受影响
+    sel.title = '暂无项目：打开「管理项目」初始化或导入';
+  } else {
+    for (const p of list) {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = shortProject(p);
+      opt.title = p;
+      opt.selected = p === state.project;
+      sel.appendChild(opt);
+    }
+    sel.disabled = false;
+    sel.title = state.project || '切换项目看板'; // 长名截断时悬浮可看完整路径
   }
-  sel.classList.toggle('hidden', list.length === 0);
 }
 
 async function refreshHealth() {
+  // BUG-20260921-011：带状态机重拉（loading → ok/empty/error）——期间选择器保持占位
+  // 不隐藏；失败与空态区分，成功后由 renderProjectSel 恢复列表与切换能力
+  state.projectsState = 'loading';
+  renderProjectSel();
   try {
     const h = await api('/api/health');
-    state.projects = h.projects || [];
-  } catch {}
+    setProjectList(h.projects || []);
+  } catch {
+    state.projectsState = 'error';
+  }
   renderProjectSel();
+}
+
+// BUG-20260921-011：项目选择器 change 统一入口——失败态时选择器即重试入口（重拉项目
+// 列表，不切换项目、不冒充空态）；常态保持营销未保存守卫与既有切换流程不变
+function onProjectSelChange(e) {
+  if (state.projectsState === 'error') {
+    refreshHealth(); // 选中「加载失败，点此重试」占位：重试拉取，成功恢复列表 / 失败回到失败态
+    return;
+  }
+  const next = e.target.value;
+  if (!next) return; // 占位选项（无 value）不触发切换
+  // REQ-20260910-019：营销档案有未保存内容时先确认——保存并切换 / 放弃 / 取消
+  //（取消回弹项目选择器，不切换；保存失败弹窗保留可重试）
+  if (window.ATBMarketing?.hasUnsaved?.()) {
+    window.ATBMarketing.guardProjectSwitch(next, () => switchProject(next), () => renderProjectSel());
+    return;
+  }
+  switchProject(next);
 }
 
 async function switchProject(p) {
@@ -805,7 +870,7 @@ async function confirmBatchRemove() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paths: list }),
     }, null);
-    state.projects = r.projects || [];
+    setProjectList(r.projects || []); // BUG-20260921-011：统一入口，同步加载状态
     hideBatchRemoveConfirm();
     renderProjectSel(); // 列表与项目切换器同步更新
     const removed = r.removed || [];
@@ -904,6 +969,7 @@ function closeProjPanel({ focus = true } = {}) {
 // 移出最后一项：清理当前项目选择与旧条目画面，进入无项目引导空态
 async function clearProjectState() {
   state.project = null;
+  if (!state.projects.length) state.projectsState = 'empty'; // BUG-20260921-011：无项目空态与失败态区分
   localStorage.removeItem('atb.project'); // 记忆选择不再指向旧项目
   state.board = { noProject: true, initialized: false, dataDir: null, projectRoot: null, items: [] };
   state.boardJson = '';
@@ -963,7 +1029,7 @@ async function runProjInit(raw) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: raw }),
     }, null);
-    state.projects = r.projects || [];
+    setProjectList(r.projects || []); // BUG-20260921-011：统一入口，同步加载状态
     closeProjPanel();
     toast(`✓ 已初始化并切换到 ${shortProject(r.root)}（${r.dataDir}）`);
     state.knownIds = null; // 初始化是目录状态变化，首轮重新播种基线（对齐 #btnInit 口径）
@@ -984,7 +1050,7 @@ async function submitProjImport(raw) {
       body: JSON.stringify({ path: raw, requireInitialized: true }), // 未初始化目录由服务端拒绝并提示改用初始化
     }, null);
     const existed = state.projects.includes(r.root);
-    state.projects = r.projects || [];
+    setProjectList(r.projects || []); // BUG-20260921-011：统一入口，同步加载状态
     closeProjPanel();
     toast(existed
       ? `已在列表中，已切换到 ${shortProject(r.root)}`
@@ -1025,7 +1091,7 @@ async function confirmRemoveProject() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: p }),
     }, null);
-    state.projects = r.projects || [];
+    setProjectList(r.projects || []); // BUG-20260921-011：统一入口，同步加载状态
     hideRemoveConfirm();
     renderProjectSel();
     if (p === state.project) {
@@ -8188,16 +8254,8 @@ $('#btnInit').addEventListener('click', async () => {
     toast(e.message, true);
   }
 });
-$('#projectSel').addEventListener('change', (e) => {
-  const next = e.target.value;
-  // REQ-20260910-019：营销档案有未保存内容时先确认——保存并切换 / 放弃 / 取消
-  //（取消回弹项目选择器，不切换；保存失败弹窗保留可重试）
-  if (window.ATBMarketing?.hasUnsaved?.()) {
-    window.ATBMarketing.guardProjectSwitch(next, () => switchProject(next), () => renderProjectSel());
-    return;
-  }
-  switchProject(next);
-});
+// BUG-20260921-011：改绑命名入口（失败态重试 + 常态守卫切换，见 onProjectSelChange）
+$('#projectSel').addEventListener('change', onProjectSelChange);
 // REQ-20260910-005 项目管理入口与面板接线（顶栏按钮 + 无项目引导卡）
 $('#btnProjManage').addEventListener('click', openProjPanel);
 // BUG-20260910-004：全局任务面板接线（顶栏「全局」入口；面板内搜索与关闭为常驻节点一次性绑定）
@@ -8701,13 +8759,19 @@ async function boot() {
   const urlParams = new URLSearchParams(location.search);
   const fromUrl = urlParams.get('project');
   const saved = localStorage.getItem('atb.project');
+  // BUG-20260921-011：首帧即渲染项目选择器占位（加载中 / 已知项目名），不再等健康检查
+  // 与首轮数据完成——配合 .project-sel 固定宽度，刷新期间选择器不空白塌缩、模块页签不横移
+  state.projectsState = 'loading';
+  renderProjectSel();
   try {
     const h = await api('/api/health');
-    state.projects = h.projects || [];
+    setProjectList(h.projects || []);
     state.project = fromUrl || saved || h.defaultProject || null;
   } catch {
+    state.projectsState = 'error'; // 健康检查失败与「暂无项目」区分：占位呈现重试入口
     state.project = fromUrl || saved || null;
   }
+  renderProjectSel(); // 数据（或失败态）一到即渲染，不排队等首轮 poll 与快照恢复
   if (state.project) localStorage.setItem('atb.project', state.project);
   // REQ-20260907-004：深链兼容五个模块；无旧深链默认进入需求列表。
   // BUG-20260910-004：旧 view=global 深链仍有效——经 setView 收敛为打开全局任务面板（不切换模块）。

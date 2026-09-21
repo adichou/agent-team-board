@@ -1258,6 +1258,9 @@ span.state { color: var(--sc); font-weight: 650; }
 .hit-file .fchip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- 项目切换器 ---------- */
+/* BUG-20260921-011：宽度稳定——加载中 / 空 / 失败占位与常态同宽（固定 200px，替代原
+   max-width：无下限时空选项塌缩，刷新期间模块页签随数据到达横移）。长名沿用
+   text-overflow 截断，悬浮 title 可看完整路径 */
 .project-sel {
   appearance: none;
   border: 1px solid var(--border);
@@ -1267,7 +1270,7 @@ span.state { color: var(--sc); font-weight: 650; }
   padding: 6px 24px 6px 12px;
   font: inherit;
   font-size: 12.5px;
-  max-width: 200px;
+  width: 200px;
   cursor: pointer;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b98ad' stroke-width='1.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -1561,6 +1564,9 @@ span.state { color: var(--sc); font-weight: 650; }
   /* REQ-20260910-012：页签组整行换行（不与操作区同排挤压），行内横滑不裁切不遮挡按钮 */
   .module-nav { flex: 1 1 100%; order: 2; padding: 0 2px; }
   .top-actions { order: 3; margin-left: auto; gap: 10px; }
+  /* BUG-20260921-011：竖屏沿用「按内容自适应」既有口径，但保最小占位——
+     空数据 / 加载占位不塌缩，行内「管理项目」等按钮不横移 */
+  .project-sel { width: auto; min-width: 120px; }
   .brand-text h1 {
     font-size: 14px;
     white-space: nowrap;

@@ -697,6 +697,11 @@ const EN = {
   '暂无项目': 'No projects',
   '暂无项目。使用上方表单初始化或导入项目。': 'No projects. Use the form above to initialize or import one.',
   '暂无项目：打开「管理项目」初始化或导入': 'No projects: open "Manage projects" to initialize or import',
+  // BUG-20260921-011 项目选择器四态占位（加载中 / 失败重试入口 / 加载提示）
+  '加载项目中…': 'Loading projects…',
+  '正在加载项目列表…': 'Loading project list…',
+  '加载失败，点此重试': 'Failed to load — click to retry',
+  '项目列表加载失败，点击本选择器重试': 'Failed to load the project list — click this selector to retry',
   '更新': 'Updated',
   '最后事件': 'Last event',
   '最后活动': 'Last activity',
@@ -1374,6 +1379,8 @@ const EN_CLI = {
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
 const EN_DYNAMIC = {
+  // BUG-20260921-011 项目选择器加载中已知项目占位（动态拼接：项目名（加载中…））
+  '◇（加载中…）': '◇ (loading…)',
   // REQ-20260921-008 文档编写页（总结 → 审查 → 提交流水线）：进度 / 门禁 / 审查对话框 /
   // AI 总结任务面板与全局行（动态拼接）
   '总结中 ◇/◇': 'Summarizing $1/$2',
