@@ -198,8 +198,9 @@ t('R5 既有机制不回退：refreshRefine/refreshBatch 签名剪枝保留；bi
   const bind = source.match(/function bindBatchDrawer\(\)[\s\S]{0,1100}/);
   assert.ok(bind, '应存在 bindBatchDrawer');
   assert.match(bind[0], /state\.batch\.mode = b\.dataset\.bmode;/, '页签点击切换 mode');
-  // REQ-20260921-008：AI 总结子面板走独立数据源（refreshSummary），其余仍 refreshBatch
-  assert.match(bind[0], /renderBatchDrawer\(\);\s*\n\s*\/\/ 切换子面板即时拉取[\s\S]*?\n\s*if \(state\.batch\.mode === 'summary'\) refreshSummary\(\);\s*\n\s*else refreshBatch\(\);/, '手动切换仍无条件重渲染并即时拉取');
+  // REQ-20260921-008：AI 总结子面板走独立数据源（refreshSummary），其余仍 refreshBatch；
+  // REQ-20260921-012：AI 翻译子面板同口径（refreshTranslate）
+  assert.match(bind[0], /renderBatchDrawer\(\);\s*\n\s*\/\/ 切换子面板即时拉取[\s\S]*?\n\s*if \(state\.batch\.mode === 'summary'\) refreshSummary\(\);\s*\n\s*else if \(state\.batch\.mode === 'translate'\) refreshTranslate\(\);\s*\n\s*else refreshBatch\(\);/, '手动切换仍无条件重渲染并即时拉取');
 });
 
 let failed = 0;

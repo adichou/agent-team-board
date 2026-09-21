@@ -61,9 +61,9 @@ t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表�
     esc: (s) => String(s),
     short: (h) => String(h || '').slice(0, 8),
     fmtTime: () => 't',
-    DOCS_FLOW_LABEL: { unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核' },
-    DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' },
-    DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' },
+    DOCS_FLOW_LABEL: { unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', untranslated: '未翻译', translating: '正在翻译', translated: '已翻译待审核', reviewed: '已审核' },
+    DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', untranslated: 'st-mute', translating: 'st-run', translated: 'st-wait', reviewed: 'st-ok' },
+    DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', untranslated: '○', translating: '◐', translated: '●', reviewed: '✔' },
     DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
     // REQ-20260921-010 起文档清单按语言集动态展开（原模块级 DOC_FILES 常量下线）
     DEFAULT_DOC_LANGS: ['cn', 'en'],
@@ -74,12 +74,14 @@ t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表�
     ]).slice(0, Array.isArray(langs) && langs.length ? langs.length * 4 : 8),
   };
   const context = vm.createContext(ctx);
-  vm.runInContext([pick('summaryBtnText'), pick('commitBtnHtml'), pick('renderDocsPane'), pick('renderReviewModal')].join('\n'), context);
+  // REQ-20260921-012：renderDocsPane 新增依赖（阶段条 / AI 翻译 / 整体审查 / 分组求值兜底）
+  vm.runInContext([pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'), pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'), pick('renderReviewModal')].join('\n'), context);
   const html = vm.runInContext(`renderDocsPane({
     id: 'V',
     pf: {
       phase: 'ready',
       plan: {
+        langs: ['zh', 'en'],
         docsFlow: { files: [
           { file: 'README.md', lang: 'zh', state: 'unsummarized' },
           { file: 'README.en.md', lang: 'en', state: 'unsummarized' },
@@ -92,7 +94,7 @@ t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表�
     pf: {
       review: { open: true, key: 'README', modes: { 'README.md': 'preview', 'README.en.md': 'preview' },
         contents: { 'README.md': '# zh', 'README.en.md': '# en' } },
-      plan: { docsFlow: { files: [
+      plan: { langs: ['zh', 'en'], docsFlow: { files: [
         { file: 'README.md', lang: 'zh', state: 'unsummarized' },
         { file: 'README.en.md', lang: 'en', state: 'unsummarized' },
       ], reviewedCount: 0 } },
