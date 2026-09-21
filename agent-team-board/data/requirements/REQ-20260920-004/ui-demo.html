@@ -8,17 +8,15 @@ header{padding:18px 24px;border-bottom:1px solid var(--line2)}h1{margin:0 0 6px;
 .tabs .proj{margin-left:auto;color:var(--muted);font-size:13px}
 .shell{display:grid;grid-template-columns:300px 1fr;gap:18px;max-width:1220px;margin:18px auto;padding:0 18px}
 aside,section{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:16px;min-width:0}
-aside{max-height:78vh;display:flex;flex-direction:column;gap:10px}
+aside{max-height:78vh;display:flex;flex-direction:row;gap:12px}
 aside input[type=search]{font:inherit;padding:8px 10px;border:1px solid var(--line2);border-radius:7px;background:var(--panel2);color:var(--text);width:100%}
 aside label{color:var(--muted);font-size:13px;display:flex;gap:6px;align-items:center}
 aside select{font:inherit;background:var(--panel2);color:var(--text);border:1px solid var(--line2);border-radius:6px;padding:4px 6px}
 .list{overflow:auto;flex:1;border-top:1px solid var(--line2);padding-top:8px}
-.ltabs{display:flex;gap:6px}
-.ltab{font:inherit;font-size:14px;padding:6px 12px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);border-radius:7px;cursor:pointer}
+.ltabs{display:flex;flex-direction:column;gap:8px}
+.ltab{writing-mode:vertical-rl;text-orientation:mixed;font:inherit;font-size:14px;min-height:118px;padding:12px 7px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);border-radius:10px;cursor:pointer;letter-spacing:.1em}
 .ltab.on{background:var(--accent);border-color:var(--accent);color:#10203a;font-weight:600}
-.item{margin:3px 0}
-.exp{margin:2px 0 6px;padding:12px;border:1px solid var(--line2);border-left:3px solid var(--accent);border-radius:9px;background:var(--panel2)}
-.exp h4{margin:0 0 4px;font-size:14px}
+.lmain{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
 .cmd.off{opacity:.6}
 .cmd small{float:right;color:var(--muted);font-size:11px;margin-left:6px}
 .grp{margin:8px 0 4px;color:var(--muted);font-size:12px;letter-spacing:.05em}
@@ -67,28 +65,30 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
 </nav>
 <main class="shell">
   <aside>
-    <div class="ltabs" role="tablist" aria-label="左栏视图页签">
+    <div class="ltabs" role="tablist" aria-label="左缘视图页签（竖排）">
       <button type="button" id="tabAll" class="ltab on" role="tab" aria-selected="true">全部命令</button>
       <button type="button" id="tabRecent" class="ltab" role="tab" aria-selected="false">最近执行</button>
     </div>
-    <div id="listCtl">
-      <input id="q" type="search" placeholder="搜索命令或说明（按 / 聚焦）…" autocomplete="off" aria-label="搜索命令">
-      <label>清单状态 <select id="scene"><option value="normal">正常</option><option value="loading">清单加载中</option><option value="error">清单读取失败</option></select></label>
+    <div class="lmain">
+      <div id="listCtl">
+        <input id="q" type="search" placeholder="搜索命令或说明（按 / 聚焦）…" autocomplete="off" aria-label="搜索命令">
+        <label>清单状态 <select id="scene"><option value="normal">正常</option><option value="loading">清单加载中</option><option value="error">清单读取失败</option></select></label>
+      </div>
+      <label>模拟结果 <select id="simres"><option value="ok">执行成功（有输出）</option><option value="empty">执行成功（无输出）</option><option value="fail">执行失败（退出码 ≠ 0）</option></select></label>
+      <div id="list" class="list" role="listbox" aria-label="命令列表"></div>
+      <div id="recent" class="list hidden" role="listbox" aria-label="最近执行列表（按命令去重前 10）"></div>
     </div>
-    <label>模拟结果 <select id="simres"><option value="ok">执行成功（有输出）</option><option value="empty">执行成功（无输出）</option><option value="fail">执行失败（退出码 ≠ 0）</option></select></label>
-    <div id="list" class="list" role="listbox" aria-label="命令列表"></div>
-    <div id="recent" class="list hidden" role="listbox" aria-label="最近执行列表（按命令去重前 10）"></div>
   </aside>
   <section>
-    <div id="noout" class="notice">在左侧点击命令展开下拉区域，查看说明、填写参数后执行；输出与执行历史在此回显（模拟）。</div>
+    <div id="detail" aria-live="polite"></div>
+    <div id="noout" class="notice">在左侧点击命令，右侧显示说明、参数表单与执行入口；输出与执行历史在下方回显（模拟）。</div>
     <div id="outwrap" class="hidden">
       <h3>输出</h3>
       <div class="row"><span id="outmeta" class="feedback"></span><button type="button" class="ghost" id="copy">复制输出</button></div>
       <div id="out" class="out"></div>
     </div>
-    <h3>执行历史（本次会话 · 模拟）</h3>
+    <h3>执行历史（本次会话 · 最近 20 次 · 模拟）</h3>
     <ul id="hist" class="hist"></ul>
-    <div class="row"><button type="button" class="ghost" id="clearHist">清空历史</button></div>
   </section>
 </main>
 <div id="confirmWrap" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -102,7 +102,7 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
     </div>
   </div>
 </div>
-<footer>演示要点：左栏「全部命令 / 最近执行」双页签、命令点击展开下拉区域（说明—参数—预览—执行闭环）、最近执行按命令去重前 10（成功执行计入、点击展开回填参数快速再执行）、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引（可展开查看原因）、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、右栏输出与执行历史回看。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
+<footer>演示要点：左缘竖排页签（全部命令 / 最近执行，参考需求模块纵向档位形态）、平铺命令列表点击在右侧显示详情与执行、最近执行按命令去重前 10（成功执行计入、点击在右侧回填参数快速再执行）、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引（右侧详情说明原因）、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、右侧下方执行历史（最近 20 次、无清空入口）。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
 <script>
 const GROUPS=[
  {g:'数据与分发',items:[
@@ -165,61 +165,54 @@ const GROUPS=[
   {c:'cli uninstall',d:'卸载终端命令 —— 请在终端执行',dis:1,o:'--to 目录'},
   {c:'cli status',d:'查看安装状态 —— 请在终端执行',dis:1}]}
 ];
-const $=s=>document.querySelector(s);let tab='all',open=null,openedCmd=null,vals={},extra='',running=false,hist=[],recents=[];
+const $=s=>document.querySelector(s);let tab='all',sel=null,vals={},extra='',running=false,hist=[],recents=[];
 function flat(){return GROUPS.flatMap(g=>g.items.map(i=>({g:g.g,...i})))}
 function find(c){return flat().find(i=>i.c===c)}
 function cmdText(i){const a=(i.a||[]).map(x=>vals[i.c+'|'+x.k]||('<'+x.k+'>')).join(' ');return 'atb '+i.c+(a?' '+a:'')+(extra?' '+extra:'')+' --dir /demo/project'}
 function st(cls,txt){const m=$('#outmeta');m.className='feedback '+cls;m.textContent=txt}
-function itemHtml(i,t){const on=open===i.c;return '<div class="item"><button type="button" class="cmd'+(on?' on':'')+(i.dis?' off':'')+'" data-c="'+i.c+'" aria-expanded="'+on+'" aria-label="atb '+i.c+'"><code>atb '+i.c+'</code>'+(i.danger?'<span class="tag danger">需确认</span>':'')+(i.warn?'<span class="tag warn">影响提示</span>':'')+(i.dis?'<span class="tag disabled">终端执行</span>':'')+(t?'<small>'+t+'</small>':'')+'</button>'+(on?expHtml(i):'')+'</div>'}
-function expHtml(i){const miss=(i.a||[]).filter(x=>x.r&&!vals[i.c+'|'+x.k]);
- return '<div class="exp"><h4><code>atb '+i.c+'</code></h4><p class="desc">'+i.d+(i.dis?'（界面不下发）':'')+'</p>'
- +(i.a&&i.a.length?'<div class="params">'+i.a.map(x=>'<label class="f">'+x.k+(x.r?'（必填）':'（可选）')+'<input data-k="'+x.k+'" placeholder="'+(x.p||'')+'" value="'+(vals[i.c+'|'+x.k]||'')+'"></label>').join('')+'</div>':'<p class="desc">该命令无位置参数。</p>')
- +(i.o?'<p class="desc">常用选项：'+i.o+'（演示中经「附加参数」输入）</p>':'')
- +'<label class="f" style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)">附加参数（可选，空格分隔）<input class="extra" placeholder="--json --by demo" value="'+extra.replace(/"/g,'&quot;')+'"></label>'
- +'<div class="preview prev"></div>'
- +(i.warn?'<div class="notice">执行影响：版本一致时为「复用现有实例」的空操作，正常回显输出；磁盘代码较新时服务自动重启——本次响应会丢失、界面短暂断连，属预期而非执行失败，重启完成后界面自动恢复。</div>':'')
- +(i.dis?'<div class="notice">该命令面向本机终端环境（PATH / 常驻服务），不适合经网页下发；请在终端执行：<code>node scripts/atb.mjs '+i.c+'</code></div><div class="row"><button type="button" class="act" disabled>执行</button><span class="feedback warn">界面已禁用执行入口</span></div>'
- :'<div class="row"><button type="button" class="act run"'+(miss.length||running?' disabled':'')+'>'+(running?'执行中…':((i.a||[]).some(x=>x.r)?'核对参数后执行':'执行'))+'</button>'+(miss.length?'<span class="feedback warn">必填项缺失：'+miss.map(x=>x.k).join('、')+'</span>':'')+(i.long?'<span class="feedback">长耗时命令：异步执行，不阻塞看板轮询（模拟）</span>':'')+'</div>')
- +'<p class="feedback dfb" role="status" aria-live="polite"></p></div>'}
-function bindExp(){const i=find(open);if(!i)return;const exp=document.querySelector('.exp');if(!exp)return;
- exp.querySelector('.prev').textContent='$ '+cmdText(i);
- exp.querySelectorAll('.params input').forEach(inp=>inp.oninput=()=>{vals[open+'|'+inp.dataset.k]=inp.value;exp.querySelector('.prev').textContent='$ '+cmdText(i);const m=(i.a||[]).filter(x=>x.r&&!vals[open+'|'+x.k]);const rb=exp.querySelector('.run');if(rb)rb.disabled=!!m.length||running;const fb=exp.querySelector('.dfb');fb.className='feedback';fb.textContent=m.length?'必填项缺失：'+m.map(x=>x.k).join('、'):''});
- const ex=exp.querySelector('.extra');if(ex)ex.oninput=e=>{extra=e.target.value.trim();exp.querySelector('.prev').textContent='$ '+cmdText(i)};
- const rb=exp.querySelector('.run');if(rb)rb.onclick=()=>{running=true;renderTab();const e2=document.querySelector('.exp');if(e2){const fb=e2.querySelector('.dfb');fb.className='feedback';fb.textContent='已下发（模拟）：'+cmdText(i)}
-  if(i.danger){$('#confirmCmd').textContent='$ '+cmdText(i);$('#confirmWrap').classList.remove('hidden');return}
-  finish(i)}}
-function bindItems(root,mode){root.querySelectorAll('.cmd').forEach(b=>b.onclick=()=>{const c=b.dataset.c;
- if(open===c){open=null}
- else if(mode==='recent'){const r=recents.find(x=>x.c===c);vals=r?{...r.vals}:{};extra=r?r.extra:'';openedCmd=c;open=c}
- else{if(openedCmd!==c){vals={};extra='';openedCmd=c}open=c}
- renderTab()})}
+function cmdBtn(i,t){return '<button type="button" class="cmd'+(sel===i.c?' on':'')+(i.dis?' off':'')+'" data-c="'+i.c+'" aria-label="atb '+i.c+'"><code>atb '+i.c+'</code>'+(i.danger?'<span class="tag danger">需确认</span>':'')+(i.warn?'<span class="tag warn">影响提示</span>':'')+(i.dis?'<span class="tag disabled">终端执行</span>':'')+(t?'<small>'+t+'</small>':'')+'</button>'}
 function renderList(){const sc=$('#scene').value,q=$('#q').value.trim().toLowerCase(),L=$('#list');
  if(sc==='loading'){L.innerHTML='<div class="notice">正在读取命令清单…</div>';return}
  if(sc==='error'){L.innerHTML='<div class="notice">命令清单读取失败：模拟服务异常。<br><button type="button" class="ghost" id="retryList">重试</button></div>';$('#retryList').onclick=()=>{$('#scene').value='normal';renderList()};return}
  let any=false;L.innerHTML=GROUPS.map(g=>{const its=g.items.filter(i=>!q||(i.c+' '+i.d).toLowerCase().includes(q));if(!its.length)return '';any=any||!!its.length;
-  return '<p class="grp">'+g.g+'</p>'+its.map(i=>itemHtml(i)).join('')}).join('');
+  return '<p class="grp">'+g.g+'</p>'+its.map(i=>cmdBtn(i)).join('')}).join('');
  if(!any)L.innerHTML='<div class="notice">无匹配命令。<button type="button" class="ghost" id="clearQ">清除搜索</button></div>',$('#clearQ').onclick=()=>{$('#q').value='';renderList()};
- bindItems(L);bindExp()}
+ L.querySelectorAll('.cmd').forEach(b=>b.onclick=()=>{const c=b.dataset.c;if(sel!==c){vals={};extra='';sel=c}renderTab();renderDetail()})}
+function renderDetail(){const i=find(sel);if(!i){$('#detail').innerHTML='<div class="notice">在左侧点击命令，这里显示说明、参数表单与执行入口（模拟）。</div>';return}const miss=(i.a||[]).filter(x=>x.r&&!vals[i.c+'|'+x.k]);
+ $('#detail').innerHTML='<h2><code>atb '+i.c+'</code></h2><p class="desc">'+i.d+(i.dis?'（界面不下发）':'')+'</p>'
+ +(i.a&&i.a.length?'<div class="params">'+i.a.map(x=>'<label class="f">'+x.k+(x.r?'（必填）':'（可选）')+'<input data-k="'+x.k+'" placeholder="'+(x.p||'')+'" value="'+(vals[i.c+'|'+x.k]||'')+'"></label>').join('')+'</div>':'<p class="desc">该命令无位置参数。</p>')
+ +(i.o?'<p class="desc">常用选项：'+i.o+'（演示中经「附加参数」输入）</p>':'')
+ +'<label class="f" style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)">附加参数（可选，空格分隔）<input id="extra" placeholder="--json --by demo" value="'+extra.replace(/"/g,'&quot;')+'"></label>'
+ +'<div class="preview" id="prev"></div>'
+ +(i.warn?'<div class="notice">执行影响：版本一致时为「复用现有实例」的空操作，正常回显输出；磁盘代码较新时服务自动重启——本次响应会丢失、界面短暂断连，属预期而非执行失败，重启完成后界面自动恢复。</div>':'')
+ +(i.dis?'<div class="notice">该命令面向本机终端环境（PATH / 常驻服务），不适合经网页下发；请在终端执行：<code>node scripts/atb.mjs '+i.c+'</code></div><div class="row"><button type="button" class="act" disabled>执行</button><span class="feedback warn">界面已禁用执行入口</span></div>'
+ :'<div class="row"><button type="button" class="act" id="run"'+(miss.length||running?' disabled':'')+'>'+(running?'执行中…':((i.a||[]).some(x=>x.r)?'核对参数后执行':'执行'))+'</button>'+(miss.length?'<span class="feedback warn">必填项缺失：'+miss.map(x=>x.k).join('、')+'</span>':'')+(i.long?'<span class="feedback">长耗时命令：异步执行，不阻塞看板轮询（模拟）</span>':'')+'</div>')
+ +'<p class="feedback" id="dfb" role="status" aria-live="polite"></p>';
+ $('#prev').textContent='$ '+cmdText(i);
+ $('#detail').querySelectorAll('.params input').forEach(inp=>inp.oninput=()=>{const key=i.c+'|'+inp.dataset.k;vals[key]=inp.value;$('#prev').textContent='$ '+cmdText(i);const m=(i.a||[]).filter(x=>x.r&&!vals[i.c+'|'+x.k]);if($('#run'))$('#run').disabled=!!m.length||running;$('#dfb').className='feedback';$('#dfb').textContent=m.length?'必填项缺失：'+m.map(x=>x.k).join('、'):''});
+ if($('#extra'))$('#extra').oninput=e=>{extra=e.target.value.trim();$('#prev').textContent='$ '+cmdText(i)};
+ if($('#run'))$('#run').onclick=()=>{running=true;$('#run').disabled=true;$('#run').textContent='执行中…';$('#dfb').className='feedback';$('#dfb').textContent='已下发（模拟）：'+cmdText(i);
+  if(i.danger){$('#confirmCmd').textContent='$ '+cmdText(i);$('#confirmWrap').classList.remove('hidden');return}
+  finish(i)}}
 function finish(i){setTimeout(()=>{running=false;const res=$('#simres').value,t=new Date().toLocaleTimeString(),full=cmdText(i);
  if(res==='ok'){st('ok','✓ 成功 · 退出码 0 · 耗时 0.4s（模拟）');$('#out').textContent=i.out||'✓ 命令执行完成（模拟）';hist.unshift({cmd:full,t:t,st:'ok',out:i.out||'✓ 命令执行完成（模拟）'})}
  else if(res==='empty'){st('ok','✓ 成功 · 无输出 · 退出码 0（模拟）');$('#out').textContent='（无输出）';hist.unshift({cmd:full,t:t,st:'ok',out:'（无输出）'})}
  else{st('err','✗ 失败 · 退出码 1 · 耗时 0.4s（模拟）');$('#out').textContent='✗ 模拟失败：条目不存在或参数不合法（stderr 原文示例）\n可在下方就地重试，参数保留。';hist.unshift({cmd:full,t:t,st:'err',out:'✗ 模拟失败（退出码 1）'})}
- if(res!=='fail'){recents=recents.filter(r=>r.c!==i.c);recents.unshift({c:i.c,vals:{...vals},extra:extra,t:t});if(recents.length>10)recents.length=10}
- renderTab();const exp=document.querySelector('.exp');if(exp){const fb=exp.querySelector('.dfb');fb.className='feedback '+(res==='fail'?'err':'ok');fb.textContent=res==='fail'?'执行失败，可在展开区内就地重试（参数保留）。':'执行完成，输出与执行历史见右侧。'}
- $('#noout').classList.add('hidden');$('#outwrap').classList.remove('hidden');renderHist()},700)}
-function renderRecent(){const R=$('#recent');R.innerHTML=recents.length?recents.map(r=>itemHtml(find(r.c),r.t)).join(''):'<div class="notice" style="padding:8px;font-size:12.5px">暂无最近执行：命令成功执行后，这里按命令去重展示最近 10 条，点击展开可回填该次参数快速再执行。</div>';
- bindItems(R,'recent');bindExp()}
+ if(hist.length>20)hist.length=20;
+ if(res!=='fail'){recents=recents.filter(r=>r.c!==i.c);recents.unshift({c:i.c,vals:{...vals},extra:extra,t:t});if(recents.length>10)recents.length=10;renderRecent()}
+ $('#noout').classList.add('hidden');$('#outwrap').classList.remove('hidden');renderHist();const b=$('#run');if(b){b.disabled=false;b.textContent='执行';$('#dfb').textContent=res==='fail'?'执行失败，可重试（同命令同参数）。':''}},700)}
+function renderRecent(){const R=$('#recent');R.innerHTML=recents.length?recents.map(r=>cmdBtn(find(r.c),r.t)).join(''):'<div class="notice" style="padding:8px;font-size:12.5px">暂无最近执行：命令成功执行后，这里按命令去重展示最近 10 条，点击在右侧回填该次参数快速再执行。</div>';
+ R.querySelectorAll('.cmd').forEach(b=>b.onclick=()=>{const r=recents.find(x=>x.c===b.dataset.c);sel=r.c;vals={...r.vals};extra=r.extra;renderRecent();renderDetail();$('#dfb').className='feedback';$('#dfb').textContent='已回填该命令最近一次执行参数，核对后可直接执行。'})}
 function renderTab(){if(tab==='all')renderList();else renderRecent()}
-function switchTab(t){if(tab===t)return;tab=t;open=null;$('#tabAll').classList.toggle('on',t==='all');$('#tabRecent').classList.toggle('on',t==='recent');$('#tabAll').setAttribute('aria-selected',String(t==='all'));$('#tabRecent').setAttribute('aria-selected',String(t==='recent'));$('#list').classList.toggle('hidden',t!=='all');$('#recent').classList.toggle('hidden',t!=='recent');$('#listCtl').classList.toggle('hidden',t!=='all');renderTab()}
+function switchTab(t){if(tab===t)return;tab=t;$('#tabAll').classList.toggle('on',t==='all');$('#tabRecent').classList.toggle('on',t==='recent');$('#tabAll').setAttribute('aria-selected',String(t==='all'));$('#tabRecent').setAttribute('aria-selected',String(t==='recent'));$('#list').classList.toggle('hidden',t!=='all');$('#recent').classList.toggle('hidden',t!=='recent');$('#listCtl').classList.toggle('hidden',t!=='all');renderTab()}
 function renderHist(){$('#hist').innerHTML=hist.length?hist.map((h,n)=>'<li><code>'+h.cmd+'</code><small>'+h.t+'</small><span class="st '+h.st+'">'+(h.st==='ok'?'成功':'失败')+'</span><button type="button" data-n="'+n+'">回看输出</button></li>').join(''):'<li style="color:var(--muted)">暂无执行记录（模拟）</li>';
  $('#hist').querySelectorAll('button').forEach(b=>b.onclick=()=>{const h=hist[+b.dataset.n];$('#out').textContent=h.out;st(h.st==='ok'?'ok':'err','回看 · '+h.t+' · '+(h.st==='ok'?'成功':'失败'));$('#outwrap').classList.remove('hidden')})}
 $('#q').oninput=renderList;$('#scene').onchange=()=>{renderList()};
-$('#confirmNo').onclick=()=>{$('#confirmWrap').classList.add('hidden');running=false;renderTab();const exp=document.querySelector('.exp');if(exp){const fb=exp.querySelector('.dfb');fb.className='feedback warn';fb.textContent='已取消：高危命令未执行，参数保留。'}};
-$('#confirmYes').onclick=()=>{$('#confirmWrap').classList.add('hidden');finish(find(open))};
+$('#confirmNo').onclick=()=>{$('#confirmWrap').classList.add('hidden');running=false;renderDetail();$('#dfb').className='feedback warn';$('#dfb').textContent='已取消：高危命令未执行，参数保留。'};
+$('#confirmYes').onclick=()=>{$('#confirmWrap').classList.add('hidden');finish(find(sel))};
 $('#copy').onclick=()=>{st('ok','已复制输出（演示环境为模拟复制）')};
-$('#clearHist').onclick=()=>{hist=[];recents=[];renderHist();renderTab()};
 $('#tabAll').onclick=()=>switchTab('all');$('#tabRecent').onclick=()=>switchTab('recent');
 document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea|select/i.test(document.activeElement.tagName)){e.preventDefault();if(!$('#listCtl').classList.contains('hidden'))$('#q').focus()}});
-renderTab();renderHist();
+renderTab();renderDetail();renderHist();
 </script>
 </body></html>
