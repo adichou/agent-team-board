@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as core from './lib/core.mjs';
 import * as batch from './lib/batch.mjs';
@@ -44,6 +44,8 @@ import * as holdStore from './lib/hold-store.mjs';
 import * as confirmStore from './lib/confirm-store.mjs';
 import * as confirmStates from './lib/confirm-states.mjs';
 import * as taskSettings from './lib/task-settings.mjs';
+// REQ-20260920-004 命令模块：命令注册表（白名单唯一事实源，测试校验与 atb.mjs 命令面同步）
+import * as cliRegistry from './lib/cli-registry.mjs';
 import * as dispatch from './lib/dispatch.mjs';
 import { createScheduler, createHub, detectCli, probeCliVersion, resolveModelForItem } from './lib/scheduler.mjs';
 import { startCodexExec, classifyFailure } from './lib/codex-adapter.mjs';
@@ -717,6 +719,11 @@ function handleSearchApi(res, u, root, dataDir) {
 const HUB = createHub();               // 首期全服务自动实施并发固定 1
 const schedulers = new Map();          // 项目根 → scheduler（懒建 + 建即恢复核对）
 const ATB_CLI_ABS = fileURLToPath(new URL('./atb.mjs', import.meta.url));
+
+// REQ-20260920-004 命令模块：per-root 单在途执行（会话内内存口径，服务重启即丢）。
+// stdout / stderr 各上限 512 KiB（超限截断并标记，防长输出撑爆内存与响应体）。
+const cliRuns = new Map(); // 项目根 → 最近一次执行 job（running 期间占位实现同项目互斥）
+const CLI_OUTPUT_MAX_BYTES = 512 * 1024;
 
 function schedulerFor(root) {
   if (!schedulers.has(root)) {
@@ -2921,6 +2928,13 @@ async function handleApi(req, res, u, pathname) {
     });
   }
 
+  // REQ-20260920-004 命令模块：命令清单（与项目无关，只读）——注册表序列化是前端清单唯一
+  // 来源（分组 / 命令 / 参数元数据 / 高危 / 禁用 / serve 标记），杜绝前端手抄清单漂移。
+  // 恒定排除 Oncall 咨询 / 讨论 / 增长三组（EXCLUDED_PREFIXES，测试断言恒不出现）。
+  if (req.method === 'GET' && pathname === '/api/cli/commands') {
+    return sendJson(res, 200, { groups: cliRegistry.CLI_GROUPS, excluded: cliRegistry.EXCLUDED_PREFIXES });
+  }
+
   // REQ-20260916-007 数据布局迁移（旧 docs/agent-team-board/ → agent-team-board/{data,runtime}）：
   // 只读探测 + 一键迁移，均不依赖 ?project= 已初始化（旧项目 dataDir 为空态也要能用设置页入口）。
   if (req.method === 'POST' && pathname === '/api/layout/state') {
@@ -3102,6 +3116,84 @@ async function handleApi(req, res, u, pathname) {
     throw new core.AtbError('当前没有已注册项目：请通过右上「管理项目」初始化或导入项目');
   }
   const dataDir = core.dataDirFrom(root);
+
+  // ---------- REQ-20260920-004 命令模块：白名单下发（同一 CLI 入口，--dir 绑定当前项目） ----------
+  // 安全边界（条目 README「安全与权限边界」）：
+  // - 白名单下发：仅命令清单内命令可执行（cli-registry.validateRunRequest），未注册一律拒绝；
+  //   参数以数组逐个传递给子进程（不经 shell 字符串拼接），本模块不构成任意命令执行通道；
+  // - --dir 由服务端强制注入（args 携带 --dir 即拒绝），下发目标不可篡改；
+  // - 并发：同一项目同一时间仅一个命令在途（per-root 内存互斥），在途再下发 409；
+  // - 执行记录仅存内存（会话内口径）：服务重启即丢，前端对在途判「结果未知」不悬挂；
+  // - 状态铁律不变：网页是人工入口，经本模块执行人工专属命令等同人工在终端执行；
+  //   Agent 侧权限边界（PreToolUse 状态守卫、认领锁）不因本模块放宽。
+  if (req.method === 'POST' && pathname === '/api/cli/run') {
+    const body = JSON.parse((await readBody(req)) || '{}');
+    const v = cliRegistry.validateRunRequest(body);
+    if (!v.ok) throw new core.AtbError(v.error);
+    const prev = cliRuns.get(root);
+    if (prev && prev.running) {
+      return sendJson(res, 409, {
+        error: `该项目已有命令在执行中（${prev.name}），完成后才能再次下发`,
+        conflict: true,
+        runningName: prev.name,
+      });
+    }
+    const runId = `cli-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+    // 展示与下发严格同构：argv 即实际传给子进程的完整参数（atb 语义 + 注入的 --dir）
+    const argv = [ATB_CLI_ABS, ...v.tokens, ...v.args, '--dir', root];
+    const display = ['atb', ...v.tokens, ...v.args, '--dir', root];
+    const job = {
+      runId,
+      name: v.spec.name,
+      argv: display,
+      startedAt: new Date().toISOString(),
+      running: true,
+      exitCode: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      durationMs: null,
+      truncated: false,
+      spawnError: null,
+    };
+    cliRuns.set(root, job);
+    const startedAt = Date.now();
+    const collect = (chunk, key) => {
+      if (job[key].length >= CLI_OUTPUT_MAX_BYTES) { job.truncated = true; return; }
+      job[key] += chunk.toString('utf8');
+      if (job[key].length > CLI_OUTPUT_MAX_BYTES) {
+        job[key] = job[key].slice(0, CLI_OUTPUT_MAX_BYTES);
+        job.truncated = true;
+      }
+    };
+    const finish = (exitCode, signal, spawnError) => {
+      job.running = false;
+      job.exitCode = exitCode;
+      job.signal = signal || null;
+      job.durationMs = Date.now() - startedAt;
+      if (spawnError) job.spawnError = String(spawnError.message || spawnError);
+    };
+    try {
+      const child = spawn(process.execPath, argv, { cwd: root });
+      child.stdout.on('data', (c) => collect(c, 'stdout'));
+      child.stderr.on('data', (c) => collect(c, 'stderr'));
+      child.on('error', (e) => finish(null, null, e)); // 拉起失败（如解释器不可用）落失败态，不悬挂
+      child.on('close', (code, signal) => finish(code, signal));
+    } catch (e) {
+      finish(null, null, e);
+    }
+    // 立即返回（异步执行）：长耗时命令不阻塞看板轮询与其他模块操作
+    return sendJson(res, 200, { ok: true, runId, name: v.spec.name, argv: display });
+  }
+
+  // 在途 / 最近一次执行结果（前端 1s 轮询收敛；无记录 404 = 服务重启丢失，前端判结果未知）
+  if (req.method === 'GET' && pathname === '/api/cli/run-status') {
+    const job = cliRuns.get(root);
+    if (!job) {
+      return sendJson(res, 404, { error: '该项目没有命令执行记录（服务可能已重启；此前在途执行的结果未知）' });
+    }
+    return sendJson(res, 200, { ...job });
+  }
 
   // ---------- REQ-20260911-009 Git 工作流（设置页「Git 工作流」分区）：只读状态 + 人工初始化 dev ----------
   // branch-state 只读（进入设置页即加载）；init-dev 为人工网页操作（按需创建 dev 并整体切换，

@@ -651,6 +651,7 @@ async function switchProject(p) {
   window.ATBOncall?.closeDrawer(); // oncall 抽屉随项目关闭，数据按新项目重新拉取
   window.ATBMarketing?.reset?.(); // REQ-20260910-019：营销档案按项目隔离，切换后重新拉取（草稿由守卫确认丢弃或保存）
   window.ATBRelease?.reset?.(); // REQ-20260910-029：发布配置与运行历史按项目隔离，切换后重新拉取
+  if (state.view === 'commands') window.ATBCommands?.enter(p); // REQ-20260920-004：命令模块按项目重载（--dir 绑定新项目根）
   if (state.view === 'oncall') await window.ATBOncall?.poll(p, true);
   await poll();
   saveViewSnapshot(); // REQ-20260910-001：项目切换按项目重置——用重置后的默认态覆盖新项目快照，
@@ -1086,6 +1087,8 @@ const MODULE_SUB = {
   // REQ-20260913-001：构建模块（版本管理 + 分支浏览与同步）插在需求与任务之间
   build: '发布计划与流程，集中在这里',
   runs: '进度、队列与结果集中在这里',
+  // REQ-20260920-004：命令模块（atb 命令统一入口）
+  commands: 'atb 命令统一入口：选择命令，按提示填参执行',
   settings: '',
 };
 
@@ -1093,9 +1096,11 @@ const MODULE_SUB = {
 // REQ-20260910-019：新增营销模块（档案 / 定位与定价 / 渠道与行动 / 效果与复盘四页签，后两页暂不可用）。
 // REQ-20260910-029：新增发布模块（Git 远端 / Apple App Store 发布流水线，插在营销与设置之间）。
 // REQ-20260913-001：新增构建模块（版本管理 + 分支浏览与同步，插在需求与任务之间）。
+// REQ-20260920-004：新增命令模块（atb 命令界面按钮下发，插在任务与设置之间；清单与执行
+// 全部经服务端白名单端点 /api/cli/*，前端不手抄命令面）。
 // BUG-20260910-004：全局任务总览不再是主视图（入口移至顶栏「管理项目」右侧，打开右侧面板），
 // 旧 view=global 深链 / 快照 / 浏览器回放经 setView 收敛为打开面板，见 setView 内分支
-const VIEWS = ['status', 'oncall', 'build', 'runs', 'files', 'marketing', 'release', 'settings'];
+const VIEWS = ['status', 'oncall', 'build', 'runs', 'files', 'marketing', 'release', 'commands', 'settings'];
 
 // REQ-20260909-013：讨论（oncall）/ 文件（files）模块暂态隐藏开关——暂态隐藏，不是功能删除。
 // 仅收敛界面入口与间接跳转（顶栏按钮、详情讨论纪要、来源讨论、搜索跨模块入口、旧深链 / 快照回落），
@@ -1139,6 +1144,9 @@ function setView(v) {
   $('#oncallView').classList.toggle('hidden', v !== 'oncall');
   // REQ-20260907-004：任务模块页面化（原批量开发抽屉），离开视图时停用轮询刷新
   $('#runsView').classList.toggle('hidden', v !== 'runs');
+  // REQ-20260920-004：命令模块（enter 幂等：清单已就绪不重复拉取，每次进入默认「最近执行」页签）
+  $('#commandsView').classList.toggle('hidden', v !== 'commands');
+  if (v === 'commands') window.ATBCommands?.enter(state.project);
   // REQ-20260910-019：营销模块（enter 幂等：数据已就绪不重复拉取，编辑中的草稿不受进入影响）
   $('#marketingView').classList.toggle('hidden', v !== 'marketing');
   if (v === 'marketing') window.ATBMarketing?.enter(state.project);
@@ -1177,8 +1185,9 @@ function updatePageHead() {
   if (sub) sub.textContent = MODULE_SUB[state.view] || '';
   const search = $('#pageHead .module-search');
   // REQ-20260910-019：营销模块无全局搜索对象（档案表单内检索不适用），与设置同法隐藏搜索框；
-  // REQ-20260910-029：发布模块筛选在模块工具栏内（目标 / 状态），与设置同法隐藏全局搜索框
-  if (search) search.classList.toggle('hidden', state.view === 'settings' || state.view === 'marketing' || state.view === 'release');
+  // REQ-20260910-029：发布模块筛选在模块工具栏内（目标 / 状态），与设置同法隐藏全局搜索框；
+  // REQ-20260920-004：命令模块搜索在模块左栏内（按 `/` 聚焦），与设置同法隐藏全局搜索框
+  if (search) search.classList.toggle('hidden', state.view === 'settings' || state.view === 'marketing' || state.view === 'release' || state.view === 'commands');
 }
 
 // REQ-20260910-016：需求排序菜单迁至第三行定位组（搜索框左侧）——仅需求模块且看板已初始化时可见；
@@ -2296,11 +2305,19 @@ function onGlobalKeydown(e) {
   if (e.repeat || e.isComposing) return;
   const typing = isEditableTarget(e.target);
   const modalOpen = anyModalOpen();
-  // `/` 聚焦当前模块搜索框：无弹窗、非输入态、搜索入口可用（设置模块隐藏搜索）
-  if (e.key === '/' && !typing && !modalOpen && searchEntryAvailable()) {
-    e.preventDefault(); // 阻止 / 落入页面；聚焦后输入框内输入不受影响
-    $('#searchInput')?.focus();
-    return;
+  // `/` 聚焦当前模块搜索框：无弹窗、非输入态、搜索入口可用（设置模块隐藏搜索）；
+  // REQ-20260920-004：命令模块的搜索在模块左栏内（全局搜索框随模块隐藏），转聚焦模块搜索
+  if (e.key === '/' && !typing && !modalOpen) {
+    if (state.view === 'commands') {
+      e.preventDefault();
+      window.ATBCommands?.focusSearch();
+      return;
+    }
+    if (searchEntryAvailable()) {
+      e.preventDefault(); // 阻止 / 落入页面；聚焦后输入框内输入不受影响
+      $('#searchInput')?.focus();
+      return;
+    }
   }
   // `?` 打开快捷键帮助：非输入态且无其他弹窗
   if (e.key === '?' && !typing && !modalOpen) {

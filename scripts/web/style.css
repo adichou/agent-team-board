@@ -3764,3 +3764,101 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .task-progress { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; }
 .task-progress-bar { flex: 1; height: 8px; border-radius: 6px; background: var(--border); overflow: hidden; }
 .task-progress-bar i { display: block; height: 100%; background: var(--accent, #2563eb); transition: width 0.4s; }
+
+/* ---------- REQ-20260920-004 命令模块：左缘竖排页签 + 命令列表 | 详情与执行 + 执行历史 ---------- */
+/* 布局参考需求模块纵向档位形态：左缘竖排页签（最近执行默认 / 全部命令），深浅色走既有 CSS 变量 */
+
+.commands-view { display: block; padding: 14px 18px 22px; }
+.cmd-shell { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; max-width: 1280px; margin: 0 auto; }
+.cmd-side { display: flex; flex-direction: row; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-width: 0; max-height: calc(100vh - 150px); }
+
+/* 左缘竖排页签（对齐需求模块纵向档位头形态） */
+.cmd-ltabs { display: flex; flex-direction: column; gap: 8px; }
+.cmd-ltab {
+  writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0.12em;
+  font: inherit; font-size: 13.5px; min-height: 128px; padding: 14px 8px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
+  cursor: pointer;
+}
+.cmd-ltab:hover { border-color: var(--muted); }
+.cmd-ltab.on { background: var(--viewrail-accent); border-color: var(--viewrail-accent); color: #fff; font-weight: 600; }
+
+.cmd-lmain { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cmd-search { font: inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; }
+.cmd-list { flex: 1; overflow: auto; border-top: 1px solid var(--border); padding-top: 6px; }
+
+.cmd-grp { margin: 10px 2px 4px; color: var(--muted); font-size: 12px; letter-spacing: 0.05em; }
+.cmd-grp:first-child { margin-top: 0; }
+.cmd-item {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 13.5px;
+  padding: 7px 9px; margin: 3px 0; border: 1px solid transparent; border-radius: 8px;
+  background: none; color: var(--text); cursor: pointer;
+}
+.cmd-item:hover { background: var(--bg); }
+.cmd-item.on { background: var(--viewrail-accent-soft); border-color: var(--viewrail-accent); }
+.cmd-item.off { opacity: 0.6; }
+.cmd-item:disabled { cursor: not-allowed; opacity: 0.55; }
+.cmd-item code { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--primary); font-size: 13px; }
+.cmd-item.off code { color: var(--muted); }
+.cmd-item small { float: right; color: var(--muted); font-size: 11px; margin-left: 6px; margin-top: 2px; }
+.cmd-tag { float: right; font-size: 11px; line-height: 1.5; padding: 1px 7px; border-radius: 9px; margin-left: 6px; white-space: nowrap; }
+.cmd-tag.danger { background: rgba(220, 38, 38, 0.12); color: var(--warn); }
+.cmd-tag.warn { background: rgba(217, 119, 6, 0.14); color: var(--inprogress); }
+.cmd-tag.dis { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+
+/* 右侧：详情与执行 */
+.cmd-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.cmd-detail { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.cmd-title { margin: 0 0 4px; font-size: 17px; }
+.cmd-title code { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--primary); }
+.cmd-desc { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+.cmd-params { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 8px 0; }
+.cmd-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.cmd-field input { font: inherit; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.cmd-extra { margin: 8px 0 0; max-width: 420px; }
+.cmd-preview {
+  font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0;
+  white-space: pre-wrap; word-break: break-word; color: var(--text);
+}
+.cmd-notice { padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: var(--bg); font-size: 12.5px; margin: 8px 0; }
+.cmd-notice .btn { margin-left: 8px; }
+.cmd-recent-empty { font-size: 12.5px; }
+.cmd-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0 4px; }
+.cmd-fb { min-height: 20px; font-size: 13px; margin: 4px 0; color: var(--muted); }
+.cmd-fb.ok { color: var(--ok-text); }
+.cmd-fb.err { color: var(--warn); }
+.cmd-fb.warn { color: var(--inprogress); }
+
+/* 输出区与执行历史 */
+.cmd-outwrap, .cmd-histwrap { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+.cmd-h { font-size: 14px; margin: 0 0 6px; }
+.cmd-out { border: 1px solid var(--border); border-radius: 9px; background: var(--bg); font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace; margin: 6px 0; }
+.cmd-out-sec { padding: 8px 12px; }
+.cmd-out-sec + .cmd-out-sec { border-top: 1px dashed var(--border); }
+.cmd-out-sec.err pre { color: var(--warn); }
+.cmd-out-label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; letter-spacing: 0.04em; }
+.cmd-out pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+.cmd-hist { list-style: none; margin: 4px 0; padding: 0; }
+.cmd-hist-row { display: flex; gap: 10px; align-items: center; padding: 5px 2px; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.cmd-hist-row:last-child { border-bottom: none; }
+.cmd-hist-cmd { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.cmd-hist-row small { color: var(--muted); }
+.cmd-hist-st { margin-left: auto; font-size: 12.5px; }
+.cmd-hist-st.ok { color: var(--ok-text); }
+.cmd-hist-st.err { color: var(--warn); }
+.cmd-hist-empty { color: var(--muted); font-size: 13px; }
+
+/* 高危命令二次确认弹窗 */
+.cmd-confirm-wrap { position: fixed; inset: 0; background: rgba(8, 12, 20, 0.55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 300; }
+.cmd-confirm-box { background: var(--panel); border: 1px solid var(--warn); border-radius: 12px; max-width: 580px; width: 100%; padding: 18px 20px; box-shadow: var(--shadow); }
+.cmd-confirm-title { margin: 0 0 6px; font-size: 16px; color: var(--warn); }
+.cmd-confirm-desc { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.cmd-confirm-box .cmd-preview { margin: 8px 0 12px; }
+
+@media (max-width: 900px) {
+  .cmd-shell { grid-template-columns: 1fr; }
+  .cmd-side { max-height: none; }
+}
+.cmd-field .cmd-fl { color: var(--muted); }
+.cmd-field .cmd-fr { color: var(--muted); font-size: 12px; }
