@@ -35,6 +35,10 @@ const EN = {
   // BUG-20260913-004：「提示词与回答回填」更名「AI 完善」（按钮迁入版本卡片，弹窗标题同步）
   'AI 完善': 'AI refine',
   '复制提示词': 'Copy prompt',
+  // REQ-20260921-013：「AI 完善」入口迁入详情概况页签（卡片不再保留）；按钮 title 两条
+  // 文案补登记（此前缺词条，英文界面悬停仍中文）
+  '合并中，请稍候……': 'Merging in progress — please wait…',
+  '复制提示词给 Agent，回答直接粘贴回本弹窗自动解析': 'Copy the prompt for the Agent, then paste the answer back into this dialog for automatic parsing',
   // REQ-20260913-004 支持版本删除（卡片删除键 + 确认弹窗 + 反馈）
   '确认删除': 'Confirm delete',
   '合并中，不可删除': 'Merging in progress — deletion disabled',

@@ -1052,7 +1052,7 @@ const ATBBuild = (() => {
 
   /* ---------- AI 完善（提示词与回答回填，同一弹窗两段式） ---------- */
 
-  // BUG-20260913-004：入口迁入版本卡片后按 verId 打开（对按钮所在卡片生效）；
+  // REQ-20260921-013：入口位于详情概况页签操作行，按 verId 打开（对当前选中版本生效）；
   // 不带参时回落当前选中版本（向后兼容），带参但版本已不存在时不弹窗。
   // BUG-20260920-005：锁定基准后移——推送完成（正式发布）后不允许再 AI 完善（卡片按钮已
   // 禁用），此处对带参直调与无参回落两条路径兜底校验（merging 同步收口），锁定态一律不弹窗；
@@ -2551,14 +2551,9 @@ const ATBBuild = (() => {
     }
     // BUG-20260913-004：版本操作直接放在每张卡片内（参照需求列表 row-acts 口径），
     // 状态禁用/文案规则逐卡继承原详情底部逻辑；mergeBusy 为全局口径（执行中禁所有卡片的合并键）。
+    // REQ-20260921-013：「AI 完善」迁入右侧详情概况页签（操作对象与展示信息一致），卡片不再保留。
     return versions.map((v) => {
       const mergeLabel = v.status === 'failed' ? '重试合并入 main' : '合并入 main';
-      // BUG-20260920-005：锁定基准后移——merged（已合并未推送）「AI 完善 / 合并入 main」可用
-      //（补关联后可重开合并）；推送完成（正式发布）后禁用（title 说明已正式发布）；
-      // merging 维持「合并中」口径；draft / failed 仍可用。
-      const vPushed = pushedOf(v);
-      const answerLocked = v.status === 'merging' || vPushed;
-      const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${vPushed ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
       // BUG-20260920-006：合并键禁用改 aria-disabled（HTML disabled 不派发 click，点击无反馈），
       // 原因统一走 mergeBlockReason 与详情页主按钮同口径（含全局合并执行中 / 已正式发布 /
       // 五步门禁 / 不在 dev，选中版本装配已加载时同查门禁与分支）；点击由 openMergeConfirm
@@ -2584,7 +2579,7 @@ const ATBBuild = (() => {
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><strong>${esc(v.name || v.id)}</strong> ${versionChip(v)}</div>
         <div class="meta">${esc(v.id)}${verNo ? ` · 版本号 ${esc(verNo)}` : ''} · 阶段 ${esc(stage)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
-        <div class="card-acts">${answerBtn}${mergeBtn}${releaseBtn}${releaseViewBtn}${delBtn}</div>
+        <div class="card-acts">${mergeBtn}${releaseBtn}${releaseViewBtn}${delBtn}</div>
       </div>`;
     }).join('');
   }
@@ -2640,7 +2635,9 @@ const ATBBuild = (() => {
 
   /* ---------- REQ-20260920-003 五步流程渲染（plan / link / docs / merge / release） ---------- */
 
-  const STEP_LABEL = { plan: '版本计划', link: '关联条目与提交', docs: '文档编写', merge: '合并入 main', release: '正式发布' };
+  // REQ-20260921-013：首个页签显示名「版本计划」→「概况」（AI 完善入口迁入其内容区顶部）；
+  // 内部步骤标识 plan 与五步顺序不变（快照恢复 / setStep / 后端 PUBLISH_STEPS 键兼容）。
+  const STEP_LABEL = { plan: '概况', link: '关联条目与提交', docs: '文档编写', merge: '合并入 main', release: '正式发布' };
   // REQ-20260921-008 文档流水线状态（与 publish-flow.DOCS_FLOW_LABEL 同口径的唯一前端事实源）：
   // REQ-20260921-012 扩展七态——默认语言四态 + 剩余语言 未翻译 / 正在翻译 / 已翻译待审核
   //（reviewed 共用）；chip 三重区分（图标 + 颜色 + 文字，不只靠颜色）。
@@ -3312,8 +3309,9 @@ ${langsField}
       : v.status === 'failed' && v.merge?.error
         ? `<p class="rel-form-err bld-merge-note" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>`
         : '';
-    // REQ-20260920-003：右侧详情改为五步流程导航——1 版本计划（信息编辑）→ 2 关联条目与提交
-    //（原概况的关联列表）→ 3 文档编写 → 4 合并入 main → 5 正式发布（含原产品发布记录页签）
+    // REQ-20260920-003：右侧详情改为五步流程导航——1 概况（原「版本计划」，REQ-20260921-013
+    // 更名并迁入 AI 完善，信息编辑）→ 2 关联条目与提交（原概况的关联列表）→ 3 文档编写
+    // → 4 合并入 main → 5 正式发布（含原产品发布记录页签）
     const versionNumber = (v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '';
     // REQ-20260921-014：概况页签显式编辑——描述块头部行放可见「编辑」按钮（merging 禁用 +
     // title 文字原因），点开就地替换描述块为名称 + 描述同一表单（见 renderPlanEditForm）；
@@ -3329,7 +3327,14 @@ ${langsField}
                 : '<button type="button" class="btn small quiet" id="bldEditInfo" title="编辑版本名称与描述">编辑</button>'}
             </div>
             ${descCell}</div>`;
+    // REQ-20260921-013：「AI 完善」从版本卡片迁入概况内容区顶部操作行（右对齐）——
+    // 用户先选版本再完善，操作对象与展示信息一致；锁定口径原样迁移（BUG-20260920-005
+    // 基准：merging 禁用、推送完成即正式发布后禁用并说明，merged 未推送可用），
+    // data-ver-answer 行为标记与绑定循环保留，openAnswerModal(verId) 仍按当前版本打开。
+    const answerLocked = v.status === 'merging' || pushedOf(v);
+    const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${pushedOf(v) ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
     const planBody = `
+        <div class="bld-plan-acts">${answerBtn}</div>
         <p class="muted small">计划号 ${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 目标分支 ${esc(v.targetBranch || 'main')}${v.merge?.baseBranch ? ` · 来源分支 ${esc(v.merge.baseBranch)}` : ''}</p>
         ${descBlock}
         ${mergeState}`;
