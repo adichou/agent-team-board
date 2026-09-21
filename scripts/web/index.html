@@ -42,7 +42,11 @@
       <button type="button" class="view-tab nav-extra" data-view="settings">设置</button>
     </nav>
     <div class="top-actions">
-      <select id="projectSel" class="project-sel" title="切换项目看板"></select>
+      <!-- BUG-20260921-011：静态首帧占位——app.js boot 立即按四态重渲染；脚本加载失败 /
+           JS 异常时也不呈现空选择器（配合 .project-sel 固定宽度防塌缩、防页签跳动） -->
+      <select id="projectSel" class="project-sel" title="切换项目看板" disabled>
+        <option>加载项目中…</option>
+      </select>
       <!-- REQ-20260910-005：项目管理入口（初始化 / 导入 / 移出；移出仅移出列表，目录与文档保留）；
            REQ-20260910-014：点击改开右侧侧拉面板，入口带面板开合联动（对齐全局按钮写法） -->
       <button id="btnProjManage" class="btn" type="button" title="初始化、导入或移出项目" aria-haspopup="dialog" aria-expanded="false" aria-controls="projModalWrap">管理项目</button>
