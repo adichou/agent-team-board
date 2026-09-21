@@ -464,21 +464,18 @@ function remainingDisposition(dataDir, batch, state, policies = null) {
 // （FOLLOW_SESSION_PROMPT_LINE）。
 // BUG-20260909-017：模型指令行统一跟随口径——manual 或仅传 model/level（兼容旧调用）同样注入
 // 跟随指令；均未传 → 不注入任何行（直连调用行为不变）。
+// REQ-20260921-006 提示词缓存命中优化：重组为「静态段在前 + 尾部运行参数区」——角色与调度纪律
+// 构成稳定公共前缀；随调用变化的值（项目根 / 规范路径 / atbPath）与条件行（模型跟随行）收敛到
+// 尾部参数区，不再出现在前部（条件行不再改变公共前缀）。调度/领取/回执/锁语义不变。
 export function generatePrompt({ projectRoot, workerSpecPath, batchId = null, developer = null, agent = null, modelSource = null, model = null, level = null, atbPath = ATB_PATH }) {
   void batchId; // REQ-20260913-003：调度不依赖批次标识，参数仅作兼容
   void agent; // REQ-20260909-011：执行端无关，参数仅作兼容
   void developer; // REQ-20260910-027：开发人员已移除，参数仅作兼容
-  const head = [
-    '你是当前项目的 AI 开发调度员，只负责派发与接收短回执。',
-    `项目：${projectRoot}`,
-  ];
   const modelLine = modelSource === 'follow' || modelSource === 'manual' || model || level
     ? [FOLLOW_SESSION_PROMPT_LINE]
     : [];
   const common = [
-    `执行规范：${workerSpecPath}`,
-    `调度核对入口：node ${atbPath} batch check --dir ${projectRoot}`,
-    '',
+    '你是当前项目的 AI 开发调度员，只负责派发与接收短回执。',
     '每轮新启动一个子代理，按执行规范领取当前队列中最早的一个可实施条目，认领、实施、测试并上报。',
     '实时取单：每完成一项，立即核对并从当前已计划队列（最旧优先）领取下一项；运行中新移入计划的条目立即可领取，无需任何并入操作；实时队列取空即本轮结束。',
     '每个子代理只做一项；子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
@@ -486,13 +483,20 @@ export function generatePrompt({ projectRoot, workerSpecPath, batchId = null, de
     '只传项目根与规范路径，不复制本会话的历史实施记录。',
     '',
     '完整需求、代码、测试日志、报告均由子代理按需读取或落盘。',
-    '主会话只接收规定的短回执，并调用最小核对入口。',
+    '主会话只接收规定的短回执，并调用最小核对入口（命令见运行参数）。',
     'nextAction=continue 时启动下一个新子代理；stop 时结束；',
     'needs_attention 时说明简短原因和记录入口，等待人工处理。',
     '不要重复读取全队列、完整报告，不逐项输出长总结，不高频轮询。',
     '收尾只给本轮计数和异常入口。不得代替人工接受需求或确认完成。',
   ];
-  return [...head, ...modelLine, ...common].join('\n');
+  const params = [
+    '运行参数（随项目与任务变化，命令占位符以本区实际值为准）：',
+    `项目：${projectRoot}`,
+    `执行规范：${workerSpecPath}`,
+    `调度核对入口：node ${atbPath} batch check --dir ${projectRoot}`,
+    ...modelLine,
+  ];
+  return [...common, '', ...params].join('\n');
 }
 
 // 启动一轮批量开发（REQ-20260913-003 去批次化）：不再冻结候选快照、不再排队——

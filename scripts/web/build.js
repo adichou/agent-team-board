@@ -244,15 +244,21 @@ const ATBBuild = (() => {
     return esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, end)) + '</mark>' + markMatch(s.slice(end), kw);
   }
 
+  // REQ-20260921-006 提示词缓存命中优化：静态段（任务句 + 综合要求 + 回答格式约定）在前，
+  // 随版本变化的值（版本号 / 当前名称描述 / 关联条目清单）收敛到尾部「运行参数」区——
+  // 不同版本的提示词共享逐字一致的公共前缀。回答格式约定与 parseAnswer 解析口径不变。
   function buildPrompt(v) {
     const lines = [];
-    lines.push(`请为看板版本 ${v.id} 生成「版本名称」与「版本描述」。`);
+    lines.push('请为看板版本（版本号与素材见运行参数）生成「版本名称」与「版本描述」。');
+    lines.push('请综合运行参数给出的当前信息与关联条目，给出更完整的版本名称与描述；只按以下格式回答，不要附加其他内容：');
+    lines.push('版本名称：<一行>');
+    lines.push('版本描述：<可多行>');
+    lines.push('');
+    lines.push('运行参数（随版本变化，占位符以本区实际值为准）：');
+    lines.push(`看板版本：${v.id}`);
     lines.push(`当前信息：名称「${v.name || '（空）'}」；描述「${v.description || '（空）'}」。`);
     lines.push('关联条目：');
     for (const it of v.items || []) lines.push(`- ${it.itemId} ${it.title || ''}（commit ${commitsOf(it).map((h) => short(h)).join(' ')}）`);
-    lines.push('请综合以上条目给出更完整的版本名称与描述；只按以下格式回答，不要附加其他内容：');
-    lines.push('版本名称：<一行>');
-    lines.push('版本描述：<可多行>');
     return lines.join('\n');
   }
 

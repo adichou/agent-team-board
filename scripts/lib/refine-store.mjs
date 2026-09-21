@@ -409,6 +409,10 @@ export function queueHeadRefineBatch(dataDir) {
 // BUG-20260910-008：autoPlan（「完善完成后自动转入计划」开关，默认 false）分态约束段——关闭沿
 // REQ-20260908-020 原约束行（零回归）；开启时说明 done 回执后系统自动 accepted → planned 属预期
 // 系统行为、不得据此暂停（防严格 Agent 把系统流转当约束违反而中断推进），Agent 纪律不放宽。
+// REQ-20260921-006 提示词缓存命中优化：重组为「静态段在前 + 尾部运行参数区」——角色/流程/补全口径/
+// 演示门槛/回执语义构成稳定公共前缀（命令以 <项目根>/<RUN-ID> 占位）；项目根、CLI 入口、模型跟随行与
+// autoPlan 分态约束段收敛到尾部参数区（条件行不再改变公共前缀；OFF 态全文仍无「自动转入计划」字样，
+// ON 态约束段仅尾部追加）。调度/领取/回执/锁语义不变。
 export function buildRefinePrompt({ projectRoot, batchId = null, developer = null, agent = null, modelSource = null, model = null, level = null, autoPlan = false, atbPath = ATB_PATH }) {
   void batchId; // REQ-20260913-003：调度不依赖批次标识，参数仅作兼容
   void agent; // REQ-20260909-011：执行端无关，参数仅作兼容
@@ -418,22 +422,17 @@ export function buildRefinePrompt({ projectRoot, batchId = null, developer = nul
     : null;
   // REQ-20260909-011：领取前缀固定单一通用前缀（不再 zcode-refine / codex-refine 二选一；
   // 前缀仅为会话标识字符串，不影响锁与账本语义）
-  const byPrefix = 'refine';
   const constraintLines = autoPlan ? REFINE_SCHEDULER_AUTO_PLAN_LINES : [REFINE_SCHEDULER_KEEP_ACCEPTED_LINE];
-  return [
+  const common = [
     '你是当前项目的 AI 分析调度员，只负责派发与接收短回执。',
-    `项目：${projectRoot}`,
-    ...(modelLine ? [modelLine] : []),
-    '',
     '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。',
     '实时取单：每完成一项，立即核对并从当前已接受未完善队列（需求优先、最旧优先）领取下一项；运行中新接受的单立即可领取，无需任何并入操作；实时队列取空即本轮结束。',
     '子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
     '每个子代理只做一项；同一时间只运行一个；不要让子代理再派发子代理。',
-    '',
-    `CLI 约定：atb 指 node ${atbPath}（下同）。`,
+    'CLI 约定：atb 指 node 运行参数「CLI 入口」给出的命令（下同）。',
     '',
     '子代理流程（每项一个）：',
-    `1. 领取：atb refine next --by ${byPrefix}-<序号> --dir ${JSON.stringify(projectRoot)}`,
+    '1. 领取：atb refine next --by refine-<序号> --dir <项目根>',
     '   （返回条目、目录、缺失原因；stop 时按提示结束）',
     '   领取/回执命令在子代理会话内执行（工作目录用 --dir 指定）。',
     '2. 阅读条目现有说明与项目代码/文档，直接编辑条目目录下的 markdown 补全：',
@@ -447,26 +446,33 @@ export function buildRefinePrompt({ projectRoot, batchId = null, developer = nul
     '   无法完善用 atb refine fail <RUN-ID> --reason "<短句>"；认领冲突用 atb refine release。',
     '   遇到必须人工确认的问题用 atb refine hold <RUN-ID> --reason "<短句>" --question "<问题>"：',
     '   声明后队列暂停、人工看板作答确认后答案随续跑回传（REQ-20260914-001）。',
-    '',
-    ...constraintLines,
     REFINE_DEMO_PERMIT_LINE,
-    `4. 主会话核对：atb refine check --dir ${JSON.stringify(projectRoot)}`,
+    '4. 主会话核对：atb refine check --dir <项目根>',
     '   nextAction=continue 时派发下一个子代理；stop 时结束。主会话只接收规定的短回执，不复制子代理的完整文档内容。',
-  ].join('\n');
+  ];
+  const params = [
+    '运行参数（随项目与任务变化，命令占位符以本区实际值为准）：',
+    `项目根：${projectRoot}`,
+    `CLI 入口：node ${atbPath}`,
+    ...(modelLine ? [modelLine] : []),
+    '条目状态约束：',
+    ...constraintLines,
+  ];
+  return [...common, '', ...params].join('\n');
 }
 
-// codex 单项提示词：条目目录行供测试夹具与运行核验解析，保持稳定形态
+// codex 单项提示词：条目目录/缺失原因/执行编号行供测试夹具与运行核验解析，保持整行稳定形态
 // BUG-20260910-008：autoPlan 分态第 3 条约束——关闭沿原句（零回归）；开启说明核验记账后系统自动
 // accepted → planned 属预期、不得据此暂停，你自身仍不得改状态（纪律不放宽，文案常量见 task-settings）。
+// REQ-20260921-006 提示词缓存命中优化：条目编号/标题/目录/缺失原因/执行编号/项目根/CLI 入口等随条目
+// 变化的值收敛到尾部「运行参数」区（整行形态不变）；autoPlan 分态约束段随参数区尾部输出（不再改变
+// 公共前缀）。补全要求、演示门槛、hold/回执语义等静态段在前；命令占位符（<RUN-ID>/<CLI 入口>/<项目根>）
+// 以参数区实际值为准，CLI 与回执语义不变。
 export function buildRefineWorkerPrompt({ item, projectRoot, atbPath = ATB_PATH, runId, autoPlan = false }) {
   const constraintLines = autoPlan ? REFINE_WORKER_AUTO_PLAN_LINES : [REFINE_WORKER_KEEP_ACCEPTED_LINE];
-  return [
-    `请将当前会话名改为 ${item.id}。`,
-    `你是本项目的需求完善执行者，补全看板条目 ${item.id}：${item.title} 的文档。`,
-    `项目根：${projectRoot}（codex 已以 -C 指定工作目录，请勿切换目录）。执行编号：${runId}。`,
-    `条目目录：${item.itemDir}`,
-    `缺失原因：${(item.reasons || []).join('、')}`,
-    '',
+  const common = [
+    '请将当前会话名改为运行参数给出的条目编号。',
+    '你是本项目的需求完善执行者，按运行参数补全指定看板条目的文档。',
     '要求：',
     '1. 阅读条目目录下现有 markdown 与项目代码/文档，直接编辑条目目录内文件补全：',
     '   需求只补 README：描述 + 验收标准；涉及 UI 时须含界面布局、交互行为、状态反馈与界面展示——',
@@ -479,11 +485,24 @@ export function buildRefineWorkerPrompt({ item, projectRoot, atbPath = ATB_PATH,
     '   遇到必须由人工确认的问题（需求歧义、方案选择、信息缺失）：',
     `   atb refine hold ${'<RUN-ID>'} --reason "<短句>" --question "<问题一>" [--question "<问题二>"] [--background "<背景>"]`,
     '   声明后结束本轮（不写 done）：当前条目挂起、完善队列暂停，人工在看板作答确认后答案会随续跑回传。',
+    '3. 完成后把补全要点（一两句话）作为最终回复直接输出（服务会核验文档确有变更后记账）。',
+    '   CLI 入口（可选核对）：node <CLI 入口> refine check --dir <项目根>',
+  ];
+  const params = [
+    '运行参数（随条目变化，命令占位符以本区实际值为准）：',
+    `条目编号：${item.id}`,
+    `条目标题：${item.title}`,
+    `项目根：${projectRoot}（codex 已以 -C 指定工作目录，请勿切换目录）`,
+    `执行编号：${runId}`,
+    `条目目录：${item.itemDir}`,
+    `缺失原因：${(item.reasons || []).join('、')}`,
+    `CLI 入口：node ${atbPath}`,
+    '条目状态约束：',
     ...constraintLines,
-    `   不要写 test-report.md、不要 git commit；只编辑条目目录下的 markdown（涉及 UI 的需求或 Bug 可另建约定的 ${UI_DEMO_FILE}）。`,
-    `4. 完成后把补全要点（一两句话）作为最终回复直接输出（服务会核验文档确有变更后记账）。`,
-    `   CLI 入口（可选核对）：node ${JSON.stringify(atbPath)} refine check --dir ${JSON.stringify(projectRoot)}`,
-  ].join('\n');
+    // 末行续行（OFF/ON 约束行均以「、」收尾续接本行）：test-report/git commit 禁令与只编辑 markdown 许可
+    `不要写 test-report.md、不要 git commit；只编辑条目目录下的 markdown（涉及 UI 的需求或 Bug 可另建约定的 ${UI_DEMO_FILE}）。`,
+  ];
+  return [...common, '', ...params].join('\n');
 }
 
 // ---------- 完善批次创建 ----------
