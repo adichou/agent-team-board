@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260921-001 界面演示 — 待人工确认入口随模块切换消失缺陷</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6ea; --text: #1f2430; --muted: #8a919e;
+    --accent: #2f6fed; --accent-soft: #e8effd; --warn: #b7791f; --warn-soft: #fdf3e3;
+    --ok: #2f9e63; --ok-soft: #e7f6ee; --danger: #d64545; --danger-soft: #fdeaea;
+    --chip: #eef1f5; --shadow: 0 8px 28px rgba(20, 30, 60, .10);
+  }
+  html[data-theme="dark"] {
+    --bg: #14171c; --panel: #1d2129; --line: #323844; --text: #e8eaee; --muted: #98a0ad;
+    --accent: #6c9bff; --accent-soft: #22304d; --warn: #e0b25c; --warn-soft: #3a2f1a;
+    --ok: #58bd8a; --ok-soft: #1d3529; --danger: #ef8080; --danger-soft: #402323;
+    --chip: #262b34; --shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  .hidden { display: none !important; }
+  .grow { flex: 1; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 30;
+  }
+  .topbar h1 { font-size: 15px; margin: 0 8px 0 0; }
+  .mode-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .mode-switch button { border: 0; background: transparent; color: var(--text); padding: 5px 12px; }
+  .mode-switch button.active { background: var(--accent); color: #fff; }
+  .mode-switch button.active.bug { background: var(--danger); }
+  .topbar .grow { flex: 1; }
+
+  /* ---------- 布局 ---------- */
+  .layout { display: grid; grid-template-columns: 336px 1fr; gap: 14px; padding: 14px 16px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+
+  /* ---------- 控制面板 ---------- */
+  .ctrl .card { margin-bottom: 12px; }
+  .ctrl h3 { margin: 0 0 8px; font-size: 13px; }
+  .ctrl ol { margin: 0; padding-left: 18px; }
+  .ctrl li { margin: 4px 0; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 5px 12px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12px; border-radius: 6px; }
+  .btn.accent { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.ghost { border-style: dashed; color: var(--muted); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .poll-line { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; }
+  .poll-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .poll-dot.off { background: var(--muted); }
+  .switch { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0; }
+  #eventLog {
+    margin: 0; padding: 8px 10px; list-style: none; height: 250px; overflow: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+  }
+  #eventLog li { margin: 3px 0; border-bottom: 1px dashed var(--line); padding-bottom: 3px; word-break: break-all; }
+  #eventLog .t { color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+  #eventLog .k-poll { color: var(--muted); }
+  #eventLog .k-prune { color: var(--warn); }
+  #eventLog .k-act { color: var(--accent); }
+  #eventLog .k-bad { color: var(--danger); font-weight: 600; }
+  #eventLog .k-good { color: var(--ok); }
+
+  /* ---------- 舞台（模拟看板页） ---------- */
+  .module-nav { display: flex; gap: 6px; margin-bottom: 10px; }
+  .module-nav button {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    padding: 5px 16px; border-radius: 8px 8px 0 0; border-bottom: 0;
+  }
+  .module-nav button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .stage-card { background: var(--panel); border: 1px solid var(--line); border-radius: 0 10px 10px 10px; padding: 12px 14px; min-height: 480px; }
+  .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filter-chip {
+    border: 1px solid var(--line); background: var(--chip); color: var(--text);
+    border-radius: 999px; padding: 2px 12px; font-size: 12px;
+  }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .filter-chip .n { opacity: .75; margin-left: 4px; }
+
+  .req-row {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+    background: var(--bg);
+  }
+  .req-row .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cid { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .state-chip { border-radius: 999px; padding: 1px 10px; font-size: 12px; border: 1px solid var(--line); background: var(--chip); }
+  .state-chip.s-dev { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .state-chip.s-done { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+  .req-title { margin: 4px 0 2px; font-weight: 600; }
+  .flag { border-radius: 6px; padding: 1px 8px; font-size: 12px; }
+  .flag.hold-flag { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+
+  /* ---------- 待人工确认聚合区 ---------- */
+  .hold-area { margin-top: 12px; border: 2px solid var(--warn); border-radius: 10px; padding: 10px 12px; }
+  .hold-area-head { display: flex; align-items: center; gap: 8px; }
+  .hold-area-title { font-weight: 700; color: var(--warn); }
+  .hold-count {
+    background: var(--warn); color: #fff; border-radius: 999px; font-size: 12px;
+    min-width: 20px; text-align: center; padding: 0 6px;
+  }
+  .hold-area-sub { margin: 2px 0 10px; }
+  .hold-card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: var(--panel); }
+  .hold-card .card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .hold-wait { margin-left: auto; }
+  .hold-q-summary .unanswered-count { font-weight: 700; }
+  .hold-qs { margin: 6px 0; padding-left: 18px; }
+  .hold-qs li { margin: 2px 0; }
+  .hold-qs li.open { font-weight: 600; }
+  .hold-qs li.answered { color: var(--muted); font-weight: 400; }
+  .hold-fold-row { list-style: none; margin-left: -18px; }
+  .hold-fold { border: 0; background: transparent; color: var(--accent); padding: 2px 0; }
+  .hold-qs-nested { margin: 2px 0; padding-left: 16px; }
+  .hold-acts { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; border-top: 1px dashed var(--line); padding-top: 8px; }
+  .hold-acts .grp { display: flex; gap: 8px; }
+  .hold-timeline { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 6px; }
+  .hold-events { margin: 4px 0 0; padding-left: 18px; }
+  .hold-error {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--danger-soft); border: 1px solid var(--danger); color: var(--danger);
+    border-radius: 8px; padding: 8px 10px;
+  }
+  .hold-error .btn { border-color: var(--danger); color: var(--danger); background: transparent; }
+  .hold-loading { color: var(--muted); padding: 6px 2px; }
+
+  /* ---------- 决策侧拉面板 ---------- */
+  .mask { position: fixed; inset: 0; background: rgba(10, 14, 22, .45); z-index: 40; }
+  .side-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw); z-index: 50;
+    background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+  }
+  .side-panel header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .side-panel header h3 { margin: 0; font-size: 14px; flex: 1; }
+  .icon-btn { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 6px; width: 26px; height: 26px; }
+  .panel-body { flex: 1; overflow: auto; padding: 12px 14px; }
+  .meta-line { display: flex; flex-wrap: wrap; gap: 10px; background: var(--bg); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+  .progress-pill {
+    display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px;
+    background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn);
+  }
+  .progress-pill.done { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+  fieldset.q { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; padding: 8px 10px; }
+  fieldset.q legend { font-weight: 600; padding: 0 6px; }
+  fieldset.q .qtxt { font-size: 13px; margin: 0 0 6px; }
+  textarea, input[type="text"] {
+    width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+    color: var(--text); padding: 6px 8px; font: inherit; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .panel-foot { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .panel-msg { flex: 1; font-size: 12px; }
+  .panel-msg.ok { color: var(--ok); }
+  .panel-msg.bad { color: var(--danger); }
+
+  /* ---------- 模态 / toast ---------- */
+  .modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(10, 14, 22, .45); }
+  .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; width: min(420px, 92vw); box-shadow: var(--shadow); }
+  .modal .box h4 { margin: 0 0 8px; color: var(--danger); }
+  .modal .acts { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+  .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 70;
+    background: var(--text); color: var(--bg); border-radius: 8px; padding: 6px 14px;
+    opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 80vw;
+  }
+  #toast.show { opacity: .95; }
+  .placeholder-view { color: var(--muted); padding: 30px 10px; text-align: center; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>REQ-20260921-001 · 待人工确认「补决策」入口随模块切换消失 — 界面演示</h1>
+  <div class="mode-switch" role="group" aria-label="演示模式">
+    <button type="button" id="modeBug" class="active bug">缺陷复现（现状）</button>
+    <button type="button" id="modeFixed">修复后（目标）</button>
+  </div>
+  <span class="grow"></span>
+  <button type="button" class="btn small" id="btnTheme">深浅色切换</button>
+  <button type="button" class="btn small" id="btnReset">重置演示</button>
+</header>
+
+<div class="layout">
+  <!-- ============ 控制面板 ============ -->
+  <aside class="ctrl">
+    <div class="card">
+      <h3>评审路径（缺陷复现模式）</h3>
+      <ol class="small">
+        <li>点「worker 声明 hold」——列表行出现 <b>⚠ 等人工决策</b>，列表尾部出现「待人工确认」聚合区（首次渲染）。</li>
+        <li>切到「任务」页签，<b>等事件日志出现至少一轮轮询</b>（约 2 秒），再切回「需求」——聚合区不再出现，行旗标仍在，悬停提示引导去列表下方补决策却找不到入口。</li>
+        <li>F5 等价的「重置演示」或刷新后聚合区恢复——对应「只有首次进入或刷新才出现」。</li>
+        <li>切到「修复后（目标）」模式重复①②——切回需求 ≤2 秒内聚合区恢复。</li>
+        <li>打开「模拟 /api/holds 失败」再关闭——对照两种模式下错误条是否残留。</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>模拟 worker / 服务端</h3>
+      <div class="btn-row">
+        <button type="button" class="btn primary small" id="btnDeclare">worker 声明 hold（atb hold declare）</button>
+        <button type="button" class="btn small" id="btnPollNow">立即执行一轮轮询</button>
+      </div>
+      <label class="switch small"><input type="checkbox" id="chkFail"> 模拟 /api/holds 请求失败</label>
+      <div class="poll-line small">
+        <span class="poll-dot" id="pollDot"></span>
+        <span id="pollText">轮询：每 2 秒（下一轮 2s）</span>
+      </div>
+      <p class="small muted" style="margin:4px 0 0">数据快照：活动 hold <b id="holdCount">0</b> 条；「补决策」入口仅存在于聚合区卡片。</p>
+    </div>
+    <div class="card">
+      <h3>事件日志（renderHolds 每轮决策）</h3>
+      <ul id="eventLog"></ul>
+    </div>
+  </aside>
+
+  <!-- ============ 舞台：模拟看板页 ============ -->
+  <main class="stage">
+    <nav class="module-nav" aria-label="模块导航">
+      <button type="button" data-view="status" class="active">需求</button>
+      <button type="button" data-view="runs">任务</button>
+      <button type="button" data-view="settings">设置</button>
+    </nav>
+    <div class="stage-card">
+      <!-- 需求模块 -->
+      <section id="reqView">
+        <div class="filter-bar" aria-label="状态筛选（演示静态）">
+          <button type="button" class="filter-chip">待接受 <span class="n">1</span></button>
+          <button type="button" class="filter-chip">已接受 <span class="n">1</span></button>
+          <button type="button" class="filter-chip">已计划 <span class="n">0</span></button>
+          <button type="button" class="filter-chip active">开发中 <span class="n">1</span></button>
+          <button type="button" class="filter-chip">已完成 <span class="n">1</span></button>
+        </div>
+        <div id="reqList">
+          <article class="req-row" id="row-REQ-20260921-009">
+            <div class="top">
+              <span class="cid">REQ-20260921-009</span>
+              <span class="state-chip s-dev" id="rowState">开发中</span>
+              <span class="flag hold-flag hidden" id="rowHoldFlag" title="待人工决策：2 项未答；到列表下方「待人工确认」区补决策并复工">⚠ 等人工决策</span>
+            </div>
+            <p class="req-title">示例开发中需求：为发布流水线增加 dry-run 校验（演示数据）</p>
+            <p class="small muted" style="margin:0">👤 worker-1 · 刚刚更新</p>
+          </article>
+          <article class="req-row">
+            <div class="top"><span class="cid">REQ-20260918-014</span><span class="state-chip">已接受</span></div>
+            <p class="req-title">示例已接受需求（演示占位）</p>
+          </article>
+          <article class="req-row">
+            <div class="top"><span class="cid">BUG-20260920-006</span><span class="state-chip">待接受</span></div>
+            <p class="req-title">示例待接受 Bug（演示占位）</p>
+          </article>
+          <article class="req-row">
+            <div class="top"><span class="cid">REQ-20260916-008</span><span class="state-chip s-done">已完成</span></div>
+            <p class="req-title">示例已完成需求（演示占位）</p>
+          </article>
+        </div>
+        <!-- 待人工确认持久聚合区（#holdArea 对应物） -->
+        <div id="holdArea" class="hold-area hidden" role="region" aria-label="待人工确认"></div>
+      </section>
+      <!-- 任务模块（占位） -->
+      <section id="runsView" class="hidden">
+        <div class="placeholder-view">任务模块（演示占位）——本缺陷聚焦需求模块的「待人工确认」聚合区；切走期间每轮轮询仍会拉取 /api/holds 并清空聚合区 DOM。</div>
+      </section>
+      <!-- 设置模块（占位） -->
+      <section id="settingsView" class="hidden">
+        <div class="placeholder-view">设置模块（演示占位）</div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- ============ 人工决策侧拉面板 ============ -->
+<div id="panelMask" class="mask hidden"></div>
+<aside id="holdPanel" class="side-panel hidden" role="dialog" aria-label="人工决策">
+  <header>
+    <h3 id="panelTitle">人工决策</h3>
+    <button type="button" class="icon-btn" id="panelClose" aria-label="关闭人工决策面板">✕</button>
+  </header>
+  <div class="panel-body">
+    <div class="meta-line small" id="panelMeta"></div>
+    <p id="panelMsg" class="panel-msg" role="status"></p>
+    <form id="holdForm"></form>
+  </div>
+  <div class="panel-foot">
+    <span class="grow"></span>
+    <button type="button" class="btn" id="panelCancel">关闭</button>
+    <button type="button" class="btn primary" id="panelSave">保存决策</button>
+  </div>
+</aside>
+
+<!-- ============ 确认完成防呆模态 ============ -->
+<div id="doneModal" class="modal hidden" role="dialog" aria-label="确认完成防呆">
+  <div class="box">
+    <h4>尚有 <span id="doneMiss">0</span> 项决策未答，仍要确认完成吗？</h4>
+    <p class="small">常规路径是补齐决策并复工；确认后将越过未答决策完成条目（留痕写入 agent-team-board/runtime/holds/decisions/）。</p>
+    <div class="acts">
+      <button type="button" class="btn" id="doneCancel">取消</button>
+      <button type="button" class="btn danger" id="doneConfirm">仍要确认完成</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+ * 演示说明：
+ * - 本文件为静态模拟，不接真实 API；数据全部为本页内存态。
+ * - 「缺陷复现」模式的 renderHolds() 忠实移植 scripts/web/app.js 当前实现
+ *   （签名剪枝早退 + 隐藏/空/错误分支不重置 state.holds.sig / dataset.rendered）。
+ * - 「修复后」模式仅在这些分支补上「重置签名与已渲染标记」，其余逻辑一致。
+ * ===================================================================== */
+
+const $ = (s) => document.querySelector(s);
+
+const state = {
+  mode: 'bug',                       // 'bug' = 缺陷复现（现状） | 'fixed' = 修复后（目标）
+  view: 'status',
+  holds: {                           // 对应 app.js state.holds（前端快照 + 剪枝状态）
+    data: null,                      // /api/holds 最近一次响应
+    sig: '',                         // 渲染签名（轮询剪枝）
+    error: null,                     // 拉取失败原因
+    expanded: new Set(),             // 卡片「查看进展记录」展开集合
+    answeredOpen: new Map(),         // 卡片「已答 n 项」折叠态
+    events: new Map(),               // itemId → 事件时间线缓存
+  },
+};
+
+/* ---------------- 模拟服务端（内存态） ---------------- */
+const server = {
+  fail: false,
+  holds: { count: 0, items: [] },
+};
+function serverSnapshot() {
+  const items = server.holds.items.map((h) => ({
+    ...JSON.parse(JSON.stringify(h)),
+    unanswered: h.questions.filter((q) => !q.answer).length,
+    total: h.questions.length,
+  }));
+  return { count: items.length, items };
+}
+function holdOf(id) { return server.holds.items.find((h) => h.itemId === id); }
+
+/* ---------------- 工具 ---------------- */
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmtClock(d) { const p = (n) => String(n).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+function fmtWait(iso) {
+  const t = Date.parse(iso || ''); if (!Number.isFinite(t)) return '—';
+  let s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return '刚刚';
+  const m = Math.floor(s / 60); const h = Math.floor(m / 60); const d = Math.floor(h / 24);
+  if (d >= 1) return `${d} 天`; if (h >= 1) return `${h} 小时`; return `${m} 分`;
+}
+const HOLD_EVENT_LABEL = { declared: '声明', answered: '已作答', resumed: '已复工', cancelled: '已作废', 'closed-done': '随完成闭环' };
+
+let toastTimer = null;
+function toast(text) {
+  const el = $('#toast'); el.textContent = text; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function log(text, kind = 'poll') {
+  const ul = $('#eventLog');
+  const li = document.createElement('li');
+  li.className = `k-${kind}`;
+  li.innerHTML = `<span class="t">${fmtClock(new Date())}</span>${esc(text)}`;
+  ul.appendChild(li);
+  while (ul.children.length > 80) ul.removeChild(ul.firstChild);
+  ul.scrollTop = ul.scrollHeight;
+}
+
+/* ---------------- 轮询（对应 app.js poll()：每 2 秒，任何视图都拉 /api/holds） ---------------- */
+let pollCountdown = 2;
+let pollBusy = false;
+async function apiHolds() {                       // 模拟 GET /api/holds（约 250ms 延迟）
+  await new Promise((r) => setTimeout(r, 250));
+  if (server.fail) throw new Error('模拟网络故障：GET /api/holds 500');
+  return serverSnapshot();
+}
+async function refreshHolds(viaPoll = true) {     // 对应 app.js refreshHolds()
+  try {
+    const r = await apiHolds();
+    state.holds.data = r;
+    state.holds.error = null;
+    log(`${viaPoll ? 'poll' : '手动'} → GET /api/holds 200（${r.count} 项）`, viaPoll ? 'poll' : 'act');
+  } catch (e) {
+    state.holds.error = String(e.message || e);
+    log(`${viaPoll ? 'poll' : '手动'} → GET /api/holds 失败：${state.holds.error}`, 'bad');
+  }
+  renderHolds();
+}
+function renderBoardSim() {                       // 简化版看板渲染：只同步行旗标与状态
+  const it = serverSnapshot().items[0];
+  const flag = $('#rowHoldFlag');
+  const has = !!it;
+  flag.classList.toggle('hidden', !has);
+  if (has) flag.title = `待人工决策：${it.unanswered} 项未答；到列表下方「待人工确认」区补决策并复工`;
+  $('#holdCount').textContent = String(serverSnapshot().count);
+}
+async function pollTick() {
+  if (pollBusy) return;
+  pollBusy = true;
+  try {
+    renderBoardSim();            // /api/board 部分（演示只同步行旗标）
+    await refreshHolds(true);    // /api/holds 部分（不随视图 gating）
+  } finally { pollBusy = false; }
+}
+setInterval(() => {
+  pollCountdown -= 1;
+  if (pollCountdown <= 0) { pollCountdown = 2; pollTick(); }
+  $('#pollText').textContent = `轮询：每 2 秒（下一轮 ${Math.max(pollCountdown, 0)}s）`;
+}, 1000);
+
+/* =====================================================================
+ * renderHolds() —— 缺陷所在（对照 scripts/web/app.js renderHolds）
+ * bug 模式 = 现状逐分支移植；fixed 模式 = 在隐藏/空/错误条分支重置剪枝状态。
+ * ===================================================================== */
+function clearRenderedState(branchName) {         // 仅 fixed 模式调用：修复要点
+  state.holds.sig = '';
+  delete $('#holdArea').dataset.rendered;
+  log(`renderHolds → ${branchName}：清空 DOM 并重置签名 / rendered 标记（修复模式）`, 'good');
+}
+function renderHolds() {
+  const area = $('#holdArea');
+  const fixed = state.mode === 'fixed';
+  const showStatus = state.view === 'status';
+
+  // 分支一：非需求视图 / 加载失败
+  if (!showStatus || state.holds.error) {
+    if (state.holds.error && showStatus) {
+      area.classList.remove('hidden');
+      area.innerHTML = `<div class="hold-error" role="alert">
+        <span>待确认清单加载失败：${esc(state.holds.error)}</span>
+        <button type="button" class="btn small" data-hold-retry>重试</button>
+      </div>`;
+      area.querySelector('[data-hold-retry]').addEventListener('click', () => refreshHolds(false));
+      if (fixed) clearRenderedState('错误条分支');   // 修复：错误条替换卡片后不残留“已渲染”标记
+      return;
+    }
+    area.classList.add('hidden');
+    area.replaceChildren();
+    log(`renderHolds → 非需求视图：隐藏并清空 DOM${fixed ? '' : '（sig 与 rendered 标记未重置 ← 缺陷根因）'}`, fixed ? 'good' : 'prune');
+    if (fixed) clearRenderedState('隐藏分支');
+    return;
+  }
+
+  // 分支二：空清单
+  const items = state.holds.data?.items || [];
+  if (!items.length) {
+    area.classList.add('hidden');
+    area.replaceChildren();
+    log('renderHolds → 空清单：整体隐藏不占版面', 'poll');
+    if (fixed) clearRenderedState('空清单分支');
+    return;
+  }
+
+  // 分支三：签名剪枝（缺陷核心行，对照 app.js:2979）
+  const sig = JSON.stringify([
+    items.map((h) => [h.itemId, h.unanswered, h.total, h.declaredAt, h.reason, h.runId, h.questions.map((q) => q.answer || '')]),
+    [...state.holds.expanded],
+    [...state.holds.answeredOpen.keys()].filter((k) => state.holds.answeredOpen.get(k)),
+  ]);
+  if (sig === state.holds.sig && area.dataset.rendered === '1') {
+    const areaActuallyHidden = area.classList.contains('hidden') || !area.childElementCount;
+    if (areaActuallyHidden) {
+      log('renderHolds → 签名未变且 rendered=1 → 早退；聚合区实际处于隐藏态，未恢复显示 ← 缺陷表现', 'bad');
+    } else {
+      log('renderHolds → 签名未变且 rendered=1 → 早退（不重绘，保护展开态与填写中内容）', 'prune');
+    }
+    return;
+  }
+
+  state.holds.sig = sig;
+  area.dataset.rendered = '1';
+  area.classList.remove('hidden');
+  area.innerHTML = `<header class="hold-area-head">
+      <span class="hold-area-title">⚠ 待人工确认</span><span class="hold-count">${items.length}</span>
+    </header>
+    <p class="muted small hold-area-sub">worker 声明受阻待人工决策的条目在此承接：补决策 → 复工回已计划队列；清单不随本轮任务结束消失</p>
+    ${items.map(holdCardHtml).join('')}`;
+  bindHoldCard(area);
+  log('renderHolds → 渲染聚合区（卡片可见，「补决策」入口可达）', 'good');
+}
+
+function holdCardHtml(h) {
+  const expanded = state.holds.expanded.has(h.itemId);
+  const foldOpen = state.holds.answeredOpen.get(h.itemId) === true;
+  const openQs = h.questions.filter((q) => !q.answer);
+  const answeredQs = h.questions.filter((q) => q.answer);
+  const resumeDisabled = h.unanswered > 0 ? ' disabled' : '';
+  const resumeTitle = h.unanswered > 0 ? `尚缺 ${h.unanswered} 项决策，补齐后可复工` : '决策已齐备：条目回已计划队列，可被 AI 开发重新取单';
+  const openRows = openQs.map((q) => `<li class="open" title="未答">○ ${esc(q.text)}</li>`).join('');
+  const answeredRows = answeredQs.map((q) => `<li class="answered" title="已答：${esc(q.answer)}">✓ ${esc(q.text)}</li>`).join('');
+  const foldRow = answeredQs.length
+    ? `<li class="hold-fold-row"><button type="button" class="hold-fold" data-hold-fold="${esc(h.itemId)}" aria-expanded="${foldOpen}">${foldOpen ? '▾' : '▸'} 已答 ${answeredQs.length} 项</button>${foldOpen ? `<ul class="hold-qs hold-qs-nested">${answeredRows}</ul>` : ''}</li>`
+    : '';
+  return `<article class="hold-card" data-hold-id="${esc(h.itemId)}">
+    <div class="card-top">
+      <span class="cid">${esc(h.itemId)}</span>
+      <span class="flag hold-flag" title="worker 已声明待人工决策">⚠ 等人工决策</span>
+      <span class="muted small hold-wait">已等待 ${esc(fmtWait(h.declaredAt))}</span>
+    </div>
+    <div class="req-title">${esc(h.title)}</div>
+    <div class="hold-q-summary">
+      <span class="unanswered-count">未答 ${h.unanswered}/${h.total}</span>
+      <ul class="hold-qs">${openRows}${foldRow}</ul>
+    </div>
+    <div class="hold-acts">
+      <span class="grp">
+        <button type="button" class="btn small primary" data-hold-answer="${esc(h.itemId)}">补决策</button>
+        <button type="button" class="btn small accent" data-hold-resume="${esc(h.itemId)}"${resumeDisabled} title="${esc(resumeTitle)}">复工</button>
+      </span>
+      <span class="grp">
+        <button type="button" class="btn small ghost" data-hold-toggle="${esc(h.itemId)}">${expanded ? '收起记录' : '查看进展记录'}</button>
+        <button type="button" class="btn small ghost" data-hold-done="${esc(h.itemId)}">确认完成</button>
+      </span>
+    </div>
+    ${expanded ? holdTimelineHtml(h) : ''}
+  </article>`;
+}
+function holdTimelineHtml(h) {
+  const events = state.holds.events.get(h.itemId) || [];
+  const rows = events.slice().reverse().map((e) => {
+    const label = HOLD_EVENT_LABEL[e.kind] || e.kind;
+    return `<li>${esc(fmtClock(new Date(e.at)))} · ${esc(label)}${e.by ? `（${esc(e.by)}）` : ''}</li>`;
+  }).join('');
+  return `<div class="hold-timeline">
+    ${h.reason ? `<p class="small"><b>受阻原因：</b>${esc(h.reason)}</p>` : ''}
+    <p class="small muted">运行：${esc(h.runId || '—')}（决策留痕见 agent-team-board/runtime/holds/decisions/）</p>
+    ${rows ? `<ul class="hold-events">${rows}</ul>` : '<p class="muted small">（暂无事件）</p>'}
+  </div>`;
+}
+function bindHoldCard(area) {
+  for (const btn of area.querySelectorAll('[data-hold-toggle]')) {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.holdToggle;
+      if (state.holds.expanded.has(id)) state.holds.expanded.delete(id);
+      else {
+        const h = holdOf(id);
+        if (h) state.holds.events.set(id, h.events || []);
+        state.holds.expanded.add(id);
+      }
+      renderHolds();
+    });
+  }
+  for (const btn of area.querySelectorAll('[data-hold-fold]')) {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.holdFold;
+      if (state.holds.answeredOpen.get(id)) state.holds.answeredOpen.delete(id);
+      else state.holds.answeredOpen.set(id, true);
+      renderHolds();
+    });
+  }
+  for (const btn of area.querySelectorAll('[data-hold-answer]')) btn.addEventListener('click', () => openHoldPanel(btn.dataset.holdAnswer, btn));
+  for (const btn of area.querySelectorAll('[data-hold-resume]')) btn.addEventListener('click', () => resumeHold(btn.dataset.holdResume));
+  for (const btn of area.querySelectorAll('[data-hold-done]')) btn.addEventListener('click', () => confirmDoneFlow(btn.dataset.holdDone));
+}
+
+/* ---------------- 卡片动作：复工 / 确认完成 ---------------- */
+function resumeHold(id) {
+  const h = holdOf(id);
+  if (!h) return;
+  if (h.questions.some((q) => !q.answer)) return;   // 未答 > 0 禁用（按钮本身已禁用，双保险）
+  h.events.push({ kind: 'resumed', at: new Date().toISOString(), by: 'board' });
+  server.holds.items = server.holds.items.filter((x) => x.itemId !== id);
+  server.holds.count = server.holds.items.length;
+  log(`人工 → 复工 ${id}：条目回已计划队列`, 'act');
+  toast(`✓ ${id} 已复工，条目回已计划队列`);
+  setRowState('planned');
+  refreshHolds(false);
+  renderBoardSim();
+}
+function confirmDoneFlow(id) {
+  const h = holdOf(id);
+  if (!h) return;
+  const miss = h.questions.filter((q) => !q.answer).length;
+  if (miss > 0) {
+    $('#doneMiss').textContent = String(miss);
+    $('#doneModal').classList.remove('hidden');
+    $('#doneConfirm').onclick = () => {
+      $('#doneModal').classList.add('hidden');
+      h.events.push({ kind: 'closed-done', at: new Date().toISOString(), by: 'board' });
+      server.holds.items = server.holds.items.filter((x) => x.itemId !== id);
+      server.holds.count = server.holds.items.length;
+      log(`人工 → 确认完成 ${id}（越过 ${miss} 项未答决策，留痕 runtime/holds/decisions/）`, 'act');
+      toast(`✓ ${id} 已确认完成（越过未答决策）`);
+      setRowState('done');
+      refreshHolds(false);
+      renderBoardSim();
+    };
+    $('#doneCancel').onclick = () => $('#doneModal').classList.add('hidden');
+  } else {
+    h.events.push({ kind: 'closed-done', at: new Date().toISOString(), by: 'board' });
+    server.holds.items = server.holds.items.filter((x) => x.itemId !== id);
+    server.holds.count = server.holds.items.length;
+    log(`人工 → 确认完成 ${id}（决策已齐备）`, 'act');
+    toast(`✓ ${id} 已确认完成`);
+    setRowState('done');
+    refreshHolds(false);
+    renderBoardSim();
+  }
+}
+function setRowState(s) {
+  const chip = $('#rowState');
+  if (s === 'done') { chip.textContent = '已完成'; chip.className = 'state-chip s-done'; }
+  else if (s === 'planned') { chip.textContent = '已计划'; chip.className = 'state-chip'; }
+  else { chip.textContent = '开发中'; chip.className = 'state-chip s-dev'; }
+}
+
+/* ---------------- 决策侧拉面板（补决策） ---------------- */
+const holdSide = { id: null, opener: null };
+function openHoldPanel(id, opener) {
+  const h = holdOf(id);
+  if (!h) return;
+  holdSide.id = id; holdSide.opener = opener || null;
+  $('#panelTitle').textContent = `人工决策 · ${id}`;
+  const miss = h.questions.filter((q) => !q.answer).length;
+  $('#panelMeta').innerHTML = `
+    <span>声明：${esc(fmtClock(new Date(h.declaredAt)))}</span>
+    <span>声明人：${esc(h.declaredBy)}</span>
+    <span class="progress-pill${miss ? '' : ' done'}" id="panelPill">未答 ${miss}/${h.total}</span>`;
+  $('#panelMsg').textContent = '逐项作答后复工；支持保存未答完的草稿';
+  $('#panelMsg').className = 'panel-msg';
+  $('#holdForm').innerHTML = h.questions.map((q, i) => `
+    <fieldset class="q">
+      <legend>问题 ${i + 1} ${q.answer ? '<span class="muted small">✓ 已答</span>' : '<span class="small" style="color:var(--warn)">○ 未答</span>'}</legend>
+      <p class="qtxt">${esc(q.text)}</p>
+      <textarea rows="2" data-q="${i}" placeholder="答复（必填才计入已答）">${esc(q.answer || '')}</textarea>
+      <p class="small muted" style="margin:6px 0 0"><input type="text" data-note="${i}" placeholder="补充说明（可选，演示未持久化）" style="padding:4px 8px"></p>
+    </fieldset>`).join('');
+  $('#holdPanel').classList.remove('hidden');
+  $('#panelMask').classList.remove('hidden');
+  const first = $('#holdForm').querySelector('textarea');
+  if (first) first.focus();
+}
+function closeHoldPanel() {
+  $('#holdPanel').classList.add('hidden');
+  $('#panelMask').classList.add('hidden');
+  if (holdSide.opener && document.contains(holdSide.opener)) holdSide.opener.focus();
+  holdSide.id = null; holdSide.opener = null;
+}
+$('#panelClose').addEventListener('click', closeHoldPanel);
+$('#panelCancel').addEventListener('click', closeHoldPanel);
+$('#panelMask').addEventListener('click', closeHoldPanel);
+$('#panelSave').addEventListener('click', () => {
+  const h = holdOf(holdSide.id);
+  if (!h) { closeHoldPanel(); return; }
+  const fields = [...$('#holdForm').querySelectorAll('textarea[data-q]')];
+  for (const f of fields) h.questions[Number(f.dataset.q)].answer = f.value.trim();
+  const miss = h.questions.filter((q) => !q.answer).length;
+  h.events.push({ kind: 'answered', at: new Date().toISOString(), by: 'board', n: h.questions.length - miss });
+  const pill = $('#panelPill');
+  if (pill) { pill.textContent = `未答 ${miss}/${h.total}`; pill.className = `progress-pill${miss ? '' : ' done'}`; }
+  const msg = $('#panelMsg');
+  if (miss) {
+    msg.textContent = `草稿已保存，尚缺 ${miss} 项（继续作答或稍后补齐）`;
+    msg.className = 'panel-msg ok';
+    log(`人工 → 保存决策（${holdSide.id}）：草稿，尚缺 ${miss} 项`, 'act');
+  } else {
+    msg.textContent = '决策已齐备，可复工';
+    msg.className = 'panel-msg ok';
+    log(`人工 → 保存决策（${holdSide.id}）：已齐备`, 'act');
+  }
+  refreshHolds(false);      // 数据已变化 → 签名变化 → 正常重绘
+  renderBoardSim();
+});
+
+/* ---------------- 模块切换（对应 setView；注意：不调用 renderHolds） ---------------- */
+for (const btn of document.querySelectorAll('.module-nav button')) {
+  btn.addEventListener('click', () => {
+    const v = btn.dataset.view;
+    if (v === state.view) return;
+    state.view = v;
+    for (const b of document.querySelectorAll('.module-nav button')) b.classList.toggle('active', b.dataset.view === v);
+    $('#reqView').classList.toggle('hidden', v !== 'status');
+    $('#runsView').classList.toggle('hidden', v !== 'runs');
+    $('#settingsView').classList.toggle('hidden', v !== 'settings');
+    log(`人工 → 切换到「${v === 'status' ? '需求' : v === 'runs' ? '任务' : '设置'}」模块（setView 不调用 renderHolds，恢复依赖下一轮轮询 ≤2s）`, 'act');
+  });
+}
+
+/* ---------------- 控制面板 ---------------- */
+$('#btnDeclare').addEventListener('click', () => {
+  if (holdOf('REQ-20260921-009')) { toast('演示：该条目已有活动 hold'); return; }
+  server.holds.items.push({
+    itemId: 'REQ-20260921-009',
+    title: '示例开发中需求：为发布流水线增加 dry-run 校验（演示数据）',
+    declaredAt: new Date().toISOString(),
+    declaredBy: 'worker-1',
+    runId: 'run-20260921-demo',
+    reason: '示例：dry-run 交互取舍需人工决策（atb hold declare 演示）',
+    questions: [
+      { text: 'dry-run 失败时是否自动阻断后续发布阶段？', answer: '' },
+      { text: '是否允许为本单引入新的 npm 依赖？', answer: '' },
+    ],
+    events: [{ kind: 'declared', at: new Date().toISOString(), by: 'worker-1' }],
+  });
+  server.holds.count = server.holds.items.length;
+  setRowState('dev');
+  log('worker → atb hold declare：REQ-20260921-009 声明 2 项问题（等待下一轮轮询呈现）', 'act');
+  renderBoardSim();
+});
+$('#btnPollNow').addEventListener('click', () => { pollCountdown = 2; pollTick(); });
+$('#chkFail').addEventListener('change', (e) => {
+  server.fail = e.target.checked;
+  log(server.fail ? '模拟 → /api/holds 开始失败（失败保留上次数据 + 错误条）' : '模拟 → /api/holds 恢复正常（观察错误条是否残留）', server.fail ? 'bad' : 'act');
+});
+$('#modeBug').addEventListener('click', () => setMode('bug'));
+$('#modeFixed').addEventListener('click', () => setMode('fixed'));
+function setMode(m) {
+  if (state.mode === m) return;
+  state.mode = m;
+  $('#modeBug').classList.toggle('active', m === 'bug');
+  $('#modeFixed').classList.toggle('active', m === 'fixed');
+  log(`演示 → 切换到「${m === 'bug' ? '缺陷复现（现状 renderHolds 实现）' : '修复后（隐藏/空/错误分支重置剪枝状态）'}」模式`, m === 'bug' ? 'bad' : 'good');
+  if (m === 'fixed') { state.holds.sig = ''; delete $('#holdArea').dataset.rendered; renderHolds(); }
+}
+$('#btnTheme').addEventListener('click', () => {
+  const html = document.documentElement;
+  const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  html.dataset.theme = next;
+});
+$('#btnReset').addEventListener('click', () => {
+  server.fail = false; $('#chkFail').checked = false;
+  server.holds = { count: 0, items: [] };
+  state.holds = { data: null, sig: '', error: null, expanded: new Set(), answeredOpen: new Map(), events: new Map() };
+  const area = $('#holdArea');
+  area.classList.add('hidden'); area.replaceChildren(); delete area.dataset.rendered;
+  closeHoldPanel();
+  $('#doneModal').classList.add('hidden');
+  $('#eventLog').replaceChildren();
+  setRowState('dev');
+  if (state.view !== 'status') document.querySelector('.module-nav [data-view="status"]').click();
+  log('演示 → 重置（等同刷新页面的初始态）', 'act');
+  bootLoadingThenPoll();
+});
+
+/* ---------------- Esc 关闭（保存中不可关闭为演示简化） ---------------- */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#doneModal').classList.contains('hidden')) { $('#doneModal').classList.add('hidden'); return; }
+  if (!$('#holdPanel').classList.contains('hidden')) closeHoldPanel();
+});
+
+/* ---------------- 启动 ---------------- */
+function bootLoadingThenPoll() {
+  const area = $('#holdArea');
+  area.classList.remove('hidden');
+  area.innerHTML = '<p class="hold-loading small">正在读取待确认清单…（演示示意加载态；现状界面无专门加载视图）</p>';
+  log('页面加载 → 首次进入需求模块；等待首轮轮询', 'poll');
+  setTimeout(() => pollTick(), 600);
+}
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.documentElement.dataset.theme = 'dark';
+} else {
+  document.documentElement.dataset.theme = 'light';
+}
+bootLoadingThenPoll();
+</script>
+</body>
+</html>
