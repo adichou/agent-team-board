@@ -3671,6 +3671,14 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-docs-gate { border-left: 3px solid var(--warn, #d97706); padding-left: 8px; }
 .bld-merge-pane ul, .bld-release-pane ul { margin: 2px 0 0; padding-left: 18px; }
 .bld-merge-pane li, .bld-release-pane li { margin: 2px 0; }
+/* REQ-20260921-015 合并页简洁隔离分析：阻止性信息单行状态条（非红色长文）＋ 一行汇总 ＋
+   依赖明细折叠；沿用既有 CSS 变量，不新引入配色（深浅色同源） */
+.bld-iso-note { margin: 0; font-size: 12.5px; border-left: 3px solid var(--warn, #d97706); padding-left: 8px; overflow-wrap: anywhere; }
+.bld-iso-sum { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+.bld-iso-deps, .bld-iso-skip { font-size: 12.5px; }
+.bld-iso-deps summary { cursor: pointer; color: var(--muted); }
+.bld-iso-deps ul, .bld-iso-skip { margin: 4px 0 0; padding-left: 18px; }
+.bld-iso-deps li, .bld-iso-skip li { margin: 2px 0; overflow-wrap: anywhere; }
 /* 窄屏：五步导航横向滚动不折行（步名较长），各节纵向堆叠（不并排） */
 @media (max-width: 640px) {
   .bld-detail-tabs { flex-wrap: nowrap; overflow-x: auto; }

@@ -2278,6 +2278,9 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
 //   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删；
 //                                    add 同受 BUG-20260913-001 / BUG-20260914-004 口径约束）
+//   POST /api/build/version/add-dependencies  REQ-20260921-015 一键加入所有依赖提交（服务端现算隔离分析、
+//                                    itemCommitStatusIndex 反查归属、沿用 addItems 校验与 scopeStale 联动；
+//                                    不可纳入项进 skipped 清单；merging / 已正式发布 409）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
 //   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
 //                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
@@ -2435,6 +2438,86 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         return sendJson(res, 200, { version: buildStore.setItemCommit(board, body.id, body.itemId, body.commit) });
       }
       throw new core.AtbError('action 必须是 add / remove / commit');
+    });
+  }
+  // REQ-20260921-015 一键加入所有依赖提交：服务端现算隔离分析（执行时点新鲜数据，不信前端传值），
+  // 把未选祖先（依赖）提交经 itemCommitStatusIndex（commit 台账 ∪ 主题单号）反查归属条目，
+  // 按「添加条目」同口径校验后一次性纳入；无法纳入的依赖逐条进 skipped 清单（含原因），不静默
+  // 丢失。纳入沿用 addItems：成功后 markDocsScopeStale 联动（文档需重新核对 / 提交）；
+  // merging / 已正式发布锁定（BuildConflictError → 409，与 addItems 同文案）。
+  if (req.method === 'POST' && pathname === '/api/build/version/add-dependencies') {
+    return runPost(async (body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id); // 不存在 → AtbError 400
+      // 锁定态前置（与 addItems.assertItemsEditable 同口径）：无依赖的幂等空响应同样先过锁
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，条目不可增删');
+      if (buildStore.isPushed(v)) throw new buildStore.BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
+      const analysis = buildGit.analyzePublishIsolation(root, v.items);
+      // 依赖集：跨所选条目去重（hash → { subject, date, owner }；owner = 该依赖隶属的所选条目）
+      const deps = new Map();
+      for (const per of analysis.perItem || []) {
+        for (const dep of per.intermediates || []) {
+          const h = String(dep.hash || '').toLowerCase();
+          if (!h || deps.has(h)) continue;
+          deps.set(h, { subject: dep.subject || '', date: dep.date || '', owner: per.itemId });
+        }
+      }
+      if (!deps.size) {
+        return sendJson(res, 200, { version: v, added: [], skipped: [], note: '所选提交无未选祖先提交，无需加入' });
+      }
+      // 归因反查：itemCommitStatusIndex（itemId → commits）翻转为 commit → 归属条目集合
+      const ownersByCommit = new Map();
+      for (const rec of gitFlow.itemCommitStatusIndex(board, root).values()) {
+        for (const h of rec.commits || []) {
+          const k = String(h || '').toLowerCase();
+          if (!k) continue;
+          if (!ownersByCommit.has(k)) ownersByCommit.set(k, new Set());
+          ownersByCommit.get(k).add(rec.itemId);
+        }
+      }
+      const itemsAll = new Map(core.listItems(board).map((it) => [it.id, it]));
+      const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
+      const inVersion = new Set(v.items.map((x) => x.itemId));
+      const occupied = buildStore.occupiedItemMap(board, { excludeVersionId: v.id });
+      const skipped = [];
+      const pick = new Map(); // itemId → { commit, date }（同条目多依赖提交取最新）
+      for (const [hash, meta] of deps) {
+        const owners = ownersByCommit.get(hash);
+        if (!owners || !owners.size) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: '无法归属到看板条目（提交主题不含条目编号）' });
+          continue;
+        }
+        if (owners.size > 1) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `混合提交（关联 ${[...owners].join('、')}），无法安全归因` });
+          continue;
+        }
+        const itemId = [...owners][0];
+        if (inVersion.has(itemId)) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 已在本版本（当前关联另一提交）` });
+          continue;
+        }
+        const boardItem = itemsAll.get(itemId);
+        if (!boardItem) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 不在本看板中` });
+          continue;
+        }
+        if (boardItem.status !== 'done') {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 尚未完成（当前状态：${boardItem.status}）：仅已完成（done）条目可纳入` });
+          continue;
+        }
+        if (occupied.has(itemId)) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 已纳入版本 ${occupied.get(itemId)}，不可重复纳入` });
+          continue;
+        }
+        const prev = pick.get(itemId);
+        if (!prev || String(meta.date || '') > String(prev.date || '')) {
+          pick.set(itemId, { commit: hash, date: meta.date || '' });
+        }
+      }
+      const added = [...pick.entries()].map(([itemId, pk]) => ({ itemId, commit: pk.commit, title: titles.get(itemId) || '' }));
+      let version = v;
+      if (added.length) version = buildStore.addItems(board, v.id, added, { by: 'board' });
+      return sendJson(res, 200, { version, added, skipped });
     });
   }
   if (req.method === 'POST' && pathname === '/api/build/version/merge') {

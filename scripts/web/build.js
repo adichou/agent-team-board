@@ -1271,6 +1271,8 @@ const ATBBuild = (() => {
   // 口径同 publishStepsState 与服务端守卫）> 不在 dev（含 detached HEAD）。
   // 门禁与分支仅当前选中版本已加载五步装配（pfOf(v).plan）时可知；未加载时不猜测，
   // 放行至确认后由后端守卫 409 + toast 给出真实原因（反馈链路完整，不误报）。
+  // REQ-20260921-015：末档增补混合提交（mergeAnalysis.blocked）——服务端合并前置确定性
+  // 阻止，装配已加载时纳入 title / toast 归因（截断首条；完整原因见隔离分析单行 title）。
   function mergeBlockReason(v) {
     if (!v) return '';
     if (state.mergeBusy || v.status === 'merging') return '合并中，请勿重复触发';
@@ -1283,6 +1285,8 @@ const ATBBuild = (() => {
         ? `当前分支是 ${p.currentBranch}，不在 dev：请自行切换回 dev 后重试（不自动切分支）`
         : '当前处于 detached HEAD，不在 dev：请自行切换回 dev 后重试（不自动切分支）';
     }
+    const blocked = (p?.mergeAnalysis?.blocked || []);
+    if (blocked.length) return `暂不可合并：${String(blocked[0]).slice(0, 120)}`;
     return '';
   }
 
@@ -1334,6 +1338,48 @@ const ATBBuild = (() => {
     } finally {
       state.mergeBusy = false;
       await refresh();
+    }
+  }
+
+  /* ---------- REQ-20260921-015 一键加入所有依赖提交 ---------- */
+
+  // 隔离分析发现未选祖先（依赖）提交时的一键纳入：服务端现算依赖并按「添加条目」同口径
+  // 校验（done / 未被其他版本占用 / 归属准确），本函数只做锁定守卫与反馈——merging /
+  // 已正式发布点击 toast 真实原因不静默；depBusy 防重复触发（按钮「加入中…」）；成功后
+  // 刷新构建状态（发布范围列表更新）并重求值隔离分析（依赖收敛、按钮随无依赖消失），
+  // 跳过清单（pf.depSkip）就地在隔离分析节内展示原因，不静默丢失；失败 toast 可重试。
+  async function addDependencies() {
+    const v = selVersion();
+    if (!v) return;
+    const pf = pfOf(v);
+    if (!pf || pf.depBusy) return;
+    if (v.status === 'merging') {
+      toast('合并中，条目不可增删', true);
+      return;
+    }
+    if (pushedOf(v)) {
+      toast('已正式发布，条目已锁定', true);
+      return;
+    }
+    pf.depBusy = true;
+    render();
+    try {
+      const r = await post('/version/add-dependencies', { id: v.id });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `一键加入失败（${r.status}）`);
+      const added = data.added || [];
+      const skipped = data.skipped || [];
+      pf.depSkip = skipped.length ? skipped : null;
+      if (added.length && skipped.length) toast(`✓ 已加入 ${added.length} 个依赖条目，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      else if (added.length) toast(`✓ 已加入 ${added.length} 个依赖条目：发布范围已变化，文档需重新核对 / 提交`);
+      else if (skipped.length) toast('⚠ 未能加入任何依赖提交（原因见隔离分析清单）', true);
+      await refresh(); // 发布范围列表（关联条目）更新
+      await ensurePublishPlan(true); // 隔离分析重求值：依赖收敛、门禁随 scopeStale 联动
+    } catch (e) {
+      toast(`✕ 一键加入失败：${e.message}`, true);
+    } finally {
+      pf.depBusy = false;
+      if (state.pf === pf) render();
     }
   }
 
@@ -1548,6 +1594,10 @@ const ATBBuild = (() => {
       // contents: { file: 文本 }, busy }；编辑态草稿经 syncReviewDrafts 回同步防丢
       review: null,
       siteBusy: false,
+      // REQ-20260921-015 一键加入所有依赖提交：depBusy 执行中防重复触发；depSkip 最近一次
+      // 服务端返回的跳过清单（{ commit, subject, reason }[]），就地在隔离分析节内展示原因
+      depBusy: false,
+      depSkip: null,
     };
   }
 
@@ -3062,7 +3112,11 @@ ${langsField}
       </div>`;
   }
 
-  // 合并入 main 步：范围与隔离分析、禁用原因、合并结果
+  // 合并入 main 步（REQ-20260921-015 重构）：隔离分析收敛为「一行汇总 + 一键加入所有依赖提交 +
+  // 明细折叠（details）」；阻止性信息（混合提交 / 门禁锁定 / 不在 dev / 合并失败）一律单行状态条
+  //（bld-iso-note，非红色长文），真实原因三通道可达：单行 title / 主按钮 title / 点击 toast
+  //（BUG-20260920-006「点击必反馈」不回退；服务端守卫不弱化）。区块与顺序沿用 BUG-20260921-014：
+  // 隔离分析 → 分支提示 → 门禁行（如有）→ 主按钮 → 失败 / 完成结果。
   function renderMergePane(v) {
     const pf = pfOf(v);
     if (!pf || pf.phase === 'loading') return '<div class="bld-merge-pane"><p class="muted" role="status">正在加载合并分析…</p></div>';
@@ -3074,14 +3128,55 @@ ${langsField}
     const gate = (p.steps || []).find((s) => s.key === 'merge');
     const an = p.mergeAnalysis || { perItem: [], blocked: [], notes: [] };
     const onDev = p.currentBranch === 'dev';
-    // BUG-20260921-014：移除「发布范围」区块——关联条目 / 文档提交信息与
-    //「关联条目与提交」「文档编写」页签及合并确认弹窗完全重复，首屏让位给隔离分析。
-    const interRows = (an.perItem || []).filter((x) => (x.intermediates || []).length).map((x) => `
-      <li>${esc(x.itemId)}：${x.count} 个未选祖先提交（普通 merge 会一并带入 main；隔离合并不带入，依赖其内容将冲突阻止）
-        <ul>${(x.intermediates || []).slice(0, 5).map((i) => `<li><code>${esc(short(i.hash))}</code> ${esc(i.subject || '')}</li>`).join('')}</ul></li>`).join('');
+    // 依赖集：有未选祖先的所选条目（去重提交；owner = 该依赖隶属的所选条目，明细标注用）
+    const depItems = (an.perItem || []).filter((x) => (x.intermediates || []).length);
+    const depCommits = new Map();
+    for (const x of depItems) {
+      for (const i of x.intermediates || []) {
+        const h = String(i.hash || '').toLowerCase();
+        if (h && !depCommits.has(h)) depCommits.set(h, { ...i, owner: x.itemId });
+      }
+    }
+    const depN = depCommits.size;
+    // 一键加入按钮：有依赖才渲染；merging / 已正式发布锁定（aria-disabled + title 真实原因，
+    // 点击守卫 toast 不静默）；执行中 disabled 防重复触发
+    const depLock = v.status === 'merging' ? '合并中，条目不可增删' : pushedOf(v) ? '已正式发布，条目已锁定' : '';
+    const depBtnTitle = pf.depBusy ? '正在执行一键加入，请稍候' : (depLock || '把全部依赖提交对应的条目与提交纳入本版本发布范围；加入后发布范围变化，文档需重新核对 / 提交');
+    const depBtn = depN
+      ? `<button type="button" class="btn small primary" data-iso-add-deps="${esc(v.id)}"${pf.depBusy ? ' disabled' : (depLock ? ' aria-disabled="true"' : '')} title="${esc(depBtnTitle)}">${pf.depBusy ? '加入中…' : '一键加入所有依赖提交'}</button>`
+      : '';
+    // 明细折叠：每条 短 hash + 提交主题 + 归属所选条目；上限 50 防超长（超出注明）
+    const ISO_MAX = 50;
+    const depRows = [...depCommits.values()];
+    const depDetails = depN
+      ? `<details class="bld-iso-deps"><summary>查看依赖明细</summary>
+          <ul>${depRows.slice(0, ISO_MAX).map((i) => `<li><code data-i18n-skip>${esc(short(i.hash))}</code> <span data-i18n-skip>${esc(i.subject || '')}</span><br><span class="muted small">为 ${esc(i.owner)} 的依赖</span></li>`).join('')}</ul>
+          ${depN > ISO_MAX ? `<p class="muted small">（其余 ${depN - ISO_MAX} 个略）</p>` : ''}
+          <p class="muted small">一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。</p>
+        </details>`
+      : '';
+    // 一键加入后的跳过清单：逐条短 hash + 原因，不静默丢失（含依赖已收敛为无的场合）
+    const skipList = (pf.depSkip || []).length
+      ? `<p class="bld-iso-note">⚠ 以下 ${pf.depSkip.length} 个依赖未能纳入：</p>
+        <ul class="bld-iso-skip">${pf.depSkip.map((s) => `<li><code data-i18n-skip>${esc(short(s.commit))}</code> <span data-i18n-skip>${esc(s.subject || '')}</span><br><span class="muted small">${esc(s.reason || '')}</span></li>`).join('')}</ul>`
+      : '';
+    // 混合提交：单行 + title 全文（服务端合并仍确定性阻止）
+    const blockedLine = (an.blocked || []).length
+      ? `<p class="bld-iso-note" role="alert" title="${esc((an.blocked || []).join('；'))}">⚠ ${(an.blocked || []).length} 处混合提交无法安全拆分，合并将被阻止</p>`
+      : '';
+    let isoBody;
+    if (depN) {
+      isoBody = `<p class="bld-iso-sum"><span class="small">发现 ${depN} 个未选祖先（依赖）提交 · 影响 ${depItems.length} 个所选条目</span>${depBtn}</p>
+        ${depDetails}
+        ${skipList}
+        ${blockedLine}`;
+    } else {
+      isoBody = `${blockedLine || '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>'}
+        ${skipList}`;
+    }
     const devBar = onDev
       ? `<p class="small muted">当前分支 dev · 目标主分支 ${esc(p.mainBranch || 'main')}（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>`
-      : `<p class="rel-form-err" role="alert">当前分支${p.currentBranch ? `是 ${esc(p.currentBranch)}` : '处于 detached HEAD'}，不在 dev：请自行切换回 dev 后重试（不自动切分支）。</p>`;
+      : `<p class="bld-iso-note" role="alert">${p.currentBranch ? `当前分支是 ${esc(p.currentBranch)}，不在 dev：请自行切换回 dev 后重试（不自动切分支）` : '当前处于 detached HEAD，不在 dev：请自行切换回 dev 后重试（不自动切分支）'}</p>`;
     const merged = v.status === 'merged';
     // BUG-20260920-006：主按钮禁用改 aria-disabled（HTML disabled 不派发 click，点击无反馈）；
     // title 归因统一走 mergeBlockReason——不在 dev / 合并执行中不再误回落「前置条件未满足」，
@@ -3090,15 +3185,13 @@ ${langsField}
     return `
       <div class="bld-merge-pane">
         <section><strong>隔离分析</strong>
-          ${(an.blocked || []).length ? `<p class="rel-form-err" role="alert">${(an.blocked || []).map((x) => esc(x)).join('；')}</p>` : ''}
-          ${(an.notes || []).map((x) => `<p class="small muted">${esc(x)}</p>`).join('')}
-          ${interRows ? `<ul>${interRows}</ul>` : '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>'}
+          ${isoBody}
         </section>
         ${devBar}
-        ${gate?.locked ? `<p class="rel-form-err" role="alert">暂不可合并：${esc(gate.reason || '前置条件未满足')}</p>` : ''}
+        ${gate?.locked ? `<p class="bld-iso-note" role="alert">⚠ 暂不可合并：${esc(gate.reason || '前置条件未满足')}</p>` : ''}
         <p><button type="button" class="btn primary" data-ver-merge="${esc(v.id)}"${mergeReason ? ` aria-disabled="true" title="${esc(mergeReason)}"` : ''}>${v.status === 'failed' ? '重试合并入 main' : '合并入 main'}</button>
           <span class="muted small">只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。</span></p>
-        ${v.status === 'failed' && v.merge?.error ? `<p class="rel-form-err" role="alert">合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>` : ''}
+        ${v.status === 'failed' && v.merge?.error ? `<p class="bld-iso-note" role="alert">⚠ 合并失败：${esc(v.merge.error)}（可重试，只补未合并条目）</p>` : ''}
         ${merged && v.merge?.mainSha ? `<p class="small muted">合并完成：主分支头 <code>${esc(short(v.merge.mainSha))}</code>；重放证据 ${(v.merge?.replays || []).length} 条。</p>` : ''}
       </div>`;
   }
@@ -3877,6 +3970,10 @@ ${langsField}
     for (const el of view.querySelectorAll('[data-pf-retry]')) {
       el.addEventListener('click', () => ensurePublishPlan(true));
     }
+    // REQ-20260921-015 一键加入所有依赖提交（合并页隔离分析节内；守卫与反馈见 addDependencies）
+    for (const el of view.querySelectorAll('[data-iso-add-deps]')) {
+      el.addEventListener('click', () => addDependencies());
+    }
     // REQ-20260921-008 文档编写页按钮：刷新 / AI 总结 / 审查 / 提交；
     // REQ-20260921-012 新增 AI 翻译（默认语言全审后解锁）与整体审查（全部已审核后解锁）
     // BUG-20260921-013 语言页签切换：激活语言记忆于 pf.docLang（重渲染保持；语言集变化后
@@ -4017,6 +4114,8 @@ ${langsField}
     // REQ-20260913-004：openDeleteConfirm / doDelete 删除确认与执行；
     // BUG-20260920-006：doMerge 守卫分支（执行中 / 版本不存在）补反馈测试接缝）
     openAnswerModal, openMergeConfirm, openDeleteConfirm, doDelete, doMerge,
+    // REQ-20260921-015：一键加入所有依赖提交（行为接缝，测试与交互共用）
+    addDependencies,
     // REQ-20260915-003：切换选中版本（清空关联列表搜索并回第一页）
     selectVersion,
     // REQ-20260915-002：产品发布入口行为接缝（测试与创建交互）
