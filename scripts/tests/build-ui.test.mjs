@@ -25,7 +25,7 @@ t('N1 顶栏导航：页签顺序 需求→构建→任务→设置；「构建�
   const nav = html.match(/<nav class="module-nav"[\s\S]*?<\/nav>/);
   assert.ok(nav, '缺少模块导航');
   const order = [...nav[0].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['status', 'build', 'runs', 'settings'], '导航顺序应为 需求/发布/任务 + 末位设置');
+  assert.deepEqual(order, ['status', 'build', 'runs', 'commands', 'settings'], '导航顺序应为 需求/发布/任务 + 末位设置');
   assert.match(nav[0], /data-view="build"[^>]*>发布</, '发布入口文案（REQ-20260920-003：构建 → 发布）');
   const iStatus = nav[0].indexOf('data-view="status"');
   const iBuild = nav[0].indexOf('data-view="build"');
