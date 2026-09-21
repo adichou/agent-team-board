@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// BUG-20260921-006 分支浏览 dev 只显示 dev 可达提交（dev 单支口径；main 维持
-// BUG-20260920-002 的双支并集不回归）
+// BUG-20260921-006 分支浏览 dev 只显示 dev 可达提交（dev 单支口径；BUG-20260921-008 起
+// main 同为单支口径——B2/B6/B7 的 main 侧断言随之同步为单支）
 // —— B 组：build-git 真实临时仓库（dev 单支 / 无并集载荷字段 / main 不回归 / 搜索双模式 /
 //   分页 / master 回退 / dev 已全并入 main 型）；R 组：vm 渲染（dev 单支载荷不出并集专属
 //   UI：无并集提示 / 无 main 分支头标签 / 无 Merge-base 标注，与其他单支分支一致）。
@@ -97,15 +97,15 @@ t('B1 branchLog dev 单支：集合与次序 = git log dev，total = dev 可达�
   }
 });
 
-t('B2 main 不回归：选中 main 仍走双支并集（total 5 / heads 两支 / mergeBase / side），BUG-20260920-002 口径保持', () => {
+t('B2 main 单支（BUG-20260921-008 同口径）：选中 main 只显示 main 可达提交（total 3），无 heads / mergeBase / side', () => {
   const { root, m1, m2 } = mkParallelRepo();
   const r = buildGit.branchLog(root, 'main', { limit: 50 });
   assert.equal(r.branch, 'main');
-  assert.equal(r.total, 5, 'main 仍 = 并集总数（rev-list --count main dev）');
-  assert.deepEqual(r.commits.map((c) => c.hash), logOf(root, 'main', 'dev'), 'main 集合与次序 = git log main dev');
-  assert.ok(Array.isArray(r.heads) && r.heads.length === 2, 'main 响应仍附 heads');
-  assert.equal(r.mergeBase, m1, 'main 响应仍附 mergeBase');
-  assert.equal(r.commits.find((c) => c.hash === m2).side, 'main', 'main 响应仍附 side');
+  assert.equal(r.total, 3, 'main = main 可达总数（rev-list --count main）');
+  assert.deepEqual(r.commits.map((c) => c.hash), logOf(root, 'main'), 'main 集合与次序 = git log main');
+  assert.ok(r.commits.some((c) => c.hash === m2) && r.commits.some((c) => c.hash === m1), 'main 可达提交齐全');
+  assert.ok(!('heads' in r) && !('mergeBase' in r), 'main 单支响应不带 heads / mergeBase');
+  assert.ok(r.commits.every((c) => !('side' in c)), 'main 单支响应不带 side');
 });
 
 t('B3 dev 搜索 filter：匹配与闭包数据集均为 dev 单支（作者全命中 4 条；main 独有主题零命中）', () => {
@@ -155,17 +155,17 @@ t('B5 dev 分页与空白关键词：limit/offset 在 dev 单支上拼回完整�
   assert.ok(!('heads' in blank), '空白关键词响应不带 heads');
 });
 
-t('B6 dev 已全并入 main（合并提交型）：dev 视图 = dev 可达 2 条，不含 main 上的合并提交；main 视图仍为并集', () => {
+t('B6 dev 已全并入 main（合并提交型）：dev 视图 = dev 可达 2 条，不含 main 上的合并提交；main 视图 = main 可达（BUG-20260921-008 单支）', () => {
   const { root, M } = mkMergedRepo();
   const d = buildGit.branchLog(root, 'dev', { limit: 50 });
   assert.equal(d.total, 2, 'dev = m0 + d0（merge-base 场景下不含 main 合并提交）');
   assert.ok(!d.commits.some((c) => c.hash === M), '「build: 合并 …」合并提交（dev 不可达）不混入 dev 视图');
   const m = buildGit.branchLog(root, 'main', { limit: 50 });
-  assert.equal(m.total, 3, 'main 仍 = 并集（m0 / d0 / 合并提交）');
-  assert.ok(Array.isArray(m.heads) && m.heads.length === 2, 'main 响应仍附 heads');
+  assert.equal(m.total, 3, 'main = m0 / d0 / 合并提交（git log main 可达，含经合并提交可达的 dev 提交）');
+  assert.ok(!('heads' in m) && !('mergeBase' in m), 'main 单支响应不带 heads / mergeBase');
 });
 
-t('B7 主分支 master 回退仓库：dev 同样单支口径；master 仍并集（heads = master + dev）', () => {
+t('B7 主分支 master 回退仓库：dev 同样单支口径；master 亦单支（BUG-20260921-008，不含 dev 独有）', () => {
   const root = mkTmp();
   git(root, ['init', '-q', '-b', 'master']);
   const c0 = commit(root, 'a.md', 'chore: 初始化');
@@ -177,8 +177,9 @@ t('B7 主分支 master 回退仓库：dev 同样单支口径；master 仍并集�
   assert.equal(d.total, 2, 'dev = c0 + d0（不含 master 独有 c1）');
   assert.ok(!('heads' in d) && !('mergeBase' in d), 'dev 单支响应不带并集字段');
   const m = buildGit.branchLog(root, 'master', { limit: 50 });
-  assert.equal(m.total, 3, 'master 仍 = 并集');
-  assert.deepEqual(m.heads, [{ name: 'master', hash: c1 }, { name: 'dev', hash: d0 }], 'master 并集 heads 不回归');
+  assert.equal(m.total, 2, 'master = c0 + c1（不含 dev 独有 d0）');
+  assert.ok(!m.commits.some((c) => c.hash === d0), 'dev 独有提交不混入 master 视图');
+  assert.ok(!('heads' in m) && !('mergeBase' in m), 'master 单支响应不带并集字段');
 });
 
 /* ---------- R 组：vm 渲染（dev 单支载荷无并集专属 UI） ---------- */

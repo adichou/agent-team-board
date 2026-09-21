@@ -145,18 +145,23 @@ t('B4 匹配范围：tag 名 / 分支名（选中分支）/ message / 作者 / h
   assert.equal(byHash.matchedTotal, 1, 'hash 命中');
 });
 
-t('B5 双支并集：filter / highlight 两模式口径一致（heads / mergeBase / side 保留，闭包沿并集 parents）', () => {
+t('B5 单支口径（BUG-20260921-008）：main 搜索数据集 = main 可达，不含 dev 独有；filter / highlight 两模式一致；dev 侧口径保持', () => {
   const { root, a, b, d } = mkDualRepo();
   const def = buildGit.branchLog(root, 'main', { limit: 50 });
-  assert.ok(Array.isArray(def.heads) && def.heads.length === 2, '并集载荷附 heads');
-  // 搜 dev：heads 名命中 → side=dev 提交匹配；闭包沿并集 parents 收敛到全量
+  assert.equal(def.total, 2, 'main 单支载荷 = main 可达（A、B；不含 dev 独有 D）');
+  assert.ok(!('heads' in def) && !('mergeBase' in def), '单支载荷不附 heads / mergeBase');
+  // 搜 dev：单支数据集（main）中 dev 独有提交 D 不可命中（不再经 heads 名命中 side）
   const f = buildGit.branchSearchLog(root, 'main', { q: 'dev', mode: 'filter', limit: 50 });
-  assert.equal(f.matchedTotal, 1, 'dev side 命中 D');
-  assert.equal(f.total, 3, '闭包 D→B→A = 并集全量');
-  assert.deepEqual(f.commits.map((x) => x.hash).sort(), [a, b, d].sort());
-  assert.ok(f.heads && f.mergeBase, 'filter 模式保留 heads / mergeBase');
-  assert.equal(f.commits.find((x) => x.hash === d).side, 'dev', 'side 字段保留');
-  // 搜 REQ-2：message 命中 D，闭包同上；highlight 模式清单只含 D
+  assert.equal(f.matchedTotal, 0, 'dev 独有提交在 main 单支数据集中零命中');
+  assert.equal(f.total, 0);
+  assert.deepEqual(f.commits, []);
+  // 搜 主线（message 命中 B）：闭包 B→A = main 单支全量
+  const f2 = buildGit.branchSearchLog(root, 'main', { q: '主线', mode: 'filter', limit: 50 });
+  assert.equal(f2.matchedTotal, 1, 'message 命中 B');
+  assert.equal(f2.total, 2, '闭包 B→A = main 单支全量');
+  assert.deepEqual(f2.commits.map((x) => x.hash).sort(), [a, b].sort());
+  assert.ok(!('heads' in f2) && !('mergeBase' in f2), 'filter 响应不带 heads / mergeBase');
+  // 搜 REQ-2：message 命中 D；highlight 模式清单只含 D
   //（BUG-20260921-006：dev 为单支口径；本夹具 dev ⊇ main，单支集合与并集相同）
   const h = buildGit.branchSearchLog(root, 'dev', { q: 'REQ-2', mode: 'highlight', limit: 50 });
   assert.deepEqual(h.matchedHashes, [d]);
