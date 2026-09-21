@@ -13,6 +13,7 @@ aside input[type=search]{font:inherit;padding:8px 10px;border:1px solid var(--li
 aside label{color:var(--muted);font-size:13px;display:flex;gap:6px;align-items:center}
 aside select{font:inherit;background:var(--panel2);color:var(--text);border:1px solid var(--line2);border-radius:6px;padding:4px 6px}
 .list{overflow:auto;flex:1;border-top:1px solid var(--line2);padding-top:8px}
+#recentWrap{border-top:1px solid var(--line2);padding-top:6px}#recent{display:flex;flex-direction:column;max-height:176px;overflow:auto}#recent .cmd small{float:right;color:var(--muted);font-size:11px;margin-left:6px}
 .grp{margin:8px 0 4px;color:var(--muted);font-size:12px;letter-spacing:.05em}
 .cmd{display:block;width:100%;text-align:left;font:inherit;font-size:14px;padding:7px 9px;margin:3px 0;border:1px solid transparent;background:none;color:var(--text);border-radius:7px;cursor:pointer}
 .cmd:hover{background:var(--panel2)}.cmd.on{background:var(--panel2);border-color:var(--accent)}
@@ -62,6 +63,10 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
     <input id="q" type="search" placeholder="搜索命令或说明（按 / 聚焦）…" autocomplete="off" aria-label="搜索命令">
     <label>清单状态 <select id="scene"><option value="normal">正常</option><option value="loading">清单加载中</option><option value="error">清单读取失败</option></select></label>
     <label>模拟结果 <select id="simres"><option value="ok">执行成功（有输出）</option><option value="empty">执行成功（无输出）</option><option value="fail">执行失败（退出码 ≠ 0）</option></select></label>
+    <div id="recentWrap">
+      <p class="grp">最近执行（按命令去重前 10 · 点击回填参数）</p>
+      <div id="recent" class="recent"></div>
+    </div>
     <div id="list" class="list" role="listbox" aria-label="命令列表"></div>
   </aside>
   <section>
@@ -87,7 +92,7 @@ footer{margin:14px auto 26px;max-width:1220px;padding:0 18px;color:var(--muted);
     </div>
   </div>
 </div>
-<footer>演示要点：分组命令按钮与搜索、参数表单与实时命令预览、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、执行历史回看。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
+<footer>演示要点：分组命令按钮与搜索、最近执行快捷列表（按命令去重前 10、成功执行计入、点击回填参数快速再执行）、参数表单与实时命令预览、高危命令二次确认、serve 影响告知与直接执行、cli 组禁用指引、执行中 / 成功 / 无输出 / 失败状态、清单加载中与读取失败、执行历史回看。真实实现中命令由服务端白名单校验并以数组参数下发（node scripts/atb.mjs … --dir 项目根），本页不执行任何真实命令。</footer>
 <script>
 const GROUPS=[
  {g:'数据与分发',items:[
@@ -150,7 +155,7 @@ const GROUPS=[
   {c:'cli uninstall',d:'卸载终端命令 —— 请在终端执行',dis:1,o:'--to 目录'},
   {c:'cli status',d:'查看安装状态 —— 请在终端执行',dis:1}]}
 ];
-const $=s=>document.querySelector(s);let sel='list',vals={},extra='',running=false,hist=[];
+const $=s=>document.querySelector(s);let sel='list',vals={},extra='',running=false,hist=[],recents=[];
 function flat(){return GROUPS.flatMap(g=>g.items.map(i=>({g:g.g,...i})))}
 function find(c){return flat().find(i=>i.c===c)}
 function cmdText(i){const a=(i.a||[]).map(x=>vals[i.c+'|'+x.k]||('<'+x.k+'>')).join(' ');return 'atb '+i.c+(a?' '+a:'')+(extra?' '+extra:'')+' --dir /demo/project'}
@@ -182,15 +187,18 @@ function finish(i){setTimeout(()=>{running=false;const res=$('#simres').value,t=
  if(res==='ok'){st('ok','✓ 成功 · 退出码 0 · 耗时 0.4s（模拟）');$('#out').textContent=i.out||'✓ 命令执行完成（模拟）';hist.unshift({cmd:full,t:t,st:'ok',out:i.out||'✓ 命令执行完成（模拟）'})}
  else if(res==='empty'){st('ok','✓ 成功 · 无输出 · 退出码 0（模拟）');$('#out').textContent='（无输出）';hist.unshift({cmd:full,t:t,st:'ok',out:'（无输出）'})}
  else{st('err','✗ 失败 · 退出码 1 · 耗时 0.4s（模拟）');$('#out').textContent='✗ 模拟失败：条目不存在或参数不合法（stderr 原文示例）\n可在下方就地重试，参数保留。';hist.unshift({cmd:full,t:t,st:'err',out:'✗ 模拟失败（退出码 1）'})}
+ if(res!=='fail'){recents=recents.filter(r=>r.c!==i.c);recents.unshift({c:i.c,vals:{...vals},extra:extra,t:t});if(recents.length>10)recents.length=10;renderRecent()}
  $('#outwrap').classList.remove('hidden');renderHist();const b=$('#run');if(b){b.disabled=false;b.textContent='执行';$('#dfb').textContent=res==='fail'?'执行失败，可重试（同命令同参数）。':''}},700)}
+function renderRecent(){const R=$('#recent');R.innerHTML=recents.length?recents.map(r=>'<button type="button" class="cmd" data-c="'+r.c+'" aria-label="atb '+r.c+'"><code>atb '+r.c+'</code><small>'+r.t+'</small></button>').join(''):'<div class="notice" style="padding:8px;font-size:12.5px">暂无最近执行：命令成功执行后，这里按命令去重展示最近 10 条，点击可回填该次参数快速再执行。</div>';
+ R.querySelectorAll('.cmd').forEach(b=>b.onclick=()=>{const r=recents.find(x=>x.c===b.dataset.c);sel=r.c;vals={...r.vals};extra=r.extra;renderList();renderDetail();$('#dfb').className='feedback';$('#dfb').textContent='已回填该命令最近一次执行参数，核对后可直接执行。'})}
 function renderHist(){$('#hist').innerHTML=hist.length?hist.map((h,n)=>'<li><code>'+h.cmd+'</code><small>'+h.t+'</small><span class="st '+h.st+'">'+(h.st==='ok'?'成功':'失败')+'</span><button type="button" data-n="'+n+'">回看输出</button></li>').join(''):'<li style="color:var(--muted)">暂无执行记录（模拟）</li>';
  $('#hist').querySelectorAll('button').forEach(b=>b.onclick=()=>{const h=hist[+b.dataset.n];$('#out').textContent=h.out;st(h.st==='ok'?'ok':'err','回看 · '+h.t+' · '+(h.st==='ok'?'成功':'失败'));$('#outwrap').classList.remove('hidden')})}
 $('#q').oninput=renderList;$('#scene').onchange=()=>{renderList()};
 $('#confirmNo').onclick=()=>{$('#confirmWrap').classList.add('hidden');running=false;renderDetail();$('#dfb').className='feedback warn';$('#dfb').textContent='已取消：高危命令未执行，参数保留。'};
 $('#confirmYes').onclick=()=>{$('#confirmWrap').classList.add('hidden');finish(find(sel))};
 $('#copy').onclick=()=>{st('ok','已复制输出（演示环境为模拟复制）')};
-$('#clearHist').onclick=()=>{hist=[];renderHist()};
+$('#clearHist').onclick=()=>{hist=[];recents=[];renderHist();renderRecent()};
 document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea|select/i.test(document.activeElement.tagName)){e.preventDefault();$('#q').focus()}});
-renderList();renderDetail();
+renderList();renderRecent();renderDetail();
 </script>
 </body></html>
