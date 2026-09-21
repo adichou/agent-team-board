@@ -7,7 +7,8 @@
 //   - 发布文档：README / CHANGELOG / FEATURES / AGENTS 四类 × 语言集（REQ-20260921-010，
 //     默认 cn,en，可配置）动态展开；README 按语言链接 CHANGELOG 与 FEATURES（同语言互链）；
 //   - AI 写作提示词：技术写作人员角色 + 子代理流程 + 项目路径 / 计划号 / 版本号 / 关联范围 /
-//     文档清单 / 写作约束（简练通俗、不罗列原文、不编造）；
+//     文档清单 / 写作约束（简练通俗、不罗列原文、不编造）；关联范围不内嵌条目标题
+//     （BUG-20260921-005）：REQ 仅列编号 + 条目文件路径规则引导自行读取，BUG 汇总一句；
 //   - AI 翻译提示词（REQ-20260921-012）：以已审核默认语言文档为唯一基准，产出剩余语言
 //     全部文档（atb translate 逐文件回执）；
 //   - 官网提示词：在官网仓库执行、读已发布版本 CHANGELOG / FEATURES 双语材料、提交消息带
@@ -140,6 +141,29 @@ export function restDocFiles(langs = DEFAULT_DOC_LANGS) {
 
 const shortHash = (h) => String(h || '').slice(0, 12);
 
+// BUG-20260921-005 关联范围精简（AI 总结 / AI 翻译同口径）：不再逐条内嵌条目标题。
+// REQ 条目仅列编号，并以路径规则引导子代理按编号自行读取条目说明文件（项目路径已在
+// 提示词头部给出，文件在磁盘可达）；BUG 条目对写作 / 翻译语境价值低，不逐条罗列、
+// 不引导读取，统一汇总为一句「修复了 N 个 bug」。条目编号形态经 build-store 校验
+// 必为 REQ-/BUG- 前缀；防御起见非 BUG 前缀一律按 REQ 清单处理。
+function docScopeLines(items = []) {
+  const lines = [];
+  const reqIds = [];
+  let bugCount = 0;
+  for (const it of items || []) {
+    const id = String(it?.itemId || '').trim();
+    if (!id) continue;
+    if (id.startsWith('BUG-')) bugCount += 1;
+    else reqIds.push(id);
+  }
+  for (const id of reqIds) lines.push(`- ${id}`);
+  if (bugCount > 0) lines.push(`- 修复了 ${bugCount} 个 bug（BUG 条目不逐条展开）`);
+  if (reqIds.length > 0) {
+    lines.push('需求详情按上列编号自行读取条目说明文件：<项目根>/agent-team-board/data/requirements/<REQ-ID>/（README.md、design.md 等），了解本版语境；Bug 修复无需逐条了解。');
+  }
+  return lines;
+}
+
 // AI 总结提示词（REQ-20260921-008，原 buildDocWritingPrompt 更名并按新工作流调整；
 // REQ-20260921-012 范围收窄为阶段一：仅默认语言 4 文件）：
 // 主会话派发给「技术写作人员」角色的子代理，逐文件总结当前版本发布文档的**默认语言**
@@ -158,7 +182,7 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
   lines.push(`发布计划号：${planId}（版本号 ${version}）`);
   if (runId) lines.push(`执行编号：${runId}`);
   lines.push('关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：');
-  for (const it of items) lines.push(`- ${it.itemId}（commit ${shortHash(it.commit)}）${it.title || ''}`);
+  lines.push(...docScopeLines(items));
   lines.push('');
   lines.push(`本阶段只总结默认语言（语言集首语言 ${ls[0]}）的 ${docFiles.length} 个文档（${PUBLISH_DOC_KEYS.length} 类 × 1）；语言集 ${ls.join(',')} 的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围：`);
   for (const f of docFiles) lines.push(`- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`);
@@ -199,7 +223,7 @@ export function buildDocTranslatePrompt({ projectRoot, planId, items = [], runId
   lines.push(`发布计划号：${planId}（版本号 ${version}）`);
   if (runId) lines.push(`执行编号：${runId}`);
   lines.push('关联范围（翻译时了解本版内容语境，不展开代码修改）：');
-  for (const it of items) lines.push(`- ${it.itemId}（commit ${shortHash(it.commit)}）${it.title || ''}`);
+  lines.push(...docScopeLines(items));
   lines.push('');
   lines.push(`翻译基准（已人工审核的默认语言 ${ls[0]} 文档，唯一基准——语义以此为准，不得引入基准外信息，不得编造）：`);
   for (const f of baseFiles) {
