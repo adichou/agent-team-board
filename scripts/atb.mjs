@@ -30,6 +30,8 @@ import { packPlugin } from './lib/plugin-pack.mjs';
 import * as manualCloseout from './lib/manual-closeout.mjs';
 // REQ-20260921-008：发布文档 AI 总结执行账本（独立锁 summary.lock，与实施/完善互斥隔离）。
 import * as docsSummary from './lib/docs-summary-store.mjs';
+// REQ-20260921-012：发布文档 AI 翻译执行账本（独立锁 translate.lock，与总结/分析/开发互斥隔离）。
+import * as docsTranslate from './lib/docs-translate-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
 import * as publishFlow from './lib/publish-flow.mjs';
 
@@ -150,14 +152,25 @@ Oncall 咨询看板（REQ-20260907-001；咨询单独立 ASK 序列，不进 REQ
   atb refine abort [--batch ID]              终止任务（剩余项出局；在途需在对应子代理会话人工停止）
   atb refine records [--batch ID] [--offset N] [--limit N]  执行记录分页
 
-发布文档 AI 总结（REQ-20260921-008；发布流水线「总结 → 审查 → 提交」第一段；独立锁 summary.lock，
-与 AI 分析 / AI 开发互不占用；只总结八个发布文档，人工审查与提交在看板「文档编写」页执行）：
+发布文档 AI 总结（REQ-20260921-008；文档编写三阶段（REQ-20260921-012）阶段一「默认语言先行」；
+独立锁 summary.lock，与 AI 分析 / AI 开发互不占用；只总结默认语言四个发布文档，人工审查与提交
+在看板「文档编写」页执行）：
   atb summary start --id <BLD-ID> [--by 会话]  启动一轮 AI 总结（返回 runId + 提示词）
   atb summary file <RUN-ID> --file <文件名> --state <summarizing|summarized>
                                               逐文件进度回执（正在总结 / 已总结待审核）
   atb summary done <RUN-ID> --summary <要点>   完成回执
   atb summary fail <RUN-ID> --reason <短句>    中断回执（不悬挂「正在总结」，可重启续跑）
-  atb summary show [RUN-ID]                    进度视图（x/8、当前文件、锁占用）
+  atb summary show [RUN-ID]                    进度视图（x/4、当前文件、锁占用）
+
+发布文档 AI 翻译（REQ-20260921-012；阶段二「AI 翻译与审查」——默认语言四文件全部人工审核后，
+以已审核默认语言文档为唯一基准产出剩余语言文档；独立锁 translate.lock，与总结/分析/开发互不占用）：
+  atb translate start --id <BLD-ID> [--by 会话] 启动一轮 AI 翻译（默认语言 4/4 已审核才可启动；
+                                                返回 runId + 提示词；基准更新时按最新磁盘基准）
+  atb translate file <RUN-ID> --file <文件名> --state <translating|translated>
+                                              逐文件进度回执（正在翻译 / 已翻译待审核）
+  atb translate done <RUN-ID> --summary <要点>  完成回执（待翻译文件均进入已翻译待审核）
+  atb translate fail <RUN-ID> --reason <短句>   中断回执（残留「正在翻译」回退，不悬挂）
+  atb translate show [RUN-ID]                   进度视图（x/N、当前文件、锁占用；缺省最新 run）
 
 提交索引（REQ-20260911-009；条目 ↔ commit 双向查询，只读）：
   atb commit log <ITEM-ID>                     查该单全部提交（hash+消息；账本与 git 历史合并）
@@ -478,6 +491,13 @@ async function main() {
 
   if (cmd === 'summary') {
     await summaryCmd(rest);
+    return;
+  }
+
+  // ---------- 发布文档 AI 翻译（REQ-20260921-012） ----------
+
+  if (cmd === 'translate') {
+    await translateCmd(rest);
     return;
   }
 
@@ -1183,15 +1203,16 @@ async function refineCmd(rest) {
 // AI 分析互不占用）；看板轮询同一账本展示进度（文档编写页 / 任务模块 / 全局任务面板）。
 
 const SUMMARY_USAGE = `用法：
-  atb summary start --id <BLD-ID> [--by 会话]   启动一轮 AI 总结（八文件 pending；返回 runId + 提示词）
+  atb summary start --id <BLD-ID> [--by 会话]   启动一轮 AI 总结（默认语言四文件 pending；返回 runId + 提示词）
   atb summary file <RUN-ID> --file <文件名> --state <summarizing|summarized>
                                                逐文件进度回执（正在总结 / 已总结待审核）
   atb summary done <RUN-ID> --summary <要点>    完成回执（本轮待总结文件均进入已总结待审核）
   atb summary fail <RUN-ID> --reason <短句>     中断回执（残留「正在总结」回退，不悬挂）
-  atb summary show [RUN-ID]                     进度视图（x/8、当前文件、锁占用；缺省最新 run）
+  atb summary show [RUN-ID]                     进度视图（x/4、当前文件、锁占用；缺省最新 run）
 
-口径：发布文档流水线「总结 → 审查 → 提交」的第一段；只总结八个发布文档
-（README / CHANGELOG / FEATURES / AGENTS 中英），人工审查与 Git 提交在看板「文档编写」页执行。`;
+口径：文档编写三阶段（REQ-20260921-012）的阶段一「默认语言先行」——只总结默认语言
+（语言集首语言）四个发布文档；剩余语言文档由阶段二「AI 翻译」（atb translate）产出；
+人工审查、整体审查完结与 Git 提交在看板「文档编写」页执行。`;
 
 async function summaryCmd(rest) {
   const [sub, ...subRest] = rest;
@@ -1267,6 +1288,123 @@ async function summaryCmd(rest) {
   }
 
   die(SUMMARY_USAGE);
+}
+
+// ---------- 发布文档 AI 翻译（REQ-20260921-012）：translate 子命令 ----------
+// 供「AI 翻译」提示词派发的技术翻译子代理逐文件回执进度（独立锁 translate.lock，与 AI
+// 总结 / AI 分析 / AI 开发互不占用）；看板轮询同一账本展示进度。启动门禁：默认语言四文件
+// 全部已人工审核（evaluateDocsFlow.canTranslate）；基准 = 已审核默认语言文档的当前磁盘内容
+//（默认语言文档 mtime 晚于剩余语言文档时按最新基准重新翻译并提示）。
+
+const TRANSLATE_USAGE = `用法：
+  atb translate start --id <BLD-ID> [--by 会话] 启动一轮 AI 翻译（剩余语言文件 pending；默认语言
+                                                4/4 已审核才可启动；返回 runId + 提示词）
+  atb translate file <RUN-ID> --file <文件名> --state <translating|translated>
+                                               逐文件进度回执（正在翻译 / 已翻译待审核）
+  atb translate done <RUN-ID> --summary <要点>  完成回执（本轮待翻译文件均进入已翻译待审核）
+  atb translate fail <RUN-ID> --reason <短句>   中断回执（残留「正在翻译」回退，不悬挂）
+  atb translate show [RUN-ID]                   进度视图（x/N、当前文件、锁占用；缺省最新 run）
+
+口径：文档编写三阶段（REQ-20260921-012）的阶段二「AI 翻译与审查」——以已审核的默认语言文档
+为唯一翻译基准，逐文件产出剩余语言（语言集其余语言）文档；人工审查、整体审查完结与 Git 提交
+在看板「文档编写」页执行。`;
+
+async function translateCmd(rest) {
+  const [sub, ...subRest] = rest;
+  if (!sub) die(TRANSLATE_USAGE);
+  const dataDir = core.requireDataDir(cwd);
+  const projectRoot = core.projectRootOfBoard(dataDir);
+  // 基准注入：默认语言文档当前磁盘内容（唯一翻译基准）与 mtime（基准变更检测）
+  const readDoc = (f) => { try { return fs.readFileSync(path.join(projectRoot, f), 'utf8'); } catch { return null; } };
+  const statDoc = (f) => { try { return fs.statSync(path.join(projectRoot, f)).mtimeMs; } catch { return null; } };
+
+  if (sub === 'start') {
+    const { opts } = parseOpts(subRest, new Set(['id', 'by']));
+    if (!opts.id) die('用法：atb translate start --id <BLD-ID> [--by 会话]');
+    const v = buildStore.readVersion(dataDir, opts.id);
+    if (v.status === 'merging') die('版本合并中，暂不可启动 AI 翻译');
+    const flowEval = publishFlow.evaluateDocsFlow(
+      v,
+      readDoc,
+      {
+        ...docsSummary.summaryMarksForVer(dataDir, v.id),
+        ...docsTranslate.translateMarksForVer(dataDir, v.id),
+      },
+      { statFile: statDoc },
+    );
+    if (!flowEval.canTranslate) {
+      const gap = flowEval.translateMissing.map((m) => `${m.file}（${publishFlow.DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、');
+      die(`AI 翻译未解锁：默认语言 ${flowEval.defaultReviewedCount}/${flowEval.defaultFiles.length} 已审核，尚缺：${gap || '无文件'}；请先在看板「文档编写」页完成默认语言文档的人工审核`);
+    }
+    const langs = publishFlow.docLangsOf(v);
+    const run = docsTranslate.createTranslateRun(dataDir, { verId: v.id, owner: opts.by || 'translate', langs });
+    const prompt = publishFlow.buildDocTranslatePrompt({
+      projectRoot,
+      planId: v.id,
+      items: v.items,
+      runId: run.runId,
+      langs,
+      readFile: readDoc,
+      atbPath: 'node scripts/atb.mjs',
+    });
+    const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt, baselineShift: flowEval.baselineShift };
+    if (jsonOut) { console.log(JSON.stringify(payload)); return; }
+    console.log(`✓ 已启动 AI 翻译执行：${run.runId}（版本 ${v.id}，独立锁 translate.lock）`);
+    if (flowEval.baselineShift.length) {
+      console.log(`  ⚠ 基准已更新：${flowEval.baselineShift.length} 个翻译文档将按最新基准重新翻译（${flowEval.baselineShift.join('、')}）`);
+    }
+    console.log('  逐文件进度回执：atb translate file <RUN-ID> --file <文件名> --state translating|translated');
+    console.log('  提示词（复制后在当前项目的 Agent 会话发送）：');
+    console.log('  -----');
+    for (const line of prompt.split('\n')) console.log(`  ${line}`);
+    console.log('  -----');
+    return;
+  }
+
+  if (sub === 'file') {
+    const { pos, opts } = parseOpts(subRest, new Set(['file', 'state']));
+    const runId = pos[0];
+    if (!runId || !opts.file || !opts.state) die('用法：atb translate file <RUN-ID> --file <文件名> --state <translating|translated>');
+    const run = docsTranslate.markTranslateFile(dataDir, runId, opts.file, opts.state);
+    if (jsonOut) { console.log(JSON.stringify(docsTranslate.translateRunView(run))); return; }
+    console.log(`✓ ${opts.file} → ${opts.state === 'translating' ? '正在翻译' : '已翻译待审核'}（${run.runId}）`);
+    return;
+  }
+
+  if (sub === 'done' || sub === 'fail') {
+    const { pos, opts } = parseOpts(subRest, new Set(['summary', 'reason']));
+    const runId = pos[0];
+    if (!runId) die(sub === 'done' ? '用法：atb translate done <RUN-ID> --summary <要点>' : '用法：atb translate fail <RUN-ID> --reason <短句>');
+    const run = sub === 'done'
+      ? docsTranslate.finishTranslateRun(dataDir, runId, { result: 'done', summary: opts.summary || '' })
+      : docsTranslate.finishTranslateRun(dataDir, runId, { result: 'failed', reason: opts.reason || '' });
+    if (jsonOut) { console.log(JSON.stringify(docsTranslate.translateRunView(run))); return; }
+    console.log(sub === 'done'
+      ? `✓ AI 翻译完成（${run.runId}）：待翻译文件均进入「已翻译待审核」，等待人工审查`
+      : `✓ AI 翻译中断（${run.runId}）：${run.reason}；文件状态不悬挂「正在翻译」，可重新启动续跑（已翻译完成的文件保留）`);
+    return;
+  }
+
+  if (sub === 'show') {
+    const { pos } = parseOpts(subRest, new Set());
+    const run = pos[0] ? docsTranslate.getTranslateRun(dataDir, pos[0]) : docsTranslate.latestTranslateRun(dataDir);
+    if (!run) {
+      if (jsonOut) { console.log(JSON.stringify({ run: null })); return; }
+      console.log('（暂无 AI 翻译执行：看板「文档编写」页点击 AI 翻译，或 atb translate start --id <BLD-ID>）');
+      return;
+    }
+    const view = docsTranslate.translateRunView(run);
+    if (jsonOut) { console.log(JSON.stringify(view)); return; }
+    const PHASE_LABEL = { running: '进行中', done: '已完成', failed: '失败' };
+    console.log(`AI 翻译 ${run.runId}（版本 ${run.verId}，owner ${run.owner}）：${PHASE_LABEL[run.phase] || run.phase}`);
+    console.log(`  进度 ${view.counts.translated}/${view.counts.total}${view.currentFile ? ` · 当前：${view.currentFile}（正在翻译）` : ''}`);
+    if (view.reason) console.log(`  原因：${view.reason}`);
+    if (view.summary) console.log(`  要点：${view.summary}`);
+    console.log('  锁：translate（独立锁，与 AI 总结 / AI 分析 / AI 开发互不占用）');
+    return;
+  }
+
+  die(TRANSLATE_USAGE);
 }
 
 // ---------- 提交索引查询（REQ-20260911-009）：commit 子命令 ----------

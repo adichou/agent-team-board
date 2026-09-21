@@ -388,6 +388,31 @@ export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
   return writeVersion(dataDir, v);
 }
 
+// REQ-20260921-012 整体审查完结（文档编写第三阶段的最终收口动作）：在版本记录
+// v.review.finalized 固化人工完结时点快照——langsKey（语言集）+ 语言集全文件内容
+// sha256。与 v.review.files（逐文件审核记录）同域、与 v.docs（提交记录语义）隔离。
+// 有效性由求值侧（publish-flow.evaluateDocsFlow.finalized）实时判定：语言集变化、任一
+// 文件回退待审核、scopeStale、基准变更（默认语言文档 mtime 更新）都会使完结失效回退，
+// 不在完结时点固化放行。前置门禁（全部已审核等）由调用方（server）按 evaluateDocsFlow
+// 校验后再调用；merging 拒绝。
+export function recordDocsFinalize(dataDir, id, { langs, readFile } = {}) {
+  const v = readVersion(dataDir, id);
+  if (v.status === 'merging') throw new BuildConflictError('版本合并中，不可整体审查完结');
+  const ls = flow.docLangsOf({ langs });
+  const read = typeof readFile === 'function'
+    ? readFile
+    : (f) => { try { return fs.readFileSync(path.join(projectRootGuess(dataDir), f), 'utf8'); } catch { return null; } };
+  const files = {};
+  for (const f of flow.publishDocFiles(ls)) {
+    const text = read(f.file);
+    if (text == null) throw new AtbError(`${f.file} 不存在或不可读：整体审查完结要求语言集内全部文档在盘`);
+    files[f.file] = crypto.createHash('sha256').update(text).digest('hex');
+  }
+  v.review = { files: { ...((v.review && v.review.files) || {}) }, finalized: { at: nowIso(), langsKey: ls.join(','), files } };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
 // REQ-20260921-010 文档语言集：保存到版本记录顶层 v.langs（发布计划级持久化，重新进入
 // 文档编写步回显）；merging / 已正式发布（pushed）锁定不可改（与五步门禁 docs 步锁定口径
 // 一致）；非法语言集报错不改盘。语言集是文档清单的唯一事实源（求值 / 审核白名单 / 提交

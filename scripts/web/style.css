@@ -3717,6 +3717,29 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 /* AI 总结提示词预览折叠框 */
 .bld-docs-prompt-box { border: 1px dashed var(--border); border-radius: 10px; padding: 8px 12px; }
 .bld-docs-prompt-box summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+
+/* ---------- REQ-20260921-012 文档编写三阶段：阶段条 / 语言分组 / 整体审查完结对话框 ---------- */
+/* 阶段条：① 默认语言先行 ── ② AI 翻译与审查 ── ③ 整体审查完结（各阶段状态 chip；窄屏换行） */
+.bld-docs-stages {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 10px;
+}
+.bld-docs-stages .bld-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.bld-docs-stages .st { font-size: 12px; }
+/* 文件列表按语言成组：组头行（默认语言组 + 各剩余语言组）弱化呈现，不与文件行争视觉 */
+.bld-doc-group { padding: 6px 2px 2px; border-bottom: 1px dashed var(--border); list-style: none; }
+.bld-doc-group span { font-size: 12px; letter-spacing: 0.02em; }
+.bld-doc-group + .bld-doc-row { border-top: none; }
+/* 整体审查完结对核对话框（沿用审查对话框布局骨架） */
+.bld-finalize-wrap { z-index: 60; }
+.bld-finalize-modal { max-width: 640px; }
+.bld-finalize-checklist { list-style: none; margin: 10px 0 0; padding: 0; }
+.bld-finalize-checklist li {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5;
+}
+.bld-finalize-checklist li:last-child { border-bottom: none; }
+.bld-finalize-modal .bld-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .bld-docs-prompt-box textarea { width: 100%; margin-top: 8px; }
 /* 审查对话框：居中 modal，四类型页签 + 全语言栏（REQ-20260921-010 列数随语言集内联注入；
    缺省两列兼容；窄屏单列） */

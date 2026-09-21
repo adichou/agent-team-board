@@ -1,7 +1,8 @@
 // REQ-20260921-008 发布模块文档编写页优化 —— AI 总结执行账本（docs-summary-store）。
-// 「AI 总结」是发布文档流水线（总结 → 审查 → 提交）的第一段：主会话把提示词交给技术写作
-// 子代理逐文件总结八个发布文档；子代理经 atb summary CLI 逐文件回执进度，本账本落盘供
-// 看板（文档编写页 / 任务模块 / 全局任务面板）轮询展示。
+// 「AI 总结」是发布文档流水线第一段（REQ-20260921-012 起为三阶段流程的阶段一：默认语言
+// 先行）：主会话把提示词交给技术写作子代理，逐文件总结**默认语言**（语言集首语言）四个
+// 发布文档；子代理经 atb summary CLI 逐文件回执进度，本账本落盘供看板（文档编写页 /
+// 任务模块 / 全局任务面板）轮询展示。
 // 隔离口径（README 需求 5）：
 //   - 独立锁 .locks/summary.lock：与 AI 开发（impl.lock）、AI 分析（refine.lock）互不占用；
 //   - 不并入 TASK_KINDS（AI 总结无 Agent / 模型分路配置诉求，不进任务设置）；
@@ -110,9 +111,9 @@ export function latestSummaryRun(dataDir, verId = null) {
 
 // ---------- 生命周期 ----------
 
-// 启动一轮 AI 总结：按语言集展开文件全部 pending（REQ-20260921-010 起文档清单随语言集
-// 动态，缺省 cn,en），占用独立锁。同一时间至多一个进行中的 run（锁单一，跨版本亦互斥）；
-// 重复 start 报错不排队。
+// 启动一轮 AI 总结：按语言集展开**默认语言**（首语言）文件全部 pending（REQ-20260921-012
+// 阶段一范围收窄：只总结默认语言 4 文件，剩余语言由阶段二 AI 翻译产出），占用独立锁。
+// 同一时间至多一个进行中的 run（锁单一，跨版本亦互斥）；重复 start 报错不排队。
 export function createSummaryRun(dataDir, { verId, owner, langs } = {}) {
   const id = String(verId || '').trim();
   if (!/^BLD-\d{8}-\d{3,}$/.test(id)) throw new AtbError(`版本计划号非法：${id || '（空）'}（形如 BLD-YYYYMMDD-NNN）`);
@@ -126,7 +127,8 @@ export function createSummaryRun(dataDir, { verId, owner, langs } = {}) {
   }
   const runId = newRunId();
   const files = {};
-  for (const f of publishDocFiles(docLangsOf({ langs }))) files[f.file] = 'pending';
+  const ls = docLangsOf({ langs });
+  for (const f of publishDocFiles(ls).filter((x) => x.lang === ls[0])) files[f.file] = 'pending';
   const run = {
     version: 1,
     runId,

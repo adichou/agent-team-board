@@ -8,13 +8,17 @@
 //     默认 cn,en，可配置）动态展开；README 按语言链接 CHANGELOG 与 FEATURES（同语言互链）；
 //   - AI 写作提示词：技术写作人员角色 + 子代理流程 + 项目路径 / 计划号 / 版本号 / 关联范围 /
 //     文档清单 / 写作约束（简练通俗、不罗列原文、不编造）；
+//   - AI 翻译提示词（REQ-20260921-012）：以已审核默认语言文档为唯一基准，产出剩余语言
+//     全部文档（atb translate 逐文件回执）；
 //   - 官网提示词：在官网仓库执行、读已发布版本 CHANGELOG / FEATURES 双语材料、提交消息带
 //     完整计划号，不强制官网技术栈；
 //   - 计划号匹配：完整计划号 + 标识边界（BLD-20260920-0010 不冒充 BLD-20260920-001）；
 //   - 官网检测：仅提交者时间不早于推送成功时间（含等于边界）的提交参与匹配；起点缺失 →
 //     waiting（缺少推送完成时间，待核对），不做全历史扫描；预算未读完窗口 → scanning
 //     （本轮检测未完成，不当未命中）；窗口读完无命中 → missed；命中 → hit 带证据；
-//   - 文档状态机 / 五步门禁：见 evaluateDocsState / publishStepsState 注释。
+//   - 文档状态机（三阶段七态 + 基准变更检测 + 整体完结门禁，REQ-20260921-012）：见
+//     evaluateDocsFlow 注释；提交口径状态机 / 五步门禁：见 evaluateDocsState /
+//     publishStepsState 注释。
 
 import crypto from 'node:crypto';
 
@@ -121,25 +125,34 @@ export function readmeDocLinks(file) {
   return [`CHANGELOG${suffix}.md`, `FEATURES${suffix}.md`];
 }
 
+// 默认语言 / 剩余语言清单（REQ-20260921-012 阶段划分依据）：默认语言 = 语言集首语言
+//（文件不带后缀）；剩余语言 = 其余语言（<KEY>_<lang>.md，AI 翻译产出范围）。
+export function defaultDocFiles(langs = DEFAULT_DOC_LANGS) {
+  const ls = docLangsOf({ langs });
+  return publishDocFiles(ls).filter((f) => f.lang === ls[0]);
+}
+export function restDocFiles(langs = DEFAULT_DOC_LANGS) {
+  const ls = docLangsOf({ langs });
+  return publishDocFiles(ls).filter((f) => f.lang !== ls[0]);
+}
+
 // ---------- 提示词装配 ----------
 
 const shortHash = (h) => String(h || '').slice(0, 12);
 
-// AI 总结提示词（REQ-20260921-008，原 buildDocWritingPrompt 更名并按新工作流调整）：
-// 主会话派发给「技术写作人员」角色的子代理，逐文件总结当前版本发布文档；子代理经
-// atb summary CLI 逐文件回执进度（正在总结 → 已总结待审核），完成后交短回执。
-// 必带：项目路径、计划号、版本号、关联范围（条目 + 实际提交）、文档清单（REQ-20260921-010
-// 起按语言集 4 类 × N 展开）、进度回执指令、写作约束。
+// AI 总结提示词（REQ-20260921-008，原 buildDocWritingPrompt 更名并按新工作流调整；
+// REQ-20260921-012 范围收窄为阶段一：仅默认语言 4 文件）：
+// 主会话派发给「技术写作人员」角色的子代理，逐文件总结当前版本发布文档的**默认语言**
+//（语言集首语言）四个文件；子代理经 atb summary CLI 逐文件回执进度（正在总结 → 已总结
+// 待审核），完成后交短回执。剩余语言文档由阶段二 AI 翻译（buildDocTranslatePrompt）产出，
+// 不在本提示词范围内。
 export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, atbPath = 'node scripts/atb.mjs' } = {}) {
   const version = versionNumberOf(planId) || planId;
   const ls = docLangsOf({ langs });
-  const docFiles = publishDocFiles(ls);
-  const readmePairs = ls.map((_, i) => {
-    const suffix = i === 0 ? '' : `_${ls[i]}`;
-    return `README${suffix}.md → CHANGELOG${suffix}.md / FEATURES${suffix}.md`;
-  });
+  const docFiles = defaultDocFiles(ls);
+  const readmePair = 'README.md → CHANGELOG.md / FEATURES.md';
   const lines = [];
-  lines.push(`你是技术写作人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 总结任务；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
+  lines.push(`你是技术写作人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
   lines.push('');
   lines.push(`项目路径：${projectRoot || '（未提供）'}`);
   lines.push(`发布计划号：${planId}（版本号 ${version}）`);
@@ -147,7 +160,7 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
   lines.push('关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：');
   for (const it of items) lines.push(`- ${it.itemId}（commit ${shortHash(it.commit)}）${it.title || ''}`);
   lines.push('');
-  lines.push(`请逐个总结以下 ${docFiles.length} 个文档（${PUBLISH_DOC_KEYS.length} 类 × ${ls.length} 语言，语言集 ${ls.join(',')}），每个文件总结完成后其状态变为「已总结待审核」，等待人工审查：`);
+  lines.push(`本阶段只总结默认语言（语言集首语言 ${ls[0]}）的 ${docFiles.length} 个文档（${PUBLISH_DOC_KEYS.length} 类 × 1）；语言集 ${ls.join(',')} 的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围：`);
   for (const f of docFiles) lines.push(`- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`);
   lines.push('');
   if (runId) {
@@ -161,10 +174,59 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
   }
   lines.push('写作约束：');
   lines.push('- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。');
-  lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${readmePairs.join('；')}），链接必须真实可达。`);
+  lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${readmePair}），链接必须真实可达。`);
   lines.push('- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。');
   lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
   lines.push('- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。');
+  return lines.join('\n');
+}
+
+// AI 翻译提示词（REQ-20260921-012 阶段二）：以**已审核的默认语言文档磁盘内容为唯一翻译
+// 基准**（readFile 注入、全文嵌入提示词——启动时点即基准快照，检出基准更新时按最新磁盘
+// 内容重新生成即「按最新基准翻译」），逐文件产出剩余语言全部文件（4 × (N−1)）；子代理经
+// atb translate CLI 逐文件回执进度（正在翻译 → 已翻译待审核）。不得引入基准外信息、
+// 不得编造。
+export function buildDocTranslatePrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, readFile = null, atbPath = 'node scripts/atb.mjs' } = {}) {
+  const version = versionNumberOf(planId) || planId;
+  const ls = docLangsOf({ langs });
+  const baseFiles = defaultDocFiles(ls);
+  const targets = restDocFiles(ls);
+  const read = typeof readFile === 'function' ? readFile : () => null;
+  const lines = [];
+  lines.push(`你是技术翻译人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 翻译任务（阶段二：默认语言已全部人工审核）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
+  lines.push('');
+  lines.push(`项目路径：${projectRoot || '（未提供）'}`);
+  lines.push(`发布计划号：${planId}（版本号 ${version}）`);
+  if (runId) lines.push(`执行编号：${runId}`);
+  lines.push('关联范围（翻译时了解本版内容语境，不展开代码修改）：');
+  for (const it of items) lines.push(`- ${it.itemId}（commit ${shortHash(it.commit)}）${it.title || ''}`);
+  lines.push('');
+  lines.push(`翻译基准（已人工审核的默认语言 ${ls[0]} 文档，唯一基准——语义以此为准，不得引入基准外信息，不得编造）：`);
+  for (const f of baseFiles) {
+    const text = read(f.file);
+    lines.push(`===== ${f.file}（默认语言 ${ls[0]}，已审核基准） =====`);
+    lines.push(text == null ? '（文件缺失：跳过该类型翻译并在回执说明）' : String(text).replace(/\s*$/, ''));
+    lines.push('===== 基准结束 =====');
+  }
+  lines.push('');
+  lines.push(`请逐个产出以下 ${targets.length} 个剩余语言文档（${PUBLISH_DOC_KEYS.length} 类 × ${ls.length - 1} 语言，剩余语言 ${ls.slice(1).join(',')}），每个文件写入后其状态变为「已翻译待审核」，等待人工审查：`);
+  for (const f of targets) lines.push(`- ${f.file}（${langNameOf(f.lang)} / ${f.key}，基准 ${f.key}.md）`);
+  lines.push('');
+  if (runId) {
+    lines.push('逐文件进度回执（在项目根执行；atb 指 ' + atbPath + '，下同）：');
+    lines.push(`1. 开始翻译某文件：atb translate file ${runId} --file <文件名> --state translating`);
+    lines.push(`2. 该文件翻译完成（先写盘再回执）：atb translate file ${runId} --file <文件名> --state translated`);
+    lines.push(`3. 全部完成：atb translate done ${runId} --summary "<一两句要点>"`);
+    lines.push(`4. 中断 / 无法完成：atb translate fail ${runId} --reason "<短句原因>"`);
+    lines.push(`已审核（reviewed）的目标文件跳过不再翻译；不修改上述 ${targets.length} 个文档与基准文档以外的任何文件。`);
+    lines.push('');
+  }
+  lines.push('翻译约束：');
+  lines.push('- 以基准文档为唯一翻译基准：与默认语言语义一致，不增删信息，不得编造能力或范围。');
+  lines.push('- 各剩余语言行文地道（README / CHANGELOG 面向用户，AGENTS 为协作规则），结构与基准对应。');
+  lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${ls.slice(1).map((l) => `README_${l}.md → CHANGELOG_${l}.md / FEATURES_${l}.md`).join('；')}），链接必须真实可达。`);
+  lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
+  lines.push('- 完成后以短回执汇报（哪些文件已翻译 / 关键结论），不粘贴全文。');
   return lines.join('\n');
 }
 
@@ -241,56 +303,135 @@ export function scanSiteCommitsForPlan(commits, { planId, sinceIso, budget = 200
   return { status: 'missed', scanned, windowCount };
 }
 
-// ---------- REQ-20260921-008 文档流水线四态（总结 → 审查 → 提交） ----------
+// ---------- REQ-20260921-008 文档流水线状态机（REQ-20260921-012 扩展为三阶段七态） ----------
 
-// 四态（本页签展示口径，替代旧的 未编写/未提交/已提交/需重新编写）：
+// 默认语言四态（阶段一）：
 //   未总结 ──(AI 总结执行中)──▶ 正在总结 ──(该文件总结完成)──▶ 已总结待审核
 //      │                                                        │
 //      └──────(不经 AI 总结，直接审查修改后人工通过)────────────┤
 //                                                               ▼
 //      已总结待审核 ──(人工通过审核)──▶ 已审核 ──(再次编辑修改)──▶ 回到已总结待审核
-export const DOCS_FLOW_STATES = ['unsummarized', 'summarizing', 'summarized', 'reviewed'];
+// 剩余语言三态 + 已审核（阶段二，语义与默认语言一一对应）：
+//   未翻译 ──(AI 翻译执行中)──▶ 正在翻译 ──(该文件翻译完成)──▶ 已翻译待审核 ──(人工通过审核)──▶ 已审核
+//      │                                                            ▲ │
+//      └──(基准变更检测：默认语言同类型文档 mtime 更新)──────────────┘  └─(再次编辑修改)──▶ 回到已翻译待审核
+// 阶段三：4×N 全部已审核 → 人工「整体审查完结」（recordDocsFinalize）→ 提交解锁。
+export const DOCS_FLOW_STATES = [
+  'unsummarized', 'summarizing', 'summarized',
+  'untranslated', 'translating', 'translated',
+  'reviewed',
+];
 export const DOCS_FLOW_LABEL = {
-  unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核',
+  unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核',
+  untranslated: '未翻译', translating: '正在翻译', translated: '已翻译待审核',
+  reviewed: '已审核',
 };
 
-// 四态求值（纯函数；发布文档流水线的唯一状态事实源，前端复用同口径渲染）：
+// 基准变更检测（REQ-20260921-012 本轮落定：磁盘 mtime 对比，纯函数）：
+// 同类型文件两两对比（README.md ↔ README_<lang>.md，依次类推），默认语言文档 mtime
+// **严格晚于**剩余语言文档 → 该剩余语言文档置回「未翻译」（未审核）、整体完结失效回退。
+// statFile(file) → mtimeMs | null（注入解耦 fs）；mtime 缺失 / 相同不回退（mtime 为弱信号，
+// 内容 hash 复核豁免按 README 待确认口径暂不做）。检测在每次求值读盘时发生，不依赖审查
+// 界面的保存按钮——保存只是修改途径之一，外部编辑器 / IDE 直接落盘同样更新 mtime 被捕获。
+export function detectBaselineShift(langs, statFile) {
+  const stat = typeof statFile === 'function' ? statFile : () => null;
+  const ls = docLangsOf({ langs });
+  if (ls.length < 2) return [];
+  const shifted = [];
+  for (const key of PUBLISH_DOC_KEYS) {
+    const baseMtime = stat(`${key}.md`);
+    if (baseMtime == null || !Number.isFinite(Number(baseMtime))) continue;
+    for (const lang of ls.slice(1)) {
+      const file = `${key}_${lang}.md`;
+      const m = stat(file);
+      if (m == null || !Number.isFinite(Number(m))) continue;
+      if (Number(baseMtime) > Number(m)) shifted.push(file);
+    }
+  }
+  return shifted;
+}
+
+// 阶段状态求值（纯函数；发布文档流水线的唯一状态事实源，前端复用同口径渲染）：
 //   - v.review.files[file].hash：人工「通过审核」时点的磁盘内容 sha256（build-store.recordDocsReview）；
+//   - v.review.finalized：人工「整体审查完结」记录（build-store.recordDocsFinalize：
+//     { at, langsKey, files }）；有效性实时求值——语言集未变（langsKey 匹配）且当前全部
+//     已审核、无 scopeStale、无基准变更才算有效，任何变化即时失效回退（不固化放行）；
 //   - readFile(file)：当前磁盘内容（注入解耦 fs）；
-//   - marks = { summarizing: [...], summarized: [...] }：AI 总结账本聚合标记
-//     （docs-summary-store.summaryMarksForVer：活动 run 的正在总结 + 任一 run 曾完成的已总结）。
-// 判定优先级：正在总结 > 已审核（hash 一致且未 scopeStale）> 已总结待审核（任一 run 曾标记完成，
-// 或审核记录存在但内容已变——再次编辑 / 外部 IDE 修改自动回退）> 未总结。
-// scopeStale 口径（design.md 落定）：发布范围变化时审核整体失效（回退待审核），不弱化提交门禁。
-// 输出：files（4 类 × 语言集语言数，REQ-20260921-010 动态）、reviewedCount、canCommit
-//（全部已审核）、missing（未审核文件 + 状态）。
-export function evaluateDocsFlow(v, readFile, marks = {}) {
+//   - marks = { summarizing, summarized, translating, translated }：AI 总结 / AI 翻译账本
+//     聚合标记（docs-summary-store.summaryMarksForVer / docs-translate-store.translateMarksForVer）；
+//   - opts.statFile(file) → mtimeMs | null：基准变更检测注入（缺省不做检测）。
+// 判定优先级（默认语言）：正在总结 > 已审核（hash 一致且未 scopeStale）> 已总结待审核 > 未总结；
+// 判定优先级（剩余语言）：基准变更回退未翻译 > 正在翻译 > 已审核 > 已翻译待审核 > 未翻译。
+// scopeStale 口径沿用：发布范围变化时审核与整体完结一并失效（回退待审核），不弱化门禁。
+// 输出：files（4 类 × 语言集语言数，带 isDefault 分组标识）、defaultFiles / restFiles、
+// reviewedCount（合计）与分组计数、canTranslate（默认语言 4/4 已审核且存在剩余语言；
+// translateMissing 为默认语言缺口明细）、baselineShift、canFinalize（4×N 全部已审核且无
+// 失效源）、finalized（有效时 { at }）、canCommit（canFinalize && 完结有效——在「全部已
+// 审核」门禁之上叠加完结条件，不弱化）、missing（未审核文件 + 状态）。
+export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const scopeStale = !!(v?.docs && v.docs.scopeStale);
   const reviewFiles = (v?.review && v.review.files) || {};
+  const finalRec = (v?.review && v.review.finalized) || null;
   const summarizing = new Set(marks.summarizing || []);
   const summarizedMarks = new Set(marks.summarized || []);
-  const files = publishDocFiles(docLangsOf(v)).map((f) => {
+  const translating = new Set(marks.translating || []);
+  const translatedMarks = new Set(marks.translated || []);
+  const langs = docLangsOf(v);
+  const defaultLang = langs[0];
+  const baselineShift = new Set(detectBaselineShift(langs, opts.statFile));
+  const files = publishDocFiles(langs).map((f) => {
+    const isDefault = f.lang === defaultLang;
     let text = null;
     try { text = read(f.file); } catch { text = null; }
     const diskHash = text == null ? null : hashOf(text);
     const rec = reviewFiles[f.file] || null;
     const approved = !scopeStale && !!rec && diskHash != null && rec.hash === diskHash;
     let state;
-    if (summarizing.has(f.file)) state = 'summarizing';
-    else if (approved) state = 'reviewed';
-    else if (summarizedMarks.has(f.file) || rec) state = 'summarized';
-    else state = 'unsummarized';
-    return { ...f, state };
+    if (isDefault) {
+      if (summarizing.has(f.file)) state = 'summarizing';
+      else if (approved) state = 'reviewed';
+      else if (summarizedMarks.has(f.file) || rec) state = 'summarized';
+      else state = 'unsummarized';
+    } else {
+      if (baselineShift.has(f.file)) state = 'untranslated'; // 基准（默认语言）已更新：翻译过期，回退未翻译
+      else if (translating.has(f.file)) state = 'translating';
+      else if (approved) state = 'reviewed';
+      else if (translatedMarks.has(f.file) || rec) state = 'translated';
+      else state = 'untranslated';
+    }
+    return { ...f, isDefault, state };
   });
+  const defaultFiles = files.filter((f) => f.isDefault);
+  const restFiles = files.filter((f) => !f.isDefault);
   const reviewed = files.filter((f) => f.state === 'reviewed');
+  const defaultReviewedCount = defaultFiles.filter((f) => f.state === 'reviewed').length;
+  const restReviewedCount = restFiles.filter((f) => f.state === 'reviewed').length;
+  const allReviewed = files.length > 0 && reviewed.length === files.length;
+  const translateMissing = defaultFiles
+    .filter((f) => f.state !== 'reviewed')
+    .map((f) => ({ file: f.file, state: f.state }));
+  const canTranslate = defaultFiles.length > 0 && defaultReviewedCount === defaultFiles.length && restFiles.length > 0;
+  // 整体完结可用：4×N 全部已审核，且无 scopeStale / 基准变更失效源
+  const canFinalize = allReviewed && !scopeStale && baselineShift.size === 0;
+  // 完结记录有效：存在人工完结记录，且语言集未变、当前全部已审核、无失效源
+  const finalizedOk = canFinalize && !!finalRec && finalRec.langsKey === langs.join(',');
   const missing = files
     .filter((f) => f.state !== 'reviewed')
     .map((f) => ({ file: f.file, state: f.state }));
   return {
     files,
+    defaultFiles,
+    restFiles,
     reviewedCount: reviewed.length,
-    canCommit: files.length > 0 && reviewed.length === files.length,
+    defaultReviewedCount,
+    restReviewedCount,
+    canTranslate,
+    translateMissing,
+    baselineShift: [...baselineShift],
+    canFinalize,
+    finalized: finalizedOk ? { at: finalRec.at } : null,
+    canCommit: finalizedOk, // 全部已审核 + 整体审查已完结（叠加门禁，不弱化原「全部已审核」）
     missing,
     scopeStale,
   };
