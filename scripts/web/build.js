@@ -1712,9 +1712,11 @@ const ATBBuild = (() => {
   }
 
   // 双栏同步滚动：编辑态同步 textarea、预览态同步内容区——按 scrollHeight 比例跟随，
-  // 互斥标志防回环（一侧滚动时另一侧跟随不再反触发）
+  // 互斥标志防回环（一侧滚动时另一侧跟随不再反触发）。
+  // REQ-20260921-011：预览态改为富文本容器 .bld-review-preview（滚动主体；渲染异常回退的
+  // <pre> 与围栏代码块在容器内部随容器滚动，不单独绑定），三种模式组合同一绑定覆盖。
   function bindReviewSyncScroll(view) {
-    const bodies = [...view.querySelectorAll('.bld-review-col-body textarea, .bld-review-col-body pre')];
+    const bodies = [...view.querySelectorAll('.bld-review-col-body textarea, .bld-review-col-body .bld-review-preview')];
     if (bodies.length < 2) return;
     let syncing = false;
     const scrollRatio = (el) => {
@@ -2563,6 +2565,24 @@ const ATBBuild = (() => {
     return `<button type="button" class="btn small primary" data-pf-commit${ok ? '' : ' aria-disabled="true"'} title="${esc(reason)}">提交</button>`;
   }
 
+  // REQ-20260921-011 预览态 Markdown 渲染：与 app.js / req-disc.js / oncall.js 三处 renderMd
+  // 逐字同口径——复用 index.html 已全局加载的 vendored marked v12.0.2（零新增依赖），
+  // 输出经 sanitizeHtml 消毒（剥 script 块与 on* 内联事件）；渲染器抛错（含 marked 未加载）
+  // 回退转义源码 <pre>，不白屏不崩溃。
+  function sanitizeHtml(html) {
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  }
+
+  function renderMd(md) {
+    try {
+      return sanitizeHtml(window.marked.parse(md || ''));
+    } catch {
+      return `<pre>${esc(md)}</pre>`;
+    }
+  }
+
   // REQ-20260921-008 审查对话框：按文档类型四页签，页签内全语言栏并排（语言集内全部文件
   // 可达；REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，栅格列数 = 语言数）；
   // 每栏独立 编辑/预览 切换、保存、通过审核；各栏同步滚动（bindReviewSyncScroll 按比例跟随）；
@@ -2588,7 +2608,13 @@ const ATBBuild = (() => {
         ? '<p class="muted small" role="status">正在读取文档内容…</p>'
         : mode === 'edit'
           ? `<textarea class="bld-review-editor" data-review-file="${esc(f.file)}" rows="18" spellcheck="false">${esc(content)}</textarea>`
-          : `<pre class="bld-review-preview" data-review-file="${esc(f.file)}">${esc(content) || '（空文档）'}</pre>`;
+          // REQ-20260921-011 预览态：Markdown 渲染为富文本（.md 排版：标题/列表/表格/引用/代码），
+          // 空文档显示占位不渲染空白区。富文本容器 data-i18n-skip——文档内容是各自语言的本体
+          //（README.md 中文 / README_en.md 英文），不进界面词典翻译（BUG-20260921-004 同口径），
+          // 预览必须展示即将提交的原文；空文档占位是界面文案，不豁免、可随界面语言翻译。
+          : !String(content).trim()
+            ? `<div class="bld-review-preview muted small" data-review-file="${esc(f.file)}">（空文档）</div>`
+            : `<div class="bld-review-preview md" data-review-file="${esc(f.file)}" data-i18n-skip>${renderMd(content)}</div>`;
       return `
             <div class="bld-review-col" data-col="${esc(f.file)}">
               <div class="bld-review-col-head">

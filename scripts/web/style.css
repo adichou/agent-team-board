@@ -3745,11 +3745,17 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   background: var(--bg, var(--panel)); color: var(--text); padding: 10px 12px;
   font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace;
 }
-.bld-review-col-body pre {
-  flex: 1; margin: 0; overflow: auto; border-radius: 0;
-  background: var(--bg, var(--panel)); color: var(--text); padding: 10px 12px;
-  font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace;
+/* REQ-20260921-011 预览态富文本容器：.md 排版口径（标题层级/列表缩进/表格边框/引用竖线/
+   行内与围栏代码底色，深浅色走 CSS 变量），去 .md 外框随栏滚动（同步滚动绑定的滚动主体，
+   兼任渲染异常回退源码的滚动容器）；空文档占位沿用容器布局，内容由 muted small 文案撑起。 */
+.bld-review-col-body .bld-review-preview {
+  flex: 1; margin: 0; overflow: auto; border: none; border-radius: 0;
+  background: var(--bg, var(--panel)); color: var(--text); padding: 10px 14px;
+  font-size: 13px; line-height: 1.7;
+}
+.bld-review-col-body .bld-review-preview pre {
   white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
 }
 .bld-review-foot {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
