@@ -188,7 +188,7 @@ t('S3 点击成功：复制 buildPrompt(v)（本弹窗版本提示词，非批�
   h.openModal();
   await h.clickLink('zcode');
   assert.equal(h.copiedTexts.length, 1, '复制一次');
-  assert.ok(h.copiedTexts[0].includes('请为看板版本 BLD-20260913-005'), '复制的是版本提示词（含版本号）');
+  assert.ok(h.copiedTexts[0].includes('看板版本：BLD-20260913-005'), '复制的是版本提示词（版本号在运行参数区，REQ-20260921-006）');
   assert.ok(h.copiedTexts[0].includes('REQ-20260913-001'), '复制的是版本提示词（含关联条目）');
   assert.ok(!h.copiedTexts[0].includes('主调度'), '不是批量调度提示词');
   assert.equal(h.navUrl, `zcode://workspace/open?path=${encodeURIComponent(PROJECT)}`, '复制后跳 zcode workspace/open 深链');
@@ -375,7 +375,7 @@ t('S13 零回归：「复制提示词」成功 → 既有 toast +「已复制 �
   h.openModal();
   await h.clickCopyPrompt();
   assert.equal(h.copiedTexts.length, 1, '复制一次');
-  assert.ok(h.copiedTexts[0].includes('请为看板版本 BLD-20260913-005'), '复制的是版本提示词');
+  assert.ok(h.copiedTexts[0].includes('看板版本：BLD-20260913-005'), '复制的是版本提示词');
   assert.match(h.lastToast().msg, /✓ 提示词已复制，去 Agent 粘贴执行后把回答粘贴到下方/, '既有成功 toast 原样保留');
   assert.match(h.inner(), /已复制 ✓/, '既有「已复制 ✓」标记保留');
   // 剪贴板不可用降级
