@@ -67,27 +67,39 @@ export function readmeDocLinks(file) {
 
 const shortHash = (h) => String(h || '').slice(0, 12);
 
-// AI 写作提示词：主会话派发给「技术写作人员」角色的子代理完成当前版本文档任务；回短回执。
-// 必带：项目路径、计划号、版本号、关联范围（条目 + 实际提交）、文档清单、写作约束。
-export function buildDocWritingPrompt({ projectRoot, planId, items = [] } = {}) {
+// AI 总结提示词（REQ-20260921-008，原 buildDocWritingPrompt 更名并按新工作流调整）：
+// 主会话派发给「技术写作人员」角色的子代理，逐文件总结当前版本八个发布文档；子代理经
+// atb summary CLI 逐文件回执进度（正在总结 → 已总结待审核），完成后交短回执。
+// 必带：项目路径、计划号、版本号、关联范围（条目 + 实际提交）、文档清单、进度回执指令、写作约束。
+export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, atbPath = 'node scripts/atb.mjs' } = {}) {
   const version = versionNumberOf(planId) || planId;
   const lines = [];
-  lines.push(`你是技术写作人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档任务；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
+  lines.push(`你是技术写作人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 总结任务；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
   lines.push('');
   lines.push(`项目路径：${projectRoot || '（未提供）'}`);
   lines.push(`发布计划号：${planId}（版本号 ${version}）`);
+  if (runId) lines.push(`执行编号：${runId}`);
   lines.push('关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：');
   for (const it of items) lines.push(`- ${it.itemId}（commit ${shortHash(it.commit)}）${it.title || ''}`);
   lines.push('');
-  lines.push('请在项目仓库内编写以下八个文档（中文 / 英文各四类）：');
+  lines.push('请逐个总结以下八个文档（中文 / 英文各四类），每个文件总结完成后其状态变为「已总结待审核」，等待人工审查：');
   for (const f of publishDocFiles()) lines.push(`- ${f.file}（${f.lang === 'zh' ? '中' : '英'}文 / ${f.key}）`);
   lines.push('');
+  if (runId) {
+    lines.push('逐文件进度回执（在项目根执行；atb 指 ' + atbPath + '，下同）：');
+    lines.push(`1. 开始总结某文件：atb summary file ${runId} --file <文件名> --state summarizing`);
+    lines.push(`2. 该文件总结完成：atb summary file ${runId} --file <文件名> --state summarized`);
+    lines.push(`3. 全部完成：atb summary done ${runId} --summary "<一两句要点>"`);
+    lines.push(`4. 中断 / 无法完成：atb summary fail ${runId} --reason "<短句原因>"`);
+    lines.push('已审核（reviewed）的文件跳过不再总结；不修改八个文档以外的任何文件。');
+    lines.push('');
+  }
   lines.push('写作约束：');
   lines.push('- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。');
   lines.push('- README 按语言链接同语言 CHANGELOG 与 FEATURES（README.md → CHANGELOG.md / FEATURES.md；README.en.md → CHANGELOG.en.md / FEATURES.en.md），链接必须真实可达。');
   lines.push('- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。');
   lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
-  lines.push('- 完成后以短回执汇报（哪些文件已写 / 关键结论），不粘贴全文。');
+  lines.push('- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。');
   return lines.join('\n');
 }
 
@@ -164,7 +176,61 @@ export function scanSiteCommitsForPlan(commits, { planId, sinceIso, budget = 200
   return { status: 'missed', scanned, windowCount };
 }
 
-// ---------- 文档状态机 ----------
+// ---------- REQ-20260921-008 文档流水线四态（总结 → 审查 → 提交） ----------
+
+// 四态（本页签展示口径，替代旧的 未编写/未提交/已提交/需重新编写）：
+//   未总结 ──(AI 总结执行中)──▶ 正在总结 ──(该文件总结完成)──▶ 已总结待审核
+//      │                                                        │
+//      └──────(不经 AI 总结，直接审查修改后人工通过)────────────┤
+//                                                               ▼
+//      已总结待审核 ──(人工通过审核)──▶ 已审核 ──(再次编辑修改)──▶ 回到已总结待审核
+export const DOCS_FLOW_STATES = ['unsummarized', 'summarizing', 'summarized', 'reviewed'];
+export const DOCS_FLOW_LABEL = {
+  unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核', reviewed: '已审核',
+};
+
+// 四态求值（纯函数；发布文档流水线的唯一状态事实源，前端复用同口径渲染）：
+//   - v.review.files[file].hash：人工「通过审核」时点的磁盘内容 sha256（build-store.recordDocsReview）；
+//   - readFile(file)：当前磁盘内容（注入解耦 fs）；
+//   - marks = { summarizing: [...], summarized: [...] }：AI 总结账本聚合标记
+//     （docs-summary-store.summaryMarksForVer：活动 run 的正在总结 + 任一 run 曾完成的已总结）。
+// 判定优先级：正在总结 > 已审核（hash 一致且未 scopeStale）> 已总结待审核（任一 run 曾标记完成，
+// 或审核记录存在但内容已变——再次编辑 / 外部 IDE 修改自动回退）> 未总结。
+// scopeStale 口径（design.md 落定）：发布范围变化时审核整体失效（回退待审核），不弱化提交门禁。
+// 输出：files（八行恒定）、reviewedCount、canCommit（8/8 已审核）、missing（未审核文件 + 状态）。
+export function evaluateDocsFlow(v, readFile, marks = {}) {
+  const read = typeof readFile === 'function' ? readFile : () => null;
+  const scopeStale = !!(v?.docs && v.docs.scopeStale);
+  const reviewFiles = (v?.review && v.review.files) || {};
+  const summarizing = new Set(marks.summarizing || []);
+  const summarizedMarks = new Set(marks.summarized || []);
+  const files = publishDocFiles().map((f) => {
+    let text = null;
+    try { text = read(f.file); } catch { text = null; }
+    const diskHash = text == null ? null : hashOf(text);
+    const rec = reviewFiles[f.file] || null;
+    const approved = !scopeStale && !!rec && diskHash != null && rec.hash === diskHash;
+    let state;
+    if (summarizing.has(f.file)) state = 'summarizing';
+    else if (approved) state = 'reviewed';
+    else if (summarizedMarks.has(f.file) || rec) state = 'summarized';
+    else state = 'unsummarized';
+    return { ...f, state };
+  });
+  const reviewed = files.filter((f) => f.state === 'reviewed');
+  const missing = files
+    .filter((f) => f.state !== 'reviewed')
+    .map((f) => ({ file: f.file, state: f.state }));
+  return {
+    files,
+    reviewedCount: reviewed.length,
+    canCommit: files.length > 0 && reviewed.length === files.length,
+    missing,
+    scopeStale,
+  };
+}
+
+// ---------- 文档状态机（提交口径：evaluateDocsState，合并门禁沿用） ----------
 
 const hashOf = (s) => crypto.createHash('sha256').update(String(s ?? '')).digest('hex');
 

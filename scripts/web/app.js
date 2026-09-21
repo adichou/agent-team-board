@@ -184,7 +184,7 @@ async function applyViewSnapshot(snap) {
     searchRestored = true; // 请求在 setView 之后由 boot 统一按当前模块解释（runSearch）
   }
   // REQ-20260911-010：批量 Commit 面板已回退——batchMode 不再接受 'commit'（存量快照静默忽略）
-  if (['refine', 'develop', 'codex'].includes(snap.batchMode)) state.batch.mode = snap.batchMode; // codex 为存量深链保留
+  if (['refine', 'develop', 'codex', 'summary'].includes(snap.batchMode)) state.batch.mode = snap.batchMode; // codex 为存量深链保留；summary 为 REQ-20260921-008 AI 总结
   if (TASK_PANES.some((p) => p.key === snap.batchPane)) state.batch.pane = snap.batchPane;
   if (TASK_PANES.some((p) => p.key === snap.refinePane)) state.refine.pane = snap.refinePane;
   // REQ-20260910-003：全局总览筛选档恢复（非法值回落「全部」）
@@ -294,6 +294,10 @@ const state = {
     pane: 'overview',    // 运行面板二级页签记忆（REQ-20260909-008；与 state.batch.pane 相互独立）
     data: null,           // /api/refine/current + candidates 快照
     sig: '',              // 渲染签名（轮询剪枝）
+  },
+  summary: {      // REQ-20260921-008 发布文档 AI 总结（独立锁 summary.lock；发布流水线第一段）
+    data: null,   // /api/build/docs-summary/current 快照 { run, docsFlow }
+    sig: '',      // 渲染签名（轮询剪枝）
   },
   commitStatus: { // 已完成条目提交状态（BUG-20260910-014 保留部分）：/api/commit/item-status 快照
     // REQ-20260911-010：取数换源为 REQ-20260911-009 索引（自动提交账本 + git 历史）；
@@ -624,6 +628,7 @@ async function switchProject(p) {
   state.plan = { selected: new Set(), pending: false, message: '', failures: [] }; // REQ-20260908-018：按项目隔离
   state.reject = { pending: false, message: '', failures: [] }; // REQ-20260908-027：批量驳回态按项目隔离
   state.refine = { mode: 'zcode', data: null, sig: '' }; // 完善面板按项目隔离
+  state.summary = { data: null, sig: '' }; // REQ-20260921-008：AI 总结面板按项目隔离
   state.commitStatus = { map: {}, sig: '', loading: false, error: null }; // 提交状态随项目切换重置，不串项目数据
   state.board = null;
   state.banner = newBannerState(); // 文件横幅按项目隔离，切换后重进文件视图重新加载
@@ -1845,7 +1850,8 @@ async function poll() {
       }
     }
     // 批量开发抽屉随主轮询刷新（签名无变化不重渲染）
-    if (state.batch.open) await refreshBatch();
+    if (state.batch.open && state.batch.mode === 'summary') await refreshSummary(); // REQ-20260921-008：AI 总结面板
+    else if (state.batch.open) await refreshBatch();
     // REQ-20260911-007：待人工确认聚合区随主轮询刷新（独立请求；失败保留上次数据并显示错误条 + 重试）
     if (b?.initialized) await refreshHolds();
     // BUG-20260910-014（REQ-20260911-010 换源保留）：已完成条目提交状态随主轮询刷新
@@ -5725,7 +5731,9 @@ async function gotoRuns(mode) {
   // （无缓存数据时面板自身呈现「加载中…」），数据刷新仍走既有轮询与签名剪枝（不打断面板内输入）。
   renderBatchDrawer();
   setView('runs'); // 激活视图（state.batch.open = true）并拉取面板数据
-  await refreshBatch();
+  // REQ-20260921-008：AI 总结子面板走独立数据源（docs-summary/current）
+  if (state.batch.mode === 'summary') await refreshSummary();
+  else await refreshBatch();
 }
 
 // 兼容旧调用名：打开批量开发 = 进入任务模块「批量开发」子面板
@@ -5812,19 +5820,22 @@ const GLOBAL_STATUS_FILTERS = [
   { key: 'paused', label: '已暂停' },
   { key: 'needs_attention', label: '待核对' },
 ];
-// 类型筛选档：批量开发 / 批量完善两类账本（Codex 后台执行器不聚合，口径见条目 README）
+// 类型筛选档：批量开发 / 批量完善 / AI 总结三类账本（Codex 后台执行器不聚合，口径见条目 README）
 // REQ-20260911-010：批量 Commit 类型档随 CMT 批次简报回退移除
+// REQ-20260921-008：新增 AI 总结（发布文档流水线第一段，独立锁 summary.lock）
 const GLOBAL_KIND_FILTERS = [
   { key: 'all', label: '全部类型' },
   { key: 'develop', label: 'AI 开发' },
   { key: 'refine', label: 'AI 分析' },
+  { key: 'summary', label: 'AI 总结' },
 ];
-const GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析' };
+const GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结' };
 // BUG-20260911-007：kind 兜底前缀表——账本目录前缀与任务类型的固定对应（refine-store RFB- /
 // dispatch batch-）。前端实时读盘而看板服务为常驻进程（路由启动时固化，
 // BUG-20260907-017 同型机制），旧服务进程可能返回缺 kind / 未知 kind 的旧口径简报。
 // REQ-20260911-010：CMT- 前缀随批量 Commit 回退移除（服务端不再产出 CMT 简报行）。
-const GLOBAL_KIND_PREFIXES = [['RFB-', 'refine'], ['batch-', 'develop']];
+// REQ-20260921-008：docs-summary sum- 前缀（AI 总结 run）。
+const GLOBAL_KIND_PREFIXES = [['RFB-', 'refine'], ['batch-', 'develop'], ['sum-', 'summary']];
 
 // BUG-20260911-007：任务行类型兜底。原始 kind 缺失 / 不在词表时按简报携带的账本标识前缀推断
 //（REQ-20260913-003 起简报不再透出批次号，此处仅兼容旧服务进程残留的 batchId 字段，不作渲染）；
@@ -5857,6 +5868,16 @@ function globalCountsParts(task) {
       doneLabel: '已完成',
       done: c.done ?? 0,
       abnormal: (c.failed ?? 0) + (c.interrupted ?? 0),
+      remaining: c.remaining ?? 0,
+      total: c.total ?? 0,
+    };
+  }
+  if (kind === 'summary') {
+    // REQ-20260921-008 AI 总结：done = 已总结文件数；异常恒 0（中断即移出全局面板）
+    return {
+      doneLabel: '已总结',
+      done: c.done ?? 0,
+      abnormal: 0,
       remaining: c.remaining ?? 0,
       total: c.total ?? 0,
     };
@@ -5936,6 +5957,11 @@ function globalTaskRowHtml(task) {
   const kindWarn = inferred
     ? `<span class="flag" title="${esc(`简报类型字段缺失或未知（${rawKind == null || rawKind === '' ? '缺失' : `原始值 ${rawKind}`}），已按账本标识前缀${effKind === 'unknown' ? '未能识别类型，按「未知类型」兜底展示（仅在「全部类型」筛选下可见）' : `推断为${kindLabel}`}。常驻看板服务的路由在启动时固化而静态前端实时读盘，服务进程可能旧于前端：请重启看板服务（atb serve / npm run app）后刷新；若重启后仍出现请按 BUG-20260911-007 反馈`)}">${effKind === 'unknown' ? '类型未知' : '类型推断'}</span>`
     : '';
+  // REQ-20260921-008 AI 总结行：中段展示版本号与进度（verId 非 REQ/BUG 编号，不带条目跳转挂点）
+  const sumCurFilePart = task.currentFile ? ` · 当前文件 ${esc(task.currentFile)}` : '';
+  const sumMid = effKind === 'summary'
+    ? `<span class="muted">版本：</span><span class="cid">${esc(task.verId || (task.current && task.current.itemId) || '—')}</span><span class="muted small"> · 进度 ${cnt.done}/${cnt.total}<span>${sumCurFilePart}</span> · 执行会话 ${esc(shortOwner((task.current && task.current.owner) || '—'))}</span>`
+    : null;
   return `
     <article class="global-task" data-ggoto-runs="${esc(effKind)}" data-gproject="${esc(task.root || '')}"
              title="点击进入该项目任务模块（${esc(kindLabel)}）">
@@ -5947,9 +5973,11 @@ function globalTaskRowHtml(task) {
         <button type="button" class="btn small global-enter">进入项目任务</button>
       </div>
       <div class="global-task-mid">
-        ${cur
-          ? `<span class="muted">当前：</span><span class="cid link" data-ggoto-item="${esc(cur.itemId)}" data-gproject="${esc(task.root || '')}" role="button" title="查看条目 ${esc(cur.itemId)}">${esc(cur.itemId)}</span><span class="dep-title" title="${esc(cur.title || '')}">${esc(shortOwner(cur.title || ''))}</span><span class="muted small">子代理会话 ${esc(shortOwner(cur.owner || ''))}</span>`
-          : '<span class="muted small">待启动：请在对应项目的 Agent 会话粘贴调度提示词后登记运行</span>'}
+        ${sumMid !== null
+          ? sumMid
+          : cur
+            ? `<span class="muted">当前：</span><span class="cid link" data-ggoto-item="${esc(cur.itemId)}" data-gproject="${esc(task.root || '')}" role="button" title="查看条目 ${esc(cur.itemId)}">${esc(cur.itemId)}</span><span class="dep-title" title="${esc(cur.title || '')}">${esc(shortOwner(cur.title || ''))}</span><span class="muted small">子代理会话 ${esc(shortOwner(cur.owner || ''))}</span>`
+            : '<span class="muted small">待启动：请在对应项目的 Agent 会话粘贴调度提示词后登记运行</span>'}
       </div>
       <div class="global-task-meta">
         <span>${cnt.doneLabel} <b>${cnt.done}</b></span>
@@ -6039,7 +6067,7 @@ function renderGlobalView() {
       ${globalFilterChipsHtml()}
       ${hasTasks
         ? (groupsHtml || '<div class="notice">当前筛选与搜索下没有匹配的任务。</div>')
-        : '<div class="empty global-empty"><div class="empty-card"><h2>所有项目的批量任务均已收尾</h2><p>到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析任务；新任务登记运行后会自动出现在这里。</p></div></div>'}
+        : '<div class="empty global-empty"><div class="empty-card"><h2>所有项目的批量任务均已收尾</h2><p>到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析任务（AI 总结到发布模块「文档编写」页启动）；新任务登记运行后会自动出现在这里。</p></div></div>'}
       <p class="muted small global-note">数据随看板轮询自动刷新（2 秒）；「暂停 / 终止 / 删除」等操作请点击任务进入对应项目的任务模块执行。</p>
     </div>`;
   bindGlobalView(view);
@@ -6222,12 +6250,13 @@ function renderBatchDrawer() {
       <nav class="tabs batch-modes">
         <button class="tab ${mode === 'refine' ? 'active' : ''}" data-bmode="refine">AI 分析</button>
         <button class="tab ${mode === 'develop' ? 'active' : ''}" data-bmode="develop">AI 开发</button>
+        <button class="tab ${mode === 'summary' ? 'active' : ''}" data-bmode="summary">AI 总结</button>
       </nav>
       <div class="ws-entry">${newSessionLinksHtml()}</div>
     </header>
       <div class="drawer-body">
         <div id="confirmArea" class="confirm-area hidden" role="region" aria-label="待人工确认" aria-live="polite"></div>
-        ${mode === 'refine' ? renderRefinePanel() : `${!state.batchData?.batch ? renderDevStartBar() : ''}${mode === 'codex' ? renderCodexPanel(q) : renderZcodeBatchPanel()}`}
+        ${mode === 'refine' ? renderRefinePanel() : mode === 'summary' ? renderSummaryPanel() : `${!state.batchData?.batch ? renderDevStartBar() : ''}${mode === 'codex' ? renderCodexPanel(q) : renderZcodeBatchPanel()}`}
       </div>`;
   renderConfirmArea(); // REQ-20260914-001：任务页置顶「待人工确认」挂起卡片
   bindBatchDrawer();
@@ -7278,6 +7307,71 @@ function renderRefinePanel() {
 // 完善执行记录渲染已由 REQ-20260908-026 的共用 runAttemptsHtml 承接（四列表格、最近 2 次尝试）；
 // BUG-20260908-018 的记录分页交互随 2 条展示上限移除——完整账本与计数不受影响。
 
+/* ---------- REQ-20260921-008 发布文档 AI 总结（任务模块第三类子面板） ---------- */
+
+// 数据拉取（随主轮询）：/api/build/docs-summary/current（最新 run 视图 + 该版本四态）。
+// 签名剪枝：进度 / 状态无变化不重渲染；失败保留上次数据并 toast（下一轮自动重试）。
+async function refreshSummary() {
+  try {
+    const data = await api('/api/build/docs-summary/current');
+    state.summary.data = data;
+    const sig = JSON.stringify(data);
+    if (sig === state.summary.sig) return;
+    state.summary.sig = sig;
+    if (state.batch.open && state.batch.mode === 'summary') renderBatchDrawer();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// AI 总结面板：进行中（进度条 + 当前文件 + 独立锁标注）/ 失败（原因 + 可重启指引）/
+// 已完成 / 空态。入口在发布模块「文档编写」页（点击 AI 总结复制提示词启动），本面板只读展示。
+const SUMMARY_PHASE_LABEL = { running: '进行中', done: '已完成', failed: '失败' };
+
+function renderSummaryPanel() {
+  const run = state.summary.data?.run || null;
+  if (!run) {
+    return `
+      <section class="batch-create summary-create">
+        <p class="muted small" style="margin:0 0 6px">AI 总结：发布文档流水线「总结 → 审查 → 提交」的第一段——对当前版本八个发布文档（README / CHANGELOG / FEATURES / AGENTS 中英）逐文件总结，完成后进入人工审查。使用独立锁（summary.lock），与 AI 分析、AI 开发互不占用，三者可同时进行。</p>
+        <div class="notice">暂无进行中的 AI 总结任务（空态）——到发布模块「文档编写」页点击「AI 总结」启动。</div>
+      </section>`;
+  }
+  const n = run.counts?.summarized ?? 0;
+  const total = run.counts?.total ?? 8;
+  const pct = Math.round((n / total) * 100);
+  const head = `
+      <div class="batch-status-line">
+        <span class="chip batch-st ${run.phase === 'running' ? 's-running' : run.phase === 'failed' ? 's-aborted' : 's-finished'}">${SUMMARY_PHASE_LABEL[run.phase] || run.phase}</span>
+        <span class="muted small">AI 总结 · ${esc(run.verId)} · 执行 ${esc(run.runId)} · 创建 ${fmtTime(run.createdAt)}</span>
+      </div>`;
+  if (run.phase === 'running') {
+    return `
+      <section>
+        ${head}
+        <div class="task-progress"><div class="task-progress-bar"><i style="width:${pct}%"></i></div><span class="muted small">${n}/${total}</span></div>
+        <p class="small" style="margin:6px 0">当前：<code>${esc(run.currentFile || '—')}</code>${run.currentFile ? '（正在总结）' : '（等待下一文件回执）'}</p>
+        <p class="muted small">锁：summary（独立锁，与 AI 分析 / AI 开发隔离，互不占用） · 执行会话 ${esc(run.owner)}</p>
+        <p class="muted small">进度由执行子代理经 atb summary file 逐文件回执，本面板随轮询自动刷新；完成后到发布模块「文档编写」页人工审查并提交。</p>
+      </section>`;
+  }
+  if (run.phase === 'failed') {
+    return `
+      <section>
+        ${head}
+        <div class="notice warn">AI 总结中断：${esc(run.reason || '未知原因')}——文件状态不悬挂在「正在总结」，可到发布模块「文档编写」页再次点击「AI 总结」续跑（已总结完成的文件保留待审核状态）。</div>
+        <p class="muted small">中断时间 ${fmtTime(run.finishedAt || run.updatedAt)} · 执行会话 ${esc(run.owner)} · 锁已释放（summary）。</p>
+      </section>`;
+  }
+  return `
+      <section>
+        ${head}
+        <div class="notice ok">AI 总结已完成：${n}/${total} 个文件已总结（未总结的文件可在审查中直接处理），全部进入「已总结待审核」，等待人工审查。</div>
+        ${run.summary ? `<p class="small"><span class="muted small">要点：</span> ${esc(run.summary)}</p>` : ''}
+        <p class="muted small">完成时间 ${fmtTime(run.finishedAt || run.updatedAt)} · 下一步：发布模块「文档编写」页「审查」→「提交」。</p>
+      </section>`;
+}
+
 // REQ-20260917-001：需求模块快捷入口——就地创建任务并复制主调度提示词，不再跳转任务页。
 // 创建接口与任务页「启动」同一事实源（响应 prompt 即任务页「提示词」页签文本，不出现两份文本）；
 // 成功 toast 沿用任务页统一成功口径；重复启动由服务端 400 明确提示、前端如实展示不新建；
@@ -7585,7 +7679,9 @@ function bindBatchDrawer() {
       state.batch.mode = b.dataset.bmode;
       saveViewSnapshot(); // REQ-20260910-001：任务一级页签进入快照
       renderBatchDrawer();
-      refreshBatch(); // 切换子面板即时拉取该面板数据（不等下一轮轮询）
+      // 切换子面板即时拉取该面板数据（不等下一轮轮询）；REQ-20260921-008：AI 总结走独立接口
+      if (state.batch.mode === 'summary') refreshSummary();
+      else refreshBatch();
     });
   }
   // REQ-20260909-008：二级页签切换（纯前端；当前页签随 state.batch.pane / state.refine.pane
