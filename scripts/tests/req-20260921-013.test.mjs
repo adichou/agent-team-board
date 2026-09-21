@@ -132,17 +132,17 @@ t('T2 卡片迁移：版本卡片不再渲染 AI 完善按钮；合并 / 创建�
   }
 });
 
-t('T3 概况入口：概况描述块头部有唯一「AI 完善」按钮（REQ-20260921-016 迁至描述头、紧邻「编辑」左边）绑定当前版本；切至其余四步入口隐藏', async () => {
+t('T3 概况入口：概况顶部操作行有唯一「AI 完善」按钮（BUG-20260921-016 起位于 bld-plan-acts 行、紧邻「编辑」左边）绑定当前版本；切至其余四步入口隐藏', async () => {
   const h = setup();
   await h.enter(); // 选中 BLD-DRAFT，plan 步
   let detail = detailPart(h.inner());
-  assert.match(detail, /bld-desc-block-head/, '概况描述块头部存在（入口所在容器）');
+  assert.match(detail, /bld-plan-acts/, '概况顶部操作行存在（入口所在容器，BUG-20260921-016）');
   assert.match(detail, /data-ver-answer="BLD-DRAFT"/, '按钮绑定当前选中版本');
   assert.match(detail, /aria-label="AI 完善 BLD-DRAFT"/, '可访问名称带版本号');
   assert.equal((detail.match(/data-ver-answer=/g) || []).length, 1, '详情内唯一入口（无重复）');
-  // 入口在描述块头部操作组内，且先于「编辑」键（紧邻其左）
-  const iHead = detail.indexOf('bld-desc-block-head');
-  assert.ok(iHead !== -1 && detail.indexOf('data-ver-answer="BLD-DRAFT"', iHead) < detail.indexOf('id="bldEditInfo"'), 'AI 完善位于编辑左边');
+  // 入口在概况顶部操作行内，且先于「编辑」键（紧邻其左）
+  const iActs = detail.indexOf('bld-plan-acts');
+  assert.ok(iActs !== -1 && detail.indexOf('data-ver-answer="BLD-DRAFT"', iActs) < detail.indexOf('id="bldEditInfo"'), 'AI 完善位于编辑左边');
   // 切至其他步骤：入口不显示（对四个步骤逐一验证）
   for (const step of ['link', 'docs', 'merge', 'release']) {
     h.run(`window.ATBBuild.setStep(${JSON.stringify(step)})`);

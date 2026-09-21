@@ -107,7 +107,7 @@ const mergePaneAt = async (h, id) => {
   return inner.slice(s, inner.indexOf('</button>', j));
 };
 
-t('B1 版本卡片不再有行内合并 / 发布键（REQ-20260921-016 精简，合并迁详情合并步）；「AI 完善」在详情概况描述块头部（REQ-20260921-013 迁入详情）', async () => {
+t('B1 版本卡片不再有行内合并 / 发布键（REQ-20260921-016 精简，合并迁详情合并步）；「AI 完善」在详情概况顶部操作行（REQ-20260921-013 迁入详情，BUG-20260921-016 布局调整）', async () => {
   const h = await setup();
   await h.enter();
   const inner = h.inner();
@@ -119,9 +119,9 @@ t('B1 版本卡片不再有行内合并 / 发布键（REQ-20260921-016 精简，
   for (const id of ['BLD-A', 'BLD-B']) {
     assert.match(cards, new RegExp(`data-ver-delete="${id}"`), `${id} 删除键保留（迁卡片标题行右端）`);
   }
-  // 详情概况：唯一 AI 完善入口绑定选中版本（enter 后自动选中 BLD-A），位于描述块头部
+  // 详情概况：唯一 AI 完善入口绑定选中版本（enter 后自动选中 BLD-A），位于概况顶部操作行
   const detail = detailAt(h, 'BLD-A');
-  assert.match(detail, /bld-desc-block-head/, '描述块头部存在（入口所在容器）');
+  assert.match(detail, /bld-plan-acts/, '概况顶部操作行存在（入口所在容器，BUG-20260921-016）');
   assert.match(detail, /data-ver-answer="BLD-A"/, '概况描述头有 AI 完善（绑定当前版本）');
   assert.match(detail, /aria-label="AI 完善 BLD-A"/, 'AI 完善 aria-label 带版本号');
   assert.match(detail, /title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"/, 'AI 完善 title 说明动作');
