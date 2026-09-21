@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260921-002 · 分支浏览提交树可视化 + 搜索 — 可交互演示</title>
+<!--
+  可交互演示（REQ-20260908-021 口径）：单文件、内联 CSS/JS、无外网依赖、无构建步骤。
+  演示目标：发布模块 → 分支浏览右栏升级为 git 提交树（彩色泳道 + 提交圆点 + 分支/合并曲线 +
+  分支名与 tag 标签）并支持两模式搜索（高亮定位 / 过滤保留祖先）。
+  说明：数据为模拟（仿本仓库提交风格）；实际实现按 README 选型 vendored @gitgraph/js 渲染、
+  数据来自分支浏览既有 git log 链路；分页控件沿用现状，未纳入本演示。
+-->
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --warn: #dc2626;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --git-lg0: #2563eb; --git-lg1: #d97706; --git-lg2: #7c3aed;
+    --git-lg3: #0891b2; --git-lg4: #dc2626; --git-lg5: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+      --border: #263041; --primary: #3b82f6; --warn: #f87171;
+      --info-bg: #0b1d3a; --info-text: #93c5fd; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+      --git-lg0: #60a5fa; --git-lg1: #fbbf24; --git-lg2: #a78bfa;
+      --git-lg3: #22d3ee; --git-lg4: #f87171; --git-lg5: #4ade80;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c;
+    --border: #e2e7ef; --primary: #2563eb; --warn: #dc2626;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --git-lg0: #2563eb; --git-lg1: #d97706; --git-lg2: #7c3aed;
+    --git-lg3: #0891b2; --git-lg4: #dc2626; --git-lg5: #16a34a;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad;
+    --border: #263041; --primary: #3b82f6; --warn: #f87171;
+    --info-bg: #0b1d3a; --info-text: #93c5fd; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+    --git-lg0: #60a5fa; --git-lg1: #fbbf24; --git-lg2: #a78bfa;
+    --git-lg3: #22d3ee; --git-lg4: #f87171; --git-lg5: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px;
+    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  /* ── 演示控制条（仅演示用，真实界面无此条） ── */
+  .demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 6px; }
+  .demo-title { font-weight: 600; }
+  .demo-controls { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .demo-controls .lbl { color: var(--muted); font-size: 12.5px; }
+  .demo-controls button {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  .demo-controls button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .demo-note { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+  /* ── 应用框架：发布模块 ── */
+  .app { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06); }
+  .app-head { display: flex; align-items: center; gap: 6px; padding: 10px 16px 0; border-bottom: 1px solid var(--border); }
+  .app-title { font-weight: 600; margin-right: 10px; }
+  .rel-tab { font-size: 13px; padding: 7px 12px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); cursor: pointer; }
+  .rel-tab.active { color: var(--text); border-bottom-color: var(--primary); font-weight: 600; }
+  .rel-tab[disabled] { cursor: default; }
+  /* ── 分支浏览左右分栏 ── */
+  .branch-split { display: grid; grid-template-columns: 235px minmax(0, 1fr); gap: 14px; padding: 14px 16px; }
+  @media (max-width: 860px) { .branch-split { grid-template-columns: minmax(0, 1fr); } }
+  .branch-list { border-right: 1px solid var(--border); padding-right: 12px; }
+  @media (max-width: 860px) { .branch-list { border-right: 0; padding-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; } }
+  .branch-tools { display: flex; gap: 6px; margin-bottom: 8px; }
+  .btn { font-size: 13px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .btn:hover:not(:disabled) { background: var(--info-bg); }
+  .btn.small { font-size: 12px; padding: 3px 8px; }
+  .btn.quiet { border-color: transparent; color: var(--muted); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .sync-note { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .group-head { font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .brow { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .brow:hover { background: var(--info-bg); }
+  .brow.sel { border-color: var(--primary); background: var(--info-bg); }
+  .brow.remote { color: var(--muted); }
+  .st { font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 999px; background: var(--ok-bg); color: var(--ok-text); margin-left: auto; }
+  .tiny { font-size: 11px; }
+  /* ── 右栏：提交树 ── */
+  .log-pane { min-width: 0; }
+  .log-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .log-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 260px; min-width: 0; }
+  .log-search input[type="search"] { flex: 1 1 180px; min-width: 0; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 5px 9px; font-size: 12.5px; }
+  .log-search label.radio { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+  .chip-btn { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer; }
+  .chip-btn:hover { background: var(--info-bg); color: var(--info-text); }
+  .count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .log-body { position: relative; max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; background: var(--panel); }
+  .lg-row { display: flex; align-items: center; gap: 8px; width: max-content; min-width: 100%; background: none; border: 0; padding: 0 6px; margin: 0; height: 30px; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 6px; white-space: nowrap; }
+  .lg-row:hover { background: var(--info-bg); }
+  .lg-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .lg-row.sel { background: var(--info-bg); }
+  .lg-row code { font-size: 12px; color: var(--info-text); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .lg-msg { overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
+  .lg-meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .lg-graph { flex-shrink: 0; display: block; overflow: visible; }
+  .lg-graph path { fill: none; stroke-width: 2; }
+  .lg-graph .c0 { stroke: var(--git-lg0); } .lg-graph .c1 { stroke: var(--git-lg1); }
+  .lg-graph .c2 { stroke: var(--git-lg2); } .lg-graph .c3 { stroke: var(--git-lg3); }
+  .lg-graph .c4 { stroke: var(--git-lg4); } .lg-graph .c5 { stroke: var(--git-lg5); }
+  .lg-graph .node { fill: var(--panel); stroke-width: 2; }
+  .lg-graph .dot { stroke: none; }
+  .lg-graph .head-ring { fill: none; stroke: var(--text); stroke-width: 1.2; opacity: .75; }
+  .btag { flex: none; border-radius: 4px; font-size: 11px; line-height: 17px; padding: 0 7px; color: #fff; }
+  .btag.t0 { background: var(--git-lg0); } .btag.t1 { background: var(--git-lg1); }
+  .btag.t2 { background: var(--git-lg2); } .btag.t3 { background: var(--git-lg3); }
+  .btag.t4 { background: var(--git-lg4); } .btag.t5 { background: var(--git-lg5); }
+  .gtag { flex: none; border: 1px solid var(--info-text); color: var(--info-text); border-radius: 4px; font-size: 11px; line-height: 16px; padding: 0 6px; background: transparent; }
+  .merge-tag { flex: none; font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 99px; background: var(--info-bg); color: var(--info-text); }
+  mark { background: var(--info-bg); color: var(--info-text); font-weight: 700; border-radius: 3px; padding: 0 1px; }
+  .btag.hit, .gtag.hit { outline: 2px solid var(--info-text); outline-offset: 1px; }
+  .log-detail { font-size: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin: 6px 2px 8px; }
+  .log-detail code { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--info-text); }
+  .log-eof { margin: 10px 2px 4px; padding-top: 8px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: 12px; }
+  .state-msg { color: var(--muted); padding: 18px 8px; }
+  .state-err { color: var(--warn); padding: 14px 8px; }
+  .log-empty-hint { padding: 4px 8px 14px; }
+  /* ── 非 git 仓库空态 ── */
+  .repo-empty { padding: 46px 20px; text-align: center; }
+  .repo-empty h3 { margin: 0 0 8px; }
+  .repo-empty p { color: var(--muted); font-size: 13px; max-width: 520px; margin: 0 auto; }
+  .repo-empty code { font-family: ui-monospace, Menlo, Consolas, monospace; background: var(--info-bg); color: var(--info-text); border-radius: 4px; padding: 0 5px; }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="demo-title">REQ-20260921-002 · 分支浏览提交树可视化 + 搜索 — 可交互演示</span>
+  <span class="demo-controls">
+    <span class="lbl">状态切换：</span>
+    <button type="button" data-sc="normal" class="on">正常</button>
+    <button type="button" data-sc="loading">加载中</button>
+    <button type="button" data-sc="error">读取失败</button>
+    <button type="button" data-sc="notrepo">非 git 仓库</button>
+    <button type="button" data-sc="empty">空分支</button>
+  </span>
+  <span class="demo-controls"><button type="button" id="themeBtn">外观：跟随系统</button></span>
+</div>
+<p class="demo-note">
+  演示数据为模拟（仿本仓库提交风格）。搜索支持 message / 分支名 / tag 忽略大小写，两模式：高亮定位 / 过滤（保留全部祖先，泳道连通）。
+  实际实现按 README 选型 vendored @gitgraph/js 渲染、数据来自既有 git log 链路；分页控件沿用现状，未纳入本演示。点击提交行可查看详情（沿用 REQ-20260920-001 行选中口径）。
+</p>
+
+<div class="app">
+  <div class="app-head">
+    <span class="app-title">发布模块</span>
+    <button type="button" class="rel-tab" disabled>版本计划</button>
+    <button type="button" class="rel-tab active" disabled>分支浏览</button>
+  </div>
+  <div id="branchesPane"><!-- JS 渲染 --></div>
+</div>
+
+<noscript><p>本演示需要启用 JavaScript。</p></noscript>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── 模拟历史（旧 → 新），仿 agent-team-board 提交风格 ─────────────────── */
+  var BRANCH_COLOR = { 'main': 0, 'dev': 1, 'feat/version-plan': 2, 'fix/i18n': 3, 'feat/board-ui': 4 };
+  var HIST = [
+    { t: 'commit', b: 'main', h: '711cd99', m: 'chore: 初始化 agent-team-board 仓库', a: 'adi chou', d: '09-10' },
+    { t: 'commit', b: 'main', h: 'f62d519', m: 'doc: README 环境与运行命令 REQ-20260918-002', a: 'adi chou', d: '09-12' },
+    { t: 'tag', b: 'main', n: 'v0.1.0' },
+    { t: 'branch', from: 'main', b: 'dev' },
+    { t: 'commit', b: 'dev', h: 'd353523', m: 'feat: 看板骨架与条目状态机 REQ-20260901-001', a: 'adi chou', d: '09-13' },
+    { t: 'branch', from: 'dev', b: 'feat/version-plan' },
+    { t: 'commit', b: 'feat/version-plan', h: '581a33b', m: 'test: 版本计划允许重新关联条目 BUG-20260920-005', a: 'adi chou', d: '09-15' },
+    { t: 'commit', b: 'feat/version-plan', h: 'ed0a331', m: 'fix: 版本计划允许重新关联条目和提交 BUG-20260920-005', a: 'adi chou', d: '09-15' },
+    { t: 'merge', into: 'dev', from: 'feat/version-plan', h: '9be4c07' },
+    { t: 'branch', from: 'dev', b: 'fix/i18n' },
+    { t: 'commit', b: 'fix/i18n', h: 'c0ffe10', m: 'fix: 界面文案中英文同步 BUG-20260912-001', a: 'adi chou', d: '09-16' },
+    { t: 'branch', from: 'dev', b: 'feat/board-ui' },
+    { t: 'commit', b: 'feat/board-ui', h: '4a2f8d1', m: 'feat: 看板卡片交互 REQ-20260901-004', a: 'adi chou', d: '09-17' },
+    { t: 'commit', b: 'feat/board-ui', h: 'b7e93f2', m: 'test: 看板卡片交互用例 BUG-20260918-007', a: 'adi chou', d: '09-17' },
+    { t: 'merge', into: 'dev', from: 'fix/i18n', h: '51c9d84' },
+    { t: 'merge', into: 'dev', from: 'feat/board-ui', h: '8a4de92' },
+    { t: 'commit', b: 'dev', h: 'a1b2c3d', m: 'chore: 收口清理与全量测试', a: 'adi chou', d: '09-18' },
+    { t: 'merge', into: 'main', from: 'dev', h: '3f8e521' },
+    { t: 'commit', b: 'main', h: '9d77a10', m: 'doc: 发布说明 v0.1.1', a: 'adi chou', d: '09-20' },
+    { t: 'tag', b: 'main', n: 'v0.1.1' }
+  ];
+
+  // 编译为 commit DAG（下标即内部 id），heads 记录各分支头（该分支最后一次提交）
+  function compile(steps) {
+    var heads = {}, commits = [];
+    steps.forEach(function (s) {
+      if (s.t === 'commit' || s.t === 'merge') {
+        var c;
+        if (s.t === 'commit') {
+          c = { n: commits.length, h: s.h, branch: s.b, msg: s.m, author: s.a, date: s.d,
+                parents: heads[s.b] != null ? [heads[s.b]] : [] };
+        } else {
+          c = { n: commits.length, h: s.h, branch: s.into,
+                msg: "Merge branch '" + s.from + "' into " + s.into, author: 'adi chou', date: '',
+                parents: [heads[s.into], heads[s.from]].filter(function (p) { return p != null; }) };
+        }
+        commits.push(c); heads[s.b || s.into] = c.n; s._cid = c.n;
+      } else if (s.t === 'branch') {
+        heads[s.b] = heads[s.from];
+      } else if (s.t === 'tag') {
+        s._cid = heads[s.b]; if (commits[s._cid]) commits[s._cid].tag = s.n;
+      }
+    });
+    var branchHead = {};
+    commits.forEach(function (c) { branchHead[c.branch] = c.n; });
+    return { commits: commits, branchHead: branchHead };
+  }
+  var G = compile(HIST);
+  var C = G.commits;
+
+  /* ── 状态 ─────────────────────────────────────────────────────────────── */
+  var state = { branch: 'dev', scenario: 'normal', loading: false, q: '', mode: 'highlight', sel: null };
+  var themeMode = 'auto'; // auto | light | dark
+  var timers = { loading: null, debounce: null };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+  // 命中词高亮（忽略大小写子串包裹 <mark>）
+  function hilite(text, q) {
+    var t = esc(text);
+    if (!q) return t;
+    var i = text.toLowerCase().indexOf(q.toLowerCase());
+    if (i < 0) return t;
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+  }
+
+  /* ── 视图：所选分支可达集（新 → 旧） ─────────────────────────────────── */
+  function viewCommits() {
+    if (state.branch === 'docs/notes') return [];
+    var head = G.branchHead[state.branch];
+    if (head == null) return [];
+    var seen = {}, stack = [head];
+    while (stack.length) {
+      var n = stack.pop();
+      if (seen[n]) continue;
+      seen[n] = true;
+      C[n].parents.forEach(function (p) { if (!seen[p]) stack.push(p); });
+    }
+    return C.filter(function (c) { return seen[c.n]; }).reverse();
+  }
+
+  // 搜索：匹配 message / 分支名 / tag（忽略大小写）；kept = 匹配 + 全部祖先（泳道连通）
+  function search(q) {
+    var ql = q.trim().toLowerCase(), matched = [];
+    var view = viewCommits();
+    if (ql) {
+      matched = view.filter(function (c) {
+        return c.msg.toLowerCase().indexOf(ql) >= 0
+          || c.branch.toLowerCase().indexOf(ql) >= 0
+          || (c.tag || '').toLowerCase().indexOf(ql) >= 0;
+      });
+    }
+    var kept = {};
+    matched.forEach(function (c) {
+      var stack = [c.n];
+      while (stack.length) {
+        var n = stack.pop();
+        if (kept[n]) continue;
+        kept[n] = true;
+        C[n].parents.forEach(function (p) { if (!kept[p]) stack.push(p); });
+      }
+    });
+    return { view: view, matched: matched, kept: kept };
+  }
+
+  /* ── 泳道布局（同 git log --graph 直觉；分支身份稳定配色） ─────────────── */
+  var ROW_H = 30, LANE_W = 14;
+  function colOf(c) { return BRANCH_COLOR[c.branch] != null ? BRANCH_COLOR[c.branch] : 5; }
+  function layout(list) { // list：新 → 旧
+    var shown = {};
+    list.forEach(function (c) { shown[c.n] = true; });
+    var lanes = [], laneCount = 1;
+    var rows = list.map(function (c) {
+      var parents = c.parents.filter(function (p) { return shown[p]; });
+      var nodeX, ownColor;
+      var kept = [];
+      lanes.forEach(function (l) {
+        if (nodeX === undefined && l.n === c.n) { nodeX = kept.length; ownColor = l.color; return; }
+        kept.push(l);
+      });
+      if (nodeX === undefined) { nodeX = kept.length; ownColor = colOf(c); }
+      var bottom = kept.slice();
+      var edges = [];
+      parents.forEach(function (pn, pi) {
+        var idx = -1;
+        bottom.forEach(function (l, i) { if (l.n === pn) idx = i; });
+        if (idx >= 0) { edges.push({ x2: idx, color: bottom[idx].color }); return; }
+        var color = pi === 0 ? ownColor : colOf(C[pn]);
+        var slot = Math.min(pi === 0 ? nodeX : bottom.length, bottom.length);
+        bottom.splice(slot, 0, { n: pn, color: color });
+        edges.push({ x2: slot, color: color });
+      });
+      var segs = kept.map(function (l) {
+        return { x1: lanes.indexOf(l), x2: bottom.indexOf(l), color: l.color, fromNode: false };
+      });
+      edges.forEach(function (e) { segs.push({ x1: nodeX, x2: e.x2, color: e.color, fromNode: true }); });
+      laneCount = Math.max(laneCount, lanes.length, bottom.length, nodeX + 1);
+      lanes = bottom;
+      return { c: c, nodeX: nodeX, color: ownColor, segs: segs };
+    });
+    return { rows: rows, laneCount: laneCount };
+  }
+
+  // 行内 SVG：延续线 / 自节点父边（曲线绕行）、合并双圈、分支头外圈
+  function rowSvg(r, laneCount, isHead) {
+    var w = laneCount * LANE_W + 6;
+    var x = function (c) { return c * LANE_W + 5; };
+    var mid = ROW_H / 2;
+    var parts = r.segs.map(function (s) {
+      var cls = 'c' + s.color;
+      if (s.fromNode) {
+        var d = s.x1 === s.x2
+          ? 'M ' + x(s.x1) + ' ' + mid + ' V ' + ROW_H
+          : 'M ' + x(s.x1) + ' ' + mid + ' C ' + x(s.x1) + ' ' + (mid + 7) + ', ' + x(s.x2) + ' ' + (ROW_H - 8) + ', ' + x(s.x2) + ' ' + ROW_H;
+        return '<path d="' + d + '" class="' + cls + '"/>';
+      }
+      var d2 = s.x1 === s.x2
+        ? 'M ' + x(s.x1) + ' 0 V ' + ROW_H
+        : 'M ' + x(s.x1) + ' 0 C ' + x(s.x1) + ' 8, ' + x(s.x2) + ' ' + (mid - 7) + ', ' + x(s.x2) + ' ' + mid + ' L ' + x(s.x2) + ' ' + ROW_H;
+      return '<path d="' + d2 + '" class="' + cls + '"/>';
+    });
+    var nx = x(r.nodeX);
+    var isMerge = r.c.parents.length >= 2;
+    var node = isMerge
+      ? '<circle cx="' + nx + '" cy="' + mid + '" r="6" class="node c' + r.color + '"/>'
+        + '<circle cx="' + nx + '" cy="' + mid + '" r="2.4" class="dot" fill="var(--git-lg' + r.color + ')"/>'
+      : '<circle cx="' + nx + '" cy="' + mid + '" r="4" class="node c' + r.color + '"/>';
+    var ring = isHead ? '<circle cx="' + nx + '" cy="' + mid + '" r="8.5" class="head-ring"/>' : '';
+    return '<svg class="lg-graph" width="' + w + '" height="' + ROW_H + '" viewBox="0 0 ' + w + ' ' + ROW_H + '" aria-hidden="true">' + parts.join('') + node + ring + '</svg>';
+  }
+
+  /* ── 渲染 ─────────────────────────────────────────────────────────────── */
+  var $ = function (sel) { return document.querySelector(sel); };
+
+  function branchRowsHtml() {
+    var cur = ' <span class="st">当前</span>';
+    return ''
+      + '<div class="group"><div class="group-head">本地</div>'
+      + '<div class="brow' + (state.branch === 'dev' ? ' sel' : '') + '" data-b="dev" role="button" tabindex="0"><strong>dev</strong>' + cur + '</div>'
+      + '<div class="brow' + (state.branch === 'main' ? ' sel' : '') + '" data-b="main" role="button" tabindex="0"><span>main</span></div>'
+      + '<div class="brow' + (state.branch === 'docs/notes' ? ' sel' : '') + '" data-b="docs/notes" role="button" tabindex="0"><span>docs/notes</span> <span class="tiny" style="color:var(--muted)">（演示空分支）</span></div>'
+      + '</div>'
+      + '<div class="group"><div class="group-head">远端</div>'
+      + '<div class="brow remote" data-b="dev" role="button" tabindex="0" title="查看该远端分支对应的提交记录"><span>origin/dev</span></div>'
+      + '<div class="brow remote" data-b="main" role="button" tabindex="0" title="查看该远端分支对应的提交记录"><span>origin/main</span></div>'
+      + '</div>';
+  }
+
+  function renderPane() {
+    var pane = $('#branchesPane');
+    if (state.scenario === 'notrepo') {
+      pane.innerHTML = '<div class="repo-empty"><h3>当前项目不是 git 仓库</h3>'
+        + '<p>分支浏览与同步需要 git 仓库：可在终端执行 git init，或经 <code>atb init</code> 初始化项目（设置模块「Git 工作流」亦有初始化入口）。</p></div>';
+      return;
+    }
+    pane.innerHTML = ''
+      + '<div class="branch-split">'
+      + '<aside class="branch-list" aria-label="分支列表">'
+      + '<div class="branch-tools">'
+      + '<button type="button" class="btn small" title="演示不包含同步行为（fetch --prune + 推送开发分支），见 README">⟳ 和远端同步</button>'
+      + '<button type="button" class="btn small quiet" id="branchRefresh" title="重新加载分支列表（演示：无实际请求）">刷新</button>'
+      + '</div>'
+      + '<p class="sync-note">同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。</p>'
+      + branchRowsHtml()
+      + '</aside>'
+      + '<section class="log-pane" aria-label="提交记录">'
+      + '<div class="log-head">'
+      + '<strong id="logBranchName"></strong>'
+      + '<div class="log-search" role="search">'
+      + '<input type="search" id="qInput" placeholder="搜 message / 分支名 / tag…" aria-label="搜索提交记录">'
+      + '<label class="radio"><input type="radio" name="mode" value="highlight">高亮定位</label>'
+      + '<label class="radio"><input type="radio" name="mode" value="filter">过滤（保留祖先）</label>'
+      + '<button type="button" class="chip-btn" data-q="BUG-20260920-005">BUG-20260920-005</button>'
+      + '<button type="button" class="chip-btn" data-q="i18n">i18n</button>'
+      + '<button type="button" class="chip-btn" data-q="v0.1.0">v0.1.0</button>'
+      + '<button type="button" class="btn small quiet" id="clearBtn" hidden>清除</button>'
+      + '<span class="count" id="countTxt" role="status"></span>'
+      + '</div>'
+      + '<button type="button" class="btn small quiet" id="logRefresh" title="重新加载当前分支提交记录">刷新</button>'
+      + '</div>'
+      + '<div id="logArea"></div>'
+      + '</section>'
+      + '</div>';
+    $('#qInput').value = state.q;
+    var radios = document.querySelectorAll('input[name="mode"]');
+    radios.forEach(function (r) { r.checked = r.value === state.mode; });
+    updateHead();
+    renderLog();
+  }
+
+  function updateHead() {
+    var nameEl = $('#logBranchName'), input = $('#qInput'), clearBtn = $('#clearBtn');
+    if (!nameEl) return;
+    nameEl.textContent = state.branch === 'docs/notes' ? 'docs/notes' : state.branch;
+    var busy = state.loading;
+    input.disabled = busy;
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.disabled = busy; });
+    document.querySelectorAll('.chip-btn').forEach(function (b) { b.disabled = busy; });
+    var refresh = $('#logRefresh'); if (refresh) refresh.disabled = busy;
+    clearBtn.hidden = !state.q;
+    var count = $('#countTxt');
+    if (busy) { count.textContent = state.q.trim() ? '搜索中…' : ''; return; } // 执行中不出计数（与真实口径一致）
+    if (state.branch === 'docs/notes') { count.textContent = ''; return; }
+    var res = search(state.q);
+    if (!state.q.trim()) {
+      count.textContent = '共 ' + res.view.length + ' 条提交';
+    } else if (state.mode === 'highlight') {
+      count.textContent = res.matched.length
+        ? '高亮 ' + res.matched.length + ' 条匹配（message / 分支名 / tag）'
+        : '没有匹配';
+    } else {
+      var keptN = res.view.filter(function (c) { return res.kept[c.n]; }).length;
+      count.textContent = '匹配 ' + res.matched.length + ' 条 · 保留 ' + keptN + '/' + res.view.length + ' 条（含祖先，泳道连通）';
+    }
+  }
+
+  function renderLog() {
+    var area = $('#logArea');
+    if (!area) return;
+    // 加载态（默认加载 / 搜索执行中共范式，控件随 loading 禁用防重复触发）
+    if (state.loading) {
+      area.innerHTML = '<div class="state-msg">' + (state.q.trim() ? '搜索中…' : '加载提交记录中…') + '</div>';
+      return;
+    }
+    if (state.scenario === 'error') {
+      area.innerHTML = '<div class="state-err" role="alert">提交记录读取失败：模拟网络错误（演示）'
+        + ' <button type="button" class="btn small" data-retry>重试</button></div>';
+      return;
+    }
+    if (state.branch === 'docs/notes') {
+      var q = state.q.trim();
+      area.innerHTML = q
+        ? '<div class="state-msg">没有匹配的提交（关键词：' + esc(q) + '）</div>'
+          + '<div class="log-empty-hint"><button type="button" class="btn small quiet" data-clear>清除</button></div>'
+        : '<div class="state-msg">该分支暂无提交</div>';
+      return;
+    }
+    var res = search(state.q);
+    var q2 = state.q.trim();
+    // 搜索无匹配空态（与「该分支暂无提交」区分；一键清除回默认列表）
+    if (q2 && !res.matched.length) {
+      area.innerHTML = '<div class="state-msg">没有匹配的提交（关键词：' + esc(q2) + '）</div>'
+        + '<div class="log-empty-hint"><button type="button" class="btn small quiet" data-clear>清除</button></div>';
+      return;
+    }
+    var list = (state.mode === 'filter' && q2)
+      ? res.view.filter(function (c) { return res.kept[c.n]; })
+      : res.view;
+    var g = layout(list);
+    // 选中行详情（REQ-20260920-001 行选中口径；过滤后不可见则清除选中）
+    if (state.sel != null && !list.some(function (c) { return c.n === state.sel; })) state.sel = null;
+    var detail = '';
+    if (state.sel != null) {
+      var sc = C[state.sel];
+      var parentsPart = sc.parents.length
+        ? '父提交：' + sc.parents.map(function (p) { return '<code>' + esc(C[p].h) + '</code>'; }).join(' ')
+        : '无父提交（根提交）';
+      var tagPart = sc.tag ? '；标签：<code>' + esc(sc.tag) + '</code>' : '';
+      detail = '<div class="log-detail" role="status"><code>' + esc(sc.h) + '</code> ' + esc(sc.msg)
+        + '；' + parentsPart + '；分支：' + esc(sc.branch) + tagPart + '</div>';
+    }
+    var ql = q2.toLowerCase();
+    var rowsHtml = g.rows.map(function (r) {
+      var c = r.c;
+      var isHead = G.branchHead[c.branch] === c.n;
+      var bHit = q2 && c.branch.toLowerCase().indexOf(ql) >= 0;
+      var tHit = q2 && (c.tag || '').toLowerCase().indexOf(ql) >= 0;
+      var btag = isHead ? '<span class="btag t' + colOf(c) + (bHit ? ' hit' : '') + '">' + hilite(c.branch, q2) + '</span>' : '';
+      var gtag = c.tag ? '<span class="gtag' + (tHit ? ' hit' : '') + '">' + hilite(c.tag, q2) + '</span>' : '';
+      var mergeTag = c.parents.length >= 2 ? '<span class="merge-tag">合并 · ' + c.parents.length + ' 父提交</span>' : '';
+      var meta = c.author ? esc(c.author) + (c.date ? ' · ' + esc(c.date) : '') : '';
+      return '<button type="button" class="lg-row' + (state.sel === c.n ? ' sel' : '') + '" data-id="' + c.n
+        + '" title="点击查看提交详情">' + rowSvg(r, g.laneCount, isHead)
+        + '<code>' + esc(c.h) + '</code>' + btag + gtag
+        + '<span class="lg-msg">' + hilite(c.msg, q2) + '</span>' + mergeTag
+        + '<span class="lg-meta">' + meta + '</span></button>';
+    }).join('');
+    var eof = (state.mode === 'filter' && q2)
+      ? '已到末尾 · 共 ' + res.matched.length + ' 条匹配，保留 ' + list.length + ' 条（含祖先）'
+      : '已到末尾 · 共 ' + list.length + ' 条提交（可翻至分支首个提交）';
+    area.innerHTML = detail + rowsHtml + '<div class="log-eof" role="note">' + eof + '</div>';
+    // 高亮定位：自动滚动到首条匹配
+    if (state.mode === 'highlight' && q2 && res.matched.length) {
+      var first = area.querySelector('.lg-row mark') || area.querySelector('.lg-row .hit');
+      var firstRow = first ? (first.closest ? first.closest('.lg-row') : null) : null;
+      if (firstRow) area.scrollTo({ top: Math.max(0, firstRow.offsetTop - area.clientHeight / 2 + firstRow.offsetHeight / 2), behavior: 'smooth' });
+    }
+  }
+
+  function setScenarioButtons() {
+    document.querySelectorAll('.demo-controls [data-sc]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-sc') === state.scenario);
+    });
+  }
+
+  /* ── 带加载反馈的动作（模拟异步；期间控件禁用防重复触发） ───────────────── */
+  function withLoading(fn, ms) {
+    if (state.loading) return;
+    state.loading = true;
+    renderLog(); updateHead();
+    if (timers.loading) clearTimeout(timers.loading);
+    timers.loading = setTimeout(function () {
+      state.loading = false;
+      fn();
+      renderLog(); updateHead();
+    }, ms);
+  }
+
+  /* ── 事件 ─────────────────────────────────────────────────────────────── */
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest ? ev.target.closest('button, [data-b]') : null;
+    if (!t) return;
+    // 演示状态切换
+    var sc = t.getAttribute('data-sc');
+    if (sc) {
+      if (timers.loading) { clearTimeout(timers.loading); state.loading = false; }
+      state.scenario = sc;
+      if (sc === 'empty') { // 空分支 = 选中新建未提交的分支
+        state.branch = 'docs/notes'; state.q = ''; state.sel = null;
+        state.scenario = 'normal';
+        setScenarioButtons(); renderPane();
+        return;
+      }
+      if (sc === 'loading') {
+        setScenarioButtons();
+        withLoading(function () { state.scenario = 'normal'; setScenarioButtons(); }, 900);
+        return;
+      }
+      if (sc === 'error') { state.q = ''; setScenarioButtons(); renderPane(); return; }
+      setScenarioButtons(); renderPane(); // normal / notrepo
+      return;
+    }
+    // 主题切换：跟随系统 → 浅色 → 深色
+    if (t.id === 'themeBtn') {
+      themeMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
+      document.documentElement.setAttribute('data-theme', themeMode === 'auto' ? '' : themeMode);
+      t.textContent = '外观：' + (themeMode === 'auto' ? '跟随系统' : themeMode === 'light' ? '浅色' : '深色');
+      return;
+    }
+    // 左侧分支行：切换分支（口径同现状——切换分支重置搜索与选中，回默认列表；加载反馈先行）
+    var b = t.getAttribute('data-b');
+    if (b && b !== state.branch) {
+      state.branch = b; state.q = ''; state.sel = null;
+      if (state.scenario !== 'normal') { state.scenario = 'normal'; setScenarioButtons(); }
+      if (state.loading) { renderPane(); return; }
+      state.loading = true;
+      renderPane(); // 先渲染加载态
+      if (timers.loading) clearTimeout(timers.loading);
+      timers.loading = setTimeout(function () { state.loading = false; renderPane(); }, 350);
+      return;
+    }
+    if (t.id === 'branchRefresh') { renderPane(); return; }
+    if (t.id === 'logRefresh') { withLoading(function () {}, 500); return; }
+    if (t.hasAttribute('data-retry')) {
+      withLoading(function () { state.scenario = 'normal'; setScenarioButtons(); }, 700);
+      return;
+    }
+    if (t.hasAttribute('data-clear') || t.id === 'clearBtn') {
+      state.q = ''; // 清空关键字恢复全量（选中行保留）
+      var input = $('#qInput'); if (input) input.value = '';
+      renderLog(); updateHead();
+      return;
+    }
+    var chipQ = t.getAttribute('data-q');
+    if (chipQ) {
+      state.q = chipQ;
+      var input2 = $('#qInput'); if (input2) input2.value = chipQ;
+      withLoading(function () {}, 220); // 搜索执行反馈（真实实现走服务端过滤）
+      return;
+    }
+    // 提交行选中 / 取消
+    var idAttr = t.getAttribute('data-id');
+    if (idAttr != null) {
+      var id = Number(idAttr);
+      state.sel = state.sel === id ? null : id;
+      renderLog(); updateHead();
+    }
+  });
+
+  // 搜索输入：防抖 + 「搜索中…」执行反馈
+  document.addEventListener('input', function (ev) {
+    if (ev.target && ev.target.id === 'qInput') {
+      state.q = ev.target.value;
+      if (timers.debounce) clearTimeout(timers.debounce);
+      timers.debounce = setTimeout(function () { withLoading(function () {}, 220); }, 200);
+    }
+  });
+  document.addEventListener('change', function (ev) {
+    if (ev.target && ev.target.name === 'mode') {
+      state.mode = ev.target.value;
+      renderLog(); updateHead();
+    }
+  });
+  // 键盘可达：分支行 Enter/Space 触发点击
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.key === 'Enter' || ev.key === ' ') && ev.target && ev.target.getAttribute && ev.target.getAttribute('data-b') != null) {
+      ev.preventDefault(); ev.target.click();
+    }
+  });
+
+  renderPane();
+})();
+</script>
+</body>
+</html>

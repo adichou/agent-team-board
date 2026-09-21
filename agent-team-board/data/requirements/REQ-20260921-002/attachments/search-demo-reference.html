@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>@gitgraph/js + 搜索 演示</title>
+<style>
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f6f8; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; background: #fff; border-bottom: 1px solid #e1e4e8; position: sticky; top: 0; z-index: 5; }
+  .toolbar input[type="search"] { width: 340px; padding: 7px 10px; border: 1px solid #c9cdd3; border-radius: 6px; font-size: 13px; }
+  .toolbar label { font-size: 13px; color: #333; display: inline-flex; align-items: center; gap: 4px; }
+  .toolbar .chips { display: inline-flex; gap: 6px; }
+  .toolbar .chips button { font-size: 12px; padding: 4px 9px; border: 1px solid #c9cdd3; background: #f6f8fa; border-radius: 999px; cursor: pointer; }
+  #count { font-size: 12.5px; color: #57606a; }
+  .wrap { display: flex; flex-wrap: wrap; gap: 24px; padding: 20px; align-items: flex-start; }
+  .panel { border-radius: 10px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+  .panel h2 { margin: 0; padding: 10px 16px; font-size: 13px; font-weight: 600; }
+  .panel.light h2 { background: #fff; color: #24292f; border-bottom: 1px solid #e1e4e8; }
+  .panel.dark h2 { background: #252526; color: #cccccc; border-bottom: 1px solid #3c3c3c; }
+  .panel .body { padding: 12px 16px 16px 8px; max-height: 580px; overflow-y: auto; }
+  .panel.light .body { background: #fff; }
+  .panel.dark .body { background: #1e1e1e; }
+  #graphLight, #graphDark { width: 460px; }
+  svg text.hit { fill: #d2a8ff !important; font-weight: 700; }
+  .panel.light svg text.hit { fill: #8250df !important; }
+  #err { color: #d1242f; white-space: pre-wrap; font: 12px Menlo, monospace; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <input type="search" id="q" placeholder="搜索 message / 分支名 / tag，如 BUG-20260920-005、i18n、v0.1.0">
+  <label><input type="radio" name="mode" value="highlight" checked> 高亮定位</label>
+  <label><input type="radio" name="mode" value="filter"> 过滤（保留祖先）</label>
+  <span class="chips">
+    <button data-q="BUG-20260920-005">BUG-20260920-005</button>
+    <button data-q="BUG-">BUG-</button>
+    <button data-q="i18n">i18n</button>
+    <button data-q="REQ-">REQ-</button>
+  </span>
+  <span id="count"></span>
+</div>
+<div class="wrap">
+  <div class="panel light">
+    <h2>① metro 默认模板（浅色）</h2>
+    <div class="body"><div id="graphLight"></div></div>
+  </div>
+  <div class="panel dark">
+    <h2>② templateExtend 定制（VS Code 深色风）</h2>
+    <div class="body"><div id="graphDark"></div></div>
+  </div>
+</div>
+<pre id="err"></pre>
+<script src="gitgraph.min.js"></script>
+<script>
+window.addEventListener("error", function (e) {
+  document.getElementById("err").textContent += String(e.message || e) + "\n";
+});
+
+// ── 历史数据模型：步骤序列（旧 → 新），模拟 agent-team-board 提交风格 ──
+const HIST = [
+  { t: "commit", b: "main", m: "chore: 初始化 agent-team-board 仓库" },
+  { t: "commit", b: "main", m: "doc: README 环境与运行命令 REQ-20260918-002" },
+  { t: "tag", b: "main", n: "v0.1.0" },
+  { t: "branch", from: "main", b: "dev" },
+  { t: "commit", b: "dev", m: "feat: 看板骨架与条目状态机 REQ-20260901-001" },
+  { t: "branch", from: "dev", b: "feat/version-plan" },
+  { t: "commit", b: "feat/version-plan", m: "test: 版本计划允许重新关联条目 BUG-20260920-005" },
+  { t: "commit", b: "feat/version-plan", m: "fix: 版本计划允许重新关联条目和提交 BUG-20260920-005" },
+  { t: "merge", into: "dev", from: "feat/version-plan" },
+  { t: "branch", from: "dev", b: "fix/i18n" },
+  { t: "commit", b: "fix/i18n", m: "fix: 界面文案中英文同步 BUG-20260912-001" },
+  { t: "merge", into: "dev", from: "fix/i18n" },
+  { t: "commit", b: "dev", m: "chore: 收口清理与全量测试" },
+  { t: "merge", into: "main", from: "dev" },
+  { t: "commit", b: "main", m: "doc: 发布说明 v0.1.1" },
+  { t: "tag", b: "main", n: "v0.1.1" },
+];
+
+// 编译为 commit DAG（parent 关系），供祖先闭包计算
+function compile(steps) {
+  const heads = {};      // 分支 -> 最新 commit id
+  const commits = [];    // id 即下标
+  for (const s of steps) {
+    if (s.t === "commit") {
+      const c = { id: commits.length, branch: s.b, msg: s.m,
+                  parents: heads[s.b] != null ? [heads[s.b]] : [] };
+      commits.push(c); heads[s.b] = c.id; s._cid = c.id;
+    } else if (s.t === "branch") {
+      heads[s.b] = heads[s.from];
+    } else if (s.t === "merge") {
+      const c = { id: commits.length, branch: s.into,
+                  msg: `Merge branch '${s.from}' into ${s.into}`,
+                  parents: [heads[s.into], heads[s.from]].filter(p => p != null) };
+      commits.push(c); heads[s.into] = c.id; s._cid = c.id;
+    } else if (s.t === "tag") {
+      s._cid = heads[s.b]; if (commits[s._cid]) commits[s._cid].tagName = s.n;
+    }
+  }
+  return commits;
+}
+const commits = compile(HIST);
+
+// 搜索：匹配 message / 分支名 / tag；kept = 匹配 + 全部祖先（保证泳道连通）
+function search(q) {
+  const ql = q.trim().toLowerCase();
+  const matched = new Set();
+  if (ql) for (const c of commits) {
+    if (c.msg.toLowerCase().includes(ql)
+        || (c.tagName || "").toLowerCase().includes(ql)
+        || c.branch.toLowerCase().includes(ql)) matched.add(c.id);
+  }
+  const kept = new Set(matched);
+  const stack = [...matched];
+  while (stack.length) {
+    for (const p of commits[stack.pop()].parents)
+      if (!kept.has(p)) { kept.add(p); stack.push(p); }
+  }
+  return { matched, kept };
+}
+
+// 重放：kept 为 null 画全量；否则只画 kept 中的 commit / merge / tag
+function replay(el, tpl, kept) {
+  el.innerHTML = "";
+  const g = GitgraphJS.createGitgraph(el, {
+    orientation: "vertical-reverse",
+    author: "adi chou <adi@local>",
+    template: tpl,
+  });
+  const branches = {};
+  const br = (name, from) =>
+    branches[name] ??= (from ? branches[from].branch(name) : g.branch(name));
+  for (const s of HIST) {
+    if (kept && s._cid != null && !kept.has(s._cid)) continue;
+    if (s.t === "commit") br(s.b).commit(s.m);
+    else if (s.t === "merge") br(s.into).merge(br(s.from));
+    else if (s.t === "tag") br(s.b).tag(s.n);
+  }
+}
+
+// 高亮：给 SVG 里的 <text>（message / 分支标签 / tag）加 .hit
+function highlight(q) {
+  const ql = q.trim().toLowerCase();
+  let n = 0, first = null;
+  document.querySelectorAll(".panel svg text").forEach(t => {
+    const hit = !!ql && t.textContent.toLowerCase().includes(ql);
+    t.classList.toggle("hit", hit);
+    if (hit) { n++; if (!first) first = t; }
+  });
+  if (first) first.scrollIntoView({ block: "center" });
+  return n;
+}
+
+const lightTpl = GitgraphJS.templateExtend(GitgraphJS.MetroTemplate, {
+  colors: ["#2f6fde", "#e07000", "#7c4dff", "#0e8a6d"],
+  commit: { message: { displayAuthor: false, displayHash: true,
+    font: "normal 12px ui-monospace, Menlo, monospace", color: "#24292f" } },
+});
+const darkTpl = GitgraphJS.templateExtend(GitgraphJS.MetroTemplate, {
+  colors: ["#4fc1ff", "#d7ba7d", "#c586c0", "#89d185"],
+  branch: { lineWidth: 2 },
+  commit: { spacing: 34, dot: { size: 9 },
+    message: { displayAuthor: false, displayHash: true,
+      font: "normal 12px ui-monospace, Menlo, monospace", color: "#cccccc" } },
+});
+
+const $ = (id) => document.getElementById(id);
+function render() {
+  const q = $("q").value;
+  const mode = document.querySelector("input[name=mode]:checked").value;
+  const { matched, kept } = search(q);
+  const showSet = mode === "filter" && q.trim() ? kept : null;
+  replay($("graphLight"), lightTpl, showSet);
+  replay($("graphDark"), darkTpl, showSet);
+  const hits = q.trim() && mode === "highlight" ? highlight(q) : 0;
+  $("count").textContent = !q.trim()
+    ? `共 ${commits.length} 条提交`
+    : mode === "highlight"
+      ? `高亮 ${hits} 处匹配（message / 分支名 / tag）`
+      : `匹配 ${matched.size} 条 · 保留 ${kept.size}/${commits.length} 条（含祖先，泳道连通）`;
+}
+
+let timer = null;
+$("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 200); });
+document.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", render));
+document.querySelectorAll(".chips button").forEach(b =>
+  b.addEventListener("click", () => { $("q").value = b.dataset.q; render(); }));
+
+render();
+</script>
+</body>
+</html>
