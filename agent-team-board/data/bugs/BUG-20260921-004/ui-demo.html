@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260921-004 界面演示 · 类型下拉「说明」缺陷对照</title>
+<style>
+  :root[data-theme="dark"] {
+    --bg: #14161a; --panel: #1d2026; --panel-2: #23262e; --border: #32363f;
+    --text: #e8eaed; --muted: #9aa0a8; --primary: #3b82f6; --primary-h: #2f6fe0;
+    --ok: #34d399; --run: #60a5fa; --warn: #f59e0b; --fail: #f87171;
+    --err-bg: rgba(248,113,113,.08); --ok-bg: rgba(52,211,153,.08);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f6f8; --panel: #ffffff; --panel-2: #f0f1f4; --border: #d8dbe0;
+    --text: #1f2328; --muted: #6b7280; --primary: #2563eb; --primary-h: #1d4ed8;
+    --ok: #059669; --run: #2563eb; --warn: #b45309; --fail: #dc2626;
+    --err-bg: rgba(220,38,38,.07); --ok-bg: rgba(5,150,105,.07);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  /* ---- 演示控制条（非真实界面） ---- */
+  .demo-bar { border-style: dashed; }
+  .demo-bar .row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .demo-bar .title { font-weight: 600; font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; cursor: pointer; font-size: 12.5px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; font-size: 12.5px; }
+  .switch .track { width: 38px; height: 20px; border-radius: 10px; background: var(--border); position: relative; transition: background .15s; }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .switch.on .track { background: var(--fail); }
+  .switch.on .track::after { left: 20px; }
+  .switch.fixed.on .track { background: var(--ok); }
+  .demo-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  /* ---- 文档编写步布局 ---- */
+  .pane section { margin-bottom: 14px; }
+  .pane section:last-child { margin-bottom: 0; }
+  .sec-title { font-size: 13.5px; margin: 0 0 6px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  textarea { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical; }
+  textarea[readonly] { opacity: .85; }
+  .btn { border: 1px solid var(--border); background: var(--panel-2); color: var(--text); border-radius: 8px;
+    padding: 5px 12px; font-size: 12.5px; cursor: pointer; }
+  .btn:hover { border-color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { background: var(--primary-h); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 0; }
+  .docs-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 10px; }
+  .docs-head strong { font-size: 13.5px; }
+  .docs-head label { font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 4px 8px; font-size: 12.5px; }
+  select.bug { border-color: var(--fail); box-shadow: 0 0 0 2px rgba(248,113,113,.25); }
+  select.fixed { border-color: var(--ok); }
+  .mode-group { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .mode-group button { border: 0; background: transparent; color: var(--muted); padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .mode-group button.on { background: var(--primary); color: #fff; }
+  .doc-caption { font-size: 12px; margin: 6px 0 0; }
+  .doc-caption.bug { color: var(--fail); }
+  .doc-caption.fixed { color: var(--ok); }
+  pre.bld-doc-preview { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; min-height: 170px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; }
+  .status-line { font-size: 12.5px; margin: 6px 0 0; min-height: 1em; }
+  .gate { border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); padding: 8px 12px; margin: 8px 0; }
+  .gate.blocked { border-color: var(--warn); }
+  .gate.ok { border-color: var(--ok); background: var(--ok-bg); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+    background: var(--panel-2); display: inline-flex; gap: 6px; align-items: center; }
+  .chip.active { border-color: var(--primary); color: var(--primary); }
+  .st { font-size: 11px; border-radius: 4px; padding: 0 5px; }
+  .st-ok { color: var(--ok); background: var(--ok-bg); }
+  .st-run { color: var(--run); }
+  .st-mute { color: var(--muted); }
+  .st-wait { color: var(--warn); }
+  .pane-loading { color: var(--muted); padding: 30px 0; text-align: center; }
+  .pane-loading .dot { display: inline-block; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+  .pane-error { color: var(--fail); background: var(--err-bg); border: 1px solid var(--fail);
+    border-radius: 8px; padding: 12px 14px; }
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .2s; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.fail { border-color: var(--fail); color: var(--fail); }
+  #toast.ok { border-color: var(--ok); color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260921-004 · 版本计划「文档编写」步类型下拉缺陷演示</h1>
+  <p class="sub">本页为条目附属的可交互演示（单文件、无外部依赖），还原「构建 → 版本计划 → 选中版本 → 文档编写」步的文档编辑 / 预览界面，用于对照缺陷现象与期望修复后状态。<b>非真实产品界面</b>，数据均为演示假数据。</p>
+
+  <!-- 演示控制条：仅本演示使用 -->
+  <div class="card demo-bar" id="demoBar">
+    <div class="row">
+      <span class="title">演示控制（非真实界面）</span>
+      <span>
+        <span class="muted small">界面语言</span>
+        <span class="seg" id="segLang">
+          <button type="button" data-lang="zh" class="on">中文</button>
+          <button type="button" data-lang="en">English</button>
+        </span>
+      </span>
+      <label class="switch on" id="swBug">
+        <span class="track"></span>
+        <span id="swBugLabel">缺陷复现：开（现状）</span>
+      </label>
+      <span>
+        <span class="muted small">数据状态</span>
+        <span class="seg" id="segState">
+          <button type="button" data-state="normal" class="on">正常</button>
+          <button type="button" data-state="loading">加载中</button>
+          <button type="button" data-state="error">失败</button>
+          <button type="button" data-state="empty">空文档</button>
+        </span>
+      </span>
+      <button type="button" class="btn" id="btnReset">重置演示</button>
+      <button type="button" class="btn" id="btnTheme">深浅色切换</button>
+    </div>
+    <p class="demo-note" id="demoNote"></p>
+  </div>
+
+  <!-- 文档编写步（还原真实界面结构） -->
+  <div class="card pane" id="docsPane"></div>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+/* ================= 演示数据与状态 ================= */
+var S = {
+  lang: 'zh',          // 界面语言（演示控制）
+  bug: true,           // 缺陷复现开关：true = 现状（README 被译为「说明」）
+  state: 'normal',     // normal | loading | error | empty
+  type: 'README',      // 文档类型键（同真实界面：README / CHANGELOG / FEATURES / AGENTS）
+  lang2: 'zh',         // 文档语言（中文 / 英文）
+  mode: 'preview',     // preview | edit
+  busy: false,
+  savedMsg: '', commitMsg: '', ideMsg: '',
+  committed: false,    // 演示：提交成功后门禁放行
+  draft: null          // 编辑草稿
+};
+var FILES = [
+  { file: 'README.md',      key: 'README',    lang: 'zh', state: 'committed' },
+  { file: 'README.en.md',   key: 'README',    lang: 'en', state: 'uncommitted' },
+  { file: 'CHANGELOG.md',   key: 'CHANGELOG', lang: 'zh', state: 'unwritten' },
+  { file: 'CHANGELOG.en.md',key: 'CHANGELOG', lang: 'en', state: 'unwritten' },
+  { file: 'FEATURES.md',    key: 'FEATURES',  lang: 'zh', state: 'unwritten' },
+  { file: 'FEATURES.en.md', key: 'FEATURES',  lang: 'en', state: 'unwritten' },
+  { file: 'AGENTS.md',      key: 'AGENTS',    lang: 'zh', state: 'committed' },
+  { file: 'AGENTS.en.md',   key: 'AGENTS',    lang: 'en', state: 'uncommitted' }
+];
+var DOC_STATE_LABEL = { unwritten: '未编写', uncommitted: '未提交', committed: '已提交' };
+var DOC_STATE_CLS = { unwritten: 'st-mute', uncommitted: 'st-run', committed: 'st-ok' };
+var PROMPT = '请以「技术写作人员」角色完成当前版本文档任务：按关联条目与实际代码核实变化，简练通俗，不编造能力。（演示提示词，非真实提示词全文）';
+var CONTENT = {
+  README: {
+    zh: '中文 | [English](./README.en.md)\n# Agent Team Board（智能体团队看板）\n\n以条目（需求 / Bug）为核心的小团队协作看板：登记、认领、开发收口与构建发布全流程。（演示内容，实际以仓库 README.md 为准）',
+    en: 'English | [中文](./README.md)\n# Agent Team Board\n\nA collaboration board for small teams built around items (requirements / bugs): registration, claiming, dev wrap-up and build release. (demo content)'
+  },
+  CHANGELOG: {
+    zh: '中文 | [English](./CHANGELOG.en.md)\n# 更新日志\n\n## 演示版本\n- 构建和发布流程五步整改（演示内容）',
+    en: 'English | [中文](./CHANGELOG.md)\n# Changelog\n\n## Demo version\n- Five-step build & release flow rework (demo content)'
+  },
+  FEATURES: {
+    zh: '中文 | [English](./FEATURES.en.md)\n# 功能特性\n\n- 看板条目管理\n- 构建与发布五步流程（演示内容）',
+    en: 'English | [中文](./FEATURES.md)\n# Features\n\n- Board item management\n- Five-step build & release flow (demo content)'
+  },
+  AGENTS: {
+    zh: '中文 | [English](./AGENTS.en.md)\n# AGENTS\n\n面向在本仓库开发本产品的 Agent 与人的行动规则。（演示内容）',
+    en: 'English | [中文](./AGENTS.md)\n# AGENTS\n\nRules for agents and humans developing this product in this repo. (demo content)'
+  }
+};
+/* 演示界面文案（中英） */
+var T = {
+  aiTitle: { zh: 'AI 写作', en: 'AI writing' },
+  aiDesc: { zh: '由「技术写作人员」角色的子代理完成当前版本文档任务：主会话派发下方提示词并接收短回执。（演示节选）', en: 'A "technical writer" subagent completes the docs task; the main session dispatches the prompt below. (demo excerpt)' },
+  copyPrompt: { zh: '复制提示词', en: 'Copy prompt' },
+  traeCn: { zh: 'TRAE CN 打开', en: 'Open in TRAE CN' },
+  trae: { zh: 'TRAE 打开', en: 'Open in TRAE' },
+  doc: { zh: '文档', en: 'Document' },
+  type: { zh: '类型', en: 'Type' },
+  langLabel: { zh: '语言', en: 'Language' },
+  zhOpt: { zh: '中文', en: 'Chinese' },
+  enOpt: { zh: '英文', en: 'English' },
+  edit: { zh: '编辑', en: 'Edit' },
+  preview: { zh: '预览', en: 'Preview' },
+  save: { zh: '保存', en: 'Save' },
+  saving: { zh: '处理中…', en: 'Working…' },
+  emptyDoc: { zh: '（空文档）', en: '(empty document)' },
+  readmeNoteZh: { zh: 'README 需链接同语言 CHANGELOG 与 FEATURES（CHANGELOG.md、FEATURES.md）。', en: 'README must link the same-language CHANGELOG and FEATURES (CHANGELOG.md, FEATURES.md).' },
+  readmeNoteEn: { zh: 'README 需链接同语言 CHANGELOG 与 FEATURES（CHANGELOG.en.md、FEATURES.en.md）。', en: 'README must link the same-language CHANGELOG and FEATURES (CHANGELOG.en.md, FEATURES.en.md).' },
+  commitBtn: { zh: '提交文档到 Git', en: 'Commit docs to Git' },
+  committing: { zh: '提交中…', en: 'Committing…' },
+  commitHint: { zh: '只提交上述八个文档，不夹带业务源码；无变化不空提交。', en: 'Commits only the eight docs above, never business source; no empty commits.' },
+  gateBlocked: { zh: '文档未完成提交，暂不可合并', en: 'Docs are not fully committed; merge is blocked' },
+  gateOkP1: { zh: '文档已提交（a1b2c3d4e5f6）：满足合并前置', en: 'Docs committed (a1b2c3d4e5f6): merge precondition met' },
+  loading: { zh: '正在加载发布流程数据…', en: 'Loading publish-flow data…' },
+  errorTitle: { zh: '发布流程数据读取失败：未知原因（演示模拟）', en: 'Failed to load publish-flow data: unknown reason (simulated)' },
+  retry: { zh: '重试', en: 'Retry' },
+  copied: { zh: '已复制提示词（演示）', en: 'Prompt copied (demo)' },
+  copyFail: { zh: '演示环境：剪贴板不可用', en: 'Demo env: clipboard unavailable' },
+  ideMsg: { zh: '演示：真实界面会检测宿主是否安装，未安装会明确提示并给手动路径。', en: 'Demo: the real UI detects whether the IDE is installed and explains otherwise.' },
+  saved: { zh: '已保存 {file}（未提交：需「提交文档到 Git」后才能合并）', en: 'Saved {file} (uncommitted: run "Commit docs to Git" before merge)' },
+  committedToast: { zh: '✓ 文档已提交到 Git（a1b2c3d4）', en: '✓ Docs committed to Git (a1b2c3d4)' },
+  bugCaption: { zh: '缺陷现状：选项 README 被中文界面反向词条译成「说明」（英文界面不受影响）。', en: 'Bug: the README option is mistranslated to 「说明」 in the Chinese UI only.' },
+  fixedCaption: { zh: '期望修复后：显示真实文档标识（报告口径 README.md；裸键 README 还是 README.md 待确认）。', en: 'Fixed: shows the real doc identity (README.md per report; README vs README.md to be confirmed).' }
+};
+
+function t(k) { return T[k][S.lang]; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+  return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fileOf() { return S.type + (S.lang2 === 'en' ? '.en.md' : '.md'); }
+
+/* 核心：类型下拉 README 选项的显示文本（缺陷 / 修复对照） */
+function typeOptionLabel(k) {
+  if (k !== 'README') return k;
+  if (S.bug) return S.lang === 'zh' ? '说明' : 'README'; // 现状：中文被误译、英文正常
+  return 'README.md'; // 期望修复后（口径待确认：README / README.md）
+}
+
+var toastTimer = null;
+function toast(msg, cls) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (cls ? ' ' + cls : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.className = ''; }, 2200);
+}
+
+/* ================= 渲染 ================= */
+function render() {
+  document.documentElement.lang = S.lang === 'en' ? 'en' : 'zh-CN';
+  renderDemoBar();
+  renderPane();
+}
+
+function renderDemoBar() {
+  var langBtns = document.querySelectorAll('#segLang button');
+  for (var i = 0; i < langBtns.length; i++)
+    langBtns[i].className = langBtns[i].dataset.lang === S.lang ? 'on' : '';
+  var stBtns = document.querySelectorAll('#segState button');
+  for (var j = 0; j < stBtns.length; j++)
+    stBtns[j].className = stBtns[j].dataset.state === S.state ? 'on' : '';
+  var sw = document.getElementById('swBug');
+  sw.className = 'switch' + (S.bug ? ' on' : '');
+  document.getElementById('swBugLabel').textContent = S.bug
+    ? (S.lang === 'zh' ? '缺陷复现：开（现状）' : 'Bug repro: ON (current)')
+    : (S.lang === 'zh' ? '缺陷复现：关（修复后）' : 'Bug repro: OFF (fixed)');
+  document.getElementById('demoNote').textContent = S.lang === 'zh'
+    ? '「缺陷复现」开 = 中文界面现状（类型下拉 README 显示为「说明」）；关 = 期望修复后（显示 README.md）。缺陷仅中文界面出现：把界面语言切到 English 可见现状下英文显示正常。'
+    : 'Bug ON = current Chinese UI (README shown as 「说明」); OFF = expected fix (README.md). The bug only affects the Chinese UI — switch UI language to English to compare.';
+}
+
+function renderPane() {
+  var pane = document.getElementById('docsPane');
+  if (S.state === 'loading') {
+    pane.innerHTML = '<section><p class="pane-loading"><span class="dot">' + esc(t('loading')) + '</span></p></section>';
+    return;
+  }
+  if (S.state === 'error') {
+    pane.innerHTML = '<section><div class="pane-error" role="alert">' + esc(t('errorTitle')) + '</div>' +
+      '<p class="btn-row"><button type="button" class="btn" data-act="retry">' + esc(t('retry')) + '</button></p></section>';
+    return;
+  }
+  var editing = S.mode === 'edit';
+  var content = S.draft != null && editing ? S.draft : (S.state === 'empty' ? '' : CONTENT[S.type][S.lang2]);
+  var editor = editing
+    ? '<textarea id="docEditor" rows="10" spellcheck="false">' + esc(content) + '</textarea>'
+    : '<pre class="bld-doc-preview">' + esc(content) || ' ' + '</pre>';
+  if (!editing && content === '') editor = '<pre class="bld-doc-preview">' + esc(t('emptyDoc')) + '</pre>';
+  var selCls = S.bug ? (S.lang === 'zh' ? 'bug' : '') : 'fixed';
+  var caption = S.bug
+    ? (S.lang === 'zh' ? '<p class="doc-caption bug">' + esc(t('bugCaption')) + '</p>' : '')
+    : '<p class="doc-caption fixed">' + esc(t('fixedCaption')) + '</p>';
+  var chips = FILES.map(function (f) {
+    var active = f.key === S.type && f.lang === S.lang2;
+    var state = S.committed ? 'committed' : f.state;
+    return '<span class="chip' + (active ? ' active' : '') + '" data-file="' + esc(f.file) + '" role="button" tabindex="0" ' +
+      'title="' + esc(DOC_STATE_LABEL[state]) + '">' + esc(f.file) +
+      ' <span class="st ' + DOC_STATE_CLS[state] + '">' + esc(DOC_STATE_LABEL[state]) + '</span></span>';
+  }).join('');
+  var gate = S.committed
+    ? '<div class="gate ok" role="note"><p class="small" style="margin:0">' + esc(t('gateOkP1')) + '</p></div>'
+    : '<div class="gate blocked" role="note"><p class="small" style="margin:0">' + esc(t('gateBlocked')) + '</p></div>';
+  var readmeNote = S.type === 'README'
+    ? '<p class="muted small" style="margin:6px 0 0">' + esc(S.lang2 === 'zh' ? t('readmeNoteZh') : t('readmeNoteEn')) + '</p>'
+    : '';
+  var opts = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].map(function (k) {
+    return '<option value="' + k + '"' + (k === S.type ? ' selected' : '') + '>' + esc(typeOptionLabel(k)) + '</option>';
+  }).join('');
+  pane.innerHTML =
+    '<section>' +
+      '<p class="sec-title">' + esc(t('aiTitle')) + '</p>' +
+      '<p class="muted small" style="margin:0 0 6px">' + esc(t('aiDesc')) + '</p>' +
+      '<textarea rows="4" readonly>' + esc(PROMPT) + '</textarea>' +
+      '<p class="btn-row">' +
+        '<button type="button" class="btn primary" data-act="copy">' + esc(t('copyPrompt')) + '</button>' +
+        '<button type="button" class="btn" data-act="ide-cn">' + esc(t('traeCn')) + '</button>' +
+        '<button type="button" class="btn" data-act="ide">' + esc(t('trae')) + '</button>' +
+      '</p>' +
+      (S.ideMsg ? '<p class="status-line muted">' + esc(S.ideMsg) + '</p>' : '') +
+    '</section>' +
+    '<section>' +
+      '<div class="docs-head">' +
+        '<strong>' + esc(t('doc')) + '</strong>' +
+        '<label>' + esc(t('type')) + '<select id="docKey" class="' + selCls + '">' + opts + '</select></label>' +
+        '<label>' + esc(t('langLabel')) +
+          '<select id="docLang"><option value="zh"' + (S.lang2 === 'zh' ? ' selected' : '') + '>' + esc(t('zhOpt')) + '</option>' +
+          '<option value="en"' + (S.lang2 === 'en' ? ' selected' : '') + '>' + esc(t('enOpt')) + '</option></select></label>' +
+        '<span class="mode-group" role="group">' +
+          '<button type="button" data-mode="edit"' + (editing ? ' class="on"' : '') + '>' + esc(t('edit')) + '</button>' +
+          '<button type="button" data-mode="preview"' + (!editing ? ' class="on"' : '') + '>' + esc(t('preview')) + '</button>' +
+        '</span>' +
+        '<button type="button" class="btn primary" data-act="save"' + (S.busy ? ' disabled' : '') + '>' + esc(S.busy ? t('saving') : t('save')) + '</button>' +
+      '</div>' +
+      caption +
+      editor +
+      readmeNote +
+      (S.savedMsg ? '<p class="status-line">' + esc(S.savedMsg) + '</p>' : '') +
+    '</section>' +
+    '<section>' +
+      '<div class="chips">' + chips + '</div>' +
+      gate +
+      '<p class="btn-row" style="margin:0">' +
+        '<button type="button" class="btn primary" data-act="commit"' + (S.busy || S.state === 'empty' ? ' disabled title="先编写并保存文档"' : '') + '>' + esc(S.busy ? t('committing') : t('commitBtn')) + '</button>' +
+        '<span class="muted small">' + esc(t('commitHint')) + '</span>' +
+      '</p>' +
+      (S.commitMsg ? '<p class="status-line">' + esc(S.commitMsg) + '</p>' : '') +
+    '</section>';
+}
+
+/* ================= 交互 ================= */
+document.getElementById('segLang').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-lang]');
+  if (!b) return;
+  S.lang = b.dataset.lang;
+  render();
+});
+document.getElementById('segState').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-state]');
+  if (!b) return;
+  S.state = b.dataset.state;
+  S.savedMsg = ''; S.commitMsg = ''; S.ideMsg = '';
+  render();
+});
+document.getElementById('swBug').addEventListener('click', function () {
+  S.bug = !S.bug;
+  render();
+});
+document.getElementById('btnTheme').addEventListener('click', function () {
+  var root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+});
+document.getElementById('btnReset').addEventListener('click', function () {
+  S.lang = 'zh'; S.bug = true; S.state = 'normal'; S.type = 'README'; S.lang2 = 'zh';
+  S.mode = 'preview'; S.busy = false; S.savedMsg = ''; S.commitMsg = ''; S.ideMsg = '';
+  S.committed = false; S.draft = null;
+  render();
+  toast(S.lang === 'zh' ? '已重置演示' : 'Demo reset');
+});
+
+document.getElementById('docsPane').addEventListener('click', function (e) {
+  var act = e.target.closest('[data-act]');
+  var mode = e.target.closest('[data-mode]');
+  var chip = e.target.closest('.chip[data-file]');
+  if (mode) {
+    S.draft = null;
+    S.mode = mode.dataset.mode;
+    render();
+    return;
+  }
+  if (chip) {
+    var f = FILES.find(function (x) { return x.file === chip.dataset.file; });
+    if (f) { S.draft = null; S.type = f.key; S.lang2 = f.lang; render(); }
+    return;
+  }
+  if (!act) return;
+  var kind = act.dataset.act;
+  if (kind === 'retry') {
+    S.state = 'loading'; render();
+    setTimeout(function () { S.state = 'normal'; render(); }, 800);
+  } else if (kind === 'copy') {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(PROMPT).then(
+        function () { toast(t('copied'), 'ok'); },
+        function () { toast(t('copyFail'), 'fail'); });
+    } else toast(t('copyFail'), 'fail');
+  } else if (kind === 'ide-cn' || kind === 'ide') {
+    S.ideMsg = t('ideMsg');
+    render();
+  } else if (kind === 'save') {
+    var ta = document.getElementById('docEditor');
+    if (ta) S.draft = ta.value;
+    S.busy = true; render();
+    var file = fileOf();
+    setTimeout(function () {
+      S.busy = false;
+      S.savedMsg = t('saved').replace('{file}', file);
+      if (S.draft != null && CONTENT[S.type]) CONTENT[S.type][S.lang2] = S.draft; // 保存后内容持久（切换编辑/预览不丢）
+      render();
+      toast(S.lang === 'zh' ? '已保存 ' + file : 'Saved ' + file, 'ok');
+    }, 600);
+  } else if (kind === 'commit') {
+    S.busy = true; render();
+    setTimeout(function () {
+      S.busy = false; S.committed = true;
+      S.commitMsg = S.lang === 'zh'
+        ? '已提交文档（a1b2c3d4e5f6；范围：八个文档）'
+        : 'Docs committed (a1b2c3d4e5f6; scope: the eight docs)';
+      render();
+      toast(t('committedToast'), 'ok');
+    }, 800);
+  }
+});
+document.getElementById('docsPane').addEventListener('change', function (e) {
+  if (e.target.id === 'docKey') { S.draft = null; S.type = e.target.value; render(); }
+  if (e.target.id === 'docLang') { S.draft = null; S.lang2 = e.target.value; render(); }
+});
+/* 编辑草稿回同步：重渲染前带走未保存内容（同真实界面防丢字口径） */
+var _render = render;
+render = function () {
+  var ta = document.getElementById('docEditor');
+  if (ta && S.mode === 'edit') S.draft = ta.value;
+  _render();
+};
+
+render();
+</script>
+</body>
+</html>
