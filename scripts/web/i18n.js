@@ -115,6 +115,20 @@ const EN = {
   '请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）': 'Merge into main first — only merged version plans can start a release',
   '从本版本创建产品发布草稿（自动带入条目与冻结信息）': 'Create a product release draft from this version (items and frozen info included automatically)',
   '暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单': 'No linked items yet: click "＋ Add items" to include requirement or bug items',
+  // REQ-20260921-014 概况页签（详情第 1 步「版本计划」）显式编辑版本名称与描述：
+  // 表单标签 / 校验 / 锁定 / 反馈文案；一并补齐所涉行内编辑欠账（悬停提示、空描述占位、
+  // 保存成功 toast；失败 toast 拼接句见 EN_DYNAMIC）
+  '版本名称': 'Version name',
+  '版本描述': 'Version description',
+  '版本名称不能为空': 'Version name cannot be empty',
+  '版本名称不超过 80 字': 'Version name must be 80 characters or fewer',
+  '版本描述不超过 4000 字': 'Version description must be 4000 characters or fewer',
+  '版本合并中，暂不可修改': 'Version merge in progress — editing unavailable',
+  '✓ 已保存版本信息': '✓ Version info saved',
+  '（无描述）': '(No description)',
+  '编辑版本信息': 'Edit version info',
+  '点击编辑名称': 'Click to edit the name',
+  '点击编辑描述': 'Click to edit the description',
   // BUG-20260915-014 构建模块版本详情「概况 / 发布」页签（发布记录按当前版本就地展示；
   // 读取失败 / 详情失败 / 计划确认等动态拼接见 EN_DYNAMIC）
   '在当前版本详情的「发布」页签查看本版本的发布记录': 'View this version\'s release records in the "Release" tab of its detail pane',
@@ -1392,6 +1406,8 @@ const EN_DYNAMIC = {
   '✕ 语言集未应用：◇': '✕ Language set not applied: $1',
   '✓ 语言集已应用：◇（文档清单 4 类 × ◇ 语言）': '✓ Language set applied: $1 (doc list: 4 types × $2 languages)',
   '✕ 语言集保存失败：◇': '✕ Failed to save the language set: $1',
+  // REQ-20260921-014 概况页签编辑保存失败 toast（沿用 saveInfo 失败口径）
+  '✕ 保存失败：◇': '✕ Save failed: $1',
   '还需 ◇ 个文件通过审查：◇': '$1 more files need review: $2',
   'AI 总结进行中：◇/◇ · 当前：': 'AI summary in progress: $1/$2 · current: ',
   'AI 总结中断：◇——文件状态不悬挂在「正在总结」，可到发布模块「文档编写」页再次点击「AI 总结」续跑（已总结完成的文件保留待审核状态）。': 'AI summary interrupted: $1 — file states are not stuck on "summarizing"; click "AI summary" again in the "Docs writing" step to resume (already summarized files keep their awaiting-review status).',
