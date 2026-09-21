@@ -390,8 +390,10 @@ t('RT-09 前端静态契约：面板/全局视图/条目详情/搜索/i18n 无�
   // 全局搜索占位去批次号
   assert.match(html, /搜项目 \/ 条目编号…/, '全局搜索占位应去批次号');
   assert.ok(!html.includes('批次号'), 'index.html 不得残留批次号字样');
-  // i18n 词表整体去批次
-  assert.ok(!i18n.includes('批次'), 'i18n.js 不得残留批次相关词条');
+  // i18n 词表整体去批次（REQ-20260920-004：命令注册表词条 EN_CLI 为 atb help 原文语义，
+  // 客观含「批次」等 CLI 命令面词汇，剔除该块后词表不得残留批次概念）
+  const i18nClean = i18n.replace(/const EN_CLI = \{[\s\S]*?\n\};/, '');
+  assert.ok(!i18nClean.includes('批次'), 'i18n.js 不得残留批次相关词条（命令注册表 EN_CLI 除外）');
 });
 
 // ---------- RT-10 暂停/终止/重试/记录不回归 ----------
