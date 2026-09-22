@@ -2724,9 +2724,11 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   }
 
   // POST /api/build/docs/custom {id, op: add|remove, name|key}：REQ-20260922-003 自定义发布
-  // 文档增删（可多份）。命名 / 去重 / 上限校验（normalizeCustomDocName 权威口径）失败 400
-  // 不改盘；merging / 已正式发布（pushed）锁定 409；op=remove 在 AI 总结运行中拦截 400
-  //（进行中 run 的账本与提示词清单不变，自定义文档移除须等总结收尾）。成功返回最新
+  // 文档增删（可多份；BUG-20260922-002 起添加一次随语言集自动展开、移除整份删全部语种）。
+  // 命名 / 去重 / 上限 / 展开重名校验（normalizeCustomDocName 权威口径）失败 400 不改盘；
+  // merging / 已正式发布（pushed）锁定 409；op=remove 在 AI 总结运行中拦截 400（进行中
+  // run 的账本与提示词清单不变，自定义文档移除须等总结收尾）。remove 同步删除项目根该 KEY
+  // 全部语言文件并返回 removedFiles（不残留退出 pathspec 的孤儿文件）。成功返回最新
   // customDocs / version / docs / docsFlow，前端据此联动文件列表、计数、门禁与提示词预览。
   if (req.method === 'POST' && pathname === '/api/build/docs/custom') {
     return runPost((body) => {
@@ -2748,10 +2750,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         if (active) {
           throw new core.AtbError(`AI 总结运行中（${active.runId}），暂不可移除自定义文档：请先完成或收尾当前总结任务后再移除`);
         }
-        const v = buildStore.removeCustomDoc(board, String(body.id || ''), { key: body.key });
+        const key = String(body.key || '').trim().toUpperCase();
+        // 移除前记录在盘文件（响应 removedFiles 供前端提示；store 层负责删除）
+        const targetFiles = flow.customDocsOf(v0).includes(key)
+          ? flow.customDocFilesOf(key, flow.docLangsOf(v0)).map((f) => f.file)
+          : [];
+        const removedFiles = targetFiles.filter((f) => docReadFile(f) != null);
+        const v = buildStore.removeCustomDoc(board, String(body.id || ''), { key, projectRoot: root });
         return sendJson(res, 200, {
           ok: true,
           customDocs: flow.customDocsOf(v),
+          removedFiles,
           version: v,
           docs: flow.evaluateDocsState(v, docReadFile),
           docsFlow: docsFlowOf(board, v),
@@ -2825,13 +2834,16 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         );
       }
       const langs = flow.docLangsOf(v);
-      const run = docsTranslate.createTranslateRun(board, { verId: v.id, owner: 'translate', langs });
+      // BUG-20260922-002：自定义文档其余语言份进入 AI 翻译（账本 + 提示词与标准 4 类同口径）
+      const customDocs = flow.customDocsOf(v);
+      const run = docsTranslate.createTranslateRun(board, { verId: v.id, owner: 'translate', langs, customDocs });
       const prompt = flow.buildDocTranslatePrompt({
         projectRoot: root,
         planId: v.id,
         items: v.items,
         runId: run.runId,
         langs,
+        customDocs,
         readFile: docReadFile,
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
       });

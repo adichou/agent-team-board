@@ -112,23 +112,25 @@ export function latestTranslateRun(dataDir, verId = null) {
 
 // ---------- 生命周期 ----------
 
-// 剩余语言文件清单（语言集其余语言的全部文件，4 × (N−1)）：翻译账本只装这些文件——
+// 剩余语言文件清单（语言集其余语言的全部非单文件文件）：翻译账本只装这些文件——
 // 默认语言文件属阶段一（AI 总结 + 审查），不经翻译产出；单文件类（LICENSE，
-// REQ-20260922-002 口径 B）不进 AI 翻译，同样排除。
-function restLangFiles(langs) {
+// REQ-20260922-002 口径 B）不进 AI 翻译，同样排除；BUG-20260922-002 起自定义文档其余
+// 语言份 <KEY>_<lang>.md 进入（与标准 4 类同口径，随 customDocs 展开）。
+function restLangFiles(langs, customDocs = []) {
   const ls = docLangsOf({ langs });
-  return publishDocFiles(ls).filter((f) => f.lang != null && f.lang !== ls[0]);
+  return publishDocFiles(ls, customDocs).filter((f) => f.lang != null && f.lang !== ls[0]);
 }
 
-// 启动一轮 AI 翻译：按语言集展开**剩余语言**文件全部 pending，占用独立锁。同一时间至多
-// 一个进行中的 run（锁单一，跨版本亦互斥）；重复 start 报错不排队。单语言集（无剩余语言）
-// 报错——没有可翻译文件。解锁前置（默认语言 4/4 已审核）由调用方（server / atb CLI）按
-// evaluateDocsFlow.canTranslate 门禁校验，账本不重复求值。
-export function createTranslateRun(dataDir, { verId, owner, langs } = {}) {
+// 启动一轮 AI 翻译：按语言集展开**剩余语言**非单文件文件全部 pending（BUG-20260922-002
+// 起含自定义文档其余语言 <KEY>_<lang>.md），占用独立锁。同一时间至多一个进行中的 run
+//（锁单一，跨版本亦互斥）；重复 start 报错不排队。单语言集（无剩余语言）报错——没有可
+// 翻译文件。解锁前置（默认语言非单文件全审，含自定义默认语言份）由调用方（server /
+// atb CLI）按 evaluateDocsFlow.canTranslate 门禁校验，账本不重复求值。
+export function createTranslateRun(dataDir, { verId, owner, langs, customDocs = [] } = {}) {
   const id = String(verId || '').trim();
   if (!/^BLD-\d{8}-\d{3,}$/.test(id)) throw new AtbError(`版本计划号非法：${id || '（空）'}（形如 BLD-YYYYMMDD-NNN）`);
   ensureDocsTranslate(dataDir);
-  const files = restLangFiles(langs);
+  const files = restLangFiles(langs, customDocs);
   if (!files.length) {
     throw new AtbError('语言集只有一个语言：无剩余语言文档可翻译（AI 翻译服务于语言集其余语言）');
   }

@@ -130,9 +130,10 @@ export function createSummaryRun(dataDir, { verId, owner, langs, customDocs = []
   const runId = newRunId();
   const files = {};
   const ls = docLangsOf({ langs });
-  // 装默认语言 4 类文件 + 自定义文档；单文件类（LICENSE，lang=null 且非 custom，
-  // REQ-20260922-002 口径 B）不进 AI 总结
-  for (const f of publishDocFiles(ls, customDocs).filter((x) => x.custom || x.lang === ls[0])) files[f.file] = 'pending';
+  // 装默认语言（首语言）全部非单文件文件：标准 4 类 + 自定义文档默认语言 <KEY>.md
+  //（BUG-20260922-002 起自定义随语言集展开，其余语言份属阶段二 AI 翻译，不进总结账本）；
+  // 单文件类（LICENSE，lang=null，REQ-20260922-002 口径 B）不进 AI 总结
+  for (const f of publishDocFiles(ls, customDocs).filter((x) => x.lang === ls[0])) files[f.file] = 'pending';
   const run = {
     version: 1,
     runId,

@@ -480,7 +480,7 @@ export function recordDocsFinalize(dataDir, id, { langs, customDocs, readFile } 
     if (text == null) throw new AtbError(`${f.file} 不存在或不可读：整体审查完结要求语言集内全部文档在盘`);
     files[f.file] = crypto.createHash('sha256').update(text).digest('hex');
   }
-  v.review = { files: { ...((v.review && v.review.files) || {}) }, finalized: { at: nowIso(), langsKey: ls.join(','), files } };
+  v.review = { files: { ...((v.review && v.review.files) || {}) }, finalized: { at: nowIso(), langsKey: ls.join(','), customDocsKey: cs.join(','), files } };
   v.by = 'board';
   return writeVersion(dataDir, v);
 }
@@ -489,12 +489,20 @@ export function recordDocsFinalize(dataDir, id, { langs, customDocs, readFile } 
 // 文档编写步回显）；merging / 已正式发布（pushed）锁定不可改（与五步门禁 docs 步锁定口径
 // 一致）；非法语言集报错不改盘。语言集是文档清单的唯一事实源（求值 / 审核白名单 / 提交
 // pathspec / AI 总结提示词均按其展开）。
+// BUG-20260922-002：语言集变化会改变自定义文档的展开形态（MIGRATION → MIGRATION.md +
+// MIGRATION_<lang>.md），扩展语言集导致既有自定义 KEY 展开撞名时拒绝保存（如单语言集下
+// MIGRATION 与 MIGRATION_FR 合法共存，加入 fr 后 MIGRATION 的 MIGRATION_fr.md 与
+// MIGRATION_FR.md 重名）。
 export function saveDocLangs(dataDir, id, { langs, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改文档语言集');
   if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
   const r = Array.isArray(langs) ? flow.normalizeLangsList(langs) : flow.normalizeDocLangs(langs);
   if (r.error) throw new AtbError(r.error);
+  const conflict = flow.customDocsExpandConflict(flow.customDocsOf(v), r.langs);
+  if (conflict) {
+    throw new AtbError(`语言集展开后自定义文档重名：${conflict.a} 与 ${conflict.b} 均展开出 ${conflict.file}；请先移除或改名其中一个自定义文档再改语言集`);
+  }
   v.langs = r.langs;
   v.by = by;
   return writeVersion(dataDir, v);
@@ -502,30 +510,45 @@ export function saveDocLangs(dataDir, id, { langs, by = 'board' } = {}) {
 
 // REQ-20260922-003 自定义发布文档清单：发布计划级持久化（版本记录顶层 v.customDocs，
 // 大写 KEY 数组、顺序保留，类比 v.langs / saveDocLangs 先例）；merging / 已正式发布（pushed）
-// 锁定增删；命名 / 去重 / 上限校验经 publish-flow.normalizeCustomDocName（权威口径，
-// 前端 validateCustomDocName 镜像）。清单是文件清单唯一事实源的一部分：求值 / 审核白名单 /
+// 锁定增删；命名 / 去重 / 上限 / 展开重名校验经 publish-flow.normalizeCustomDocName（权威
+// 口径，前端 validateCustomDocName 镜像）。清单是文件清单唯一事实源的一部分：求值 / 审核白名单 /
 // AI 总结账本与提示词 / 完结快照 / 提交 pathspec 均随其展开。
 export function addCustomDoc(dataDir, id, { name, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');
-  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定，如需调整请新建版本');
   const existing = flow.customDocsOf(v);
-  const r = flow.normalizeCustomDocName(name, { existing });
+  const r = flow.normalizeCustomDocName(name, { existing, langs: flow.docLangsOf(v) });
   if (r.error) throw new AtbError(r.error);
   v.customDocs = [...existing, r.key];
   v.by = by;
   return writeVersion(dataDir, v);
 }
 
-// 移除自定义文档：允许移除已总结 / 已审核条目（其审核记录留存 v.review.files 但随清单移出
-// 不再参与求值）；AI 总结运行中的拦截由服务端按 summary 账本校验（本层不依赖 summary store）。
-export function removeCustomDoc(dataDir, id, { key, by = 'board' } = {}) {
+// 移除自定义文档（BUG-20260922-002 起整份移除全部语种）：允许移除已总结 / 已审核条目；
+// AI 总结运行中的拦截由服务端按 summary 账本校验（本层不依赖 summary store）。随清单移出：
+//   ① 审核留痕 v.review.files 中该 KEY 全部语言文件记录一并清理（防同 KEY 再添加时旧 hash
+//      复活「已审核」）；
+//   ② 删除项目根磁盘上该 KEY 按当前语言集展开的全部文件（不残留退出 pathspec 的孤儿未跟踪
+//      文件；projectRoot 缺省按 dataDir 推断，删除失败不阻塞清单移除）。
+// 整体完结记录（v.review.finalized）保留，有效性由求值侧按 customDocsKey 实时比对失效。
+export function removeCustomDoc(dataDir, id, { key, by = 'board', projectRoot = null } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');
-  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定，如需调整请新建版本');
   const k = String(key || '').trim().toUpperCase();
   const existing = flow.customDocsOf(v);
   if (!existing.includes(k)) throw new AtbError(`自定义文档不在清单中：${k || '（空）'}`);
+  const removedFiles = flow.customDocFilesOf(k, flow.docLangsOf(v)).map((f) => f.file);
+  if (v.review?.files && Object.keys(v.review.files).length) {
+    const files = { ...v.review.files };
+    for (const f of removedFiles) delete files[f];
+    v.review = { ...v.review, files };
+  }
+  const root = projectRoot ? path.resolve(String(projectRoot)) : projectRootGuess(dataDir);
+  for (const f of removedFiles) {
+    try { fs.rmSync(path.join(root, f), { force: true }); } catch { /* 磁盘清理失败不阻塞清单移除 */ }
+  }
   v.customDocs = existing.filter((x) => x !== k);
   v.by = by;
   return writeVersion(dataDir, v);
