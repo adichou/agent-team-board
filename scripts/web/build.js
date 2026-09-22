@@ -1864,14 +1864,15 @@ const ATBBuild = (() => {
   }
 
   // 提交添加：客户端镜像校验先行（不发请求、非法值不应用），通过后交服务端权威校验并
-  // 持久化；成功后强制刷新五步装配——文件列表、表头与页签计数、门禁条、AI 总结提示词
-  // 预览全部按新清单联动（自定义文档随下次「AI 总结」进入提示词）。
+  // 持久化；成功后强制刷新五步装配——文件列表（每个语言页签各一行）、表头与页签计数、
+  // 门禁条、AI 总结 / AI 翻译提示词预览全部按新清单联动（其余语言文件由「AI 翻译」产出）。
   async function submitAddDoc() {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.addDoc?.open || pf.addDoc.busy || !state.project || pf.phase !== 'ready') return;
     const existing = pf.plan?.customDocs || [];
-    const r = validateCustomDocName(pf.addDoc.input, existing);
+    // BUG-20260922-002：语言集参与展开重名比对（与服务端同口径）
+    const r = validateCustomDocName(pf.addDoc.input, existing, pf.plan?.langs);
     if (r.error) {
       pf.addDoc.err = r.error; // 行内报错，不应用非法值
       if (state.pf === pf) render();
@@ -1890,7 +1891,9 @@ const ATBBuild = (() => {
       if (!resp.ok) throw new Error(data.error || `添加失败（${resp.status}）`);
       pf.addDoc = null;
       await ensurePublishPlan(true);
-      toast(`✓ 已添加 ${r.key}.md（初始状态：未总结）`);
+      const langCount = (data.docsFlow?.files || []).filter((f) => f.custom).length
+        || (pf.plan?.langs || DEFAULT_DOC_LANGS).length;
+      toast(`✓ 已添加 ${r.key}.md（随语言集自动展开 ${langCount} 个语言文件，其余语言由「AI 翻译」产出）`);
     } catch (e) {
       if (pf.addDoc) { pf.addDoc.busy = false; pf.addDoc.err = e.message; }
       toast(`✕ 添加失败：${e.message}`, true);
@@ -1898,8 +1901,10 @@ const ATBBuild = (() => {
     }
   }
 
-  // 移除自定义文档行：AI 总结运行中禁用（按钮 disabled + 守卫提示）；服务端另有运行中
-  // 拦截与 merging / 已正式发布锁定；成功后联动刷新（审核记录留存但随清单移出不再参与求值）。
+  // 移除自定义文档（BUG-20260922-002 起整份移除）：AI 总结运行中禁用（按钮 disabled +
+  // 守卫提示）；服务端另有运行中拦截与 merging / 已正式发布锁定；任一语言页签行尾的
+  // 「移除」都按整份 KEY 生效——服务端同步删除该 KEY 全部语言文件（removedFiles 回传提示）
+  // 并清理审核留痕，成功后联动刷新（清单 / 计数 / 提示词 / 门禁）。
   async function removeCustomDocFile(file) {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
@@ -1908,7 +1913,11 @@ const ATBBuild = (() => {
       toast('✕ AI 总结运行中，暂不可移除自定义文档', true);
       return;
     }
-    const key = String(file || '').replace(/\.md$/i, '').toUpperCase();
+    const key = customDocKeyOfFile(pf.plan, file); // 展开文件名（KEY_<lang>.md）→ 整份 KEY
+    if (!key) {
+      toast(`✕ 移除失败：${file} 不是自定义文档文件`, true);
+      return;
+    }
     pf.docBusy = true;
     render();
     try {
@@ -1919,7 +1928,7 @@ const ATBBuild = (() => {
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data.error || `移除失败（${resp.status}）`);
       await ensurePublishPlan(true);
-      toast(`已移除自定义文档 ${key}.md`);
+      toast(`已移除自定义文档 ${key}（已删除 ${(data.removedFiles || []).length} 个磁盘文件）`);
     } catch (e) {
       toast(`✕ 移除失败：${e.message}`, true);
     } finally {
@@ -2764,8 +2773,9 @@ const ATBBuild = (() => {
   const DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
   const DOC_SINGLE_KEYS = ['LICENSE'];
   const DEFAULT_DOC_LANGS = ['cn', 'en'];
-  // REQ-20260922-003 自定义文档：默认语言单份 KEY.md（不随语言集展开）；命名与上限
-  // 与服务端 publish-flow.normalizeCustomDocName 同口径（validateCustomDocName 客户端镜像）。
+  // REQ-20260922-003 自定义文档；BUG-20260922-002 起随语言集自动展开（默认语言 KEY.md +
+  // 其余 KEY_<lang>.md，与服务端 publish-flow 同口径）；命名与上限与服务端
+  // publish-flow.normalizeCustomDocName 同口径（validateCustomDocName 客户端镜像）。
   const CUSTOM_DOC_KEY_MAX = 40;
   const CUSTOM_DOC_MAX = 20;
   // 常见语言显示名（未命中原样显示缩写）；显示名随文件名 data-i18n-skip 豁免（标识不是文案）。
@@ -2773,7 +2783,8 @@ const ATBBuild = (() => {
     de: 'Deutsch', es: 'Español', ko: '한국어', ru: 'Русский', it: 'Italiano', pt: 'Português' };
   function langNameOf(l) { return LANG_NAMES[String(l || '').toLowerCase()] || l || ''; }
   // 语言集 → 文档清单（plan.langs 缺省回退 cn,en）：4 类 × N + 单文件类（末尾追加）
-  // + 自定义文档（REQ-20260922-003：plan.customDocs 回显，默认语言单份、末尾追加）
+  // + 自定义文档（REQ-20260922-003：plan.customDocs 回显；BUG-20260922-002 起逐 KEY 随语言集
+  // 展开——默认语言 KEY.md + 其余 KEY_<lang>.md，末尾追加；与服务端 publishDocFiles 镜像）
   function docFilesOf(langs, customDocs) {
     const ls = Array.isArray(langs) && langs.length ? langs : DEFAULT_DOC_LANGS;
     const cus = [];
@@ -2782,7 +2793,7 @@ const ATBBuild = (() => {
       const k = String(raw ?? '').trim().toUpperCase();
       if (!k || !/^[A-Z][A-Z0-9_-]*$/.test(k) || k.length > CUSTOM_DOC_KEY_MAX || seen[k]) continue;
       seen[k] = true;
-      cus.push({ key: k, lang: null, file: `${k}.md`, single: true, custom: true, isDefault: true });
+      ls.forEach((lang, i) => cus.push({ key: k, lang, file: `${k}${i === 0 ? '' : `_${lang}`}.md`, custom: true }));
     }
     return [
       ...DOC_KEYS.flatMap((key) => ls.map((lang, i) => ({ key, lang, file: `${key}${i === 0 ? '' : `_${lang}`}.md` }))),
@@ -2790,9 +2801,17 @@ const ATBBuild = (() => {
       ...cus,
     ];
   }
+  // BUG-20260922-002：自定义文档按语言展开后，移除按钮携带的是行文件名（KEY[_lang].md）——
+  // 反推该文件所属的整份自定义 KEY（非自定义文件返回 null），移除按整份 KEY 生效。
+  function customDocKeyOfFile(plan, file) {
+    const f = docFilesOf(plan?.langs, plan?.customDocs).find((x) => x.custom && x.file === String(file || ''));
+    return f ? f.key : null;
+  }
   // REQ-20260922-003 自定义文档命名客户端镜像校验（与服务端 normalizeCustomDocName 同口径）：
   // 先行拦截不发请求（非法值不应用、界面保持上次有效状态）；服务端仍为权威校验。
-  function validateCustomDocName(raw, existing) {
+  // BUG-20260922-002：langs 参与展开重名比对（MIGRATION_EN 与 MIGRATION 的 MIGRATION_en.md
+  // 重名即拦截——添加一次即自动展开，手工逐语种 workaround 不再可行）。
+  function validateCustomDocName(raw, existing, langs) {
     let name = String(raw ?? '').trim();
     const emptyErr = { error: '文件名不能为空（如 MIGRATION.md）' };
     if (!name) return emptyErr;
@@ -2807,6 +2826,16 @@ const ATBBuild = (() => {
     const have = (Array.isArray(existing) ? existing : []).map((x) => String(x ?? '').trim().toUpperCase());
     if (have.includes(key)) return { error: `自定义文档重复：${key}.md 已在清单中` };
     if (have.length >= CUSTOM_DOC_MAX) return { error: `超出自定义文档数量上限（${CUSTOM_DOC_MAX} 份）` };
+    const ls = Array.isArray(langs) && langs.length ? langs : DEFAULT_DOC_LANGS;
+    const expand = (k) => ls.map((l, i) => `${k}${i === 0 ? '' : `_${l}`}.md`);
+    const mine = expand(key).map((f) => f.toLowerCase());
+    for (const other of have) {
+      for (const f of expand(other)) {
+        if (mine.includes(f.toLowerCase())) {
+          return { error: `自定义文档重复：${key}.md 展开后与自定义文档 ${other} 的 ${f} 重名（自定义文档添加一次即随语言集自动展开）` };
+        }
+      }
+    }
     return { key };
   }
   // 语言集客户端校验镜像（与服务端 normalizeDocLangs 同口径）：空值 / 空项 / 非 2–3 字母 /
@@ -2910,12 +2939,13 @@ ${langsField}
       // REQ-20260922-002：单文件类（LICENSE，A1 不随语言集）行尾标「不分语言」——独立可翻译
       // 元素（文件名本身仍 data-i18n-skip 豁免），深浅色下弱化呈现不与状态 chip 抢焦点。
       const singleTag = f.single && !f.custom ? '<span class="bld-doc-single-tag">不分语言</span>' : '';
-      // REQ-20260922-003：自定义文档行尾标「自定义」并提供移除入口（AI 总结运行中禁用，
-      // 其余状态可移除——已总结 / 已审核的移除口径见条目 design.md 基线）。
+      // REQ-20260922-003：自定义文档行尾标「自定义」；BUG-20260922-002 起每个语言页签各一行
+      //（默认语言 KEY.md + 其余 KEY_<lang>.md），任一行的「移除」均整份生效（全部语种 +
+      // 磁盘文件；AI 总结运行中禁用）。
       const customTag = f.custom ? '<span class="bld-doc-custom-tag">自定义</span>' : '';
       const sumRunning = !!(sum && sum.phase === 'running');
       const rmBtn = f.custom
-        ? `<button type="button" class="bld-doc-rm" data-doc-rm="${esc(f.file)}"${pf.docBusy || sumRunning ? ' disabled title="AI 总结运行中，暂不可移除"' : ' title="移除该自定义文档"'}>移除</button>`
+        ? `<button type="button" class="bld-doc-rm" data-doc-rm="${esc(f.file)}"${pf.docBusy || sumRunning ? ' disabled title="AI 总结运行中，暂不可移除"' : ' title="移除整份自定义文档（全部语言文件行与磁盘文件一并删除）"'}>移除</button>`
         : '';
       return `
           <li class="bld-doc-row">
@@ -3001,7 +3031,7 @@ ${langsField}
     const addRowHtml = pf.addDoc?.open
       ? `
           <div class="bld-docs-addrow">
-            <input id="bldDocAdd" data-doc-add-input type="text" value="${esc(pf.addDoc.input ?? '')}" placeholder="文件名，如 MIGRATION.md" autocomplete="off" spellcheck="false"${pf.addDoc.busy ? ' disabled' : ''} title="自定义发布文档文件名：字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略（自动补全）；回车或点击「添加」应用">
+            <input id="bldDocAdd" data-doc-add-input type="text" value="${esc(pf.addDoc.input ?? '')}" placeholder="文件名，如 MIGRATION.md" autocomplete="off" spellcheck="false"${pf.addDoc.busy ? ' disabled' : ''} title="自定义发布文档文件名：字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略（自动补全）；添加一次即随语言集自动展开全部语言文件（其余语言由「AI 翻译」产出，无需逐语种添加）；回车或点击「添加」应用">
             <button type="button" class="btn small primary" data-doc-add-confirm${pf.addDoc.busy ? ' disabled' : ''}>${pf.addDoc.busy ? '添加中…' : '添加'}</button>
             <button type="button" class="btn small" data-doc-add-cancel${pf.addDoc.busy ? ' disabled' : ''}>取消</button>
             ${pf.addDoc.err ? `<p class="rel-form-err small bld-docs-addrow-err" role="alert">${esc(pf.addDoc.err)}</p>` : ''}
@@ -3017,7 +3047,7 @@ ${langsField}
         ${trInfo}
         ${baselineNote}
         <section class="bld-docs-files" aria-label="发布文档文件列表">
-          <div class="bld-docs-files-head"><span>文件（${total} · 默认语言 ${flowEval.defaultReviewedCount}/${defTotal} 已审核 · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核）</span><span class="bld-docs-head-right"><span>状态</span><button type="button" class="btn small primary" data-doc-add-open${pf.phase === 'ready' ? '' : ' disabled'} title="添加一份自定义发布文档（可添加多份；命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）">＋ 添加文档</button></span></div>
+          <div class="bld-docs-files-head"><span>文件（${total} · 默认语言 ${flowEval.defaultReviewedCount}/${defTotal} 已审核 · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核）</span><span class="bld-docs-head-right"><span>状态</span><button type="button" class="btn small primary" data-doc-add-open${pf.phase === 'ready' ? '' : ' disabled'} title="添加一份自定义发布文档（可添加多份；添加一次即随语言集自动展开全部语言文件；命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）">＋ 添加文档</button></span></div>
           ${addRowHtml}
           <nav class="rel-tabs bld-doc-lang-tabs" role="tablist" aria-label="文档语言页签">${langTabsHtml}</nav>
           ${langPanelsHtml}
@@ -3167,19 +3197,20 @@ ${langsField}
 
   // REQ-20260921-008 审查对话框：按文档类型页签（REQ-20260922-002 起四类 + LICENSE 单文件类，
   // LICENSE 页签 A1 单栏并标「不分语言」；REQ-20260922-003 起自定义文档各占一个追加页签，
-  // 单栏并标「自定义」），页签内全语言栏并排（语言集内全部文件可达；
-  // REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，栅格列数 = 语言数）；
-  // 每栏独立 编辑/预览 切换、保存、通过审核；各栏同步滚动（bindReviewSyncScroll 按比例跟随）；
-  // 编辑已审核文件保存后回退「已总结待审核」（单文件类回退「待审核」）需重新审查。
-  // 文件名 data-i18n-skip（标识豁免）。
+  // BUG-20260922-002 起随语言集展开为多语言多栏——页签计数 x/语言数），页签内全语言栏并排
+  //（语言集内全部文件可达；REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，
+  // 栅格列数 = 语言数）；每栏独立 编辑/预览 切换、保存、通过审核；各栏同步滚动
+  //（bindReviewSyncScroll 按比例跟随）；编辑已审核文件保存后回退「已总结待审核」（单文件类
+  // 回退「待审核」）需重新审查。文件名 data-i18n-skip（标识豁免）。
   function renderReviewModal(v) {
     const pf = v ? pfOf(v) : null;
     const rv = pf?.review;
     if (!rv?.open) return '';
-    const flowEval = pf.plan?.docsFlow || { files: docFilesOf(pf?.plan?.langs, pf?.plan?.customDocs).map((f) => ({ ...f, state: f.custom || !f.single ? 'unsummarized' : 'unwritten' })), reviewedCount: 0 };
+    const flowEval = pf.plan?.docsFlow || { files: docFilesOf(pf?.plan?.langs, pf?.plan?.customDocs).map((f) => ({ ...f, state: f.custom ? (f.lang == null || f.lang === (pf.plan?.langs || DEFAULT_DOC_LANGS)[0] ? 'unsummarized' : 'untranslated') : (!f.single ? 'unsummarized' : 'unwritten') })), reviewedCount: 0 };
     const stateOf = (file) => (flowEval.files.find((f) => f.file === file) || {}).state || 'unsummarized';
     const docFiles = flowEval.files.length ? flowEval.files : docFilesOf(pf?.plan?.langs, pf?.plan?.customDocs);
-    // REQ-20260922-003：自定义文档各占一个类型页签（追加在四类 + LICENSE 之后，单栏）
+    // REQ-20260922-003：自定义文档各占一个类型页签（追加在四类 + LICENSE 之后；
+    // BUG-20260922-002 起页签内随语言集多栏，与标准类同构）
     const customKeys = (pf?.plan?.customDocs || []).map((x) => String(x || '').trim().toUpperCase()).filter(Boolean);
     const tabsHtml = [...DOC_KEYS, ...DOC_SINGLE_KEYS, ...customKeys].map((k) => {
       const per = docFiles.filter((f) => f.key === k);

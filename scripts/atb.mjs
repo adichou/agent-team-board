@@ -1354,13 +1354,16 @@ async function translateCmd(rest) {
       die(`AI 翻译未解锁：默认语言尚缺 ${flowEval.translateMissing.length} 个文件审核（${gap || '无文件'}）；请先在看板「文档编写」页完成默认语言文档的人工审核`);
     }
     const langs = publishFlow.docLangsOf(v);
-    const run = docsTranslate.createTranslateRun(dataDir, { verId: v.id, owner: opts.by || 'translate', langs });
+    // BUG-20260922-002：自定义文档其余语言份进入 AI 翻译（账本 + 提示词，与标准 4 类同口径）
+    const customDocs = publishFlow.customDocsOf(v);
+    const run = docsTranslate.createTranslateRun(dataDir, { verId: v.id, owner: opts.by || 'translate', langs, customDocs });
     const prompt = publishFlow.buildDocTranslatePrompt({
       projectRoot,
       planId: v.id,
       items: v.items,
       runId: run.runId,
       langs,
+      customDocs,
       readFile: readDoc,
       atbPath: 'node scripts/atb.mjs',
     });

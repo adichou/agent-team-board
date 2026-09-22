@@ -1142,13 +1142,15 @@ const EN = {
   // REQ-20260922-003 自定义发布文档：添加入口 / 内联添加行 / 标识与移除 / 校验与反馈
   //（插值句见 EN_DYNAMIC；文件名与 KEY 是标识，随 data-i18n-skip 豁免）
   '＋ 添加文档': '+ Add document',
-  '添加一份自定义发布文档（可添加多份；命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）': 'Add a custom release document (multiple allowed; the name starts with a letter, then letters / digits / hyphens / underscores; the .md suffix is optional)',
+  // BUG-20260922-002：添加一次随语言集自动展开——入口 / 输入框 title 更新（旧词条随文案变更清理）
+  '添加一份自定义发布文档（可添加多份；添加一次即随语言集自动展开全部语言文件；命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）': 'Add a custom release document (multiple allowed; adding once auto-expands it to all languages in the language set; the name starts with a letter, then letters / digits / hyphens / underscores; the .md suffix is optional)',
   '文件名，如 MIGRATION.md': 'File name, e.g. MIGRATION.md',
-  '自定义发布文档文件名：字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略（自动补全）；回车或点击「添加」应用': 'Custom release document file name: starts with a letter, then letters / digits / hyphens / underscores; the .md suffix is optional (auto-completed); press Enter or click "Add" to apply',
+  '自定义发布文档文件名：字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略（自动补全）；添加一次即随语言集自动展开全部语言文件（其余语言由「AI 翻译」产出，无需逐语种添加）；回车或点击「添加」应用': 'Custom release document file name: starts with a letter, then letters / digits / hyphens / underscores; the .md suffix is optional (auto-completed); adding once auto-expands it to all languages in the language set (the other languages come from "AI translation" — no need to add per language); press Enter or click "Add" to apply',
   '添加': 'Add',
   '添加中…': 'Adding…',
   '移除': 'Remove file',
-  '移除该自定义文档': 'Remove this custom document',
+  // BUG-20260922-002：移除整份（全部语言文件行与磁盘文件一并删除）；旧「移除该自定义文档」随文案变更清理
+  '移除整份自定义文档（全部语言文件行与磁盘文件一并删除）': 'Remove the whole custom document (all language rows and their disk files are deleted together)',
   'AI 总结运行中，暂不可移除': 'Cannot remove while an AI summary is running',
   '✕ AI 总结运行中，暂不可移除自定义文档': '✕ Cannot remove a custom document while an AI summary is running',
   '文件名不能为空（如 MIGRATION.md）': 'The file name cannot be empty (e.g. MIGRATION.md)',
@@ -1475,13 +1477,17 @@ const EN_DYNAMIC = {
   '✓ 已保存 ◇（未提交：需审查通过并「提交」后进入本地 dev）': '✓ Saved $1 (not committed: review, approve, then "Commit" to the local dev branch)',
   '◇ 内容已修改：回到「已总结待审核」，需重新审查': '$1 modified: back to "summarized, awaiting review" — needs review again',
   '◇ 内容已修改：回到「待审核」，需重新审查': '$1 modified: back to "awaiting review" — needs review again',
-  // REQ-20260922-003 自定义文档：校验错误与添加 / 移除反馈（◇ = KEY / 文件名 / 错误信息）
+  // REQ-20260922-003 自定义文档：校验错误与添加 / 移除反馈（◇ = KEY / 文件名 / 错误信息）；
+  // BUG-20260922-002 起随语言集展开——展开重名报错、整份移除反馈与添加成功反馈更新
+  //（旧「✓ 已添加 ◇（初始状态：未总结）」「已移除自定义文档 ◇」随文案变更清理）
   '与标准发布文档重名：◇（README / CHANGELOG / FEATURES / AGENTS / LICENSE 及 _语言 后缀为保留名）': 'Conflicts with a standard release document: $1 (README / CHANGELOG / FEATURES / AGENTS / LICENSE and their _lang suffixes are reserved)',
   '自定义文档重复：◇ 已在清单中': 'Duplicate custom document: $1 is already in the list',
+  '自定义文档重复：◇.md 展开后与自定义文档 ◇ 的 ◇ 重名（自定义文档添加一次即随语言集自动展开）': 'Duplicate custom document: $1.md expands into the file $3 of the existing custom document $2 (a custom document is added once and auto-expands with the language set)',
   '✕ 添加失败：◇': '✕ Add failed: $1',
-  '✓ 已添加 ◇（初始状态：未总结）': '✓ Added $1 (initial state: not summarized)',
-  '已移除自定义文档 ◇': 'Removed custom document $1',
+  '✓ 已添加 ◇（随语言集自动展开 ◇ 个语言文件，其余语言由「AI 翻译」产出）': '✓ Added $1 (auto-expanded to $2 language files with the language set; the other languages come from "AI translation")',
+  '已移除自定义文档 ◇（已删除 ◇ 个磁盘文件）': 'Removed custom document $1 ($2 disk files deleted)',
   '✕ 移除失败：◇': '✕ Remove failed: $1',
+  '✕ 移除失败：◇ 不是自定义文档文件': '✕ Remove failed: $1 is not a custom document file',
   '✕ 保存失败：◇（内容已保留，可重试）': '✕ Save failed: $1 (content preserved, retryable)',
   '✓ ◇ 已通过审核（◇/◇）': '✓ $1 approved ($2/$3)',
   '✕ 审核失败：◇': '✕ Approval failed: $1',
