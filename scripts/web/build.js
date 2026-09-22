@@ -1617,6 +1617,9 @@ const ATBBuild = (() => {
       // 审查对话框：{ open, key（文档类型页签）, modes: { file: 'edit'|'preview' },
       // contents: { file: 文本 }, busy }；编辑态草稿经 syncReviewDrafts 回同步防丢
       review: null,
+      // REQ-20260922-005 选择开源协议弹框：{ open, sel(选中 SPDX id), busy(写入中),
+      // loading(目录加载中), error(加载失败), list(协议目录，含标准文本) }
+      license: null,
       siteBusy: false,
       // REQ-20260921-015 一键加入所有依赖提交：depBusy 执行中防重复触发；depSkip 最近一次
       // 服务端返回的跳过清单（{ commit, subject, reason }[]），就地在隔离分析节内展示原因
@@ -1722,8 +1725,107 @@ const ATBBuild = (() => {
   }
 
   // REQ-20260921-008「AI 总结」：启动一轮逐文件总结（独立锁）+ 复制提示词到剪贴板；
-  // 已有进行中的任务由服务端 400 明确提示（提示词仍可从预览复制）
-  async function startSummary() {
+  // 已有进行中的任务由服务端 400 明确提示（提示词仍可从预览复制）。
+  // REQ-20260922-005：LICENSE.md 未编写时先弹「选择开源协议」框（表格：定义 / 官网 / 优劣；
+  // 002 口径 B 下 LICENSE 不进 AI 总结，按「AI 总结」按钮时点拦截引导人工选择）——
+  // 选中写入标准文本或暂不选择后再继续原启动；关闭（✕ / Esc / 遮罩）不启动。
+  function startSummary() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.busy || !state.project || pf.phase !== 'ready') return;
+    if (licenseGuardNeeded()) { openLicensePicker(); return; }
+    doStartSummary();
+  }
+
+  // 弹框触发条件：当前版本文档清单里 LICENSE.md（单文件类，002 A1 口径）状态 = 未编写
+  //（在盘（待审核 / 已审核）不弹框，用户改协议 = 审查对话框人工编辑，不走快捷入口）。
+  function licenseGuardNeeded() {
+    const pf = state.pf;
+    if (!pf || pf.phase !== 'ready' || !pf.plan) return false;
+    const flowEval = normalizeFlowEval(pf.plan);
+    const lic = (flowEval.files || []).find((f) => f.single && !f.custom && f.file === 'LICENSE.md');
+    return !!lic && lic.state === 'unwritten';
+  }
+
+  function openLicensePicker() {
+    const pf = state.pf;
+    if (!pf) return;
+    const reuse = pf.license?.list || null; // 已拉取过的目录直接复用（重开不重复请求）
+    pf.license = { open: true, sel: null, busy: false, loading: !reuse, error: null, list: reuse };
+    render();
+    if (!reuse) loadDocLicenses();
+  }
+
+  // 协议目录拉取（弹框打开时一次；迟到响应按 pf 身份 + 弹框状态丢弃）
+  async function loadDocLicenses() {
+    const pf = state.pf;
+    if (!pf?.license?.open || !state.project) return;
+    const stamp = ++pf.seq;
+    try {
+      const r = await fetch(`/api/build/doc-licenses?project=${encodeURIComponent(state.project)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
+      if (state.pf !== pf || !pf.license?.open || pf.seq !== stamp) return;
+      pf.license.list = Array.isArray(data.licenses) ? data.licenses : [];
+      pf.license.loading = false;
+      pf.license.error = null;
+    } catch (e) {
+      if (state.pf !== pf || !pf.license?.open) return;
+      pf.license.loading = false;
+      pf.license.error = e.message;
+    }
+    if (state.pf === pf) render();
+  }
+
+  // 确认所选协议：以目录标准文本走既有 /api/build/docs/save 白名单通道写入 LICENSE.md
+  //（002 口径：状态转「待审核」，人工在「审查」中通过审核；本单不新增写入口径）→
+  // 关框后继续原 AI 总结启动。
+  async function confirmLicensePick() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    const lic = pf?.license;
+    if (!lic?.open || lic.busy || !state.project) return;
+    const entry = (lic.list || []).find((x) => x.id === lic.sel);
+    if (!entry || !entry.text) return;
+    lic.busy = true;
+    render();
+    try {
+      const r = await fetch(`/api/build/docs/save?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, file: 'LICENSE.md', content: entry.text }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
+      if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
+      pf.license = null;
+      toast(`✓ LICENSE.md 已写入（${entry.name} 标准文本）：转为「待审核」，请在「审查」中人工确认`);
+      await doStartSummary();
+    } catch (e) {
+      toast(`✕ 写入 LICENSE.md 失败：${e.message}（弹框保留，可重试或暂不选择）`, true);
+    } finally {
+      if (pf.license) lic.busy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  // 暂不选择：不写盘，关框后照常启动 AI 总结（LICENSE 本不在总结范围，不冲突）。
+  function skipLicensePick() {
+    const pf = state.pf;
+    if (!pf?.license || pf.license.busy) return;
+    pf.license = null;
+    render();
+    doStartSummary();
+  }
+
+  // ✕ / Esc / 遮罩关闭：不写盘也不启动（再点「AI 总结」可重来）。
+  function closeLicensePicker() {
+    const pf = state.pf;
+    if (!pf?.license || pf.license.busy) return;
+    pf.license = null;
+    render();
+  }
+
+  async function doStartSummary() {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.busy || !state.project || pf.phase !== 'ready') return;
@@ -3306,6 +3408,58 @@ ${langsField}
       </div>`;
   }
 
+  // REQ-20260922-005 选择开源协议弹框：LICENSE.md 未编写时点击「AI 总结」打开（002 口径 B
+  // 下 LICENSE 不进 AI 总结——弹框是人工选协议的引导，写入的是内置 SPDX 标准文本）。表格
+  // 罗列主流协议的定义 / 官网网址 / 优劣（协议名 / SPDX 标识 / 官网 URL 是标识，data-i18n-skip；
+  // 定义与优劣是文案，随界面语言翻译）；行单选（radio + 高亮），确认 = 写入标准文本并继续
+  // 总结，暂不选择 = 不写盘直接继续，✕ / Esc / 遮罩 = 关闭不继续。加载中 / 加载失败（重试）/
+  // 写入中（按钮禁用）三态齐备。
+  function renderLicenseModal(v) {
+    const pf = v ? pfOf(v) : null;
+    const lic = pf?.license;
+    if (!lic?.open) return '';
+    const copyleftLabel = { none: '宽松', weak: '弱著佐权', strong: '强著佐权' };
+    let bodyHtml;
+    if (lic.loading) {
+      bodyHtml = '<p class="muted small" role="status">正在加载协议目录…</p>';
+    } else if (lic.error) {
+      bodyHtml = `<p class="rel-form-err" role="alert">协议目录读取失败：${esc(lic.error)}（可重试，或「暂不选择」直接总结，LICENSE.md 稍后在「审查」中人工编写）</p>
+          <p><button type="button" class="btn small" data-license-retry${lic.busy ? ' disabled' : ''}>重试</button></p>`;
+    } else {
+      const rows = (lic.list || []).map((x) => `
+            <tr class="bld-license-row${lic.sel === x.id ? ' sel' : ''}" data-license-row="${esc(x.id)}">
+              <td><label class="bld-license-pick"><input type="radio" name="bldLicensePick" value="${esc(x.id)}"${lic.sel === x.id ? ' checked' : ''}${lic.busy ? ' disabled' : ''}> <span class="bld-license-name" data-i18n-skip>${esc(x.name)}</span> <code data-i18n-skip>${esc(x.id)}</code></label><span class="bld-doc-custom-tag">${esc(copyleftLabel[x.copyleft] || '')}</span></td>
+              <td>${esc(x.definition)}</td>
+              <td><a href="${esc(x.url)}" target="_blank" rel="noreferrer" data-i18n-skip>${esc(x.url)}</a></td>
+              <td><ul class="bld-license-plist">${(x.pros || []).map((p) => `<li>${esc(p)}</li>`).join('')}</ul></td>
+              <td><ul class="bld-license-plist cons">${(x.cons || []).map((p) => `<li>${esc(p)}</li>`).join('')}</ul></td>
+            </tr>`).join('');
+      bodyHtml = `
+          <div class="bld-license-table-wrap"><table class="bld-license-table">
+            <thead><tr><th>协议</th><th>定义</th><th>官网</th><th>优势</th><th>劣势</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>`;
+    }
+    return `
+      <div class="rel-modal-wrap bld-license-wrap" id="bldLicenseWrap" role="dialog" aria-modal="true" aria-label="选择开源协议">
+        <div class="rel-modal bld-license-modal">
+          <header class="bld-review-head">
+            <span>选择开源协议（LICENSE.md 尚未编写）</span>
+            <button type="button" class="btn small quiet" data-license-close${lic.busy ? ' disabled' : ''} aria-label="关闭对话框">✕ 关闭</button>
+          </header>
+          <p class="muted small">AI 总结不覆盖 LICENSE.md：请选择开源协议，确认后写入该协议的标准文本（含占位符如 &lt;year&gt; &lt;copyright holders&gt;，审查时人工确认填写）；写入后 LICENSE.md 转为「待审核」，由人工在「审查」中通过审核。协议口径以官网为准。</p>
+          ${bodyHtml}
+          <footer class="bld-review-foot">
+            <span class="muted small">选择协议即写入标准文本；也可暂不选择，稍后在「审查」中人工编写。</span>
+            <span>
+              <button type="button" class="btn small" data-license-skip${lic.busy ? ' disabled' : ''}>暂不选择，继续 AI 总结</button>
+              <button type="button" class="btn small primary" data-license-confirm${!lic.sel || lic.busy ? ' disabled' : ''}>${lic.busy ? '写入中…' : '写入 LICENSE.md 并继续总结'}</button>
+            </span>
+          </footer>
+        </div>
+      </div>`;
+  }
+
   // 合并入 main 步（REQ-20260921-015 重构）：隔离分析收敛为「一行汇总 + 一键加入所有依赖提交 +
   // 明细折叠（details）」；阻止性信息（混合提交 / 门禁锁定 / 不在 dev / 合并失败）一律单行状态条
   //（bld-iso-note，非红色长文），真实原因三通道可达：单行 title / 主按钮 title / 点击 toast
@@ -3917,7 +4071,8 @@ ${langsField}
       ${renderReleaseConfirm()}
       ${renderRelPlanModal()}
       ${renderReviewModal(selVersion())}
-      ${renderFinalizeModal(selVersion())}`;
+      ${renderFinalizeModal(selVersion())}
+      ${renderLicenseModal(selVersion())}`;
     bindCommon(view);
     // REQ-20260920-003：文档 / 合并 / 正式发布步按需自愈加载——详情在这些步但 pf 数据缺失 /
     // 版本不匹配（切换版本 / 选中失效回落 / 恢复快照）时只读拉取；ensurePublishPlan 同步置
@@ -4272,6 +4427,30 @@ ${langsField}
       if (e.target?.id === 'bldReviewWrap' && !state.pf?.review?.busy) closeReview();
     });
     if (reviewWrap) bindReviewSyncScroll(reviewWrap); // 双栏同步滚动（编辑态 + 预览态）
+    // REQ-20260922-005 选择开源协议弹框：行选中 / 写入并继续 / 暂不选择 / 关闭 / 重试（Esc + 遮罩）
+    for (const el of view.querySelectorAll('[data-license-row]')) {
+      el.addEventListener('click', () => {
+        const pf = state.pf;
+        if (!pf?.license?.open || pf.license.busy) return;
+        pf.license.sel = el.dataset.licenseRow;
+        render();
+      });
+    }
+    q('[data-license-confirm]')?.addEventListener('click', confirmLicensePick);
+    q('[data-license-skip]')?.addEventListener('click', skipLicensePick);
+    q('[data-license-close]')?.addEventListener('click', closeLicensePicker);
+    q('[data-license-retry]')?.addEventListener('click', () => {
+      const pf = state.pf;
+      if (!pf?.license?.open) return;
+      pf.license.loading = true;
+      pf.license.error = null;
+      render();
+      loadDocLicenses();
+    });
+    const licenseWrap = q('#bldLicenseWrap');
+    licenseWrap?.addEventListener('click', (e) => {
+      if (e.target?.id === 'bldLicenseWrap' && !state.pf?.license?.busy) closeLicensePicker();
+    });
     for (const el of view.querySelectorAll('[data-rel-run]')) {
       el.addEventListener('click', (e) => {
         if (e.target?.closest?.('button')) return;
@@ -4298,6 +4477,7 @@ ${langsField}
   document.addEventListener?.('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (state.rel?.planModal) { closeRelPlan(); return; } // BUG-20260915-014：发布计划确认弹窗（取消不发请求）
+    if (state.pf?.license?.open) { closeLicensePicker(); return; } // REQ-20260922-005：选择开源协议弹框 Esc 关闭（不启动总结）
     if (state.pf?.finalize?.open) { closeFinalize(); return; } // REQ-20260921-012：整体审查完结对话框 Esc 关闭
     if (state.pf?.review?.open) { closeReview(); return; } // REQ-20260921-008：审查对话框 Esc 关闭
     if (state.pushConfirm) { state.pushConfirm = null; render(); return; }
@@ -4347,6 +4527,8 @@ ${langsField}
     // REQ-20260921-012：AI 翻译与整体审查完结接缝
     ensurePublishPlan, refreshDocsPane, startSummary, startTranslation, openReview, closeReview,
     openFinalize, closeFinalize, confirmFinalize,
+    // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
+    confirmLicensePick, skipLicensePick, closeLicensePicker,
     loadReviewPair, saveReviewFile, approveReviewFile, commitDocs, pushMain, siteScan, summaryPoll,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,

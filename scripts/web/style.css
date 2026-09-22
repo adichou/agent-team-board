@@ -3830,6 +3830,31 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 }
 .bld-finalize-checklist li:last-child { border-bottom: none; }
 .bld-finalize-modal .bld-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* REQ-20260922-005 选择开源协议弹框（AI 总结时 LICENSE.md 未编写触发）：宽 modal + 五列
+   对比表格（协议 / 定义 / 官网 / 优势 / 劣势），窄屏横向滚动不挤压；行选中高亮 + 单选 */
+.bld-license-wrap { z-index: 70; padding: 16px; }
+.bld-license-modal {
+  width: min(960px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+}
+.bld-license-modal > p { margin: 10px 16px 0; }
+.bld-license-table-wrap { overflow: auto; margin: 10px 16px; flex: 1; min-height: 0; }
+.bld-license-table { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.55; }
+.bld-license-table th, .bld-license-table td {
+  border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top;
+}
+.bld-license-table th { position: sticky; top: 0; background: var(--bg, var(--panel)); font-weight: 600; white-space: nowrap; }
+.bld-license-row { cursor: pointer; }
+.bld-license-row:hover { background: var(--hover, rgba(127, 127, 127, 0.08)); }
+.bld-license-row.sel { background: var(--sel, rgba(59, 130, 246, 0.12)); }
+.bld-license-pick { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+.bld-license-pick .bld-license-name { font-weight: 600; }
+.bld-license-row td a { word-break: break-all; }
+.bld-license-plist { list-style: none; margin: 0; padding: 0; color: var(--text); }
+.bld-license-plist li { padding-left: 12px; position: relative; }
+.bld-license-plist li::before { content: '·'; position: absolute; left: 2px; color: var(--muted); }
+.bld-license-plist.cons { color: var(--muted); }
+.bld-license-modal .bld-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .bld-docs-prompt-box textarea { width: 100%; margin-top: 8px; }
 /* 审查对话框：居中 modal，四类型页签 + 全语言栏（REQ-20260921-010 列数随语言集内联注入；
    缺省两列兼容；窄屏单列） */
