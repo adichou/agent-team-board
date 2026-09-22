@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260922-002 · 自定义文档多语言自动展开与删除 · 交互演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #dfe3e8; --text: #1f2430; --muted: #6b7484;
+    --accent: #2563eb; --ok: #16803c; --ok-bg: #e6f6ec; --run: #1d5fd0; --run-bg: #e8effd;
+    --wait: #a05a00; --wait-bg: #fdf1dd; --mute: #6b7484; --mute-bg: #eef0f3;
+    --err: #b42318; --err-bg: #fdebe9; --tag: #6d28d9; --tag-bg: #f1e9fd;
+    --shadow: 0 1px 4px rgba(20, 30, 50, .08);
+  }
+  [data-theme="dark"] {
+    --bg: #14171c; --panel: #1d2129; --line: #323947; --text: #e7eaf0; --muted: #99a1b0;
+    --accent: #6b9cff; --ok: #4ade80; --ok-bg: #10321f; --run: #7faaff; --run-bg: #1a2a4a;
+    --wait: #f0b45a; --wait-bg: #3a2c12; --mute: #99a1b0; --mute-bg: #262c37;
+    --err: #ff8a80; --err-bg: #3d1712; --tag: #c4a5ff; --tag-bg: #2a2140;
+    --shadow: 0 1px 4px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .top h1 { font-size: 16px; margin: 0; }
+  .top .sub { color: var(--muted); font-size: 12px; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; padding: 6px 12px; cursor: pointer; background: var(--panel); color: var(--text); font-size: 13px; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .subbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .langset { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .langset input { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 130px;
+    background: var(--bg); color: var(--text); font-size: 13px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .stagebar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stage { flex: 1; min-width: 150px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted); }
+  .stage.on { border-color: var(--accent); color: var(--text); }
+  .stage b { display: block; font-size: 12.5px; }
+  .banner { border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+  .banner.err { background: var(--err-bg); color: var(--err); border: 1px solid var(--err); }
+  .banner.warn { background: var(--wait-bg); color: var(--wait); border: 1px solid var(--wait); }
+  .banner .btn { margin-left: 8px; }
+  .loading { color: var(--muted); padding: 18px 4px; font-size: 13px; }
+  .files-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 8px; font-size: 13px; }
+  .files-head .right { display: flex; align-items: center; gap: 10px; }
+  .addrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 6px 0; }
+  .addrow input { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 240px;
+    background: var(--bg); color: var(--text); font-size: 13px; }
+  .inline-err { color: var(--err); font-size: 12.5px; margin: 2px 0 6px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tab { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 8px 8px 0 0;
+    padding: 5px 10px; font-size: 13px; cursor: pointer; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab.active .badge, .tab.active .def { color: #fff; }
+  .tab .def { color: var(--muted); font-size: 12px; }
+  .badge { border-radius: 8px; padding: 0 6px; font-size: 12px; margin-left: 4px; background: var(--mute-bg); color: var(--muted); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .filelist { list-style: none; margin: 0 0 10px; padding: 0; border: 1px solid var(--line); border-radius: 0 8px 8px 8px; }
+  .filelist li { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .filelist li:last-child { border-bottom: 0; }
+  .fname { font-family: ui-monospace, Menlo, Consolas, monospace; min-width: 200px; }
+  .tagx { font-size: 11.5px; border-radius: 5px; padding: 0 5px; }
+  .tagx.custom { background: var(--tag-bg); color: var(--tag); }
+  .tagx.single { background: var(--mute-bg); color: var(--muted); }
+  .tagx.warn { background: var(--err-bg); color: var(--err); }
+  .rowright { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .prog { color: var(--muted); font-size: 12px; }
+  .st { display: inline-flex; align-items: center; gap: 4px; border-radius: 10px; padding: 1px 8px; font-size: 12px; }
+  .st.mute { background: var(--mute-bg); color: var(--mute); }
+  .st.run { background: var(--run-bg); color: var(--run); }
+  .st.wait { background: var(--wait-bg); color: var(--wait); cursor: pointer; }
+  .st.ok { background: var(--ok-bg); color: var(--ok); cursor: pointer; }
+  .rm { border: 0; background: none; color: var(--err); font-size: 12.5px; cursor: pointer; padding: 0 4px; text-decoration: underline; }
+  .rm:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
+  .gate { border-radius: 8px; padding: 7px 12px; font-size: 12.5px; border: 1px solid var(--line); color: var(--muted); }
+  .gate.ok { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
+  .promptbox { margin-top: 12px; }
+  .promptbox summary { cursor: pointer; font-size: 13px; }
+  .promptbox pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; font-size: 12px; white-space: pre-wrap; max-height: 260px; overflow: auto; }
+  .note-ok { color: var(--ok); font-size: 12px; }
+  .note-err { color: var(--err); font-size: 12px; }
+  .simbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px;
+    border-top: 1px dashed var(--line); padding-top: 10px; font-size: 12.5px; }
+  .compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .compare .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .compare .card h3 { margin: 0 0 6px; font-size: 13.5px; }
+  .compare .card.bug h3 { color: var(--err); }
+  .compare .card.fixed h3 { color: var(--ok); }
+  .compare ul { margin: 0; padding-left: 18px; }
+  .compare li { margin-bottom: 4px; }
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 9; max-width: 420px; }
+  .toast { border-radius: 8px; padding: 8px 12px; font-size: 13px; box-shadow: var(--shadow);
+    background: var(--panel); border: 1px solid var(--line); }
+  .toast.ok { border-color: var(--ok); color: var(--ok); }
+  .toast.err { border-color: var(--err); color: var(--err); }
+  .toast.warn { border-color: var(--wait); color: var(--wait); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>BUG-20260922-002 · 自定义文档：多语言自动展开与删除</h1>
+    <div class="sub">文档编写页文件区 · 交互演示（单文件 HTML，无外网依赖）· 对照「缺陷现状」与「期望修复后」</div>
+  </div>
+  <div class="controls">
+    <div class="seg">
+      <button id="modeBug" class="active">缺陷现状（当前 dev）</button>
+      <button id="modeFixed">期望修复后</button>
+    </div>
+    <button class="btn" id="themeBtn">深色</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="subbar">
+      <div class="langset">
+        <label for="langsInput">语言集</label>
+        <input id="langsInput" value="cn,en,fr" disabled title="演示固定语言集 cn,en,fr（第一个 cn 为默认语言，其余语言文件为 KEY_lang.md）">
+      </div>
+      <div class="actions">
+        <button class="btn" id="refreshBtn" title="重新从磁盘读取全部文件内容与状态">刷新</button>
+        <button class="btn" id="summaryBtn" title="复制 AI 总结提示词并模拟逐文件总结（默认语言：标准 4 类 + 自定义）">AI 总结</button>
+        <button class="btn" id="translateBtn" title="生成 AI 翻译提示词并模拟阶段二翻译（修复后含自定义文档其余语种）">AI 翻译</button>
+        <button class="btn" disabled title="演示未覆盖（见条目 README）">审查</button>
+        <button class="btn" disabled title="演示未覆盖（见条目 README）">整体审查</button>
+        <button class="btn" disabled title="演示未覆盖（见条目 README）">提交</button>
+      </div>
+    </div>
+
+    <div class="stagebar" id="stageBar"></div>
+    <div class="banner err" id="errBanner" hidden>
+      发布流程数据读取失败：演示注入的错误
+      <button class="btn" id="retryBtn">重试</button>
+    </div>
+    <div class="banner err" id="intBanner" hidden></div>
+    <div class="loading" id="loadingRow" hidden>正在加载发布流程数据…</div>
+
+    <div id="filesArea">
+      <div class="files-head">
+        <span id="filesCount"></span>
+        <span class="right">
+          <span style="color:var(--muted)">状态</span>
+          <button class="btn primary" id="addOpen" title="添加一份自定义发布文档（命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）">＋ 添加文档</button>
+        </span>
+      </div>
+      <div class="addrow" id="addRow" hidden>
+        <input id="addInput" placeholder="文件名，如 MIGRATION.md" autocomplete="off" spellcheck="false">
+        <button class="btn primary" id="addConfirm">添加</button>
+        <button class="btn" id="addCancel">取消</button>
+      </div>
+      <p class="inline-err" id="addErr" hidden></p>
+      <div class="tabs" id="tabs"></div>
+      <ul class="filelist" id="fileList"></ul>
+      <div class="gate" id="gateBar"></div>
+
+      <details class="promptbox" id="promptBox">
+        <summary>AI 翻译提示词预览（点击「AI 翻译」生成；随清单与对照模式联动）</summary>
+        <pre id="promptPre">（尚未生成：阶段二解锁后点击「AI 翻译」）</pre>
+        <p id="promptNote" style="margin:6px 0 0"></p>
+      </details>
+
+      <div class="simbar">
+        <span style="color:var(--muted)">模拟：</span>
+        <button class="btn" id="simFail">读取失败</button>
+        <button class="btn" id="simInterrupt" disabled>AI 总结中断</button>
+        <button class="btn" id="resetBtn">重置演示</button>
+        <span style="color:var(--muted)">提示：点击「已总结待审核 / 已翻译待审核 / 待审核 / 已编写」等状态 chip 可模拟人工审核通过或回退。</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="compare">
+      <div class="card bug">
+        <h3>缺陷现状（当前 dev，REQ-20260922-003 实现 9c207d1）</h3>
+        <ul>
+          <li>添加 <code>MIGRATION</code> 仅得到默认语言一份 <code>MIGRATION.md</code>，只在默认语言页签出现；其他语言页签<b>不会</b>自动出现 <code>MIGRATION_en.md</code> / <code>MIGRATION_fr.md</code>。</li>
+          <li>手工补英文只能再添加 <code>MIGRATION_EN</code>：得到全大写 <code>MIGRATION_EN.md</code>，仍归默认语言页签，与语言集无关联（红色 workaround 标识）。</li>
+          <li>「AI 翻译」提示词的翻译目标只含标准 4 类 × 剩余语言，自定义文档被排除，其他语种无法经阶段二产出。</li>
+          <li>删除：文件列表行尾有「移除」（AI 总结运行中禁用）；但审查对话框内无移除入口，且移除不清理磁盘遗留文件。</li>
+        </ul>
+      </div>
+      <div class="card fixed">
+        <h3>期望修复后（本单验收口径）</h3>
+        <ul>
+          <li>默认语言添加一次 <code>MIGRATION</code> → 自动按语言集展开 <code>MIGRATION.md</code> + <code>MIGRATION_en.md</code> + <code>MIGRATION_fr.md</code>，各语言页签自动出现，沿用七态状态机与审核角标。</li>
+          <li>「AI 翻译」提示词翻译目标包含自定义文档的其余语种文件（基准 <code>MIGRATION.md</code>）。</li>
+          <li>移除按整份删除全部语种行并联动计数（粒度 / 磁盘清理口径见条目 README「待确认」）。</li>
+          <li>标准 4 类、LICENSE（不分语言）、三阶段门禁与提交口径不回归。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  var LANGS = ['cn', 'en', 'fr'], DEF = 'cn';
+  var STD = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+  var ST_LABEL = { unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核',
+    untranslated: '未翻译', translating: '正在翻译', translated: '已翻译待审核', reviewed: '已审核',
+    unwritten: '未编写', pending: '待审核' };
+  var ST_CLS = { unsummarized: 'mute', summarizing: 'run', summarized: 'wait', untranslated: 'mute',
+    translating: 'run', translated: 'wait', reviewed: 'ok', unwritten: 'mute', pending: 'wait' };
+  var ST_ICON = { unsummarized: '○', summarizing: '◐', summarized: '●', untranslated: '○',
+    translating: '◐', translated: '●', reviewed: '✔', unwritten: '○', pending: '●' };
+  var LANG_NAME = { cn: '中文', en: 'English', fr: 'Français' };
+
+  var state = {
+    mode: 'bug',            // bug = 缺陷现状；fixed = 期望修复后
+    activeLang: 'cn',
+    customKeys: [],         // 大写 KEY 数组
+    files: {},              // 文件名 -> 状态
+    promptGenerated: false,
+    summaryRun: null,       // { list:[文件名], idx, current }
+    timer: null,
+    trTimer: null
+  };
+
+  // ---------- 工具 ----------
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function toast(msg, type) {
+    var t = document.createElement('div');
+    t.className = 'toast ' + (type || '');
+    t.textContent = msg;
+    $('toasts').appendChild(t);
+    setTimeout(function () { t.remove(); }, 4200);
+  }
+  function stdFiles() {
+    var out = [];
+    LANGS.forEach(function (lang, i) {
+      STD.forEach(function (key) {
+        var file = key + (i === 0 ? '' : '_' + lang) + '.md';
+        out.push({ key: key, lang: lang, file: file, custom: false, single: false });
+      });
+    });
+    out.push({ key: 'LICENSE', lang: null, file: 'LICENSE.md', custom: false, single: true });
+    return out;
+  }
+  function customFiles() {
+    var out = [];
+    state.customKeys.forEach(function (key) {
+      if (state.mode === 'bug') {
+        out.push({ key: key, lang: DEF, file: key + '.md', custom: true, single: true });
+      } else {
+        LANGS.forEach(function (lang, i) {
+          out.push({ key: key, lang: lang, file: key + (i === 0 ? '' : '_' + lang) + '.md', custom: true, single: false });
+        });
+      }
+    });
+    return out;
+  }
+  function allFiles() { return stdFiles().concat(customFiles()); }
+  function fileEntry(file) {
+    var def = file.custom && state.mode === 'bug' ? 'unsummarized'
+      : file.custom ? (file.lang === DEF ? 'unsummarized' : 'untranslated')
+      : file.single ? 'unwritten'
+      : file.lang === DEF ? 'unsummarized' : 'untranslated';
+    return { file: file.file, state: state.files[file.file] || def, meta: file };
+  }
+  function rowsOfLang(lang) {
+    return allFiles().filter(function (f) {
+      if (f.custom) return state.mode === 'bug' ? f.lang === DEF : f.lang === lang;
+      return f.single ? lang === DEF : f.lang === lang;
+    }).map(fileEntry);
+  }
+  function defaultRows() { return rowsOfLang(DEF); }
+  function restRows() {
+    return LANGS.slice(1).map(function (l) { return rowsOfLang(l); }).reduce(function (a, b) { return a.concat(b); }, []);
+  }
+
+  // ---------- 渲染 ----------
+  function chipOf(entry) {
+    var clickable = ['summarized', 'translated', 'pending', 'reviewed', 'unwritten'].indexOf(entry.state) >= 0;
+    return '<span class="st ' + ST_CLS[entry.state] + (clickable ? '' : '') + '" data-file="' + esc(entry.file) + '"'
+      + (clickable ? ' title="点击模拟人工审核通过 / 回退"' : '') + '>'
+      + '<i>' + ST_ICON[entry.state] + '</i>' + ST_LABEL[entry.state] + '</span>';
+  }
+  function render() {
+    var dr = defaultRows(), rr = restRows();
+    var defTotal = dr.length, defRev = dr.filter(function (r) { return r.state === 'reviewed'; }).length;
+    var restTotal = rr.length, restRev = rr.filter(function (r) { return r.state === 'reviewed'; }).length;
+    var total = allFiles().length;
+
+    // 阶段条
+    var s1done = defTotal > 0 && defRev === defTotal;
+    var s2on = s1done && !(restTotal > 0 && restRev === restTotal);
+    $('stageBar').innerHTML =
+      '<div class="stage' + (s1done ? ' on' : '') + '"><b>阶段一 · 默认语言总结与审核</b>已审核 ' + defRev + '/' + defTotal + (s1done ? '（已解锁阶段二）' : '') + '</div>'
+      + '<div class="stage' + (s2on ? ' on' : '') + '"><b>阶段二 · 剩余语言翻译与审核</b>已审核 ' + restRev + '/' + restTotal + (s1done ? '' : '（阶段一完成后解锁）') + '</div>'
+      + '<div class="stage"><b>阶段三 · 整体审查完结与提交</b>（演示未覆盖）</div>';
+
+    // 表头计数
+    $('filesCount').textContent = '文件（' + total + ' · 默认语言 ' + defRev + '/' + defTotal + ' 已审核 · 剩余语言 ' + restRev + '/' + restTotal + ' 已审核）';
+
+    // 页签
+    $('tabs').innerHTML = LANGS.map(function (l, i) {
+      var rows = rowsOfLang(l);
+      var rev = rows.filter(function (r) { return r.state === 'reviewed'; }).length;
+      return '<button class="tab' + (state.activeLang === l ? ' active' : '') + '" data-lang="' + l + '">'
+        + l + ' · ' + LANG_NAME[l]
+        + (i === 0 ? '<span class="def">（默认）</span>' : '')
+        + '<span class="badge' + (rows.length && rev === rows.length ? ' ok' : '') + '">' + rev + '/' + rows.length + '</span></button>';
+    }).join('');
+
+    // 文件列表
+    var sumRun = state.summaryRun;
+    var rows = rowsOfLang(state.activeLang);
+    $('fileList').innerHTML = rows.map(function (r) {
+      var tags = '';
+      if (r.meta.custom) {
+        tags += '<span class="tagx custom">自定义</span>';
+        if (state.mode === 'bug' && /_(EN|FR)$/.test(r.meta.key)) {
+          tags += '<span class="tagx warn" title="手工逐语种添加的 workaround：命名错误、仍归默认语言页签、与语言集无关联">手工逐语种（不推荐）</span>';
+        }
+      } else if (r.meta.single) {
+        tags += '<span class="tagx single">不分语言</span>';
+      }
+      var prog = '';
+      if (sumRun && sumRun.current === r.file) {
+        prog = '<span class="prog"> · AI 总结 ' + sumRun.idx + '/' + sumRun.list.length + '</span>';
+      }
+      var rm = r.meta.custom
+        ? '<button class="rm" data-rm="' + esc(r.meta.key) + '"'
+          + (sumRun ? ' disabled title="AI 总结运行中，暂不可移除"' : ' title="移除该自定义文档（整份，含全部语种行；粒度待确认）"') + '>移除</button>'
+        : '';
+      return '<li><span class="fname">' + esc(r.file) + '</span>' + tags
+        + '<span class="rowright">' + prog + chipOf(r) + rm + '</span></li>';
+    }).join('');
+
+    // 门禁条
+    var gate = $('gateBar');
+    if (defTotal > 0 && defRev === defTotal && restTotal > 0 && restRev === restTotal) {
+      gate.className = 'gate ok';
+      gate.textContent = '提交门禁：' + total + '/' + total + ' 已审核 —— 默认语言与剩余语言均完成（整体审查完结与提交为演示未覆盖环节）。';
+    } else {
+      var missing = defaultRows().concat(restRows()).filter(function (r) { return r.state !== 'reviewed'; })
+        .map(function (r) { return r.file + '（' + ST_LABEL[r.state] + '）'; });
+      gate.className = 'gate';
+      gate.textContent = '提交门禁：默认语言 ' + defRev + '/' + defTotal + ' · 剩余语言 ' + restRev + '/' + restTotal + ' 已审核 —— 尚缺：' + (missing.slice(0, 6).join('、') || '（无）') + (missing.length > 6 ? ' 等 ' + missing.length + ' 项' : '') + '。';
+    }
+
+    // 总结按钮文案
+    $('summaryBtn').textContent = sumRun ? '总结中 ' + sumRun.idx + '/' + sumRun.list.length : 'AI 总结';
+    $('summaryBtn').disabled = !!sumRun;
+    $('simInterrupt').disabled = !sumRun;
+    $('translateBtn').disabled = !!sumRun;
+    renderPromptNote();
+  }
+  function renderPromptNote() {
+    var p = $('promptNote');
+    if (!state.promptGenerated) { p.textContent = ''; return; }
+    if (state.mode === 'bug') {
+      p.className = 'note-err';
+      p.textContent = '⚠ 缺陷：自定义文档不在翻译基准与目标清单内（当前 dev 的 buildDocTranslatePrompt 明确排除 custom）——其余语种无法经阶段二产出。';
+    } else {
+      p.className = 'note-ok';
+      p.textContent = '✓ 修复后：自定义文档随语言集展开，其余语种进入翻译目标清单（基准 KEY.md）。';
+    }
+  }
+  function buildPrompt() {
+    var base = defaultRows().filter(function (r) { return !r.meta.custom; });
+    var customBase = defaultRows().filter(function (r) { return r.meta.custom; });
+    var targets = restRows();
+    var customTargets = targets.filter(function (r) { return r.meta.custom; });
+    var stdTargets = targets.filter(function (r) { return !r.meta.custom; });
+    var lines = [];
+    lines.push('你是技术翻译人员，以子代理身份完成「BLD-xxxx」（发布文档 AI 翻译任务，阶段二：默认语言已全部人工审核）……');
+    lines.push('');
+    lines.push('翻译基准（已人工审核的默认语言 ' + DEF + ' 文档，唯一基准——语义以此为准，不得编造）：');
+    base.forEach(function (r) { lines.push('===== ' + r.file + '（默认语言 ' + DEF + '，已审核基准） =====（内容略）'); });
+    if (state.mode === 'fixed') customBase.forEach(function (r) { lines.push('===== ' + r.file + '（默认语言 ' + DEF + '，已审核基准 · 自定义） =====（内容略）'); });
+    lines.push('');
+    var shape = state.mode === 'fixed' && customTargets.length
+      ? STD.length + ' 类 + ' + state.customKeys.length + ' 自定义 × ' + (LANGS.length - 1) + ' 语言'
+      : STD.length + ' 类 × ' + (LANGS.length - 1) + ' 语言';
+    lines.push('请逐个产出以下 ' + targets.length + ' 个剩余语言文档（' + shape + '，剩余语言 ' + LANGS.slice(1).join(',') + '），每个文件写入后其状态变为「已翻译待审核」，等待人工审查：');
+    stdTargets.forEach(function (r) { lines.push('- ' + r.file + '（' + LANG_NAME[r.meta.lang] + ' / ' + r.meta.key + '，基准 ' + r.meta.key + '.md）'); });
+    if (state.mode === 'fixed') customTargets.forEach(function (r) { lines.push('- ' + r.file + '（' + LANG_NAME[r.meta.lang] + ' / ' + r.meta.key + '，基准 ' + r.meta.key + '.md · 自定义）'); });
+    lines.push('');
+    lines.push('（缺陷现状对照：以上清单不含自定义文档——其余语种无从产出，见本单 README「现象」第 2 条。）');
+    return lines.join('\n');
+  }
+
+  // ---------- 交互 ----------
+  $('modeBug').addEventListener('click', function () { switchMode('bug'); });
+  $('modeFixed').addEventListener('click', function () { switchMode('fixed'); });
+  function switchMode(m) {
+    if (state.mode === m) return;
+    if (state.summaryRun) { toast('AI 总结运行中，暂不可切换对照模式', 'err'); return; }
+    if (state.trTimer) { clearInterval(state.trTimer); state.trTimer = null; }
+    state.mode = m;
+    $('modeBug').className = m === 'bug' ? 'active' : '';
+    $('modeFixed').className = m === 'fixed' ? 'active' : '';
+    if (m === 'fixed') {
+      toast('已切换到「期望修复后」：现有自定义文档自动按语言集展开至各语言页签（未翻译）', 'ok');
+    } else {
+      toast('已切换回「缺陷现状」：自定义文档回落为默认语言单份，其余语种行消失', 'warn');
+    }
+    if (state.promptGenerated) $('promptPre').textContent = buildPrompt();
+    render();
+  }
+
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-lang]');
+    if (b) { state.activeLang = b.dataset.lang; render(); }
+  });
+
+  // 添加文档
+  $('addOpen').addEventListener('click', function () {
+    $('addRow').hidden = false; $('addErr').hidden = true; $('addInput').value = ''; $('addInput').focus();
+  });
+  $('addCancel').addEventListener('click', function () { $('addRow').hidden = true; $('addErr').hidden = true; });
+  $('addInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitAdd(); });
+  $('addConfirm').addEventListener('click', submitAdd);
+  function addError(msg) { $('addErr').textContent = msg; $('addErr').hidden = false; }
+  function submitAdd() {
+    var name = $('addInput').value.trim();
+    if (!name) return addError('文件名不能为空（如 MIGRATION.md）');
+    if (/\.md$/i.test(name)) name = name.slice(0, -3);
+    if (name.length > 40) return addError('文件名过长（上限 40 字符）');
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name)) return addError('存在非法字符：仅允许字母开头，字母 / 数字 / 连字符 / 下划线（.md 后缀可省略，自动补全；不支持子目录）');
+    var key = name.toUpperCase();
+    if (/^(?:README|CHANGELOG|FEATURES|AGENTS|LICENSE)(?:_[A-Za-z]{2,3})?$/.test(key)) return addError('与标准发布文档重名：' + key + '（README / CHANGELOG / FEATURES / AGENTS / LICENSE 及 _语言 后缀为保留名）');
+    if (state.customKeys.indexOf(key) >= 0) return addError('自定义文档重复：' + key + '.md 已在清单中');
+    if (state.customKeys.length >= 20) return addError('超出自定义文档数量上限（20 份）');
+    var btn = $('addConfirm'); btn.disabled = true; btn.textContent = '添加中…';
+    setTimeout(function () {
+      btn.disabled = false; btn.textContent = '添加';
+      state.customKeys.push(key);
+      $('addRow').hidden = true; $('addErr').hidden = true; $('addInput').value = '';
+      if (state.mode === 'fixed') {
+        var files = LANGS.map(function (l, i) { return key + (i === 0 ? '' : '_' + l) + '.md'; });
+        toast('已添加 ' + key + '：自动展开 ' + files.join(' + ') + '（默认语言未总结 · 其余语种未翻译）', 'ok');
+      } else {
+        toast('已添加 ' + key + '.md（初始状态：未总结）——缺陷现状：仅默认语言一份，其他语种不会自动添加', 'warn');
+      }
+      if (state.promptGenerated) $('promptPre').textContent = buildPrompt();
+      render();
+    }, 400);
+  }
+
+  // 移除（整份）
+  $('fileList').addEventListener('click', function (e) {
+    var rm = e.target.closest('[data-rm]');
+    if (rm && !rm.disabled) {
+      var key = rm.dataset.rm;
+      state.customKeys = state.customKeys.filter(function (k) { return k !== key; });
+      var removed = LANGS.map(function (l, i) { return key + (i === 0 ? '' : '_' + l) + '.md'; });
+      if (state.mode === 'bug') {
+        toast('已移除自定义文档 ' + key + '.md；注意：当前实现不删除磁盘遗留文件（口径待确认）', 'warn');
+      } else {
+        toast('已整份移除自定义文档 ' + key + '：' + removed.join('、') + '（移除粒度与磁盘清理口径待确认）', 'ok');
+      }
+      if (state.promptGenerated) $('promptPre').textContent = buildPrompt();
+      render();
+      return;
+    }
+    var chip = e.target.closest('[data-file]');
+    if (chip) toggleReview(chip.dataset.file);
+  });
+  function toggleReview(file) {
+    var entry = allFiles().map(fileEntry).filter(function (r) { return r.file === file; })[0];
+    if (!entry) return;
+    var s = entry.state;
+    if (['summarized', 'translated', 'pending'].indexOf(s) >= 0) {
+      state.files[file] = 'reviewed';
+      toast('已模拟人工审核通过：' + file + ' → 已审核', 'ok');
+      render();
+    } else if (s === 'reviewed') {
+      state.files[file] = entry.meta.custom && state.mode === 'fixed' && entry.meta.lang !== DEF
+        ? 'translated' : (entry.meta.single && !entry.meta.custom ? 'pending' : (entry.meta.lang === DEF || (entry.meta.custom && state.mode === 'bug') ? 'summarized' : 'translated'));
+      toast('已回退：' + file + ' → ' + ST_LABEL[state.files[file]] + '（需重新审核）', 'warn');
+      render();
+    } else if (s === 'unwritten') {
+      state.files[file] = 'pending';
+      toast('已模拟人工编写完成：' + file + ' → 待审核', 'ok');
+      render();
+    }
+  }
+
+  // AI 总结（模拟逐文件推进）
+  $('summaryBtn').addEventListener('click', function () {
+    var pending = defaultRows().filter(function (r) { return r.state === 'unsummarized' && !(r.meta.single && !r.meta.custom); });
+    if (!pending.length) { toast('没有待总结文件（未总结的默认语言文档为空；已审核文件跳过）', 'warn'); return; }
+    state.summaryRun = { list: pending.map(function (r) { return r.file; }), idx: 0, current: null };
+    $('intBanner').hidden = true;
+    toast('AI 总结已启动：逐文件总结默认语言文档（标准 4 类 + 自定义；LICENSE 人工编写不经 AI）', 'ok');
+    stepSummary();
+    state.timer = setInterval(stepSummary, 800);
+    render();
+  });
+  function stepSummary() {
+    var run = state.summaryRun;
+    if (!run) return;
+    if (run.idx > 0) state.files[run.list[run.idx - 1]] = 'summarized';
+    if (run.idx >= run.list.length) { finishSummary(); return; }
+    run.current = run.list[run.idx];
+    state.files[run.current] = 'summarizing';
+    run.idx += 1;
+    render();
+  }
+  function finishSummary() {
+    clearInterval(state.timer); state.timer = null;
+    state.summaryRun = null;
+    toast('AI 总结已完成：待总结文件均进入已总结待审核，等待人工审查', 'ok');
+    render();
+  }
+  $('simInterrupt').addEventListener('click', function () {
+    if (!state.summaryRun) return;
+    clearInterval(state.timer); state.timer = null;
+    var run = state.summaryRun;
+    if (run.current) state.files[run.current] = 'unsummarized';
+    state.summaryRun = null;
+    $('intBanner').hidden = false;
+    $('intBanner').innerHTML = 'AI 总结中断：演示注入（可再次点击 AI 总结续跑）';
+    render();
+  });
+
+  // AI 翻译（阶段二门禁 + 提示词 + 模拟推进）
+  $('translateBtn').addEventListener('click', function () {
+    var dr = defaultRows();
+    var unrev = dr.filter(function (r) { return r.state !== 'reviewed'; });
+    if (unrev.length) {
+      toast('默认语言尚有 ' + unrev.length + ' 个文件未审核，阶段二（AI 翻译）未解锁：' + unrev.slice(0, 3).map(function (r) { return r.file; }).join('、'), 'err');
+      return;
+    }
+    state.promptGenerated = true;
+    $('promptPre').textContent = buildPrompt();
+    $('promptBox').open = true;
+    var targets = restRows().filter(function (r) { return r.state === 'untranslated'; });
+    if (!targets.length) { toast('翻译目标均为已审核 / 已翻译，跳过运行（提示词已生成）', 'warn'); render(); return; }
+    toast(state.mode === 'fixed' && state.customKeys.length
+      ? 'AI 翻译已启动：目标含自定义文档其余语种（' + state.customKeys.map(function (k) { return k + '_<lang>.md'; }).join('、') + '）'
+      : 'AI 翻译已启动：目标仅标准 4 类 × 剩余语言（自定义文档被排除——缺陷现状）', state.mode === 'fixed' ? 'ok' : 'warn');
+    var i = 0;
+    if (state.trTimer) clearInterval(state.trTimer);
+    state.trTimer = setInterval(function () {
+      if (i >= targets.length) {
+        clearInterval(state.trTimer); state.trTimer = null;
+        toast('AI 翻译已完成：目标文件均进入已翻译待审核，等待人工审查', 'ok');
+        render(); return;
+      }
+      if (i > 0) state.files[targets[i - 1].file] = 'translated';
+      state.files[targets[i].file] = 'translating';
+      i += 1;
+      render();
+    }, 700);
+    render();
+  });
+
+  // 刷新 / 失败 / 重试 / 重置
+  $('refreshBtn').addEventListener('click', function () {
+    var b = $('refreshBtn'); b.disabled = true; b.textContent = '正在读取…';
+    setTimeout(function () { b.disabled = false; b.textContent = '刷新'; toast('✓ 已重新读取最新内容（演示数据未变化）', 'ok'); }, 600);
+  });
+  $('simFail').addEventListener('click', function () {
+    $('errBanner').hidden = false; $('filesArea').style.opacity = '.35'; $('filesArea').style.pointerEvents = 'none';
+  });
+  $('retryBtn').addEventListener('click', function () {
+    $('errBanner').hidden = true;
+    $('loadingRow').hidden = false;
+    setTimeout(function () { $('loadingRow').hidden = true; $('filesArea').style.opacity = ''; $('filesArea').style.pointerEvents = ''; toast('✓ 重试成功：发布流程数据已恢复', 'ok'); }, 600);
+  });
+  $('resetBtn').addEventListener('click', function () {
+    if (state.timer) clearInterval(state.timer);
+    if (state.trTimer) clearInterval(state.trTimer);
+    state.customKeys = []; state.files = {}; state.summaryRun = null; state.promptGenerated = false; state.trTimer = null;
+    $('promptPre').textContent = '（尚未生成：阶段二解锁后点击「AI 翻译」）';
+    $('intBanner').hidden = true; $('promptBox').open = false;
+    $('loadingRow').hidden = false;
+    setTimeout(function () { $('loadingRow').hidden = true; render(); toast('演示已重置（空态：无自定义文档，列表仅标准 4 类 + LICENSE）', 'ok'); }, 500);
+    render();
+  });
+
+  // 深浅色
+  var themeBtn = $('themeBtn');
+  function applyTheme(dark) {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    themeBtn.textContent = dark ? '浅色' : '深色';
+  }
+  themeBtn.addEventListener('click', function () {
+    applyTheme(document.documentElement.dataset.theme !== 'dark');
+  });
+  applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  render();
+})();
+</script>
+</body>
+</html>
