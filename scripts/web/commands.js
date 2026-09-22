@@ -271,17 +271,20 @@ const ATBCommands = (() => {
   function renderRecent() {
     const host = $('#commandsView .cmd-list[aria-label^="最近执行列表"]');
     if (!host) return;
-    if (!state.recents.length) {
+    // REQ-20260922-001：持久化残留记录中属隐藏范围（agentOnly，已不在清单）的命令被忽略
+    // 不展示（记录保留在 localStorage，被忽略而非清除，不报错）；全部被忽略时显示空态提示
+    //（引导切换「全部命令」），不显示空白。
+    const visible = state.recents.filter((r) => findCmd(r.name));
+    if (!visible.length) {
       host.innerHTML = '<div class="cmd-notice cmd-recent-empty">暂无最近执行：命令成功执行后，这里按命令去重展示最近 10 条，点击在右侧回填该次参数快速再执行；也可切换「全部命令」页签选择命令。</div>';
       return;
     }
-    host.innerHTML = state.recents.map((r) => {
+    host.innerHTML = visible.map((r) => {
       const c = findCmd(r.name);
-      if (!c) return '';
       return cmdBtnHtml(c, `<small>${esc(r.at)}</small>`);
     }).join('');
     $$('.cmd-item', host).forEach((b) => b.addEventListener('click', () => {
-      const r = state.recents.find((x) => x.name === b.dataset.c);
+      const r = visible.find((x) => x.name === b.dataset.c);
       if (!r) return;
       state.sel = r.name;
       state.vals = { ...r.vals }; // 回填该命令最近一次成功执行的参数

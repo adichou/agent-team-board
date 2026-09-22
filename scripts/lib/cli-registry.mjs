@@ -7,6 +7,13 @@
 // 增长（growth）——由专用深链视图与专用回执流程承载，不经通用命令模块下发。
 // 命令名与参数保持 CLI 原文不翻译；分组名 / 说明 / 参数标签为中文原文，前端经 i18n.js
 // 词典翻译（BUG-20260912-001 口径，词条同步维护在 scripts/web/i18n.js）。
+//
+// REQ-20260922-001 AI Agent 工作流命令在看板隐藏：agentOnly 标记（组级或命令级）的命令
+// 由 Agent 会话创建 / 领取 / 回执 / 调度（RUN-ID / 批次 ID / 会话标识等上下文只存在于
+// Agent 会话），人工经界面执行无意义或无上下文。隐藏仅看板展示层：注册表仍包含全部命令
+//（findCommand 白名单查找、CLI 同步测试口径不变，隐藏不得以「从注册表删除命令」实现）；
+// 看板命令清单（visibleGroups → GET /api/cli/commands）与网页下发（validateRunRequest
+// 拒绝 agentOnly）双过滤，Agent 在终端 / 各会话中以 CLI 照常使用。
 
 // 排除组前缀：生成与校验恒定排除，任何命令 token 序列不得以此开头
 const EXCLUDED_PREFIXES = ['oncall', 'disc', 'growth'];
@@ -69,6 +76,7 @@ const CLI_GROUPS = [
         desc: '认领条目（accepted/planned → in-progress，原子锁）',
         args: [{ label: 'ID', required: true, placeholder: 'REQ-20260920-004' }],
         options: '--by 会话标识',
+        agentOnly: true, // REQ-20260922-001：Agent 常规状态操作（根 AGENTS.md），与人工命令同组，看板隐藏
       },
       {
         name: 'rename',
@@ -100,6 +108,7 @@ const CLI_GROUPS = [
         desc: '写 test-report.md 并标记待人工确认完成（开发收口，提交由系统自动完成）',
         args: [{ label: 'ID', required: true, placeholder: 'REQ-20260920-004' }],
         options: '--coverage N · --framework 名称 · --summary 摘要 · --by 会话 · --run RUN-ID',
+        agentOnly: true, // REQ-20260922-001：Agent 常规状态操作（根 AGENTS.md），看板隐藏
       },
       {
         name: 'move',
@@ -118,6 +127,7 @@ const CLI_GROUPS = [
   {
     id: 'batch',
     label: 'AI 开发',
+    agentOnly: true, // REQ-20260922-001：主调度建批 / worker 领取回执，整组看板隐藏
     commands: [
       { name: 'batch create', desc: '创建 AI 开发批次（有未结束批次时排队接续）' },
       { name: 'batch next', desc: 'worker 领取本批一项（原子预留 + 项目实施互斥）', options: '--batch ID · --by 会话' },
@@ -136,6 +146,7 @@ const CLI_GROUPS = [
   {
     id: 'run',
     label: '执行回执',
+    agentOnly: true, // REQ-20260922-001：worker 上报回执（RUN-ID 只存在于 Agent 会话），整组看板隐藏
     commands: [
       {
         name: 'run receipt',
@@ -169,6 +180,7 @@ const CLI_GROUPS = [
         desc: 'worker 声明条目待人工决策（附问题清单，随后仍交 blocked 回执）',
         args: [{ label: 'ID', required: true, placeholder: 'REQ-20260920-004' }],
         options: '--question 问题（可多次） · --reason 短句 · --run RUN-ID · --by 会话',
+        agentOnly: true, // REQ-20260922-001：worker 声明动作（人工入口是 hold answer/resume/cancel），看板隐藏
       },
       { name: 'hold list', desc: '待人工确认清单（等待时长 / 未答计数 / 原因）', options: '--all 全部' },
       { name: 'hold show', desc: '单条详情（问题清单 / 作答进度 / 事件留痕）', args: [{ label: 'ID', required: true, placeholder: 'REQ-20260920-004' }] },
@@ -197,6 +209,7 @@ const CLI_GROUPS = [
   {
     id: 'refine',
     label: 'AI 分析',
+    agentOnly: true, // REQ-20260922-001：主调度建任务 / 子 Agent 领取回执，整组看板隐藏
     commands: [
       { name: 'refine create', desc: '创建完善任务（候选 = 已接受未完善；冻结候选与文档基线）', options: '--ids ID1,ID2' },
       { name: 'refine next', desc: '子 Agent 领取一项（refine 互斥；实时吸收新接受的单）', options: '--batch ID · --by 会话' },
@@ -227,6 +240,7 @@ const CLI_GROUPS = [
   {
     id: 'summary',
     label: '发布文档 AI 总结',
+    agentOnly: true, // REQ-20260922-001：发布文档 AI 总结轮次回执，整组看板隐藏
     commands: [
       {
         name: 'summary start',
@@ -265,6 +279,7 @@ const CLI_GROUPS = [
   {
     id: 'translate',
     label: '发布文档 AI 翻译',
+    agentOnly: true, // REQ-20260922-001：发布文档 AI 翻译轮次回执，整组看板隐藏
     commands: [
       {
         name: 'translate start',
@@ -334,9 +349,11 @@ const CLI_GROUPS = [
   },
 ];
 
-// 扁平命令清单（生成 / 测试 / 白名单查找共用）
+// 扁平命令清单（生成 / 测试 / 白名单查找共用）。
+// agentOnly 归一化：组级或命令级任一标记即视为 AI Agent 工作流命令（REQ-20260922-001），
+// findCommand / validateRunRequest / 前端表单消费同一口径。
 function allCommands() {
-  return CLI_GROUPS.flatMap((g) => g.commands.map((c) => ({ ...c, group: g.id, groupLabel: g.label })));
+  return CLI_GROUPS.flatMap((g) => g.commands.map((c) => ({ ...c, agentOnly: !!(c.agentOnly || g.agentOnly), group: g.id, groupLabel: g.label })));
 }
 
 // 按完整命令名精确查找（'batch delete'；白名单不接受前缀或别名）
@@ -345,8 +362,19 @@ function findCommand(name) {
   return allCommands().find((c) => c.name === n) || null;
 }
 
+// 看板可见清单（REQ-20260922-001）：过滤 agentOnly 分组 / 命令，返回副本（不改注册表本体）。
+// 服务端 GET /api/cli/commands 的唯一分组来源——整组隐藏的分组不出现（无空分组标题残留），
+// 组内隐藏的命令从所属分组消失、分组标题与其余命令保留。
+function visibleGroups() {
+  return CLI_GROUPS
+    .filter((g) => !g.agentOnly)
+    .map((g) => ({ ...g, commands: g.commands.filter((c) => !c.agentOnly) }));
+}
+
 // 白名单校验（服务端 /api/cli/run 的唯一放行口径）：
 // - 命令必须精确命中注册表（未注册一律拒绝——本模块不得成为任意命令执行通道）；
+// - agentOnly 命令（REQ-20260922-001）白名单内也拒绝网页下发：RUN-ID / 批次 ID / 会话标识
+//   等上下文只存在于 Agent 会话，网页（人工入口）执行无意义，防绕过界面直接调接口；
 // - disabled 命令（cli 组等）白名单内也拒绝执行；
 // - args 必须是字符串数组（逐个传递给子进程，不经 shell 拼接）；
 // - args 携带 --dir 拒绝：项目根由服务端统一注入，不允许篡改下发目标。
@@ -359,6 +387,9 @@ function validateRunRequest(body) {
   const spec = findCommand(command);
   if (!spec) {
     return { ok: false, error: `未注册命令：${command.trim()}（白名单仅接受命令清单内命令）` };
+  }
+  if (spec.agentOnly) {
+    return { ok: false, error: `命令 ${spec.name} 属 AI Agent 会话工作流命令（RUN-ID / 批次 ID / 会话标识只存在于 Agent 会话），不提供网页下发` };
   }
   if (spec.disabled) {
     return { ok: false, error: `命令 ${spec.name} 不提供界面下发（本机终端操作），请在终端执行` };
@@ -391,4 +422,4 @@ function validateRunRequest(body) {
   return { ok: true, spec, tokens: spec.name.split(' '), args };
 }
 
-export { CLI_GROUPS, EXCLUDED_PREFIXES, allCommands, findCommand, validateRunRequest };
+export { CLI_GROUPS, EXCLUDED_PREFIXES, allCommands, findCommand, visibleGroups, validateRunRequest };

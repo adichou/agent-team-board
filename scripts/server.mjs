@@ -3165,8 +3165,12 @@ async function handleApi(req, res, u, pathname) {
   // REQ-20260920-004 命令模块：命令清单（与项目无关，只读）——注册表序列化是前端清单唯一
   // 来源（分组 / 命令 / 参数元数据 / 高危 / 禁用 / serve 标记），杜绝前端手抄清单漂移。
   // 恒定排除 Oncall 咨询 / 讨论 / 增长三组（EXCLUDED_PREFIXES，测试断言恒不出现）。
+  // REQ-20260922-001：下发 visibleGroups（agentOnly 分组 / 命令过滤后的副本）——AI Agent
+  // 工作流命令（batch / run / refine / summary / translate 全组与 claim / report /
+  // hold declare）不在看板呈现；注册表本体与 CLI 同步口径不变（agentOnly 命令经
+  // /api/cli/run 由 validateRunRequest 一并拒绝，防绕过界面直接调接口）。
   if (req.method === 'GET' && pathname === '/api/cli/commands') {
-    return sendJson(res, 200, { groups: cliRegistry.CLI_GROUPS, excluded: cliRegistry.EXCLUDED_PREFIXES });
+    return sendJson(res, 200, { groups: cliRegistry.visibleGroups(), excluded: cliRegistry.EXCLUDED_PREFIXES });
   }
 
   // REQ-20260916-007 数据布局迁移（旧 docs/agent-team-board/ → agent-team-board/{data,runtime}）：
