@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260922-004 演示 · AI 分析并行子代理模式（最多 3 个）</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #1f2329; --muted: #6b7280; --line: #e2e5ea;
+    --primary: #2f6fed; --ok: #1a9e6c; --warn: #c2830a; --danger: #d54545; --info: #2f6fed;
+    --chip-bg: #eef2fb; --chip-ok-bg: #e7f7f0; --chip-warn-bg: #fbf3e0; --chip-danger-bg: #fbeaea;
+    --demo-bg: #f0f2f7; --code-bg: #f3f4f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191d; --card: #212429; --ink: #e6e8eb; --muted: #9aa1ab; --line: #33373e;
+      --primary: #6c94f5; --ok: #3ecf9a; --warn: #e0b04a; --danger: #ef8080; --info: #6c94f5;
+      --chip-bg: #262c3a; --chip-ok-bg: #1c332b; --chip-warn-bg: #38301d; --chip-danger-bg: #3b2424;
+      --demo-bg: #1b1e24; --code-bg: #262a31;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--ink);
+         font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .demo-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+              background: var(--demo-bg); border: 1px dashed var(--line); border-radius: 10px;
+              padding: 10px 14px; margin-bottom: 14px; }
+  .demo-bar .label { font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--card); color: var(--ink); padding: 6px 14px;
+                cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .demo-bar .spacer { flex: 1; }
+  .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--ink);
+         border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.warn { background: var(--chip-warn-bg); border-color: var(--warn); color: var(--warn); }
+  .btn.danger { background: var(--chip-danger-bg); border-color: var(--danger); color: var(--danger); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.small { padding: 3px 9px; font-size: 12px; border-radius: 6px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .status-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; }
+  .chip.st-run { background: var(--chip-bg); color: var(--primary); }
+  .chip.st-pause { background: var(--chip-warn-bg); color: var(--warn); }
+  .chip.st-abort { background: var(--chip-danger-bg); color: var(--danger); }
+  .chip.st-done { background: var(--chip-ok-bg); color: var(--ok); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .notice { border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .notice.ok { background: var(--chip-ok-bg); color: var(--ok); }
+  .notice.warn { background: var(--chip-warn-bg); color: var(--warn); }
+  .notice.info { background: var(--chip-bg); color: var(--info); }
+  .notice.danger { background: var(--chip-danger-bg); color: var(--danger); }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+               gap: 10px 16px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 10px 0; }
+  .meta-grid label { display: block; color: var(--muted); font-size: 12px; }
+  .meta-grid span { font-size: 13px; }
+  .active-head { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 6px; }
+  .active-head b { font-size: 13px; }
+  .run-card { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+              border: 1px solid var(--line); border-left: 3px solid var(--primary);
+              border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--card); }
+  .run-card .id { color: var(--primary); font-weight: 600; cursor: pointer; text-decoration: underline; }
+  .run-card .title { flex: 1; min-width: 180px; }
+  .run-card .kv { color: var(--muted); font-size: 12px; }
+  .run-card .ops { display: flex; gap: 6px; }
+  .slots { display: flex; gap: 6px; margin: 2px 0 6px; }
+  .slot { width: 10px; height: 10px; border-radius: 3px; background: var(--line); }
+  .slot.used { background: var(--primary); }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; margin: 10px 0; }
+  .stats b { font-size: 15px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 14px; }
+  .tabs button { border: 0; background: none; color: var(--muted); padding: 7px 12px;
+                 cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .tab-body { padding-top: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px 12px; font-size: 12px; overflow: auto; white-space: pre-wrap; max-height: 300px; }
+  .q-item { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 4px;
+            border-bottom: 1px solid var(--line); font-size: 13px; }
+  .q-item:last-child { border-bottom: 0; }
+  .q-item .id { color: var(--primary); font-weight: 600; }
+  .reason { background: var(--chip-bg); color: var(--info); border-radius: 999px;
+            padding: 0 8px; font-size: 11px; }
+  .badge { border-radius: 999px; padding: 0 8px; font-size: 11px; }
+  .badge.unrefined { background: var(--chip-bg); color: var(--muted); }
+  .badge.refining { background: var(--chip-bg); color: var(--primary); }
+  .badge.refined { background: var(--chip-ok-bg); color: var(--ok); }
+  .res-done { color: var(--ok); font-weight: 600; }
+  .res-failed { color: var(--danger); font-weight: 600; }
+  .res-hold { color: var(--warn); font-weight: 600; }
+  .cli { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+         padding: 10px 12px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+         max-height: 180px; overflow: auto; white-space: pre-wrap; margin-top: 10px; }
+  .cli .cmd { color: var(--primary); }
+  .cli .err { color: var(--danger); }
+  .cli .okline { color: var(--ok); }
+  .footer { color: var(--muted); font-size: 12px; margin-top: 14px; }
+  .toast-wrap { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 9; }
+  .toast { background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 14px;
+           font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.25); max-width: 360px; }
+  .toast.err { background: var(--danger); color: #fff; }
+  .loading { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line);
+             border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite;
+             vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260922-004 · AI 分析并行子代理模式（同时最多 3 个）</h1>
+  <p class="sub">可交互演示：任务页「AI 分析」面板。顶部开关对照「现状（串行，同一时间只运行 1 个子代理）」与「目标（并行，同时在途 ≤ 3 个子代理）」；演示区可模拟主会话派发、子代理回执（done / fail / hold）、核对补派、暂停 / 终止等全流程。深浅色跟随系统。</p>
+
+  <div class="demo-bar">
+    <span class="label">形态对照</span>
+    <div class="seg" id="modeSeg">
+      <button id="modeSerial" class="on" title="现有行为：主会话每轮只派 1 个子代理，回执核对后再派下一个">现状 · 串行</button>
+      <button id="modeParallel" title="目标行为：可同时展开最多 3 个子代理，各自认领不同条目">目标 · 并行 ≤3</button>
+    </div>
+    <label class="chk" title="勾选后：子代理回执时自动执行一次核对并在有空槽时补派，模拟主会话调度循环"><input type="checkbox" id="autoCheck" checked> 回执后自动核对补派</label>
+    <span class="spacer"></span>
+    <button class="btn" id="resetDemo">重置演示</button>
+  </div>
+
+  <div class="panel" id="panel"></div>
+
+  <p class="footer">演示数据为假想条目；界面结构与文案口径对应 scripts/web/app.js 的 renderRefinePanel（概况 / 队列 / 提示词 / 记录二级页签、三态徽标、暂停与终止语义）与 atb refine next / check 协议。未知实现细节以需求文档为准。</p>
+</div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+'use strict';
+// ---------- 演示数据（假想条目；排序口径：需求优先、最旧优先） ----------
+const SEED_ITEMS = [
+  { id: 'REQ-20260922-001', type: 'requirement', title: '看板列表支持按状态筛选', reasons: ['README 描述待补充', '验收标准待补充'] },
+  { id: 'REQ-20260922-002', type: 'requirement', title: '条目详情页增加活动时间线', reasons: ['README 说明过简', '验收标准待补充'] },
+  { id: 'REQ-20260922-003', type: 'requirement', title: '导出看板快照为 Markdown', reasons: ['README 描述待补充'] },
+  { id: 'BUG-20260922-001', type: 'bug', title: '深色模式下徽标对比度不足', reasons: ['复现步骤待补充', '验收说明待补充'] },
+  { id: 'BUG-20260922-002', type: 'bug', title: '长标题在队列行溢出', reasons: ['现象描述待补充'] },
+];
+const MAX_PARALLEL = 3;
+
+const SERIAL_PROMPT = [
+  '你是当前项目的 AI 分析调度员，只负责派发与接收短回执。',
+  '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。',
+  '实时取单：每完成一项，立即核对并从当前已接受未完善队列（需求优先、最旧优先）领取下一项；队列取空即本轮结束。',
+  '子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+  '每个子代理只做一项；同一时间只运行一个；不要让子代理再派发子代理。   ← 现状串行约束（本单移除）',
+].join('\n');
+const PARALLEL_PROMPT = [
+  '你是当前项目的 AI 分析调度员，只负责派发与接收短回执。',
+  '在当前项目的 Agent 会话中执行本提示词：按执行流程并行完善已接受未完善条目的文档。',
+  '实时取单：同时最多展开 3 个子代理，各自认领不同条目；任一子代理回执后立即核对，',
+  '在途不足 3 且队列有余即补派下一项；运行中新接受的单立即可领取；实时队列取空且在途清零即本轮结束。',
+  '子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
+  '每个子代理只做一项、只认领一项；不要让子代理再派发子代理。   ← 目标并行口径（上限 3）',
+].join('\n');
+
+// ---------- 状态机 ----------
+let mode = 'serial'; // serial | parallel
+let S = null;
+let pane = 'overview';
+let loadingTimer = null;
+let tickTimer = null;
+
+function freshState() {
+  return {
+    started: false, paused: false, aborted: false, finished: false, holding: null,
+    queue: SEED_ITEMS.map((x) => ({ ...x })),        // 待领取队列
+    active: [],                                       // 在途运行 [{runId,itemId,title,owner,startedAt}]
+    records: [],                                      // 执行记录（新→旧）
+    badges: {},                                       // itemId -> unrefined|refining|refined
+    createdAt: new Date(),
+    seq: 0,
+  };
+}
+function slotLimit() { return mode === 'parallel' ? MAX_PARALLEL : 1; }
+function counts() {
+  const done = S.records.filter((r) => r.result === 'done').length;
+  const failed = S.records.filter((r) => r.result === 'failed').length;
+  const total = SEED_ITEMS.length;
+  const settled = new Set([...S.records.filter((r) => r.result !== 'hold').map((r) => r.itemId)]);
+  return { done, failed, active: S.active.length, remaining: total - settled.size, total };
+}
+function fmtElapsed(from) {
+  const s = Math.max(0, Math.floor((Date.now() - from) / 1000));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m} 分 ${s % 60} 秒` : `${s} 秒`;
+}
+function fmtTime(d) { return d.toTimeString().slice(0, 8); }
+
+// ---------- CLI 模拟输出 ----------
+function cliLog(text, cls) {
+  const box = document.getElementById('cliBox');
+  if (!box) return;
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---------- 操作 ----------
+function dispatchNext() {
+  if (!S.started || S.finished || S.aborted) { toast('无进行中任务：请先「启动」AI 分析任务', true); return; }
+  if (S.holding) { cliLog('$ atb refine next --by refine-N --dir <项目根>', 'cmd'); cliLog('stop: 分析队列挂起：' + S.holding.itemId + ' 待人工确认分析；请到任务页「待人工确认」作答并确认后继续', 'err'); return; }
+  if (S.paused) { cliLog('$ atb refine next --by refine-N --dir <项目根>', 'cmd'); cliLog('stop: 已暂停后续领取', 'err'); toast('已暂停后续领取：当前项完成后不再派发（恢复后继续）', true); return; }
+  if (S.active.length >= slotLimit()) {
+    cliLog('$ atb refine next --by refine-N --dir <项目根>', 'cmd');
+    if (mode === 'serial') {
+      const r = S.active[0];
+      cliLog(`错误：当前执行未收尾：${r.runId}（${r.itemId}，owner ${r.owner}）。先核对旧子 Agent 是否结束，不得创建第二个完善执行`, 'err');
+    } else {
+      cliLog(`提示：在途已达 ${slotLimit()}（${S.active.map((r) => r.itemId).join('、')}），等待任一子代理回执后核对补派`, 'err');
+      toast(`在途已达 3：等待回执后补派`, true);
+    }
+    render(); return;
+  }
+  const cand = S.queue.shift();
+  if (!cand) { cliLog('$ atb refine next', 'cmd'); cliLog('stop: 本轮完善队列已处理完毕', 'okline'); return; }
+  // loading 瞬态（模拟轮询/派发延迟）
+  S.loadingNext = true; render();
+  loadingTimer = setTimeout(() => {
+    S.loadingNext = false;
+    S.seq += 1;
+    const run = { runId: 'run-' + S.seq, itemId: cand.id, title: cand.title,
+                  owner: 'refine-' + (S.seq), startedAt: Date.now() };
+    S.active.push(run);
+    S.badges[cand.id] = 'refining';
+    cliLog('$ atb refine next --by ' + run.owner + ' --dir <项目根>', 'cmd');
+    cliLog('✓ 已预留 ' + cand.id + '（runId: ' + run.runId + ', owner: ' + run.owner + '）缺失原因：' + cand.reasons.join('、'), 'okline');
+    render();
+  }, 500);
+}
+
+function receipt(runId, result) {
+  const idx = S.active.findIndex((r) => r.runId === runId);
+  if (idx < 0) return;
+  const run = S.active.splice(idx, 1)[0];
+  if (result === 'done') {
+    S.badges[run.itemId] = 'refined';
+    S.records.unshift({ ...run, endedAt: new Date(), result: 'done', summary: '补全 README 描述与验收标准（含界面展示）' });
+    cliLog(`$ atb refine done ${run.runId} --summary "补全 README 描述与验收标准"`, 'cmd');
+    cliLog('✓ 已核验记账：文档确有变更 → ' + run.itemId + ' 已完善', 'okline');
+  } else if (result === 'failed') {
+    delete S.badges[run.itemId];
+    S.records.unshift({ ...run, endedAt: new Date(), result: 'failed', reason: '信息不足，无法完善（示例回执）' });
+    cliLog(`$ atb refine fail ${run.runId} --reason "信息不足"`, 'cmd');
+    cliLog('× 失败回执已记账：' + run.itemId + ' 本轮出局，条目保持已接受', 'err');
+  } else if (result === 'hold') {
+    S.holding = { itemId: run.itemId, runId: run.runId, run };
+    S.records.unshift({ ...run, endedAt: new Date(), result: 'hold', reason: '需求歧义，需人工确认（示例）' });
+    cliLog(`$ atb refine hold ${run.runId} --reason "需求歧义" --question "并行上限是否可配置？"`, 'cmd');
+    cliLog('! 已声明挂起：队列暂停，待人工确认分析后续跑', 'err');
+    toast('队列已挂起：请到「待人工确认」作答并确认后继续', true);
+  }
+  render();
+  if (document.getElementById('autoCheck').checked && !S.holding) setTimeout(check, 350);
+}
+
+function check() {
+  if (!S.started || S.finished || S.aborted) return;
+  const c = counts();
+  cliLog('$ atb refine check --dir <项目根>', 'cmd');
+  if (S.holding) { cliLog('notice: 分析队列已暂停：' + S.holding.itemId + ' 待人工确认分析', 'err'); render(); return; }
+  if (c.remaining === 0 && S.active.length === 0) {
+    S.finished = true;
+    cliLog('nextAction=stop · 本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）', 'okline');
+    toast('本轮 AI 分析已结束', false); render(); return;
+  }
+  if (mode === 'serial') {
+    if (S.active.length > 0) {
+      const r = S.active[0];
+      cliLog(`nextAction=needs_attention · 当前执行未收尾（${r.runId} ${r.itemId} owner ${r.owner}），等待子 Agent 回执后核对`, 'err');
+    } else if (c.remaining > 0) {
+      cliLog('nextAction=continue · 可派发下一个子代理（串行：每轮一个）', 'okline');
+      if (document.getElementById('autoCheck').checked) dispatchNext();
+    }
+  } else {
+    if (S.paused) {
+      cliLog('nextAction=stop · 已暂停后续领取（在途执行不受影响）', 'err');
+    } else if (S.active.length < slotLimit() && c.remaining > 0) {
+      cliLog(`nextAction=continue · 在途 ${S.active.length}/${slotLimit()}，剩余 ${c.remaining}：可补派子代理`, 'okline');
+      if (document.getElementById('autoCheck').checked) { dispatchNext(); return; }
+    } else if (S.active.length > 0) {
+      cliLog(`nextAction=needs_attention · 在途 ${S.active.length}/${slotLimit()}（${S.active.map((r) => r.itemId).join('、')}），等待回执后核对`, 'err');
+    }
+  }
+  render();
+}
+
+function togglePause() {
+  if (!S.started || S.finished || S.aborted) return;
+  S.paused = !S.paused;
+  cliLog(S.paused ? '$ atb refine pause' : '$ atb refine pause --off', 'cmd');
+  cliLog(S.paused ? '已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。'
+                  : '已恢复后续领取：核对后继续派发。', 'okline');
+  render();
+}
+function abort() {
+  if (!S.started || S.finished || S.aborted) return;
+  if (!confirm('终止 AI 分析任务？剩余项出局；本轮记录保留；在途子代理需在对应会话人工停止。')) return;
+  S.aborted = true;
+  cliLog('$ atb refine abort', 'cmd');
+  cliLog('× 任务已终止：剩余项出局；在途子代理请在对应子代理会话人工停止', 'err');
+  toast('任务已终止（在途子代理需人工停止）', true);
+  render();
+}
+function startNew() {
+  const keepBadges = S.badges;
+  S = freshState();
+  S.badges = Object.fromEntries(
+    SEED_ITEMS.map((x) => [x.id, keepBadges[x.id] === 'refined' ? 'refined' : 'unrefined']));
+  S.queue = S.queue.filter((x) => S.badges[x.id] !== 'refined');
+  S.started = true;
+  cliLog('$ （面板）启动新一轮 AI 分析：已复制主调度提示词', 'cmd');
+  render();
+}
+function startFirst() { S.started = true; cliLog('$ （面板）启动 AI 分析：创建任务并复制主调度提示词（登记运行后才算执行中）', 'cmd'); render(); }
+function answerHold() {
+  if (!S.holding) return;
+  const h = S.holding; S.holding = null;
+  // 演示口径：人工确认后续跑——条目回到队列队首，由下一个子代理携答案继续
+  S.queue.unshift({ id: h.itemId, type: 'requirement', title: h.run.title, reasons: ['携人工答案续跑'] });
+  cliLog('$ （人工）已作答并确认 · hold resume → 答案随续跑回传', 'okline');
+  toast('已确认续跑：答案将随领取回传给子代理', false);
+  render();
+  if (document.getElementById('autoCheck').checked) setTimeout(check, 300);
+}
+function gotoItem(id) { toast('跳转条目 ' + id + '（演示中以提示代替）', false); }
+
+// ---------- 渲染 ----------
+function badgeOf(id) { return S.badges[id] || 'unrefined'; }
+const BADGE_TXT = { unrefined: '未完善', refining: '完善中', refined: '已完善' };
+
+function toast(msg, isErr) {
+  const wrap = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+function render() {
+  const p = document.getElementById('panel');
+  const c = counts();
+  const stChip = S.aborted ? '<span class="chip st-abort">已终止</span>'
+    : S.finished ? '<span class="chip st-done">已结束</span>'
+    : S.paused ? '<span class="chip st-pause">已暂停</span>'
+    : S.started ? '<span class="chip st-run">运行中</span>'
+    : '<span class="chip st-run">未启动</span>';
+  const modeText = mode === 'parallel' ? '并行子代理（在途 ≤ 3）' : '串行子代理（在途 ≤ 1，现状）';
+
+  // 通知条
+  let notices = '';
+  if (S.holding) notices += `<div class="notice warn">⚠ 待人工确认分析：${S.holding.itemId}（存在必答问题：并行上限是否可配置？）——队列已暂停、不派新项，在途不受影响。 <button class="btn small" onclick="answerHold()">作答并确认续跑</button></div>`;
+  if (S.aborted) notices += '<div class="notice danger">任务已人工终止：本轮全部处理记录已保留；在途子代理请在对应子代理会话人工停止；终止后可立即「启动新一轮」。</div>';
+  if (S.paused && !S.aborted) notices += '<div class="notice info">已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。</div>';
+  if (S.finished) notices += '<div class="notice ok">本轮完善队列已处理完毕（条目均保持已接受，后续流转由人工判断）。</div>';
+  if (!S.started) notices += '<div class="notice">待启动：复制主调度提示词到项目 Agent 会话粘贴发送（登记运行后才算执行中）。</div>';
+
+  // 在途区
+  let activeHtml = '';
+  if (mode === 'parallel') {
+    const slots = Array.from({ length: MAX_PARALLEL }, (_, i) => `<span class="slot${i < S.active.length ? ' used' : ''}" title="并行槽位 ${i + 1}"></span>`).join('');
+    activeHtml += `<div class="active-head"><b>在途子代理</b><span class="slots">${slots}</span><span class="muted small">${S.active.length}/${MAX_PARALLEL} · 槽位即并行上限</span></div>`;
+  } else {
+    activeHtml += '<div class="active-head"><b>当前执行</b><span class="muted small">串行：同一时间只运行一个（现状）</span></div>';
+  }
+  if (S.loadingNext) {
+    activeHtml += `<div class="run-card"><span class="loading"></span><span class="muted">派发中：atb refine next（轮询瞬态）…</span></div>`;
+  } else if (S.active.length === 0) {
+    activeHtml += `<div class="meta-grid">
+      <div><label>当前条目</label><span>${S.aborted ? '任务已终止' : S.finished ? '本轮已结束' : S.paused ? '已暂停，等待恢复' : S.started ? '等待领取下一项' : '—'}</span></div>
+      <div><label>子代理会话</label><span>—</span></div>
+      <div><label>开始时间</label><span>—</span></div>
+      <div><label>耗时</label><span>—</span></div></div>`;
+  } else {
+    for (const r of S.active) {
+      activeHtml += `<div class="run-card">
+        <span class="id" onclick="gotoItem('${r.itemId}')" title="点击跳转条目详情">${r.itemId}</span>
+        <span class="title">${r.title}</span>
+        <span class="kv">会话 ${r.owner}</span>
+        <span class="kv">开始 ${fmtTime(new Date(r.startedAt))}</span>
+        <span class="kv">已用时 ${fmtElapsed(r.startedAt)}</span>
+        <span class="ops">
+          <button class="btn small" onclick="receipt('${r.runId}','done')">模拟 done 回执</button>
+          <button class="btn small" onclick="receipt('${r.runId}','fail')">fail</button>
+          <button class="btn small" onclick="receipt('${r.runId}','hold')">hold 挂起</button>
+        </span></div>`;
+    }
+  }
+
+  // 统计行
+  const stats = `<div class="stats">
+    <span>完成 <b style="color:var(--ok)">${c.done}</b></span>
+    <span>异常 <b style="color:var(--danger)">${c.failed}</b></span>
+    <span>进行中 <b style="color:var(--primary)">${c.active}</b>${mode === 'parallel' ? '（≤3）' : '（≤1）'}</span>
+    <span>剩余 <b>${c.remaining}</b></span>
+    <span>总数 <b>${c.total}</b></span></div>`;
+
+  // 操作区
+  const terminal = S.aborted || S.finished;
+  const ops = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+    ${!S.started ? '<button class="btn primary" onclick="startFirst()">启动</button>' : ''}
+    ${S.started && terminal ? `<button class="btn primary" onclick="startNew()" ${c.remaining === 0 ? 'disabled title="暂无可完善候选：已接受条目均已完善（或尚无已接受条目）"' : 'title="以当前已接受未完善候选创建新任务"'}>启动新一轮</button>` : ''}
+    ${S.started && !terminal ? `<button class="btn ${S.paused ? 'primary' : 'warn'}" onclick="togglePause()">${S.paused ? '恢复后续领取' : '暂停后续领取'}</button>
+      <button class="btn danger" onclick="abort()" title="停止派发后续项；剩余项出局；本轮记录保留；在途子代理需在对应会话人工停止">终止任务</button>` : ''}
+  </div>`;
+
+  // 演示控制条
+  const demoOps = `<div class="demo-bar" style="margin:12px 0 0">
+    <span class="label" style="font-size:13px">演示操作</span>
+    <button class="btn" onclick="dispatchNext()">主会话派发子代理（refine next）</button>
+    <button class="btn" onclick="check()">主会话核对（refine check）</button>
+    <span class="muted small">串行形态下：在途 1 个时再派发会触发「当前执行未收尾」报错（现状行为）。</span>
+  </div>`;
+
+  // 页签体
+  let body = '';
+  if (pane === 'overview') {
+    body = `${notices}${activeHtml}${stats}${demoOps}${ops}
+      <div class="cli" id="cliBox"></div>`;
+  } else if (pane === 'queue') {
+    const rows = S.queue.length ? S.queue.map((x) => `<div class="q-item">
+        <span class="id" onclick="gotoItem('${x.id}')">${x.id}</span><span>${x.title}</span>
+        ${x.reasons.map((r) => `<span class="reason" title="缺失原因">${r}</span>`).join('')}
+        <span class="badge ${badgeOf(x.id)}">${BADGE_TXT[badgeOf(x.id)]}</span></div>`).join('')
+      : '<p class="muted small">任务已收尾：待完善队列已清空（条目保持已接受）。</p>';
+    body = `<p class="muted small">待完善队列（需求优先、最旧优先；每轮实时读取，含本轮新接受的单）</p>${rows}`;
+  } else if (pane === 'prompt') {
+    body = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="muted small">主调度提示词（随形态对照切换；${mode === 'parallel' ? '目标并行版' : '现状串行版'}）：</span>
+      <button class="btn small" onclick="toast('已复制主调度提示词（演示）',false)">重新复制</button></div>
+      <pre>${mode === 'parallel' ? PARALLEL_PROMPT : SERIAL_PROMPT}</pre>`;
+  } else if (pane === 'records') {
+    body = S.records.length ? `<table><thead><tr><th>运行</th><th>条目</th><th>子代理会话</th><th>结果</th><th>摘要 / 原因</th></tr></thead><tbody>
+      ${S.records.map((r) => `<tr><td>${r.runId}</td><td><span class="id" style="color:var(--primary);cursor:pointer" onclick="gotoItem('${r.itemId}')">${r.itemId}</span></td>
+        <td>${r.owner}</td><td class="res-${r.result}">${{ done: '完成', failed: '失败', hold: '挂起' }[r.result]}</td>
+        <td>${r.summary || r.reason || ''}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted small">暂无执行记录：派发子代理并回执后在此展示。</p>';
+  }
+
+  const tabs = ['overview', 'queue', 'prompt', 'records'];
+  const tabTxt = { overview: '概况', queue: '队列', prompt: '提示词', records: '记录' };
+  p.innerHTML = `
+    <div class="status-line">${stChip}<span class="muted small">${modeText} · 创建 ${fmtTime(S.createdAt)}</span></div>
+    <div class="tabs">${tabs.map((t) => `<button class="${t === pane ? 'on' : ''}" onclick="switchPane('${t}')">${tabTxt[t]}</button>`).join('')}</div>
+    <div class="tab-body">${body}</div>`;
+  // CLI 盒内容迁移（重渲染不清空历史）
+  if (pane === 'overview' && cliHistory.length) {
+    const box = document.getElementById('cliBox');
+    for (const { text, cls } of cliHistory) {
+      const d = document.createElement('div');
+      if (cls) d.className = cls;
+      d.textContent = text;
+      box.appendChild(d);
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+// CLI 历史缓存（跨渲染保留）
+const cliHistory = [];
+const _origCliLog = cliLog;
+cliLog = function (text, cls) { cliHistory.push({ text, cls }); _origCliLog(text, cls); };
+
+function switchPane(t) { pane = t; render(); }
+
+// ---------- 模式切换与初始化 ----------
+document.getElementById('modeSerial').addEventListener('click', () => { mode = 'serial'; segSync(); reset(); });
+document.getElementById('modeParallel').addEventListener('click', () => { mode = 'parallel'; segSync(); reset(); });
+function segSync() {
+  document.getElementById('modeSerial').className = mode === 'serial' ? 'on' : '';
+  document.getElementById('modeParallel').className = mode === 'parallel' ? 'on' : '';
+}
+function reset() {
+  clearTimeout(loadingTimer);
+  S = freshState();
+  for (const it of SEED_ITEMS) S.badges[it.id] = 'unrefined';
+  cliHistory.length = 0;
+  pane = 'overview';
+  render();
+}
+document.getElementById('resetDemo').addEventListener('click', reset);
+reset();
+tickTimer = setInterval(() => { // 在途耗时每秒刷新
+  if (S && S.active.length && pane === 'overview') render();
+}, 1000);
+</script>
+</body>
+</html>
