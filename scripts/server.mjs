@@ -2326,7 +2326,15 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       // BUG-20260920-005：随列表附带 pushed（五步流程「正式发布 → 推送主分支」成功，
       // version.json release.pushedAt）——卡片行内键（AI 完善 / 合并入 main）与详情条目锁
       // 的锁定基准从 merged 后移到该时点；release 字段仍为产品发布汇总（不改既有语义）。
-      versions: buildStore.listVersions(dataDir).map((v) => ({ ...v, pushed: buildStore.isPushed(v), release: releaseMap.get(v.id) || null })),
+      versions: buildStore.listVersions(dataDir).map((v) => ({
+        ...v,
+        pushed: buildStore.isPushed(v),
+        // REQ-20260922-006 发布时间：顶层 releasedAt（推送成功时写入）；存量已推送计划
+        // 无该字段时按 release.pushedAt 回退（列表装配处统一计算，前端不再兜底）。注意
+        // release 键随后被产品发布汇总覆盖，推送事实只经 releasedAt / pushed 透出。
+        releasedAt: v.releasedAt || (v.release && v.release.pushedAt) || null,
+        release: releaseMap.get(v.id) || null,
+      })),
       statusLabels: buildStore.VERSION_STATUS_LABEL,
     });
   }
@@ -2404,6 +2412,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         // REQ-20260916-005：版本计划合并目标按主分支解析结果记录（仅 master 历史仓库
         // 为 'master'；两者皆无时缺省 main，实际合并前置校验会按补建口径处理）。
         targetBranch: gitFlow.resolveMainBranch(root) || buildStore.TARGET_BRANCH,
+        // REQ-20260922-006：版本号（x.y.z）可选传入；空 / 缺省由数据层自动分配，
+        // 非法格式与重复由数据层校验报错（AtbError → 400）。
+        version: body.version,
         by: 'board',
       });
       return sendJson(res, 201, { version });
@@ -2666,7 +2677,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     try { config = buildPublishStore.readConfig(); } catch { /* 配置读取失败不阻塞总览 */ }
     return sendJson(res, 200, {
       version: v,
-      versionNumber: flow.versionNumberOf(v.id),
+      // REQ-20260922-006：版本号优先取计划的 x.y.z 字段；存量计划（无 version 字段）
+      // 回退计划编号派生口径（YYYYMMDD-NNN）。
+      versionNumber: v.version || flow.versionNumberOf(v.id),
       langs: flow.docLangsOf(v), // REQ-20260921-010 文档语言集（缺省 cn,en）
       customDocs: flow.customDocsOf(v), // REQ-20260922-003 自定义文档清单（缺省空，回显）
       steps: flow.publishStepsState(v, docsEval),

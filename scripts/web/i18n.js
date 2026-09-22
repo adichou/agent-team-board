@@ -163,6 +163,11 @@ const EN = {
   '加载运行详情…': 'Loading run details…',
   '运行 ID': 'Run ID',
   '发行版本号': 'Release version number',
+  // REQ-20260922-006 版本号 x.y.z + 发布时间：创建表单 / 列表卡片 / 详情头部新文案
+  //（「发布于」为复合 meta 行内的片段键，随行内其余片段一起替换）
+  '发布于': 'Released at',
+  '版本号（x.y.z 语义化格式，留空自动分配）': 'Version number (x.y.z semver format; auto-assigned if empty)',
+  '0.1.0（自动递增，可修改）': '0.1.0 (auto-incremented, editable)',
   '官网与文档': 'Website & docs',
   '未提供': 'Not provided',
   '草稿': 'Draft',

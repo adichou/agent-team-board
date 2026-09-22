@@ -822,8 +822,23 @@ const ATBBuild = (() => {
 
   /* ---------- 版本计划：创建 / 编辑 / 条目 ---------- */
 
+  // REQ-20260922-006：建议版本号预填值——既有版本中最大 x.y.z 的 patch+1（无历史 0.1.0）。
+  // 仅作表单预填建议，实际分配以服务端校验为准（空 / 重复 / 非法由服务端报错回显）。
+  function suggestNextVersion() {
+    let best = null;
+    for (const v of state.data?.versions || []) {
+      const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(v.version || ''));
+      if (!m) continue;
+      const cur = [Number(m[1]), Number(m[2]), Number(m[3])];
+      if (!best
+        || cur[0] > best[0]
+        || (cur[0] === best[0] && (cur[1] > best[1] || (cur[1] === best[1] && cur[2] > best[2])))) best = cur;
+    }
+    return best ? `${best[0]}.${best[1]}.${best[2] + 1}` : '0.1.0';
+  }
+
   async function openCreatePanel() {
-    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', totalDone: null, busy: false, error: null, loadError: null };
+    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', version: suggestNextVersion(), totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
@@ -881,7 +896,7 @@ const ATBBuild = (() => {
     p.error = null;
     render();
     try {
-      const r = await post('/version', { name: p.name, items });
+      const r = await post('/version', { name: p.name, version: String(p.version || '').trim(), items });
       if (!r.ok) throw new Error(await errOf(r, '创建失败'));
       state.createPanel = null;
       state.selVerId = null; // refresh 后自动选中最新（即刚创建的）
@@ -1448,7 +1463,9 @@ const ATBBuild = (() => {
       toast('仅已合并（merged）的版本计划可创建发布：请先完成「合并入 main」', true);
       return;
     }
-    state.releaseConfirm = { verId: v.id, version: '', busy: false, error: null };
+    // REQ-20260922-006：产品发布弹窗发行版本号默认预填本计划的 x.y.z 版本号（可改），
+    // 存量计划无 version 字段时维持原空值。
+    state.releaseConfirm = { verId: v.id, version: v.version ? String(v.version).replace(/^v/, '') : '', busy: false, error: null };
     render();
   }
 
@@ -2784,13 +2801,15 @@ const ATBBuild = (() => {
       // （不抢主操作）；merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（一并禁用）。
       const delDisabled = v.status === 'merging' || state.mergeBusy;
       const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
-      // REQ-20260920-003：列表展示计划号 + 提取版本号（保留前导零）+ 阶段
-      const verNo = /^BLD-\d{8}-\d{3}$/.test(v.id) ? v.id.replace(/^BLD-/, '') : '';
+      // REQ-20260920-003：列表展示计划号 + 版本号 + 阶段；REQ-20260922-006：版本号优先取
+      // 计划的 x.y.z 字段，存量计划（无 version）回退计划编号派生（YYYYMMDD-NNN）；
+      // 已发布（releasedAt，推送远端 main 成功时间）追加「发布于」。
+      const verNo = v.version || (/^BLD-\d{8}-\d{3}$/.test(v.id) ? v.id.replace(/^BLD-/, '') : '');
       const stage = v.status === 'merged' ? '正式发布' : v.status === 'merging' ? '合并中' : v.status === 'failed' ? '失败（可重试）' : '计划中';
       return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><span class="bld-card-title"><strong title="${esc(v.name || v.id)}">${esc(v.name || v.id)}</strong> ${versionChip(v)}</span>${delBtn}</div>
-        <div class="meta">${esc(v.id)}${verNo ? ` · 版本号 ${esc(verNo)}` : ''} · 阶段 ${esc(stage)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}</div>
+        <div class="meta">${esc(v.id)}${verNo ? ` · 版本号 ${esc(verNo)}` : ''} · 阶段 ${esc(stage)} · ${v.items.length} 个关联单 · 更新 ${esc(fmtTime(v.updatedAt))}${v.releasedAt ? ` · 发布于 ${esc(fmtTime(v.releasedAt))}` : ''}</div>
       </div>`;
     }).join('');
   }
@@ -2836,6 +2855,8 @@ const ATBBuild = (() => {
           ${renderCandidateRows(p, p === state.createPanel ? 'createPanel' : 'addPanel')}
           ${p === state.createPanel ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）
             <input id="bldNewName" value="${esc(p.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}
+          ${p === state.createPanel ? `<label class="field">版本号（x.y.z 语义化格式，留空自动分配）
+            <input id="bldNewVersion" value="${esc(p.version)}" placeholder="0.1.0（自动递增，可修改）"></label>` : ''}
           ${p.error ? `<p class="rel-form-err" role="alert">${esc(p.error)}</p>` : ''}`}
         </div>
         <footer class="rel-panel-foot">
@@ -3669,7 +3690,8 @@ ${langsField}
     // REQ-20260920-003：右侧详情改为五步流程导航——1 概况（原「版本计划」，REQ-20260921-013
     // 更名并迁入 AI 完善，信息编辑）→ 2 关联条目与提交（原概况的关联列表）→ 3 文档编写
     // → 4 合并入 main → 5 正式发布（含原产品发布记录页签）
-    const versionNumber = (v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '';
+    // REQ-20260922-006：详情头部版本号优先取 x.y.z 字段（存量计划回退派生）；已发布追加「发布于」。
+    const versionNumber = v.version || ((v.id && /^BLD-\d{8}-\d{3}$/.test(v.id)) ? v.id.replace(/^BLD-/, '') : '');
     // REQ-20260921-014：概况页签显式编辑——可见「编辑」按钮（merging 禁用 + title 文字
     // 原因），点开就地替换描述区为名称 + 描述同一表单（见 renderPlanEditForm）；与遗留
     // 行内点击编辑并存（快捷路径，见 bindCommon 绑定）。
@@ -3719,7 +3741,7 @@ ${langsField}
         <header class="rel-detail-head">
           <div>
             <h3>${nameCell}</h3>
-            <p class="muted small">${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 更新 ${esc(fmtTime(v.updatedAt))}</p>
+            <p class="muted small">${esc(v.id)}${versionNumber ? ` · 版本号 ${esc(versionNumber)}` : ''} · 更新 ${esc(fmtTime(v.updatedAt))}${v.releasedAt ? ` · 发布于 ${esc(fmtTime(v.releasedAt))}` : ''}</p>
           </div>
         </header>
         ${renderStepNav(v)}
@@ -4264,6 +4286,9 @@ ${langsField}
     }
     const nameInput = q('#bldNewName');
     nameInput?.addEventListener('input', () => { if (state.createPanel) state.createPanel.name = nameInput.value; });
+    // REQ-20260922-006：版本号输入（x.y.z，预填建议值可改；空则服务端自动分配）
+    const versionInput = q('#bldNewVersion');
+    versionInput?.addEventListener('input', () => { if (state.createPanel) state.createPanel.version = versionInput.value; });
     // 分支浏览
     q('#bldFetchBtn')?.addEventListener('click', doSync);
     q('#bldBranchRefresh')?.addEventListener('click', loadBranches);
