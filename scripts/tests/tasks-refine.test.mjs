@@ -137,7 +137,8 @@ t('T6 refine 终止：剩余项出局、在途 interrupted、锁释放、批次�
   accept(dataDir, b2.id);
   const { batch: b } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
   const got = refine.nextRefineItem(dataDir, b.batchId, { owner: 'w1' });
-  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')), '领取持有互斥锁');
+  // REQ-20260922-004 锁语义迁移：zcode 领取不再持有全局 refine.lock（并行 ≤3 改 refine-next 短临界区）
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')), '领取不持有全局 refine.lock（锁迁移）');
 
   const r = refine.abortRefineBatch(dataDir, b.batchId);
   assert.equal(r.ok, true);
