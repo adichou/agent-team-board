@@ -21,6 +21,18 @@
    - 必改三处已全部处理（app.js 4512 行 + i18n.js 1011 行改写、864 行核对保留）。
    - 保留项维持原状：「未检测到 ZCode.app（zcode:// 深链宿主）…」系列（app.js 7143/7890 行、build.js 1217/4040 行、i18n.js 737/738 行，事实性深链检测提示）；「去新建 Zcode 会话」双宿主并列链接（app.js 7140 行、build.js 1215 行、i18n.js 386 行）。
    - 验收 grep 复核：`grep -rn "ZCode 会话" scripts/` 中面向用户源码（scripts/web/、scripts/atb.mjs 等）0 处命中；剩余命中均为本单新增测试文件对旧文案的注释/断言引用（缺陷描述与移除断言所需，非面向用户文案）。「Zcode 会话」命中为「去新建 Zcode 会话」双宿主并列链接（保留项）。
+5. 复工补充（run-20260922-348，dev-5；hold 第 1 轮人工决策落地）：
+   - **q1 已答「通用化处理」（2026-09-22 04:15 board）**：「或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词」
+     （检测失败分支手动打开指引）三处改通用口径——`app.js` `newSessionLinksHtml()` 失败分支、
+     `build.js` `answerSessionLinksHtml()` 失败分支改「或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词」；
+     `i18n.js` 词条键随中文原文更新、EN 值改 "or open your agent client directly, start a session manually and paste the prompt"。
+     周边「客户端检测失败：无法确认本机 Zcode / Codex 是否可用」与「未检测到 ZCode.app / ChatGPT.app」系列为事实性
+     深链检测描述（同保留口径），不在 q1 范围、未改动。
+   - **q2 已答「保留现状」（同上）**：atb.mjs「提示：ZCode 内置浏览器右侧面板需在会话内用 /board 打开。」
+     保留原文——ZCode 内置浏览器（IAB）为 ZCode 特有形态的事实提示，上一行已给通用浏览器 URL，人工定夺不改。
+   - 回归测试补充：本单测试文件新增 B5（app.js/build.js 两处改通用口径、不再并列宿主名）、B6（词典新键存在且
+     EN 值无宿主名、旧键移除）先红后绿；既有 `bug-build-session-entry-20260913-005.test.mjs` S7 断言同步到新文案。
+   - 决策留痕：`agent-team-board/runtime/holds/decisions/BUG-20260922-001.md`（应用数据，不进 git）。
 
 开源选型：纯文案修改，未引入任何库（无合适库可言——不涉及第三方能力）。
 
@@ -28,4 +40,4 @@
 
 - 仅改提示条文案与词典，不动布局与交互（README「界面展示」节确认）。
 - i18n 覆盖卡点（i18n-coverage C1）随中文原文同步更新词典键，全部 i18n 套件通过；双语往返（R4）验证英文值唯一可还原。
-- 「待确认」两项（「或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词」app.js 7133 / build.js 1208 / i18n.js 505 行；atb.mjs 2208 行「提示：ZCode 内置浏览器右侧面板需在会话内用 /board 打开。」）不在本次必改范围，已按 hold 机制声明待人工决策（问题清单见 agent-team-board/runtime/holds/decisions/BUG-20260922-001.md）；人工定夺「需要修改」则复工后按通用口径处理，「保留」则结论以 hold 答复记录为准。
+- 「待确认」两项（「或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词」app.js 7133 / build.js 1208 / i18n.js 505 行；atb.mjs 2208 行「提示：ZCode 内置浏览器右侧面板需在会话内用 /board 打开。」）已于 hold 第 1 轮由人工定夺（2026-09-22 04:15，board）：q1 通用化处理（已实施，见方案第 5 条）、q2 保留现状（atb.mjs 未改动）；决策留痕见 agent-team-board/runtime/holds/decisions/BUG-20260922-001.md。

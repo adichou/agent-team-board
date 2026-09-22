@@ -46,9 +46,9 @@ Web 看板详情抽屉中，条目状态为「已接受（accepted，未入计�
    - **保留（事实性宿主描述，非排他）**：
      - 「未检测到 ZCode.app（zcode:// 深链宿主）…」系列（`app.js` 约 7143 / 7890 行、`build.js` 约 1217 / 3874 行、`i18n.js` 约 737 / 738 行）：`zcode://` 深链确实仅由 ZCode.app 承载，属事实性检测提示，且同屏给出「打开 Zcode / ChatGPT 手动新建会话」通用备选。
      - 「去新建 Zcode / Codex 会话」链接（`app.js` `newSessionLinksHtml()`）、`atb.mjs` pack 输出的「ZCode/Codex 双宿主安装遵循各自官方插件机制」：双宿主并列口径，通用。
-   - **待人工确认**：
-     - 「或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词」（`app.js` 约 7133 行、`build.js` 约 1208 行、`i18n.js` 约 505 行）：为并列提及，是否需进一步通用化（如「或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词」）待确认。
-     - `atb.mjs` 约 2204 行「提示：ZCode 内置浏览器右侧面板需在会话内用 /board 打开。」：ZCode 内置浏览器（IAB）为 ZCode 特有形态的事实提示，且上一行已给出通用浏览器 URL；是否需要调整待确认。
+   - **已人工定夺（hold 第 1 轮，2026-09-22 04:15 board）**：
+     - 「或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词」（`app.js` 约 7133 行、`build.js` 约 1208 行、`i18n.js` 约 505 行）：定夺**通用化处理**，已改为「或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词」，EN 同步 "or open your agent client directly, …"。
+     - `atb.mjs` 约 2204 行「提示：ZCode 内置浏览器右侧面板需在会话内用 /board 打开。」：定夺**保留现状**（ZCode 内置浏览器 IAB 为 ZCode 特有形态的事实提示，上一行已给出通用浏览器 URL）。
    - 排查范围：`scripts/web/`（app.js、build.js、i18n.js）、`scripts/atb.mjs`、`commands/`、`skills/`；`agent-team-board/runtime/`（含 builds 产物）为系统生成数据，不手改。
    - 排查未发现 commands/、skills/、bin/ 中存在「ZCode 会话」类排他文案（docs/ 下仅历史运行日志命中，属数据非文案）。
 
