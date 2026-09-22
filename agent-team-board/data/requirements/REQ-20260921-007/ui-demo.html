@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260921-007 演示 · AI 写作改成 AI 总结并优化提示词显示布局</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #d9dee4; --text: #24292f; --muted: #6b7280;
+    --primary: #1f6feb; --primary-text: #ffffff; --ok: #1a7f37; --ok-bg: #e6f4ea;
+    --warn: #9a6700; --warn-bg: #fff3d6; --err: #cf222e; --err-bg: #ffebe9;
+    --run: #1f6feb; --run-bg: #ddf4ff; --mute-bg: #eef1f4; --chip-line: #c8d1da;
+    --hover: #f0f3f6; --code-bg: #f0f3f6;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117; --panel: #161b22; --line: #3d444d; --text: #e6edf3; --muted: #9198a1;
+    --primary: #4493f8; --primary-text: #ffffff; --ok: #3fb950; --ok-bg: #12261e;
+    --warn: #d29922; --warn-bg: #2d2200; --err: #f85149; --err-bg: #2d1416;
+    --run: #4493f8; --run-bg: #121d2f; --mute-bg: #21262d; --chip-line: #3d444d;
+    --hover: #1c2129; --code-bg: #21262d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; }
+  .demo-top { position: sticky; top: 0; z-index: 10; background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .demo-top h1 { font-size: 15px; margin: 0 12px 0 0; }
+  .viewswitch { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .viewswitch button, .btn, .chip-btn { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 10px; }
+  .viewswitch button.on { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .btn.small { padding: 2px 8px; font-size: 13px; }
+  .btn.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .btn.danger { background: var(--err-bg); color: var(--err); border-color: var(--err); }
+  .btn.quiet { background: transparent; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .note { margin: 20px auto; max-width: 1080px; }
+  .note-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--muted); }
+  .note-card b { color: var(--text); }
+  .wrap { max-width: 1080px; margin: 20px auto; padding: 0 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .panel > h2 { margin: 0 0 10px; font-size: 16px; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .statusbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 12px;
+    padding: 8px 10px; background: var(--mute-bg); border-radius: 8px; }
+  .statusbar .lbl { font-size: 12.5px; color: var(--muted); }
+  .st { display: inline-block; border-radius: 10px; padding: 0 8px; font-size: 12px; border: 1px solid var(--chip-line); background: var(--mute-bg); }
+  .st-ok { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .st-run { color: var(--run); background: var(--run-bg); border-color: transparent; }
+  .st-fail { color: var(--err); background: var(--err-bg); border-color: transparent; }
+  .st-wait { color: var(--warn); background: var(--warn-bg); border-color: transparent; }
+  .notice { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 10px 0; }
+  .notice.ok { background: var(--ok-bg); border-color: transparent; color: var(--ok); }
+  .notice.warn { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
+  .notice.err { background: var(--err-bg); border-color: transparent; color: var(--err); }
+  .notice.info { background: var(--run-bg); border-color: transparent; color: var(--run); }
+  /* 步骤导航 */
+  .steps { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); padding-bottom: 0; margin-bottom: 14px; }
+  .steps button { border: none; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; }
+  .steps button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+  .steps button.other:hover { background: var(--hover); }
+  /* 文档区头部：类型/语言/菜单/保存 */
+  .doc-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .doc-head strong { margin-right: 4px; }
+  select { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: none; background: var(--panel); color: var(--muted); padding: 4px 12px; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: none; }
+  .seg button.on { background: var(--primary); color: var(--primary-text); }
+  .seg .star { font-size: 11px; vertical-align: top; }
+  textarea.doc-editor, pre.doc-preview, pre.prompt { width: 100%; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); padding: 10px; font: 12.5px/1.6 ui-monospace, Menlo, Consolas, monospace; }
+  textarea.doc-editor { min-height: 180px; resize: vertical; }
+  pre.doc-preview { min-height: 180px; white-space: pre-wrap; margin: 0; }
+  pre.prompt { white-space: pre-wrap; margin: 8px 0; }
+  details.fold { border: 1px dashed var(--line); border-radius: 8px; padding: 6px 10px; margin: 8px 0; }
+  details.fold summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .filechips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .filechips .fc { border: 1px solid var(--chip-line); border-radius: 14px; padding: 1px 10px; font-size: 12.5px; background: var(--mute-bg); cursor: pointer; }
+  /* 任务页签 */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .tabs button { border: none; background: transparent; color: var(--muted); padding: 6px 14px; border-bottom: 2px solid transparent; }
+  .tabs button.on { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+  .ws-link { margin-left: auto; font-size: 12.5px; color: var(--primary); align-self: center; }
+  .batch-stats { background: var(--mute-bg); border-radius: 8px; padding: 8px 12px; margin: 10px 0; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 10px 0; }
+  .meta-grid label { display: block; font-size: 12px; color: var(--muted); }
+  .queue-row, .rec-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
+  .cid { color: var(--primary); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  /* 全局 */
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+  .filters .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+  .chip-btn.on { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+  .gproj { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; overflow: hidden; }
+  .gproj > h4 { margin: 0; padding: 8px 12px; background: var(--mute-bg); font-size: 13px; }
+  .gtask { padding: 10px 12px; border-top: 1px solid var(--line); cursor: pointer; }
+  .gtask:hover { background: var(--hover); }
+  .gtask .top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .gtask .meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .kind-chip { border: 1px solid var(--chip-line); border-radius: 10px; padding: 0 8px; font-size: 12px; background: var(--mute-bg); }
+  /* 旧版对照 */
+  .old-ai { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; background: var(--mute-bg); }
+  .tag-old { display: inline-block; background: var(--err-bg); color: var(--err); border-radius: 10px; padding: 0 8px; font-size: 12px; margin-left: 6px; }
+  .tag-new { display: inline-block; background: var(--ok-bg); color: var(--ok); border-radius: 10px; padding: 0 8px; font-size: 12px; margin-left: 6px; }
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 99;
+    background: var(--text); color: var(--bg); border-radius: 8px; padding: 8px 16px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 80vw; }
+  #toast.show { opacity: .96; }
+  .skel { border-radius: 8px; background: linear-gradient(90deg, var(--mute-bg) 25%, var(--hover) 50%, var(--mute-bg) 75%);
+    background-size: 200% 100%; animation: sk 1.1s infinite; height: 14px; margin: 8px 0; }
+  @keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  @media (max-width: 720px) { .doc-head, .gtask .meta { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<div class="demo-top">
+  <h1>REQ-20260921-007 演示</h1>
+  <div class="viewswitch" id="viewSwitch">
+    <button data-view="docs" class="on">① 发布 · 文档编写（改后）</button>
+    <button data-view="tasks">② 任务模块 · AI 总结</button>
+    <button data-view="global">③ 全局任务面板</button>
+    <button data-view="old">④ 原始历史布局对照</button>
+  </div>
+  <button class="btn small" id="themeBtn" title="切换深浅色">深浅色</button>
+</div>
+<div class="note">
+  <div class="note-card">
+    本演示为 <b>REQ-20260921-007</b> 的可交互原型：单文件、内联 CSS/JS、无外网依赖、无构建步骤。任务创建、提示词、IDE 与 Git 均为<b>模拟</b>，不产生真实副作用。视图④展示原始历史布局；当前代码已采用默认语言总结、AI 翻译与人工审查流程（「AI 写作→AI 总结」更名已由 REQ-20260921-008 完成，任务模块「AI 总结」页签现为只读进度面板，入口在发布模块「文档编写」页）。本演示的八文档总结、菜单形态与视图②的启动区 / 待处理队列均属待确认原始目标，不代表当前实现或已确认方案。
+  </div>
+</div>
+<div class="wrap" id="app"></div>
+<div id="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- 基础工具 ----------
+  var app = document.getElementById('app');
+  var toastBox = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg) {
+    toastBox.textContent = msg;
+    toastBox.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastBox.classList.remove('show'); }, 2600);
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function q(sel) { return app.querySelector(sel); }
+  function qa(sel) { return Array.prototype.slice.call(app.querySelectorAll(sel)); }
+
+  // ---------- 全局演示状态 ----------
+  var S = {
+    view: 'docs',
+    docMode: 'ai',            // docs 视图菜单态：ai | edit | preview
+    docState: 'normal',       // normal | loading | error
+    docType: 'README', docLang: 'zh',
+    savedMsg: '', commitMsg: '', committing: false,
+    ideMsg: '',
+    files: { 'README.md': 'unwritten', 'CHANGELOG.md': 'unwritten', 'FEATURES.md': 'unwritten', 'AGENTS.md': 'unwritten',
+             'README.en.md': 'unwritten', 'CHANGELOG.en.md': 'unwritten', 'FEATURES.en.md': 'unwritten', 'AGENTS.en.md': 'unwritten' },
+    taskPanel: 'start',       // start | running | empty
+    taskPane: 'overview',     // overview | queue | prompt | records
+    taskCreated: false, taskCopyFail: false,
+    gState: 'normal',         // normal | loading | error | empty
+    gKind: 'all', gStatus: 'all',
+    taskCopied: false
+  };
+  var DOC_LABEL = { unwritten: '未编写', uncommitted: '未提交', committed: '已提交', 'needs-rewrite': '需重新编写' };
+  var DOC_CLS = { unwritten: '', uncommitted: 'st-run', committed: 'st-ok', 'needs-rewrite': 'st-wait' };
+  var AI_SUMMARY_DESC = '由子代理按本版关联条目与实际提交核实变化，总结提炼为用户可读的发布文档（README / CHANGELOG / FEATURES / AGENTS 中英文各四类）：文字简练通俗、说明用户能做什么与本次变化，不编造能力；完成后以短回执收口。';
+  var PLAN_ID = 'BLD-20260921-001';
+  var SCHED_PROMPT = [
+    '你是 AI 总结主调度。项目路径：/Users/demo/src/my-app',
+    '发布计划号：' + PLAN_ID + '（版本号 20260921-001）',
+    '请以「领取 → 总结 → 回执」循环处理队列中的发布计划：',
+    '- 领取：atb summarize next --by summarize-1（返回计划号与 RUN-ID，队列为空则结束）',
+    '- 总结：按计划关联条目与实际提交核实变化，编写八个双语文档（README / CHANGELOG / FEATURES / AGENTS × 中英）',
+    '- 回执：atb summarize done <RUN-ID> --summary "…"；受阻用 summarize hold',
+    '约束：不修改业务源码、不编造能力、README 按语言链接 CHANGELOG 与 FEATURES。',
+    '（演示提示词，仅示意任务模块统一生成与复制的主调度提示词口径）'
+  ].join('\n');
+
+  // ---------- 视图 1：发布 · 文档编写（改后） ----------
+  function renderDocs() {
+    var head =
+      '<div class="panel">' +
+      '<h2>发布 · <span class="cid">' + esc(PLAN_ID) + '</span> <span class="st st-run">文档编写</span><span class="tag-new">改后</span></h2>' +
+      '<nav class="steps">' +
+      '<button class="other">版本计划</button><button class="other">关联条目与提交</button>' +
+      '<button class="on">文档编写</button><button class="other" title="文档未完成提交，暂不可合并">合并入 main</button>' +
+      '<button class="other" title="先完成合并入 main">正式发布</button></nav>' +
+      '<div class="statusbar"><span class="lbl">页面状态：</span>' +
+      ['normal', 'loading', 'error'].map(function (k) {
+        var label = { normal: '正常', loading: '加载中', error: '读取失败' }[k];
+        return '<button class="chip-btn' + (S.docState === k ? ' on' : '') + '" data-docstate="' + k + '">' + label + '</button>';
+      }).join('') +
+      '<span class="lbl small">（模拟发布流程数据读取的三种状态）</span></div>';
+
+    if (S.docState === 'loading') {
+      return head + '<div class="skel" style="width:70%"></div><div class="skel" style="width:90%"></div>' +
+        '<div class="skel" style="width:50%"></div><p class="muted small" role="status">正在加载发布流程数据…</p></div>';
+    }
+    if (S.docState === 'error') {
+      return head + '<div class="notice err" role="alert">发布流程数据读取失败：模拟的网络错误（未知原因）</div>' +
+        '<p><button class="btn small" id="docRetry">重试</button></p></div>';
+    }
+
+    // 文档区头部：AI 总结为第一个菜单项且默认选中（ seg ）
+    var body =
+      '<div class="doc-head"><strong>文档</strong>' +
+      '<label class="small">类型 <select id="docType">' + ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'].map(function (k) {
+        return '<option' + (S.docType === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></label>' +
+      '<label class="small">语言 <select id="docLang"><option value="zh"' + (S.docLang === 'zh' ? ' selected' : '') + '>中文</option>' +
+      '<option value="en"' + (S.docLang === 'en' ? ' selected' : '') + '>英文</option></select></label>' +
+      '<span class="seg" role="group" aria-label="模式菜单：AI 总结为第一个菜单项且默认选中">' +
+      '<button data-docmode="ai"' + (S.docMode === 'ai' ? ' class="on"' : '') + '>✦ AI 总结 <span class="star" title="第一个菜单项 · 默认菜单">★默认</span></button>' +
+      '<button data-docmode="edit"' + (S.docMode === 'edit' ? ' class="on"' : '') + '>编辑</button>' +
+      '<button data-docmode="preview"' + (S.docMode === 'preview' ? ' class="on"' : '') + '>预览</button></span>' +
+      '<button class="btn small primary" id="docSave"' + (S.docMode === 'edit' ? '' : ' disabled title="仅编辑态可保存"') + '>保存</button></div>';
+
+    if (S.docMode === 'ai') {
+      body += '<div class="notice info"><b>AI 总结</b>（原顶部独立「AI 写作」区块已折叠收纳进本菜单，成为第一个菜单项且默认选中）' +
+        '<p class="small" style="margin:6px 0 0">' + esc(AI_SUMMARY_DESC) + '</p></div>' +
+        '<p><button class="btn primary" id="gotoTask">前往任务模块启动 AI 总结（' + esc(PLAN_ID) + '）</button>' +
+        ' <button class="btn small" data-ide="trae-cn">TRAE CN 打开</button>' +
+        ' <button class="btn small" data-ide="trae">TRAE 打开</button></p>' +
+        (S.ideMsg ? '<p class="small" role="status">' + esc(S.ideMsg) + '</p>' : '') +
+        '<details class="fold"><summary>提示词已移至任务模块（展开查看迁移说明）</summary>' +
+        '<p class="small muted" style="margin:6px 0">原「AI 写作」区块中的提示词正文与复制操作移入任务模块「AI 总结」页签（与 AI 开发 / AI 分析同口径：启动任务即创建并复制主调度提示词），本页仅保留说明与入口。</p></details>';
+    } else if (S.docMode === 'edit') {
+      body += '<textarea class="doc-editor" id="docEditor" spellcheck="false">' + esc('# My App\n\n（演示文档内容）本次发布新增 AI 总结任务：发布模块按关联条目与实际提交总结生成发布文档。\n') + '</textarea>' +
+        (S.savedMsg ? '<p class="small" role="status">' + esc(S.savedMsg) + '</p>' : '');
+    } else {
+      body += '<pre class="doc-preview">' + esc('# My App\n\n（演示文档内容）本次发布新增 AI 总结任务：发布模块按关联条目与实际提交总结生成发布文档。\n') + '</pre>';
+    }
+
+    // 提交区
+    var allCommitted = Object.keys(S.files).every(function (f) { return S.files[f] === 'committed'; });
+    var chips = Object.keys(S.files).map(function (f) {
+      return '<span class="fc" data-file="' + esc(f) + '" title="点击演示状态流转：未编写 → 未提交 → 已提交 → 需重新编写">' +
+        esc(f) + ' <span class="st ' + DOC_CLS[S.files[f]] + '">' + DOC_LABEL[S.files[f]] + '</span></span>';
+    }).join('');
+    body += '<hr style="border:none;border-top:1px solid var(--line);margin:14px 0">' +
+      '<div class="filechips">' + chips + '</div>' +
+      (allCommitted
+        ? '<p class="small muted">文档已提交（a1b2c3d4e5f6）：满足合并前置</p>'
+        : '<div class="notice warn">文档未完成提交，暂不可合并：还有 ' +
+          Object.keys(S.files).filter(function (f) { return S.files[f] !== 'committed'; }).length + ' 个文档未提交</div>') +
+      '<p><button class="btn primary" id="commitBtn"' + (S.committing ? ' disabled' : '') + '>' + (S.committing ? '提交中…' : '提交文档到 Git') + '</button>' +
+      ' <span class="muted small">只提交上述八个文档，不夹带业务源码；无变化不空提交。（演示）</span></p>' +
+      (S.commitMsg ? '<p class="small" role="status">' + esc(S.commitMsg) + '</p>' : '') +
+      '</div>';
+    return head + body;
+  }
+  function bindDocs() {
+    qa('[data-docstate]').forEach(function (b) {
+      b.addEventListener('click', function () { S.docState = b.dataset.docstate; render(); });
+    });
+    q('#docRetry') && q('#docRetry').addEventListener('click', function () {
+      S.docState = 'loading'; render();
+      setTimeout(function () { S.docState = 'normal'; render(); toast('✓ 重试成功：发布流程数据已加载'); }, 900);
+    });
+    qa('[data-docmode]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.docMode = b.dataset.docmode;
+        if (S.docMode === 'edit' || S.docMode === 'preview') toast(S.docMode === 'edit' ? '切换到编辑：草稿已同步，内容不丢失' : '切换到预览');
+        render();
+      });
+    });
+    q('#docType') && q('#docType').addEventListener('change', function (e) { S.docType = e.target.value; toast('已切换文档：' + S.docType + (S.docLang === 'en' ? '.en' : '') + '.md'); });
+    q('#docLang') && q('#docLang').addEventListener('change', function (e) { S.docLang = e.target.value; toast('已切换语言：' + (S.docLang === 'zh' ? '中文' : '英文')); });
+    q('#docSave') && q('#docSave').addEventListener('click', function () {
+      S.savedMsg = '✓ 已保存（演示）：内容写入 ' + S.docType + (S.docLang === 'en' ? '.en' : '') + '.md，尚未提交';
+      render(); toast('✓ 已保存（演示）');
+    });
+    q('#gotoTask') && q('#gotoTask').addEventListener('click', function () {
+      S.view = 'tasks'; S.taskPanel = 'start'; render();
+      toast('已跳转任务模块 → AI 总结页签（携带 ' + PLAN_ID + '）');
+      var t = app.querySelector('.tabs button[data-ttab="summarize"]');
+      t && t.focus();
+    });
+    qa('[data-ide]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.ideMsg = '已尝试唤起 ' + (b.dataset.ide === 'trae-cn' ? 'TRAE CN' : 'TRAE') + '（演示）：未安装时这里会明确提示失败并给手动打开路径，不伪报已打开';
+        render();
+      });
+    });
+    qa('[data-file]').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var order = ['unwritten', 'uncommitted', 'committed', 'needs-rewrite'];
+        var f = c.dataset.file;
+        S.files[f] = order[(order.indexOf(S.files[f]) + 1) % order.length];
+        render();
+      });
+    });
+    q('#commitBtn') && q('#commitBtn').addEventListener('click', function () {
+      S.committing = true; S.commitMsg = ''; render();
+      setTimeout(function () {
+        Object.keys(S.files).forEach(function (f) { if (S.files[f] === 'uncommitted' || S.files[f] === 'unwritten') S.files[f] = 'committed'; });
+        S.committing = false;
+        S.commitMsg = '✓ 提交成功（演示）：a1b2c3d4e5f6，只含八个文档';
+        render(); toast('✓ 文档已提交到 Git（演示）：a1b2c3d4e5f6');
+      }, 900);
+    });
+  }
+
+  // ---------- 视图 2：任务模块 · AI 总结 ----------
+  function renderTasks() {
+    var h = '<div class="panel"><h2>任务模块 <span class="muted small">（主导航「任务」页签）</span><span class="tag-new">改后</span></h2>' +
+      '<div class="statusbar"><span class="lbl">面板形态：</span>' +
+      [['start', '启动区（无任务）'], ['running', '运行中'], ['empty', '空态（无候选）']].map(function (p) {
+        return '<button class="chip-btn' + (S.taskPanel === p[0] ? ' on' : '') + '" data-tpanel="' + p[0] + '">' + p[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="tabs">' +
+      '<button data-ttab="refine">AI 分析</button><button data-ttab="develop">AI 开发</button>' +
+      '<button data-ttab="summarize" class="on">AI 总结 <span class="star">★新增</span></button>' +
+      '<span class="ws-link">去新建 Zcode / Codex 会话（链接）</span></div>';
+
+    if (S.taskPanel === 'start') {
+      h += '<section><p class="muted small" style="margin:0 0 6px">AI 总结：对文档未完成的发布计划（' + esc(PLAN_ID) + ' 等）批量生成本版发布文档——按关联条目与实际提交核实变化、简练通俗、不编造能力。派子代理执行：条目与发布计划状态不被非法改动，未知事实标「待确认」。</p>' +
+        '<div class="batch-stats">候选：文档未完成的发布计划 <b>2</b> 项（每轮实时读取）</div>' +
+        '<div class="statusbar"><span class="lbl">复制模拟：</span>' +
+        '<button class="chip-btn' + (!S.taskCopyFail ? ' on' : '') + '" data-copymode="ok">复制成功</button>' +
+        '<button class="chip-btn' + (S.taskCopyFail ? ' on' : '') + '" data-copymode="fail">复制失败</button></div>' +
+        '<p><button class="btn primary" id="sumStart">启动</button> ' +
+        '<span class="muted small">启动 = 创建任务并复制主调度提示词（复制成功 ≠ 执行中，登记运行后才算执行中）</span></p></section>' +
+        '<h3 class="small" style="margin:14px 0 4px">待总结队列（最近 2 条）</h3>' +
+        queueRow(PLAN_ID, '文档未全部提交（8 个中 8 个未编写）', '待总结') +
+        queueRow('BLD-20260920-006', '关联后文档需重新编写（范围已变化）', '待总结');
+    } else if (S.taskPanel === 'empty') {
+      h += '<section><div class="notice">暂无可总结候选：所有发布计划的文档均已提交（或尚无发布计划）。</div>' +
+        '<p><button class="btn primary" disabled title="暂无可总结候选">启动</button></p></section>';
+    } else {
+      h += '<div class="tabs">' +
+        [['overview', '概况'], ['queue', '队列'], ['prompt', '提示词'], ['records', '记录']].map(function (p) {
+          return '<button data-tpane="' + p[0] + '"' + (S.taskPane === p[0] ? ' class="on"' : '') + '>' + p[1] + '</button>';
+        }).join('') + '</div>';
+      if (S.taskPane === 'overview') {
+        h += '<div class="batch-stats"><span class="st st-run">执行中</span> <span class="muted small">创建 刚刚 · 子代理模式</span></div>' +
+          '<div class="meta-grid">' +
+          '<div><label>当前计划</label><span><span class="cid">' + esc(PLAN_ID) + '</span> 2026-09 发布一</span></div>' +
+          '<div><label>子代理会话</label><span>summarize-1</span></div>' +
+          '<div><label>开始时间</label><span>刚刚</span></div>' +
+          '<div><label>耗时</label><span>已用时 0 分钟</span></div>' +
+          '<div><label>最后活动</label><span>刚刚</span></div></div>' +
+          '<p class="small">已完成 <b>0</b> · 异常 <b>0</b> · 待处理 <b>2</b> · 共 <b>2</b></p>' +
+          '<p><button class="btn warn">暂停后续领取</button> <button class="btn danger">终止任务</button></p>' +
+          '<p class="muted small">终止不删除记录；在途子代理请在对应会话人工停止。（演示按钮）</p>';
+      } else if (S.taskPane === 'queue') {
+        h += queueRow(PLAN_ID, '文档未全部提交（8 个中 8 个未编写）', '待总结') +
+          queueRow('BLD-20260920-006', '关联后文档需重新编写（范围已变化）', '待总结');
+      } else if (S.taskPane === 'prompt') {
+        h += '<div class="statusbar"><span class="muted small">主调度提示词（在本项目的 Agent 会话粘贴发送，提示词通用）：</span>' +
+          '<button class="btn small" id="recopy">重新复制</button> <button class="btn small" id="resumeCopy">复制续接提示词</button></div>' +
+          '<pre class="prompt">' + esc(SCHED_PROMPT) + '</pre>' +
+          (S.taskCopied ? '<div class="notice ok">✓ 已复制到剪贴板（演示）：粘贴到 Agent 会话发送即登记运行</div>' : '');
+      } else {
+        h += recRow('run-20260921-090001-1a2b', PLAN_ID, 'done', '已完成', '已写 8 个文档：README/CHANGELOG/FEATURES/AGENTS × 中英') +
+          recRow('run-20260921-090500-3c4d', 'BLD-20260920-006', 'waiting', '执行中', '子代理会话 summarize-2 处理中');
+      }
+    }
+    return h + '</div>';
+  }
+  function queueRow(id, reason, action) {
+    return '<div class="queue-row"><span class="cid">' + esc(id) + '</span><span class="muted small">' + esc(reason) + '</span>' +
+      '<span class="st" style="margin-left:auto">' + esc(action) + '</span></div>';
+  }
+  function recRow(runId, planId, cls, label, summary) {
+    return '<div class="rec-row"><span class="cid">' + esc(runId) + '</span><span class="cid">' + esc(planId) + '</span>' +
+      '<span class="st st-' + cls + '">' + esc(label) + '</span>' +
+      '<span class="muted small">' + esc(summary) + '</span></div>';
+  }
+  function bindTasks() {
+    qa('[data-ttab]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        toast(b.dataset.ttab === 'summarize' ? 'AI 总结页签（本演示默认视图）' : '「' + b.textContent.replace('★新增', '').trim() + '」为既有面板，本单不改动，布局与 AI 总结同口径');
+      });
+    });
+    qa('[data-tpanel]').forEach(function (b) {
+      b.addEventListener('click', function () { S.taskPanel = b.dataset.tpanel; S.taskPane = 'overview'; S.taskCopied = false; render(); });
+    });
+    qa('[data-tpane]').forEach(function (b) {
+      b.addEventListener('click', function () { S.taskPane = b.dataset.tpane; render(); });
+    });
+    qa('[data-copymode]').forEach(function (b) {
+      b.addEventListener('click', function () { S.taskCopyFail = b.dataset.copymode === 'fail'; render(); });
+    });
+    q('#sumStart') && q('#sumStart').addEventListener('click', function () {
+      if (S.taskCopyFail) {
+        toast('任务已创建，但复制失败：请到「提示词」页签手动复制（不会产生新任务）', true);
+      } else {
+        toast('✓ 任务已创建并复制主调度提示词：粘贴到 Agent 会话发送，登记运行后才算执行中');
+      }
+      S.taskPanel = 'running'; S.taskPane = 'overview'; render();
+    });
+    q('#recopy') && q('#recopy').addEventListener('click', function () { S.taskCopied = true; render(); toast('✓ 重新复制成功（不会创建新任务）'); });
+    q('#resumeCopy') && q('#resumeCopy').addEventListener('click', function () { toast('✓ 续接提示词已复制（演示）：主会话退出/压缩后用同一提示词续接'); });
+  }
+
+  // ---------- 视图 3：全局任务面板 ----------
+  var G_TASKS = [
+    { proj: 'my-app', kind: 'summarize', status: 'running', label: '执行中', cur: PLAN_ID, owner: 'summarize-1', done: 1, abnormal: 0, remaining: 1, total: 2 },
+    { proj: 'my-app', kind: 'develop', status: 'needs_attention', label: '待核对', cur: 'REQ-20260920-010', owner: 'dev-3', done: 3, abnormal: 1, remaining: 0, total: 4 },
+    { proj: 'agent-team-board', kind: 'refine', status: 'prepared', label: '待启动', cur: null, owner: '', done: 0, abnormal: 0, remaining: 3, total: 3 },
+    { proj: 'agent-team-board', kind: 'summarize', status: 'paused', label: '已暂停', cur: 'BLD-20260918-003', owner: 'summarize-4', done: 0, abnormal: 0, remaining: 1, total: 1 }
+  ];
+  var G_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summarize: 'AI 总结' };
+  function renderGlobal() {
+    var h = '<div class="panel"><h2>全局任务面板 <span class="muted small">（跨项目批量任务）</span><span class="tag-new">改后</span></h2>' +
+      '<div class="statusbar"><span class="lbl">面板状态：</span>' +
+      [['normal', '正常'], ['loading', '加载中'], ['error', '读取失败'], ['empty', '空态']].map(function (p) {
+        return '<button class="chip-btn' + (S.gState === p[0] ? ' on' : '') + '" data-gstate="' + p[0] + '">' + p[1] + '</button>';
+      }).join('') + '</div>';
+    if (S.gState === 'loading') {
+      return h + '<div class="skel" style="width:60%"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:45%"></div></div>';
+    }
+    if (S.gState === 'error') {
+      return h + '<div class="notice err" role="alert">全局任务读取失败：模拟的网络错误。已保留上一次数据，下一轮轮询自动重试。</div></div>';
+    }
+    var list = G_TASKS.filter(function (t) { return S.gKind === 'all' || t.kind === S.gKind; })
+      .filter(function (t) { return S.gStatus === 'all' || t.status === S.gStatus; });
+    h += '<div class="filters">' +
+      [['all', '全部'], ['running', '执行中'], ['prepared', '待启动'], ['paused', '已暂停'], ['needs_attention', '待核对']].map(function (f) {
+        return '<button class="chip-btn' + (S.gStatus === f[0] ? ' on' : '') + '" data-gstatus="' + f[0] + '">' + f[1] + '</button>';
+      }).join('') + '<span class="sep"></span>' +
+      [['all', '全部类型'], ['develop', 'AI 开发'], ['refine', 'AI 分析'], ['summarize', 'AI 总结']].map(function (f) {
+        return '<button class="chip-btn' + (S.gKind === f[0] ? ' on' : '') + '" data-gkind="' + f[0] + '">' + f[1] + '</button>';
+      }).join('') + '</div>' +
+      '<p class="small muted">执行中 <b>1</b> · 待启动 <b>1</b> · 已暂停 <b>1</b> · 待核对 <b>1</b></p>';
+    if (S.gState === 'empty' || list.length === 0) {
+      h += '<div class="notice">所有项目的批量任务均已收尾（或当前筛选无匹配）。到各项目的任务模块（「任务」页签）可启动新的 AI 开发 / AI 分析 / AI 总结任务。</div>';
+    } else {
+      var byProj = {};
+      list.forEach(function (t) { (byProj[t.proj] = byProj[t.proj] || []).push(t); });
+      Object.keys(byProj).forEach(function (proj) {
+        h += '<div class="gproj"><h4>' + esc(proj) + ' <span class="muted small">/Users/demo/src/' + esc(proj) + '</span></h4>';
+        byProj[proj].forEach(function (t) {
+          h += '<div class="gtask" data-gtask="' + esc(t.kind) + '" title="点击进入该项目任务模块（' + esc(G_KIND_LABEL[t.kind]) + '）">' +
+            '<div class="top"><span class="st st-run">' + esc(t.label) + '</span>' +
+            '<span class="kind-chip">' + esc(G_KIND_LABEL[t.kind]) + '</span>' +
+            (t.kind === 'summarize' ? '<span class="tag-new">新类型可见</span>' : '') +
+            '<button class="btn small" style="margin-left:auto">进入项目任务</button></div>' +
+            '<div class="meta">' +
+            (t.cur ? '<span>当前：<span class="cid">' + esc(t.cur) + '</span> <span class="muted">子代理会话 ' + esc(t.owner) + '</span></span>'
+                   : '<span class="muted">待启动：请在对应项目的 Agent 会话粘贴调度提示词后登记运行</span>') +
+            '</div><div class="meta">' +
+            '<span>已完成 <b>' + t.done + '</b></span><span>异常 <b>' + t.abnormal + '</b></span>' +
+            '<span>待处理 <b>' + t.remaining + '</b></span><span class="muted">共 ' + t.total + '</span>' +
+            '<span>创建 刚刚</span></div></div>';
+        });
+        h += '</div>';
+      });
+    }
+    return h + '</div>';
+  }
+  function bindGlobal() {
+    qa('[data-gstate]').forEach(function (b) {
+      b.addEventListener('click', function () { S.gState = b.dataset.gstate; render(); });
+    });
+    qa('[data-gkind]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        S.gKind = b.dataset.gkind;
+        render();
+        toast('类型筛选：' + b.textContent + (S.gKind === 'summarize' ? '——AI 总结任务可被单独筛出，不出现「类型未知」' : ''));
+      });
+    });
+    qa('[data-gstatus]').forEach(function (b) {
+      b.addEventListener('click', function () { S.gStatus = b.dataset.gstatus; render(); });
+    });
+    qa('[data-gtask]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var kind = el.dataset.gtask;
+        if (kind === 'summarize') { S.view = 'tasks'; S.taskPanel = 'running'; render(); toast('已进入该项目任务模块 → AI 总结面板'); }
+        else toast('跳转到该项目任务模块的「' + G_KIND_LABEL[kind] + '」面板（既有行为，本演示不切换）');
+      });
+    });
+  }
+
+  // ---------- 视图 4：改前对照（现状） ----------
+  function renderOld() {
+    return '<div class="panel"><h2>发布 · 文档编写 <span class="muted small">（现状复刻）</span><span class="tag-old">改前</span></h2>' +
+      '<nav class="steps"><button class="other">版本计划</button><button class="other">关联条目与提交</button>' +
+      '<button class="on">文档编写</button><button class="other">合并入 main</button><button class="other">正式发布</button></nav>' +
+      '<div class="old-ai"><strong>AI 写作</strong>' +
+      '<p class="muted small">由「技术写作人员」角色的子代理完成当前版本文档任务：主会话派发下方提示词并接收短回执；子代理按关联条目与实际代码核实变化，简练通俗，不编造能力。</p>' +
+      '<textarea class="doc-editor" rows="7" readonly style="min-height:120px">' + esc('你是技术写作人员，以子代理身份完成「' + PLAN_ID + '」的发布文档任务…\n项目路径：/Users/demo/src/my-app\n发布计划号：' + PLAN_ID + '…\n（现状：提示词正文常驻显示在本区块，仅可手动复制）') + '</textarea>' +
+      '<p><button class="btn small primary">复制提示词</button> <button class="btn small">TRAE CN 打开</button> <button class="btn small">TRAE 打开</button></p></div>' +
+      '<div class="doc-head"><strong>文档</strong>' +
+      '<label class="small">类型 <select disabled><option>README</option></select></label>' +
+      '<label class="small">语言 <select disabled><option>中文</option></select></label>' +
+      '<span class="seg"><button class="on">编辑</button><button>预览</button></span>' +
+      '<button class="btn small primary">保存</button></div>' +
+      '<textarea class="doc-editor" readonly>（现状：编辑器位于整块提示词下方，首屏被提示词占满）</textarea>' +
+      '<div class="notice warn" style="margin-top:12px"><b>对照要点（改后）</b>：① 「AI 写作」更名「AI 总结」并按总结语义改写描述；② 独立区块折叠收纳进「编辑」按钮菜单，成为第一个菜单项且默认选中；③ 提示词正文与复制移入任务模块「AI 总结」页签（布局同 AI 开发 / AI 分析），并在全局区域类型筛选与任务行中显示。可切回视图①②③对比交互与状态。</div></div>';
+  }
+
+  // ---------- 主题与视图切换 ----------
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var root = document.documentElement;
+    var dark = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  });
+  document.getElementById('viewSwitch').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-view]');
+    if (!b) return;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+    S.view = b.dataset.view;
+    render();
+  });
+
+  function render() {
+    if (S.view === 'docs') app.innerHTML = renderDocs();
+    else if (S.view === 'tasks') app.innerHTML = renderTasks();
+    else if (S.view === 'global') app.innerHTML = renderGlobal();
+    else app.innerHTML = renderOld();
+    bind();
+  }
+  function bind() {
+    bindDocs(); bindTasks(); bindGlobal();
+  }
+  render();
+})();
+</script>
+</body>
+</html>
