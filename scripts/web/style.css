@@ -3742,6 +3742,31 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 }
 .bld-doc-row .bld-doc-single-tag { align-self: center; }
 .bld-review-col-head .bld-doc-single-tag { margin-left: 6px; }
+/* REQ-20260922-003 自定义文档：「自定义」标识（primary 描边弱化呈现）、移除链接、
+   文件区表头右侧「＋ 添加文档」与内联添加行 */
+.bld-doc-custom-tag {
+  font-size: 11.5px; color: var(--primary); border: 1px solid var(--primary);
+  border-radius: 999px; padding: 1px 8px; margin-left: 8px; white-space: nowrap; opacity: .85;
+}
+.bld-doc-row .bld-doc-custom-tag { align-self: center; }
+.bld-review-col-head .bld-doc-custom-tag { margin-left: 6px; }
+.bld-doc-rm {
+  border: none; background: none; padding: 0; cursor: pointer; text-decoration: underline;
+  color: var(--muted); font-size: 12px; white-space: nowrap;
+}
+.bld-doc-rm:hover:not(:disabled) { color: var(--danger-text, #b3261e); }
+.bld-doc-rm:disabled { opacity: .5; cursor: not-allowed; text-decoration: none; }
+.bld-docs-head-right { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-docs-addrow {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px 0 8px; border-bottom: 1px dashed var(--border);
+}
+.bld-docs-addrow input {
+  border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 13px;
+  width: 240px; background: var(--panel); color: var(--text);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.bld-docs-addrow-err { flex-basis: 100%; margin: 0; }
 .bld-doc-row-st { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .st .st-ico { font-style: normal; margin-right: 5px; }
 .bld-docs-loading {

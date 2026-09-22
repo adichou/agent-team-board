@@ -113,8 +113,10 @@ export function latestSummaryRun(dataDir, verId = null) {
 
 // 启动一轮 AI 总结：按语言集展开**默认语言**（首语言）文件全部 pending（REQ-20260921-012
 // 阶段一范围收窄：只总结默认语言 4 文件，剩余语言由阶段二 AI 翻译产出），占用独立锁。
+// REQ-20260922-003：customDocs（版本记录 v.customDocs）随入参并入账本——自定义文档
+// 与标准 4 类并列逐文件回执（pending 起步，markSummaryFile 按 run 自身账本校验）。
 // 同一时间至多一个进行中的 run（锁单一，跨版本亦互斥）；重复 start 报错不排队。
-export function createSummaryRun(dataDir, { verId, owner, langs } = {}) {
+export function createSummaryRun(dataDir, { verId, owner, langs, customDocs = [] } = {}) {
   const id = String(verId || '').trim();
   if (!/^BLD-\d{8}-\d{3,}$/.test(id)) throw new AtbError(`版本计划号非法：${id || '（空）'}（形如 BLD-YYYYMMDD-NNN）`);
   ensureDocsSummary(dataDir);
@@ -128,8 +130,9 @@ export function createSummaryRun(dataDir, { verId, owner, langs } = {}) {
   const runId = newRunId();
   const files = {};
   const ls = docLangsOf({ langs });
-  // 只装默认语言 4 类文件：单文件类（LICENSE，lang=null，REQ-20260922-002 口径 B）不进 AI 总结
-  for (const f of publishDocFiles(ls).filter((x) => x.lang === ls[0])) files[f.file] = 'pending';
+  // 装默认语言 4 类文件 + 自定义文档；单文件类（LICENSE，lang=null 且非 custom，
+  // REQ-20260922-002 口径 B）不进 AI 总结
+  for (const f of publishDocFiles(ls, customDocs).filter((x) => x.custom || x.lang === ls[0])) files[f.file] = 'pending';
   const run = {
     version: 1,
     runId,
