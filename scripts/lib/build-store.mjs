@@ -411,7 +411,7 @@ export function recordDocsCommit(dataDir, id, { commitHash, files, scopeFp } = {
   if (!/^[0-9a-f]{40}$/i.test(String(commitHash || ''))) throw new AtbError('文档提交记录缺少有效 commit hash');
   if (!files || typeof files !== 'object') throw new AtbError('文档提交记录缺少文件清单');
   for (const name of Object.keys(files)) {
-    if (!flow.isPublishDocFile(name, flow.docLangsOf(v))) throw new AtbError(`非发布文档文件：${name}`);
+    if (!flow.isPublishDocFile(name, flow.docLangsOf(v), flow.customDocsOf(v))) throw new AtbError(`非发布文档文件：${name}`);
   }
   v.docs = {
     commitHash: String(commitHash).toLowerCase(),
@@ -442,7 +442,7 @@ function markDocsScopeStale(dataDir, v, reason) {
 // 现算当前内容。
 export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
   const v = readVersion(dataDir, id);
-  if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) throw new AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);
+  if (!flow.isPublishDocFile(file, flow.docLangsOf(v), flow.customDocsOf(v))) throw new AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);
   let h = String(hash || '');
   if (!h) {
     const read = typeof readFile === 'function'
@@ -465,15 +465,17 @@ export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
 // 文件回退待审核、scopeStale、基准变更（默认语言文档 mtime 更新）都会使完结失效回退，
 // 不在完结时点固化放行。前置门禁（全部已审核等）由调用方（server）按 evaluateDocsFlow
 // 校验后再调用；merging 拒绝。
-export function recordDocsFinalize(dataDir, id, { langs, readFile } = {}) {
+export function recordDocsFinalize(dataDir, id, { langs, customDocs, readFile } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，不可整体审查完结');
   const ls = flow.docLangsOf({ langs });
+  // REQ-20260922-003：完结快照按含自定义文档的清单（缺省读版本记录 v.customDocs）
+  const cs = customDocs != null ? flow.customDocsOf({ customDocs }) : flow.customDocsOf(v);
   const read = typeof readFile === 'function'
     ? readFile
     : (f) => { try { return fs.readFileSync(path.join(projectRootGuess(dataDir), f), 'utf8'); } catch { return null; } };
   const files = {};
-  for (const f of flow.publishDocFiles(ls)) {
+  for (const f of flow.publishDocFiles(ls, cs)) {
     const text = read(f.file);
     if (text == null) throw new AtbError(`${f.file} 不存在或不可读：整体审查完结要求语言集内全部文档在盘`);
     files[f.file] = crypto.createHash('sha256').update(text).digest('hex');
@@ -494,6 +496,37 @@ export function saveDocLangs(dataDir, id, { langs, by = 'board' } = {}) {
   const r = Array.isArray(langs) ? flow.normalizeLangsList(langs) : flow.normalizeDocLangs(langs);
   if (r.error) throw new AtbError(r.error);
   v.langs = r.langs;
+  v.by = by;
+  return writeVersion(dataDir, v);
+}
+
+// REQ-20260922-003 自定义发布文档清单：发布计划级持久化（版本记录顶层 v.customDocs，
+// 大写 KEY 数组、顺序保留，类比 v.langs / saveDocLangs 先例）；merging / 已正式发布（pushed）
+// 锁定增删；命名 / 去重 / 上限校验经 publish-flow.normalizeCustomDocName（权威口径，
+// 前端 validateCustomDocName 镜像）。清单是文件清单唯一事实源的一部分：求值 / 审核白名单 /
+// AI 总结账本与提示词 / 完结快照 / 提交 pathspec 均随其展开。
+export function addCustomDoc(dataDir, id, { name, by = 'board' } = {}) {
+  const v = readVersion(dataDir, id);
+  if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');
+  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+  const existing = flow.customDocsOf(v);
+  const r = flow.normalizeCustomDocName(name, { existing });
+  if (r.error) throw new AtbError(r.error);
+  v.customDocs = [...existing, r.key];
+  v.by = by;
+  return writeVersion(dataDir, v);
+}
+
+// 移除自定义文档：允许移除已总结 / 已审核条目（其审核记录留存 v.review.files 但随清单移出
+// 不再参与求值）；AI 总结运行中的拦截由服务端按 summary 账本校验（本层不依赖 summary store）。
+export function removeCustomDoc(dataDir, id, { key, by = 'board' } = {}) {
+  const v = readVersion(dataDir, id);
+  if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');
+  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+  const k = String(key || '').trim().toUpperCase();
+  const existing = flow.customDocsOf(v);
+  if (!existing.includes(k)) throw new AtbError(`自定义文档不在清单中：${k || '（空）'}`);
+  v.customDocs = existing.filter((x) => x !== k);
   v.by = by;
   return writeVersion(dataDir, v);
 }

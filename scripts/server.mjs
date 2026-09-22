@@ -2666,6 +2666,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       version: v,
       versionNumber: flow.versionNumberOf(v.id),
       langs: flow.docLangsOf(v), // REQ-20260921-010 文档语言集（缺省 cn,en）
+      customDocs: flow.customDocsOf(v), // REQ-20260922-003 自定义文档清单（缺省空，回显）
       steps: flow.publishStepsState(v, docsEval),
       docs: docsEval,
       docsFlow: docsFlowOf(dataDir, v),
@@ -2693,7 +2694,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     const board = requireBoard();
     const v = buildStore.readVersion(board, String(u.searchParams.get('id') || ''));
     const file = String(u.searchParams.get('file') || 'README.md');
-    if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) return sendJson(res, 400, { error: `非发布文档文件：${file}` });
+    if (!flow.isPublishDocFile(file, flow.docLangsOf(v), flow.customDocsOf(v))) return sendJson(res, 400, { error: `非发布文档文件：${file}` });
     const docsEval = flow.evaluateDocsState(v, docReadFile);
     return sendJson(res, 200, {
       file,
@@ -2722,6 +2723,44 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
+  // POST /api/build/docs/custom {id, op: add|remove, name|key}：REQ-20260922-003 自定义发布
+  // 文档增删（可多份）。命名 / 去重 / 上限校验（normalizeCustomDocName 权威口径）失败 400
+  // 不改盘；merging / 已正式发布（pushed）锁定 409；op=remove 在 AI 总结运行中拦截 400
+  //（进行中 run 的账本与提示词清单不变，自定义文档移除须等总结收尾）。成功返回最新
+  // customDocs / version / docs / docsFlow，前端据此联动文件列表、计数、门禁与提示词预览。
+  if (req.method === 'POST' && pathname === '/api/build/docs/custom') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const op = String(body.op || '');
+      if (op === 'add') {
+        const v = buildStore.addCustomDoc(board, String(body.id || ''), { name: body.name });
+        return sendJson(res, 200, {
+          ok: true,
+          customDocs: flow.customDocsOf(v),
+          version: v,
+          docs: flow.evaluateDocsState(v, docReadFile),
+          docsFlow: docsFlowOf(board, v),
+        });
+      }
+      if (op === 'remove') {
+        const v0 = buildStore.readVersion(board, String(body.id || ''));
+        const active = docsSummary.unfinishedSummaryRuns(board).find((r) => r.verId === v0.id);
+        if (active) {
+          throw new core.AtbError(`AI 总结运行中（${active.runId}），暂不可移除自定义文档：请先完成或收尾当前总结任务后再移除`);
+        }
+        const v = buildStore.removeCustomDoc(board, String(body.id || ''), { key: body.key });
+        return sendJson(res, 200, {
+          ok: true,
+          customDocs: flow.customDocsOf(v),
+          version: v,
+          docs: flow.evaluateDocsState(v, docReadFile),
+          docsFlow: docsFlowOf(board, v),
+        });
+      }
+      throw new core.AtbError('op 必须是 add | remove');
+    });
+  }
+
   // REQ-20260921-008 AI 总结流水线：启动一轮逐文件总结（独立锁 summary.lock，与 AI 分析 /
   // AI 开发互不占用）；返回 runId 与提示词（含 atb summary 逐文件进度回执指令），前端复制到
   // 剪贴板交给 AI Agent 执行。
@@ -2730,13 +2769,15 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可启动 AI 总结');
-      const run = docsSummary.createSummaryRun(board, { verId: v.id, owner: 'summary', langs: flow.docLangsOf(v) });
+      // REQ-20260922-003：自定义文档并入总结账本与提示词清单（与标准 4 类并列逐文件回执）
+      const run = docsSummary.createSummaryRun(board, { verId: v.id, owner: 'summary', langs: flow.docLangsOf(v), customDocs: flow.customDocsOf(v) });
       const prompt = flow.buildDocSummaryPrompt({
         projectRoot: root,
         planId: v.id,
         items: v.items,
         runId: run.runId,
         langs: flow.docLangsOf(v),
+        customDocs: flow.customDocsOf(v),
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
       });
       return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsSummary.summaryRunView(run) });
@@ -2833,7 +2874,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可审核文档');
       const file = String(body.file || '');
-      if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);
+      if (!flow.isPublishDocFile(file, flow.docLangsOf(v), flow.customDocsOf(v))) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);
       const text = docReadFile(file);
       if (text == null) throw new core.AtbError(`${file} 不存在或不可读：先编写并保存再通过审核`);
       const hash = crypto.createHash('sha256').update(text).digest('hex');
@@ -2855,7 +2896,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可修改文档');
       const file = String(body.file || '');
-      if (!flow.isPublishDocFile(file, flow.docLangsOf(v))) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可编辑）`);
+      if (!flow.isPublishDocFile(file, flow.docLangsOf(v), flow.customDocsOf(v))) throw new core.AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可编辑）`);
       const content = String(body.content ?? '');
       if (Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) throw new core.AtbError('文档内容过大（上限 2 MiB）');
       fs.writeFileSync(path.join(root, file), content);
@@ -2895,14 +2936,16 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         throw new core.AtbError(`整体审查未完结（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：请先在「整体审查」中人工确认完结后再提交`);
       }
       buildGit.assertOnDev(root);
-      // REQ-20260921-010：提交范围按语言集展开（4 类 × N），pathspec 限定不夹带业务源码。
+      // REQ-20260921-010：提交范围按语言集展开（4 类 × N），pathspec 限定不夹带业务源码；
+      // REQ-20260922-003：自定义文档随清单进入 pathspec 与范围指纹。
       const langs = flow.docLangsOf(v);
-      const docFiles = flow.publishDocFiles(langs).map((f) => f.file);
+      const customDocs = flow.customDocsOf(v);
+      const docFiles = flow.publishDocFiles(langs, customDocs).map((f) => f.file);
       const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${v.id}`, files: docFiles });
       if (r.noop) {
         return sendJson(res, 200, { ok: true, noop: true, files: r.files, version: buildStore.readVersion(board, body.id) });
       }
-      const scopeFp = flow.publishScopeFingerprint(v.items, docReadFile, langs);
+      const scopeFp = flow.publishScopeFingerprint(v.items, docReadFile, langs, customDocs);
       const version = buildStore.recordDocsCommit(board, body.id, { commitHash: r.commitHash, files: r.hashes, scopeFp });
       return sendJson(res, 200, { ok: true, commitHash: r.commitHash, files: r.files, version });
     });

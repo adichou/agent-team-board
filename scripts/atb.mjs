@@ -1224,13 +1224,15 @@ async function summaryCmd(rest) {
     const { opts } = parseOpts(subRest, new Set(['id', 'by']));
     if (!opts.id) die('用法：atb summary start --id <BLD-ID> [--by 会话]');
     const v = buildStore.readVersion(dataDir, opts.id);
-    const run = docsSummary.createSummaryRun(dataDir, { verId: v.id, owner: opts.by || 'summary', langs: publishFlow.docLangsOf(v) });
+    // REQ-20260922-003：自定义文档并入总结账本与提示词清单（与服务端 start 同口径）
+    const run = docsSummary.createSummaryRun(dataDir, { verId: v.id, owner: opts.by || 'summary', langs: publishFlow.docLangsOf(v), customDocs: publishFlow.customDocsOf(v) });
     const prompt = publishFlow.buildDocSummaryPrompt({
       projectRoot,
       planId: v.id,
       items: v.items,
       runId: run.runId,
       langs: publishFlow.docLangsOf(v),
+      customDocs: publishFlow.customDocsOf(v),
       atbPath: 'node scripts/atb.mjs',
     });
     const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt };
