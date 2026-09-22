@@ -3098,17 +3098,18 @@ ${langsField}
     const finalizedNote = flowEval.finalized
       ? `<p class="small" role="status">整体审查已完结 ✓（时间 ${fmtTime(flowEval.finalized.at)}；提交已解锁）</p>`
       : '';
-    // AI 总结提示词预览（点击「AI 总结」后展示；已复制口径）
+    // AI 总结提示词预览（点击「AI 总结」后展示；已复制口径。REQ-20260921-007 默认折叠：
+    // 摘要行已说明已复制与回执口径，需要查看全文再展开，避免长提示词常驻占据大块空间）
     const promptBox = pf.prompt
-      ? `<details class="bld-docs-prompt-box" open>
+      ? `<details class="bld-docs-prompt-box">
           <summary>AI 总结提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb summary 逐文件回执，本页自动刷新）</summary>
           <textarea class="bld-docs-prompt" rows="7" readonly>${esc(pf.prompt.text || '')}</textarea>
           <p><button type="button" class="btn small" data-pf-copy-prompt>复制提示词</button></p>
         </details>`
       : '';
-    // AI 翻译提示词预览（点击「AI 翻译」后展示；已复制口径，与 AI 总结同型）
+    // AI 翻译提示词预览（点击「AI 翻译」后展示；已复制口径，与 AI 总结同型、默认折叠）
     const tPromptBox = pf.translatePrompt
-      ? `<details class="bld-docs-prompt-box" open>
+      ? `<details class="bld-docs-prompt-box">
           <summary>AI 翻译提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb translate 逐文件回执，本页自动刷新）</summary>
           <textarea class="bld-docs-prompt" rows="7" readonly>${esc(pf.translatePrompt.text || '')}</textarea>
           <p><button type="button" class="btn small" data-pf-copy-tprompt>复制提示词</button></p>
@@ -3551,7 +3552,7 @@ ${langsField}
       </div>`;
   }
 
-  // 正式发布步：主分支推送 → 官网 AI 写作提示词 → 同步检测（60 秒轮询 + 立即检测）
+  // 正式发布步：主分支推送 → 官网 AI 总结提示词 → 同步检测（60 秒轮询 + 立即检测）
   function renderReleaseFlowPane(v) {
     const pf = pfOf(v);
     if (!pf || pf.phase === 'loading') return '<div class="bld-release-pane"><p class="muted" role="status">正在加载发布状态…</p></div>';
@@ -3581,7 +3582,7 @@ ${langsField}
             <button type="button" class="btn primary" data-pf-push${v.status === 'merged' && onDev && !pf.busy ? '' : ` disabled title="${esc(v.status !== 'merged' ? '先完成合并入 main' : '请自行切换回 dev 后重试')}"`}>${pf.busy ? '推送中…' : '推送主分支'}</button>
             <span class="muted small">只推主分支（${esc(p.mainBranch || 'main')}）：不推 dev、不强推；失败可重试，不进入完成状态。</span></p>
         </section>
-        <section><strong>第二步 · 官网 AI 写作</strong>
+        <section><strong>第二步 · 官网 AI 总结</strong>
           <p class="muted small">推送成功后进行：提示词在官网仓库执行，读取本项目已发布版本 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新；完成提交消息须含完整计划号。</p>
           ${p.sitePrompt ? `<textarea class="bld-site-prompt" rows="7" readonly>${esc(p.sitePrompt)}</textarea>
           <p><button type="button" class="btn small primary" data-pf-copy-site>复制官网提示词</button></p>` : '<p class="small muted">未配置官网仓库：先在设置中配置官网仓库根目录。</p>'}

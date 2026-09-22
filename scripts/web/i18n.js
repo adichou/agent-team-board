@@ -1085,12 +1085,13 @@ const EN = {
   // REQ-20260920-003 构建和发布流程整改：模块入口「构建」→「发布」、五步流程、文档编写与官网检测
   // REQ-20260921-008 文档编写页重构（总结 → 审查 → 提交）：「AI 写作」更名「AI 总结」，四态 /
   // 四按钮 / 门禁 / 审查对话框 / 任务面板新词条；旧键「AI 写作」「TRAE CN 打开」「TRAE 打开」
-  //「提交文档到 Git」随界面移除清理（官网侧「官网 AI 写作」保留，不在本单范围）。
+  //「提交文档到 Git」随界面移除清理（官网侧旧键当时保留、不在 008 范围；REQ-20260921-007
+  // 起随统一更名「官网 AI 总结」一并清理，全库无「AI 写作 / AI writing」残留）。
   '发布计划与流程，集中在这里': 'Release plans and the release flow, all in one place',
   '关联条目与提交': 'Linked items and commits',
   '文档编写': 'Write docs',
   '正式发布': 'Official release',
-  '官网 AI 写作': 'Website AI writing',
+  '官网 AI 总结': 'Website AI summary',
   '复制官网提示词': 'Copy website prompt',
   '推送主分支': 'Push main branch',
   '推送中…': 'Pushing…',
@@ -1108,7 +1109,7 @@ const EN = {
   '未命中（可继续检测）': 'No match yet (you can keep checking)',
   '读取失败': 'Read failed',
   '第一步 · 推送主分支': 'Step 1 · Push the main branch',
-  '第二步 · 官网 AI 写作': 'Step 2 · Website AI writing',
+  '第二步 · 官网 AI 总结': 'Step 2 · Website AI summary',
   '第三步 · 官网同步检测': 'Step 3 · Website sync detection',
   '隔离分析': 'Isolation analysis',
   '目标远端': 'Target remote',

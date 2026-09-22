@@ -487,7 +487,7 @@ t('L4-1 renderDocsPane：副标题 + 六按钮 + 八文件行七态 chip + 门�
   // 门禁条：默认语言 / 剩余语言分组计数 + 缺口
   assert.match(html, /默认语言 0\/4/, '门禁条默认语言计数（本例默认语言未审）');
   assert.match(html, /剩余语言 1\/4/, '门禁条剩余语言计数');
-  // 文案更名：文档编写页签不再出现「AI 写作」（「官网 AI 写作」在另一函数）
+  // 文案更名：文档编写页签不再出现「AI 写作」（官网侧旧文案在另一函数，REQ-20260921-007 起统一更名）
   assert.ok(!html.includes('AI 写作'), 'AI 写作文案已更名 AI 总结');
 });
 
@@ -552,11 +552,13 @@ t('L4-3 审查对话框：四类型页签 × 中英双栏 / 编辑预览 / 保�
   assert.match(source, /scrollHeight/, '按滚动高度比例跟随');
 });
 
-t('L4-4 文案更名与轮询：docs 页签「AI 写作」清零、「官网 AI 写作」保留；AI 总结进度轮询存在', () => {
+t('L4-4 文案更名与轮询：docs 页签「AI 写作」清零、官网侧已随 REQ-20260921-007 统一更名；AI 总结进度轮询存在', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const pane = source.match(/  function renderDocsPane\(v\) \{[\s\S]*?\n  \}/)[0];
   assert.ok(!pane.includes('AI 写作'), '文档编写页签内 AI 写作清零');
-  assert.ok(source.includes('官网 AI 写作'), '正式发布步官网 AI 写作保留（不在本单范围）');
+  // 008 当时官网侧保留不在本单范围；REQ-20260921-007 起随统一更名清理
+  assert.ok(source.includes('官网 AI 总结'), '正式发布步官网 AI 总结（REQ-20260921-007 统一更名）');
+  assert.ok(!source.includes('官网 AI 写作'), '正式发布步官网旧文案无残留');
   assert.ok(source.includes('docs-summary/current'), 'docs 步轮询 AI 总结进度');
   assert.ok(/summaryTimer|SUMMARY_POLL/.test(source), '轮询定时器管理存在');
 });
@@ -588,10 +590,12 @@ t('L6-1 i18n：新增文案中英词条齐备；「AI 写作」文档页旧键�
   for (const k of ['未总结', '正在总结', '已总结待审核', '已审核', '审查', '通过审核', '刷新']) {
     assert.ok(typeof EN[k] === 'string' && EN[k], `词条缺失：${k}`);
   }
-  // 旧键清理：文档页「AI 写作」与「提交文档到 Git」按钮键随界面移除（官网键保留）
+  // 旧键清理：文档页「AI 写作」与「提交文档到 Git」按钮键随界面移除
+  //（官网键 008 时保留；REQ-20260921-007 起统一更名「官网 AI 总结」，旧键清理）
   assert.ok(!('AI 写作' in EN), '「AI 写作」旧键清理');
   assert.ok(!('提交文档到 Git' in EN), '「提交文档到 Git」旧键清理');
-  assert.ok('官网 AI 写作' in EN, '官网键保留');
+  assert.ok('官网 AI 总结' in EN, '官网键已随 REQ-20260921-007 更名');
+  assert.ok(!('官网 AI 写作' in EN), '官网旧键已清理');
   // 往返不变形
   I.setLang('en');
   assert.equal(I.t('AI 总结'), 'AI summary');
