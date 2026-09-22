@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // REQ-20260922-003 文档编写页支持添加多份自定义文档（并入 AI 总结提示词）—— 分层测试。
-// 口径（design.md 定稿）：
+// 口径（design.md 定稿；BUG-20260922-002 起多语言口径升级——本文件断言已随落定更新）：
 //   命名：字母开头 + 字母/数字/连字符/下划线，≤40 字符，.md 可省略自动补全，大写归一，
-//        保留名 = 标准 4 类 / LICENSE 及其 _lang(2-3 字母) 后缀形态，上限 20 份，不支持子目录；
-//   展开：仅默认语言单份 KEY.md（single + custom），不随语言集、不进 AI 翻译；
+//        保留名 = 标准 4 类 / LICENSE 及其 _lang(2-3字母) 后缀形态，上限 20 份，不支持子目录；
+//   展开：BUG-20260922-002 起随语言集自动展开（默认语言 KEY.md + 其余 KEY_<lang>.md，
+//        其余语言进 AI 翻译；展开重名 MIGRATION_EN ↔ MIGRATION 拦截）；
 //   参与：进 AI 总结（提示词清单 + 账本）、七态状态机与审核 hash、canFinalize / canCommit /
-//        提交 pathspec / 合并门禁 / 范围指纹（全参与，只增不减）；canTranslate 不被自定义锁；
+//        提交 pathspec / 合并门禁 / 范围指纹（全参与，只增不减）；canTranslate 含自定义默认
+//        语言份（BUG-20260922-002 起与标准 4 类同口径）；
 //   持久化：版本记录 v.customDocs（发布计划级），merging / pushed 锁定，总结运行中禁移除。
 // L1 纯逻辑（publish-flow）；L2 数据层（build-store + summary 账本）；L3 服务接口；
 // L4 前端静态契约（build.js）；L6 i18n（中英同步）。
@@ -56,19 +58,20 @@ const CUSTOM = ['MIGRATION', 'SECURITY'];
 
 /* ---------- L1 纯逻辑（publish-flow.mjs） ---------- */
 
-t('L1-1 清单展开：publishDocFiles(langs, customs) = 4×N + LICENSE + 自定义（末尾追加）；无自定义与现状一致', () => {
+t('L1-1 清单展开：publishDocFiles(langs, customs) = 4×N + LICENSE + 自定义×N（末尾追加）；无自定义与现状一致', () => {
   const base = flow.publishDocFiles(['cn', 'en']);
   assert.equal(base.length, 9, '现状 4 × 2 + LICENSE.md');
   const withCustom = flow.publishDocFiles(['cn', 'en'], CUSTOM);
-  assert.equal(withCustom.length, 11, '4 × 2 + LICENSE.md + 2 自定义');
+  assert.equal(withCustom.length, 13, '4 × 2 + LICENSE.md + 2 自定义 × 2 语言');
   const mig = withCustom.find((f) => f.file === 'MIGRATION.md');
   assert.ok(mig, '清单含 MIGRATION.md');
   assert.deepEqual(
     { key: mig.key, lang: mig.lang, file: mig.file, single: mig.single, custom: mig.custom },
-    { key: 'MIGRATION', lang: null, file: 'MIGRATION.md', single: true, custom: true },
-    '自定义 = 默认语言单份条目（single + custom，不随语言集）',
+    { key: 'MIGRATION', lang: 'cn', file: 'MIGRATION.md', single: undefined, custom: true },
+    '自定义随语言集展开（BUG-20260922-002：默认语言份 lang=首语言，非 single）',
   );
-  assert.equal(withCustom[withCustom.length - 1].file, 'SECURITY.md', '追加在清单末尾');
+  assert.equal(withCustom[withCustom.length - 3].file, 'MIGRATION_en.md', '逐 KEY 展开其余语言 KEY_<lang>.md');
+  assert.equal(withCustom[withCustom.length - 1].file, 'SECURITY_en.md', '逐 KEY 追加在清单末尾');
   assert.deepEqual(flow.publishDocFiles(['cn', 'en'], []), base, '空自定义与现状逐字节一致');
   assert.deepEqual(flow.publishDocFiles(['cn'], ['MIGRATION']).map((f) => f.file), ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md', 'LICENSE.md', 'MIGRATION.md'], '单语言集同样追加');
 
@@ -112,20 +115,21 @@ t('L1-2 命名校验 normalizeCustomDocName：合法 / .md 省略 / 大写归一
   assert.equal(ok('MIGRATION_EN').key, 'MIGRATION_EN');
 });
 
-t('L1-3 白名单与派生清单：isPublishDocFile 含自定义、拒绝 _lang 展开；defaultDocFiles 含 / restDocFiles 不含；docFileOf', () => {
+t('L1-3 白名单与派生清单：isPublishDocFile 含自定义及其 _lang 展开；defaultDocFiles 含默认语言份 / restDocFiles 含其余语言份；docFileOf', () => {
   assert.equal(flow.isPublishDocFile('MIGRATION.md', ['cn', 'en'], ['MIGRATION']), true);
   assert.equal(flow.isPublishDocFile('MIGRATION.md', ['cn', 'en'], []), false, '未登记不自证白名单');
-  assert.equal(flow.isPublishDocFile('MIGRATION_en.md', ['cn', 'en'], ['MIGRATION']), false, '自定义不随语言集展开');
+  assert.equal(flow.isPublishDocFile('MIGRATION_en.md', ['cn', 'en'], ['MIGRATION']), true, 'BUG-20260922-002：随语言集展开进入白名单');
+  assert.equal(flow.isPublishDocFile('MIGRATION_fr.md', ['cn', 'en'], ['MIGRATION']), false, '语言集外不展开');
   assert.equal(flow.isPublishDocFile('migration.md', ['cn', 'en'], ['MIGRATION']), false, '文件名大小写敏感');
 
   const def = flow.defaultDocFiles(['cn', 'en'], ['MIGRATION']);
   const rest = flow.restDocFiles(['cn', 'en'], ['MIGRATION']);
-  assert.equal(def.length, 5, '默认语言 4 类 + 1 自定义');
+  assert.equal(def.length, 5, '默认语言 4 类 + 1 自定义默认语言份');
   assert.ok(def.some((f) => f.file === 'MIGRATION.md' && f.custom), 'AI 总结范围含自定义');
-  assert.equal(rest.length, 4, 'AI 翻译范围不含自定义');
-  assert.ok(!rest.some((f) => f.custom));
+  assert.equal(rest.length, 5, 'AI 翻译范围含自定义其余语言份（BUG-20260922-002）');
+  assert.ok(rest.some((f) => f.file === 'MIGRATION_en.md' && f.custom));
 
-  assert.equal(flow.docFileOf('MIGRATION', null, ['cn', 'en'], ['MIGRATION']), 'MIGRATION.md');
+  assert.equal(flow.docFileOf('MIGRATION', 'cn', ['cn', 'en'], ['MIGRATION']), 'MIGRATION.md');
   assert.equal(flow.docFileOf('README', 'en', ['cn', 'en'], ['MIGRATION']), 'README_en.md', '标准类不受影响');
 });
 
@@ -145,13 +149,16 @@ t('L1-4 AI 总结提示词（核心）：自定义并入默认语言文档清单
   assert.ok(!p0.includes('自定义'), '无自定义不出现自定义字样');
 });
 
-t('L1-5 AI 翻译提示词：目标与基准均不含自定义文档', () => {
+t('L1-5 AI 翻译提示词：BUG-20260922-002 起自定义进入翻译（基准与目标均含其余语言份）', () => {
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'])) contents[f.file] = `# ${f.key}\n`;
   contents['MIGRATION.md'] = '# 迁移说明\n';
   const tp = flow.buildDocTranslatePrompt({ projectRoot: '/tmp/p', planId: 'BLD-20260922-003', runId: 'tr-20260922-000101-cd01', langs: ['cn', 'en'], readFile: readsOf(contents), customDocs: ['MIGRATION'] });
-  assert.ok(!tp.includes('MIGRATION'), '翻译基准与目标均不含自定义');
-  assert.ok(tp.includes('请逐个产出以下 4 个剩余语言文档'), '翻译目标数不变（4 × (N−1)）');
+  assert.ok(tp.includes('- MIGRATION_en.md（English / MIGRATION / 自定义，基准 MIGRATION.md）'), '翻译目标含自定义其余语言份');
+  assert.ok(tp.includes('===== MIGRATION.md（默认语言 cn，已审核基准） ====='), '翻译基准含自定义默认语言份');
+  assert.ok(tp.includes('请逐个产出以下 5 个剩余语言文档（4 类 + 1 自定义 × 1 语言，剩余语言 en）'), '目标计数随清单联动');
+  const tp0 = flow.buildDocTranslatePrompt({ projectRoot: '/tmp/p', planId: 'BLD-20260922-003', langs: ['cn', 'en'], readFile: readsOf(contents) });
+  assert.ok(tp0.includes('请逐个产出以下 4 个剩余语言文档'), '无自定义翻译目标数不变（4 × (N−1)）');
 });
 
 t('L1-6 自定义文档七态：未总结 → 正在总结 → 已总结待审核 → 已审核（hash）；编辑回退；scopeStale 失效', () => {
@@ -167,27 +174,27 @@ t('L1-6 自定义文档七态：未总结 → 正在总结 → 已总结待审�
   assert.equal(find(flow.evaluateDocsFlow(vOf(), readsOf({ 'MIGRATION.md': '# 在盘\n' }), {})).state, 'unsummarized', '在盘未总结未审 = 未总结（与四类同口径：人工在盘内容不经 AI 仍显示未总结）');
 });
 
-t('L1-7 门禁参与：分组计数 / canFinalize / canCommit / missing 含自定义；canTranslate 与 translateMissing 不被自定义锁', () => {
+t('L1-7 门禁参与：分组计数 / canFinalize / canCommit / missing 含自定义；canTranslate 与 translateMissing 含自定义默认语言份（BUG-20260922-002 同口径）', () => {
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) contents[f.file] = `# ${f.key}\n`;
   const files = {};
   for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) files[f.file] = { hash: sha256(contents[f.file]), at: '2026-09-22T00:00:00Z' };
   const v = (rec) => ({ review: { files: rec }, customDocs: ['MIGRATION'] });
 
-  // 只审标准 4 类默认语言（LICENSE / MIGRATION 未审）
+  // 只审标准 4 类默认语言（LICENSE / MIGRATION.md 未审）
   const fourDefault = {};
   for (const f of flow.defaultDocFiles(['cn', 'en'])) fourDefault[f.file] = files[f.file];
   let r = flow.evaluateDocsFlow(v(fourDefault), readsOf(contents), {});
-  assert.equal(r.defaultFiles.filter((f) => f.custom).length, 1, '自定义归默认语言组');
+  assert.equal(r.defaultFiles.filter((f) => f.custom).length, 1, '自定义默认语言份归默认语言组');
   assert.equal(r.defaultReviewedCount, 4, '默认语言计数分母含自定义（4/6）');
-  assert.equal(r.defaultFiles.length, 6, '默认语言组分母 = 4 类 + LICENSE + 自定义');
-  assert.equal(r.canTranslate, true, '自定义未审不锁 AI 翻译（翻译范围不含它）');
-  assert.ok(!r.translateMissing.some((m) => m.file === 'MIGRATION.md'), 'translateMissing 不含自定义');
+  assert.equal(r.defaultFiles.length, 6, '默认语言组分母 = 4 类 + LICENSE + 自定义默认语言份');
+  assert.equal(r.canTranslate, false, 'BUG-20260922-002：自定义默认语言未审锁 AI 翻译（与标准 4 类同口径）');
+  assert.ok(r.translateMissing.some((m) => m.file === 'MIGRATION.md'), 'translateMissing 含自定义默认语言份');
   assert.equal(r.canFinalize, false, '自定义未审不可整体完结（全参与）');
   assert.ok(r.missing.some((m) => m.file === 'MIGRATION.md' && m.state === 'unsummarized'), '缺口明细含自定义与状态');
 
-  // 全审（含自定义）+ 完结 → canCommit
-  const finalized = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', files: {} };
+  // 全审（含自定义全部语种）+ 完结（customDocsKey 匹配）→ canCommit
+  const finalized = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', customDocsKey: 'MIGRATION', files: {} };
   r = flow.evaluateDocsFlow({ review: { files, finalized }, customDocs: ['MIGRATION'] }, readsOf(contents), {});
   assert.equal(r.canFinalize, true, '全审（含自定义）可完结');
   assert.equal(r.canCommit, true, '全审 + 已完结可提交');
@@ -199,12 +206,12 @@ t('L1-7 门禁参与：分组计数 / canFinalize / canCommit / missing 含自�
   assert.equal(r.canFinalize, false, '自定义缺盘不可完结');
 });
 
-t('L1-8 提交口径与指纹：evaluateDocsState 含自定义（合并门禁联动）；指纹随自定义内容变化；基准检测不涉及', () => {
+t('L1-8 提交口径与指纹：evaluateDocsState 含自定义（合并门禁联动）；指纹随自定义内容变化；基准检测含自定义', () => {
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) contents[f.file] = `# ${f.key}\n`;
   const v = { customDocs: ['MIGRATION'] };
   const stNone = flow.evaluateDocsState(v, readsOf({}));
-  assert.match(stNone.reasons[0], /共 10 个文件/, '未编写提示文件数 = 4 × 2 + 1 + 1');
+  assert.match(stNone.reasons[0], /共 11 个文件/, '未编写提示文件数 = 4 × 2 + 1 + 自定义 × 2');
   assert.match(stNone.reasons[0], /自定义/, '提示提及自定义文档');
 
   const rec = { commitHash: 'x', files: {} };
@@ -219,8 +226,8 @@ t('L1-8 提交口径与指纹：evaluateDocsState 含自定义（合并门禁联
   assert.notEqual(fp1, fp2, '自定义内容参与范围指纹');
   assert.equal(flow.publishScopeFingerprint(items, readsOf(contents), ['cn', 'en']), flow.publishScopeFingerprint(items, readsOf(contents), ['cn', 'en'], []), '无自定义指纹口径兼容');
 
-  const stats = { 'MIGRATION.md': 999, 'README.md': 100, 'README_en.md': 50 };
-  assert.deepEqual(flow.detectBaselineShift(['cn', 'en'], statsOf(stats)), ['README_en.md'], '自定义 mtime 不参与基准检测');
+  const stats = { 'MIGRATION.md': 999, 'MIGRATION_en.md': 50, 'README.md': 100, 'README_en.md': 50 };
+  assert.deepEqual(flow.detectBaselineShift(['cn', 'en'], statsOf(stats), ['MIGRATION']).sort(), ['MIGRATION_en.md', 'README_en.md'], 'BUG-20260922-002：自定义 mtime 参与基准检测');
 });
 
 /* ---------- L2 数据层 ---------- */
@@ -267,19 +274,20 @@ t('L2-1 build-store：addCustomDoc / removeCustomDoc 持久化、校验、上限
   assert.throws(() => buildStore.addCustomDoc(dataDir, v.id, { name: 'AFTERPUSH' }), buildStore.BuildConflictError, 'pushed 锁定');
 });
 
-t('L2-2 白名单与完结快照：recordDocsReview / recordDocsCommit 放行清单内自定义；recordDocsFinalize 快照含自定义', () => {
+t('L2-2 白名单与完结快照：recordDocsReview / recordDocsCommit 放行清单内自定义（含展开文件）；recordDocsFinalize 快照含自定义', () => {
   const { proj, dataDir } = mkData(tmpdir('atb-003-l22-'));
   const v = mkVersion(dataDir, proj);
   const withCus = buildStore.addCustomDoc(dataDir, v.id, { name: 'MIGRATION.md' });
   assert.doesNotThrow(() => buildStore.recordDocsReview(dataDir, withCus.id, { file: 'MIGRATION.md', hash: sha256('# M\n') }), '清单内自定义可审核');
-  assert.throws(() => buildStore.recordDocsReview(dataDir, withCus.id, { file: 'MIGRATION_en.md', hash: sha256('x') }), /非发布文档文件/, '不随语言集展开');
+  assert.doesNotThrow(() => buildStore.recordDocsReview(dataDir, withCus.id, { file: 'MIGRATION_en.md', hash: sha256('x') }), 'BUG-20260922-002：展开文件进入审核白名单');
   assert.doesNotThrow(() => buildStore.recordDocsCommit(dataDir, withCus.id, { commitHash: 'a'.repeat(40), files: { 'MIGRATION.md': 'b'.repeat(64) }, scopeFp: 'f' }), '提交记录白名单含自定义');
 
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) contents[f.file] = `# ${f.key}\n`;
   const out = buildStore.recordDocsFinalize(dataDir, withCus.id, { langs: ['cn', 'en'], customDocs: ['MIGRATION'], readFile: readsOf(contents) });
-  assert.equal(Object.keys(out.review.finalized.files).length, 10, '完结快照 = 4 × 2 + LICENSE + 自定义');
+  assert.equal(Object.keys(out.review.finalized.files).length, 11, '完结快照 = 4 × 2 + LICENSE + 自定义 × 2');
   assert.equal(out.review.finalized.files['MIGRATION.md'], sha256(contents['MIGRATION.md']));
+  assert.equal(out.review.finalized.customDocsKey, 'MIGRATION', 'BUG-20260922-002：完结快照记 customDocsKey');
   const noMig = { ...contents };
   delete noMig['MIGRATION.md'];
   assert.throws(() => buildStore.recordDocsFinalize(dataDir, withCus.id, { langs: ['cn', 'en'], customDocs: ['MIGRATION'], readFile: readsOf(noMig) }), /MIGRATION\.md 不存在或不可读/, '自定义缺盘不可完结');
@@ -381,16 +389,20 @@ t('L3 服务接口：添加 / 移除 / 回显 / AI 总结提示词与账本 / �
     assert.equal(r.status, 400, '重复（大写比较）400');
     assert.match(r.json.error || '', /重复/);
 
-    // publish-plan 回显：customDocs + docsFlow 文件清单（默认语言组、未总结）
+    // publish-plan 回显：customDocs + docsFlow 文件清单（默认语言组、未总结；BUG-20260922-002
+    // 起随语言集展开，其余语言份归剩余组、未翻译）
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.status, 200);
     assert.deepEqual(r.json.customDocs, ['MIGRATION'], '回显自定义清单');
     const fe = r.json.docsFlow;
-    assert.equal(fe.files.length, 10, '4 × 2 + LICENSE + MIGRATION.md');
+    assert.equal(fe.files.length, 11, '4 × 2 + LICENSE + MIGRATION × 2');
     const mig = fe.files.find((f) => f.file === 'MIGRATION.md');
     assert.equal(mig.state, 'unsummarized', '初始未总结');
     assert.equal(mig.isDefault, true, '归默认语言组');
     assert.equal(mig.custom, true, 'custom 标识');
+    const migEn = fe.files.find((f) => f.file === 'MIGRATION_en.md');
+    assert.equal(migEn.state, 'untranslated', '其余语言份初始未翻译');
+    assert.equal(migEn.isDefault, false, '归剩余语言组');
 
     // AI 总结：提示词并入自定义 + 账本 total 联动
     r = await req(port, 'POST', `/api/build/docs-summary/start${P}`, { id: vid });
@@ -422,11 +434,11 @@ t('L3 服务接口：添加 / 移除 / 回显 / AI 总结提示词与账本 / �
     r = await req(port, 'POST', `/api/build/docs/save${P}`, { id: vid, file: 'NOTIN.md', content: 'x' });
     assert.equal(r.status, 400, '清单外保存拒绝');
 
-    // 全审（标准 4×2 + LICENSE + 自定义）→ 完结 → 提交（pathspec 含自定义、不夹带业务文件）
-    // 顺序：先默认语言组（含 MIGRATION.md / LICENSE.md）后剩余语言，保证 mtime 不触发基准回退。
+    // 全审（标准 4×2 + LICENSE + 自定义全部语种）→ 完结 → 提交（pathspec 含自定义、不夹带业务文件）
+    // 顺序：先默认语言组（含 MIGRATION.md / LICENSE.md）后剩余语言（含 MIGRATION_en.md），
+    // 保证 mtime 不触发基准回退。BUG-20260922-002：移除→再添加会删除磁盘文件，全部文件统一写盘。
     const all = flow.publishDocFiles(['cn', 'en'], ['MIGRATION']);
     for (const f of [...all.filter((x) => x.lang === 'cn' || x.single), ...all.filter((x) => x.lang === 'en')]) {
-      if (f.file === 'MIGRATION.md') continue; // 已写盘
       fs.writeFileSync(path.join(proj, f.file), `# ${f.key}${f.lang ? ` ${f.lang}` : ''}\n`);
     }
     for (const f of all) {
@@ -438,10 +450,10 @@ t('L3 服务接口：添加 / 移除 / 回显 / AI 总结提示词与账本 / �
     fs.writeFileSync(path.join(proj, 'evil.txt'), '不应被夹带');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
-    assert.equal(r.json.files.length, 10, 'pathspec = 4 × 2 + LICENSE + MIGRATION.md');
+    assert.equal(r.json.files.length, 11, 'pathspec = 4 × 2 + LICENSE + MIGRATION × 2');
     assert.ok(r.json.files.includes('MIGRATION.md'), '自定义进入提交');
     const show = git(proj, ['show', '--name-only', '--pretty=format:', r.json.commitHash]).split('\n').filter(Boolean);
-    assert.ok(show.includes('MIGRATION.md'), 'git 提交含 MIGRATION.md');
+    assert.ok(show.includes('MIGRATION.md') && show.includes('MIGRATION_en.md'), 'git 提交含自定义全部语种');
     assert.ok(!show.includes('evil.txt'), '业务源码不夹带');
   } finally {
     server.kill('SIGTERM');
@@ -502,7 +514,7 @@ const filesStub = (states, customs = ['MIGRATION']) => flow.publishDocFiles(['cn
   state: states[f.file] || (f.custom ? 'unsummarized' : f.single ? 'unwritten' : f.lang === 'cn' ? 'unsummarized' : 'untranslated'),
 }));
 
-t('L4-1 renderDocsPane：＋添加文档按钮 + 内联添加行；自定义行（自定义标识 + 移除入口）；页签计数分母联动', () => {
+t('L4-1 renderDocsPane：＋添加文档按钮 + 内联添加行；自定义行（自定义标识 + 移除入口，每个语言页签一行）；页签计数分母联动', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun([
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
@@ -514,8 +526,8 @@ t('L4-1 renderDocsPane：＋添加文档按钮 + 内联添加行；自定义行�
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({ 'README.md': 'reviewed', 'CHANGELOG.md': 'reviewed', 'FEATURES.md': 'reviewed', 'AGENTS.md': 'reviewed' }))},
         reviewedCount: 4, defaultReviewedCount: 4, restReviewedCount: 0,
-        canTranslate: true, translateMissing: [], canFinalize: false, finalized: null, canCommit: false,
-        baselineShift: [], missing: [{ file: 'README_en.md', state: 'untranslated' }, { file: 'CHANGELOG_en.md', state: 'untranslated' }, { file: 'FEATURES_en.md', state: 'untranslated' }, { file: 'AGENTS_en.md', state: 'untranslated' }, { file: 'LICENSE.md', state: 'unwritten' }, { file: 'MIGRATION.md', state: 'unsummarized' }] },
+        canTranslate: false, translateMissing: [{ file: 'MIGRATION.md', state: 'unsummarized' }], canFinalize: false, finalized: null, canCommit: false,
+        baselineShift: [], missing: [{ file: 'README_en.md', state: 'untranslated' }, { file: 'CHANGELOG_en.md', state: 'untranslated' }, { file: 'FEATURES_en.md', state: 'untranslated' }, { file: 'AGENTS_en.md', state: 'untranslated' }, { file: 'LICENSE.md', state: 'unwritten' }, { file: 'MIGRATION.md', state: 'unsummarized' }, { file: 'MIGRATION_en.md', state: 'untranslated' }] },
       summary: null, translate: null, docs: { overall: 'none' } } } })`);
   // 添加入口与内联添加行
   assert.ok(html.includes('＋ 添加文档'), '＋ 添加文档按钮');
@@ -523,14 +535,17 @@ t('L4-1 renderDocsPane：＋添加文档按钮 + 内联添加行；自定义行�
   assert.ok(html.includes('data-doc-add-input'), '文件名输入框');
   assert.ok(html.includes('data-doc-add-confirm') && html.includes('data-doc-add-cancel'), '添加 / 取消按钮');
   assert.ok(html.includes('文件名不能为空（如 MIGRATION.md）'), '行内错误提示');
-  // 自定义行：默认语言面板内 + 自定义标识 + 移除入口 + 未总结 chip
+  // 自定义行：默认语言面板内 + 自定义标识 + 移除入口 + 未总结 chip；BUG-20260922-002 起其余
+  // 语言面板同样一行（自动展开）
   assert.match(html, /id="bldDocPanel_cn"[^>]*>[\s\S]*?MIGRATION\.md/, 'MIGRATION.md 在默认语言面板');
+  assert.match(html, /id="bldDocPanel_en"[^>]*>[\s\S]*?MIGRATION_en\.md/, 'MIGRATION_en.md 在 en 语言面板（自动展开）');
   assert.ok(html.includes('自定义'), '自定义标识');
-  assert.ok(html.includes('data-doc-rm="MIGRATION.md"'), '移除入口');
+  assert.ok(html.includes('data-doc-rm="MIGRATION.md"') && html.includes('data-doc-rm="MIGRATION_en.md"'), '两行均有移除入口（整份移除）');
   assert.ok(html.includes('未总结'), '未总结状态 chip');
-  // 默认语言页签计数 4/6（分母含 LICENSE + 自定义）
+  // 默认语言页签计数 4/6（分母含 LICENSE + 自定义默认语言份）；en 页签 0/5
   assert.match(html, /data-doc-lang="cn"[\s\S]*?4\/6/, '页签计数分母联动');
-  assert.match(html, /文件（10 · 默认语言 4\/6 已审核 · 剩余语言 0\/4 已审核）/, '表头计数联动');
+  assert.match(html, /data-doc-lang="en"[\s\S]*?0\/5/, 'en 页签分母含自定义展开文件');
+  assert.match(html, /文件（11 · 默认语言 4\/6 已审核 · 剩余语言 0\/5 已审核）/, '表头计数联动');
 });
 
 t('L4-2 renderDocsPane：AI 总结运行中移除禁用（title 提示）；总结按钮 x/N 分母联动', () => {
@@ -553,7 +568,7 @@ t('L4-2 renderDocsPane：AI 总结运行中移除禁用（title 提示）；总�
   assert.match(html, /总结中 0\/5/, '总结按钮分母含自定义');
 });
 
-t('L4-3 renderReviewModal：自定义文档追加类型页签（x/1）单栏、标「自定义」，操作按钮齐全', () => {
+t('L4-3 renderReviewModal：自定义文档追加类型页签（BUG-20260922-002 起多语言多栏 x/2），操作按钮齐全', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun([
     extractFn(source, 'sanitizeHtml'), extractFn(source, 'renderMd'), extractFn(source, 'renderReviewModal'),
@@ -563,9 +578,9 @@ t('L4-3 renderReviewModal：自定义文档追加类型页签（x/1）单栏、�
     review: { open: true, key: 'MIGRATION', modes: { 'MIGRATION.md': 'preview' }, contents: { 'MIGRATION.md': '# 迁移\\n' } },
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({ 'MIGRATION.md': 'summarized' }))}, reviewedCount: 0 } } } })`);
-  assert.match(html, /data-review-tab="MIGRATION"[^>]*>MIGRATION（0\/1）/, '自定义类型页签 x/1');
+  assert.match(html, /data-review-tab="MIGRATION"[^>]*>MIGRATION（0\/2）/, '自定义类型页签 x/2（按语言计数）');
   const cols = (html.match(/bld-review-col"/g) || []).length;
-  assert.equal(cols, 1, '单栏');
+  assert.equal(cols, 2, '多语言两栏（MIGRATION.md + MIGRATION_en.md）');
   assert.match(html, /MIGRATION\.md[\s\S]{0,160}自定义/, '栏头标注自定义');
   assert.ok(html.includes('data-review-save="MIGRATION.md"') && html.includes('data-review-approve="MIGRATION.md"'), '保存 / 通过审核按钮');
   assert.ok(html.includes('data-review-mode="MIGRATION.md"'), '编辑 / 预览切换');
@@ -576,7 +591,7 @@ t('L4-4 validateCustomDocName 客户端镜像：与服务端同口径', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const vm2 = vm.createContext({
     DOC_KEYS: FLOW_STUB.DOC_KEYS, DOC_SINGLE_KEYS: FLOW_STUB.DOC_SINGLE_KEYS,
-    CUSTOM_DOC_KEY_MAX: 40, CUSTOM_DOC_MAX: 20,
+    CUSTOM_DOC_KEY_MAX: 40, CUSTOM_DOC_MAX: 20, DEFAULT_DOC_LANGS: ['cn', 'en'],
   });
   vm.runInContext(extractFn(source, 'validateCustomDocName'), vm2);
   const call = (raw, existing) => vm.runInContext(`validateCustomDocName(${JSON.stringify(raw)}, ${JSON.stringify(existing || [])})`, vm2);
@@ -600,7 +615,7 @@ t('L6-1 i18n：新增文案中英同步；动态词条 ◇ 占位；往返不变
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN, EN_DYNAMIC } = I._dict;
   const statics = [
-    '＋ 添加文档', '添加', '添加中…', '移除', '移除该自定义文档',
+    '＋ 添加文档', '添加', '添加中…', '移除', '移除整份自定义文档（全部语言文件行与磁盘文件一并删除）',
     'AI 总结运行中，暂不可移除', '文件名不能为空（如 MIGRATION.md）', '文件名过长（上限 40 字符）',
     '存在非法字符：仅允许字母开头，字母 / 数字 / 连字符 / 下划线（.md 后缀可省略，自动补全；不支持子目录）',
     '超出自定义文档数量上限（20 份）', '✕ AI 总结运行中，暂不可移除自定义文档',
@@ -611,13 +626,12 @@ t('L6-1 i18n：新增文案中英同步；动态词条 ◇ 占位；往返不变
   const dynamics = [
     '与标准发布文档重名：◇（README / CHANGELOG / FEATURES / AGENTS / LICENSE 及 _语言 后缀为保留名）',
     '自定义文档重复：◇ 已在清单中',
-    '✕ 添加失败：◇', '✓ 已添加 ◇（初始状态：未总结）', '已移除自定义文档 ◇', '✕ 移除失败：◇',
+    '✕ 添加失败：◇', '已移除自定义文档 ◇（已删除 ◇ 个磁盘文件）', '✕ 移除失败：◇',
   ];
   for (const k of dynamics) assert.ok(k in EN_DYNAMIC, `动态词条缺失：${k}`);
   I.setLang('en');
   assert.equal(I.t('自定义'), 'Custom');
   assert.equal(I.t('＋ 添加文档'), '+ Add document');
-  assert.equal(I.t('✓ 已添加 MIGRATION.md（初始状态：未总结）'), '✓ Added MIGRATION.md (initial state: not summarized)');
   assert.equal(I.t('自定义文档重复：MIGRATION.md 已在清单中'), 'Duplicate custom document: MIGRATION.md is already in the list');
   I.setLang('zh');
   assert.equal(I.t('＋ 添加文档'), '＋ 添加文档');
