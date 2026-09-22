@@ -57,6 +57,7 @@ const FLOW_STUB = {
     untranslated: '○', translating: '◐', translated: '●', reviewed: '✔',
   },
   DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+  DOC_SINGLE_KEYS: ['LICENSE'], // REQ-20260922-002 单文件类（审查对话框页签含 LICENSE）
   DEFAULT_DOC_LANGS: ['cn', 'en'],
   langNameOf: flow.langNameOf,
   docFilesOf: (langs) => flow.publishDocFiles(Array.isArray(langs) && langs.length ? langs : flow.DEFAULT_DOC_LANGS),
@@ -79,10 +80,12 @@ function docsPaneFns(source) {
   ].join('\n');
 }
 
-// cn,en 八文件样例（默认 cn 四文件全审 + en 四文件各态；stateOf 可按 key|lang 覆盖状态）
+// cn,en 八文件样例（默认 cn 四文件全审 + en 四文件各态；stateOf 可按 key|lang 覆盖状态）。
+// REQ-20260922-002：单文件类（LICENSE）不参与本 Bug 的页签口径样例（其行为由
+// req-20260922-002.test.mjs 覆盖），样例仍为四类 × 语言集。
 function planOf(langs, extra = {}, stateOf = null) {
   const restStates = ['translated', 'translating', 'untranslated', 'untranslated'];
-  const files = flow.publishDocFiles(langs).map((f) => ({
+  const files = flow.publishDocFiles(langs).filter((f) => !f.single).map((f) => ({
     ...f,
     isDefault: f.lang === langs[0],
     state: (stateOf && stateOf[`${f.key}|${f.lang}`])

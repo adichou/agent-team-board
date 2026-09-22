@@ -60,15 +60,21 @@ t('L1-1 版本号提取：取计划编号后两段、保留前导零；非法输
   assert.equal(flow.versionNumberOf(null), null);
 });
 
-t('L1-2 发布文档清单：四类 × 双语共八个文件，命名与需求一致（REQ-20260921-010 起默认语言集 cn,en、下划线命名）', () => {
+t('L1-2 发布文档清单：四类 × 双语 + LICENSE 单文件（REQ-20260922-002 起共 4×N+1），命名与需求一致（REQ-20260921-010 起默认语言集 cn,en、下划线命名）', () => {
   const files = flow.publishDocFiles();
-  assert.equal(files.length, 8);
+  assert.equal(files.length, 9, '4 × 2 + LICENSE.md');
   assert.deepEqual(
     files.map((f) => f.file).sort(),
-    ['AGENTS.md', 'AGENTS_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'README.md', 'README_en.md'].sort(),
+    ['AGENTS.md', 'AGENTS_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'LICENSE.md', 'README.md', 'README_en.md'].sort(),
   );
-  for (const f of files) assert.ok(['cn', 'en'].includes(f.lang) && f.key, '每条含 key/lang');
+  // 单文件类（LICENSE）lang=null / single=true，不随语言集；四类每条含 key/lang
+  for (const f of files) {
+    assert.ok(f.key, '每条含 key');
+    if (f.single) assert.ok(f.lang === null && f.file === 'LICENSE.md', '单文件类恒 LICENSE.md');
+    else assert.ok(['cn', 'en'].includes(f.lang), '四类按语言集');
+  }
   assert.equal(flow.docFileOf('CHANGELOG', 'en'), 'CHANGELOG_en.md');
+  assert.equal(flow.docFileOf('LICENSE', null), 'LICENSE.md');
 });
 
 t('L1-3 README 互链口径：按语言链接 CHANGELOG 与 FEATURES，其余文档无链接要求', () => {
@@ -154,16 +160,17 @@ t('L1-9 文档状态机：未提交 / 已提交 / 外部修改未提交 / 范围
   const disk = {
     'README.md': 'r1', 'README_en.md': 'r2', 'CHANGELOG.md': 'c1', 'CHANGELOG_en.md': 'c2',
     'FEATURES.md': 'f1', 'FEATURES_en.md': 'f2', 'AGENTS.md': 'a1', 'AGENTS_en.md': 'a2',
+    'LICENSE.md': 'lic', // REQ-20260922-002：单文件类计入提交口径
   };
-  const files8 = {};
-  for (const [f, c] of Object.entries(disk)) files8[f] = sha(c);
+  const filesAll = {};
+  for (const [f, c] of Object.entries(disk)) filesAll[f] = sha(c);
   const committed = flow.evaluateDocsState(
-    { ...v, docs: { commitHash: 'c'.repeat(40), scopeFp: 'fp1', files: files8 } },
+    { ...v, docs: { commitHash: 'c'.repeat(40), scopeFp: 'fp1', files: filesAll } },
     (f) => disk[f] ?? null,
   );
   assert.equal(committed.overall, 'committed');
   const dirty = flow.evaluateDocsState(
-    { ...v, docs: { commitHash: 'c'.repeat(40), scopeFp: 'fp1', files: { 'README.md': files8['README.md'] } } },
+    { ...v, docs: { commitHash: 'c'.repeat(40), scopeFp: 'fp1', files: { 'README.md': filesAll['README.md'] } } },
     (f) => (f === 'README.md' ? 'changed' : null),
   );
   assert.equal(dirty.overall, 'uncommitted', '外部/再次编辑后未提交');
@@ -461,9 +468,10 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.status, 200, `publish-plan：${r.text}`);
     assert.equal(r.json.versionNumber, vid.replace(/^BLD-/, ''), '版本号 = 计划编号后两段');
     assert.deepEqual(r.json.steps.map((s) => s.key), ['plan', 'link', 'docs', 'merge', 'release']);
-    assert.equal(r.json.docsFlow.files.length, 8, 'docsFlow 八文件七态');
-    assert.ok(r.json.docsFlow.files.filter((f) => f.isDefault).every((f) => f.state === 'unsummarized'), '全新版本默认语言全未总结');
+    assert.equal(r.json.docsFlow.files.length, 9, 'docsFlow 4×2 + LICENSE（REQ-20260922-002）');
+    assert.ok(r.json.docsFlow.files.filter((f) => f.isDefault && !f.single).every((f) => f.state === 'unsummarized'), '全新版本默认语言全未总结');
     assert.ok(r.json.docsFlow.files.filter((f) => !f.isDefault).every((f) => f.state === 'untranslated'), '剩余语言初始未翻译（REQ-20260921-012）');
+    assert.equal(r.json.docsFlow.files.find((f) => f.file === 'LICENSE.md').state, 'unwritten', 'LICENSE 初始未编写');
     assert.ok(r.json.summary === null || r.json.summary.phase, 'AI 总结 run 字段存在');
     assert.equal(r.json.docsPrompt, undefined, '提示词不在总览（start 按需生成）');
     assert.ok(r.json.mergeAnalysis.perItem.length === 1, '合并分析含所选条目');

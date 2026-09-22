@@ -65,6 +65,7 @@ t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表�
     DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', untranslated: 'st-mute', translating: 'st-run', translated: 'st-wait', reviewed: 'st-ok' },
     DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', untranslated: '○', translating: '◐', translated: '●', reviewed: '✔' },
     DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+    DOC_SINGLE_KEYS: ['LICENSE'], // REQ-20260922-002 单文件类（审查对话框页签含 LICENSE）
     // REQ-20260921-010 起文档清单按语言集动态展开（原模块级 DOC_FILES 常量下线）
     DEFAULT_DOC_LANGS: ['cn', 'en'],
     langNameOf: (l) => String(l),

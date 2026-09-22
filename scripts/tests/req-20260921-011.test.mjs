@@ -40,6 +40,7 @@ function mdContext({ withMarked = true, breakParser = false } = {}) {
     DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' },
     DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' },
     DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+    DOC_SINGLE_KEYS: ['LICENSE'], // REQ-20260922-002 单文件类（审查对话框页签含 LICENSE）
     DEFAULT_DOC_LANGS: ['cn', 'en'],
     langNameOf: flow.langNameOf,
     docFilesOf: (langs) => flow.publishDocFiles(Array.isArray(langs) && langs.length ? langs : ['cn', 'en']),

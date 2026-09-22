@@ -326,10 +326,10 @@ t('S1~S10 /api/build* 全链路', async () => {
     // REQ-20260920-003：合并前置 = 文档已完成且最新变化已提交——先写八个文档并提交
     //（REQ-20260921-008 起提交门禁：八文件需先全部通过人工审查；REQ-20260921-010 起默认
     // 语言集 cn,en、英文文件为下划线命名 KEY_en.md；REQ-20260921-012 起提交前还需
-    //「整体审查完结」人工确认）
-    const DOCS8 = ['README.md', 'README_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'AGENTS.md', 'AGENTS_en.md'];
+    //「整体审查完结」人工确认；REQ-20260922-002 起清单含 LICENSE.md 单文件）
+    const DOCS = ['README.md', 'README_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'AGENTS.md', 'AGENTS_en.md', 'LICENSE.md'];
     const commitDocsFor = async (id) => {
-      for (const file of DOCS8) {
+      for (const file of DOCS) {
         const r0 = await req(port, 'POST', `/api/build/docs/save${P}`, { id, file, content: `# ${file} (${id})` });
         if (r0.status !== 200) throw new Error(`docs save ${file}: ${r0.text}`);
         const rv = await req(port, 'POST', `/api/build/docs/review${P}`, { id, file });

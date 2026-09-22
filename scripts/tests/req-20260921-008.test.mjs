@@ -53,14 +53,15 @@ const t = (name, fn) => cases.push([name, fn]);
 
 /* ---------- L1 纯逻辑（publish-flow.mjs） ---------- */
 
-t('L1-1 状态枚举与文案唯一事实源：默认语言四态 + 剩余语言三态（REQ-20260921-012 扩展七态）', () => {
+t('L1-1 状态枚举与文案唯一事实源：默认语言四态 + 剩余语言三态 + 单文件类两态（REQ-20260922-002 扩展）', () => {
   assert.deepEqual(
     Object.keys(flow.DOCS_FLOW_LABEL),
-    ['unsummarized', 'summarizing', 'summarized', 'untranslated', 'translating', 'translated', 'reviewed'],
+    ['unsummarized', 'summarizing', 'summarized', 'untranslated', 'translating', 'translated', 'reviewed', 'unwritten', 'pending'],
   );
   assert.deepEqual(flow.DOCS_FLOW_LABEL, {
     unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核',
     untranslated: '未翻译', translating: '正在翻译', translated: '已翻译待审核', reviewed: '已审核',
+    unwritten: '未编写', pending: '待审核',
   });
 });
 
@@ -70,9 +71,10 @@ t('L1-2 evaluateDocsFlow 基础求值：无审核无总结 → 全未总结；su
   const contents = {};
   for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.file}\n`;
   let r = flow.evaluateDocsFlow({}, readsOf(contents), {});
-  assert.equal(r.files.length, 8, '恒为八行');
-  assert.ok(r.defaultFiles.every((f) => f.state === 'unsummarized'), '默认语言无审核无总结全未总结');
+  assert.equal(r.files.length, 9, '4 × 2 + LICENSE（REQ-20260922-002）');
+  assert.ok(r.defaultFiles.filter((f) => !f.single).every((f) => f.state === 'unsummarized'), '默认语言无审核无总结全未总结');
   assert.ok(r.restFiles.every((f) => f.state === 'untranslated'), '剩余语言初始未翻译（REQ-20260921-012）');
+  assert.equal(r.files.find((f) => f.file === 'LICENSE.md').state, 'pending', 'LICENSE 在盘未审为待审核（单文件类不经 AI）');
   assert.equal(r.reviewedCount, 0);
   assert.equal(r.canCommit, false);
 
@@ -115,22 +117,23 @@ t('L1-5 提交门禁求值：canCommit 仅 8/8 reviewed；missing 列出缺口�
   for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.key}`;
   const files = {};
   for (const f of flow.publishDocFiles()) files[f.file] = { hash: sha256(contents[f.file]), at: '2026-09-21T00:00:00Z' };
-  // 先只审 6 个
+  // 先只审 6 个（LICENSE 也不审——单文件类同口径进门禁，REQ-20260922-002）
   const partial = { 'README.md': files['README.md'], 'README_en.md': files['README_en.md'], 'CHANGELOG.md': files['CHANGELOG.md'], 'CHANGELOG_en.md': files['CHANGELOG_en.md'], 'FEATURES.md': files['FEATURES.md'], 'FEATURES_en.md': files['FEATURES_en.md'] };
   let r = flow.evaluateDocsFlow({ review: { files: partial } }, readsOf(contents), {});
   assert.equal(r.reviewedCount, 6);
-  assert.equal(r.canCommit, false, '未满 8/8 不可提交');
-  assert.equal(r.missing.length, 2);
-  assert.deepEqual(r.missing.map((m) => m.file).sort(), ['AGENTS.md', 'AGENTS_en.md']);
+  assert.equal(r.canCommit, false, '未满 9/9 不可提交');
+  assert.equal(r.missing.length, 3);
+  assert.deepEqual(r.missing.map((m) => m.file).sort(), ['AGENTS.md', 'AGENTS_en.md', 'LICENSE.md']);
   assert.equal(r.missing.find((m) => m.file === 'AGENTS.md').state, 'unsummarized', '默认语言缺口带状态');
   assert.equal(r.missing.find((m) => m.file === 'AGENTS_en.md').state, 'untranslated', '剩余语言缺口带状态');
+  assert.equal(r.missing.find((m) => m.file === 'LICENSE.md').state, 'pending', 'LICENSE 缺口为待审核');
 
   r = flow.evaluateDocsFlow({ review: { files } }, readsOf(contents), {});
-  assert.equal(r.canFinalize, true, '8/8 reviewed 可整体审查完结');
+  assert.equal(r.canFinalize, true, '9/9 reviewed 可整体审查完结');
   assert.equal(r.canCommit, false, '整体审查未完结前不可提交（REQ-20260921-012 叠加门禁）');
   assert.deepEqual(r.missing, []);
   r = flow.evaluateDocsFlow({ review: { files, finalized: { at: '2026-09-21T02:00:00Z', langsKey: 'cn,en', files: {} } } }, readsOf(contents), {});
-  assert.equal(r.canCommit, true, '8/8 reviewed + 整体完结可提交');
+  assert.equal(r.canCommit, true, '9/9 reviewed + 整体完结可提交');
 });
 
 t('L1-6 AI 总结提示词：计划号/版本号/项目路径/八文档/逐文件进度回执 CLI 指令/写作约束', () => {
@@ -303,11 +306,12 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
     assert.equal(r.status, 201, `创建版本：${r.text}`);
     const vid = r.json.version.id;
 
-    // publish-plan：docsFlow 八文件四态 + summary 字段；docsPrompt 移除
+    // publish-plan：docsFlow 4×2 + LICENSE + summary 字段；docsPrompt 移除
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.status, 200);
-    assert.equal(r.json.docsFlow.files.length, 8, 'docsFlow 恒为八行');
-    assert.ok(r.json.docsFlow.files.filter((f) => f.isDefault).every((f) => f.state === 'unsummarized'), '全新版本默认语言全未总结');
+    assert.equal(r.json.docsFlow.files.length, 9, 'docsFlow 4 × 2 + LICENSE（REQ-20260922-002）');
+    assert.equal(r.json.docsFlow.files.find((f) => f.file === 'LICENSE.md').state, 'unwritten', 'LICENSE 初始未编写');
+    assert.ok(r.json.docsFlow.files.filter((f) => f.isDefault && !f.single).every((f) => f.state === 'unsummarized'), '全新版本默认语言全未总结');
     assert.ok(r.json.docsFlow.files.filter((f) => !f.isDefault).every((f) => f.state === 'untranslated'), '剩余语言初始未翻译');
     assert.equal(r.json.docsFlow.canCommit, false);
     assert.ok(r.json.summary === null || r.json.summary.phase, 'summary 字段存在');
@@ -359,7 +363,7 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
       assert.equal(r.status, 200, `review ${f.file}：${r.text}`);
     }
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canFinalize, true, '8/8 已审核可整体完结');
+    assert.equal(r.json.docsFlow.canFinalize, true, '9/9 已审核可整体完结（含 LICENSE）');
     assert.equal(r.json.docsFlow.canCommit, false, '完结前提交不放行');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 400, '整体审查未完结提交被阻止');
@@ -367,7 +371,7 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
     assert.equal(r.status, 200, `finalize：${r.text}`);
     assert.ok(r.json.docsFlow.finalized && r.json.docsFlow.finalized.at, '完结标识与时间');
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canCommit, true, '8/8 已审核 + 已完结');
+    assert.equal(r.json.docsFlow.canCommit, true, '9/9 已审核 + 已完结');
 
     // 不在 dev：提交被阻止（不自动切分支）
     git(proj, ['switch', 'main']);
@@ -381,7 +385,7 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
     const docHash = r.json.commitHash;
     assert.ok(/^[0-9a-f]{40}$/.test(docHash));
     const stat = git(proj, ['show', '--name-only', '--format=', docHash]).split('\n').filter(Boolean);
-    assert.deepEqual(stat.sort(), Object.keys(contents).sort(), 'pathspec 只含八文档');
+    assert.deepEqual(stat.sort(), Object.keys(contents).sort(), 'pathspec 只含清单内文档（4×2 + LICENSE）');
     // 提交后门禁衔接：docsFlow 全 reviewed 且 overall=committed 满足合并前置
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.json.docsFlow.canCommit, true, '提交后内容未变保持已审核');
@@ -430,6 +434,7 @@ const FLOW_STUB = {
   DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', untranslated: 'st-mute', translating: 'st-run', translated: 'st-wait', reviewed: 'st-ok' },
   DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', untranslated: '○', translating: '◐', translated: '●', reviewed: '✔' },
   DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+  DOC_SINGLE_KEYS: ['LICENSE'], // REQ-20260922-002 单文件类（审查对话框页签含 LICENSE）
   // REQ-20260921-010 起文档清单按语言集动态展开（原模块级 DOC_FILES 常量下线）
   DEFAULT_DOC_LANGS: ['cn', 'en'],
   langNameOf: (l) => String(l),
