@@ -3734,6 +3734,14 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 }
 .bld-doc-row:last-child { border-bottom: none; }
 .bld-doc-fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+/* REQ-20260922-002 单文件类（LICENSE，A1 不随语言集）「不分语言」标签：独立可翻译元素，
+   弱化呈现不与状态 chip 抢焦点（深浅色取 muted 前景色，适配两种外观） */
+.bld-doc-single-tag {
+  font-size: 11.5px; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 8px; margin-left: 8px; white-space: nowrap;
+}
+.bld-doc-row .bld-doc-single-tag { align-self: center; }
+.bld-review-col-head .bld-doc-single-tag { margin-left: 6px; }
 .bld-doc-row-st { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .st .st-ico { font-style: normal; margin-right: 5px; }
 .bld-docs-loading {

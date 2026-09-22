@@ -113,9 +113,11 @@ export function latestTranslateRun(dataDir, verId = null) {
 // ---------- 生命周期 ----------
 
 // 剩余语言文件清单（语言集其余语言的全部文件，4 × (N−1)）：翻译账本只装这些文件——
-// 默认语言文件属阶段一（AI 总结 + 审查），不经翻译产出。
+// 默认语言文件属阶段一（AI 总结 + 审查），不经翻译产出；单文件类（LICENSE，
+// REQ-20260922-002 口径 B）不进 AI 翻译，同样排除。
 function restLangFiles(langs) {
-  return publishDocFiles(docLangsOf({ langs })).filter((f) => f.lang !== docLangsOf({ langs })[0]);
+  const ls = docLangsOf({ langs });
+  return publishDocFiles(ls).filter((f) => f.lang != null && f.lang !== ls[0]);
 }
 
 // 启动一轮 AI 翻译：按语言集展开**剩余语言**文件全部 pending，占用独立锁。同一时间至多

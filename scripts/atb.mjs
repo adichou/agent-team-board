@@ -1333,8 +1333,10 @@ async function translateCmd(rest) {
       { statFile: statDoc },
     );
     if (!flowEval.canTranslate) {
+      // REQ-20260922-002：默认语言组计数含 LICENSE（不分语言），AI 翻译解锁只看默认语言 4 类
+      //（translateMissing），缺口提示不用分组分数（避免 4/5 已审核却解锁的歧义）。
       const gap = flowEval.translateMissing.map((m) => `${m.file}（${publishFlow.DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、');
-      die(`AI 翻译未解锁：默认语言 ${flowEval.defaultReviewedCount}/${flowEval.defaultFiles.length} 已审核，尚缺：${gap || '无文件'}；请先在看板「文档编写」页完成默认语言文档的人工审核`);
+      die(`AI 翻译未解锁：默认语言尚缺 ${flowEval.translateMissing.length} 个文件审核（${gap || '无文件'}）；请先在看板「文档编写」页完成默认语言文档的人工审核`);
     }
     const langs = publishFlow.docLangsOf(v);
     const run = docsTranslate.createTranslateRun(dataDir, { verId: v.id, owner: opts.by || 'translate', langs });
