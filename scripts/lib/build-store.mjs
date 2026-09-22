@@ -174,7 +174,44 @@ function assertNotOccupied(dataDir, itemIds, excludeVersionId = null) {
 // targetBranch（REQ-20260916-005）：版本计划的合并目标主分支——服务端创建时按
 // git-flow resolveMainBranch 解析结果传入（仅 master 历史仓库为 'master'）；缺省
 // TARGET_BRANCH（'main'），数据层不读 git、不猜测（旧调用 / 既有口径兼容）。
-export function createVersion(dataDir, { name, items, targetBranch = TARGET_BRANCH, by = 'board' } = {}) {
+// REQ-20260922-006 版本号：独立顶层 `version`（x.y.z 语义化格式），与计划编号（BLD-…，
+// 仍用于目录与审计）解耦；显示与发布提示词以 version 为准，存量数据无该字段时由
+// 展示层回退旧派生口径（YYYYMMDD-NNN），不迁移数据。
+export const VERSION_NUMBER_RE = /^\d+\.\d+\.\d+$/;
+
+const verParts = (s) => {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(s ?? ''));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+};
+
+// 缺省自动分配：既有计划 version 的最大者 patch +1（major/minor/patch 数值比较）；无历史 0.1.0。
+function nextVersionNumber(dataDir) {
+  let best = null;
+  for (const v of listVersions(dataDir)) {
+    const cur = verParts(v.version);
+    if (!cur) continue;
+    if (!best
+      || cur[0] > best[0]
+      || (cur[0] === best[0] && (cur[1] > best[1] || (cur[1] === best[1] && cur[2] > best[2])))) best = cur;
+  }
+  return best ? `${best[0]}.${best[1]}.${best[2] + 1}` : '0.1.0';
+}
+
+// 版本号解析：空 / 缺省 → 自动分配；非法格式 / 与既有计划重复 → AtbError（唯一性按当前
+// 存在的计划校验，删除后可复用，与计划编号口径一致）。
+function resolveVersionNumber(dataDir, version) {
+  const given = String(version ?? '').trim();
+  if (!given) return nextVersionNumber(dataDir);
+  if (!VERSION_NUMBER_RE.test(given)) {
+    throw new AtbError(`版本号须为 x.y.z 语义化格式（如 0.1.0）：${given}`);
+  }
+  for (const v of listVersions(dataDir)) {
+    if (v.version === given) throw new AtbError(`版本号 ${given} 已被版本计划 ${v.id} 使用，不可重复`);
+  }
+  return given;
+}
+
+export function createVersion(dataDir, { name, items, targetBranch = TARGET_BRANCH, version = null, by = 'board' } = {}) {
   const info = validateInfo({ name: name ?? '', description: '' });
   const normalized = normalizeItems(items);
   // BUG-20260914-004：先校验占用再分配编号，被拒绝的创建不占当日序列
@@ -182,6 +219,7 @@ export function createVersion(dataDir, { name, items, targetBranch = TARGET_BRAN
   const v = {
     schema: 1,
     id: nextVersionId(dataDir),
+    version: resolveVersionNumber(dataDir, version),
     name: info.name || defaultName(),
     description: '',
     status: 'draft',
@@ -583,6 +621,9 @@ export function recordPushSuccess(dataDir, id, { remote, sha } = {}) {
     pushedAt: sameBaseline ? prev.pushedAt : nowIso(),
     site: sameBaseline ? (prev.site || { status: 'waiting' }) : { status: 'waiting', evidence: null, checkedHead: null, lastScanAt: null, nextScanAt: null, note: '推送基准已变化，重新检测' },
   };
+  // REQ-20260922-006 发布时间：作为版本计划一等属性随推送成功同步（与 release.pushedAt
+  // 同刻同语义——同基准不重置、基准变化更新）；存量已推送计划无该字段，由读取侧回退。
+  v.releasedAt = v.release.pushedAt;
   v.by = 'board';
   return writeVersion(dataDir, v);
 }
