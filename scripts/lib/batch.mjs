@@ -1027,6 +1027,10 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
       ...(Array.isArray(autoCommit.pendingManual) && autoCommit.pendingManual.length
         ? { pendingManual: autoCommit.pendingManual.slice(0, 20) }
         : {}),
+      // REQ-20260922-007：被忽略的条目文档差异随回执显式上抛（不随收口提交，保留在工作区）
+      ...(Array.isArray(autoCommit.ignoredDocs) && autoCommit.ignoredDocs.length
+        ? { ignoredDocs: autoCommit.ignoredDocs.slice(0, 10) }
+        : {}),
       ...(autoCommit.reason ? { reason: autoCommit.reason } : {}),
     };
     // REQ-20260914-001：提交完整性是收尾与后续派发的前置——归属不明 / 暂扣 / 失败 /

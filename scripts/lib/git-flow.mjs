@@ -8,6 +8,8 @@
 //   2. 自动提交：autoCommitForRun —— 批量开发回执核验通过（reported）后，以
 //      「领取时工作区快照 → 收尾时差集」做确定性归因，把本单改动按 doc / test /
 //      业务三组提交（git add -A 指定路径 + git commit --only，只 commit 不 push）。
+//      REQ-20260922-007：本单条目目录内的文档编写差异不随收口提交（记入 ignoredDocs
+//      保留在工作区，经文档讨论轮/人工通道提交）；板级共享路径仍随 doc 组收纳。
 //      由 atb 进程内部 spawnSync 执行，不经 Agent Bash 工具，天然不受 state-guard
 //      拦截（REQ-20260911-009 授权口径：批量批次内 = 视同人工授权）。
 //   3. 索引：itemCommitLog / itemOfCommit —— 条目 ↔ commit 双向关联；正向与看板
@@ -445,12 +447,16 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
       || p.startsWith(legacyBoardRel + '/')
       || (itemRel && (p === itemRel || p.startsWith(itemRel + '/')));
 
-    // 归因集合（design 定稿口径；REQ-20260916-007 新布局）：
+    // 归因集合（design 定稿口径；REQ-20260916-007 新布局；REQ-20260922-007 文档口径）：
     //   doc 组 = 看板板根（agent-team-board/，实际脏路径来自 data/）与过渡期旧前缀
     //            （docs/agent-team-board/，存量迁移产生的删除/搬移）内当前全部脏路径，
-    //            排除其他条目目录——本单条目目录整体纳入；看板共享文件随本单 doc 提交收纳；
+    //            排除其他条目目录；看板共享文件随本单 doc 提交收纳；
     //            重命名（R 码，git mv 位置搬移）一律视为板级共享：纯搬移不按单排除，
     //            保证迁移成对入库（git log --follow 历史可循）；
+    //   ignoredDocs（REQ-20260922-007）= 本单条目目录（agent-team-board/data/{requirements,
+    //            bugs}/<本单ID>/）内的文档编写差异——不随收口提交、不还原，保留在工作区，
+    //            经文档讨论轮（pathspec + 单号主题）/人工通道提交；重命名与留痕文档出库
+    //            （owner 解析为 null 的板级共享）不在此列，仍随 doc 组收纳；
     //   test / 业务组 = 严格按快照差集（非看板路径）——预留前已存在的无关改动绝不卷入。
     //   BUG-20260913-006：非看板路径若「预留前已脏且本单动过」（同码内容变，或码也变
     //   但快照有预留前内容基线——整文件提交会连带预留前旧脏内容），不自动归因，列入
@@ -458,6 +464,7 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     const groups = { doc: [], test: [], biz: [] };
     const excluded = [];
     const pendingManual = [];
+    const ignoredDocs = [];
     const preReservedDirty = (p) => Boolean(
       run.treeSnapshot.trackedHashes && run.treeSnapshot.trackedHashes[p] != null,
     );
@@ -469,6 +476,7 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
         const renamed = code.startsWith('R') || code.includes('R');
         const owner = renamed ? null : owningItemIdOf(boardRel, p);
         if (owner && owner !== itemId && !inItem) { excluded.push(p); continue; }
+        if (inItem && owner === itemId) { ignoredDocs.push(p); continue; } // REQ-20260922-007：本单条目文档不随收口提交
         groups.doc.push(p);
         continue;
       }
@@ -497,14 +505,29 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     if (pendingManual.length) plan = plan.filter(([kind]) => kind === 'doc');
 
     if (!plan.length) {
-      // 无可自动提交分组（可能仍有待人工路径）：明细如实落盘，不误报 committed
-      const reason = manualPendingReason(pendingManual, heldGroups);
-      if (pendingManual.length) {
-        writeAutoCommitLedger(dataDir, { run, itemId, title, commits: [], excluded, pendingManual, heldGroups });
+      // 无可自动提交分组（可能仍有待人工路径 / 仅剩被忽略的条目文档差异）：
+      // 明细如实落盘，不误报 committed、不产生空提交
+      const reason = pendingManual.length
+        ? manualPendingReason(pendingManual, heldGroups)
+        : (ignoredDocs.length ? docsIgnoredReason(ignoredDocs) : '变更均不归属本单（其他条目/账本文件），已保留在工作区');
+      if (pendingManual.length || ignoredDocs.length) {
+        writeAutoCommitLedger(dataDir, {
+          run, itemId, title, commits: [], excluded, pendingManual, heldGroups,
+          ...(ignoredDocs.length ? { ignoredDocs } : {}),
+          ...(!pendingManual.length
+            ? { summaryNote: '收口跳过：仅条目文档改动（REQ-20260922-007 不随收口提交，保留在工作区走文档流程）' }
+            : {}),
+        });
       }
       return pendingManual.length
-        ? { status: 'skipped', commits: [], excluded, pendingManual, heldGroups, reason }
-        : { status: 'skipped', commits: [], reason: '变更均不归属本单（其他条目/账本文件），已保留在工作区' };
+        ? {
+          status: 'skipped', commits: [], excluded, pendingManual, heldGroups,
+          ...(ignoredDocs.length ? { ignoredDocs } : {}),
+          reason,
+        }
+        : (ignoredDocs.length
+          ? { status: 'skipped', commits: [], ignoredDocs, reason }
+          : { status: 'skipped', commits: [], reason: '变更均不归属本单（其他条目/账本文件），已保留在工作区' });
     }
 
     const commits = [];
@@ -537,7 +560,10 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     }
 
     // 账本登记（与人工批量 commit 的 committedItemIndex 同源 → 看板「已提交」徽标点亮）
-    writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups });
+    writeAutoCommitLedger(dataDir, {
+      run, itemId, title, commits, excluded, pendingManual, heldGroups,
+      ...(ignoredDocs.length ? { ignoredDocs } : {}),
+    });
     return pendingManual.length
       ? {
         status: 'committed', // 部分提交（doc 组）；待人工路径与暂扣组显式携带，不表现为全量
@@ -545,9 +571,18 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
         excluded,
         pendingManual,
         heldGroups,
+        ...(ignoredDocs.length ? { ignoredDocs } : {}),
         reason: manualPendingReason(pendingManual, heldGroups),
       }
-      : { status: 'committed', commits, excluded, reason: null };
+      : (ignoredDocs.length
+        ? {
+          status: 'committed', // 源码/测试照常收口；条目文档差异被忽略（REQ-20260922-007），如实携带
+          commits,
+          excluded,
+          ignoredDocs,
+          reason: docsIgnoredReason(ignoredDocs),
+        }
+        : { status: 'committed', commits, excluded, reason: null });
   } catch (e) {
     // BUG-20260915-003：归因阶段意外失败同样保留完整错误并落明细账（status=failed），
     // 不再只留截断 reason——现场可诊断、面板可展示。
@@ -583,11 +618,17 @@ function manualPendingReason(pendingManual, heldGroups) {
     + (held ? `；本单 test/业务 ${held} 个路径已一并暂扣待人工处理后补提交` : '');
 }
 
+// REQ-20260922-007 条目文档差异被忽略的原因短句（≤200 字）：committed 时为随行说明，
+// 仅文档改动时为 skipped 原因——均如实注明「不随收口提交、保留在工作区走文档流程」。
+function docsIgnoredReason(ignoredDocs) {
+  return `条目文档 ${ignoredDocs.length} 个路径按 REQ-20260922-007 不随收口提交，已保留在工作区，经文档讨论轮/人工通道提交`;
+}
+
 // 自动提交账本：写入 commits/runs/（runId 采用 commit 账本形态），phase=committed 供
 // committedItemIndex 收录；完整明细另落 dispatch 运行目录 auto-commit.json。
 // BUG-20260913-006：仅有待人工路径、无实际提交时不写 commits/runs（徽标不误点亮），
 // 但明细仍落盘如实记录 pendingManual（路径 + 建议）与 heldGroups。
-function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups, summaryNote = null, statusOverride = null, errorFull = null }) {
+function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded, pendingManual, heldGroups, ignoredDocs = [], summaryNote = null, statusOverride = null, errorFull = null }) {
   const d = new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const rand = crypto.randomBytes(2).toString('hex');
@@ -628,6 +669,8 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
       pendingManual: pending,
       pendingManualAdvice: pending.length ? PENDING_MANUAL_ADVICE : undefined,
       ...(heldGroups ? { heldGroups } : {}),
+      // REQ-20260922-007：被忽略的条目文档差异如实入明细（不提交、保留在工作区走文档流程）
+      ...(Array.isArray(ignoredDocs) && ignoredDocs.length ? { ignoredDocs } : {}),
       ...(errorFull ? { errorFull: String(errorFull).slice(0, 4000) } : {}),
     });
   } catch { /* 明细写失败不影响主流程 */ }
