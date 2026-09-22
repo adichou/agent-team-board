@@ -466,7 +466,9 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     // 提示词改由 docs-summary/start 按需生成）
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.status, 200, `publish-plan：${r.text}`);
-    assert.equal(r.json.versionNumber, vid.replace(/^BLD-/, ''), '版本号 = 计划编号后两段');
+    // REQ-20260922-006：新计划版本号取自动分配的 x.y.z（首个 0.1.0），不再从计划编号派生
+    assert.equal(r.json.versionNumber, r.json.version.version, '版本号 = 计划的 x.y.z 字段');
+    assert.equal(r.json.version.version, '0.1.0', '本夹具为该看板首个计划，自动分配 0.1.0');
     assert.deepEqual(r.json.steps.map((s) => s.key), ['plan', 'link', 'docs', 'merge', 'release']);
     assert.equal(r.json.docsFlow.files.length, 9, 'docsFlow 4×2 + LICENSE（REQ-20260922-002）');
     assert.ok(r.json.docsFlow.files.filter((f) => f.isDefault && !f.single).every((f) => f.state === 'unsummarized'), '全新版本默认语言全未总结');
