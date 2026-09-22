@@ -127,7 +127,7 @@ t('C1d validateRunRequest 白名单校验', () => {
   assert.equal(cliRegistry.validateRunRequest({ command: 'list', args: [42] }).ok, false, 'args 含非字符串拒绝');
   assert.equal(cliRegistry.validateRunRequest({ command: 'list', args: ['--dir', '/tmp'] }).ok, false, 'args 携带 --dir 拒绝');
   assert.equal(cliRegistry.validateRunRequest({ command: 'cli status', args: [] }).ok, false, 'disabled 命令拒绝执行');
-  assert.equal(cliRegistry.validateRunRequest({ command: 'batch delete', args: [] }).ok, false, 'batch delete 必填参数缺失时以表单校验为准（服务端放行，白名单只管命令面）');
+  assert.equal(cliRegistry.validateRunRequest({ command: 'batch delete', args: ['BAT-20260920-001'] }).ok, false, 'agentOnly 命令（REQ-20260922-001）参数齐全也拒绝网页下发，CLI 命令面不受影响');
   const ok = cliRegistry.validateRunRequest({ command: 'show', args: ['REQ-20260920-004'] });
   assert.equal(ok.ok, true, '合法命令通过');
   assert.equal(ok.spec.name, 'show');
@@ -174,13 +174,18 @@ t('C2 服务端命令清单 / 白名单执行 / 互斥 / run-status 全链路', 
   const P = `?project=${encodeURIComponent(projA)}`;
   const PB = `?project=${encodeURIComponent(projB)}`;
   try {
-    // C2a 命令清单：分组 / 命令 / 参数元数据；排除三组不出现
+    // C2a 命令清单：分组 / 命令 / 参数元数据；排除三组不出现。
+    // REQ-20260922-001：清单下发 visibleGroups（agentOnly 过滤后）——可见分组 7
+    //（12 − 整组隐藏的 AI 开发 / 执行回执 / AI 分析 / 发布文档 AI 总结 / AI 翻译 5 组），
+    // 组内隐藏的 claim / report / hold declare 不在清单；注册表本体仍含全部命令（C1 口径）。
     let r = await req(port, 'GET', '/api/cli/commands');
     assert.equal(r.status, 200, `清单应可用：${r.text}`);
-    assert.ok(Array.isArray(r.json.groups) && r.json.groups.length === 12, `分组数应 12（数据与分发…终端命令，含发布文档 AI 总结 / AI 翻译）：${r.json.groups?.length}`);
+    assert.ok(Array.isArray(r.json.groups) && r.json.groups.length === 7, `可见分组应 7（12 − AI Agent 整组隐藏 5，REQ-20260922-001）：${r.json.groups?.length}`);
     const flat = r.json.groups.flatMap((g) => g.commands.map((c) => c.name));
-    assert.ok(flat.includes('batch delete') && flat.includes('commit which') && flat.includes('prune-locks'));
+    assert.ok(flat.includes('commit which') && flat.includes('prune-locks'));
     assert.ok(!flat.some((n) => /^(oncall|disc|growth)\b/.test(n)), '排除三组恒不出现');
+    assert.ok(!flat.some((n) => /^(batch|run|refine|summary|translate)\b/.test(n)), 'AI Agent 五组（REQ-20260922-001）不在看板清单');
+    assert.ok(!['claim', 'report', 'hold declare'].some((n) => flat.includes(n)), '组内隐藏命令（claim / report / hold declare）不在清单');
     const showCmd = r.json.groups.flatMap((g) => g.commands).find((c) => c.name === 'show');
     assert.ok(showCmd.args?.length >= 1 && showCmd.args[0].required === true, 'show 应带必填 ID 参数元数据');
     const delCmd = r.json.groups.flatMap((g) => g.commands).find((c) => c.name === 'delete');
