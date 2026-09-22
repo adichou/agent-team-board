@@ -38,6 +38,8 @@ import * as refine from './lib/refine-store.mjs';
 import * as docsSummary from './lib/docs-summary-store.mjs';
 // REQ-20260921-012：发布文档 AI 翻译执行账本（独立锁 translate.lock，与总结/分析/开发互斥隔离）。
 import * as docsTranslate from './lib/docs-translate-store.mjs';
+// REQ-20260922-005：主流开源协议目录（弹框「选择开源协议」静态数据源，含 SPDX 标准文本）。
+import * as licenseCatalog from './lib/license-catalog.mjs';
 // REQ-20260911-010：commit-store（提交规范内核/已提交索引）不再被服务端直接引用——
 // /api/commit/item-status 已换源至 gitFlow.itemCommitStatusIndex（REQ-20260911-009 索引）。
 import * as refineStates from './lib/refine-states.mjs';
@@ -2703,6 +2705,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       docs: docsEval,
       docsFlow: docsFlowOf(board, v),
     });
+  }
+
+  // GET /api/build/doc-licenses：REQ-20260922-005 主流开源协议目录（元数据 + SPDX 标准文本）。
+  // 静态内置数据，不依赖看板 / 版本状态与网络（弹框「选择开源协议」打开时拉取一次）；
+  // 写入不设新接口——前端确认后走既有 /api/build/docs/save 白名单通道（file=LICENSE.md）。
+  if (req.method === 'GET' && pathname === '/api/build/doc-licenses') {
+    return sendJson(res, 200, { licenses: licenseCatalog.licenseCatalogView() });
   }
 
   // POST /api/build/docs/langs {id, langs}：REQ-20260921-010 设置文档语言集（逗号分隔缩写，
