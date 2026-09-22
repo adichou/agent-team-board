@@ -55,10 +55,10 @@ t('R10 CLI 全链路：create（含提示词）→ next → 补文档 → done �
   assert.match(nx.runId, /^run-/);
   assert.ok(nx.itemDir.endsWith(req.id));
 
-  // 未收尾再领 → 非零退出带原因
-  r = atb(['refine', 'next', '--by', 'zcode-refine-001-2'], root);
-  assert.notEqual(r.code, 0);
-  assert.match(r.err, /未收尾/);
+  // REQ-20260922-004 并行（≤3）：在途 <3 时第二路领取不同条目成功（旧「未收尾」串行拦截已移除）
+  const nx2 = JSON.parse(atb(['refine', 'next', '--by', 'zcode-refine-001-2', '--json'], root).out.split('\n').filter(Boolean).pop());
+  assert.equal(nx2.itemId, bug.id, '第二路并行领取 Bug 条目');
+  assert.notEqual(nx2.runId, nx.runId, '两路 runId 不同');
 
   // 不改文档直接 done → 拒绝
   r = atb(['refine', 'done', nx.runId, '--summary', '没改文档'], root);
@@ -74,11 +74,10 @@ t('R10 CLI 全链路：create（含提示词）→ next → 补文档 → done �
   assert.match(r.out, /"itemId":"REQ-\d{8}-\d{3}"/);
   assert.match(r.out, /"title":"补全我"/);
 
-  // check：还有一项待处理 → continue；领第二项用 fail 收尾
+  // check：剩余唯一项在途（可领数 0）→ needs_attention；第二路用 fail 收尾
   let ck = JSON.parse(atb(['refine', 'check', '--json'], root).out.split('\n').filter(Boolean).pop());
-  assert.equal(ck.nextAction, 'continue');
+  assert.equal(ck.nextAction, 'needs_attention', '队列余量全部在途 → 等待回执（REQ-20260922-004 口径）');
   assert.equal(ck.counts.remaining, 1);
-  const nx2 = JSON.parse(atb(['refine', 'next', '--by', 'zcode-refine-001-2', '--json'], root).out.split('\n').filter(Boolean).pop());
   r = atb(['refine', 'fail', nx2.runId, '--reason', '信息不足：复现环境无法确认'], root);
   assert.equal(r.code, 0, `fail 应成功（${r.err}）`);
   assert.match(r.out, /"title":"bug 也补"/, 'fail 回执也应带条目标题');

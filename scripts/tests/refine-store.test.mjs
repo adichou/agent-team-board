@@ -275,42 +275,52 @@ t('R4b 重复派发保护（REQ-20260913-003 口径）：未结束轮内一律�
   assert.doesNotThrow(() => refine.nextRefineItem(dataDir, b1.batch.batchId, { owner: 'w1' }), '队首账本可领取');
 });
 
-t('R5 领取：预留+互斥；未收尾重复领取被拒；状态变化出局记 skipped；人工编辑不跳过（BUG-20260908-011）', () => {
+t('R5 领取：预留+短临界区（REQ-20260922-004 并行 ≤3）；在途 <3 可并行领不同条目；状态变化出局记 skipped；人工编辑不跳过（BUG-20260908-011）', () => {
   const { root, dataDir } = mkProject();
-  const items = ['r1', 'r2', 'r3'].map((title) => {
+  const items = ['r1', 'r2', 'r3', 'r4'].map((title) => {
     const x = core.createItem(dataDir, { type: 'requirement', title });
     accept(dataDir, x.id);
     return x;
   });
-  const [req1, req2, req3] = items;
+  const [req1, req2, req3, req4] = items;
   const { batch } = refine.createRefineBatch(dataDir, { mode: 'zcode', projectRoot: root });
   const got = refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w1' });
   assert.equal(got.itemId, req1.id, '按冻结序领取第一项');
   assert.match(got.runId, /^run-/);
   assert.ok(got.reasons.length, '领取结果带缺失原因');
   assert.ok(got.itemDir.endsWith(req1.id), '领取结果带条目目录');
-  assert.ok(fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')), '领取应持有 refine 互斥锁');
-  assert.throws(() => refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w1b' }), /未收尾/, '在途执行不得二次领取');
+  // REQ-20260922-004 锁语义迁移：zcode 领取不再持有全局 refine.lock（改 refine-next 短临界区，
+  // 操作完成即释放）；并行下第二路在途 <3 可领取**不同**条目（旧「未收尾」串行拦截已移除）
+  assert.ok(!fs.existsSync(path.join(dataDir, 'runtime', '.locks', 'refine.lock')),
+    '领取不持有全局 refine.lock（REQ-20260922-004 锁迁移）');
+  const got2 = refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w1b' });
+  assert.equal(got2.itemId, req2.id, '在途 <3 时第二路并行领取不同条目');
 
   // 完成第一项（先改文档再 done；条目保持 accepted）
   fs.writeFileSync(path.join(got.itemDir, 'README.md'), '# r1\n\n## 描述\n补全后的说明，超过三十个字符以保证判定完整。\n\n## 验收标准\n\n- [x] 可筛选\n');
   refine.finishRefineRun(dataDir, got.runId, { result: 'done', summary: '补全 r1' });
 
-  // req2 冻结后置为已计划（离开已接受）→ 领取时出局记 skipped；
-  // req3 冻结后被人工编辑 → BUG-20260908-011：领取时重冻结基线，正常领取不再出局
-  core.setStatus(dataDir, req2.id, 'planned', { by: 'human' });
-  const req3dir = core.resolveItemDir(dataDir, req3.id).dir;
-  fs.writeFileSync(path.join(req3dir, 'README.md'), '# r3\n人工已自行补全一版说明，内容足够长。\n');
+  // req3 冻结后置为已计划（离开已接受）→ 领取时出局记 skipped；
+  // req4 冻结后被人工编辑 → BUG-20260908-011：领取时重冻结基线，正常领取不再出局
+  core.setStatus(dataDir, req3.id, 'planned', { by: 'human' });
+  const req4dir = core.resolveItemDir(dataDir, req4.id).dir;
+  fs.writeFileSync(path.join(req4dir, 'README.md'), '# r4\n人工已自行补全一版说明，内容足够长。\n');
   const got3 = refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w2' });
-  assert.equal(got3.itemId, req3.id, '被人工编辑的条目按领取时基线正常领取');
+  assert.equal(got3.itemId, req4.id, '在途 r2 跳过、planned r3 出局、被人工编辑的 r4 按领取时基线正常领取');
   fs.appendFileSync(path.join(got3.itemDir, 'README.md'), '\n子代理补全说明\n');
-  refine.finishRefineRun(dataDir, got3.runId, { result: 'done', summary: '补全 r3' });
+  refine.finishRefineRun(dataDir, got3.runId, { result: 'done', summary: '补全 r4' });
+  // 队列已取空但 r2 仍在途：stop=finished + 在途等待提示，不落 finished（REQ-20260922-004）
+  const drain = refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w3' });
+  assert.equal(drain.stop, 'finished', '队列取空 → stop=finished');
+  assert.match(drain.notice, /在途|等待/, '在途未清零时提示等待回执');
+  assert.notEqual(refine.getRefineBatch(dataDir, batch.batchId).status, 'finished', '在途未清零不收尾落账');
+  refine.releaseRefineRun(dataDir, got2.runId, { reason: '认领冲突换单' });
   const end = refine.nextRefineItem(dataDir, batch.batchId, { owner: 'w3' });
-  assert.equal(end.stop, 'finished', '最后一项状态变化出局 → 收尾');
+  assert.equal(end.stop, 'finished', '在途清零 → 收尾');
   const runs = refine.listRefineRuns(dataDir, batch.batchId, { offset: 0, limit: 20 });
   const skipped = runs.records.filter((x) => x.result === 'skipped');
   assert.equal(skipped.length, 1, '仅状态变化一条 skipped（人工编辑不再出局）');
-  assert.match(skipped.find((x) => x.itemId === req2.id).reason, /状态已变化/);
+  assert.match(skipped.find((x) => x.itemId === req3.id).reason, /状态已变化/);
   const ck = refine.checkRefineBatch(dataDir, batch.batchId);
   assert.equal(ck.counts.done, 2);
   assert.equal(ck.counts.skipped, 1);
