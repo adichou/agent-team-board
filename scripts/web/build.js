@@ -2841,6 +2841,12 @@ const ATBBuild = (() => {
         </header>
         <div class="rel-panel-body">
           ${p.loadError ? `<p class="rel-form-err" role="alert">${esc(p.loadError)} <button type="button" class="btn small" id="bldPanelRetry">重试</button></p>` : ''}
+          <!-- BUG-20260922-006：版本名称 / 版本号输入框上移至面板 body 顶部（候选清单之前），
+            done 条目多时不再被长清单挤到折叠线下；候选加载中也可先行填写（版本号已预填建议值）。 -->
+          ${p === state.createPanel ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）
+            <input id="bldNewName" value="${esc(p.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}
+          ${p === state.createPanel ? `<label class="field">版本号（x.y.z 语义化格式，留空自动分配）
+            <input id="bldNewVersion" value="${esc(p.version)}" placeholder="0.1.0（自动递增，可修改）"></label>` : ''}
           ${!p.candidates ? '<p class="muted">正在读取条目…</p>'
             : p.candidates.length === 0 ? `<p class="muted bld-cand-empty">${p.totalDone
               ? '已完成的条目均已纳入版本计划：可从「计划中 / 失败」版本移出条目，或删除版本后重新纳入' // BUG-20260914-004：区分「均已被占用」空态
@@ -2853,10 +2859,6 @@ const ATBBuild = (() => {
             <span class="muted small">已选 ${p.picked.size} 项${skipped ? ` · ${skipped} 个条目暂无关联提交将被跳过` : ''}</span>
           </div>
           ${renderCandidateRows(p, p === state.createPanel ? 'createPanel' : 'addPanel')}
-          ${p === state.createPanel ? `<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）
-            <input id="bldNewName" value="${esc(p.name)}" placeholder="v1.0 / 2026-09 冲刺"></label>` : ''}
-          ${p === state.createPanel ? `<label class="field">版本号（x.y.z 语义化格式，留空自动分配）
-            <input id="bldNewVersion" value="${esc(p.version)}" placeholder="0.1.0（自动递增，可修改）"></label>` : ''}
           ${p.error ? `<p class="rel-form-err" role="alert">${esc(p.error)}</p>` : ''}`}
         </div>
         <footer class="rel-panel-foot">
