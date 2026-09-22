@@ -4,8 +4,11 @@
 
 | # | 用例 | 优先级 | 结果 |
 | -- | ---- | ------ | ---- |
-| 1 | 正式发布步第二步标题为「第二步 · 官网 AI 总结」；`scripts/web/build.js` 与 `scripts/web/i18n.js` 全文无「AI 写作」残留 | P0 | 通过（build.js 全文无残留；i18n.js 键字面量无残留，历史注释保留更名记录） |
-| 2 | i18n 新键中英齐备：`EN['官网 AI 总结'] === 'Website AI summary'`、`EN['第二步 · 官网 AI 总结'] === 'Step 2 · Website AI summary'`；旧键「官网 AI 写作」「第二步 · 官网 AI 写作」已清理；全词典值无「AI writing」 | P0 | 通过 |
-| 3 | 提示词预览默认折叠：`renderDocsPane` 中 AI 总结 / AI 翻译两个 `<details class="bld-docs-prompt-box">` 均不带 `open` 属性；「复制提示词」按钮（data-pf-copy-prompt / data-pf-copy-tprompt）仍存在 | P0 | 通过 |
+| 1 | ~~正式发布步「官网 AI 写作」更名「官网 AI 总结」~~ **作废**：人工 2026-09-21 已确认「官网 AI 写作不更名」（confirms 第 1 轮），本轮误实施待回退；回退后断言恢复为「官网键保留、文档编写步无 AI 写作」 | P0 | 待回退后重跑 |
+| 2 | ~~i18n 官网两键更名~~ **作废**（同上）：回退后 `'官网 AI 写作': 'Website AI writing'`、`'第二步 · 官网 AI 写作': 'Step 2 · Website AI writing'` 保留原状 | P0 | 待回退后重跑 |
+| 3 | 提示词预览默认折叠：`renderDocsPane` 中 AI 总结 / AI 翻译两个 `<details class="bld-docs-prompt-box">` 均不带 `open` 属性；「复制提示词」按钮（data-pf-copy-prompt / data-pf-copy-tprompt）仍存在 | P0 | 通过（保留，方向正确） |
 | 4 | 回归：文档编写步（renderDocsPane）内无「AI 写作」文案（008 既有口径不回退）；任务模块 AI 总结页签、全局 summary 类型与 `sum-` 前缀兜底仍在（app.js 静态契约） | P1 | 通过 |
-| 5 | 既有测试同步后全量通过：req-20260921-008（更名与官网键断言更新）、req-20260920-003（官网文案断言更新）、i18n 系列（coverage/dict/lang/runtime）不回退 | P0 | 通过（三者全绿；全量 330 文件中 2 个失败为文档阶段对根 README/AGENTS 的未提交改写所致的既有失败——req-20260918-002、req-doc-entry-20260916-003，与本单改动无关，待文档阶段审核提交时一并处理） |
+| 5 | 既有测试同步后全量通过：req-20260921-008（更名与官网键断言更新）、req-20260920-003（官网文案断言更新）、i18n 系列（coverage/dict/lang/runtime）不回退 | P0 | 首轮通过但断言方向错误（官网更名），回退后恢复原断言重跑；全量 330 文件中 2 个失败为文档阶段对根 README/AGENTS 未提交改写所致的既有失败（req-20260918-002、req-doc-entry-20260916-003），与本单无关 |
+| 6 | 任务入口（待补做）：任务模块 AI 总结面板各状态提供「打开发布模块『文档编写』步」跳转按钮（携带 run.verId；空态无 run 时跳发布模块由人工选版本），经 ATBBuild.openDocsStep 定位版本卡并进入 docs 步 | P0 | 待实施 |
+| 7 | 任务入口（待补做）：文档编写步 AI 总结信息行提供「在任务模块查看 AI 总结」入口，经 data-goto-runs 委托调 gotoRuns('summary') 切换到任务模块 AI 总结页签 | P0 | 待实施 |
+| 8 | 任务入口新增文案中英文同步（i18n.js 词条齐备，i18n 系列测试通过） | P0 | 待实施 |
