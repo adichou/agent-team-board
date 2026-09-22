@@ -10,6 +10,11 @@
 // B4 全局防线：scripts/web/ 源码（app.js / build.js / i18n.js）不再出现「ZCode 会话」；
 //     保留的事实性宿主描述（「去新建 Zcode 会话」双宿主并列链接、zcode:// 深链检测提示）
 //     不在本测试禁止之列（口径见 BUG-20260922-001 README 排查结论）。
+// 复工补充（hold 第 1 轮人工决策：q1 通用化处理、q2 保留现状）：
+// B5 q1 通用化：app.js / build.js「或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词」
+//     （检测失败分支的手动打开指引）改通用口径「您使用的 Agent 客户端」，不再并列宿主名；
+// B6 q1 词典：新键存在且 EN 值通用（不含 ZCode / ChatGPT 并列），旧键移除；
+//     「未检测到 ZCode.app / ChatGPT.app」系列为事实性深链检测提示，q2 同口径保留，不在禁止之列。
 // 用法：node scripts/tests/bug-drawer-notice-generic-20260922-001.test.mjs
 
 import assert from 'node:assert/strict';
@@ -27,6 +32,9 @@ const { EN } = I._dict;
 
 const NOTICE_KEY = '未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在您使用的 Agent 会话运行';
 const LEGACY_KEY = '未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在 ZCode 会话运行';
+// q1（hold 人工决策：通用化处理）：检测失败分支手动打开指引
+const MANUAL_KEY = '或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词';
+const MANUAL_LEGACY_KEY = '或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词';
 
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
@@ -61,6 +69,23 @@ t('B4 全局防线：scripts/web 源码不再出现「ZCode 会话」排他文�
     assert.doesNotMatch(src, /ZCode 会话/, `${name} 不得出现「ZCode 会话」`);
   }
   assert.doesNotMatch(fs.readFileSync(path.join(webRoot, 'i18n.js'), 'utf8'), /ZCode 会话/, 'i18n.js 不得出现「ZCode 会话」');
+});
+
+t('B5 q1 复工补充：检测失败分支「或直接打开 ZCode / ChatGPT …」改通用口径（您使用的 Agent 客户端）', () => {
+  for (const [name, src] of [['app.js', appJs], ['build.js', buildJs]]) {
+    assert.doesNotMatch(src, /或直接打开 ZCode \/ ChatGPT/, `${name} 手动打开指引不得再并列宿主名`);
+    assert.ok(src.includes(MANUAL_KEY), `${name} 应含通用手动打开指引：${MANUAL_KEY}`);
+  }
+});
+
+t('B6 q1 复工补充：i18n 词典新键存在、EN 值通用化（不含 ZCode / ChatGPT 并列），旧键移除', () => {
+  assert.ok(MANUAL_KEY in EN, `EN 词典应含新键：${MANUAL_KEY}`);
+  const v = EN[MANUAL_KEY];
+  assert.match(v, /your agent client/, '英文值应为通用 agent client 表述');
+  assert.doesNotMatch(v, /ZCode|ChatGPT/, '英文值不得再提宿主名');
+  assert.ok(!(MANUAL_LEGACY_KEY in EN), '旧键（或直接打开 ZCode / ChatGPT …）应随中文原文一并移除');
+  const legacyHit = Object.entries(EN).filter(([k, val]) => /或直接打开 ZCode \/ ChatGPT/.test(k) || /open ZCode \/ ChatGPT/.test(String(val)));
+  assert.deepEqual(legacyHit, [], `词典不得残留宿主并列的手动打开指引：${legacyHit.map(([k]) => k).join('、')}`);
 });
 
 for (const [name, fn] of cases) {
