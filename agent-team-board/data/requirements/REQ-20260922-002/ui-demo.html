@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260922-002 · 文档编写页支持 LICENSE.md 演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #d9dee4; --text: #1f2430; --muted: #6b7280;
+    --ok: #16794c; --ok-bg: #e3f4ea; --run: #9a6700; --run-bg: #fff3d6;
+    --wait: #a16207; --wait-bg: #fdf0d5; --mute: #6b7280; --mute-bg: #eef0f3;
+    --fail: #b3261e; --fail-bg: #fdebea; --primary: #2563eb; --primary-bg: #dbeafe;
+    --stage-done: #16794c; --stage-cur: #9a6700; --stage-todo: #9ca3af;
+    --code-bg: #f0f2f5; --shadow: 0 10px 30px rgba(15, 23, 42, .14);
+  }
+  html[data-theme="dark"] {
+    --bg: #14161a; --card: #1d2026; --line: #34383f; --text: #e6e8ec; --muted: #9aa1ab;
+    --ok: #5bd695; --ok-bg: #12331f; --run: #e3b341; --run-bg: #3a2f10;
+    --wait: #d9a441; --wait-bg: #33290f; --mute: #9aa1ab; --mute-bg: #262a31;
+    --fail: #f08a84; --fail-bg: #3a1715; --primary: #6ea8ff; --primary-bg: #16294d;
+    --stage-done: #5bd695; --stage-cur: #e3b341; --stage-todo: #5b626c;
+    --code-bg: #262a31; --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .note { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .note code { background: var(--code-bg); border-radius: 4px; padding: 0 4px; }
+
+  /* 演示控制条 */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px;
+    background: var(--card); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  select, input[type="text"] { border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 8px; padding: 5px 10px; font-size: 13px; }
+  button.btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button.btn:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--primary); color: var(--primary); }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  html[data-theme="dark"] button.btn.primary { color: #0d1220; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn[aria-disabled="true"] { opacity: .45; }
+
+  /* 模拟页面骨架 */
+  .page { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .top .vid { font-weight: 600; font-size: 15px; }
+  .top .ver { color: var(--muted); font-size: 12.5px; }
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+  .steps button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px;
+    padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .steps button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .steps button.locked { opacity: .55; }
+
+  /* 文档编写页 */
+  .docs-sub { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .langset { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .langset label { color: var(--muted); font-size: 12.5px; }
+  .langset .err { color: var(--fail); font-size: 12px; margin: 0; width: 100%; }
+  .langset .busy { color: var(--muted); font-size: 12px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .stagebar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stage { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 12px; font-size: 12.5px; }
+  .stage.done { color: var(--stage-done); border-color: var(--stage-done); }
+  .stage.cur { color: var(--stage-cur); border-color: var(--stage-cur); font-weight: 600; }
+  .stage.todo { color: var(--stage-todo); }
+  .arrow { color: var(--muted); }
+  .stagebar .lbl { color: var(--muted); font-size: 12.5px; }
+
+  .runinfo { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+  .runinfo.err { color: var(--fail); }
+  .runinfo code { background: var(--code-bg); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+
+  details.prompt { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  details.prompt summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  details.prompt textarea { width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--code-bg); color: var(--text); font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; padding: 8px; }
+
+  .files-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px; gap: 10px; }
+  .lang-tabs { display: flex; gap: 4px; padding: 10px 0 0; flex-wrap: wrap; }
+  .lang-tabs button { border: 1px solid var(--line); background: transparent; color: var(--text);
+    border-radius: 8px 8px 0 0; padding: 4px 12px; cursor: pointer; font-size: 12.5px; display: inline-flex; gap: 6px; align-items: center; }
+  .lang-tabs button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .tab-count { border-radius: 999px; background: var(--mute-bg); color: var(--muted); padding: 0 8px; font-size: 11.5px; }
+  .tab-count.ok { background: var(--ok-bg); color: var(--ok); }
+  ul.files { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.files li { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px;
+    border-bottom: 1px solid var(--line); gap: 10px; flex-wrap: wrap; }
+  .fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .fname .tag { color: var(--muted); font-family: inherit; font-size: 11.5px; border: 1px dashed var(--line);
+    border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+  .row-st { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cur-file { color: var(--muted); font-size: 12px; }
+  .st { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 10px; font-size: 12px; white-space: nowrap; }
+  .st i { font-style: normal; }
+  .st-ok { color: var(--ok); background: var(--ok-bg); }
+  .st-run { color: var(--run); background: var(--run-bg); }
+  .st-wait { color: var(--wait); background: var(--wait-bg); }
+  .st-mute { color: var(--mute); background: var(--mute-bg); }
+
+  .gate { border-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin-top: 12px;
+    border: 1px solid var(--line); background: var(--mute-bg); }
+  .gate.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+  .gate code { font-size: 12px; }
+  .fin-note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+  .err-banner { color: var(--fail); font-size: 13px; margin: 10px 0 6px; }
+  .loading-line { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+
+  /* 对话框 */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 20, .5); display: flex;
+    align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    width: min(920px, 100%); max-height: 88vh; display: flex; flex-direction: column; }
+  .modal.narrow { width: min(580px, 100%); }
+  .modal header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); font-weight: 600; gap: 10px; }
+  .modal .tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-wrap: wrap; }
+  .modal .tabs button { border: 1px solid var(--line); background: transparent; color: var(--text);
+    border-radius: 8px 8px 0 0; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .modal .tabs button.active { border-bottom-color: transparent; background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+  .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 1fr); gap: 0;
+    overflow-x: auto; border-top: 1px solid var(--line); }
+  .col { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
+  .col:last-child { border-right: none; }
+  .col-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .col-acts { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  .mode-grp { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .mode-grp button { border: none; background: transparent; color: var(--text); padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  .mode-grp button.on { background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+  .col-body { padding: 10px; overflow-y: auto; max-height: 46vh; flex: 1; }
+  .col-body textarea { width: 100%; min-height: 240px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--code-bg); color: var(--text); font: 12.5px/1.6 ui-monospace, Menlo, Consolas, monospace; padding: 8px; resize: vertical; }
+  .md-preview { font-size: 13px; }
+  .md-preview h2 { font-size: 15px; margin: 8px 0 6px; }
+  .md-preview h3 { font-size: 13.5px; margin: 8px 0 4px; }
+  .md-preview ul { margin: 4px 0; padding-left: 20px; }
+  .md-preview .empty-doc { color: var(--muted); font-size: 12.5px; }
+  .reading { color: var(--muted); font-size: 12.5px; }
+  .modal footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  .checklist { list-style: none; margin: 0; padding: 12px 20px; }
+  .checklist li { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 13px; }
+  .checklist .hint { color: var(--muted); font-size: 12px; }
+  .st-fail { color: var(--fail); background: var(--fail-bg); }
+
+  /* toast */
+  #toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 99; }
+  .toast { background: var(--card); color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--primary);
+    border-radius: 8px; box-shadow: var(--shadow); padding: 8px 14px; font-size: 12.5px; max-width: 420px; }
+  .toast.err { border-left-color: var(--fail); color: var(--fail); }
+  .toast.ok { border-left-color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260922-002 · 发布看板「文档编写」页支持 LICENSE.md —— 可交互演示</h1>
+  <p class="note">
+    演示数据为模拟，布局 / 交互 / 状态口径与真实页面（<code>scripts/web/build.js</code> 的 renderDocsPane / renderReviewModal）同构。
+    「LICENSE 文件形态（A1 单文件 / A2 ×语言集）」与「是否进 AI 总结 / AI 翻译」为 README 待确认口径：本演示默认按
+    <b>A1 单文件 + 参与状态机与门禁计数</b>，可用下方开关切换对比。真实效果以定稿口径为准。
+  </p>
+
+  <div class="demo-bar">
+    <span class="lbl">场景</span>
+    <select id="scenario">
+      <option value="initial">初始（未编写 / 未总结）</option>
+      <option value="summaryRunning">AI 总结进行中</option>
+      <option value="summaryFailed">AI 总结中断（失败反馈）</option>
+      <option value="summaryDone">默认语言已总结待审核</option>
+      <option value="defaultReviewed">默认语言全部已审核（AI 翻译解锁）</option>
+      <option value="translateRunning">AI 翻译进行中</option>
+      <option value="translateDone">剩余语言已翻译待审核</option>
+      <option value="allReviewed">全部已审核（整体审查解锁）</option>
+      <option value="finalized">整体审查已完结（提交解锁）</option>
+      <option value="committed">已提交（终态）</option>
+      <option value="loading">数据加载中</option>
+      <option value="error">数据读取失败（重试）</option>
+    </select>
+    <span class="lbl">LICENSE 口径</span>
+    <select id="licenseMode">
+      <option value="single">A1：LICENSE.md 单文件（不随语言集）</option>
+      <option value="perLang">A2：随语言集展开（LICENSE_&lt;lang&gt;.md）</option>
+    </select>
+    <button type="button" class="btn" id="themeBtn">深色 / 浅色</button>
+  </div>
+
+  <div class="page" id="app"></div>
+</div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+/* ---------- 常量（与真实页面同口径的镜像） ---------- */
+const DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+const LANG_NAMES = { cn: '中文', zh: '中文', en: 'English', fr: 'Français', jp: '日本語', ja: '日本語' };
+const FLOW_LABEL = {
+  unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核',
+  untranslated: '未翻译', translating: '正在翻译', translated: '已翻译待审核', reviewed: '已审核',
+};
+const FLOW_CLS = { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait',
+  untranslated: 'st-mute', translating: 'st-run', translated: 'st-wait', reviewed: 'st-ok' };
+const FLOW_ICON = { unsummarized: '○', summarizing: '◐', summarized: '●',
+  untranslated: '○', translating: '◐', translated: '●', reviewed: '✔' };
+
+/* ---------- 演示状态 ---------- */
+let scenario = 'initial';
+let licenseMode = 'single';           // A1 single | A2 perLang
+let langs = ['cn', 'en'];
+let fstate = {};                       // file -> 状态
+let contents = {};                     // file -> 文本（审查对话框编辑草稿）
+let summaryRun = null;                 // { phase:'running'|'failed'|'done', done, total, current, reason }
+let translateRun = null;               // 同上（translated 计数）
+let finalized = false;
+let committedHash = null;
+let loadPhase = 'ready';               // ready | loading | error
+let refreshing = false;
+let promptBox = null;                  // 'summary' | 'translate' | null
+let review = null;                     // { key, modes:{file:'edit'|'preview'}, reading:file|null }
+let readingTimer = null;
+let finalizeOpen = false;
+let finalizeBusy = false;
+let commitBusy = false;
+let langErr = null;
+let activeDocLang = 'cn';
+let lastToastAt = 0;
+
+/* ---------- 工具 ---------- */
+const langNameOf = (l) => LANG_NAMES[String(l || '').toLowerCase()] || l || '';
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* 文档清单：4 类 × 语言集 + LICENSE（口径切换）——README / CHANGELOG / FEATURES / AGENTS 之外新增第 5 类 */
+function fileListOf() {
+  const out = [];
+  for (const key of DOC_KEYS) {
+    langs.forEach((l, i) => out.push({ key, lang: l, file: `${key}${i === 0 ? '' : `_${l}`}.md` }));
+  }
+  if (licenseMode === 'single') {
+    out.push({ key: 'LICENSE', lang: langs[0], file: 'LICENSE.md', unlabeled: true }); // A1：恒单文件，计入门禁（归默认语言组展示并标「不分语言」）
+  } else {
+    langs.forEach((l, i) => out.push({ key: 'LICENSE', lang: l, file: `LICENSE${i === 0 ? '' : `_${l}`}.md` }));
+  }
+  return out;
+}
+const stOf = (file) => fstate[file] || 'unsummarized';
+
+function evalFlow() {
+  const files = fileListOf();
+  const def = files.filter((f) => f.lang === langs[0]);
+  const rest = files.filter((f) => f.lang !== langs[0]);
+  const rev = (list) => list.filter((f) => stOf(f.file) === 'reviewed').length;
+  const defRev = rev(def), restRev = rev(rest);
+  const allReviewed = files.length > 0 && defRev + restRev === files.length;
+  const missing = files.filter((f) => stOf(f.file) !== 'reviewed').map((f) => ({ file: f.file, state: stOf(f.file) }));
+  return {
+    files, def, rest, defRev, restRev, total: files.length, defTotal: def.length, restTotal: rest.length,
+    allReviewed, missing,
+    canTranslate: def.length > 0 && defRev === def.length && rest.length > 0,
+    translateMissing: def.filter((f) => stOf(f.file) !== 'reviewed').map((f) => ({ file: f.file, state: stOf(f.file) })),
+    canFinalize: allReviewed,
+    finalizedOk: allReviewed && finalized,
+    canCommit: allReviewed && finalized && !committedHash,
+  };
+}
+
+/* ---------- 场景装配 ---------- */
+function seedContents() {
+  contents = {};
+  for (const f of fileListOf()) {
+    if (f.key === 'LICENSE') { contents[f.file] = ''; continue; } // 空文档：审查对话框预览显示（空文档）占位
+    contents[f.file] = f.lang === langs[0]
+      ? `# ${f.key}\n\n这是 ${f.file}（默认语言 ${langNameOf(f.lang)}）的演示内容。\n\n- 要点一：与真实页面同口径的状态机演示\n- 要点二：编辑保存后已审核文件回退待审核\n`
+      : `# ${f.key}\n\nThis is the demo content of ${f.file} (${langNameOf(f.lang)}).\n\n- Point 1: same state machine as the real page\n- Point 2: editing a reviewed file reverts it to pending review\n`;
+  }
+}
+
+function applyScenario(name) {
+  scenario = name;
+  langs = ['cn', 'en'];
+  activeDocLang = 'cn';
+  summaryRun = null; translateRun = null; finalized = false; committedHash = null;
+  loadPhase = 'ready'; refreshing = false; promptBox = null; review = null; finalizeOpen = false;
+  commitBusy = false; finalizeBusy = false; langErr = null;
+  const files = fileListOf();
+  const defFiles = files.filter((f) => f.lang === langs[0]);
+  const restFiles = files.filter((f) => f.lang !== langs[0]);
+  fstate = {};
+  defFiles.forEach((f) => { fstate[f.file] = 'unsummarized'; });
+  restFiles.forEach((f) => { fstate[f.file] = 'untranslated'; });
+  seedContents();
+  switch (name) {
+    case 'summaryRunning':
+      fstate['README.md'] = 'summarizing';
+      summaryRun = { phase: 'running', done: 0, total: defFiles.length, current: 'README.md' };
+      break;
+    case 'summaryFailed':
+      fstate['README.md'] = 'summarized';
+      summaryRun = { phase: 'failed', done: 1, total: defFiles.length, current: null, reason: '执行子代理中断（演示原因）' };
+      break;
+    case 'summaryDone':
+      defFiles.forEach((f) => { fstate[f.file] = 'summarized'; });
+      summaryRun = { phase: 'done', done: defFiles.length, total: defFiles.length, current: null };
+      break;
+    case 'defaultReviewed':
+      defFiles.forEach((f) => { fstate[f.file] = 'reviewed'; });
+      summaryRun = { phase: 'done', done: defFiles.length, total: defFiles.length, current: null };
+      break;
+    case 'translateRunning': {
+      defFiles.forEach((f) => { fstate[f.file] = 'reviewed'; });
+      fstate['CHANGELOG_en.md'] = 'translating';
+      translateRun = { phase: 'running', done: 1, total: restFiles.length, current: 'CHANGELOG_en.md' };
+      break;
+    }
+    case 'translateDone':
+      defFiles.forEach((f) => { fstate[f.file] = 'reviewed'; });
+      restFiles.forEach((f) => { fstate[f.file] = 'translated'; });
+      translateRun = { phase: 'done', done: restFiles.length, total: restFiles.length, current: null };
+      break;
+    case 'allReviewed':
+      files.forEach((f) => { fstate[f.file] = 'reviewed'; });
+      break;
+    case 'finalized':
+      files.forEach((f) => { fstate[f.file] = 'reviewed'; });
+      finalized = true;
+      break;
+    case 'committed':
+      files.forEach((f) => { fstate[f.file] = 'reviewed'; });
+      finalized = true;
+      committedHash = '9f2c7ab';
+      break;
+    case 'loading': loadPhase = 'loading'; break;
+    case 'error': loadPhase = 'error'; break;
+  }
+  render();
+}
+
+/* ---------- toast ---------- */
+function toast(msg, kind) {
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast${kind ? ` ${kind}` : ''}`;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+/* ---------- 迷你 Markdown 渲染（预览态示意） ---------- */
+function mdRender(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const out = [];
+  let inUl = false;
+  const closeUl = () => { if (inUl) { out.push('</ul>'); inUl = false; } };
+  const inline = (s) => esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { closeUl(); continue; }
+    if (/^###\s+/.test(line)) { closeUl(); out.push(`<h3>${inline(line.replace(/^###\s+/, ''))}</h3>`); }
+    else if (/^##\s+/.test(line)) { closeUl(); out.push(`<h3>${inline(line.replace(/^##\s+/, ''))}</h3>`); }
+    else if (/^#\s+/.test(line)) { closeUl(); out.push(`<h2>${inline(line.replace(/^#\s+/, ''))}</h2>`); }
+    else if (/^[-*]\s+/.test(line)) { if (!inUl) { out.push('<ul>'); inUl = true; } out.push(`<li>${inline(line.replace(/^[-*]\s+/, ''))}</li>`); }
+    else { closeUl(); out.push(`<p>${inline(line)}</p>`); }
+  }
+  closeUl();
+  return out.join('');
+}
+
+/* ---------- 渲染：主页面 ---------- */
+function chip(state, extra) {
+  return `<span class="st ${FLOW_CLS[state] || 'st-mute'}" title="${esc(FLOW_LABEL[state] || state)}"><i>${FLOW_ICON[state] || ''}</i>${esc(FLOW_LABEL[state] || state)}${extra || ''}</span>`;
+}
+
+function stageBar(fe) {
+  const defDone = fe.defTotal > 0 && fe.defRev === fe.defTotal;
+  const restDone = fe.restTotal === 0 || fe.restRev === fe.restTotal;
+  const finDone = fe.finalizedOk || !!committedHash;
+  const mark = (done, active) => done
+    ? '<span class="st st-ok"><i>✔</i>已完成</span>'
+    : active ? '<span class="st st-run"><i>●</i>进行中</span>' : '<span class="st st-mute"><i>○</i>未解锁</span>';
+  return `<div class="stagebar">
+    <span class="lbl">阶段：</span>
+    <span class="stage ${defDone ? 'done' : 'cur'}">① 默认语言先行（${fe.defRev}/${fe.defTotal}） ${mark(defDone, true)}</span><span class="arrow">──</span>
+    <span class="stage ${restDone ? (defDone ? 'done' : 'todo') : defDone ? 'cur' : 'todo'}">② AI 翻译与审查（${fe.restRev}/${fe.restTotal}） ${mark(restDone, defDone && !restDone)}</span><span class="arrow">──</span>
+    <span class="stage ${finDone ? 'done' : defDone && restDone ? 'cur' : 'todo'}">③ 整体审查完结 ${mark(finDone, defDone && restDone && !finDone)}</span>
+  </div>`;
+}
+
+function gapText(list) {
+  return list.map((m) => `${m.file}（${FLOW_LABEL[m.state] || m.state}）`).join('、');
+}
+
+function renderDocsPane(fe) {
+  const disabledNotReady = loadPhase !== 'ready';
+  // 语言集 + 六按钮（同水平行；加载 / 失败态按钮恒渲染——口径不回退）
+  const sub = `
+    <div class="docs-sub">
+      <div class="langset">
+        <label for="docLangs">语言集</label>
+        <input id="docLangs" data-act="langs" type="text" value="${esc(langs.join(','))}" autocomplete="off" spellcheck="false"
+          title="逗号分隔的语言缩写（2–3 个字母）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车应用（演示）"${disabledNotReady ? ' disabled' : ''}>
+        ${langErr ? `<p class="err" role="alert">${esc(langErr)}</p>` : ''}
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" data-act="refresh"${refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态">${refreshing ? '正在读取…' : '刷新'}</button>
+        <button type="button" class="btn" data-act="summary"${summaryRun && summaryRun.phase === 'running' ? ' disabled' : ''} title="复制 AI 总结提示词，交给 AI Agent 逐文件总结默认语言文档">${summaryRun && summaryRun.phase === 'running' ? `总结中 ${summaryRun.done}/${summaryRun.total}` : 'AI 总结'}</button>
+        ${translateBtn(fe, disabledNotReady)}
+        <button type="button" class="btn" data-act="review" title="打开审查对话框：按文档类型页签、全语言栏对比，逐文件编辑 / 保存 / 通过审核">审查</button>
+        ${finalizeBtn(fe, disabledNotReady)}
+        ${commitBtn(fe, disabledNotReady)}
+      </div>
+    </div>`;
+
+  if (loadPhase === 'loading') {
+    return `${sub}<p class="loading-line" role="status">正在加载发布流程数据…</p>`;
+  }
+  if (loadPhase === 'error') {
+    return `${sub}
+      <p class="err-banner" role="alert">发布流程数据读取失败：演示用的模拟错误（网络中断）</p>
+      <p><button type="button" class="btn" data-act="retry">重试</button></p>`;
+  }
+
+  const sumInfo = summaryRun
+    ? (summaryRun.phase === 'running'
+        ? `<p class="runinfo" role="status">AI 总结进行中：${summaryRun.done}/${summaryRun.total}${summaryRun.current ? ` · 当前：<code>${esc(summaryRun.current)}</code>（正在总结）` : ''} · 独立锁 summary（与 AI 翻译 / AI 分析 / AI 开发互不占用）</p>`
+        : summaryRun.phase === 'failed'
+          ? `<p class="runinfo err" role="alert">AI 总结中断：${esc(summaryRun.reason || '未知原因')}——文件状态不悬挂「正在总结」，可再次点击「AI 总结」续跑（已总结完成的文件保留待审核状态）。</p>`
+          : `<p class="runinfo" role="status">AI 总结已完成：待总结文件均进入「已总结待审核」，等待人工审查。</p>`)
+    : '';
+  const trInfo = translateRun
+    ? (translateRun.phase === 'running'
+        ? `<p class="runinfo" role="status">AI 翻译进行中：${translateRun.done}/${translateRun.total}${translateRun.current ? ` · 当前：<code>${esc(translateRun.current)}</code>（正在翻译）` : ''} · 独立锁 translate（与 AI 总结 / AI 分析 / AI 开发互不占用）</p>`
+        : `<p class="runinfo" role="status">AI 翻译已完成：待翻译文件均进入「已翻译待审核」，等待人工审查。</p>`)
+    : '';
+
+  const promptHtml = promptBox === 'summary' || promptBox === 'translate'
+    ? `<details class="prompt" open>
+        <summary>${promptBox === 'summary' ? 'AI 总结' : 'AI 翻译'}提示词（已复制到剪贴板，交给 AI Agent 执行；演示文本）</summary>
+        <textarea rows="6" readonly>${esc(demoPrompt(promptBox, fe))}</textarea>
+        <p style="margin:6px 0 0"><button type="button" class="btn" data-act="copyPrompt">复制提示词</button></p>
+      </details>`
+    : '';
+
+  // 文件区：语言页签 + 文件行（每行：文件名[+不分语言标注] + 七态 chip + 进行中标注）
+  const langOfFile = (file) => (fe.files.find((f) => f.file === file) || {}).lang || null;
+  const sumBadgeLang = summaryRun && summaryRun.phase === 'running' ? langOfFile(summaryRun.current) : null;
+  const filesOfLang = (l, i) => (i === 0 ? fe.def : fe.rest.filter((f) => f.lang === l));
+  if (!langs.includes(activeDocLang)) activeDocLang = langs[0];
+  const tabsHtml = langs.map((l, i) => {
+    const files = filesOfLang(l, i);
+    const rev = files.filter((f) => stOf(f.file) === 'reviewed').length;
+    const badge = (sumBadgeLang === l && activeDocLang !== l) ? ' <span class="st st-run" title="AI 总结进行中：当前文件在该语言页签"><i>◐</i></span>' : '';
+    return `<button type="button" class="${activeDocLang === l ? 'active' : ''}" data-act="docLang" data-lang="${esc(l)}"><span>${esc(l)} · ${esc(langNameOf(l))}</span>${i === 0 ? '<span>（默认）</span>' : ''}<span class="tab-count${files.length && rev === files.length ? ' ok' : ''}">${rev}/${files.length}</span>${badge}</button>`;
+  }).join('');
+  const rowsHtml = filesOfLang(activeDocLang, langs.indexOf(activeDocLang)).map((f) => {
+    const st = stOf(f.file);
+    const sumMark = summaryRun && summaryRun.phase === 'running' && summaryRun.current === f.file
+      ? `<span class="cur-file">· AI 总结 ${summaryRun.done + 1}/${summaryRun.total}</span>` : '';
+    const trMark = translateRun && translateRun.phase === 'running' && translateRun.current === f.file
+      ? `<span class="cur-file">· AI 翻译 ${translateRun.done}/${translateRun.total}</span>` : '';
+    return `<li><span class="fname">${esc(f.file)}${f.unlabeled ? '<span class="tag">不分语言（A1 口径）</span>' : ''}</span>
+      <span class="row-st">${chip(st)}${sumMark}${trMark}</span></li>`;
+  }).join('');
+
+  // 门禁条
+  const gate = committedHash
+    ? `<div class="gate ok" role="note">已提交到本地 dev 分支（hash <code>${committedHash}</code>，仅清单内文档 pathspec）：满足「合并入 main」前置。</div>`
+    : fe.canCommit
+      ? `<div class="gate ok" role="note">提交门禁：${fe.total}/${fe.total} 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。</div>`
+      : `<div class="gate" role="note">提交门禁：默认语言 ${fe.defRev}/${fe.defTotal} · 剩余语言 ${fe.restRev}/${fe.restTotal} 已审核 —— ${fe.missing.length ? `提交禁用，尚缺：${esc(gapText(fe.missing))}` : '整体审查未完结（确认完结后可提交）'}。</div>`;
+  const finNote = fe.finalizedOk || committedHash
+    ? `<p class="fin-note" role="status">整体审查已完结 ✓（演示时间；提交已解锁）</p>` : '';
+
+  return `${sub}${stageBar(fe)}${promptHtml}${sumInfo}${trInfo}
+    <section aria-label="发布文档文件列表">
+      <div class="files-head"><span>文件（${fe.total} · 默认语言 ${fe.defRev}/${fe.defTotal} 已审核 · 剩余语言 ${fe.restRev}/${fe.restTotal} 已审核）</span><span>状态</span></div>
+      <nav class="lang-tabs" role="tablist" aria-label="文档语言页签">${tabsHtml}</nav>
+      <ul class="files">${rowsHtml}</ul>
+      ${refreshing ? '<div class="loading-line" role="status">正在读取最新内容…</div>' : ''}
+    </section>
+    ${gate}${finNote}`;
+}
+
+function translateBtn(fe, notReady) {
+  if (notReady) return '<button type="button" class="btn" data-act="translate" aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">AI 翻译</button>';
+  if (translateRun && translateRun.phase === 'running') {
+    return `<button type="button" class="btn" data-act="translate" disabled title="AI 翻译进行中：进度经 atb translate 逐文件回执，本页自动刷新">翻译中 ${translateRun.done}/${translateRun.total}</button>`;
+  }
+  const can = fe.canTranslate;
+  const reason = can
+    ? '复制 AI 翻译提示词：以已审核的默认语言文档为唯一基准，逐文件翻译剩余语言文档'
+    : `AI 翻译未解锁：默认语言尚缺 ${fe.translateMissing.length} 个文件审核（${esc(gapText(fe.translateMissing))}）`;
+  return `<button type="button" class="btn" data-act="translate"${can ? '' : ' aria-disabled="true"'} title="${reason}">AI 翻译</button>`;
+}
+
+function finalizeBtn(fe, notReady) {
+  if (notReady) return '<button type="button" class="btn" data-act="finalize" aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">整体审查</button>';
+  const can = fe.canFinalize;
+  const reason = can
+    ? (fe.finalizedOk ? '整体审查已完结；点击可重新核对新再次确认' : '打开整体审查完结核对：确认完结后「提交」解锁')
+    : `整体审查未解锁：尚缺 ${fe.missing.length} 个文件审核（${esc(gapText(fe.missing))}）`;
+  return `<button type="button" class="btn${can ? ' primary' : ''}" data-act="finalize"${can ? '' : ' aria-disabled="true"'} title="${reason}">整体审查</button>`;
+}
+
+function commitBtn(fe, notReady) {
+  if (notReady) return '<button type="button" class="btn primary" data-act="commit" aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">提交</button>';
+  if (committedHash) return `<button type="button" class="btn primary" data-act="commit" aria-disabled="true" title="已提交到本地 dev 分支（${committedHash}）">已提交 ✓</button>`;
+  if (commitBusy) return '<button type="button" class="btn primary" data-act="commit" disabled>提交中…</button>';
+  const ok = fe.canCommit;
+  const reason = ok
+    ? '把清单内文档（含 LICENSE 文件）提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
+    : fe.missing.length
+      ? `还需 ${fe.missing.length} 个文件通过审查：${esc(gapText(fe.missing))}`
+      : '整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交';
+  return `<button type="button" class="btn primary" data-act="commit"${ok ? '' : ' aria-disabled="true"'} title="${reason}">提交</button>`;
+}
+
+function demoPrompt(kind, fe) {
+  const lines = [];
+  if (kind === 'summary') {
+    lines.push('你是技术写作人员……（阶段一：默认语言先行）本阶段只总结默认语言文档；');
+    lines.push('默认语言文档清单：');
+    fe.def.forEach((f) => lines.push(`- ${f.file}${f.key === 'LICENSE' ? '（LICENSE 是否纳入 AI 总结为待确认口径 B，演示按纳入）' : ''}`));
+    lines.push('回执：atb summary file <执行编号> --file <文件名> --state summarizing|summarized ……');
+  } else {
+    lines.push('你是技术翻译人员……（阶段二：以已审核默认语言文档为唯一基准）');
+    lines.push('翻译目标（剩余语言）：');
+    fe.rest.forEach((f) => lines.push(`- ${f.file}（基准 ${f.key}.md）${f.key === 'LICENSE' ? '（A2 口径下才存在；口径 B 待确认）' : ''}`));
+    lines.push('回执：atb translate file <执行编号> --file <文件名> --state translating|translated ……');
+  }
+  return lines.join('\n');
+}
+
+/* ---------- 渲染：审查对话框 / 完结对核 ---------- */
+function reviewModalHtml(fe) {
+  if (!review) return '';
+  const keys = [...DOC_KEYS, 'LICENSE'];
+  const tabs = keys.map((k) => {
+    const per = fe.files.filter((f) => f.key === k);
+    const n = per.filter((f) => stOf(f.file) === 'reviewed').length;
+    return `<button type="button" class="${review.key === k ? 'active' : ''}" data-act="reviewTab" data-key="${k}">${k}（${n}/${per.length}）</button>`;
+  }).join('');
+  const cols = fe.files.filter((f) => f.key === review.key).map((f) => {
+    const mode = review.modes[f.file] === 'edit' ? 'edit' : 'preview';
+    const st = stOf(f.file);
+    let body;
+    if (review.reading === f.file) body = '<p class="reading" role="status">正在读取文档内容…</p>';
+    else if (mode === 'edit') body = `<textarea data-act="draft" data-file="${esc(f.file)}" spellcheck="false">${esc(contents[f.file] ?? '')}</textarea>`;
+    else body = String(contents[f.file] ?? '').trim()
+      ? `<div class="md-preview">${mdRender(contents[f.file])}</div>`
+      : '<div class="md-preview"><p class="empty-doc">（空文档）</p></div>';
+    return `<div class="col">
+      <div class="col-head">
+        <span class="fname">${esc(f.file)}（${esc(langNameOf(f.lang))}${f.unlabeled ? ' · 不分语言' : ''}）</span>
+        ${chip(st)}
+        <div class="col-acts">
+          <span class="mode-grp" role="group" aria-label="编辑或预览">
+            <button type="button" class="${mode === 'edit' ? 'on' : ''}" data-act="reviewMode" data-file="${esc(f.file)}" data-mode="edit">编辑</button>
+            <button type="button" class="${mode === 'preview' ? 'on' : ''}" data-act="reviewMode" data-file="${esc(f.file)}" data-mode="preview">预览</button>
+          </span>
+          <button type="button" class="btn" data-act="reviewSave" data-file="${esc(f.file)}">保存</button>
+          <button type="button" class="btn primary" data-act="reviewApprove" data-file="${esc(f.file)}"${st === 'reviewed' ? ' disabled title="已审核：编辑保存后才会回退待审核"' : ''}>${st === 'reviewed' ? '✔ 已审核' : '通过审核'}</button>
+        </div>
+      </div>
+      <div class="col-body">${body}</div>
+    </div>`;
+  }).join('');
+  const pairRev = fe.files.filter((f) => f.key === review.key && stOf(f.file) === 'reviewed').length;
+  const pairTotal = fe.files.filter((f) => f.key === review.key).length;
+  return `<div class="modal-wrap">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="审查发布文档">
+      <header><span>审查发布文档（BLD-20260922-001 演示）</span><button type="button" class="btn" data-act="reviewClose">✕ 关闭</button></header>
+      <nav class="tabs" role="tablist" aria-label="文档类型页签">${tabs}</nav>
+      <div class="cols">${cols}</div>
+      <footer><span>全部 ${fe.defRev + fe.restRev}/${fe.total} 已审核 · 本页签 ${pairRev}/${pairTotal} · 各栏同步滚动：一侧滚动其余按比例跟随（演示省略）</span>
+        <button type="button" class="btn" data-act="reviewClose">关闭</button></footer>
+    </div>
+  </div>`;
+}
+
+function finalizeModalHtml(fe) {
+  if (!finalizeOpen) return '';
+  const item = (ok, text) => `<li><span class="st ${ok ? 'st-ok' : 'st-fail'}"><i>${ok ? '✔' : '✕'}</i></span><span>${text}</span></li>`;
+  const manual = (text) => `<li><span class="st st-run"><i>◐</i></span><span>${text}</span></li>`;
+  return `<div class="modal-wrap">
+    <div class="modal narrow" role="dialog" aria-modal="true" aria-label="整体审查完结">
+      <header><span>整体审查完结（BLD-20260922-001 演示）</span><button type="button" class="btn" data-act="finalizeClose">✕ 关闭</button></header>
+      <ul class="checklist">
+        ${item(fe.defRev === fe.defTotal, `默认语言文件已全部审核（${fe.defRev}/${fe.defTotal}）`)}
+        ${item(fe.restTotal === 0 || fe.restRev === fe.restTotal, `剩余语言文件已全部审核（${fe.restRev}/${fe.restTotal}）`)}
+        ${item(fe.allReviewed, '各语言内容语义一致（以已审核默认语言为基准）')}
+        ${manual('README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）')}
+        ${manual('文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）')}
+        ${manual('LICENSE 文件与项目开源口径一致<span class="hint">（核对项口径 D 待确认，演示按加入展示）</span>')}
+      </ul>
+      <p style="margin:0 20px;color:var(--muted);font-size:12.5px">提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使完结失效回退。</p>
+      <footer><span style="color:var(--muted);font-size:12.5px">完结是人工确认动作：请逐项核对后再确认。</span>
+        <span><button type="button" class="btn" data-act="finalizeClose"${finalizeBusy ? ' disabled' : ''}>取消</button>
+        <button type="button" class="btn primary" data-act="finalizeConfirm"${finalizeBusy ? ' disabled' : ''}>${finalizeBusy ? '完结中…' : '确认完结'}</button></span></footer>
+    </div>
+  </div>`;
+}
+
+/* ---------- 主渲染 ---------- */
+function render() {
+  const fe = evalFlow();
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="top"><span class="vid">BLD-20260922-001（演示版本计划）</span><span class="ver">版本号 20260922-001 · 项目演示</span></div>
+    <nav class="steps" role="tablist" aria-label="发布五步流程">
+      <button type="button">概况</button>
+      <button type="button">关联条目与提交</button>
+      <button type="button" class="active">文档编写</button>
+      <button type="button" class="locked" title="前置条件未满足">合并入 main</button>
+      <button type="button" class="locked" title="前置条件未满足">正式发布</button>
+    </nav>
+    ${renderDocsPane(fe)}`;
+  // 对话框挂在 body 上（避免被 #app innerHTML 覆盖后重挂）
+  let mo = document.getElementById('modalHost');
+  if (!mo) { mo = document.createElement('div'); mo.id = 'modalHost'; document.body.appendChild(mo); }
+  mo.innerHTML = reviewModalHtml(fe) + finalizeModalHtml(fe);
+}
+
+/* ---------- 交互（事件委托） ---------- */
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-act], input[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const fe = evalFlow();
+  switch (act) {
+    case 'refresh':
+      if (refreshing) return;
+      refreshing = true; render();
+      setTimeout(() => {
+        refreshing = false;
+        toast(`已刷新：${fe.total} 个文件已同步为磁盘最新内容（含 LICENSE 文件）`, 'ok');
+        render();
+      }, 800);
+      break;
+    case 'summary': {
+      if (summaryRun && summaryRun.phase === 'running') return;
+      promptBox = 'summary';
+      toast('✓ AI 总结提示词已复制（演示）：交给 AI Agent 逐文件执行，进度在本页自动刷新', 'ok');
+      render();
+      break;
+    }
+    case 'translate': {
+      if (translateRun && translateRun.phase === 'running') return;
+      if (btn.getAttribute('aria-disabled') === 'true') {
+        toast(`AI 翻译未解锁：默认语言尚缺 ${fe.translateMissing.length} 个文件审核（${gapText(fe.translateMissing) || '无文件'}）`, 'err');
+        return;
+      }
+      promptBox = 'translate';
+      toast('✓ AI 翻译提示词已复制（演示）：以已审核默认语言文档为基准逐文件翻译', 'ok');
+      render();
+      break;
+    }
+    case 'copyPrompt': {
+      const ta = document.querySelector('details.prompt textarea');
+      if (!ta) return;
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      if (!ok && navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast('提示词已复制', 'ok')).catch(() => toast('复制失败：请在文本框中全选（⌘A）手动复制', 'err'));
+      else ok ? toast('提示词已复制', 'ok') : toast('复制失败：请在文本框中全选（⌘A）手动复制', 'err');
+      break;
+    }
+    case 'review': {
+      if (loadPhase !== 'ready') { toast('发布流程数据未就绪：请先刷新或重试后再审查', 'err'); return; }
+      review = { key: 'README', modes: {}, reading: null };
+      loadReview('README');
+      break;
+    }
+    case 'reviewTab': {
+      syncDraft();
+      loadReview(btn.dataset.key);
+      break;
+    }
+    case 'reviewMode': {
+      syncDraft();
+      review.modes[btn.dataset.file] = btn.dataset.mode;
+      render();
+      break;
+    }
+    case 'reviewSave': {
+      syncDraft();
+      const file = btn.dataset.file;
+      const was = stOf(file);
+      const isDef = langs[0] === (fe.files.find((f) => f.file === file) || {}).lang;
+      if (was === 'reviewed') {
+        fstate[file] = isDef ? 'summarized' : 'translated'; // 编辑保存：已审核回退待审核
+        toast(`已保存 ${file}：内容更新，状态回退「${FLOW_LABEL[fstate[file]]}」需重新审核`, 'ok');
+      } else if (was === 'unsummarized' || was === 'untranslated') {
+        toast(`已保存 ${file}（演示）：状态保持「${FLOW_LABEL[was]}」——现有状态机中保存不产生审核记录，仍需 AI 总结 / 翻译或直接「通过审核」`, 'ok');
+      } else {
+        toast(`已保存 ${file}（演示）`, 'ok');
+      }
+      finalized = false; // 内容变化：完结失效回退（与真实口径一致）
+      render();
+      break;
+    }
+    case 'reviewApprove': {
+      syncDraft();
+      const file = btn.dataset.file;
+      if (stOf(file) === 'reviewed') return;
+      fstate[file] = 'reviewed';
+      finalized = false; // 审核记录变化：既有完结失效重锁（真实口径：完结有效性实时求值）
+      toast(`✓ ${file} 已通过审核（不经 AI 直接人工审核的路径演示）`, 'ok');
+      render();
+      break;
+    }
+    case 'reviewClose': {
+      syncDraft();
+      review = null;
+      render();
+      break;
+    }
+    case 'finalize': {
+      if (btn.getAttribute('aria-disabled') === 'true') {
+        toast(`整体审查未解锁：尚缺 ${fe.missing.length} 个文件审核（${gapText(fe.missing) || '无文件'}）`, 'err');
+        return;
+      }
+      finalizeOpen = true;
+      render();
+      break;
+    }
+    case 'finalizeClose':
+      if (finalizeBusy) return;
+      finalizeOpen = false;
+      render();
+      break;
+    case 'finalizeConfirm': {
+      finalizeBusy = true; render();
+      setTimeout(() => {
+        finalizeBusy = false; finalizeOpen = false; finalized = true;
+        toast('✓ 整体审查已完结：文档编写三阶段完成，「提交」已解锁', 'ok');
+        render();
+      }, 500);
+      break;
+    }
+    case 'commit': {
+      if (committedHash) return;
+      if (btn.getAttribute('aria-disabled') === 'true') {
+        if (fe.missing.length) toast(`还需 ${fe.missing.length} 个文件通过审查：${gapText(fe.missing)}`, 'err');
+        else toast('整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交', 'err');
+        return;
+      }
+      commitBusy = true; render();
+      setTimeout(() => {
+        commitBusy = false; committedHash = '9f2c7ab';
+        toast(`✓ 已提交到本地 dev 分支（演示 hash 9f2c7ab）：pathspec 含 LICENSE 文件，不夹带业务源码`, 'ok');
+        render();
+      }, 900);
+      break;
+    }
+    case 'retry': {
+      loadPhase = 'loading'; render();
+      setTimeout(() => { applyScenario('initial'); }, 700);
+      return;
+    }
+    case 'docLang':
+      activeDocLang = btn.dataset.lang;
+      render();
+      break;
+  }
+});
+
+/* 语言集输入框：回车应用（客户端镜像校验；非法就地报错不应用） */
+document.addEventListener('keydown', (ev) => {
+  const el = ev.target;
+  if (!(el && el.dataset && el.dataset.act === 'langs')) return;
+  if (ev.key !== 'Enter') return;
+  ev.preventDefault();
+  const raw = el.value.trim();
+  const parts = raw ? raw.split(',').map((x) => x.trim()) : [];
+  const seen = {};
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (!p) { langErr = `存在空的语言项（连续逗号）：第 ${i + 1} 项为空`; break; }
+    if (!/^[a-zA-Z]{2,3}$/.test(p)) { langErr = `存在非法缩写「${p.slice(0, 20)}」：语言缩写以国际规范为准（2–3 个字母，如 cn / zh / en / fr / ja）`; break; }
+    const low = p.toLowerCase();
+    if (seen[low]) { langErr = `语言重复：「${low}」出现多次`; break; }
+    seen[low] = true;
+  }
+  if (!raw) langErr = '语言集不能为空（至少一个语言缩写，如 cn,en）';
+  if (langErr) {
+    toast(`✕ 语言集未应用：${langErr}`, 'err');
+    render();
+    return;
+  }
+  const next = parts.map((x) => x.toLowerCase());
+  if (next.join(',') === langs.join(',')) { langErr = null; render(); return; }
+  // 应用：保留既有文件状态，新增语言文件初始未翻译；语言集变化使完结 / 提交状态失效回退
+  const prevFiles = fileListOf();
+  const prevStates = { ...fstate };
+  langs = next;
+  if (!langs.includes(activeDocLang)) activeDocLang = langs[0];
+  fstate = {};
+  for (const f of fileListOf()) {
+    fstate[f.file] = prevStates[f.file] != null ? prevStates[f.file]
+      : (f.lang === langs[0] ? 'unsummarized' : 'untranslated');
+  }
+  summaryRun = null; translateRun = null; finalized = false; committedHash = null; promptBox = null;
+  langErr = null;
+  seedNewContents(prevFiles);
+  toast(`✓ 语言集已应用：${next.join(',')}（文档清单 4 类 × ${next.length}${licenseMode === 'single' ? ' + LICENSE 单文件' : '（含 LICENSE 共 5 类）'}）`, 'ok');
+  render();
+});
+
+/* 新增语言文件的演示内容补种 */
+function seedNewContents(prevFiles) {
+  for (const f of fileListOf()) {
+    if (contents[f.file] != null) continue;
+    contents[f.file] = f.key === 'LICENSE' ? '' : `# ${f.key}\n\nThis is the demo content of ${f.file} (${langNameOf(f.lang)}).\n`;
+  }
+}
+
+/* 审查对话框：编辑草稿回同步（重渲染不丢字；多栏同时编辑时逐栏同步） */
+function syncDraft() {
+  if (!review) return;
+  document.querySelectorAll('textarea[data-act="draft"]').forEach((ta) => {
+    if (ta.dataset.file) contents[ta.dataset.file] = ta.value;
+  });
+}
+
+/* 切页签 / 打开对话框：模拟读取中（350ms）后展示内容 */
+function loadReview(key) {
+  review.key = key;
+  review.reading = fe_currentFile(key);
+  render();
+  clearTimeout(readingTimer);
+  readingTimer = setTimeout(() => { if (review) { review.reading = null; render(); } }, 350);
+}
+function fe_currentFile(key) {
+  const files = fileListOf().filter((f) => f.key === key);
+  return files.length ? files[0].file : null;
+}
+
+/* ---------- 控件 ---------- */
+document.getElementById('scenario').addEventListener('change', (ev) => applyScenario(ev.target.value));
+document.getElementById('licenseMode').addEventListener('change', (ev) => {
+  licenseMode = ev.target.value;
+  applyScenario(scenario); // 口径切换后按当前场景重置，保证计数一致
+  toast(`已切换 LICENSE 口径：${licenseMode === 'single' ? 'A1 单文件 LICENSE.md（不随语言集）' : 'A2 随语言集展开 LICENSE_<lang>.md'}（待确认口径，场景已重置）`);
+});
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? '' : 'dark';
+  document.documentElement.setAttribute('data-theme', cur);
+});
+
+/* ---------- 启动 ---------- */
+applyScenario('initial');
+</script>
+</body>
+</html>
