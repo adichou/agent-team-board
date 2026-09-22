@@ -142,11 +142,11 @@ Oncall 咨询看板（REQ-20260907-001；咨询单独立 ASK 序列，不进 REQ
 需求完善（REQ-20260907-003；REQ-20260908-020 起面向已接受单批量补 README 说明文档，涉及 UI 需含界面展示；design/test-cases 留待开发阶段；全程保持 accepted，不占实施互斥）：
   atb refine create [--ids ID1,ID2]
                                               创建完善任务（候选=已接受未完善；冻结候选+缺失原因+文档基线）
-  atb refine next [--batch ID] [--by 会话]   子 Agent 领取一项（refine 互斥；实时吸收新接受的单）
+  atb refine next [--batch ID] [--by 会话]   子 Agent 领取一项（并行 ≤3：不同子代理同时领取不同条目；在途满 3 提示等待回执）
   atb refine done <RUN-ID> --summary <要点>  完成回执（须真实改过条目文档）
   atb refine fail <RUN-ID> --reason <短句>   失败回执
   atb refine release <RUN-ID> [--reason 短句] 释放未回执的预留
-  atb refine check [--batch ID]              主调度最小核对（≤2KiB）
+  atb refine check [--batch ID]              主调度最小核对（≤2KiB；在途列表 + nextAction=continue 即补派）
   atb refine summary [--batch ID]            批次摘要（当前/计数/最近记录/提示词）
   atb refine pause [--off] [--batch ID]      暂停/恢复后续领取
   atb refine abort [--batch ID]              终止任务（剩余项出局；在途需在对应子代理会话人工停止）
@@ -970,13 +970,14 @@ async function discCmd(rest) {
 
 const REFINE_USAGE = `用法：
   atb refine create [--ids ID1,ID2]          创建完善任务并冻结候选（候选=已接受未完善；提示词通用，--mode 已忽略）
-  atb refine next [--batch ID] [--by 会话]      子 Agent 领取一项（refine 互斥；实时吸收新接受的单）
+  atb refine next [--batch ID] [--by 会话]      子 Agent 领取一项（并行 ≤3：不同子代理可同时领取不同条目；
+                                               在途已达 3 时返回「等待回执」提示，退出码 0）
   atb refine done <RUN-ID> --summary <要点>     完成回执（须真实改过条目文档）
   atb refine fail <RUN-ID> --reason <短句>      失败回执
   atb refine hold <RUN-ID> --reason <短句> (--question <问题>)... [--background <背景>]
                                                声明分析挂起（REQ-20260914-001：待人工确认分析，队列暂停）
   atb refine release <RUN-ID> [--reason 短句]   释放未回执的预留
-  atb refine check [--batch ID]                 主调度最小核对（≤2KiB）
+  atb refine check [--batch ID]                 主调度最小核对（≤2KiB；在途列表 + nextAction：continue=可补派）
   atb refine summary [--batch ID]               批次摘要
   atb refine pause [--off] [--batch ID]         暂停/恢复后续领取
   atb refine abort [--batch ID]                 终止任务（剩余项出局、在途需人工停止）
@@ -1048,13 +1049,21 @@ async function refineCmd(rest) {
     const batchId = needBatch(opts);
     const r = refine.nextRefineItem(dataDir, batchId, { owner: opts.by || undefined });
     if (r.stop) {
+      // REQ-20260922-004：满槽 busy 是预期调度态（等待回执），exit 0 明确提示而非报错中断
+      if (r.stop === 'busy') {
+        if (jsonOut) { console.log(JSON.stringify(r)); return; }
+        console.log(`= 完善批次 ${batchId} 未派发：在途已达并行上限（${refine.REFINE_PARALLEL_LIMIT}），等待任一子代理回执并核对后补派`);
+        if (r.notice) console.log(`  ${r.notice}`);
+        console.log(`  计数：${JSON.stringify(r.counts)}`);
+        return;
+      }
       const explain = {
         paused: '已暂停后续领取（在途执行不受影响）',
         blocked: '剩余项暂不可完善（不派空 worker）',
         finished: '本批完善范围已处理完毕',
         aborted: '任务已终止：不再派发后续项',
       }[r.stop] || r.stop;
-      die(`完善批次 ${batchId} 未派发：${explain}\n  计数：${JSON.stringify(r.counts)}`);
+      die(`完善批次 ${batchId} 未派发：${explain}${r.notice ? `\n  ${r.notice}` : ''}\n  计数：${JSON.stringify(r.counts)}`);
     }
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
     console.log(`✓ 已预留 ${r.itemId}（runId: ${r.runId}，owner: ${r.owner}）`);
@@ -1138,9 +1147,13 @@ async function refineCmd(rest) {
     const { opts } = parseOpts(subRest, new Set(['batch']));
     const r = refine.checkRefineBatch(dataDir, needBatch(opts));
     if (jsonOut) { console.log(JSON.stringify(r)); return; }
-    const cur = r.current ? `${r.current.itemId}（${r.current.runId}，owner ${r.current.owner}，${r.current.phase}）` : '—';
+    // REQ-20260922-004：在途运行列表（并行 ≤3；currents 缺失回退单条 current——存量兼容）
+    const actives = (r.currents && r.currents.length ? r.currents : (r.current ? [r.current] : []));
     console.log(`完善批次 ${r.batchId} [${r.status}]  nextAction: ${r.nextAction}`);
-    console.log(`  当前执行：${cur}`);
+    console.log(`  在途执行：${actives.length}/${refine.REFINE_PARALLEL_LIMIT}`);
+    for (const a of actives) {
+      console.log(`  - ${a.itemId}（${a.runId}，owner ${a.owner}，${a.phase}）`);
+    }
     console.log(`  计数：总计 ${r.counts.total} · 完成 ${r.counts.done} · 失败 ${r.counts.failed} · 出局 ${r.counts.skipped} · 已释放 ${r.counts.interrupted} · 待处理 ${r.counts.remaining}`);
     if (r.notice) console.log(`  ${r.notice}`);
     return;

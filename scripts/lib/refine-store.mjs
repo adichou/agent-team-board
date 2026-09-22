@@ -46,6 +46,9 @@ import { waitingAnalyzeConfirm, confirmOf as confirmRecordOf } from './confirm-s
 
 export const REASON_MAX_CHARS = 200;   // fail reason / done summary 上限（与批次回执口径一致）
 export const RECEIPT_MAX_BYTES = 2048; // 回执/check 协议载荷上限
+// REQ-20260922-004：AI 分析并行子代理上限（同时在途运行数）。固定值口径（README「待确认」默认）：
+// 不在设置「批量任务」分区提供配置项，人工确认后再议；codex 后台执行器不并行化（维持并发 1）。
+export const REFINE_PARALLEL_LIMIT = 3;
 // REQ-20260909-011：通用子代理模式标识 subagent（新建任务缺省）；zcode / codex 为存量值，
 // 直连显式传入仍合法（存量语义兼容）。提示词已通用化，不再按 Agent 差异化。
 export const REFINE_MODES = ['zcode', 'codex', 'subagent'];
@@ -425,15 +428,15 @@ export function buildRefinePrompt({ projectRoot, batchId = null, developer = nul
   const constraintLines = autoPlan ? REFINE_SCHEDULER_AUTO_PLAN_LINES : [REFINE_SCHEDULER_KEEP_ACCEPTED_LINE];
   const common = [
     '你是当前项目的 AI 分析调度员，只负责派发与接收短回执。',
-    '在当前项目的 Agent 会话中执行本提示词：每轮新启动一个子代理，按执行流程完善当前队列中最早的一个已接受条目的文档。',
-    '实时取单：每完成一项，立即核对并从当前已接受未完善队列（需求优先、最旧优先）领取下一项；运行中新接受的单立即可领取，无需任何并入操作；实时队列取空即本轮结束。',
+    '在当前项目的 Agent 会话中执行本提示词：可同时展开最多 3 个子代理并行完善，各自领取不同的已接受条目补全文档。',
+    '实时取单：任一子代理回执后立即核对（refine check），在途不足 3 且队列有余即补派下一项（需求优先、最旧优先）；运行中新接受的单立即可领取，无需任何并入操作；实时队列取空即本轮结束。',
     '子代理会话命名统一为：<条目编号>（与主调度会话区分）。',
-    '每个子代理只做一项；同一时间只运行一个；不要让子代理再派发子代理。',
+    '每个子代理只做一项、只领取一项；同时最多 3 个子代理并行、各自领取不同条目；不要让子代理再派发子代理。',
     'CLI 约定：atb 指 node 运行参数「CLI 入口」给出的命令（下同）。',
     '',
     '子代理流程（每项一个）：',
     '1. 领取：atb refine next --by refine-<序号> --dir <项目根>',
-    '   （返回条目、目录、缺失原因；stop 时按提示结束）',
+    '   （返回条目、目录、缺失原因；返回 busy（在途已达 3，等待回执）或 stop 时按提示结束本轮，把提示返回主会话）',
     '   领取/回执命令在子代理会话内执行（工作目录用 --dir 指定）。',
     '2. 阅读条目现有说明与项目代码/文档，直接编辑条目目录下的 markdown 补全：',
     '   需求只补 README：描述 + 验收标准；涉及 UI 时须含界面布局、交互行为、状态反馈与界面展示——',
@@ -448,7 +451,7 @@ export function buildRefinePrompt({ projectRoot, batchId = null, developer = nul
     '   声明后队列暂停、人工看板作答确认后答案随续跑回传（REQ-20260914-001）。',
     REFINE_DEMO_PERMIT_LINE,
     '4. 主会话核对：atb refine check --dir <项目根>',
-    '   nextAction=continue 时派发下一个子代理；stop 时结束。主会话只接收规定的短回执，不复制子代理的完整文档内容。',
+    '   nextAction=continue 时在途不足 3 且队列有余，补派下一个子代理；needs_attention 时等待在途子代理回执后再核对；stop 时结束。主会话只接收规定的短回执，不复制子代理的完整文档内容。',
   ];
   const params = [
     '运行参数（随项目与任务变化，命令占位符以本区实际值为准）：',
@@ -543,7 +546,7 @@ export function createRefineBatch(dataDir, { ids = null, mode = REFINE_SUBAGENT_
   // 拒绝重复启动（不排队、不新建对象）。
   for (const b of unfinishedRefineBatches(dataDir)) {
     const st = refineBatchState(dataDir, b);
-    const active = st.currentRun && !FINAL_REFINE_PHASES.has(st.currentRun.phase);
+    const active = st.activeRuns.length > 0; // REQ-20260922-004：多在途口径（相位盘点）
     if (!active && st.counts.remaining === 0) {
       if (b.status !== 'finished') {
         b.status = 'finished';
@@ -667,6 +670,10 @@ function refineRunsOfBatch(dataDir, batchId) {
 // BUG-20260908-010：新增 reacceptable——终态回执后被人工「驳回再接受 / 移出计划回已接受」
 // （完善状态被 core.mjs 进入 accepted 钩子重置为「未完善」）的条目集合；计数上不计入
 // done/failed/skipped/interrupted 而计入 remaining（total = 四类终态 + remaining 恒等式保持）。
+// REQ-20260922-004：新增 activeRuns 多在途集合（批次内相位非终态的运行，createdAt 升序）——
+// 事实源为 runs 账本相位（batch.activeRunIds 仅为领取/回执维护的冗余账本，读取以相位为准，
+// 存量账本无该字段不迁移不误判）；currentRun = currentRunId 指向且非终态，否则回退最新在途
+// （兼容字段：多在途下指向最新领取，供旧读取方 / 全局简报单条展示）。
 function refineBatchState(dataDir, batch) {
   const runs = refineRunsOfBatch(dataDir, batch.batchId);
   const finalByItem = new Map();
@@ -678,6 +685,11 @@ function refineBatchState(dataDir, batch) {
       activeByItem.add(r.itemId);
     }
   }
+  const activeRuns = runs
+    .filter((r) => !FINAL_REFINE_PHASES.has(r.phase))
+    .sort((a, b) =>
+      String(a.createdAt || '').localeCompare(String(b.createdAt || '')) ||
+      String(a.runId).localeCompare(String(b.runId)));
   const reacceptable = new Set();
   for (const id of finalByItem.keys()) {
     if (reacceptedForRerun(dataDir, id)) reacceptable.add(id);
@@ -687,9 +699,10 @@ function refineBatchState(dataDir, batch) {
   const retryItems = new Set(Object.keys(batch.retryItems || {}));
   let currentRun = null;
   if (batch.currentRunId) {
-    currentRun = runs.find((r) => r.runId === batch.currentRunId)
-      || readJson(path.join(refineRunDir(dataDir, batch.currentRunId), 'run.json'));
+    currentRun = runs.find((r) => r.runId === batch.currentRunId) || null;
+    if (currentRun && FINAL_REFINE_PHASES.has(currentRun.phase)) currentRun = null;
   }
+  if (!currentRun) currentRun = activeRuns[activeRuns.length - 1] || null; // REQ-20260922-004：回退最新在途
   // REQ-20260913-003：候选按实时口径盘点（不再依赖建轮时冻结快照）
   const candidates = effectiveRefineCandidates(dataDir, batch);
   const counts = { total: candidates.length, done: 0, failed: 0, skipped: 0, interrupted: 0, remaining: 0 };
@@ -702,7 +715,24 @@ function refineBatchState(dataDir, batch) {
   }
   counts.remaining = candidates
     .filter((c) => !finalByItem.has(c.id) || reacceptable.has(c.id) || retryItems.has(c.id)).length;
-  return { runs, finalByItem, activeByItem, reacceptable, retryItems, currentRun, counts };
+  return { runs, finalByItem, activeByItem, activeRuns, reacceptable, retryItems, currentRun, counts };
+}
+
+// REQ-20260922-004：账本在途 runId 列表（activeRunIds 缺失回退 currentRunId 单值——存量账本兼容）。
+// 与 refineBatchState.activeRuns（按 runs 相位盘点的事实源）配合使用：本组只维护账本字段，
+// 判定一律以相位为准，冗余差异（异常账本）会被读取侧自然过滤。
+function activeIdsOfBatch(batch) {
+  const ids = Array.isArray(batch.activeRunIds) ? [...batch.activeRunIds] : [];
+  if (batch.currentRunId && !ids.includes(batch.currentRunId)) ids.push(batch.currentRunId);
+  return ids;
+}
+// 回执/释放/续跑收尾：仅移除自身 runId；currentRunId 等值时重指向剩余最新领取的在途（或置空），
+// 其余在途与计数不受影响（并行多在途隔离）。
+function removeActiveRunId(batch, runId) {
+  const ids = activeIdsOfBatch(batch).filter((x) => x !== runId);
+  if (ids.length) batch.activeRunIds = ids;
+  else delete batch.activeRunIds;
+  if (batch.currentRunId === runId) batch.currentRunId = ids.length ? ids[ids.length - 1] : null;
 }
 
 // BUG-20260908-010：终态回执后条目被人工重新接受的判定。依据 core.mjs 进入 accepted 钩子置位的
@@ -820,120 +850,145 @@ function requeueReacceptedRefineItems(dataDir, batch) {
 export function nextRefineItem(dataDir, batchId, { owner = null } = {}) {
   owner = owner || actor();
   ensureRefine(dataDir);
-  const batch = getRefineBatch(dataDir, batchId);
-  // 存量数据排队保护：存在更早的未结束完善账本时不得越过队首领取
-  const prior = unfinishedRefineBatches(dataDir).find((b) => b.batchId !== batchId &&
-    (String(b.createdAt || '').localeCompare(String(batch.createdAt || '')) < 0 ||
+  // REQ-20260922-004 锁语义迁移：zcode 领取不再持有全局 refine.lock（旧「领取占用、回执释放」
+  // 单锁语义废弃——并行 ≤3 路无法共用单锁；codex 执行器仍以 refine.lock 表示执行占用）。
+  // 领取的「读账本→吸收→盘点→选候选→落账」整段改由短临界区锁 refine-next.lock 串行化：
+  // 多子代理 CLI 并发领取不丢更新；操作完成即释放（30s 过期仅兜底挂死临界区）。
+  // 条目互斥（同一时间一条目单执行者）由锁内重读的 activeByItem 保证，不放宽。
+  const nextLockPath = path.join(dataDir, 'runtime', '.locks', 'refine-next.lock');
+  acquireLock(nextLockPath, REFINE_ID_LOCK_STALE_MS, { kind: 'refine-next', batchId, owner, at: nowIso() });
+  try {
+    const batch = getRefineBatch(dataDir, batchId);
+    // 存量数据排队保护：存在更早的未结束完善账本时不得越过队首领取
+    const prior = unfinishedRefineBatches(dataDir).find((b) => b.batchId !== batchId &&
+      (String(b.createdAt || '').localeCompare(String(batch.createdAt || '')) < 0 ||
       (String(b.createdAt || '') === String(batch.createdAt || '') && b.batchId < batchId)));
-  if (prior) {
-    throw new AtbError(`完善任务 ${batchId} 排队中：前序任务 ${prior.batchId} 尚未结束，不得抢先领取`);
-  }
-  if (batch.abortRequested) {
-    return { stop: 'aborted', counts: refineBatchState(dataDir, batch).counts, notice: '任务已终止：不再派发后续项' };
-  }
-  absorbNewRefineCandidates(dataDir, batch); // 实时队列：先吸收新接受的未完善条目再盘点
-  requeueReacceptedRefineItems(dataDir, batch); // BUG-20260908-010：终态后重新接受的条目重排队尾并重冻结基线
-  const state0 = refineBatchState(dataDir, batch);
-  // REQ-20260914-001：存在「待人工确认分析」挂起时后续分析条目不得领取/派发（人工恢复领取
-  // 也不放行，只有当前条目答案确认并续跑收尾后才继续）——不派空 worker。先于 currentRun 判定：
-  // 声明挂起的运行保持 reserved 是预期形态（等待人工确认后 interrupted 续跑），提示须直达确认
-  // 入口而非误导「核对旧子代理」。只看 waiting（confirmed 已回传续跑，队列须能派发该条目）。
-  const waitingAnalyze = waitingAnalyzeConfirm(dataDir);
-  if (waitingAnalyze) {
-    return {
-      stop: 'paused',
-      counts: state0.counts,
-      notice: `分析队列挂起：${waitingAnalyze.itemId} 待人工确认分析（${waitingAnalyze.reason || '存在必答问题'}）；请到 Status Board 任务页「待人工确认」作答并确认后继续`,
-    };
-  }
-  if (batch.pauseRequested) {
-    return { stop: 'paused', counts: state0.counts, notice: '已暂停后续领取' };
-  }
-  if (state0.currentRun && !FINAL_REFINE_PHASES.has(state0.currentRun.phase)) {
-    const r = state0.currentRun;
-    throw new AtbError(
-      `当前执行未收尾：${r.runId}（${r.itemId}，owner ${r.owner}，${r.phase}）。` +
-      '先核对旧子 Agent 是否结束，不得创建第二个完善执行'
-    );
-  }
-  acquireRefineLock(dataDir, { kind: 'zcode', batchId, owner, at: nowIso() });
-  for (const cand of batch.candidates) {
-    // BUG-20260908-010：finalByItem 历史终态不排除「终态后重新接受（重排队）」的条目；
-    // REQ-20260908-026：retryItems 标记的异常记录同样重新领取（新执行尝试）
-    if (state0.finalByItem.has(cand.id) && !state0.reacceptable.has(cand.id) && !state0.retryItems.has(cand.id)) continue;
-    if (state0.activeByItem.has(cand.id)) continue;
-    let st = null;
-    let dir = null;
-    try {
-      dir = resolveItemDir(dataDir, cand.id).dir;
-      st = readStatus(dir);
-    } catch {
-      skipRun(dataDir, batch, cand, '条目目录损坏，无法完善');
-      continue;
+    if (prior) {
+      throw new AtbError(`完善任务 ${batchId} 排队中：前序任务 ${prior.batchId} 尚未结束，不得抢先领取`);
     }
-    if (st.status !== 'accepted') {
-      skipRun(dataDir, batch, cand, `状态已变化（当前 ${st.status}），不再需要本批完善`);
-      continue;
+    if (batch.abortRequested) {
+      return { stop: 'aborted', counts: refineBatchState(dataDir, batch).counts, notice: '任务已终止：不再派发后续项' };
     }
-    // BUG-20260908-011：文档指纹基线改在领取时冻结（派发该项、写运行前）——创建/吸收到领取
-    // 之间的人工编辑（补充背景）不再作为出局门槛；done 回执「文档确有变更」核验沿用
-    // cand.baseline，即以领取时点为准：领取后无论子代理还是人工再编辑都算「领取后变更」，
-    // 领取后未做任何修改仍拒绝记完成（「基线一致不能记完成」语义不变）。
-    cand.baseline = docsFingerprint(dir);
-    // BUG-20260908-013：领取落账继承批次执行 Agent（batch.agent 缺省回退 batch.mode，兼容旧批次），
-    // 与 skipRun()/newCodexRefineRun() 口径一致，codex 批次不得误标 zcode
-    const run = newRefineRun(dataDir, {
-      batchId: batch.batchId,
-      item: { id: cand.id, title: st.title },
-      owner,
-      mode: batch.agent || batch.mode,
-      phase: 'reserved',
-    });
-    batch.currentRunId = run.runId;
-    batch.status = 'running';
-    if (batch.retryItems && batch.retryItems[cand.id]) {
-      delete batch.retryItems[cand.id]; // REQ-20260908-026：重试领取成功，清除标记（随下方落盘）
-      if (!Object.keys(batch.retryItems).length) delete batch.retryItems;
+    absorbNewRefineCandidates(dataDir, batch); // 实时队列：先吸收新接受的未完善条目再盘点
+    requeueReacceptedRefineItems(dataDir, batch); // BUG-20260908-010：终态后重新接受的条目重排队尾并重冻结基线
+    const state0 = refineBatchState(dataDir, batch);
+    // REQ-20260914-001：存在「待人工确认分析」挂起时后续分析条目不得领取/派发（人工恢复领取
+    // 也不放行，只有当前条目答案确认并续跑收尾后才继续）——不派空 worker。先于槽位判定：
+    // 声明挂起的运行保持 reserved 是预期形态（等待人工确认后 interrupted 续跑），提示须直达确认
+    // 入口而非误导「核对旧子代理」。只看 waiting（confirmed 已回传续跑，队列须能派发该条目）。
+    const waitingAnalyze = waitingAnalyzeConfirm(dataDir);
+    if (waitingAnalyze) {
+      return {
+        stop: 'paused',
+        counts: state0.counts,
+        notice: `分析队列挂起：${waitingAnalyze.itemId} 待人工确认分析（${waitingAnalyze.reason || '存在必答问题'}）；请到 Status Board 任务页「待人工确认」作答并确认后继续`,
+      };
     }
-    saveRefineBatch(dataDir, batch);
-    // REQ-20260908-020：领取成功置「完善中」（执行账本索引，徽标随轮询可见）
-    setRefineItemState(dataDir, cand.id, 'refining', { runId: run.runId });
-    // REQ-20260914-001：上一轮「待人工确认分析」已确认续跑的条目，把人工答案随领取回传
-    // 当前分析任务继续未完成步骤（confirmed 记录保留，done 收尾时闭环）。
-    const priorConfirm = confirmRecordOf(dataDir, cand.id);
-    const continuation = priorConfirm && priorConfirm.kind === 'analyze' && priorConfirm.state === 'confirmed'
-      ? {
-        round: priorConfirm.round || 1,
-        background: priorConfirm.background || null,
-        reason: priorConfirm.reason || null,
-        questions: (priorConfirm.questions || []).map((q) => ({
-          id: q.id, text: q.text, answer: q.answer || null, note: q.note || null,
-        })),
+    if (batch.pauseRequested) {
+      return { stop: 'paused', counts: state0.counts, notice: '已暂停后续领取' };
+    }
+    // REQ-20260922-004 并行领取：在途 < 上限时可领**不同**条目（同条目由 activeByItem 跳过防重复）；
+    // 在途已达上限 → 明确提示等待回执（预期调度态，非报错中断——旧串行「当前执行未收尾」抛错移除）。
+    if (state0.activeRuns.length >= REFINE_PARALLEL_LIMIT) {
+      return {
+        stop: 'busy',
+        counts: state0.counts,
+        notice: `在途已达 ${REFINE_PARALLEL_LIMIT}（${state0.activeRuns.map((r) => r.itemId).join('、')}）：等待任一子代理回执并核对（atb refine check）后补派`,
+      };
+    }
+    for (const cand of batch.candidates) {
+      // BUG-20260908-010：finalByItem 历史终态不排除「终态后重新接受（重排队）」的条目；
+      // REQ-20260908-026：retryItems 标记的异常记录同样重新领取（新执行尝试）
+      if (state0.finalByItem.has(cand.id) && !state0.reacceptable.has(cand.id) && !state0.retryItems.has(cand.id)) continue;
+      if (state0.activeByItem.has(cand.id)) continue;
+      let st = null;
+      let dir = null;
+      try {
+        dir = resolveItemDir(dataDir, cand.id).dir;
+        st = readStatus(dir);
+      } catch {
+        skipRun(dataDir, batch, cand, '条目目录损坏，无法完善');
+        continue;
       }
-      : null;
+      if (st.status !== 'accepted') {
+        skipRun(dataDir, batch, cand, `状态已变化（当前 ${st.status}），不再需要本批完善`);
+        continue;
+      }
+      // BUG-20260908-011：文档指纹基线改在领取时冻结（派发该项、写运行前）——创建/吸收到领取
+      // 之间的人工编辑（补充背景）不再作为出局门槛；done 回执「文档确有变更」核验沿用
+      // cand.baseline，即以领取时点为准：领取后无论子代理还是人工再编辑都算「领取后变更」，
+      // 领取后未做任何修改仍拒绝记完成（「基线一致不能记完成」语义不变）。
+      cand.baseline = docsFingerprint(dir);
+      // BUG-20260908-013：领取落账继承批次执行 Agent（batch.agent 缺省回退 batch.mode，兼容旧批次），
+      // 与 skipRun()/newCodexRefineRun() 口径一致，codex 批次不得误标 zcode
+      const run = newRefineRun(dataDir, {
+        batchId: batch.batchId,
+        item: { id: cand.id, title: st.title },
+        owner,
+        mode: batch.agent || batch.mode,
+        phase: 'reserved',
+      });
+      // REQ-20260922-004：多在途账本——activeRunIds 追加（存量字段缺失回退 currentRunId 单值），
+      // currentRunId 指向最新领取（兼容字段：check.current / 全局简报单条展示）
+      batch.activeRunIds = [...activeIdsOfBatch(batch), run.runId];
+      batch.currentRunId = run.runId;
+      batch.status = 'running';
+      if (batch.retryItems && batch.retryItems[cand.id]) {
+        delete batch.retryItems[cand.id]; // REQ-20260908-026：重试领取成功，清除标记（随下方落盘）
+        if (!Object.keys(batch.retryItems).length) delete batch.retryItems;
+      }
+      saveRefineBatch(dataDir, batch);
+      // REQ-20260908-020：领取成功置「完善中」（执行账本索引，徽标随轮询可见）
+      setRefineItemState(dataDir, cand.id, 'refining', { runId: run.runId });
+      // REQ-20260914-001：上一轮「待人工确认分析」已确认续跑的条目，把人工答案随领取回传
+      // 当前分析任务继续未完成步骤（confirmed 记录保留，done 收尾时闭环）。
+      const priorConfirm = confirmRecordOf(dataDir, cand.id);
+      const continuation = priorConfirm && priorConfirm.kind === 'analyze' && priorConfirm.state === 'confirmed'
+        ? {
+          round: priorConfirm.round || 1,
+          background: priorConfirm.background || null,
+          reason: priorConfirm.reason || null,
+          questions: (priorConfirm.questions || []).map((q) => ({
+            id: q.id, text: q.text, answer: q.answer || null, note: q.note || null,
+          })),
+        }
+        : null;
+      return {
+        runId: run.runId,
+        batchId: batch.batchId,
+        itemId: cand.id,
+        type: cand.type,
+        title: st.title,
+        reasons: cand.reasons,
+        itemDir: dir,
+        docs: orderedDocs(dir),
+        owner,
+        ...(continuation ? { continuation } : {}),
+      };
+    }
+    // 无可领取：在途未清零时不收尾落账（等待回执后核对），在途清零才收尾并释放互斥
+    const state = refineBatchState(dataDir, batch);
+    if (state.activeRuns.length > 0) {
+      return {
+        stop: 'finished',
+        counts: state.counts,
+        notice: `队列已取空：在途 ${state.activeRuns.length} 项执行中，等待子代理回执后核对（atb refine check）`,
+      };
+    }
+    batch.currentRunId = null;
+    delete batch.activeRunIds;
+    batch.status = 'finished';
+    saveRefineBatch(dataDir, batch);
+    // REQ-20260922-004：zcode 不再占用 refine.lock，收尾只清非 codex 遗留锁（kind 过滤），
+    // 不得误删 codex 执行器占用的执行锁（tryAcquireRefineLock 持有）
+    releaseRefineLockIf(dataDir, (l) => l.kind !== 'codex-refine');
     return {
-      runId: run.runId,
-      batchId: batch.batchId,
-      itemId: cand.id,
-      type: cand.type,
-      title: st.title,
-      reasons: cand.reasons,
-      itemDir: dir,
-      docs: orderedDocs(dir),
-      owner,
-      ...(continuation ? { continuation } : {}),
+      stop: state.counts.remaining > 0 ? 'blocked' : 'finished',
+      counts: state.counts,
     };
+  } finally {
+    releaseLock(nextLockPath);
   }
-  // 无可领取：收尾批次并释放互斥
-  const state = refineBatchState(dataDir, batch);
-  batch.currentRunId = null;
-  batch.status = 'finished';
-  saveRefineBatch(dataDir, batch);
-  releaseRefineLockIf(dataDir, () => true);
-  return {
-    stop: state.counts.remaining > 0 ? 'blocked' : 'finished',
-    counts: state.counts,
-  };
 }
 
 // ---------- REQ-20260914-001 分析挂起：声明（worker）/ 确认续跑（人工后回传） ----------
@@ -947,10 +1002,9 @@ export function declareRefineHold(dataDir, runId, { reason = '', background = ''
   if (FINAL_REFINE_PHASES.has(run.phase)) {
     throw new AtbError(`运行 ${runId} 已收尾（${run.phase}）：不能声明挂起，请核对后换单或重建任务`);
   }
+  // REQ-20260922-004：并行下任一在途运行可声明挂起（旧口径要求 = currentRunId 单值已移除；
+  // 终态校验在前，声明只影响自身条目与队列暂停，其他在途不受影响）
   const batch = getRefineBatch(dataDir, run.batchId);
-  if (batch.currentRunId !== runId) {
-    throw new AtbError(`运行 ${runId} 不是当前执行（currentRun ${batch.currentRunId || '无'}）：不得声明挂起`);
-  }
   const { dir } = resolveItemDir(dataDir, run.itemId);
   const st = readStatus(dir);
   if (st.status !== 'accepted' && st.status !== 'planned') {
@@ -993,9 +1047,7 @@ export function resumeAfterAnalysisConfirm(dataDir, runId) {
   if (FINAL_REFINE_PHASES.has(run.phase)) {
     throw new AtbError(`运行 ${runId} 已收尾（${run.phase}）：不能按确认续跑，请核对当前执行`);
   }
-  if (batch.currentRunId !== runId) {
-    throw new AtbError(`运行 ${runId} 不是当前执行（currentRun ${batch.currentRunId || '无'}）：不能续跑`);
-  }
+  // REQ-20260922-004：并行下按运行自身判定（旧「= currentRunId」单值检查已移除；终态校验在前）
   run.phase = 'interrupted';
   run.reason = '人工确认分析：答案已回传，重排队首续跑';
   run.finishedAt = nowIso();
@@ -1013,7 +1065,7 @@ export function resumeAfterAnalysisConfirm(dataDir, runId) {
     }
   }
   batch.retryItems = { ...(batch.retryItems || {}), [run.itemId]: runId };
-  batch.currentRunId = null;
+  removeActiveRunId(batch, runId); // REQ-20260922-004：仅移除自身（其余在途不受影响）
   batch.pauseRequested = false; // 确认闭环：解除队列暂停（当前条目队首续跑，完成后才到下一条）
   const counts = refineBatchState(dataDir, batch).counts;
   batch.status = counts.remaining > 0 ? 'running' : 'finished';
@@ -1188,7 +1240,7 @@ export function finishRefineRun(dataDir, runId, { result, summary = '', reason =
     receipt.autoPlan = plan;
   }
 
-  if (batch.currentRunId === runId) batch.currentRunId = null;
+  removeActiveRunId(batch, runId); // REQ-20260922-004：仅结算自身（currentRunId 等值时重指向剩余最新在途，其余在途不受影响）
   absorbNewRefineCandidates(dataDir, batch); // BUG-20260908-010：收尾判定前实时吸收，运行中新接受的单不得漏
   const state = refineBatchState(dataDir, batch);
   batch.status = batch.pauseRequested ? 'paused' : (state.counts.remaining > 0 ? 'running' : 'finished');
@@ -1214,7 +1266,7 @@ export function releaseRefineRun(dataDir, runId, { reason = '' } = {}) {
   saveRefineRun(dataDir, run);
   setRefineItemState(dataDir, run.itemId, 'unrefined', { runId }); // REQ-20260908-020：释放回置未完善
   const batch = getRefineBatch(dataDir, run.batchId);
-  if (batch.currentRunId === runId) batch.currentRunId = null;
+  removeActiveRunId(batch, runId); // REQ-20260922-004：仅释放自身，其余在途不受影响
   absorbNewRefineCandidates(dataDir, batch); // BUG-20260908-010：收尾判定前实时吸收
   const state = refineBatchState(dataDir, batch);
   if (!batch.pauseRequested) {
@@ -1254,6 +1306,7 @@ export function abortRefineBatch(dataDir, batchId) {
   batch.abortRequested = true;
   batch.aborted = true;
   batch.currentRunId = null;
+  delete batch.activeRunIds; // REQ-20260922-004：多在途在途集合随终止清空
   batch.status = 'finished';
   saveRefineBatch(dataDir, batch);
   releaseRefineLockIf(dataDir, () => true);
@@ -1282,7 +1335,7 @@ export function pauseRefineBatch(dataDir, batchId, paused) {
   if (refineBatchTerminalReason(batch)) return batch;
   batch.pauseRequested = Boolean(paused);
   const state = refineBatchState(dataDir, batch);
-  const active = state.currentRun && !FINAL_REFINE_PHASES.has(state.currentRun.phase);
+  const active = state.activeRuns.length > 0; // REQ-20260922-004：多在途口径（任一在途即不落 paused，在途继续执行完）
   if (paused && !active) batch.status = 'paused';
   else if (!paused && batch.status === 'paused') {
     batch.status = state.runs.length ? 'running' : 'prepared';
@@ -1296,7 +1349,7 @@ export function settleRefineBatch(dataDir, batchId) {
   const batch = getRefineBatch(dataDir, batchId);
   absorbNewRefineCandidates(dataDir, batch); // BUG-20260908-010：结算判定前实时吸收
   const state = refineBatchState(dataDir, batch);
-  const active = state.currentRun && !FINAL_REFINE_PHASES.has(state.currentRun.phase);
+  const active = state.activeRuns.length > 0; // REQ-20260922-004：多在途口径
   const next = batch.pauseRequested ? 'paused'
     : (state.counts.remaining === 0 ? 'finished'
       : (active || state.runs.length ? 'running' : 'prepared'));
@@ -1315,15 +1368,18 @@ export function checkRefineBatch(dataDir, batchId) {
   // 经 refineBatchState 计入 remaining）使 nextAction 保持 continue，不得因创建时快照耗尽提前收工。
   absorbNewRefineCandidates(dataDir, batch);
   const state = refineBatchState(dataDir, batch);
-  const currentRun = state.currentRun;
-  const active = currentRun && !FINAL_REFINE_PHASES.has(currentRun.phase);
+  // REQ-20260922-004 多在途核对协议：current 保留单条（最新在途，兼容旧读取方），currents 为
+  // 在途列表（≤ 上限，精简字段控体积）；nextAction 按「在途 < 上限且队列有余 → continue（补派）；
+  // 满槽或队列余量全部在途 → needs_attention（等待任一回执）；队列取空且在途清零 → stop」。
+  // 可领数 = remaining − 在途数（在途条目计入 remaining 但本轮不可再领）。
+  const activeRuns = state.activeRuns;
+  const active = activeRuns.length;
+  const latest = activeRuns[activeRuns.length - 1] || null;
+  const nextable = Math.max(0, state.counts.remaining - active);
 
   let nextAction = 'continue';
   let notice = '';
-  if (active) {
-    nextAction = 'needs_attention';
-    notice = `当前执行未收尾（${currentRun.runId} ${currentRun.itemId} owner ${currentRun.owner}），等待子 Agent 回执后核对`;
-  } else if (batch.abortRequested) {
+  if (batch.abortRequested) {
     nextAction = 'stop';
     notice = '任务已人工终止：不再派发后续项；在途子代理请在对应子代理会话人工停止';
   } else if (batch.pauseRequested) {
@@ -1340,17 +1396,22 @@ export function checkRefineBatch(dataDir, batchId) {
       batch.status = 'finished';
       saveRefineBatch(dataDir, batch);
     }
-  } else if (state.activeByItem.size > 0 && !currentRun) {
-    notice = `有 ${state.activeByItem.size} 项在 codex 后台排队/执行中，等待执行器结算`;
+  } else if (nextable <= 0 || active >= REFINE_PARALLEL_LIMIT) {
+    // REQ-20260922-004：满槽（在途 = 上限）或队列余量全部在途——等待任一子代理回执后核对补派；
+    // 单在途串行退化形态（可领数 0）与旧口径 needs_attention 一致，行为零回归。
+    nextAction = 'needs_attention';
+    notice = `在途 ${active}/${REFINE_PARALLEL_LIMIT}${nextable > 0 ? '（队列还有可领项）' : ''}：等待任一子代理回执后核对`;
   }
   const payload = {
     version: 1,
     batchId: batch.batchId,
     mode: batch.mode,
     status: batch.status,
-    current: active
-      ? { runId: currentRun.runId, itemId: currentRun.itemId, title: titleOfRun(dataDir, currentRun), owner: currentRun.owner, phase: currentRun.phase, at: currentRun.createdAt }
+    current: latest
+      ? { runId: latest.runId, itemId: latest.itemId, title: titleOfRun(dataDir, latest), owner: latest.owner, phase: latest.phase, at: latest.createdAt }
       : null,
+    currents: activeRuns.slice(-REFINE_PARALLEL_LIMIT).map((r) =>
+      ({ runId: r.runId, itemId: r.itemId, owner: r.owner, phase: r.phase, at: r.createdAt })),
     counts: state.counts,
     nextAction,
     ...(notice ? { notice } : {}),
@@ -1452,6 +1513,11 @@ export function refineSummary(dataDir, batchId = null) {
   return {
     batch: refineBatchPublicView(batch, { autoPlan: refineAutoPlanOn(dataDir) }),
     currentRun: state.currentRun,
+    // REQ-20260922-004：多在途透出（面板概况区在途卡片数据源）；currentRun 保留（单条兼容）
+    activeRuns: state.activeRuns.map((r) => ({
+      runId: r.runId, itemId: r.itemId, title: titleOfRun(dataDir, r),
+      owner: r.owner, phase: r.phase, createdAt: r.createdAt,
+    })),
     counts: state.counts,
     records,
     recordsTotal: total,

@@ -3784,6 +3784,8 @@ async function handleApi(req, res, u, pathname) {
     return sendJson(res, 200, {
       batch: refine.refineBatchPublicView(s.batch),
       current: s.currentRun,
+      // REQ-20260922-004：多在途列表透传（面板概况区在途卡片数据源）；current 保留单条兼容
+      activeRuns: s.activeRuns,
       counts: s.counts,
       records: s.records,
       // BUG-20260908-018：透传 run 总数，面板据此渲染「加载更多（x/N）」/「共 N 条」
