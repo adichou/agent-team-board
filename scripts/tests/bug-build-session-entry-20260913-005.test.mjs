@@ -268,7 +268,7 @@ t('S7 检测失败：说明 +「重新检测」+ 手动指引，入口不消失�
   assert.match(inner, /客户端检测失败：无法确认本机 Zcode \/ Codex 是否可用/, '失败说明');
   assert.match(inner, /data-bld-ws-retry/, '应有「重新检测」入口');
   assert.match(inner, /重新检测/, '重新检测文案');
-  assert.match(inner, /或直接打开 ZCode \/ ChatGPT 手动新建会话并粘贴提示词/, '手动打开指引');
+  assert.match(inner, /或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词/, '手动打开指引（BUG-20260922-001 通用口径）');
   assert.doesNotMatch(inner, /data-bld-new-session/, '失败未知态不渲染链接（留重试口，不砍入口区）');
   await h.clickRetry(); // force 重试 → 成功
   inner = h.inner();
