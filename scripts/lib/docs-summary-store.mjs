@@ -128,6 +128,7 @@ export function createSummaryRun(dataDir, { verId, owner, langs } = {}) {
   const runId = newRunId();
   const files = {};
   const ls = docLangsOf({ langs });
+  // 只装默认语言 4 类文件：单文件类（LICENSE，lang=null，REQ-20260922-002 口径 B）不进 AI 总结
   for (const f of publishDocFiles(ls).filter((x) => x.lang === ls[0])) files[f.file] = 'pending';
   const run = {
     version: 1,

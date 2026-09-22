@@ -1707,7 +1707,7 @@ const ATBBuild = (() => {
       if (pf.review?.open) { syncReviewDrafts(); pf.review.modes = {}; pf.review.contents = {}; } // 语言集变化：对话框按新清单重建
       await ensurePublishPlan(true);
       if (pf.review?.open) await loadReviewPair(pf.review.key);
-      toast(`✓ 语言集已应用：${next}（文档清单 4 类 × ${r.langs.length} 语言）`);
+      toast(`✓ 语言集已应用：${next}（文档清单 4 类 × ${r.langs.length} 语言 + LICENSE 单文件）`);
     } catch (e) {
       pf.langsErr = e.message; // 保存失败：保持上次有效语言集，可改后重试
       toast(`✕ 语言集保存失败：${e.message}`, true);
@@ -1907,13 +1907,16 @@ const ATBBuild = (() => {
     }
   }
 
-  // 对话框内保存单文件（沿用白名单 + ≤ 2 MiB 口径）；已审核文件编辑保存后回退「已总结待审核」
+  // 对话框内保存单文件（沿用白名单 + ≤ 2 MiB 口径）；已审核文件编辑保存后回退待审核
+  //（四类回退「已总结待审核」，单文件类回退「待审核」，REQ-20260922-002）
   async function saveReviewFile(file) {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.review?.open || pf.review.busy || !state.project) return;
     syncReviewDrafts();
-    const wasReviewed = (pf.plan?.docsFlow?.files || []).some((f) => f.file === file && f.state === 'reviewed');
+    const entry = (pf.plan?.docsFlow?.files || []).find((f) => f.file === file);
+    const wasReviewed = entry && entry.state === 'reviewed';
+    const isSingle = !!entry?.single || /^LICENSE\.md$/.test(file);
     pf.review.busy = true;
     render();
     try {
@@ -1924,7 +1927,8 @@ const ATBBuild = (() => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
       if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
-      if (wasReviewed) toast(`${file} 内容已修改：回到「已总结待审核」，需重新审查`, true);
+      if (wasReviewed && isSingle) toast(`${file} 内容已修改：回到「待审核」，需重新审查`, true);
+      else if (wasReviewed) toast(`${file} 内容已修改：回到「已总结待审核」，需重新审查`, true);
       else toast(`✓ 已保存 ${file}（未提交：需审查通过并「提交」后进入本地 dev）`);
     } catch (e) {
       toast(`✕ 保存失败：${e.message}（内容已保留，可重试）`, true);
@@ -2649,27 +2653,37 @@ const ATBBuild = (() => {
   const DOCS_FLOW_LABEL = {
     unsummarized: '未总结', summarizing: '正在总结', summarized: '已总结待审核',
     untranslated: '未翻译', translating: '正在翻译', translated: '已翻译待审核', reviewed: '已审核',
+    // REQ-20260922-002 单文件类（LICENSE）三态：不经 AI，人工编写 → 待审核 → 已审核
+    unwritten: '未编写', pending: '待审核',
   };
   const DOCS_FLOW_CLS = {
     unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait',
     untranslated: 'st-mute', translating: 'st-run', translated: 'st-wait', reviewed: 'st-ok',
+    unwritten: 'st-mute', pending: 'st-wait',
   };
   const DOCS_FLOW_ICON = {
     unsummarized: '○', summarizing: '◐', summarized: '●',
     untranslated: '○', translating: '◐', translated: '●', reviewed: '✔',
+    unwritten: '○', pending: '●',
   };
   // REQ-20260921-010 文档清单按语言集动态展开（与 publish-flow 同口径）：
-  // 四类 × 语言集语言数，第一个语言（默认语言）不带后缀，其余 <KEY>_<lang>.md。
+  // 四类 × 语言集语言数，第一个语言（默认语言）不带后缀，其余 <KEY>_<lang>.md；
+  // REQ-20260922-002 追加单文件类 LICENSE（A1 口径：恒 LICENSE.md、不随语言集展开、
+  // lang=null / single=true，归默认语言组展示并标「不分语言」）。
   const DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+  const DOC_SINGLE_KEYS = ['LICENSE'];
   const DEFAULT_DOC_LANGS = ['cn', 'en'];
   // 常见语言显示名（未命中原样显示缩写）；显示名随文件名 data-i18n-skip 豁免（标识不是文案）。
   const LANG_NAMES = { cn: '中文', zh: '中文', en: 'English', fr: 'Français', jp: '日本語', ja: '日本語',
     de: 'Deutsch', es: 'Español', ko: '한국어', ru: 'Русский', it: 'Italiano', pt: 'Português' };
   function langNameOf(l) { return LANG_NAMES[String(l || '').toLowerCase()] || l || ''; }
-  // 语言集 → 文档清单（plan.langs 缺省回退 cn,en）
+  // 语言集 → 文档清单（plan.langs 缺省回退 cn,en）：4 类 × N + 单文件类（末尾追加）
   function docFilesOf(langs) {
     const ls = Array.isArray(langs) && langs.length ? langs : DEFAULT_DOC_LANGS;
-    return DOC_KEYS.flatMap((key) => ls.map((lang, i) => ({ key, lang, file: `${key}${i === 0 ? '' : `_${lang}`}.md` })));
+    return [
+      ...DOC_KEYS.flatMap((key) => ls.map((lang, i) => ({ key, lang, file: `${key}${i === 0 ? '' : `_${lang}`}.md` }))),
+      ...DOC_SINGLE_KEYS.map((key) => ({ key, lang: null, file: `${key}.md`, single: true, isDefault: true })),
+    ];
   }
   // 语言集客户端校验镜像（与服务端 normalizeDocLangs 同口径）：空值 / 空项 / 非 2–3 字母 /
   // 重复项拦截，不应用非法值、界面保持上次有效状态。
@@ -2735,7 +2749,7 @@ const ATBBuild = (() => {
             <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
             <button type="button" class="btn small" data-pf-summary${pf.busy ? ' disabled' : ''} title="复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结默认语言四文档（已审核文件跳过；也可不经 AI 总结直接审查）">${summaryBtnText(pf)}</button>
             ${translateBtnHtml(pf)}
-            <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型四页签、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核">审查</button>
+            <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型页签（四类 + LICENSE）、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核">审查</button>
             ${finalizeBtnHtml(pf)}
             ${commitBtnHtml(pf)}
           </div>`;
@@ -2769,9 +2783,12 @@ ${langsField}
       const trProgress = tr && tr.phase === 'running' && tr.currentFile === f.file
         ? `<span class="muted small"> · AI 翻译 ${tr.counts.translated + 1}/${tr.counts.total}</span>`
         : '';
+      // REQ-20260922-002：单文件类（LICENSE，A1 不随语言集）行尾标「不分语言」——独立可翻译
+      // 元素（文件名本身仍 data-i18n-skip 豁免），深浅色下弱化呈现不与状态 chip 抢焦点。
+      const singleTag = f.single ? '<span class="bld-doc-single-tag">不分语言</span>' : '';
       return `
           <li class="bld-doc-row">
-            <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}</span>
+            <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}</span>${singleTag}
             <span class="bld-doc-row-st">${flowChip(f.state)}${sumProgress}${trProgress}</span>
           </li>`;
     };
@@ -2871,11 +2888,12 @@ ${langsField}
   }
 
   // docsFlow 防御性补齐：旧快照 / 测试桩字段缺失时按 files 与语言集推导分组与门禁
-  //（服务端求值为完整口径，此处只兜底展示，不引入第二事实源）。
+  //（服务端求值为完整口径，此处只兜底展示，不引入第二事实源）。REQ-20260922-002：单文件类
+  //（lang=null / single）归默认语言组（isDefault=true）。
   function normalizeFlowEval(p) {
     const langs = Array.isArray(p?.langs) && p.langs.length ? p.langs : DEFAULT_DOC_LANGS;
     const files = ((p?.docsFlow && p.docsFlow.files) || docFilesOf(langs))
-      .map((f) => ({ ...f, isDefault: f.isDefault != null ? !!f.isDefault : f.lang === langs[0] }));
+      .map((f) => ({ ...f, isDefault: f.isDefault != null ? !!f.isDefault : (f.lang == null ? true : f.lang === langs[0]) }));
     const defaultFiles = files.filter((f) => f.isDefault);
     const restFiles = files.filter((f) => !f.isDefault);
     const reviewedOf = (list) => list.filter((f) => f.state === 'reviewed').length;
@@ -2979,7 +2997,7 @@ ${langsField}
     const ok = flowEval.canCommit === true;
     const missing = flowEval.missing || [];
     const reason = ok
-      ? '把语言集内文档提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
+      ? '把语言集内文档与 LICENSE.md 提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
       : missing.length
         ? `还需 ${missing.length} 个文件通过审查：${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}`
         : '整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交';
@@ -3004,18 +3022,20 @@ ${langsField}
     }
   }
 
-  // REQ-20260921-008 审查对话框：按文档类型四页签，页签内全语言栏并排（语言集内全部文件
-  // 可达；REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，栅格列数 = 语言数）；
+  // REQ-20260921-008 审查对话框：按文档类型页签（REQ-20260922-002 起四类 + LICENSE 单文件类，
+  // LICENSE 页签 A1 单栏并标「不分语言」），页签内全语言栏并排（语言集内全部文件可达；
+  // REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，栅格列数 = 语言数）；
   // 每栏独立 编辑/预览 切换、保存、通过审核；各栏同步滚动（bindReviewSyncScroll 按比例跟随）；
-  // 编辑已审核文件保存后回退「已总结待审核」需重新审查。文件名 data-i18n-skip（标识豁免）。
+  // 编辑已审核文件保存后回退「已总结待审核」（单文件类回退「待审核」）需重新审查。
+  // 文件名 data-i18n-skip（标识豁免）。
   function renderReviewModal(v) {
     const pf = v ? pfOf(v) : null;
     const rv = pf?.review;
     if (!rv?.open) return '';
-    const flowEval = pf.plan?.docsFlow || { files: docFilesOf(pf?.plan?.langs).map((f) => ({ ...f, state: 'unsummarized' })), reviewedCount: 0 };
+    const flowEval = pf.plan?.docsFlow || { files: docFilesOf(pf?.plan?.langs).map((f) => ({ ...f, state: f.single ? 'unwritten' : 'unsummarized' })), reviewedCount: 0 };
     const stateOf = (file) => (flowEval.files.find((f) => f.file === file) || {}).state || 'unsummarized';
     const docFiles = flowEval.files.length ? flowEval.files : docFilesOf(pf?.plan?.langs);
-    const tabsHtml = DOC_KEYS.map((k) => {
+    const tabsHtml = [...DOC_KEYS, ...DOC_SINGLE_KEYS].map((k) => {
       const per = docFiles.filter((f) => f.key === k);
       const n = per.filter((f) => stateOf(f.file) === 'reviewed').length;
       return `<button type="button" class="rel-tab${rv.key === k ? ' active' : ''}" data-review-tab="${k}" role="tab" aria-selected="${rv.key === k}">${k}（${n}/${per.length}）</button>`;
@@ -3039,7 +3059,7 @@ ${langsField}
       return `
             <div class="bld-review-col" data-col="${esc(f.file)}">
               <div class="bld-review-col-head">
-                <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}（${esc(langNameOf(f.lang))}）</span>
+                <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}${f.single ? '' : `（${esc(langNameOf(f.lang))}）`}</span>${f.single ? '<span class="bld-doc-single-tag">不分语言</span>' : ''}
                 <span class="st ${DOCS_FLOW_CLS[st] || 'st-mute'}"><i class="st-ico" aria-hidden="true">${DOCS_FLOW_ICON[st] || ''}</i>${esc(DOCS_FLOW_LABEL[st] || st)}</span>
                 <div class="bld-review-col-acts">
                   <span class="bld-doc-mode" role="group" aria-label="编辑或预览">
@@ -3094,6 +3114,7 @@ ${langsField}
             ${item(restTotal === 0 || flowEval.restReviewedCount === restTotal, `剩余语言文件已全部审核（${flowEval.restReviewedCount}/${restTotal}）`)}
             ${item(flowEval.defaultReviewedCount === defTotal && (restTotal === 0 || flowEval.restReviewedCount === restTotal), '各语言内容语义一致（以已审核默认语言为基准）')}
             <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）</li>
+            <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，本单不做自动校验）</li>
             <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> 文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）</li>
           </ul>
           <p class="muted small">提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使完结失效回退。</p>
