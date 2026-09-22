@@ -3164,6 +3164,12 @@ function startConfirmTask({ dataDir, root, itemId, action, params }) {
   confirmStates.saveConfirmTask(dataDir, task);
   const touch = (patch) => {
     Object.assign(task, patch, { updatedAt: new Date().toISOString() });
+    // BUG-20260922-004 过期进程写回守卫：服务重启后恢复逻辑（recoverConfirmTasks）已把遗留
+    // running 任务标记 interrupted，或同条目已被新任务覆盖——旧进程滞留的异步回调不得复活
+    // 或覆盖任务账本。盘上任务已非本任务（taskId 不符）或状态已离开 running 时只更新内存
+    // 视角、不落盘；确认记录侧的过期写回守卫在 confirm-store（合并写回 / 幂等拒绝）。
+    const disk = confirmStates.confirmTaskOf(dataDir, itemId);
+    if (!disk || disk.taskId !== task.taskId || disk.status !== 'running') return;
     confirmStates.saveConfirmTask(dataDir, task);
   };
   // 异步执行（不 await）：结果 / 异常 / 阶段推进全部落任务账本，前端轮询回填
