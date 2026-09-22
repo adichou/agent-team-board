@@ -4509,7 +4509,8 @@ function drawerActionsNoticeHtml(it) {
     case 'accepted':
       // BUG-20260908-020：删除 REQ-20260907-012 的批次进入状态分支（批次候选口径已切换为已计划单），
       // 恒为不含批次内容的移入计划 / /dev 指引
-      return `<div class="notice info">未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在 ZCode 会话运行 <code>/dev ${esc(it.id)}</code> 让 Agent 直接认领。</div>`;
+      // BUG-20260922-001：/dev 为双宿主通用命令，宿主指引改通用口径「您使用的 Agent 会话」
+      return `<div class="notice info">未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在您使用的 Agent 会话运行 <code>/dev ${esc(it.id)}</code> 让 Agent 直接认领。</div>`;
     case 'planned': {
       // REQ-20260908-010：已计划——等待开发启动按最旧优先处理；未进入开发中前可移出计划
       // REQ-20260913-003：去批次概念——不再显示入轮状态（对应数据源已下线）
