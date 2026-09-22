@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260922-003 · 文档编写页添加自定义文档演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #d9dee4; --text: #1f2430; --muted: #6b7280;
+    --ok: #16794c; --ok-bg: #e3f4ea; --run: #9a6700; --run-bg: #fff3d6;
+    --wait: #a16207; --wait-bg: #fdf0d5; --mute: #6b7280; --mute-bg: #eef0f3;
+    --fail: #b3261e; --fail-bg: #fdebea; --primary: #2563eb; --primary-bg: #dbeafe;
+    --stage-done: #16794c; --stage-cur: #9a6700; --stage-todo: #9ca3af;
+    --code-bg: #f0f2f5; --shadow: 0 10px 30px rgba(15, 23, 42, .14); --input-bg: #ffffff;
+  }
+  html[data-theme="dark"] {
+    --bg: #14161a; --card: #1d2026; --line: #34383f; --text: #e6e8ec; --muted: #9aa1ab;
+    --ok: #5bd695; --ok-bg: #12331f; --run: #e3b341; --run-bg: #3a2f10;
+    --wait: #d9a441; --wait-bg: #33290f; --mute: #9aa1ab; --mute-bg: #262a31;
+    --fail: #f08a84; --fail-bg: #3a1715; --primary: #6ea8ff; --primary-bg: #16294d;
+    --stage-done: #5bd695; --stage-cur: #e3b341; --stage-todo: #5b626c;
+    --code-bg: #262a31; --shadow: 0 10px 30px rgba(0, 0, 0, .5); --input-bg: #14161a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub-title-note { color: var(--muted); font-size: 12.5px; margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .top .vid { font-weight: 600; font-size: 15px; }
+  .top .ver { color: var(--muted); font-size: 12.5px; }
+
+  /* 五步导航 */
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
+  .steps button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px;
+    padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .steps button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .steps button.locked { opacity: .55; }
+
+  /* 顶部动作行：语言集 + 六按钮 */
+  .docs-sub { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .langset { display: flex; flex-direction: column; gap: 3px; }
+  .langset .row { display: flex; align-items: center; gap: 6px; }
+  .langset label { font-size: 12.5px; color: var(--muted); }
+  .langset input { border: 1px solid var(--line); border-radius: 8px; background: var(--input-bg); color: var(--text);
+    padding: 5px 10px; font-size: 13px; width: 150px; }
+  .langset .err { color: var(--fail); font-size: 12px; margin: 0; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  button.btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button.btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  html[data-theme="dark"] button.btn.primary { color: #0d1220; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn[aria-disabled="true"] { opacity: .45; }
+
+  /* 阶段条 */
+  .stagebar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stagebar .lbl { color: var(--muted); font-size: 12.5px; }
+  .stage { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 12px; font-size: 12.5px; }
+  .stage.done { color: var(--stage-done); border-color: var(--stage-done); }
+  .stage.cur { color: var(--stage-cur); border-color: var(--stage-cur); font-weight: 600; }
+  .stage.todo { color: var(--stage-todo); }
+  .arrow { color: var(--muted); }
+
+  /* 状态行（AI 总结进行 / 完成 / 中断） */
+  .runline { font-size: 12.5px; margin: 0 0 10px; color: var(--muted); }
+  .runline.err { color: var(--fail); }
+
+  /* 提示词预览 */
+  details.prompt { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  details.prompt summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  details.prompt textarea { width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--code-bg); color: var(--text); font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; padding: 8px; }
+  details.prompt .row { display: flex; gap: 8px; margin-top: 8px; }
+
+  /* 文件区 */
+  .files-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12.5px;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px; gap: 8px; flex-wrap: wrap; }
+  .files-head .count { white-space: nowrap; }
+
+  /* 添加文档内联行 */
+  .add-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 10px 0 4px;
+    border-bottom: 1px dashed var(--line); }
+  .add-row[hidden] { display: none; }
+  .add-row input { border: 1px solid var(--line); border-radius: 8px; background: var(--input-bg); color: var(--text);
+    padding: 5px 10px; font-size: 13px; width: 220px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .add-row input.bad { border-color: var(--fail); }
+  .add-row .err { color: var(--fail); font-size: 12px; flex-basis: 100%; margin: 0; }
+  .add-hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+
+  /* 语言页签 */
+  .lang-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 10px; }
+  .lang-tabs button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px;
+    padding: 4px 12px; cursor: pointer; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+  .lang-tabs button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .lang-tabs .cnt { font-size: 11.5px; opacity: .85; }
+  .lang-tabs .cnt.ok { color: var(--ok); opacity: 1; }
+
+  /* 文件列表 */
+  ul.files { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.files li { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px;
+    border-bottom: 1px solid var(--line); gap: 10px; }
+  ul.files li[hidden] { display: none; }
+  .fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .badge-custom { font-family: inherit; font-size: 11px; color: var(--primary); border: 1px solid var(--primary);
+    border-radius: 999px; padding: 0 8px; line-height: 1.6; }
+  .rm { font-size: 11.5px; color: var(--muted); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+  .rm:hover { color: var(--fail); }
+  .rm:disabled { opacity: .45; cursor: not-allowed; text-decoration: none; }
+  .st { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 10px; font-size: 12px; white-space: nowrap; }
+  .st i { font-style: normal; }
+  .st-ok { color: var(--ok); background: var(--ok-bg); }
+  .st-run { color: var(--run); background: var(--run-bg); }
+  .st-wait { color: var(--wait); background: var(--wait-bg); }
+  .st-mute { color: var(--mute); background: var(--mute-bg); }
+  .cur-file { color: var(--muted); font-size: 12px; }
+  .right { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* 门禁条 */
+  .gate { border-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin-top: 12px; border: 1px solid var(--line); background: var(--mute-bg); }
+  .gate.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+  .loading { color: var(--muted); font-size: 12.5px; padding: 8px 4px; }
+
+  /* toast */
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 100; max-width: 380px; }
+  .toast { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--primary);
+    border-radius: 8px; padding: 8px 12px; font-size: 12.5px; box-shadow: var(--shadow); }
+  .toast.err { border-left-color: var(--fail); color: var(--fail); }
+  .toast.ok { border-left-color: var(--ok); }
+
+  /* 说明卡 */
+  .notes h2 { font-size: 14px; margin: 0 0 8px; }
+  .notes ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+  .notes li { margin-bottom: 4px; }
+  .notes code { background: var(--code-bg); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260922-003 · 文档编写页支持添加多份自定义文档（并入 AI 总结提示词）</h1>
+  <p class="sub-title-note">目标行为演示：在标准 4 类发布文档之外添加多份自定义文档；自定义文档即时进入默认语言文件清单，并随「AI 总结」一并写进提示词。单文件演示，无外部依赖。</p>
+
+  <div class="demo-bar">
+    <span class="lbl">演示控制：</span>
+    <button type="button" class="btn" id="themeBtn">深浅色切换</button>
+    <button type="button" class="btn" id="resetBtn">重置演示</button>
+    <span class="lbl">｜状态反馈在右下角 toast 与页面内联提示呈现</span>
+  </div>
+
+  <div class="card">
+    <div class="top">
+      <span class="vid">BLD-20260922-001</span>
+      <span class="ver">版本号 20260922-001 · 状态：开发中（分支 dev）</span>
+    </div>
+
+    <nav class="steps" aria-label="发布五步流程">
+      <button type="button" class="locked" title="本演示聚焦文档编写步">概况</button>
+      <button type="button" class="locked" title="本演示聚焦文档编写步">关联条目与提交</button>
+      <button type="button" class="active">文档编写</button>
+      <button type="button" class="locked" title="文档提交完成后解锁">合并入 main</button>
+      <button type="button" class="locked" title="合并完成后解锁">正式发布</button>
+    </nav>
+
+    <div class="docs-sub">
+      <div class="langset">
+        <div class="row">
+          <label for="langsInput">语言集</label>
+          <input id="langsInput" value="cn,en" autocomplete="off" spellcheck="false"
+            title="逗号分隔的语言缩写（2–3 个字母，国际规范）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用">
+        </div>
+        <p class="err" id="langsErr" hidden></p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" id="refreshBtn" title="重新从磁盘读取全部文件内容与状态">刷新</button>
+        <button type="button" class="btn" id="summaryBtn" title="复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结默认语言文档（含自定义文档；已审核文件跳过）">AI 总结</button>
+        <button type="button" class="btn" id="interruptBtn" hidden title="模拟子代理中断回执">模拟中断</button>
+        <button type="button" class="btn" aria-disabled="true" title="AI 翻译未解锁：默认语言文件全部审核后可用（与现网口径一致）">AI 翻译</button>
+        <button type="button" class="btn" title="打开审查对话框（本演示不展开，布局不变）">审查</button>
+        <button type="button" class="btn" aria-disabled="true" title="整体审查未解锁：全部文件已审核后可用">整体审查</button>
+        <button type="button" class="btn primary" aria-disabled="true" title="提交需全部文件已审核且整体审查已完结">提交</button>
+      </div>
+    </div>
+
+    <div class="stagebar" id="stageBar" aria-label="文档编写三阶段推进"></div>
+    <p class="runline" id="runLine" hidden></p>
+
+    <details class="prompt" id="promptBox" hidden open>
+      <summary>AI 总结提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb summary 逐文件回执，本页自动刷新）</summary>
+      <textarea id="promptText" rows="12" readonly></textarea>
+      <div class="row">
+        <button type="button" class="btn" id="copyBtn">复制提示词</button>
+        <span class="cur-file">提示词中「默认语言文档清单」= 标准 4 类 + 全部自定义文档（本需求核心）</span>
+      </div>
+    </details>
+
+    <section aria-label="发布文档文件列表">
+      <div class="files-head">
+        <span class="count" id="filesCount"></span>
+        <button type="button" class="btn primary" id="addBtn" title="添加一份自定义发布文档（可添加多份）">＋ 添加文档</button>
+      </div>
+
+      <div class="add-row" id="addRow" hidden>
+        <input id="addInput" placeholder="文件名，如 MIGRATION.md" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn primary" id="addConfirm">添加</button>
+        <button type="button" class="btn" id="addCancel">取消</button>
+        <p class="err" id="addErr" hidden></p>
+      </div>
+      <p class="add-hint" id="addHint">提示：可添加多份；命名仅限字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略（自动补全）。自定义文档是否按语言集展开多语言、是否参与翻译与提交门禁——口径见 README「待确认」，本演示按最小口径（仅并入 AI 总结）。</p>
+
+      <nav class="lang-tabs" id="langTabs" aria-label="文档语言页签"></nav>
+      <ul class="files" id="fileList"></ul>
+      <div class="loading" id="loadingLine" hidden>正在读取最新内容…</div>
+    </section>
+
+    <div class="gate" id="gateBar"></div>
+  </div>
+
+  <div class="card notes">
+    <h2>演示要点（对照验收标准）</h2>
+    <ul>
+      <li><strong>添加多份</strong>：点击「＋ 添加文档」依次添加如 <code>MIGRATION.md</code>、<code>SECURITY.md</code>；空名 / 非法字符 / 与标准 4 类或已有文档重名给出行内报错，不应用。</li>
+      <li><strong>并入 AI 总结提示词</strong>：点击「AI 总结」展开提示词预览——「默认语言文档清单」逐行包含全部自定义文档，总数说明随清单联动；「总结中 x/N」分母 N 同步变化。</li>
+      <li><strong>进度与中断</strong>：总结运行中逐文件推进（当前文件「正在总结」标注 + 页签 ◐ 角标）；「模拟中断」演示失败反馈与续跑口径。</li>
+      <li><strong>加载 / 刷新</strong>：「刷新」演示读取中占位与按钮禁用；语言集输入非法值（空项 / 非法缩写 / 重复）演示校验拦截。</li>
+      <li><strong>门禁联动</strong>：文件总数、默认 / 剩余语言审核计数、阶段条与门禁条随添加 / 移除与状态推进实时重算。</li>
+    </ul>
+  </div>
+</div>
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const STD_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+  const LANG_NAMES = { cn: '中文', zh: '中文', en: 'English', fr: 'Français', ja: '日本語' };
+  const ST = {
+    unsummarized: ['未总结', 'st-mute', '○'], summarizing: ['正在总结', 'st-run', '◐'], summarized: ['已总结待审核', 'st-wait', '●'],
+    untranslated: ['未翻译', 'st-mute', '○'], translating: ['正在翻译', 'st-run', '◐'], translated: ['已翻译待审核', 'st-wait', '●'],
+    reviewed: ['已审核', 'st-ok', '✔'],
+  };
+  const CUSTOM_MAX = 6; // 演示用数量上限（真实上限口径见 README 待确认）
+
+  let state = null;
+  let sumTimer = null;
+
+  function initState() {
+    state = {
+      langs: ['cn', 'en'],
+      activeLang: 'cn',
+      custom: [],            // { key, state }（默认语言）
+      stdStates: { README: 'unsummarized', CHANGELOG: 'unsummarized', FEATURES: 'unsummarized', AGENTS: 'unsummarized' },
+      sum: null,             // { phase, files[], idx, currentFile, reason }
+      refreshing: false,
+      adding: false,
+    };
+    if (sumTimer) { clearInterval(sumTimer); sumTimer = null; }
+  }
+
+  // ---------- 派生 ----------
+  function defaultFiles() {
+    const ls = state.langs;
+    return [
+      ...STD_KEYS.map((k) => ({ file: `${k}.md`, key: k, custom: false, state: state.stdStates[k] })),
+      ...state.custom.map((c) => ({ file: `${c.key}.md`, key: c.key, custom: true, state: c.state })),
+    ];
+  }
+  function restFiles() {
+    return state.langs.slice(1).flatMap((l) => STD_KEYS.map((k) => ({ file: `${k}_${l}.md`, key: k, lang: l, state: 'untranslated' })));
+  }
+  const cnt = (list, s) => list.filter((f) => f.state === s).length;
+
+  // ---------- 提示词装配（对照 publish-flow.buildDocSummaryPrompt 形态） ----------
+  function buildPrompt() {
+    const docs = defaultFiles();
+    const stdN = STD_KEYS.length;
+    const customN = state.custom.length;
+    const runId = 'sum-20260922-083000-a1b2';
+    return [
+      '你是技术写作人员，以子代理身份完成当前版本发布文档的 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。',
+      `本阶段只总结默认语言（语言集首语言，见运行参数）的 ${docs.length} 个文档（${stdN} 类 + ${customN} 自定义 × 1）；语言集的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围（文档清单见运行参数）。`,
+      '关联范围按实际代码与提交核实变化，不简单罗列需求 / Bug 原文（清单见运行参数）。',
+      '',
+      '逐文件进度回执（在项目根执行；atb 指运行参数「CLI 入口」给出的命令，下同）：',
+      '1. 开始总结某文件：atb summary file <执行编号> --file <文件名> --state summarizing',
+      '2. 该文件总结完成：atb summary file <执行编号> --file <文件名> --state summarized',
+      '3. 全部完成：atb summary done <执行编号> --summary "<一两句要点>"',
+      '4. 中断 / 无法完成：atb summary fail <执行编号> --reason "<短句原因>"',
+      `已审核（reviewed）的文件跳过不再总结；不修改本阶段 ${docs.length} 个文档以外的任何文件。`,
+      '',
+      '写作约束：',
+      '- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。',
+      '- README 按语言链接同语言 CHANGELOG 与 FEATURES（README.md → CHANGELOG.md / FEATURES.md），链接必须真实可达。',
+      '- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。',
+      '- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。',
+      '- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。',
+      '',
+      '运行参数（随任务变化，命令占位符以本区实际值为准）：',
+      '项目路径：/path/to/project',
+      '发布计划号：BLD-20260922-001（版本号 20260922-001）',
+      `执行编号：${runId}`,
+      'CLI 入口：node scripts/atb.mjs',
+      `默认语言文档清单（语言集首语言 ${state.langs[0]}，共 ${docs.length} 个文档，${stdN} 类 + ${customN} 自定义 × 1）：`,
+      ...docs.map((f) => `- ${f.file}（${LANG_NAMES[state.langs[0]] || state.langs[0]} / ${f.custom ? '自定义' : f.key}）`),
+      '关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：',
+      '- REQ-20260922-003',
+      '- 修复了 1 个 bug（BUG 条目不逐条展开）',
+      '需求详情按上列编号自行读取条目说明文件：<项目根>/agent-team-board/data/requirements/<REQ-ID>/（README.md、design.md 等），了解本版语境；Bug 修复无需逐条了解。',
+    ].join('\n');
+  }
+
+  // ---------- 渲染 ----------
+  function chip(s, extra) {
+    const [label, cls, ico] = ST[s] || [s, 'st-mute', ''];
+    return `<span class="st ${cls}" title="${label}"><i aria-hidden="true">${ico}</i>${label}${extra || ''}</span>`;
+  }
+
+  function render() {
+    const dls = defaultFiles();
+    const rls = restFiles();
+    const dRev = cnt(dls, 'reviewed');
+    const rRev = cnt(rls, 'reviewed');
+    const total = dls.length + rls.length;
+
+    // 表头计数
+    $('filesCount').textContent = `文件（${total} · 默认语言 ${dRev}/${dls.length} 已审核 · 剩余语言 ${rRev}/${rls.length} 已审核）`;
+
+    // 阶段条
+    const stage = (label, done, active) => `<span class="stage ${done ? 'done' : active ? 'cur' : 'todo'}">${done ? '✔ 已完成' : active ? '● 进行中' : '○ 未解锁'} ${label}</span>`;
+    const defDone = dls.length > 0 && dRev === dls.length;
+    const restDone = rls.length === 0 || rRev === rls.length;
+    $('stageBar').innerHTML = `<span class="lbl">阶段：</span>${stage('① 默认语言先行', defDone, true)}<span class="arrow">──</span>${stage('② AI 翻译与审查', restDone, defDone && !restDone)}<span class="arrow">──</span>${stage('③ 整体审查完结', false, defDone && restDone)}`;
+
+    // 语言页签
+    const sumRunning = state.sum && state.sum.phase === 'running';
+    $('langTabs').innerHTML = state.langs.map((l, i) => {
+      const files = i === 0 ? dls : rls.filter((f) => f.lang === l);
+      const rev = cnt(files, 'reviewed');
+      const badge = sumRunning && state.sum.currentFile && files.some((f) => f.file === state.sum.currentFile) ? ' <span class="st st-run" title="AI 总结进行中：当前文件在该语言页签"><i aria-hidden="true">◐</i></span>' : '';
+      return `<button type="button" data-lang="${l}" class="${state.activeLang === l ? 'active' : ''}"><span>${l} · ${LANG_NAMES[l] || l}${i === 0 ? '（默认）' : ''}</span><span class="cnt ${files.length && rev === files.length ? 'ok' : ''}">${rev}/${files.length}</span>${badge}</button>`;
+    }).join('');
+
+    // 文件列表（默认语言面板 + 剩余语言面板，仅激活面板可见）
+    const rowOf = (f) => {
+      let prog = '';
+      if (sumRunning && state.sum.currentFile === f.file) {
+        prog = `<span class="cur-file"> · AI 总结 ${state.sum.idx + 1}/${state.sum.files.length}</span>`;
+      }
+      const rm = f.custom
+        ? `<button type="button" class="rm" data-rm="${f.key}"${sumRunning ? ' disabled title="AI 总结运行中，暂不可移除"' : ''} title="移除该自定义文档">移除</button>`
+        : '';
+      const badge = f.custom ? '<span class="badge-custom">自定义</span>' : '';
+      return `<li data-panel="${panelOf(f)}" ${state.activeLang === panelOf(f) ? '' : 'hidden'}>
+        <span class="fname">${f.file} ${badge}</span>
+        <span class="right">${chip(f.state)}${prog} ${rm}</span>
+      </li>`;
+    };
+    const panelOf = (f) => (f.lang || state.langs[0]);
+    $('fileList').innerHTML = [...dls.map((f) => ({ ...f, lang: state.langs[0] })), ...rls].map(rowOf).join('');
+
+    // 门禁条
+    const missing = [...dls, ...rls].filter((f) => f.state !== 'reviewed');
+    $('gateBar').className = 'gate';
+    $('gateBar').textContent = missing.length
+      ? `提交门禁：默认语言 ${dRev}/${dls.length} · 剩余语言 ${rRev}/${rls.length} 已审核 —— 提交禁用，尚缺：${missing.map((m) => `${m.file}（${(ST[m.state] || [m.state])[0]}）`).join('、')}。（自定义文档是否计入门禁：口径待确认，本演示按计入计数展示）`
+      : '提交门禁：全部已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。';
+    if (!missing.length) $('gateBar').className = 'gate ok';
+
+    // AI 总结按钮与运行行
+    const btn = $('summaryBtn');
+    if (sumRunning) {
+      const summarized = state.sum.files.filter((f) => f.state === 'summarized' || f.state === 'reviewed').length;
+      btn.textContent = `总结中 ${summarized}/${state.sum.files.length}`;
+      btn.disabled = false;
+    } else {
+      btn.textContent = 'AI 总结';
+      btn.disabled = false;
+    }
+    $('interruptBtn').hidden = !sumRunning;
+
+    const line = $('runLine');
+    if (sumRunning) {
+      line.hidden = false; line.className = 'runline';
+      line.textContent = `AI 总结进行中：${state.sum.files.filter((f) => f.state === 'summarized' || f.state === 'reviewed').length}/${state.sum.files.length} · 当前：${state.sum.currentFile}（正在总结） · 独立锁 summary（与 AI 翻译 / AI 分析 / AI 开发互不占用）`;
+    } else if (state.sum && state.sum.phase === 'failed') {
+      line.hidden = false; line.className = 'runline err';
+      line.textContent = `AI 总结中断：${state.sum.reason}（文件状态不悬挂「正在总结」，可再次点击「AI 总结」续跑）`;
+    } else if (state.sum && state.sum.phase === 'done') {
+      line.hidden = false; line.className = 'runline';
+      line.textContent = 'AI 总结已完成：待总结文件均进入「已总结待审核」，等待人工审查。';
+    } else {
+      line.hidden = true;
+    }
+  }
+
+  // ---------- toast ----------
+  function toast(msg, kind) {
+    const el = document.createElement('div');
+    el.className = `toast ${kind || ''}`;
+    el.textContent = msg;
+    $('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3600);
+  }
+
+  // ---------- 语言集 ----------
+  function applyLangs(raw) {
+    const s = String(raw || '').trim();
+    const err = $('langsErr');
+    const fail = (msg) => { err.textContent = msg; err.hidden = false; toast(msg, 'err'); };
+    if (!s) return fail('语言集不能为空（至少一个语言缩写，如 cn,en）');
+    const parts = s.split(',').map((x) => x.trim());
+    const seen = new Set();
+    for (let i = 0; i < parts.length; i++) {
+      if (!parts[i]) return fail(`存在空的语言项（连续逗号）：第 ${i + 1} 项为空`);
+      if (!/^[a-zA-Z]{2,3}$/.test(parts[i])) return fail(`存在非法缩写「${parts[i]}」：语言缩写以国际规范为准（2–3 个字母，如 cn / zh / en / fr / ja）`);
+      const low = parts[i].toLowerCase();
+      if (seen.has(low)) return fail(`语言重复：「${low}」出现多次`);
+      seen.add(low);
+    }
+    err.hidden = true;
+    state.langs = parts.map((x) => x.toLowerCase());
+    if (!state.langs.includes(state.activeLang)) state.activeLang = state.langs[0];
+    render();
+    toast(`✓ 语言集已应用：${state.langs.join(',')}（文件清单随之展开）`, 'ok');
+  }
+
+  // ---------- 添加 / 移除自定义文档 ----------
+  function openAdd() {
+    $('addRow').hidden = false;
+    $('addErr').hidden = true;
+    $('addInput').classList.remove('bad');
+    $('addInput').value = '';
+    $('addInput').focus();
+  }
+  function closeAdd() { $('addRow').hidden = true; $('addErr').hidden = true; $('addInput').value = ''; }
+
+  function validateName(raw) {
+    let name = String(raw || '').trim();
+    if (!name) return { error: '文件名不能为空（如 MIGRATION.md）' };
+    if (name.length > 40) return { error: '文件名过长（上限 40 字符）' };
+    if (/\.md$/i.test(name)) name = name.slice(0, -3);
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name)) return { error: '存在非法字符：仅允许字母开头，字母 / 数字 / 连字符 / 下划线（子目录路径口径待确认）' };
+    const upper = name.toUpperCase();
+    if (STD_KEYS.includes(upper)) return { error: `与标准发布文档重名：${upper}.md（README / CHANGELOG / FEATURES / AGENTS 为保留名）` };
+    if (state.custom.some((c) => c.key.toUpperCase() === upper)) return { error: `自定义文档重复：${upper}.md 已在清单中` };
+    return { key: upper };
+  }
+
+  function addCustom() {
+    if (state.adding) return;
+    const err = $('addErr');
+    const r = validateName($('addInput').value);
+    if (r.error) {
+      err.textContent = r.error; err.hidden = false;
+      $('addInput').classList.add('bad');
+      toast(`✕ 添加失败：${r.error}`, 'err');
+      return;
+    }
+    err.hidden = true;
+    $('addInput').classList.remove('bad');
+    if (state.custom.length >= CUSTOM_MAX) {
+      err.textContent = `超出数量上限（演示上限 ${CUSTOM_MAX} 份；真实口径见 README 待确认）`; err.hidden = false;
+      return;
+    }
+    state.adding = true;
+    const btn = $('addConfirm');
+    btn.disabled = true; btn.textContent = '添加中…';
+    setTimeout(() => {
+      state.adding = false;
+      btn.disabled = false; btn.textContent = '添加';
+      state.custom.push({ key: r.key, state: 'unsummarized' });
+      state.activeLang = state.langs[0];
+      closeAdd();
+      render();
+      toast(`✓ 已添加 ${r.key}.md（初始状态：未总结；将随下次「AI 总结」一并进入提示词清单）`, 'ok');
+    }, 550);
+  }
+
+  function removeCustom(key) {
+    if (state.sum && state.sum.phase === 'running') { toast('✕ AI 总结运行中，暂不可移除自定义文档', 'err'); return; }
+    const i = state.custom.findIndex((c) => c.key === key);
+    if (i < 0) return;
+    const [c] = state.custom.splice(i, 1);
+    if (state.sum && state.sum.files) state.sum.files = state.sum.files.filter((f) => f.file !== `${c.key}.md`);
+    render();
+    toast(`已移除自定义文档 ${c.key}.md（已总结 / 已审核后的移除口径见 README 待确认）`);
+  }
+
+  // ---------- AI 总结模拟 ----------
+  function startSummary() {
+    if (state.sum && state.sum.phase === 'running') return;
+    const docs = defaultFiles();
+    state.sum = {
+      phase: 'running',
+      reason: null,
+      files: docs.map((f) => ({ file: f.file, custom: f.custom, state: f.state === 'reviewed' ? 'reviewed' : 'pending' })),
+      idx: -1,
+      currentFile: null,
+    };
+    $('promptBox').hidden = false;
+    $('promptText').value = buildPrompt();
+    copyPrompt();
+    render();
+    sumTimer = setInterval(stepSummary, 1400);
+  }
+
+  function stepSummary() {
+    const run = state.sum;
+    if (!run || run.phase !== 'running') { if (sumTimer) clearInterval(sumTimer); return; }
+    // 上一个文件完成
+    if (run.currentFile) {
+      const prev = run.files.find((f) => f.file === run.currentFile);
+      if (prev && prev.state === 'summarizing') prev.state = 'summarized';
+      setFileState(run.currentFile, 'summarized');
+    }
+    // 下一个文件（已审核跳过）
+    const next = run.files.find((f) => f.state === 'pending');
+    if (!next) {
+      run.phase = 'done'; run.currentFile = null;
+      if (sumTimer) clearInterval(sumTimer);
+      render();
+      toast('✓ AI 总结已完成：待总结文件均进入「已总结待审核」，等待人工审查', 'ok');
+      return;
+    }
+    next.state = 'summarizing';
+    run.currentFile = next.file;
+    run.idx = run.files.indexOf(next);
+    setFileState(next.file, 'summarizing');
+    render();
+  }
+
+  function setFileState(file, st) {
+    const stdKey = STD_KEYS.find((k) => `${k}.md` === file);
+    if (stdKey) { state.stdStates[stdKey] = st; return; }
+    const c = state.custom.find((x) => `${x.key}.md` === file);
+    if (c) c.state = st;
+  }
+
+  function interruptSummary() {
+    const run = state.sum;
+    if (!run || run.phase !== 'running') return;
+    if (sumTimer) clearInterval(sumTimer);
+    if (run.currentFile) {
+      const cur = run.files.find((f) => f.file === run.currentFile);
+      if (cur && cur.state === 'summarizing') cur.state = 'pending';
+      setFileState(run.currentFile, 'unsummarized'); // 中断不悬挂「正在总结」
+    }
+    run.phase = 'failed';
+    run.reason = '演示：子代理回执 atb summary fail（原因示例）';
+    run.currentFile = null;
+    render();
+    toast('✕ AI 总结中断：可再次点击「AI 总结」续跑（已总结完成的文件保留待审核状态）', 'err');
+  }
+
+  function copyPrompt() {
+    const text = $('promptText').value;
+    const done = () => toast('✓ AI 总结提示词已复制：交给 AI Agent 逐文件执行，进度在本页自动刷新', 'ok');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => { $('promptText').select(); toast('剪贴板不可用（file:// 受限）：已选中提示词全文，可手动复制', ''); });
+    } else {
+      $('promptText').select();
+      toast('剪贴板不可用（file:// 受限）：已选中提示词全文，可手动复制', '');
+    }
+  }
+
+  // ---------- 刷新（加载态） ----------
+  function refresh() {
+    if (state.refreshing) return;
+    state.refreshing = true;
+    const btn = $('refreshBtn');
+    btn.disabled = true; btn.textContent = '正在读取…';
+    $('loadingLine').hidden = false;
+    setTimeout(() => {
+      state.refreshing = false;
+      btn.disabled = false; btn.textContent = '刷新';
+      $('loadingLine').hidden = true;
+      render();
+      toast('✓ 已重新读取全部文件内容与状态（自定义文档清单随回显）', 'ok');
+    }, 850);
+  }
+
+  // ---------- 事件绑定 ----------
+  $('addBtn').addEventListener('click', openAdd);
+  $('addCancel').addEventListener('click', closeAdd);
+  $('addConfirm').addEventListener('click', addCustom);
+  $('addInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') addCustom(); });
+  $('addInput').addEventListener('input', () => { $('addErr').hidden = true; $('addInput').classList.remove('bad'); });
+  $('fileList').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-rm]');
+    if (rm && !rm.disabled) removeCustom(rm.dataset.rm);
+  });
+  $('langTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lang]');
+    if (b) { state.activeLang = b.dataset.lang; render(); }
+  });
+  $('summaryBtn').addEventListener('click', startSummary);
+  $('interruptBtn').addEventListener('click', interruptSummary);
+  $('copyBtn').addEventListener('click', copyPrompt);
+  $('refreshBtn').addEventListener('click', refresh);
+  $('langsInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyLangs(e.target.value); });
+  $('langsInput').addEventListener('blur', (e) => { if (String(e.target.value).trim() !== state.langs.join(',')) applyLangs(e.target.value); else $('langsErr').hidden = true; });
+  $('themeBtn').addEventListener('click', () => {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+  });
+  $('resetBtn').addEventListener('click', () => {
+    initState();
+    closeAdd();
+    $('promptBox').hidden = true;
+    $('loadingLine').hidden = true;
+    $('langsInput').value = 'cn,en';
+    $('langsErr').hidden = true;
+    $('refreshBtn').disabled = false; $('refreshBtn').textContent = '刷新';
+    $('addConfirm').disabled = false; $('addConfirm').textContent = '添加';
+    render();
+    toast('演示已重置');
+  });
+
+  // 深浅色初始跟随系统
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+
+  initState();
+  render();
+})();
+</script>
+</body>
+</html>
