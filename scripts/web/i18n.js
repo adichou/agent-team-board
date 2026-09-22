@@ -1736,6 +1736,8 @@ const EN_DYNAMIC = {
   '核验失败：◇': 'Verification failed: $1',
   '核验未通过：◇': 'Verification failed: $1',
   '确认失败：◇（可重试）': 'Confirmation failed: $1 (retryable)',
+  // BUG-20260923-001 确认面板动作请求 60 秒客户端超时的归一错误
+  '请求超时（◇ 秒无响应）': 'Request timed out (no response for $1 s)',
   '确认未通过，保持挂起：· ◇': 'Confirmation rejected; still suspended: · $1',
   '草稿保存失败：◇（输入已保留，可重试）': 'Failed to save draft: $1 (input kept; you can retry)',
   '草稿已保存（缺 ◇）：保存草稿不解除阻塞': 'Draft saved (missing $1): saving a draft does not lift the suspension',

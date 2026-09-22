@@ -2425,8 +2425,8 @@ function onGlobalKeydown(e) {
       if (!holdSide.busy) closeHoldPanel();
       return;
     }
-    if (confirmPanelOpen()) { // REQ-20260914-001：挂起确认面板层（确认中暂不可关闭）
-      if (!confirmSide.busy) closeConfirmPanel();
+    if (confirmPanelOpen()) { // BUG-20260923-001：挂起确认面板层随时可关——服务端确认/核验任务照常执行，进度与结论由任务页卡片轮询回填
+      closeConfirmPanel();
       return;
     }
     if (!$('#projModalWrap').classList.contains('hidden')) {
@@ -3549,10 +3549,13 @@ async function verifyConfirmItem(id, btn) {
 // 轮询核验/确认任务至终态（done / failed / interrupted）；服务瞬断继续重试，
 // 观察窗口 = 任务超时上限 + 余量（BUG-20260918-004：默认随确认任务口径 60 分钟，
 // 调用方有任务句柄时按其 timeoutMs 取值）。返回 null 表示仍在运行（由主轮询接管呈现）。
-async function watchConfirmTask(id, timeoutMs = 60 * 60_000 + 20_000) {
+// BUG-20260923-001：可选 shouldStop 停止谓词——面板已关 / 已切换即停止观察（服务端任务
+// 不受影响，进度与结论由主轮询回填），不再空转轮询到观察窗口上限。
+async function watchConfirmTask(id, timeoutMs = 60 * 60_000 + 20_000, shouldStop = null) {
   const deadline = Date.now() + timeoutMs;
   let missingSince = 0;
   while (Date.now() < deadline) {
+    if (shouldStop && shouldStop()) return null;
     await new Promise((resolve) => setTimeout(resolve, 1000));
     let task = null;
     try {
@@ -3604,6 +3607,7 @@ async function openConfirmPanel(id, opener) {
   confirmSide.seq += 1;
   confirmSide.attr = new Map();
   confirmSide.needsReverify = false;
+  confirmSide.busy = false; // BUG-20260923-001：重开复位残留忙标志——运行态改由服务端任务状态（renderConfirmForm）推导
   confirmSide.opener = opener || document.activeElement || null;
   $('#confirmPanel').classList.remove('hidden');
   confirmPanelMsg('');
@@ -3613,6 +3617,7 @@ async function openConfirmPanel(id, opener) {
 function closeConfirmPanel() {
   confirmSide.open = false;
   confirmSide.seq += 1; // 迟到响应丢弃
+  confirmSide.busy = false; // BUG-20260923-001：关闭复位本地忙标志——请求悬挂/长观察期不再让 busy 滞留 true（服务端任务不受影响）
   $('#confirmPanel').classList.add('hidden');
   const opener = confirmSide.opener;
   if (opener && opener.isConnected) opener.focus?.();
@@ -3798,7 +3803,8 @@ function updateConfirmScopeSummary(d) {
 // 面板动作绑定（归属选择 / 差异查看与重试 / 错误复制 / 保持挂起 / 重新核验 / 保存草稿 / 确认并继续）
 function bindConfirmFormActions(d) {
   const form = $('#confirmForm');
-  form.querySelector('#confirmPanelCancel')?.addEventListener('click', () => { if (!confirmSide.busy) closeConfirmPanel(); });
+  // BUG-20260923-001：「关闭」不被 busy 门控——确认/核验任务在服务端照常执行，面板随时可关
+  form.querySelector('#confirmPanelCancel')?.addEventListener('click', () => closeConfirmPanel());
   form.querySelector('#confirmKeepBtn')?.addEventListener('click', () => confirmKeepAction(d));
   form.querySelector('#confirmVerifyBtn')?.addEventListener('click', () => verifyConfirmItem(d.itemId, null).then(() => {}));
   form.querySelector('#confirmDraftBtn')?.addEventListener('click', () => confirmDraftAction(d));
@@ -3876,24 +3882,29 @@ async function loadConfirmDiff(itemId, p) {
 
 async function confirmKeepAction(d) {
   if (confirmSide.busy) return;
+  // BUG-20260923-001：面板代 token——关闭/重开（seq 变化）后旧动作的迟到收尾不复位新面板状态
+  const token = confirmSide.seq;
+  const mine = () => confirmSide.open && confirmSide.seq === token && confirmSide.id === d.itemId;
   const note = $('#confirmForm #confirmNote')?.value?.trim() || '';
   confirmSide.busy = true;
   setConfirmButtonsDisabled(true);
   try {
-    await api(`/api/confirms/${encodeURIComponent(d.itemId)}/keep`, {
+    await api(`/api/confirms/${encodeURIComponent(d.itemId)}/keep`, confirmReqOpts({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ note }),
-    });
-    confirmPanelMsg('已保持挂起：现场与队列暂停保留（取消队列须显式终止任务或恢复领取）');
+    }));
+    if (mine()) confirmPanelMsg('已保持挂起：现场与队列暂停保留（取消队列须显式终止任务或恢复领取）');
     toast(`已保持挂起 ${d.itemId}`);
     await refreshConfirms(true);
-    await loadConfirmDetail(true);
+    if (mine()) await loadConfirmDetail(true);
   } catch (e) {
-    confirmPanelMsg(`保持挂起失败：${e.message}`, true);
+    if (mine()) confirmPanelMsg(`保持挂起失败：${confirmReqErr(e)}`, true);
   } finally {
-    confirmSide.busy = false;
-    setConfirmButtonsDisabled(false);
+    if (mine()) {
+      confirmSide.busy = false;
+      setConfirmButtonsDisabled(false);
+    }
   }
 }
 
@@ -3913,6 +3924,9 @@ function collectAnalysisAnswers() {
 
 async function confirmDraftAction(d) {
   if (confirmSide.busy) return;
+  // BUG-20260923-001：面板代 token——同 confirmKeepAction 的迟到隔离口径
+  const token = confirmSide.seq;
+  const mine = () => confirmSide.open && confirmSide.seq === token && confirmSide.id === d.itemId;
   const answers = collectAnalysisAnswers();
   if (!answers.length) {
     confirmPanelMsg('请至少填写或选择一项再保存草稿', true);
@@ -3921,25 +3935,33 @@ async function confirmDraftAction(d) {
   confirmSide.busy = true;
   setConfirmButtonsDisabled(true);
   try {
-    const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/answer`, {
+    const r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/answer`, confirmReqOpts({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ answers }),
-    });
-    if (r.ready) confirmPanelMsg('草稿已保存：必答已齐，可「确认并继续」');
-    else confirmPanelMsg(`草稿已保存（缺 ${(r.missing || []).join('、')}）：保存草稿不解除阻塞`);
+    }));
+    if (mine()) {
+      if (r.ready) confirmPanelMsg('草稿已保存：必答已齐，可「确认并继续」');
+      else confirmPanelMsg(`草稿已保存（缺 ${(r.missing || []).join('、')}）：保存草稿不解除阻塞`);
+    }
     await refreshConfirms(true);
-    await loadConfirmDetail(true);
+    if (mine()) await loadConfirmDetail(true);
   } catch (e) {
-    confirmPanelMsg(`草稿保存失败：${e.message}（输入已保留，可重试）`, true);
+    if (mine()) confirmPanelMsg(`草稿保存失败：${confirmReqErr(e)}（输入已保留，可重试）`, true);
   } finally {
-    confirmSide.busy = false;
-    setConfirmButtonsDisabled(false);
+    if (mine()) {
+      confirmSide.busy = false;
+      setConfirmButtonsDisabled(false);
+    }
   }
 }
 
 async function confirmContinueAction(d) {
   if (confirmSide.busy) return;
+  // BUG-20260923-001：面板代 token——busy 期间面板随时可关；关闭/重开/切换条目（seq 变化）
+  // 后旧动作的迟到回包只保留全局刷新（卡片/看板），不写面板局部状态、不复位新面板的忙标志。
+  const token = confirmSide.seq;
+  const stillMine = () => confirmSide.open && confirmSide.seq === token && confirmSide.id === d.itemId;
   const isDev = d.kind === 'develop';
   let include = null;
   // 必答校验（就地提示，禁用继续）：推荐选项不自动视为已答
@@ -3959,15 +3981,17 @@ async function confirmContinueAction(d) {
     confirmSide.busy = true;
     setConfirmButtonsDisabled(true);
     try {
-      await api(`/api/confirms/${encodeURIComponent(d.itemId)}/answer`, {
+      await api(`/api/confirms/${encodeURIComponent(d.itemId)}/answer`, confirmReqOpts({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answers }),
-      });
+      }));
     } catch (e) {
-      confirmPanelMsg(`作答保存失败：${e.message}`, true);
-      confirmSide.busy = false;
-      setConfirmButtonsDisabled(false);
+      if (stillMine()) {
+        confirmPanelMsg(`作答保存失败：${confirmReqErr(e)}`, true);
+        confirmSide.busy = false;
+        setConfirmButtonsDisabled(false);
+      }
       return;
     }
   } else {
@@ -3996,15 +4020,17 @@ async function confirmContinueAction(d) {
       : { version: d.questionsVersion };
     // BUG-20260915-008：开发侧确认改异步任务——POST 立即返回任务句柄（补交后的测试复验
     // 不再冻结面板），此处轮询至终态后按结果回填；分析侧维持同步确认。
-    let r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/continue`, {
+    let r = await api(`/api/confirms/${encodeURIComponent(d.itemId)}/continue`, confirmReqOpts({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }));
     if (isDev && r.accepted) {
       await refreshConfirms(true); // 卡片/面板立即显示运行中进度
-      // BUG-20260918-004：观察窗口随任务超时口径（不再固定 600 秒时代余量）
-      const task = await watchConfirmTask(d.itemId, r.task?.timeoutMs ? r.task.timeoutMs + 20_000 : undefined);
+      // BUG-20260918-004：观察窗口随任务超时口径（不再固定 600 秒时代余量）；
+      // BUG-20260923-001：面板关闭/切换即停止观察——服务端任务照常执行，结论由主轮询回填
+      const task = await watchConfirmTask(d.itemId, r.task?.timeoutMs ? r.task.timeoutMs + 20_000 : undefined, () => !stillMine());
+      if (!stillMine()) return; // 面板已关/已切换：不写已关面板，全局状态交由主轮询
       if (!task) {
         confirmPanelMsg('确认任务仍在运行：进度见任务页卡片，完成后结论自动回填（本面板稍后自动刷新）');
         return;
@@ -4039,8 +4065,9 @@ async function confirmContinueAction(d) {
       await poll();
       // BUG-20260920-003：分析确认且排队成功 → 自动复制一次当前分析批次的完整续跑提示词
       //（来源 = /api/refine/current?batchId=，与批量完善面板「提示词」页签同一事实源，不新建
-      // 批次）；确认失败 / 草稿 / 保持挂起不触发；轮询 / 刷新 / 重开面板不自动覆盖剪贴板
-      if (!isDev && d.itemId) void fetchAndCopyResumePrompt(d, r.batchId || d.batchId || null);
+      // 批次）；确认失败 / 草稿 / 保持挂起不触发；轮询 / 刷新 / 重开面板不自动覆盖剪贴板；
+      // BUG-20260923-001：面板已被关闭/切换时不自动复制（重开面板走显式复制入口）
+      if (stillMine() && !isDev && d.itemId) void fetchAndCopyResumePrompt(d, r.batchId || d.batchId || null);
     } else {
       // BUG-20260915-003：内容或候选范围变化 → 确认键停用直至「重新核验」重新核对
       if ((r.reasons || []).some((x) => /内容已变|重新核验|内容指纹/.test(String(x)))) {
@@ -4051,13 +4078,15 @@ async function confirmContinueAction(d) {
       await loadConfirmDetail(true);
     }
   } catch (e) {
-    confirmPanelMsg(`确认失败：${e.message}（可重试）`, true);
+    if (stillMine()) confirmPanelMsg(`确认失败：${confirmReqErr(e)}（可重试）`, true);
   } finally {
-    confirmSide.busy = false;
-    setConfirmButtonsDisabled(false);
-    if (btn) {
-      btn.disabled = confirmSide.needsReverify === true;
-      btn.textContent = prev || '确认并继续';
+    if (stillMine()) {
+      confirmSide.busy = false;
+      setConfirmButtonsDisabled(false);
+      if (btn) {
+        btn.disabled = confirmSide.needsReverify === true;
+        btn.textContent = prev || '确认并继续';
+      }
     }
   }
 }
@@ -4067,6 +4096,22 @@ function setConfirmButtonsDisabled(disabled) {
     const el = $(sel);
     if (el) el.disabled = disabled;
   }
+}
+
+// BUG-20260923-001：确认面板动作请求（keep / answer / continue）统一加客户端超时——请求
+// 悬挂时忙标志与按钮不会永久停在「进行中」（超时按可重试失败呈现；服务端稍后实际完成的
+// 结论由轮询回填，与刷新页面的既有语义一致）。环境无 AbortSignal.timeout（旧浏览器 / 测试
+// 沙箱）时优雅降级为无超时，不阻断动作。
+const CONFIRM_REQ_TIMEOUT_MS = 60_000;
+function confirmReqOpts(opts) {
+  if (typeof AbortSignal === 'undefined' || !AbortSignal.timeout) return opts;
+  return { ...opts, signal: AbortSignal.timeout(CONFIRM_REQ_TIMEOUT_MS) };
+}
+function confirmReqErr(e) {
+  if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+    return `请求超时（${Math.round(CONFIRM_REQ_TIMEOUT_MS / 1000)} 秒无响应）`;
+  }
+  return e?.message || String(e);
 }
 
 /* ---------- BUG-20260920-003 分析确认续跑提示词（确认成功自动复制一次 + 面板常驻引导卡） ----------
@@ -8259,7 +8304,8 @@ $('#selectNone').addEventListener('click', deselectOperable); // REQ-20260908-02
 $('#laneQuickEntry')?.addEventListener('click', laneQuickCreate);
 $('#mask').addEventListener('click', closeDrawer);
 // REQ-20260914-001：挂起确认面板头部关闭 / 错误重试（表单内按钮随渲染动态绑定）
-$('#confirmPanelClose')?.addEventListener('click', () => { if (!confirmSide.busy) closeConfirmPanel(); });
+// BUG-20260923-001：头部 ✕ 不被 busy 门控，随时可关（服务端任务照常执行）
+$('#confirmPanelClose')?.addEventListener('click', () => closeConfirmPanel());
 $('#confirmPanelErrorClose')?.addEventListener('click', () => closeConfirmPanel());
 $('#confirmPanelErrorRetry')?.addEventListener('click', () => loadConfirmDetail());
 // REQ-20260909-014 / BUG-20260913-003：需求与 Bug 抽屉文档页签右键「讨论」菜单（document 级委托绑定一次，#docView 随抽屉重建不重绑）
