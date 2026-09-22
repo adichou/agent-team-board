@@ -1205,7 +1205,8 @@ const ATBBuild = (() => {
     if (w.failed && !w.loaded) {
       return '<span class="muted small">客户端检测失败：无法确认本机 Zcode / Codex 是否可用</span>'
         + '<a class="ws-entry-link" href="#" data-bld-ws-retry title="重新检测本机 Zcode / Codex 客户端（只读存在性检查）">重新检测</a>'
-        + '<span class="muted small">或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词</span>';
+        // BUG-20260922-001（hold q1 人工决策：通用化处理）：手动打开指引不并列宿主名，改通用口径
+        + '<span class="muted small">或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词</span>';
     }
     if (w.probing || !w.loaded) {
       return '<span class="muted small">正在检测本机 Agent 客户端…</span>';

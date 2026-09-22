@@ -502,7 +502,7 @@ const EN = {
   '恢复后续领取': 'Resume pickup',
   '恢复默认（源代码目录与条目文档）': 'Restore defaults (source directories and item documents)',
   '或直接 ⌘V 粘贴': 'or paste with ⌘V',
-  '或直接打开 ZCode / ChatGPT 手动新建会话并粘贴提示词': 'or open ZCode / ChatGPT directly, start a session manually and paste the prompt',
+  '或直接打开您使用的 Agent 客户端手动新建会话并粘贴提示词': 'or open your agent client directly, start a session manually and paste the prompt',
   '截图大图预览': 'Screenshot preview',
   '截图（可选）': 'Screenshots (optional)',
   '所有项目的批量任务均已收尾': 'All batch tasks across projects have wrapped up',
