@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260922-001 界面演示 — 「ZCode 会话」文案通用化</title>
+<style>
+  :root {
+    --bg: #f2f4f8; --panel: #ffffff; --ink: #1c2330; --muted: #6b7686;
+    --line: #dde3ec; --accent: #2f6fed; --info-bg: #eaf2fe; --info-line: #2f6fed;
+    --ok: #1e8e5a; --bad: #c7351f; --chip: #eef1f6; --code-bg: #eef1f6;
+    --toast-err-bg: #fdecea; --toast-err-line: #c7351f;
+  }
+  [data-theme="dark"] {
+    --bg: #14181f; --panel: #1d232d; --ink: #e6ebf2; --muted: #93a0b0;
+    --line: #323b49; --accent: #6c9bff; --info-bg: #1c2a41; --info-line: #6c9bff;
+    --ok: #4cc98b; --bad: #ff7a66; --chip: #262e3a; --code-bg: #262e3a;
+    --toast-err-bg: #3a211d; --toast-err-line: #ff7a66;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  header.demo-bar {
+    position: sticky; top: 0; z-index: 20; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  }
+  header.demo-bar h1 { font-size: 15px; margin: 0; margin-right: 4px; }
+  header.demo-bar .grow { flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: var(--panel); color: var(--ink); padding: 5px 12px;
+    cursor: pointer; font-size: 13px;
+  }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .hint { font-size: 12px; color: var(--muted); }
+  main.board { display: flex; min-height: calc(100vh - 58px); }
+  /* 左侧列表 */
+  aside.list { width: 320px; flex: none; border-right: 1px solid var(--line); background: var(--panel); padding: 12px; }
+  aside.list h2 { font-size: 13px; color: var(--muted); margin: 4px 4px 10px; font-weight: 600; }
+  .item {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; background: var(--bg);
+  }
+  .item:hover { border-color: var(--accent); }
+  .item.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(47,111,237,.18); }
+  .item .id { font-weight: 600; font-size: 13px; }
+  .item .title { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); margin-left: 6px; vertical-align: 1px; }
+  .chip.submitted { color: #8a6d1a; } [data-theme="dark"] .chip.submitted { color: #d9b95c; }
+  .chip.accepted { color: var(--accent); }
+  .chip.planned { color: var(--ok); }
+  /* 右侧详情抽屉 */
+  section.drawer { flex: 1; padding: 16px 20px; min-width: 0; }
+  .drawer-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-width: 760px; }
+  .drawer-empty { color: var(--muted); padding: 48px 20px; text-align: center; }
+  .drawer-head { padding: 14px 18px 0; }
+  .drawer-head .itemno { font-size: 12px; color: var(--muted); letter-spacing: .4px; }
+  .drawer-head .ttl { font-size: 16px; font-weight: 600; margin: 2px 0 6px; }
+  nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 0 12px; margin-top: 8px; }
+  nav.tabs button { border: 0; background: none; color: var(--muted); padding: 8px 12px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+  nav.tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .drawer-body { padding: 14px 18px 18px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .meta code { background: var(--code-bg); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  /* notice 提示条：独占操作行上方整行 */
+  .notice {
+    border-left: 3px solid var(--info-line); background: var(--info-bg);
+    border-radius: 6px; padding: 9px 12px; margin-bottom: 10px; font-size: 13.5px;
+  }
+  .notice code { background: var(--code-bg); border-radius: 4px; padding: 1px 6px; font-weight: 600; }
+  .notice .bad { background: rgba(199,53,31,.16); border-radius: 4px; padding: 0 3px; font-weight: 600; color: var(--bad); text-decoration: underline wavy var(--bad); }
+  .notice .good { background: rgba(30,142,90,.15); border-radius: 4px; padding: 0 3px; font-weight: 600; color: var(--ok); }
+  .notice .tag { float: right; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .notice .tag.bad-tag { color: var(--bad); } .notice .tag.good-tag { color: var(--ok); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: .88; }
+  .btn.warn { color: #9a6b00; border-color: #d9c08a; } [data-theme="dark"] .btn.warn { color: #e0b45c; border-color: #5a4c22; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  /* 加载骨架 */
+  .skel { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+  .skel i { display: block; height: 14px; border-radius: 6px; background: linear-gradient(90deg, var(--chip) 25%, var(--line) 45%, var(--chip) 65%); background-size: 200% 100%; animation: sh 1s infinite; }
+  @keyframes sh { 0% { background-position: 120% 0; } 100% { background-position: -80% 0; } }
+  /* toast */
+  #toast {
+    position: fixed; top: 70px; right: 20px; z-index: 50; max-width: 380px;
+    background: var(--toast-err-bg); border: 1px solid var(--toast-err-line);
+    color: var(--ink); border-radius: 10px; padding: 10px 14px; font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18); transform: translateX(120%); transition: transform .25s;
+  }
+  #toast.show { transform: none; }
+  #toast b { color: var(--toast-err-line); }
+  footer.note { padding: 10px 20px 24px; color: var(--muted); font-size: 12px; max-width: 760px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 0 20px; font-size: 12px; color: var(--muted); }
+  .legend .bad { color: var(--bad); font-weight: 600; } .legend .good { color: var(--ok); font-weight: 600; }
+</style>
+</head>
+<body>
+<header class="demo-bar">
+  <h1>BUG-20260922-001 · 「ZCode 会话」文案通用化</h1>
+  <div class="seg" id="fixSeg">
+    <button data-fix="before" class="on">修复前（当前缺陷）</button>
+    <button data-fix="after">修复后（期望）</button>
+  </div>
+  <div class="seg" id="langSeg">
+    <button data-lang="zh" class="on">中文</button>
+    <button data-lang="en">English</button>
+  </div>
+  <div class="seg" id="themeSeg">
+    <button data-theme-btn="light" class="on">浅色</button>
+    <button data-theme-btn="dark">深色</button>
+  </div>
+  <label class="switch"><input type="checkbox" id="failSwitch"><span id="failLbl">模拟接口失败</span></label>
+  <span class="grow"></span>
+  <span class="hint" id="hintTxt">点左侧条目 → 看「未入计划」提示条文案</span>
+</header>
+
+<main class="board">
+  <aside class="list">
+    <h2 id="listTitle">条目列表（演示数据）</h2>
+    <div id="itemList"></div>
+  </aside>
+  <section class="drawer"><div class="drawer-card" id="drawer"></div></section>
+</main>
+
+<div class="legend">
+  <span><span class="bad">红色波浪线</span>＝缺陷表述（ZCode 会话 / ZCode session，排他）</span>
+  <span><span class="good">绿色高亮</span>＝修复后通用表述（您使用的 Agent 会话 / your agent session）</span>
+</div>
+<footer class="note" id="footNote">
+  静态演示页（单文件、无后端）：还原看板详情抽屉的布局 / 交互 / 状态反馈，文案取自 scripts/web/app.js（drawerActionsNoticeHtml、drawerActionsButtonHtml、renderDrawerEmpty、refreshDrawer）与 scripts/web/i18n.js 词典。真实看板由 node scripts/atb.mjs serve --open 启动。
+</footer>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ---------- 演示状态 ---------- */
+const state = {
+  fix: 'before',        // before = 修复前缺陷文案；after = 修复后通用文案
+  lang: 'zh',           // zh | en（对应 i18n 词典中英文）
+  fail: false,          // 模拟 GET /api/item/<ID> 失败
+  selId: null,          // 当前选中条目
+  loading: false,
+  items: [
+    { id: 'REQ-20260922-003', status: 'accepted',  title: '批量完善批次调度支持并发子代理', owner: '—',          updated: '09-22 08:10' },
+    { id: 'BUG-20260922-001', status: 'accepted',  title: '文案「或在 ZCode 会话运行 /dev …」优化', owner: '—',  updated: '09-22 08:05' },
+    { id: 'REQ-20260921-006', status: 'planned',   title: '看板列表键盘导航与焦点管理', owner: '—',            updated: '09-21 17:32' },
+    { id: 'BUG-20260921-004', status: 'submitted', title: '深色模式下文档对比度不足', owner: '—',              updated: '09-21 11:02' },
+  ],
+};
+
+/* ---------- 文案表（zh/en；修复前/后仅 accepted 的 notice 不同） ---------- */
+const T = {
+  listTitle:   { zh: '条目列表（演示数据）', en: 'Items (demo data)' },
+  hint:        { zh: '点左侧条目 → 看「未入计划」提示条文案', en: 'Click an item on the left → check the "not planned" notice' },
+  failLbl:     { zh: '模拟接口失败', en: 'Simulate API failure' },
+  empty:       { zh: '选择左侧列表中的条目查看详情', en: 'Select an item on the left to see details' },
+  loading:     { zh: '加载中…', en: 'Loading…' },
+  tabInfo:     { zh: '基本信息', en: 'Info' },
+  tabDocs:     { zh: '文档', en: 'Docs' },
+  metaOwner:   { zh: '认领者', en: 'Owner' },
+  metaUpdate:  { zh: '更新', en: 'Updated' },
+  planned:     { zh: '已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。',
+                 en: 'Planned; development processes the oldest first automatically. Before it starts, "Remove from plan" reverts it to accepted.' },
+  btnToPlan:   { zh: '➤ 移入计划', en: '➤ Add to plan' },
+  btnReject:   { zh: '↩ 驳回接受（退回待接受）', en: '↩ Reject acceptance (back to submitted)' },
+  btnFromPlan: { zh: '↩ 移出计划（退回已接受）', en: '↩ Remove from plan (back to accepted)' },
+  btnAccept:   { zh: '✓ 接受', en: '✓ Accept' },
+  btnEdit:     { zh: '✎ 修改', en: '✎ Edit' },
+  btnDel:      { zh: '🗑 删除', en: '🗑 Delete' },
+  failToast:   { zh: '<b>加载条目详情失败</b>：接口异常（演示）——已自动关闭抽屉', en: '<b>Failed to load item details</b>: API error (demo) — drawer closed automatically' },
+  toPlanToast: { zh: '已移入计划（演示内即时切换，真实看板免二次确认）', en: 'Added to plan (instant in this demo, no confirmation in the real board)' },
+  fromPlanToast: { zh: '已移出计划，退回已接受', en: 'Removed from plan, back to accepted' },
+  acceptToast: { zh: '已接受（真实看板：submitted → accepted）', en: 'Accepted (submitted → accepted)' },
+  stChip: { submitted: { zh: '待接受', en: 'submitted' }, accepted: { zh: '已接受', en: 'accepted' }, planned: { zh: '已计划', en: 'planned' } },
+};
+
+/* accepted 状态 notice：核心演示对象，返回 HTML 片段（code = /dev <条目号>） */
+function acceptedNoticeHtml(id) {
+  const code = `<code>/dev ${id}</code>`;
+  if (state.lang === 'zh') {
+    const head = '未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在';
+    if (state.fix === 'before')
+      return { tag: ['缺陷 · 当前', 'bad-tag'],
+               html: `${head}<span class="bad">ZCode 会话</span>运行 ${code} 让 Agent 直接认领。` };
+    return { tag: ['修复后 · 期望', 'good-tag'],
+             html: `${head}<span class="good">您使用的 Agent 会话</span>运行 ${code} 让 Agent 直接认领。` };
+  }
+  const head = 'Not planned. Use "Add to plan" to schedule it (development processes the oldest first), or ';
+  if (state.fix === 'before')
+    return { tag: ['BUG · current', 'bad-tag'],
+             html: `${head}<span class="bad">run in a ZCode session</span> ${code} and let the Agent claim it directly.` };
+  return { tag: ['Fixed · expected', 'good-tag'],
+           html: `${head}<span class="good">run it in your agent session</span> ${code} and let the Agent claim it directly.` };
+}
+
+/* ---------- 渲染 ---------- */
+const $ = (s) => document.querySelector(s);
+
+function renderList() {
+  $('#itemList').innerHTML = state.items.map(it => `
+    <div class="item ${it.id === state.selId ? 'sel' : ''}" data-id="${it.id}">
+      <div><span class="id">${it.id}</span><span class="chip ${it.status}">${T.stChip[it.status][state.lang]}</span></div>
+      <div class="title">${it.title}</div>
+    </div>`).join('');
+  document.querySelectorAll('.item').forEach(el =>
+    el.addEventListener('click', () => openItem(el.dataset.id)));
+}
+
+function noticeHtml(it) {
+  if (it.status === 'accepted') {
+    const n = acceptedNoticeHtml(it.id);
+    return `<div class="notice"><span class="tag ${n.tag[1]}">${n.tag[0]}</span>${n.html}</div>`;
+  }
+  if (it.status === 'planned') return `<div class="notice">${T.planned[state.lang]}</div>`;
+  return ''; // submitted：无 notice
+}
+
+function buttonsHtml(it) {
+  if (it.status === 'accepted')
+    return `<button class="btn primary" data-op="toPlan">${T.btnToPlan[state.lang]}</button>
+            <button class="btn warn" data-op="reject">${T.btnReject[state.lang]}</button>`;
+  if (it.status === 'planned')
+    return `<button class="btn warn" data-op="fromPlan">${T.btnFromPlan[state.lang]}</button>`;
+  return `<button class="btn primary" data-op="accept">${T.btnAccept[state.lang]}</button>
+          <button class="btn" data-op="noop">${T.btnEdit[state.lang]}</button>
+          <button class="btn" data-op="noop">${T.btnDel[state.lang]}</button>`;
+}
+
+function renderDrawer() {
+  const d = $('#drawer');
+  if (state.loading) {
+    d.innerHTML = `<div class="skel"><i style="width:22%"></i><i style="width:78%"></i><i style="width:58%"></i><i style="width:92%"></i><i style="width:40%"></i></div>`;
+    return;
+  }
+  const it = state.items.find(x => x.id === state.selId);
+  if (!it) { d.innerHTML = `<div class="drawer-empty">${T.empty[state.lang]}</div>`; return; }
+  d.innerHTML = `
+    <div class="drawer-head">
+      <div class="itemno">${it.id} · <span class="chip ${it.status}">${T.stChip[it.status][state.lang]}</span></div>
+      <div class="ttl">${it.title}</div>
+      <nav class="tabs">
+        <button class="active">${T.tabInfo[state.lang]}</button>
+        <button>${T.tabDocs[state.lang]}</button>
+      </nav>
+    </div>
+    <div class="drawer-body">
+      <div class="meta">${T.metaOwner[state.lang]}：${it.owner}　·　${T.metaUpdate[state.lang]}：${it.updated}　·　文档：<code>README.md</code> <code>design.md</code></div>
+      ${noticeHtml(it)}
+      <div class="btn-row">${buttonsHtml(it)}</div>
+    </div>`;
+  bindDrawerActions();
+}
+
+function bindDrawerActions() {
+  const it = state.items.find(x => x.id === state.selId);
+  document.querySelectorAll('#drawer [data-op]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const op = btn.dataset.op;
+      if (op === 'toPlan') { it.status = 'planned'; toast(T.toPlanToast[state.lang], false); }
+      else if (op === 'fromPlan') { it.status = 'accepted'; toast(T.fromPlanToast[state.lang], false); }
+      else if (op === 'accept') { it.status = 'accepted'; toast(T.acceptToast[state.lang], false); }
+      else { return; } // 修改/删除等仅演示布局，不实现
+      renderList(); renderDrawer();
+    }));
+}
+
+/* 状态反馈：正常（直接渲染）→ 加载（模拟 GET /api/item/<ID>）→ 失败（toast + 关闭抽屉回空态） */
+function openItem(id) {
+  if (state.selId === id && !state.loading && $('#drawer').querySelector('.drawer-body')) { renderList(); return; }
+  state.selId = id; renderList();
+  if (state.fail) {
+    state.loading = true; renderDrawer();
+    setTimeout(() => { state.loading = false; state.selId = null; renderList(); renderDrawer(); toast(T.failToast[state.lang], true); }, 900);
+    return;
+  }
+  state.loading = true; renderDrawer();
+  setTimeout(() => { state.loading = false; renderDrawer(); }, 600);
+}
+
+let toastTimer = null;
+function toast(html, isError) {
+  const t = $('#toast');
+  t.innerHTML = html; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+/* ---------- 工具栏 ---------- */
+function bindSeg(sel, attr, key, after) {
+  document.querySelectorAll(sel + ' button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll(sel + ' button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    state[key] = b.getAttribute(attr);
+    if (after) after();
+  }));
+}
+bindSeg('#fixSeg', 'data-fix', 'fix');
+bindSeg('#langSeg', 'data-lang', 'lang', refreshStaticText);
+bindSeg('#themeSeg', 'data-theme-btn', '_unused', () => {
+  const on = document.querySelector('#themeSeg button.on');
+  document.documentElement.setAttribute('data-theme', on.dataset.themeBtn);
+});
+$('#failSwitch').addEventListener('change', (e) => { state.fail = e.target.checked; });
+
+function refreshStaticText() {
+  $('#listTitle').textContent = T.listTitle[state.lang];
+  $('#hintTxt').textContent = T.hint[state.lang];
+  $('#failLbl').textContent = T.failLbl[state.lang];
+  renderList(); renderDrawer();
+}
+
+/* ---------- 启动：空态 ---------- */
+renderList(); renderDrawer();
+</script>
+</body>
+</html>
