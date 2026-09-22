@@ -7294,6 +7294,9 @@ async function refreshRefine() {
     await refreshConfirms(); // REQ-20260914-001：挂起确认区随轮询刷新（独立签名）
     const sig = JSON.stringify({
       b: data.batch, c: data.counts, n: data.nextAction, t: data.stats, rt: data.recordsTotal,
+      // REQ-20260922-004：在途运行列表入签名——并行下领取/回执可能不改变 counts/nextAction
+      // （如 continue → continue 补派），在途变化必须触发面板重渲染
+      a: (data.activeRuns || []).map((x) => x.runId + x.itemId + x.owner + x.phase),
       d: data.candidates.map((x) => x.id + x.reasons.join()),
       r: (data.records || []).map((x) => x.runId + x.result + x.attempt + (x.summary || '') + (x.reason || '')),
     });
@@ -7308,6 +7311,10 @@ async function refreshRefine() {
 // 候选缺失原因 chips 由共用 pendingQueueHtml 随队列行渲染（REQ-20260908-026）
 
 function renderRefinePanel() {
+  // REQ-20260922-004：AI 分析并行子代理上限（同时在途运行数）——与服务端
+  // scripts/lib/refine-store.mjs 的 REFINE_PARALLEL_LIMIT 保持同步（固定值，不做设置项）；
+  // 定义在函数体内以兼容 vm 桩测试（只提取本函数源码执行）。
+  const REFINE_PARALLEL_LIMIT = 3;
   const data = state.refine.data;
   if (!data) return '<p class="muted">加载中…</p>';
   // BUG-20260910-009：任务搜索（state.search.q）前端过滤本面板列表——候选/待完善队列按编号/标题、
@@ -7333,7 +7340,11 @@ function renderRefinePanel() {
   }
   const b = data.batch;
   const counts = data.counts || {};
-  const rec = data.current;
+  // REQ-20260922-004：概况区在途运行列表（并行 ≤3：条目编号/子代理会话/开始时间/已用时）；
+  // activeRuns 缺失回退单条 current（旧数据兼容——退化形态与原串行面板一致）
+  const actives = Array.isArray(data.activeRuns) && data.activeRuns.length
+    ? data.activeRuns
+    : (data.current ? [data.current] : []);
   const lastReceipt = (data.records || [])[0] || null;
   const batchDone = b.status === 'finished' && (counts.remaining ?? 0) === 0;
   // BUG-20260914-001：正常收尾态（finished、未终止、未暂停、剩余 0）时服务端 notice 即收尾文案
@@ -7350,11 +7361,17 @@ function renderRefinePanel() {
   const nextTitle = !nextCands
     ? '暂无可完善候选：已接受条目均已完善（或尚无已接受条目）'
     : '以当前已接受未完善候选创建新任务';
-  const curTitle = rec ? (rec.itemTitle || '') : '';
   // REQ-20260908-026：无当前项按真实阶段展示；终态绝不显示「等待领取」
-  const currentText = rec
-    ? `<span class="cid link" data-goto-item="${esc(rec.itemId)}" role="button">${esc(rec.itemId)}</span> ${esc(shortOwner(curTitle))}`
-    : (b.aborted ? '任务已终止' : batchDone ? '本轮已结束' : b.pauseRequested ? '已暂停，等待恢复' : b.status === 'prepared' ? '待启动：请在 Agent 会话粘贴调度提示词' : '等待领取下一项');
+  const currentText = actives.length ? '' : (b.aborted ? '任务已终止' : batchDone ? '本轮已结束' : b.pauseRequested ? '已暂停，等待恢复' : b.status === 'prepared' ? '待启动：请在 Agent 会话粘贴调度提示词' : '等待领取下一项');
+  // REQ-20260922-004：在途卡片（每张：编号可点跳条目 + 标题 + 会话/开始/已用时）
+  const activeCardsHtml = actives.map((r) => `
+      <div class="refine-run-card">
+        <span class="cid link" data-goto-item="${esc(r.itemId)}" role="button" title="点击跳转条目详情">${esc(r.itemId)}</span>
+        <span class="refine-run-title">${esc(shortOwner(r.title || ''))}</span>
+        <span class="kv">子代理会话 ${esc(r.owner)}</span>
+        <span class="kv">开始时间 ${fmtTime(r.createdAt)}</span>
+        <span class="kv">已用时 ${fmtElapsed(r.createdAt)}</span>
+      </div>`).join('');
   // REQ-20260909-008：运行态按二级页签归组（概况/队列/提示词/记录），当前分区记忆在
   // state.refine.pane（与批量开发相互独立），一级页签切换与轮询重渲染均不重置
   return taskPaneShell('refine', state.refine, {
@@ -7371,18 +7388,25 @@ function renderRefinePanel() {
       ${batchDone ? `<div class="drawer-actions batch-actions">
         <button type="button" class="btn primary" id="refineNext" ${nextDisabled ? `disabled title="${nextTitle}"` : `title="${nextTitle}"`}>启动新一轮</button>
       </div>` : ''}
+      ${actives.length ? `
+      <div class="refine-active-head" title="并行槽位：同时在途上限 3，超出时 refine next 返回等待回执提示">在途子代理 <b>${actives.length}</b>/${REFINE_PARALLEL_LIMIT}</div>
+      ${activeCardsHtml}
       <section class="meta-grid">
-        <div><label>当前条目</label><span>${currentText}</span></div>
-        <div><label>子代理会话</label><span>${rec ? esc(rec.owner) : '—'}</span></div>
-        <div><label>开始时间</label><span>${rec ? fmtTime(rec.createdAt) : '—'}</span></div>
-        <div><label>耗时</label><span>${rec ? `已用时 ${fmtElapsed(rec.createdAt)}` : '—'}</span></div>
         <div><label>最近回执</label><span class="small" title="${esc(String(lastReceipt ? (lastReceipt.summary || lastReceipt.reason || '') : ''))}">${esc(shortOwner(String(lastReceipt ? (lastReceipt.summary || lastReceipt.reason || '—') : '—')))}</span></div>
         <div><label>最后活动</label><span>${fmtTime(b.lastActivityAt)}</span></div>
-      </section>
+      </section>` : `
+      <section class="meta-grid">
+        <div><label>当前条目</label><span>${currentText}</span></div>
+        <div><label>子代理会话</label><span>—</span></div>
+        <div><label>开始时间</label><span>—</span></div>
+        <div><label>耗时</label><span>—</span></div>
+        <div><label>最近回执</label><span class="small" title="${esc(String(lastReceipt ? (lastReceipt.summary || lastReceipt.reason || '') : ''))}">${esc(shortOwner(String(lastReceipt ? (lastReceipt.summary || lastReceipt.reason || '—') : '—')))}</span></div>
+        <div><label>最后活动</label><span>${fmtTime(b.lastActivityAt)}</span></div>
+      </section>`}
       ${taskStatsLine({
         done: counts.done ?? 0,
         abnormal: (counts.failed ?? 0) + (counts.interrupted ?? 0),
-        active: rec ? 1 : 0,
+        active: actives.length,
         remaining: batchTerminal ? 0 : counts.remaining ?? 0,
         total: counts.total ?? 0,
         extra: counts.skipped ? ` · 出局 ${counts.skipped}` : '',

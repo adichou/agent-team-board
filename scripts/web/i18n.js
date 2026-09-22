@@ -647,6 +647,10 @@ const EN = {
   '原因未知（未匹配已知失败归类）': 'Cause unknown (no known failure class matched)',
   '展开完整原始输出结合现场判断，再选择重新核验 / 确认并继续 / 保持挂起': 'Expand the full raw output and judge by the scene, then Re-verify / Confirm & continue / Keep suspended',
   'AI 分析：对已接受条目批量补全文档——需求补 README（描述 + 验收标准；涉及 UI 需含界面展示），Bug 补现象/复现步骤/期望行为/验收说明（涉及 UI 的 Bug 同样须提供可交互 ui-demo.html 演示）。派子代理只补文档：条目保持已接受、不写业务源码、未知事实标「待确认」。': 'AI analysis: completes documents of accepted items in bulk — READMEs for requirements (description + acceptance criteria; UI items need an interface demo) and symptoms/repro/expected behavior/acceptance for bugs (UI bugs also need an interactive ui-demo.html). Subagents only touch documents: items stay accepted, business source is untouched, unknown facts are marked "to confirm".',
+  // REQ-20260922-004：AI 分析并行子代理（在途 ≤3）——概况区在途卡片文案
+  '在途子代理': 'Active subagents',
+  '并行槽位：同时在途上限 3，超出时 refine next 返回等待回执提示': 'Parallel slots: at most 3 concurrent subagents; when full, refine next returns a wait-for-receipt notice',
+  '点击跳转条目详情': 'Click to open the item details',
   'AI 开发': 'AI development',
   '批量操作': 'Batch actions',
   '批量移出确认': 'Batch removal confirmation',
@@ -1746,6 +1750,9 @@ const EN_DYNAMIC = {
   '复制 ◇ 到剪贴板': 'Copy $1 to clipboard',
   '失败 ◇（◇）': 'Failed $1 ($2)',
   '子代理会话 ◇': 'Subagent session $1',
+  // REQ-20260922-004：AI 分析并行在途卡片（概况区）
+  '在途子代理 <b>◇</b>/◇': 'Active subagents <b>$1</b>/$2',
+  '开始时间 ◇': 'Started at $1',
   '将写入：◇': 'Will write to: $1',
   '将移出 ◇ 个不存在的目录（仅从列表移出，不删除目录与文档，不停止任务；目录恢复后可重新导入）：◇': 'Will remove $1 missing directorie(s) from the list (directories and documents are not deleted; tasks are not stopped; they can be re-imported once restored): $2',
   '已切换模型：原强度 ◇ 不被 ◇ 支持，请重新选择（支持：◇）': 'Model switched: the previous effort $1 is not supported by $2; pick again (supported: $3)',

@@ -1953,6 +1953,30 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 @media (prefers-reduced-motion: reduce) {
   .refine-badge.rf-refining { animation: none; }
 }
+
+/* REQ-20260922-004：AI 分析并行子代理（在途 ≤3）——概况区在途运行卡片列表 */
+.refine-active-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.refine-active-head b { color: var(--primary); font-size: 14px; }
+.refine-run-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+.refine-run-card .refine-run-title { flex: 1; min-width: 160px; font-size: 13px; }
+.refine-run-card .kv { color: var(--muted); font-size: 12px; white-space: nowrap; }
 @keyframes rf-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
