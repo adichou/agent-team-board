@@ -9,9 +9,10 @@
 //     不进 AI 总结 / 翻译）+ 自定义文档（REQ-20260922-003 引入；BUG-20260922-002 起随语言集
 //     自动展开——默认语言 KEY.md + 其余语言 KEY_<lang>.md，其余语言进 AI 翻译，门禁 / pathspec /
 //     指纹 / 基准变更检测全参与，与标准 4 类同口径）；README 按语言链接 CHANGELOG 与 FEATURES（同语言互链）；
-//   - AI 写作提示词：技术写作人员角色 + 子代理流程 + 项目路径 / 计划号 / 版本号 / 关联范围 /
-//     文档清单 / 写作约束（简练通俗、不罗列原文、不编造）；关联范围不内嵌条目标题
-//     （BUG-20260921-005）：REQ 仅列编号 + 条目文件路径规则引导自行读取，BUG 汇总一句；
+//   - AI 总结提示词（REQ-20260921-007 前旧称 AI 写作提示词）：技术写作人员角色 + 子代理流程 +
+//     项目路径 / 计划号 / 版本号 / 关联范围 / 文档清单 / 写作约束（简练通俗、不罗列原文、
+//     不编造）；关联范围不内嵌条目标题（BUG-20260921-005）：REQ 仅列编号 + 条目文件路径规则
+//     引导自行读取，BUG 汇总一句；
 //   - AI 翻译提示词（REQ-20260921-012）：以已审核默认语言文档为唯一基准，产出剩余语言
 //     全部文档（atb translate 逐文件回执）；
 //   - 官网提示词：在官网仓库执行、读已发布版本 CHANGELOG / FEATURES 双语材料、提交消息带
@@ -380,8 +381,9 @@ export function buildDocTranslatePrompt({ projectRoot, planId, items = [], runId
   return lines.join('\n');
 }
 
-// 官网 AI 写作提示词：在官网仓库执行；读取本项目已发布版本的 CHANGELOG / FEATURES 中英文
-// 材料，按官网自身架构更新内容；完成提交消息带完整计划号。不强制官网技术栈 / 目录 / 构建。
+// 官网 AI 总结提示词（REQ-20260921-007 前旧称官网 AI 写作提示词）：在官网仓库执行；读取本项目
+// 已发布版本的 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新内容；完成提交消息带完整计划号。
+// 不强制官网技术栈 / 目录 / 构建。
 export function buildSiteWritingPrompt({ projectRoot, siteRoot, planId, baseline = null } = {}) {
   const version = versionNumberOf(planId) || planId;
   const lines = [];
