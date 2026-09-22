@@ -106,7 +106,7 @@ function runHeldFlow(root, item, title) {
 
 // ---------- C01：挂起声明与队列暂停 ----------
 
-t('C01 预留前已脏且本单修改：挂起当前单 + 暂停队列；doc 已提交不视为完成；运行/条目状态如实', () => {
+t('C01 预留前已脏且本单修改：挂起当前单 + 暂停队列；暂扣场景无部分提交（REQ-20260922-007 条目文档不进 doc 组）；运行/条目状态如实', () => {
   const root = mkProject();
   seedPreDirtySource(root);
   const dataDir = core.dataDirFrom(root);
@@ -128,7 +128,7 @@ t('C01 预留前已脏且本单修改：挂起当前单 + 暂停队列；doc 已
   assert.ok(rec.fingerprint.files['scripts/web/build.js'], '指纹应绑定待人工路径');
   assert.ok(rec.pendingManual.includes('scripts/web/build.js'));
   assert.ok(rec.heldGroups && rec.heldGroups.test.length >= 1, '暂扣 test 组应记录');
-  assert.equal(rec.committedGroups.length, 1, 'doc 组提交应保留 hash');
+  assert.equal(rec.committedGroups.length, 0, '暂扣场景无部分提交（条目文档被忽略 REQ-20260922-007，doc 组为空）');
 
   // 队列持久化暂停 + 项目实施占用（attentionKind=confirm，不释放执行权）
   const bt = batch.getBatch(dataDir, batch.queueHeadBatch(dataDir).batchId);
@@ -310,17 +310,21 @@ t('C08 人工已在终端补交：脏→clean 允许方向；不凭任意带单�
 
 t('C02 分组提交失败：保留已成功提交 hash，不重复提交，仍挂起阻止后续领取', async () => {
   const root = mkProject();
-  // 干净源（无预留前脏路径 → 不走 pendingManual 分支）：doc 提交成功后 test/fix 被钩子拦下
+  // 干净源（无预留前脏路径 → 不走 pendingManual 分支）：板级共享 doc 提交成功后业务组被钩子拦下。
+  // REQ-20260922-007：条目文档被忽略后，doc 组以板级共享路径（agent-team-board/data/README.md）
+  // 保住「部分提交 hash 保留」场景。
   fs.mkdirSync(path.join(root, 'scripts', 'lib'), { recursive: true });
   fs.writeFileSync(path.join(root, 'scripts', 'lib', 'impl.mjs'), 'v1\n');
-  git(root, ['add', '.']);
-  git(root, ['commit', '-q', '-m', 'chore: 被测源码入库']);
   const dataDir = core.dataDirFrom(root);
+  fs.writeFileSync(path.join(dataDir, 'data', 'README.md'), '# 看板共享说明\n');
+  git(root, ['add', '.']);
+  git(root, ['commit', '-q', '-m', 'chore: 被测源码与共享文件入库']);
   const item = mkPlannedItem(dataDir, '部分失败单');
   batch.createBatch(dataDir, { projectRoot: root });
   const nx = batch.nextItem(dataDir, batch.queueHeadBatch(dataDir).batchId, { owner: 'w1' });
   core.claim(dataDir, item.id, 'w1');
   fs.appendFileSync(path.join(nx.itemDir, 'README.md'), '\n实施补充\n');
+  fs.appendFileSync(path.join(dataDir, 'data', 'README.md'), '\n共享文件轮内改动\n'); // 板级共享：仍进 doc 组
   fs.mkdirSync(path.join(root, 'scripts', 'lib'), { recursive: true });
   fs.appendFileSync(path.join(root, 'scripts', 'lib', 'impl.mjs'), 'v2\n');
   core.report(dataDir, item.id, { summary: '完成', by: 'w1', run: { runId: nx.runId } });
@@ -330,7 +334,7 @@ t('C02 分组提交失败：保留已成功提交 hash，不重复提交，仍�
   fs.chmodSync(path.join(root, '.git', 'hooks', 'pre-commit'), 0o755);
   const { receipt } = batch.finishRun(dataDir, nx.runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.equal(receipt.autoCommit.status, 'failed');
-  assert.equal(receipt.autoCommit.commits.length, 1, '已成功的 doc 组 hash 应保留在结果中');
+  assert.equal(receipt.autoCommit.commits.length, 1, '已成功的 doc 组（板级共享）hash 应保留在结果中');
   assert.ok(receipt.suspended, '失败应触发挂起');
   const rec = confirmStates.confirmOf(dataDir, item.id);
   assert.ok(rec, '失败也应创建挂起确认记录');
@@ -367,6 +371,8 @@ t('C09 纯文档任务按文件范围核验不误挂起；无改动任务记录�
   core.report(dataDir, docItem.id, { summary: '文档完成', by: 'w1', run: { runId: nx1.runId } });
   const r1 = batch.finishRun(dataDir, nx1.runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.ok(!r1.receipt.suspended, '纯文档提交完整不挂起');
+  assert.equal(r1.receipt.autoCommit.status, 'skipped', '纯文档轮按 REQ-20260922-007 skipped（不随收口提交）');
+  assert.ok((r1.receipt.autoCommit.ignoredDocs || []).length, '纯文档轮回执应携带 ignoredDocs');
   assert.ok(!confirmStates.confirmOf(dataDir, docItem.id));
   const head = batch.queueHeadBatch(dataDir).batchId;
   const nx2 = batch.nextItem(dataDir, head, { owner: 'w1' });
@@ -375,9 +381,11 @@ t('C09 纯文档任务按文件范围核验不误挂起；无改动任务记录�
   core.report(dataDir, noChgItem.id, { summary: '无改动', by: 'w1', run: { runId: nx2.runId } });
   const r2 = batch.finishRun(dataDir, nx2.runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.ok(!r2.receipt.suspended, '无业务改动不挂起');
-  // 可验证原因：报告与看板文档照常入账（doc 组），或无任何可提交时 reason 落「无待提交改动」
+  // 可验证原因：源码/测试照常入账（committed），或条目文档按 REQ-20260922-007 被忽略
+  //（skipped + ignoredDocs），或无任何可提交时 reason 落「无待提交改动」——均不挂起
   const ac2 = r2.receipt.autoCommit;
-  assert.ok(ac2.status === 'committed' || (ac2.status === 'skipped' && /无待提交改动/.test(ac2.reason || '')),
+  assert.ok(ac2.status === 'committed'
+    || (ac2.status === 'skipped' && (/无待提交改动/.test(ac2.reason || '') || (ac2.ignoredDocs || []).length)),
     `无改动任务的提交账须可验证：${JSON.stringify(ac2)}`);
   assert.ok(!confirmStates.confirmOf(dataDir, noChgItem.id));
 });
@@ -417,7 +425,7 @@ t('C11 清单/详情/核验计数一致：与候选范围扫描同源（BUG-2026
   assert.equal(lst.count, 1);
   const view = lst.items[0];
   assert.equal(view.itemId, item.id);
-  assert.equal(view.committedCount, 1, '已提交组 = doc 1 组');
+  assert.equal(view.committedCount, 0, '暂扣场景无部分提交（REQ-20260922-007 条目文档不进 doc 组）');
   const d = confirmStore.confirmDetail(dataDir, item.id, { projectRoot: root });
   assert.notEqual(view.pendingCount, null, '可扫描时计数不得为 null（待核对）');
   assert.equal(view.scopeUnknown, false);

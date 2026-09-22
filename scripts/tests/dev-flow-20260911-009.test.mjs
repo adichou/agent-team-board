@@ -161,28 +161,28 @@ function runReportedFlow(root, { preDirty = true, hookFail = false, title = '自
   return { dataDir, item, other, otherDir, runId: nx.runId, receipt, batch: nx.batchId };
 }
 
-t('D5/D6 reported 回执触发自动提交：三组规范提交 + 回执带 autoCommit + 徽标索引点亮 + 无关改动保留', () => {
+t('D5/D6 reported 回执触发自动提交：test/业务两组规范提交（REQ-20260922-007：条目文档不随收口提交）+ 回执带 autoCommit + 徽标索引点亮 + 无关改动保留', () => {
   const root = mkProject();
   const { dataDir, item, other, otherDir, receipt } = runReportedFlow(root);
 
   assert.equal(receipt.result, 'reported');
   assert.ok(receipt.autoCommit, '回执应携带 autoCommit 概要');
   assert.equal(receipt.autoCommit.status, 'committed');
-  assert.equal(receipt.autoCommit.commits.length, 3, '应产生 doc/test/业务三组提交');
+  assert.equal(receipt.autoCommit.commits.length, 2, '应收口 test + 业务两组提交（条目文档不进 doc 组）');
 
-  const subjects = logSubjects(root).slice(0, 3);
+  const subjects = logSubjects(root).slice(0, 2);
   for (const s of subjects) {
     assert.ok(s.includes(item.id), `提交消息须含单号：${s}`);
     assert.equal(commitStore.validateCommitSubject(s, item.id), null, `消息须过规范核验：${s}`);
   }
-  assert.ok(subjects.some((s) => s.startsWith('doc: ')), '条目文档应归 doc 提交');
+  assert.ok(!subjects.some((s) => s.startsWith('doc: ')), '条目文档不随收口提交（REQ-20260922-007）');
   assert.ok(subjects.some((s) => s.startsWith('test: ')), '测试代码应单独 test 提交');
   assert.ok(subjects.some((s) => s.startsWith('feat: ')), '需求业务代码应为 feat 提交');
 
   // 已提交徽标同源索引（committedItemIndex）点亮
   const idx = commitStore.committedItemIndex(dataDir);
   assert.ok(idx.get(item.id), 'committedItemIndex 应含本单');
-  assert.equal(idx.get(item.id).commits.length, 3);
+  assert.equal(idx.get(item.id).commits.length, 2);
 
   // 无关改动保留：预留前已存在的暂存/未暂存改动（非看板路径）、其他单条目文档均不动；
   // 看板共享文件（.gitignore/config 等）随本单 doc 提交收纳属预期
@@ -191,9 +191,9 @@ t('D5/D6 reported 回执触发自动提交：三组规范提交 + 回执带 auto
   assert.match(st, /M {1,2}NOTES\.md|M\s+NOTES\.md/, '预留前的未暂存改动不得被卷入');
   const otherRel = path.relative(root, path.join(otherDir, 'README.md'));
   assert.ok(st.includes(otherRel), '其他单条目文档应保留在工作区');
-  // 本单条目文档应已全部提交（目录干净）
+  // 本单条目文档保留在工作区（REQ-20260922-007：不提交、不还原，经文档讨论轮/人工通道提交）
   const itemRel = path.relative(root, core.resolveItemDir(dataDir, item.id).dir);
-  assert.ok(!st.split('\n').some((l) => l.includes(itemRel)), '本单条目目录应已提交干净');
+  assert.ok(st.split('\n').some((l) => l.includes(itemRel)), '本单条目文档应保留在工作区（不随收口提交）');
 });
 
 t('D7 幂等：同一运行重复回执不重复提交；git 历史已含单号时跳过', () => {
@@ -210,13 +210,13 @@ t('D7 幂等：同一运行重复回执不重复提交；git 历史已含单号�
   const r2 = batch.finishRun(dataDir, nx.runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.equal(r2.idempotent, true, '重复回执应幂等返回');
   const withId = logSubjects(root).filter((s) => s.includes(item.id));
-  assert.equal(withId.length, 2, '重复回执不得产生重复提交（doc + 业务两组）');
+  assert.equal(withId.length, 1, '重复回执不得产生重复提交（业务一组；条目文档不随收口提交）');
 
-  // git 历史已含单号 → 重试入口跳过（幂等）
+  // git 历史已含单号 → 重试入口跳过（幂等；仅剩条目文档差异时按 REQ-20260922-007 文档口径跳过）
   const again = atb(['run', 'autocommit', nx.runId, '--json'], root);
   assert.equal(again.code, 0);
   assert.equal(jsonOf(again).autoCommit.status, 'skipped');
-  assert.match(jsonOf(again).autoCommit.reason, /幂等|已含/);
+  assert.match(jsonOf(again).autoCommit.reason, /幂等|已含|不随收口提交/);
 });
 
 t('D8 失败不阻断回执：提交失败回执仍 reported、改动保留；REQ-20260914-001 起挂起队列，人工确认后恢复续派；重试不重复', async () => {
@@ -321,17 +321,18 @@ t('D5b Bug 单业务提交类型为 fix；快照哈希能探测未跟踪文件�
 // 历史实例标题（29 字）：超过旧 DESC_MAX_CHARS=20，修复后提交消息须完整保留
 const LONG_TITLE = '分支浏览页面中的 main 分支通过发布流程推送的文字删掉';
 
-t('D13 BUG-20260914-021 长标题：三组提交消息完整保留标题且过规范核验；核验上限与标题上限（120 字）对齐', () => {
+t('D13 BUG-20260914-021 长标题：test/业务两组提交消息完整保留标题且过规范核验；核验上限与标题上限（120 字）对齐', () => {
   const root = mkProject();
   const { item } = runReportedFlow(root, { title: LONG_TITLE });
 
-  const subjects = logSubjects(root).slice(0, 3);
-  assert.equal(subjects.length, 3, '应产生 doc/test/业务三组提交');
+  const subjects = logSubjects(root).slice(0, 2);
+  assert.equal(subjects.length, 2, '应产生 test/业务两组提交（REQ-20260922-007：条目文档不进 doc 组）');
   for (const s of subjects) {
     assert.ok(s.includes(LONG_TITLE), `提交消息须含完整标题（不截断）：${s}`);
     assert.equal(commitStore.validateCommitSubject(s, item.id), null, `长标题消息须过规范核验：${s}`);
   }
-  assert.ok(subjects.some((s) => s === `doc: ${LONG_TITLE} ${item.id}`), 'doc 组消息应为完整标题拼装');
+  assert.ok(subjects.some((s) => s === `test: ${LONG_TITLE} ${item.id}`), 'test 组消息应为完整标题拼装');
+  assert.ok(subjects.some((s) => s === `feat: ${LONG_TITLE} ${item.id}`), '业务组消息应为完整标题拼装');
 
   // atb commit log 展示完整标题（分支浏览列表同源渲染 c.subject）
   const log = atb(['commit', 'log', item.id, '--json'], root);
@@ -443,7 +444,7 @@ t('D11 索引：atb commit log 查单→全部提交；atb commit which 从提�
   const log = atb(['commit', 'log', item.id, '--json'], root);
   assert.equal(log.code, 0, `commit log 应成功（${log.err}）`);
   const rows = jsonOf(log);
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 2);
   for (const row of rows) {
     assert.match(row.hash, /^[0-9a-f]{40}$/, '应返回完整 hash');
     assert.ok(row.subject.includes(item.id), '应携带提交消息');
@@ -465,7 +466,7 @@ t('D11 索引：atb commit log 查单→全部提交；atb commit which 从提�
   assert.equal(jsonOf(none), null);
   // lib 直查：via 合并账本与 git 历史
   const merged = gitFlow.itemCommitLog(dataDir, root, item.id);
-  assert.equal(merged.length, 3);
+  assert.equal(merged.length, 2);
 });
 
 // ---------- D4 设置页接口（server 子进程） ---------- ----------

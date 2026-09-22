@@ -41,7 +41,8 @@ function event(kind, by, note = '') {
 // ---------- 开发侧：挂起声明（batch.finishRun 自动触发；legacy 由服务端物化） ----------
 
 // 自动提交结果是否构成「提交不完整」挂起（design 口径 1：提交完整性是收尾与后续派发的前置）。
-// 完整跳过（不挂起）：git 历史已含单号（幂等）、本单无待提交改动（可验证原因已落账）、非 git 项目。
+// 完整跳过（不挂起）：git 历史已含单号（幂等）、本单无待提交改动（可验证原因已落账）、非 git 项目、
+// 仅条目文档差异被忽略（REQ-20260922-007 ignoredDocs——文档走文档讨论轮/人工通道提交）。
 // 挂起：failed（含部分组失败）/ pendingManual（归属不明）/ heldGroups（暂扣）/ 其余 skipped
 // （无快照无法归因、变更不归属本单、状态不可读等——无法证明完整即挂起，不得放行队列）。
 // BUG-20260915-004：失败原因不再 slice(0, 80) 拦腰截断（原缺陷把 index.lock': File exists
@@ -60,6 +61,10 @@ export function commitIncompleteReason(autoCommit) {
   if (autoCommit.status === 'skipped') {
     const reason = String(autoCommit.reason || '');
     if (/幂等跳过|无待提交改动|不是 git 仓库/.test(reason)) return null;
+    // REQ-20260922-007：仅条目文档差异被忽略的跳过是预期完整收口（条目文档不随收口提交，
+    // 经文档讨论轮/人工通道提交），不声明挂起——否则每个正常开发轮（都会编写条目文档）
+    // 都会被挂起、批次被无限暂停。
+    if (Array.isArray(autoCommit.ignoredDocs) && autoCommit.ignoredDocs.length) return null;
     const prefix = '提交完整性无法确认：';
     return `${prefix}${clipReasonKeepEnds(reason, REASON_MAX_CHARS - [...prefix].length)}`;
   }
