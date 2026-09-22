@@ -120,12 +120,87 @@ flowchart LR
 
 ## 技术选型摘要
 
-| 选型 | 取舍 |
-| ---- | ---- |
-| 零依赖 Node http | 无框架升级与供应链维护面，本地单进程足够 |
-| Markdown + Git 存储 | 人与 Agent 共用介质，历史与审计免费获得；不追求高并发与复杂查询 |
-| 原生前端 + 少量本地打包库（提交树、Markdown 渲染、语法高亮、目录树） | 无构建步骤、无前端框架依赖 |
-| Electron 桌面壳 | 复用同一本地服务，打包 mac（DMG）与 Windows（NSIS）；不含签名与商店流程 |
-| data/ 与 runtime/ 分层 | 协作产物进 Git 随仓库分发；运行态仅本地，机器状态不进发布 |
+| 选型                                                                 | 取舍                                                                    |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 零依赖 Node http                                                     | 无框架升级与供应链维护面，本地单进程足够                                |
+| Markdown + Git 存储                                                  | 人与 Agent 共用介质，历史与审计免费获得；不追求高并发与复杂查询         |
+| 原生前端 + 少量本地打包库（提交树、Markdown 渲染、语法高亮、目录树） | 无构建步骤、无前端框架依赖                                              |
+| Electron 桌面壳                                                      | 复用同一本地服务，打包 mac（DMG）与 Windows（NSIS）；不含签名与商店流程 |
+| data/ 与 runtime/ 分层                                               | 协作产物进 Git 随仓库分发；运行态仅本地，机器状态不进发布               |
 
 [返回 README](./README.md) · [更新日志](./CHANGELOG.md) · [功能说明](./FEATURES.md)
+
+
+
+## 设计思路与架构
+
+### 设计思路
+
+- **人机分工明确**：人负责接受、计划、验收与推送等决策；Agent 负责分析、开发、测试与上报等执行。看板是双方唯一的协作界面，状态由系统流转，不靠口头约定。
+- **硬约束优于约定**：条目状态机由系统管理（Agent 的常规状态操作只有认领与上报），源码改动受钩子守卫保护，开发收口由系统按认领时快照自动提交。规则不写在文档里等人遵守，而是写进工具里强制生效。
+- **本地优先**：一个 Node 进程加一个 Git 仓库即可运行，无外部服务、无账号体系。数据在自己机器上，随时可备份、迁移和审查。
+- **一切留痕**：每个条目是一个文档目录，每次收口是一次 Git 提交，每个版本以提交为依据。出了问题可顺着条目、提交与版本计划逐层追溯。
+
+### 为什么用 Markdown + Git，而不是数据库
+
+本产品把任务数据存为 Markdown 文件并用 Git 管理，不引入数据库：
+
+- **人与 Agent 共用同一介质**。Agent 原生读写纯文本，Markdown 无需驱动、连接串或查询层；人用任何编辑器都能直接查看和修改，AI 会话与看板看到的是同一份数据。
+- **版本历史与审计免费获得**。Git 天然记录谁在何时改了什么；开发收口按单自动提交，改动归属清晰，发布文档与版本计划能以真实提交为依据核实。
+- **零部署、零运维**。没有服务进程要启动、没有 schema 要迁移、没有独立备份策略要维护——`git clone` 即得全部数据，`atb rebuild` 还能从 Git 历史重建运行状态。
+- **diff 就是评审界面**。条目文档的每次改动都可读、可审、可回滚，人和 Agent 都能直接阅读 diff 完成确认。
+- **数据与代码同生命周期**。条目说明、设计与报告随仓库分发，新成员克隆即获得完整上下文，不依赖某台机器上的数据库实例。
+
+这一取舍也划出了边界：Markdown + Git 不追求高并发写入、复杂查询和海量数据，任务看板不需要这些。需要事务性保证的运行态（状态、锁、设置、执行账本）以 JSON 存放在 `agent-team-board/runtime/`，仅本地留存、不进 Git——「文档进 Git、运行态留本地」是这套存储设计的核心分层。
+
+### 架构分层
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "transparent", "clusterBkg": "transparent", "edgeLabelBackground": "transparent"}}}%%
+flowchart TB
+    HUMAN["人"]
+    AGENT["Agent"]
+    CMD["协作规范<br/>commands · skills"]
+
+    subgraph ENTRY["入口层"]
+        WEB["看板界面<br/>scripts/web"]
+        CLI["CLI<br/>scripts/atb.mjs"]
+    end
+
+    subgraph CORE["服务与业务层"]
+        SRV["本地服务 scripts/server.mjs<br/>HTTP API · 默认 8888"]
+        LIB["业务逻辑 scripts/lib<br/>状态机 · Git 收口 · 发布流水线"]
+    end
+
+    subgraph STORE["存储层"]
+        direction LR
+        DATA[("agent-team-board/data<br/>条目 Markdown · 随 Git 管理")]
+        RT[("agent-team-board/runtime<br/>状态 · 锁 · 账本 · 仅本地")]
+    end
+
+    GUARD["守卫<br/>hooks + scripts/state-guard.mjs<br/>拦截越权写入"]
+
+    HUMAN -->|"接受 · 计划 · 验收"| WEB
+    AGENT -->|"认领 · 实现 · 上报"| CLI
+    CMD -.->|规范约束| AGENT
+    WEB --> SRV
+    CLI --> LIB
+    SRV --> LIB
+    LIB --> DATA
+    LIB --> RT
+    AGENT -.->|拦截越权写入| GUARD
+```
+
+存储分两层：`agent-team-board/data/` 保存条目文档（Markdown，随 Git 管理），`agent-team-board/runtime/` 保存运行态（JSON，仅本地）。前者是人与 Agent 的协作产物，后者是系统运行的状态账本。
+
+## 数据与开发入口
+
+`agent-team-board/data/` 保存条目说明、设计、用例和报告，随 Git 管理；`agent-team-board/runtime/` 保存状态、锁、设置和执行记录，只在本地留存。运行数据不跨设备同步，多设备协同不在本版支持范围。旧布局项目可在设置页迁移，或执行 `atb migrate`；新克隆项目可用 `atb rebuild` 按 Git 历史重建可恢复的状态，它不是完整运行记录备份。
+
+| 位置                                        | 用途                                                |
+| ------------------------------------------- | --------------------------------------------------- |
+| `scripts/atb.mjs`、`scripts/server.mjs` | CLI 与本地服务                                      |
+| `scripts/lib/`、`scripts/web/`          | 业务逻辑与看板界面                                  |
+| `scripts/tests/`                          | 自动化测试，入口为`npm test`                      |
+| `electron/`                               | 桌面壳，`npm run dist` 使用 electron-builder 打包 |
+| `commands/`、`hooks/`、`skills/`      | Agent 命令、守卫与协作规范                          |

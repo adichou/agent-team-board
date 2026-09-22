@@ -308,6 +308,10 @@ export async function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTes
   const emit = (stage) => { if (typeof onStage === 'function') { try { onStage(stage); } catch { /* 进度回调失败不影响核验 */ } } };
   emit('verify');
   const rec = requireDevelopWaiting(dataDir, itemId);
+  // BUG-20260922-004：resolved 后的重复核验幂等跳过——已闭环记录不再被核验结果覆写。
+  if (rec.state === 'resolved') {
+    return { ok: true, idempotent: true, itemId, batchId: rec.batchId };
+  }
   const run = requireRun(dataDir, rec);
   const root = projectRoot || rec.projectRoot;
   const scope = root ? scopeOfRun(dataDir, run, root) : null;
@@ -323,23 +327,34 @@ export async function verifyCommitConfirm(dataDir, itemId, { projectRoot, runTes
     }
   }
   const ok = reasons.length === 0;
-  if (scope) {
-    rec.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
+  const verifiedEvent = event('verified', by, ok
+    ? '核验通过（指纹基线刷新为当前内容）'
+    : `核验未通过（${reasons.length} 项；指纹基线刷新为当前内容）`);
+  // BUG-20260922-004 过期写回守卫：await 测试期间记录被并发更新（人工确认 resolved /
+  // 重启留痕 / 归档重开新一轮）→ 不整写回——resolved 幂等跳过，其余过期形态明确拒绝；
+  // 仍 waiting 同轮 → 以盘上最新记录为基座合并（并发留痕事件保留）。
+  const cur = confirmOf(dataDir, itemId);
+  if (cur && cur.state === 'resolved') {
+    return { ok: true, idempotent: true, itemId, batchId: cur.batchId };
   }
-  rec.verify = {
+  const staleReason = staleWriteBackReason(cur, rec);
+  if (staleReason) return { ok: false, itemId, reasons: [staleReason] };
+  const merged = { ...cur };
+  if (scope) {
+    merged.fingerprint = { version: 1, files: gitFlow.pathStates(root, paths.map((x) => x.path)) };
+  }
+  merged.verify = {
     lastCheckAt: new Date().toISOString(),
     ok,
     reasons,
     remaining: paths.map((x) => x.path),
     test: test || undefined,
   };
-  rec.events.push(event('verified', by, ok
-    ? '核验通过（指纹基线刷新为当前内容）'
-    : `核验未通过（${reasons.length} 项；指纹基线刷新为当前内容）`));
-  saveConfirmRecord(dataDir, itemId, rec);
-  // BUG-20260918-003：留痕写 runtime/（git 不可见），核验事件的写入不再污染指纹基线，
-  // 无需「留痕后再刷新一次基线」的补正——单次落账即绑定人工所见内容。
-  renderConfirmDoc(dataDir, itemId, rec.title);
+  merged.events = [...(cur.events || []), verifiedEvent];
+  saveConfirmRecord(dataDir, itemId, merged);
+  renderConfirmDoc(dataDir, itemId, merged.title);
+  // 核验事件写入不再污染指纹基线（BUG-20260918-003：留痕在 runtime/，git 不可见），
+  // 单次落账即绑定人工所见内容。
   return { ok, reasons, remaining: paths.map((x) => x.path), test };
 }
 
@@ -365,6 +380,9 @@ export function keepConfirm(dataDir, itemId, { note = '', by = 'human' } = {}) {
 // 4) 完整性 + 测试复验：确认范围内路径清零且（有测试脚本时）npm test 通过才放行；
 // 5) 全过 → 记录 resolved（补交 hash 落账），返回 batchId 供调用方恢复队列。
 // 任一失败：保持挂起并逐项说明原因（可重新核验 / 修正后重试）。幂等：已 resolved 直接成功返回。
+// BUG-20260922-004 过期写回守卫：await 测试复验期间记录被并发更新（人工经其他入口确认 /
+// 重启留痕 / 归档重开新一轮）时，过期内存副本不整写回——resolved 幂等返回、其余过期拒绝、
+// 仍 waiting 同轮以最新记录为基座合并（并发事件保留），杜绝 resolved 回退 waiting 与事件丢失。
 // BUG-20260915-008：改为 async（测试复验用异步执行器）+ onStage 阶段回调
 // （'verify' → 'supplement' → 'test' → 'restore'，未走到的阶段不上报）；
 // testRunner 可注入替身，缺省用 runProjectTestsAsync；结果与账本口径与同步版完全一致。
@@ -374,6 +392,9 @@ export async function confirmCommitContinue(dataDir, itemId, { projectRoot = nul
   if (rec.state === 'resolved') {
     return { ok: true, idempotent: true, itemId, batchId: rec.batchId };
   }
+  // BUG-20260922-004：本任务新增事件 = 装载时事件长度之后的增量；写回时与盘上最新事件
+  // 合并（并发追加的留痕不丢），不再整写回装载副本。
+  const baseEventsLen = rec.events.length;
   emit('verify');
   const root = projectRoot || rec.projectRoot;
   if (!root) throw new AtbError('确认补交需要项目根目录（projectRoot）参数');
@@ -448,33 +469,64 @@ export async function confirmCommitContinue(dataDir, itemId, { projectRoot = nul
   note = cleanText(note);
   if (clipped(note) > CONFIRM_TEXT_MAX_CHARS) throw new AtbError(`处理说明过长（≤${CONFIRM_TEXT_MAX_CHARS} 字）`);
   if (reasons.length) {
-    rec.verify = {
-      lastCheckAt: new Date().toISOString(), ok: false, reasons,
-      remaining: [], test: test || undefined,
+    const rejectedEvent = event('confirm-rejected', by, reasons[0].slice(0, 120));
+    // BUG-20260922-004 过期写回守卫：await 期间记录已被并发更新——人工已确认恢复（resolved）
+    // 时本次拒绝幂等成功返回（不复活 waiting、不抹 confirmed 事件）；其余过期形态明确拒绝
+    // 不写回；仍 waiting 同轮 → 以最新记录为基座合并（并发留痕保留）。
+    const cur = confirmOf(dataDir, itemId);
+    if (cur && cur.state === 'resolved') {
+      return { ok: true, idempotent: true, itemId, batchId: cur.batchId };
+    }
+    const staleReason = staleWriteBackReason(cur, rec);
+    if (staleReason) return { ok: false, itemId, reasons: [staleReason] };
+    const merged = {
+      ...cur,
+      verify: {
+        lastCheckAt: new Date().toISOString(), ok: false, reasons,
+        remaining: [], test: test || undefined,
+      },
+      events: [...(cur.events || []), ...rec.events.slice(baseEventsLen), rejectedEvent],
     };
-    rec.events.push(event('confirm-rejected', by, reasons[0].slice(0, 120)));
-    saveConfirmRecord(dataDir, itemId, rec);
-    renderConfirmDoc(dataDir, itemId, rec.title);
+    saveConfirmRecord(dataDir, itemId, merged);
+    renderConfirmDoc(dataDir, itemId, merged.title);
     return { ok: false, itemId, reasons };
   }
   const nowIso = new Date().toISOString();
   emit('restore');
+  // 补交结果（内存口径）：有补交 hash 落账；无待补交路径如实说明（人工可能已在终端补交）
+  let supplementValue = rec.supplement || null;
   if (supplement && Array.isArray(supplement.commits) && supplement.commits.length) {
-    rec.supplement = { commits: supplement.commits, at: nowIso, by };
-  } else if (!rec.supplement) {
-    rec.supplement = { commits: [], at: nowIso, by, note: '无可归因待补交路径（可能已由人工在终端补交）' };
+    supplementValue = { commits: supplement.commits, at: nowIso, by };
+  } else if (!supplementValue) {
+    supplementValue = { commits: [], at: nowIso, by, note: '无可归因待补交路径（可能已由人工在终端补交）' };
   }
-  rec.verify = {
-    lastCheckAt: nowIso, ok: true, reasons: [], remaining: [], test: test || undefined,
+  const confirmedEvent = event('confirmed', by, `确认并继续：${(supplementValue.commits || []).length} 组补交，核验通过，恢复队列`);
+  // BUG-20260922-004 过期写回守卫：同失败路径——resolved 幂等返回 / 过期拒绝 / 同轮合并，
+  // 绝不把已确认（resolved）记录回退成 waiting 或抹掉并发事件。
+  const cur = confirmOf(dataDir, itemId);
+  if (cur && cur.state === 'resolved') {
+    return {
+      ok: true, idempotent: true, itemId, batchId: cur.batchId,
+      supplementCommits: ((cur.supplement && cur.supplement.commits) || []).map((c) => c.hash),
+    };
+  }
+  const staleReason = staleWriteBackReason(cur, rec);
+  if (staleReason) return { ok: false, itemId, reasons: [staleReason] };
+  const merged = {
+    ...cur,
+    supplement: supplementValue,
+    verify: {
+      lastCheckAt: nowIso, ok: true, reasons: [], remaining: [], test: test || undefined,
+    },
+    state: 'resolved',
+    resolvedAt: nowIso,
+    events: [...(cur.events || []), ...rec.events.slice(baseEventsLen), confirmedEvent],
   };
-  rec.state = 'resolved';
-  rec.resolvedAt = nowIso;
-  rec.events.push(event('confirmed', by, `确认并继续：${(rec.supplement.commits || []).length} 组补交，核验通过，恢复队列`));
-  saveConfirmRecord(dataDir, itemId, rec);
-  renderConfirmDoc(dataDir, itemId, rec.title);
+  saveConfirmRecord(dataDir, itemId, merged);
+  renderConfirmDoc(dataDir, itemId, merged.title);
   return {
-    ok: true, itemId, batchId: rec.batchId,
-    supplementCommits: (rec.supplement.commits || []).map((c) => c.hash),
+    ok: true, itemId, batchId: merged.batchId,
+    supplementCommits: (merged.supplement.commits || []).map((c) => c.hash),
   };
 }
 
@@ -490,11 +542,32 @@ function requireWaiting(dataDir, itemId) {
 function requireDevelopWaiting(dataDir, itemId) {
   const rec = confirmOf(dataDir, itemId);
   if (!rec || rec.kind !== 'develop') throw new AtbError(`${itemId} 没有待人工确认提交的挂起记录`);
-  if (rec.state === 'resolved') return rec; // 幂等入口（continue）
+  if (rec.state === 'resolved') return rec; // 幂等入口（verify / continue）
   if (rec.state !== 'waiting') {
     throw new AtbError(`${itemId} 提交挂起当前为 ${rec.state}，无需确认`);
   }
   return rec;
+}
+
+// BUG-20260922-004 过期写回守卫（丢失更新防护）：verify / continue 在 await 测试复验期间
+// 持有任务开始时装载的内存副本；期间记录可能已被并发更新——人工经其他入口（服务重启后的
+// 新进程 / 另一任务 / CLI 视图触发的操作）确认 resolved、重启恢复留痕 task-interrupted、
+// 或闭环后归档重开新一轮。旧副本无差别整写回（saveConfirmRecord 整体替换）会把 resolved
+// 回退成 waiting 并抹掉并发追加的事件（丢失更新，即本缺陷形态）。写回前以盘上最新记录
+// 做三方判定，返回拒绝原因（null = 未过期，可合并写回）：
+//   · 记录缺失 / 轮次或声明时间已变 → 过期拒绝（不覆盖新一轮现场）；
+//   · 状态已离开 waiting（resolved / cancelled / closed-done）→ 过期拒绝（终态不回退；
+//     调用方对 resolved 另行走幂等成功口径，绝不复活 waiting）。
+function staleWriteBackReason(cur, base) {
+  if (!cur) return '确认记录已不存在（可能已归档重开新一轮）：本次过期结果不写回，请按最新记录操作';
+  if ((cur.round || 1) !== (base.round || 1)
+    || String(cur.declaredAt || '') !== String(base.declaredAt || '')) {
+    return '确认记录已归档重开新一轮：本次过期结果不写回，请按新一轮记录操作';
+  }
+  if (cur.state !== 'waiting') {
+    return `确认记录已被并发更新为「${CONFIRM_STATE_LABEL[cur.state] || cur.state}」：本次过期结果不写回（不回退已确认状态）`;
+  }
+  return null;
 }
 
 // run 读取（含 projectRoot 便于核验；dispatch run 与账本解耦读取）
