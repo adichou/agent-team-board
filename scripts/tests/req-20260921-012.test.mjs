@@ -55,10 +55,13 @@ const t = (name, fn) => cases.push([name, fn]);
 
 /* ---------- L1 纯逻辑（publish-flow.mjs） ---------- */
 
-t('L1-1 七态枚举与文案：剩余语言 未翻译/正在翻译/已翻译待审核（reviewed 共用）', () => {
+t('L1-1 七态枚举与文案：剩余语言 未翻译/正在翻译/已翻译待审核（reviewed 共用）；单文件类两态（REQ-20260922-002）', () => {
   assert.deepEqual(Object.keys(flow.DOCS_FLOW_LABEL), [
     'unsummarized', 'summarizing', 'summarized', 'untranslated', 'translating', 'translated', 'reviewed',
+    'unwritten', 'pending',
   ]);
+  assert.equal(flow.DOCS_FLOW_LABEL.unwritten, '未编写');
+  assert.equal(flow.DOCS_FLOW_LABEL.pending, '待审核');
   assert.equal(flow.DOCS_FLOW_LABEL.untranslated, '未翻译');
   assert.equal(flow.DOCS_FLOW_LABEL.translating, '正在翻译');
   assert.equal(flow.DOCS_FLOW_LABEL.translated, '已翻译待审核');
@@ -69,10 +72,11 @@ t('L1-2 evaluateDocsFlow 分组求值：剩余语言初始「未翻译」；tran
   const contents = {};
   for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.file}\n`;
   let r = flow.evaluateDocsFlow({}, readsOf(contents), {});
-  assert.equal(r.files.length, 8);
-  assert.deepEqual(r.defaultFiles.map((f) => f.file), ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md']);
+  assert.equal(r.files.length, 9, '4 × 2 + LICENSE（REQ-20260922-002）');
+  assert.deepEqual(r.defaultFiles.map((f) => f.file), ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md', 'LICENSE.md']);
   assert.deepEqual(r.restFiles.map((f) => f.file), ['README_en.md', 'CHANGELOG_en.md', 'FEATURES_en.md', 'AGENTS_en.md']);
-  assert.ok(r.defaultFiles.every((f) => f.state === 'unsummarized'), '默认语言初始未总结');
+  assert.ok(r.defaultFiles.filter((f) => !f.single).every((f) => f.state === 'unsummarized'), '默认语言初始未总结');
+  assert.equal(r.defaultFiles.find((f) => f.single).state, 'pending', 'LICENSE 在盘未审为待审核');
   assert.ok(r.restFiles.every((f) => f.state === 'untranslated'), '剩余语言初始未翻译（不与未总结混排）');
   assert.equal(r.defaultReviewedCount, 0);
   assert.equal(r.restReviewedCount, 0);
@@ -206,7 +210,7 @@ t('L1-6 canFinalize / finalized / canCommit：全审方可完结；完结前提�
   // 语言集变化（新增语言）：文件集变化，完结失效
   const fr = { ...contents, 'README_fr.md': '# fr', 'CHANGELOG_fr.md': '# fr', 'FEATURES_fr.md': '# fr', 'AGENTS_fr.md': '# fr' };
   r = flow.evaluateDocsFlow({ langs: 'cn,en,fr', review: { files, finalized } }, readsOf(fr), {});
-  assert.equal(r.files.length, 12);
+  assert.equal(r.files.length, 13, '4 × 3 + LICENSE');
   assert.equal(r.finalized, null, '语言集变化完结失效回退');
 
   // 部分审核：不可完结
@@ -294,7 +298,7 @@ t('L2-3 recordDocsFinalize：落 v.review.finalized（langsKey + 文件 hash）�
   for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.key}\n`;
   const out = buildStore.recordDocsFinalize(dataDir, v.id, { langs: ['cn', 'en'], readFile: readsOf(contents) });
   assert.equal(out.review.finalized.langsKey, 'cn,en');
-  assert.equal(Object.keys(out.review.finalized.files).length, 8, '完结快照覆盖语言集全文件');
+  assert.equal(Object.keys(out.review.finalized.files).length, 9, '完结快照覆盖语言集全文件（含 LICENSE）');
   assert.equal(out.review.finalized.files['README_en.md'], sha256(contents['README_en.md']));
   assert.ok(out.review.finalized.at);
   assert.equal(out.docs, undefined, '不写 v.docs（提交记录语义隔离）');
@@ -381,7 +385,7 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.status, 200);
     const fe = r.json.docsFlow;
-    assert.equal(fe.files.length, 8);
+    assert.equal(fe.files.length, 9, '4 × 2 + LICENSE');
     assert.equal(fe.defaultReviewedCount, 0);
     assert.equal(fe.restReviewedCount, 0);
     assert.ok(fe.restFiles.every((f) => f.state === 'untranslated'), '剩余语言初始未翻译');
@@ -441,8 +445,10 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     assert.ok(brief, '进行中 AI 翻译进入全局面板');
     assert.equal(brief.counts.total, 4);
 
-    // 剩余语言文件落盘（翻译产出）并审核；收尾翻译 run
-    const restFiles = flow.publishDocFiles(['cn', 'en']).filter((f) => f.lang !== 'cn');
+    // 剩余语言文件落盘（翻译产出）并审核；LICENSE 一并人工编写并审核（REQ-20260922-002 必选
+    // 进门禁）；收尾翻译 run。写盘顺序按清单（默认语言先于剩余语言、LICENSE 末尾），避免
+    // mtime 基准变更误报。
+    const restFiles = flow.publishDocFiles(['cn', 'en']).filter((f) => f.lang != null && f.lang !== 'cn');
     for (const f of restFiles) {
       fs.writeFileSync(path.join(proj, f.file), `# ${f.key} en\n`);
       r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
@@ -453,9 +459,17 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     row = (r.json.projects || []).find((p) => p.root === proj);
     assert.ok(!((row.tasks || []).some((x) => x.kind === 'translate')), '收尾后全局面板移出');
 
+    // LICENSE 未编写：整体完结被阻止（缺口含 LICENSE.md 未编写）
+    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
+    assert.equal(r.status, 400, 'LICENSE 未审不可完结');
+    assert.match(r.json.error || '', /LICENSE\.md（未编写）/);
+    fs.writeFileSync(path.join(proj, 'LICENSE.md'), '# MIT License\n');
+    r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'LICENSE.md' });
+    assert.equal(r.status, 200, 'review LICENSE.md');
+
     // 全部已审核：可完结；完结前提交被阻止
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canFinalize, true, '4×N 全部已审核可整体完结');
+    assert.equal(r.json.docsFlow.canFinalize, true, '4×N + LICENSE 全部已审核可整体完结');
     assert.equal(r.json.docsFlow.finalized, null);
     assert.equal(r.json.docsFlow.canCommit, false, '完结前提交不放行');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
@@ -471,7 +485,7 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     assert.equal(r.status, 200, `commit：${r.text}`);
     assert.ok(/^[0-9a-f]{40}$/.test(r.json.commitHash));
     const show = git(proj, ['show', '--name-only', '--format=', r.json.commitHash]).split('\n').filter(Boolean);
-    assert.equal(new Set(show).size, 8, 'pathspec 只含语言集内八文档');
+    assert.equal(new Set(show).size, 9, 'pathspec 只含语言集内八文档 + LICENSE.md');
 
     // 基准变更：外部修改默认语言文档（mtime 更新）→ 剩余语言回退未翻译、完结失效
     await sleep(20);
@@ -514,6 +528,7 @@ const FLOW_STUB = {
     untranslated: '○', translating: '◐', translated: '●', reviewed: '✔',
   },
   DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+  DOC_SINGLE_KEYS: ['LICENSE'], // REQ-20260922-002 单文件类（审查对话框页签含 LICENSE）
   DEFAULT_DOC_LANGS: ['cn', 'en'],
   langNameOf: (l) => String(l),
   docFilesOf: (langs) => flow.publishDocFiles(Array.isArray(langs) && langs.length ? langs : flow.DEFAULT_DOC_LANGS),

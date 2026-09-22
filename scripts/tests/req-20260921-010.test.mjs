@@ -71,9 +71,9 @@ t('L1-1 normalizeDocLangs：默认 cn,en；空白容错与大小写归一；空�
   assert.ok(!flow.normalizeDocLangs('cn,en').langs.includes(''));
 });
 
-t('L1-2 文件清单：首语言无后缀、其余下划线后缀；cn,en,fr,jp 共 16 文件；白名单按语言集', () => {
+t('L1-2 文件清单：首语言无后缀、其余下划线后缀；cn,en,fr,jp 共 16 文件 + LICENSE 单文件（REQ-20260922-002）；白名单按语言集', () => {
   const files = flow.publishDocFiles(['cn', 'en', 'fr', 'jp']);
-  assert.equal(files.length, 16, '4 类 × 4 语言');
+  assert.equal(files.length, 17, '4 类 × 4 语言 + LICENSE.md');
   assert.deepEqual(
     files.filter((f) => f.key === 'README').map((f) => f.file),
     ['README.md', 'README_en.md', 'README_fr.md', 'README_jp.md'],
@@ -92,6 +92,9 @@ t('L1-2 文件清单：首语言无后缀、其余下划线后缀；cn,en,fr,jp 
   assert.equal(flow.isPublishDocFile('README_fr.md', ['cn', 'en']), false, '默认语言集不含 fr');
   assert.equal(flow.isPublishDocFile('README.en.md', ['cn', 'en']), false, '存量点号命名不再进白名单（语言集为唯一事实源）');
   assert.equal(flow.isPublishDocFile('evil.txt', ['cn', 'en']), false);
+  // REQ-20260922-002：单文件类恒 LICENSE.md（不随语言集展开）
+  assert.equal(flow.isPublishDocFile('LICENSE.md', ['cn', 'en', 'fr', 'jp']), true);
+  assert.equal(files.filter((f) => f.key === 'LICENSE').length, 1, 'LICENSE 恒单文件');
 });
 
 t('L1-3 docLangsOf：v.langs 合法则用之；缺失 / 非法回退默认', () => {
@@ -138,24 +141,24 @@ t('L1-6 evaluateDocsState / evaluateDocsFlow：行数 = 4×N，计数与文案�
   for (const f of files) reviewFiles[f.file] = { hash: sha256(contents[f.file]), at: '2026-09-21T00:00:00Z' };
 
   const fv = flow.evaluateDocsFlow({ langs, review: { files: reviewFiles } }, readsOf(contents), {});
-  assert.equal(fv.files.length, 12, '4 × 3 语言');
-  assert.equal(fv.reviewedCount, 12);
-  assert.equal(fv.canFinalize, true, '12/12 已审核可整体审查完结');
+  assert.equal(fv.files.length, 13, '4 × 3 语言 + LICENSE');
+  assert.equal(fv.reviewedCount, 13);
+  assert.equal(fv.canFinalize, true, '13/13 已审核可整体审查完结');
   assert.equal(fv.canCommit, false, 'REQ-20260921-012：整体审查未完结前不可提交');
   const fv0 = flow.evaluateDocsFlow({ langs, review: { files: reviewFiles, finalized: { at: '2026-09-21T02:00:00Z', langsKey: 'cn,en,fr', files: {} } } }, readsOf(contents), {});
-  assert.equal(fv0.canCommit, true, '12/12 已审核 + 整体完结可提交');
+  assert.equal(fv0.canCommit, true, '13/13 已审核 + 整体完结可提交');
 
   // 求值从 v.langs 取语言集：新增语言文件缺失 → 缺口
   const fv2 = flow.evaluateDocsFlow({ langs: ['cn', 'en', 'fr', 'jp'], review: { files: reviewFiles } }, readsOf(contents), {});
-  assert.equal(fv2.files.length, 16, '语言集变化后行数联动');
-  assert.equal(fv2.reviewedCount, 12);
+  assert.equal(fv2.files.length, 17, '语言集变化后行数联动（LICENSE 恒 1 个）');
+  assert.equal(fv2.reviewedCount, 13);
   assert.equal(fv2.missing.filter((m) => m.file.endsWith('_jp.md')).length, 4, '新语言从缺口起步');
 
   const st = flow.evaluateDocsState({ langs }, readsOf(contents));
-  assert.equal(st.files.length, 12);
+  assert.equal(st.files.length, 13);
   assert.ok(st.reasons.every((x) => !/八个/.test(x)), 'reasons 不再硬编码「八个」');
   const stNone = flow.evaluateDocsState({ langs }, readsOf({}));
-  assert.match(stNone.reasons[0], /共 12 个文件/, '未编写文案按语言集展开文件数');
+  assert.match(stNone.reasons[0], /共 13 个文件/, '未编写文案按语言集展开文件数（含 LICENSE）');
 });
 
 t('L1-7 publishScopeFingerprint：语言集不同（文件清单不同）指纹不同', () => {
@@ -307,11 +310,11 @@ t('L3 服务接口：langs 保存 / publish-plan 回显 / save / review / commit
     assert.equal(r.status, 201, `创建版本：${r.text}`);
     const vid = r.json.version.id;
 
-    // publish-plan：默认语言集回显 cn,en；docsFlow 8 行
+    // publish-plan：默认语言集回显 cn,en；docsFlow 4×2 + LICENSE
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.status, 200);
     assert.deepEqual(r.json.langs, ['cn', 'en'], '缺省语言集 cn,en');
-    assert.equal(r.json.docsFlow.files.length, 8);
+    assert.equal(r.json.docsFlow.files.length, 9, 'REQ-20260922-002：4 × 2 + LICENSE.md');
 
     // 保存语言集 → 回显联动
     r = await req(port, 'POST', `/api/build/docs/langs${P}`, { id: vid, langs: 'cn,en,fr' });
@@ -319,7 +322,7 @@ t('L3 服务接口：langs 保存 / publish-plan 回显 / save / review / commit
     assert.deepEqual(r.json.langs, ['cn', 'en', 'fr']);
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.deepEqual(r.json.langs, ['cn', 'en', 'fr'], '重新进入界面正确回显');
-    assert.equal(r.json.docsFlow.files.length, 12, '文件清单 4 × 3 联动');
+    assert.equal(r.json.docsFlow.files.length, 13, '文件清单 4 × 3 + LICENSE 联动（LICENSE 恒 1 个）');
     assert.ok(r.json.docsFlow.files.some((f) => f.file === 'README_fr.md'));
 
     // 非法语言集 400
@@ -346,10 +349,10 @@ t('L3 服务接口：langs 保存 / publish-plan 回显 / save / review / commit
     r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'README_fr.md' });
     assert.equal(r.status, 200, `review fr：${r.text}`);
 
-    // 提交门禁：12 文件未全审核 → 400 带动态计数
+    // 提交门禁：13 文件未全审核 → 400 带动态计数
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 400);
-    assert.match(r.json.error || '', /1\/12/, '缺口计数按语言集（X/N）');
+    assert.match(r.json.error || '', /1\/13/, '缺口计数按语言集（X/N，分母含 LICENSE）');
 
     // 全部审核 → 提交成功；pathspec 只含语言集内 12 文件，不夹带业务源码
     for (const f of flow.publishDocFiles(['cn', 'en', 'fr'])) {
@@ -367,12 +370,13 @@ t('L3 服务接口：langs 保存 / publish-plan 回显 / save / review / commit
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
     assert.ok(r.json.commitHash);
-    assert.equal(r.json.files.length, 12, '提交范围 = 语言集内 12 文件');
-    assert.ok(r.json.files.every((f) => /^(README|CHANGELOG|FEATURES|AGENTS)(\.md|_(en|fr)\.md)$/.test(f)), '仅语言集内命名');
+    assert.equal(r.json.files.length, 13, '提交范围 = 语言集内 12 文件 + LICENSE.md');
+    assert.ok(r.json.files.every((f) => /^(README|CHANGELOG|FEATURES|AGENTS)(\.md|_(en|fr)\.md)$|^LICENSE\.md$/.test(f)), '仅清单内命名（含 LICENSE.md）');
+    assert.ok(r.json.files.includes('LICENSE.md'), 'LICENSE.md 随提交进入 pathspec');
     const show = git(proj, ['show', '--name-only', '--pretty=format:', r.json.commitHash]).split('\n').filter(Boolean);
     assert.ok(!show.includes('evil.txt'), '不夹带业务源码');
     assert.ok(!show.includes('a.txt') && !show.includes('base.txt'));
-    assert.equal(new Set(show).size, 12);
+    assert.equal(new Set(show).size, 13);
 
     // 无变化不空提交（noop）
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
@@ -402,6 +406,7 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInput：�
     DOCS_FLOW_CLS: { unsummarized: 'st-mute', summarizing: 'st-run', summarized: 'st-wait', reviewed: 'st-ok' },
     DOCS_FLOW_ICON: { unsummarized: '○', summarizing: '◐', summarized: '●', reviewed: '✔' },
     DOC_KEYS: ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'],
+  DOC_SINGLE_KEYS: ['LICENSE'], // REQ-20260922-002 单文件类（审查对话框页签含 LICENSE）
     DEFAULT_DOC_LANGS: ['cn', 'en'],
     langNameOf: flow.langNameOf,
     docFilesOf: (langs) => flow.publishDocFiles(Array.isArray(langs) && langs.length ? langs : ['cn', 'en']),
@@ -426,13 +431,16 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInput：�
   assert.match(html, /data-pf-langs/, '语言集输入框存在');
   assert.match(html, /value="cn,en,fr"/, '回显当前语言集');
   assert.match(html, /语言集/, '标签存在');
-  // 文件列表动态：12 行 fr 文件出现；门禁分组计数按语言集（默认 0/4 · 剩余 0/8）
+  // 文件列表动态：12 行 fr 文件 + LICENSE.md 出现；门禁分组计数按语言集（默认 0/5 · 剩余 0/8，
+  // REQ-20260922-002：LICENSE 归默认语言组计入分母）
   assert.match(html, /README_fr\.md/, 'fr 文件在列表 / 审查对话框');
-  assert.match(html, /默认语言 0\/4/, '门禁默认语言计数（首语言 cn 四文件）');
+  assert.match(html, /LICENSE\.md/, 'LICENSE.md 在文件列表 / 审查对话框页签');
+  assert.match(html, /默认语言 0\/5/, '门禁默认语言计数（首语言 cn 四文件 + LICENSE）');
   assert.match(html, /剩余语言 0\/8/, '门禁剩余语言计数（en+fr 八文件，不再固定 /8）');
   assert.match(html, /① 默认语言先行/, '阶段条（REQ-20260921-012）');
   // 审查对话框：页签计数 n/3；README 页签出现 fr 列
   assert.match(html, /README（0\/3）/, '页签计数按语言数');
+  assert.match(html, /LICENSE（0\/1）/, 'LICENSE 类型页签（A1 单栏口径）');
   assert.ok((html.match(/bld-review-col/g) || []).length >= 3, 'README 页签按语言集展开全语言列');
   // 文件名标识豁免（BUG-20260921-004 口径）
   assert.ok([...html.matchAll(/<span class="bld-doc-fname" data-i18n-skip>([^<]+)</g)].some((m) => m[1].startsWith('README_fr.md')), 'fr 文件名带豁免');
