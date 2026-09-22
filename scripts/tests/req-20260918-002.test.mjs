@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // REQ-20260918-002 根 README.md 豁免实施互斥锁 —— 子进程实测 state-guard 两种模式
 // 用法：node scripts/tests/req-20260918-002.test.mjs
-// 覆盖 test-cases.md R1–R3 / X1–X3 / C1–C4 / L1 / E1 / D1。
+// 覆盖 test-cases.md R1–R3 / X1–X3 / C1–C4 / L1 / E1（D1 文档口径用例已按 BUG-20260922-003
+// 人工决策移除：测试用例不校验 README / AGENTS 等文档内容）。
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -251,17 +252,9 @@ t('E1 端到端：根 README.md 提交守卫放行、真实落库且不夹带 st
   assert.deepEqual(files, ['README.md'], `pathspec 提交不应夹带 staged 源码：${JSON.stringify(files)}`);
 });
 
-// ---------- D1 文档同步 ----------
-
-t('D1 文档口径同步：AGENTS.md / README.md / state-guard 顶部注释', async () => {
-  const agents = fs.readFileSync(path.join(pluginRoot, 'AGENTS.md'), 'utf8');
-  assert.ok(agents.includes('例外：根 `README.md`'), 'AGENTS.md 改前先登记条款应写明根 README.md 例外');
-  assert.ok(/根 `README\.md`[^\n]*无需认领锁|无需认领锁[^\n]*根 `README\.md`/.test(agents), 'AGENTS.md 应写明无需认领锁可直接更新');
-  const readme = fs.readFileSync(README, 'utf8');
-  assert.ok(readme.includes('根 `README.md` 例外'), 'README.md 认领锁与源码守卫应写明根 README.md 例外');
-  const guardSrc = fs.readFileSync(GUARD, 'utf8');
-  assert.ok(guardSrc.slice(0, 2500).includes('REQ-20260918-002'), 'state-guard.mjs 顶部注释应同步豁免口径');
-});
+// ---------- D1 文档口径同步 ----------
+// BUG-20260922-003（人工决策：测试不校验文档内容）：原 D1 用例断言 AGENTS.md / README.md /
+// state-guard.mjs 顶部注释的文档表述，已移除；行为用例（R/X/C/L/E）全部保留。
 
 let failed = 0;
 for (const [name, fn] of cases) {
