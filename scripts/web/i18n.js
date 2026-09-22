@@ -1008,7 +1008,8 @@ const EN = {
   '；面板已切换到当前队首': '; the panel switched to the current queue head',
   '已请求暂停后续领取：当前项继续执行，完成后暂停，不再领取下一项。': 'Pause of next pickup requested: the current item finishes, then pickup pauses — no further items are claimed.',
   '文档已由 AI 分析补全；点击查看 AI 分析面板': 'Documents completed by AI analysis; click to view the AI analysis panel',
-  '未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在 ZCode 会话运行': 'Not planned. Use "Add to plan" to schedule it (development processes the oldest first), or run in a ZCode session',
+  // BUG-20260922-001：/dev 双宿主通用，文案与英文值去 ZCode 专属表述
+  '未入计划。可点「移入计划」排入开发计划（开发启动后最旧优先处理），或在您使用的 Agent 会话运行': 'Not planned. Use "Add to plan" to schedule it (development processes the oldest first), or run it in your agent session',
   '模型目录默认档位': 'Catalog default tier',
   '（最旧优先，实时读取；运行中新置计划的条目自动进入队列）': '(oldest first, read live; items planned while running join the queue automatically)',
   // REQ-20260911-007 待人工决策承接（hold）：聚合区 / 决策面板 / 复工 / 确认完成防呆
