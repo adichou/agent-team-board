@@ -521,6 +521,13 @@ const EN = {
   '打开目录': 'Open directory',
   '终止 AI 分析任务？': 'Abort AI analysis task?',
   '终止 AI 开发任务？': 'Abort AI development task?',
+  // REQ-20260924-002：AI 总结 / AI 翻译面板终止任务（确认标题 / 正文 / 按钮 title）
+  '终止 AI 总结任务？': 'Abort AI summary task?',
+  '终止 AI 翻译任务？': 'Abort AI translation task?',
+  '确认后本轮任务中断收尾：残留「正在总结」回退待处理、已总结文件保留，独立锁释放，可立即重新启动续跑。在途执行子代理需在对应 Agent 会话人工停止。': 'After confirming, this round is wound up as interrupted: files stuck on "summarizing" revert to pending, summarized files are kept, the independent lock is released, and you can restart and resume right away. Stop in-flight subagents manually in their own Agent sessions.',
+  '确认后本轮任务中断收尾：残留「正在翻译」回退待处理、已翻译文件保留，独立锁释放，可立即重新启动续跑。在途执行子代理需在对应 Agent 会话人工停止。': 'After confirming, this round is wound up as interrupted: files stuck on "translating" revert to pending, translated files are kept, the independent lock is released, and you can restart and resume right away. Stop in-flight subagents manually in their own Agent sessions.',
+  '中断收尾：残留「正在总结」回退、已完成文件保留、释放独立锁 summary；在途子代理需在对应会话人工停止': 'Winds up as interrupted: files stuck on "summarizing" revert, completed files are kept, the independent lock summary is released; stop in-flight subagents manually in their own sessions',
+  '中断收尾：残留「正在翻译」回退、已完成文件保留、释放独立锁 translate；在途子代理需在对应会话人工停止': 'Winds up as interrupted: files stuck on "translating" revert, completed files are kept, the independent lock translate is released; stop in-flight subagents manually in their own sessions',
   '执行中': 'Running',
   '执行器已暂停': 'Executor paused',
   '执行日志': 'Run log',
@@ -1856,6 +1863,9 @@ const EN_DYNAMIC = {
   '✓ 已按原配置恢复执行：◇': '✓ Resumed with the original config: $1',
   '✓ 已终止完善任务：◇': '✓ Refine task aborted: $1',
   '✓ 已终止开发任务：◇': '✓ Develop task aborted: $1',
+  // REQ-20260924-002：AI 总结 / AI 翻译终止成功 toast（notice 为插值）
+  '✓ 已终止 AI 总结任务：◇': '✓ AI summary task aborted: $1',
+  '✓ 已终止 AI 翻译任务：◇': '✓ AI translation task aborted: $1',
   // REQ-20260923-004：确认文案补「同步产生一条 git 提交留痕」说明（删除即入库）
   '「◇」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复，并将同步产生一条 git 提交留痕。': '"$1" is still pending; deleting removes the whole item directory (including all documents), cannot be undone on the board, and also creates a git commit to record the deletion.',
   '「◇」模块已暂时隐藏，已回到需求模块': 'The "$1" module is temporarily hidden; returned to Requirements',
