@@ -8,7 +8,8 @@
 //   所有图片挂 error 就地占位（含路径与原因），不渲染裸裂图；协议 / 根相对 / 锚点不改写。
 // - mermaid：`​```mermaid` 围栏替换为 .md-mermaid 待渲染容器，懒加载 vendor 的
 //   scripts/web/mermaid.min.js（index.html 不静态引入，常规页面加载零成本）后 render 为 SVG；
-//   securityLevel:'strict'、主题随 prefers-color-scheme 深浅色；失败（语法 / 库）回退源码 + 可见提示。
+//   securityLevel:'strict'、主题与 themeVariables 随 prefers-color-scheme 深浅两套自适应
+//   （REQ-20260923-003：透明底 + 亮/深两档文字连线，外观每次渲染现读）；失败（语法 / 库）回退源码 + 可见提示。
 // - plantuml：本地渲染无满足「本地优先 + License 白名单」的库（官方为 Java 实现），在线渲染
 //   服务与「本地优先 · 无外部依赖」原则冲突、未经确认不接——首期给明确降级提示 + 源码。
 // - 幂等：图片 data-md-rich 标记；回退源码块 pre data-md-keep 防二次包裹；.md-mermaid[data-pending]
@@ -89,6 +90,33 @@ function darkMode() {
   } catch { return false; }
 }
 
+// REQ-20260923-003 深浅两套 themeVariables：节点 / 子图 / 连线标签底保持透明（「无底色」要求），
+// 文字、边框、连线、子图描边、标题按外观取亮 / 深两档；靛蓝边框贴近品牌色（#4F46E5 系）。
+// 发布文档已移除 %%{init}%% 写死配色（README/DESIGN），看板预览完全随外观自适应，GitHub 等
+// 外部渲染走 mermaid 默认主题。取值在每次渲染时随 darkMode() 现读，系统切换由 change 监听重绘。
+const MERMAID_VARS = {
+  dark: {
+    primaryColor: 'transparent',
+    clusterBkg: 'transparent',
+    edgeLabelBackground: 'transparent',
+    primaryTextColor: '#d1d5db',
+    primaryBorderColor: '#a5b4fc',
+    lineColor: '#94a3b8',
+    clusterBorder: '#374151',
+    titleColor: '#e5e7eb',
+  },
+  light: {
+    primaryColor: 'transparent',
+    clusterBkg: 'transparent',
+    edgeLabelBackground: 'transparent',
+    primaryTextColor: '#475569',
+    primaryBorderColor: '#818cf8',
+    lineColor: '#9ca3af',
+    clusterBorder: '#e2e8f0',
+    titleColor: '#334155',
+  },
+};
+
 // 懒加载 vendor 的 mermaid（/mermaid.min.js，BUG-20260923-002 licenses.md）。只在首次遇到
 // 图表围栏时动态注入：常规页面加载不背约 3.5MB 库；注入失败 / 8s 超时按「库加载失败」降级。
 function ensureMermaid() {
@@ -144,10 +172,12 @@ function renderMermaidDiv(div, src) {
       return;
     }
     try {
+      const dark = darkMode(); // 每次渲染现读外观：切换后重绘取值随之切换
       mermaid.initialize({
         startOnLoad: false, // 手动按节点渲染，不自动扫描全页
         securityLevel: 'strict', // 转义标签文字（文档内容不可信）
-        theme: darkMode() ? 'dark' : 'default', // 深浅色随系统外观
+        theme: dark ? 'dark' : 'default', // 深浅色随系统外观
+        themeVariables: MERMAID_VARS[dark ? 'dark' : 'light'], // 深浅两套配色（透明底 + 亮/深两档）
       });
       Promise.resolve(mermaid.render(`md-rich-dia-${++mermaidSeq}`, src)).then((out) => {
         if (div.getAttribute('data-pending') == null) return; // 已被后续状态覆盖
