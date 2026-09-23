@@ -5985,14 +5985,16 @@ const GLOBAL_KIND_FILTERS = [
   { key: 'refine', label: 'AI 分析' },
   { key: 'summary', label: 'AI 总结' },
   { key: 'translate', label: 'AI 翻译' },
+  // REQ-20260924-001：AI 校对（整体审查自动检查——默认语言文档错别字与行文规范核查）
+  { key: 'docscheck', label: 'AI 校对' },
 ];
-const GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结', translate: 'AI 翻译' };
+const GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结', translate: 'AI 翻译', docscheck: 'AI 校对' };
 // BUG-20260911-007：kind 兜底前缀表——账本目录前缀与任务类型的固定对应（refine-store RFB- /
 // dispatch batch-）。前端实时读盘而看板服务为常驻进程（路由启动时固化，
 // BUG-20260907-017 同型机制），旧服务进程可能返回缺 kind / 未知 kind 的旧口径简报。
 // REQ-20260911-010：CMT- 前缀随批量 Commit 回退移除（服务端不再产出 CMT 简报行）。
 // REQ-20260921-008：docs-summary sum- 前缀（AI 总结 run）。
-const GLOBAL_KIND_PREFIXES = [['RFB-', 'refine'], ['batch-', 'develop'], ['sum-', 'summary'], ['tr-', 'translate']];
+const GLOBAL_KIND_PREFIXES = [['RFB-', 'refine'], ['batch-', 'develop'], ['sum-', 'summary'], ['tr-', 'translate'], ['chk-', 'docscheck']];
 
 // BUG-20260911-007：任务行类型兜底。原始 kind 缺失 / 不在词表时按简报携带的账本标识前缀推断
 //（REQ-20260913-003 起简报不再透出批次号，此处仅兼容旧服务进程残留的 batchId 字段，不作渲染）；
@@ -6045,6 +6047,16 @@ function globalCountsParts(task) {
       doneLabel: '已翻译',
       done: c.done ?? 0,
       abnormal: 0,
+      remaining: c.remaining ?? 0,
+      total: c.total ?? 0,
+    };
+  }
+  if (kind === 'docscheck') {
+    // REQ-20260924-001 AI 校对：done = 已回执结果文件数（pass+fail）；异常 = 发现问题的文件数
+    return {
+      doneLabel: '已核查',
+      done: c.done ?? 0,
+      abnormal: c.failed ?? 0,
       remaining: c.remaining ?? 0,
       total: c.total ?? 0,
     };

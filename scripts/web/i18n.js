@@ -1330,6 +1330,33 @@ const EN = {
   'AI 翻译：文档编写三阶段的第二段——默认语言四文件全部人工审核后，以已审核的默认语言文档为唯一翻译基准，逐文件产出剩余语言文档，完成后进入人工审查。使用独立锁（translate.lock），与 AI 总结、AI 分析、AI 开发互不占用，可同时进行。': 'AI translation — the second stage of docs writing: after the four default-language files are all manually approved, produce the remaining-language docs file by file with the approved default-language docs as the sole translation baseline, then hand over to manual review. Uses an independent lock (translate.lock) that never conflicts with AI summary, analysis or development — all can run at the same time.',
   '暂无进行中的 AI 翻译任务（空态）——到发布模块「文档编写」页默认语言审核完毕后点击「AI 翻译」启动。': 'No AI translation task in progress (empty state) — start one from the "Docs writing" step in the release module after the default language is fully approved.',
   '下一步：发布模块「文档编写」页「审查」→「整体审查」→「提交」。': 'Next: "Review" → "Final review" → "Commit" in the "Docs writing" step of the release module.',
+  // ---------- REQ-20260924-001 整体审查自动检查（语言一致性 / 链接可达性脚本检查 +
+  // AI 校对提示词派发核查）----------
+  '运行自动检查': 'Run auto checks',
+  '检查中…': 'Running checks…',
+  'AI 校对': 'AI proofread',
+  '校对中…': 'Proofreading…',
+  '自动检查各语言内容语言一致性与全部文档内链接可达性（只读，不设门禁，结果即时呈现）': 'Auto-check language identity across languages and reachability of every link in all docs (read-only, no gating, results shown instantly)',
+  '生成 AI 校对提示词并复制：派发 Agent 核查默认语言文档错别字与行文规范，结果自动回执': 'Generate and copy the AI proofread prompt: dispatch an Agent to check the default-language docs for typos and writing conformity; results are reported back automatically',
+  '默认语言错别字与行文规范（AI 校对自动上报）': 'Default-language typos & writing conformity (AI proofread, auto-reported)',
+  '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）': 'All links in every doc are reachable (README cross-links per language: same-language CHANGELOG and FEATURES, links must really resolve)',
+  '语言一致自动检查未运行：点击「运行自动检查」': 'Language-identity auto check not run yet: click "Run auto checks"',
+  '链接可达性自动检查未运行：点击「运行自动检查」': 'Link-reachability auto check not run yet: click "Run auto checks"',
+  'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执': 'AI proofread not run yet: click "AI proofread" to dispatch an Agent; results are reported back automatically',
+  '✓ 自动检查通过：语言一致与链接可达均无问题': '✓ Auto checks passed: language identity and link reachability are both clean',
+  '自动检查发现问题：详见整体审查对话框逐项红叉与明细': 'Auto checks found issues: see the red-cross items and details in the final-review dialog',
+  '✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（错别字与行文规范），结果自动回执': '✓ AI proofread prompt copied: hand it to the AI Agent to check the default-language docs file by file (typos & writing conformity); results are reported back automatically',
+  '已核查': 'Checked',
+  // REQ-20260924-001 命令模块注册表（cli-registry docscheck 组：分组名 / 说明 / 参数标签 /
+  // 占位提示，命令名与 CLI 原文不译）
+  '发布文档 AI 校对': 'Release-docs AI proofread',
+  '启动一轮 AI 校对（默认语言文件错别字与行文规范核查；返回 runId + 提示词；独立锁 docscheck）': 'Start a round of AI proofreading (checks default-language files for typos and writing conformity; returns runId + prompt; independent lock docscheck)',
+  '逐文件结果回执（核查中 / 通过 / 发现问题，fail 必带 --issues）': 'Per-file result receipt (checking / pass / issues found; fail requires --issues)',
+  '--issues 问题清单': '--issues issue list',
+  '完成回执（核查结果自动上报看板展示）': 'Completion receipt (check results are reported to the board automatically)',
+  '校对要点': 'Proofread points',
+  '中断回执（不悬挂「核查中」，可重启续跑）': 'Interruption receipt (never left hanging on "checking"; restartable)',
+  '结果视图（pass/fail/pending、问题清单）': 'Result view (pass/fail/pending, issue list)',
   // REQ-20260920-004 命令模块（界面框架 / 详情与执行 / 确认弹窗 / 输出与历史 / serve 状态；
   // 命令名与参数保持 CLI 原文不译，注册表 scripts/lib/cli-registry.mjs 的分组名 / 说明 /
   // 参数标签 / 占位提示一并收录——动态拼接句见 EN_DYNAMIC）
@@ -1530,6 +1557,14 @@ const EN_DYNAMIC = {
   '整体审查已完结 ✓（时间 ◇；提交已解锁）': 'Final review completed ✓ (at $1; commit unlocked)',
   'AI 翻译未解锁：默认语言尚缺 ◇ 个文件审核（◇）': 'AI translation locked: $1 default-language file(s) still unapproved ($2)',
   '整体审查未解锁：尚缺 ◇ 个文件审核（◇）': 'Final review locked: $1 file(s) still unapproved ($2)',
+  // REQ-20260924-001 整体审查自动检查（动态结果句：计数 / 文件清单插值）
+  '✕ 自动检查失败：◇': '✕ Auto checks failed: $1',
+  '✕ AI 校对启动失败：◇': '✕ AI proofread failed to start: $1',
+  '校对进行中：◇/◇': 'Proofreading $1/$2',
+  'AI 校对中断：◇': 'AI proofread interrupted: $1',
+  '通过 ◇/◇': 'Passed $1/$2',
+  '不通过 ◇/◇：◇': 'Failed $1/$2: $3',
+  '死链 ◇ 个': '$1 dead link(s)',
   '基准已更新：◇ 个翻译文档将按最新基准重新翻译': 'Baseline updated: $1 translated doc(s) will be re-translated against the latest baseline',
   'AI 翻译 · ◇ · 执行 ◇ · 创建 ◇': 'AI translation · $1 · run $2 · created $3',
   '中断时间 ◇ · 执行会话 ◇ · 锁已释放（translate）。': 'Interrupted at $1 · executing session $2 · lock released (translate).',

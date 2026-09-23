@@ -3878,6 +3878,16 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5;
 }
 .bld-finalize-checklist li:last-child { border-bottom: none; }
+/* REQ-20260924-001 自动检查结果：逐项结论副行 + 红叉明细（文件 / 行号 / 死链原因 / 校对问题）
+   + 「运行自动检查」「AI 校对」按钮行 */
+.bld-finalize-checklist li { flex-wrap: wrap; }
+.bld-finalize-sub { flex-basis: 100%; margin: 2px 0 0 24px; word-break: break-all; }
+.bld-finalize-details {
+  flex-basis: 100%; margin: 4px 0 0 24px; padding: 4px 8px; list-style: none;
+  border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px;
+  font-size: 12px; color: var(--danger, #dc2626); word-break: break-all;
+}
+.bld-finalize-actions { display: flex; gap: 8px; margin-top: 10px; }
 .bld-finalize-modal .bld-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 /* REQ-20260922-005 选择开源协议弹框（AI 总结时 LICENSE.md 未编写触发）：宽 modal + 五列
    对比表格（协议 / 定义 / 官网 / 优势 / 劣势），窄屏横向滚动不挤压；行选中高亮 + 单选 */

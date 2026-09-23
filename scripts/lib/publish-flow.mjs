@@ -384,6 +384,51 @@ export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, lan
   return lines.join('\n');
 }
 
+// AI 校对提示词（REQ-20260924-001 整体审查自动检查之三）：派发给「校对人员」角色的子代理，
+// 逐文件核查**默认语言**（语言集首语言）发布文档的错别字与语言习惯行文规范；校对只读不改
+// 文档（不修改、不提交），结果经 atb docscheck CLI 逐文件回执（pass / fail + issues 问题
+// 清单），账本落盘供看板轮询展示——核查结果自动上报。提示词形态沿用「静态段在前 + 尾部
+// 运行参数区」缓存优化（REQ-20260921-006）：有无 runId 均恒定形态。
+export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs' } = {}) {
+  const version = versionNumberOf(planId) || planId;
+  const ls = docLangsOf({ langs });
+  const docFiles = publishDocFiles(ls, customDocs).filter((f) => f.lang === ls[0] && !f.single);
+  const customCount = docFiles.filter((f) => f.custom).length;
+  const shapeText = customCount > 0
+    ? `${PUBLISH_DOC_KEYS.length} 类 + ${customCount} 自定义`
+    : `${PUBLISH_DOC_KEYS.length} 类`;
+  const common = [
+    `你是校对人员，以子代理身份完成当前版本发布文档的 AI 校对任务（默认语言文档的错别字与语言习惯行文规范核查）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`,
+    `本任务只校对默认语言（语言集首语言，见运行参数）的 ${docFiles.length} 个文档（${shapeText}）；逐文件读取磁盘内容核查，逐文件回执结果（清单见运行参数）。`,
+    '',
+    '逐文件进度与结果回执（在项目根执行；atb 指运行参数「CLI 入口」给出的命令，下同）：',
+    '1. 开始核查某文件：atb docscheck file <执行编号> --file <文件名> --state checking',
+    '2. 该文件无问题：atb docscheck file <执行编号> --file <文件名> --state pass',
+    '3. 该文件发现问题：atb docscheck file <执行编号> --file <文件名> --state fail --issues "<问题清单：逐条给出行号或原文片段与修改建议，≤2000 字>"',
+    '4. 全部完成：atb docscheck done <执行编号> --summary "<一两句要点（发现几处问题、严重程度）>"',
+    '5. 中断 / 无法完成：atb docscheck fail <执行编号> --reason "<短句原因>"',
+    '',
+    '校对约束：',
+    '- 只读核查：不修改、不保存、不提交任何文档或代码文件；发现问题只回执，不代改。',
+    `- 检查项：错别字（同音 / 形近 / 多字漏字）、语法与标点、${langNameOf(ls[0])}语言习惯与行文规范（面向用户的发布文档文体），不重写文风、不评判内容取舍。`,
+    '- 不编造问题：每条问题必须给出可定位的行号或原文片段与修改建议；拿不准的不报。',
+    '- 不评价技术内容正确性（范围一致性由人工整体审查负责），只做语言文字层面核查。',
+    '- 完成后以短回执汇报（哪些文件 pass / fail、共几处问题），不粘贴全文。',
+  ];
+  const params = [
+    '运行参数（随任务变化，命令占位符以本区实际值为准）：',
+    `项目路径：${projectRoot || '（未提供）'}`,
+    `发布计划号：${planId}（版本号 ${version}）`,
+    `执行编号：${runId || '（未提供——结果回执命令需执行编号，请先经看板启动 AI 校对获取）'}`,
+    `CLI 入口：${atbPath}`,
+    `默认语言校对清单（语言集首语言 ${ls[0]}，共 ${docFiles.length} 个文档，${shapeText}）：`,
+    ...docFiles.map((f) => (f.custom
+      ? `- ${f.file}（${langNameOf(ls[0])} / 自定义）`
+      : `- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`)),
+  ];
+  return [...common, '', ...params].join('\n');
+}
+
 // 官网 AI 总结提示词（REQ-20260921-007 前旧称官网 AI 写作提示词）：在官网仓库执行；读取本项目
 // 已发布版本的 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新内容；完成提交消息带完整计划号。
 // 不强制官网技术栈 / 目录 / 构建。

@@ -316,6 +316,46 @@ const CLI_GROUPS = [
     ],
   },
   {
+    id: 'docscheck',
+    label: '发布文档 AI 校对',
+    agentOnly: true, // REQ-20260924-001：发布文档 AI 校对轮次回执，整组看板隐藏
+    commands: [
+      {
+        name: 'docscheck start',
+        desc: '启动一轮 AI 校对（默认语言文件错别字与行文规范核查；返回 runId + 提示词；独立锁 docscheck）',
+        args: [{ label: 'BLD-ID', required: true, flag: '--id', placeholder: 'BLD-20260924-001' }],
+        options: '--by 会话',
+      },
+      {
+        name: 'docscheck file',
+        desc: '逐文件结果回执（核查中 / 通过 / 发现问题，fail 必带 --issues）',
+        args: [
+          { label: 'RUN-ID', required: true, placeholder: 'chk-20260924-001' },
+          { label: '文件名', required: true, flag: '--file', placeholder: 'README.md' },
+          { label: '状态', required: true, flag: '--state', placeholder: 'checking|pass|fail' },
+        ],
+        options: '--issues 问题清单',
+      },
+      {
+        name: 'docscheck done',
+        desc: '完成回执（核查结果自动上报看板展示）',
+        args: [
+          { label: 'RUN-ID', required: true, placeholder: 'chk-20260924-001' },
+          { label: '要点', required: true, flag: '--summary', placeholder: '校对要点' },
+        ],
+      },
+      {
+        name: 'docscheck fail',
+        desc: '中断回执（不悬挂「核查中」，可重启续跑）',
+        args: [
+          { label: 'RUN-ID', required: true, placeholder: 'chk-20260924-001' },
+          { label: '短句', required: true, flag: '--reason', placeholder: '中断原因短句' },
+        ],
+      },
+      { name: 'docscheck show', desc: '结果视图（pass/fail/pending、问题清单）' },
+    ],
+  },
+  {
     id: 'query',
     label: '查询',
     commands: [

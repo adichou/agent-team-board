@@ -1961,6 +1961,62 @@ const ATBBuild = (() => {
     }
   }
 
+  /* ---------- REQ-20260924-001 整体审查自动检查：运行自动检查 / AI 校对 ---------- */
+
+  // 「运行自动检查」：① 各语言内容语言一致性 + ② 全部文档内链接可达性（服务端只读检查）。
+  // 结果存 pf.checks（对话框重开保留），✓/✗ + 逐文件明细随 render 呈现；不设门禁、不改盘。
+  async function runReviewChecks() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf?.finalize?.open || pf.checks?.busy || !state.project) return;
+    pf.checks = { busy: true, error: null, lang: null, links: null };
+    render();
+    try {
+      const r = await fetch(`/api/build/docs/review-checks?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `检查失败（${r.status}）`);
+      pf.checks = { busy: false, error: null, lang: data.lang || null, links: data.links || null };
+      const allOk = (data.lang ? data.lang.ok === true : true) && (data.links ? data.links.ok === true : true);
+      toast(allOk
+        ? '✓ 自动检查通过：语言一致与链接可达均无问题'
+        : '自动检查发现问题：详见整体审查对话框逐项红叉与明细', !allOk);
+    } catch (e) {
+      pf.checks = { busy: false, error: e.message, lang: null, links: null };
+      toast(`✕ 自动检查失败：${e.message}`, true);
+    }
+    if (state.pf === pf) render();
+  }
+
+  // 「AI 校对」：启动默认语言文档错别字与行文规范核查（阶段门禁：默认语言非单文件文件全部
+  // 已审核）；成功复制提示词，交给 AI Agent 执行，结果经 docscheck 账本轮询自动回显。
+  async function startProofread() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf?.finalize?.open || pf.proofBusy || !state.project) return;
+    pf.proofBusy = true;
+    render();
+    try {
+      const r = await fetch(`/api/build/docs-proofread/start?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `启动失败（${r.status}）`);
+      pf.plan = { ...(pf.plan || {}), docsCheck: data.run };
+      const ok = await copyText(data.prompt);
+      if (ok) toast('✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（错别字与行文规范），结果自动回执');
+      else toast('提示词已生成但复制失败：请在下方提示词文本框中全选（⌘A）并手动复制', true);
+    } catch (e) {
+      toast(`✕ AI 校对启动失败：${e.message}`, true);
+    } finally {
+      pf.proofBusy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
   /* ---------- REQ-20260922-003 自定义文档：添加 / 移除（清单随版本记录持久化） ---------- */
 
   // 打开内联添加行（输入草稿重渲染不丢字；打开时聚焦一次）
@@ -2294,13 +2350,17 @@ const ATBBuild = (() => {
       if (state.pf !== pf || state.step !== 'docs') return;
       const prev = pf.plan?.summary || null;
       const prevTr = pf.plan?.translate || null;
+      const prevChk = pf.plan?.docsCheck || null;
       const next = data.run || null;
       const nextTr = data.translate || null;
+      const nextChk = data.docsCheck || null;
       const changed = JSON.stringify(prev) !== JSON.stringify(next)
         || JSON.stringify(prevTr) !== JSON.stringify(nextTr)
+        || JSON.stringify(prevChk) !== JSON.stringify(nextChk)
         || JSON.stringify(pf.plan?.docsFlow || null) !== JSON.stringify(data.docsFlow || null);
       if (!changed) return;
-      pf.plan = { ...(pf.plan || {}), summary: next, translate: nextTr, ...(data.docsFlow ? { docsFlow: data.docsFlow } : {}) };
+      // REQ-20260924-001：docsCheck（AI 校对 run）随单次轮询同吸——整体审查对话框结果自动刷新
+      pf.plan = { ...(pf.plan || {}), summary: next, translate: nextTr, ...(data.docsFlow ? { docsFlow: data.docsFlow } : {}), docsCheck: nextChk };
       render();
     } catch { /* 轮询网络异常静默 */ }
   }
@@ -3395,8 +3455,11 @@ ${langsField}
   }
 
   // REQ-20260921-012 整体审查完结对核对话框：语言集内全部文件已审核后由「整体审查」按钮
-  // 打开；核对清单（各语言语义一致 / README 按语言互链 / 与本版发布范围一致）+ 明确的人工
-  // 完结动作（确认完结）+ 失效回退提示。确认后文档编写步骤呈现完结终态，「提交」解锁。
+  // 打开。REQ-20260924-001 起三类自动检查驱动核对项 ✓/✗：① 各语言内容语言一致性（脚本，
+  // 中文是中文内容、英文是英文内容……）；② 全部文档内链接可达性（脚本，死链红叉带明细）；
+  // ③ 默认语言错别字与行文规范（「AI 校对」提示词派发 Agent 核查，结果经 docscheck 账本
+  // 自动上报）。①②由「运行自动检查」按钮触发（只读、不设门禁）；LICENSE 口径与本版发布
+  // 范围一致保持人工核对；「确认完结」仍是人工动作，完结有效性仍由 evaluateDocsFlow 求值判定。
   function renderFinalizeModal(v) {
     const pf = v ? pfOf(v) : null;
     const fin = pf?.finalize;
@@ -3404,7 +3467,81 @@ ${langsField}
     const flowEval = normalizeFlowEval(pf?.plan || {});
     const defTotal = flowEval.defaultFiles.length;
     const restTotal = flowEval.restFiles.length;
-    const item = (checked, text) => `<li><span class="st ${checked ? 'st-ok' : 'st-fail'}"><i class="st-ico" aria-hidden="true">${checked ? '✔' : '✕'}</i></span> ${text}</li>`;
+    const checks = pf?.checks || null;
+    const chkRun = pf?.plan?.docsCheck || null;
+    const stOf = (state) => `st ${state === 'ok' ? 'st-ok' : state === 'fail' ? 'st-fail' : 'st-run'}`;
+    const icoOf = (state) => (state === 'ok' ? '✔' : state === 'fail' ? '✕' : '◐');
+    const item = (state, text, sub = '', details = '') => `<li><span class="${stOf(state)}"><i class="st-ico" aria-hidden="true">${icoOf(state)}</i></span> ${text}${sub ? `<div class="bld-finalize-sub muted small">${sub}</div>` : ''}${details ? `<ul class="bld-finalize-details">${details}</ul>` : ''}</li>`;
+    // ① 语言一致性：pf.checks.lang（null = 未运行）
+    const langR = checks?.lang || null;
+    let langState = 'run';
+    let langSub = '语言一致自动检查未运行：点击「运行自动检查」';
+    let langDetails = '';
+    if (checks?.error) {
+      langState = 'fail';
+      langSub = esc(checks.error);
+    } else if (langR) {
+      const pass = langR.files.filter((f) => f.ok).length;
+      const total = langR.files.length;
+      if (langR.ok) {
+        langState = 'ok';
+        langSub = `通过 ${pass}/${total}`;
+      } else {
+        langState = 'fail';
+        const bad = langR.files.filter((f) => !f.ok);
+        langSub = `不通过 ${pass}/${total}：${bad.map((f) => f.file).join('、')}`;
+        langDetails = bad.map((f) => `<li><code data-i18n-skip>${esc(f.file)}</code> <span data-i18n-skip>${esc(f.detail || '')}</span></li>`).join('');
+      }
+    }
+    // ② 链接可达性：pf.checks.links（死链逐条明细：文件 / 行号 / 目标 / 原因）
+    const linksR = checks?.links || null;
+    let linkState = 'run';
+    let linkSub = '链接可达性自动检查未运行：点击「运行自动检查」';
+    let linkDetails = '';
+    if (checks?.error) {
+      linkState = 'fail';
+      linkSub = esc(checks.error);
+    } else if (linksR) {
+      const totalLinks = linksR.files.reduce((n, f) => n + (f.total || 0), 0);
+      if (linksR.ok) {
+        linkState = 'ok';
+        linkSub = `通过 ${totalLinks}/${totalLinks}`;
+      } else {
+        linkState = 'fail';
+        linkSub = `死链 ${linksR.deadTotal} 个`;
+        linkDetails = linksR.files
+          .flatMap((f) => (f.dead || []).map((d) => ({ file: f.file, ...d })))
+          .map((d) => `<li><code data-i18n-skip>${esc(d.file)}</code> <span data-i18n-skip>第${d.line || '?'}行 ${esc(d.href)} —— ${esc(d.reason || '')}</span></li>`)
+          .join('');
+      }
+    }
+    // ③ AI 校对：pf.plan.docsCheck（最新 docscheck run 视图，轮询自动吸收进度与结果）
+    let chkState = 'run';
+    let chkSub = 'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执';
+    let chkDetails = '';
+    if (chkRun) {
+      const c = chkRun.counts || {};
+      const total = c.total || 0;
+      if (chkRun.phase === 'running') {
+        chkSub = `校对进行中 ${(c.pass || 0) + (c.fail || 0)}/${total}`;
+        chkDetails = chkRun.currentFile ? `<li><code data-i18n-skip>${esc(chkRun.currentFile)}</code></li>` : '';
+      } else if (chkRun.phase === 'failed') {
+        chkState = 'fail';
+        chkSub = `AI 校对中断：${chkRun.reason || ''}`;
+      } else if (chkRun.phase === 'done') {
+        const pass = c.pass || 0;
+        const fail = c.fail || 0;
+        if (fail === 0 && pass === total) {
+          chkState = 'ok';
+          chkSub = `通过 ${pass}/${total}`;
+        } else {
+          chkState = 'fail';
+          const failedFiles = Object.entries(chkRun.files || {}).filter(([, s]) => s === 'fail').map(([f]) => f);
+          chkSub = `不通过 ${pass}/${total}：${failedFiles.join('、')}`;
+          chkDetails = failedFiles.map((f) => `<li><code data-i18n-skip>${esc(f)}</code> <span data-i18n-skip>${esc((chkRun.issues || {})[f] || '')}</span></li>`).join('');
+        }
+      }
+    }
     return `
       <div class="rel-modal-wrap bld-finalize-wrap" id="bldFinalizeWrap" role="dialog" aria-modal="true" aria-label="整体审查完结">
         <div class="rel-modal bld-finalize-modal">
@@ -3413,13 +3550,18 @@ ${langsField}
             <button type="button" class="btn small quiet" data-pf-finalize-close aria-label="关闭对话框">✕ 关闭</button>
           </header>
           <ul class="bld-finalize-checklist">
-            ${item(flowEval.defaultReviewedCount === defTotal, `默认语言文件已全部审核（${flowEval.defaultReviewedCount}/${defTotal}）`)}
-            ${item(restTotal === 0 || flowEval.restReviewedCount === restTotal, `剩余语言文件已全部审核（${flowEval.restReviewedCount}/${restTotal}）`)}
-            ${item(flowEval.defaultReviewedCount === defTotal && (restTotal === 0 || flowEval.restReviewedCount === restTotal), '各语言内容语义一致（以已审核默认语言为基准）')}
-            <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）</li>
+            ${item(flowEval.defaultReviewedCount === defTotal ? 'ok' : 'fail', `默认语言文件已全部审核（${flowEval.defaultReviewedCount}/${defTotal}）`)}
+            ${item(restTotal === 0 || flowEval.restReviewedCount === restTotal ? 'ok' : 'fail', `剩余语言文件已全部审核（${flowEval.restReviewedCount}/${restTotal}）`)}
+            ${item(langState, '各语言内容语义一致（以已审核默认语言为基准）', langSub, langDetails)}
+            ${item(linkState, '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）', linkSub, linkDetails)}
+            ${item(chkState, '默认语言错别字与行文规范（AI 校对自动上报）', chkSub, chkDetails)}
             <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，本单不做自动校验）</li>
             <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> 文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）</li>
           </ul>
+          <div class="bld-finalize-actions">
+            <button type="button" class="btn small" data-pf-checks${checks?.busy ? ' disabled' : ''} title="自动检查各语言内容语言一致性与全部文档内链接可达性（只读，不设门禁，结果即时呈现）">${checks?.busy ? '检查中…' : '运行自动检查'}</button>
+            <button type="button" class="btn small" data-pf-proofread${pf?.proofBusy ? ' disabled' : ''} title="生成 AI 校对提示词并复制：派发 Agent 核查默认语言文档错别字与行文规范，结果自动回执">${pf?.proofBusy ? '校对中…' : 'AI 校对'}</button>
+          </div>
           <p class="muted small">提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使完结失效回退。</p>
           <footer class="bld-review-foot">
             <span class="muted small">完结是人工确认动作：请逐项核对后再确认。</span>
@@ -4381,6 +4523,9 @@ ${langsField}
     q('[data-pf-finalize-close]')?.addEventListener('click', closeFinalize);
     q('[data-pf-finalize-cancel]')?.addEventListener('click', closeFinalize);
     q('[data-pf-finalize-confirm]')?.addEventListener('click', confirmFinalize);
+    // REQ-20260924-001：整体审查自动检查（语言一致 + 链接可达）与 AI 校对（提示词派发核查）
+    q('[data-pf-checks]')?.addEventListener('click', runReviewChecks);
+    q('[data-pf-proofread]')?.addEventListener('click', startProofread);
     const finalizeWrap = q('#bldFinalizeWrap');
     finalizeWrap?.addEventListener('click', (e) => {
       if (e.target?.id === 'bldFinalizeWrap' && !state.pf?.finalize?.busy) closeFinalize();
