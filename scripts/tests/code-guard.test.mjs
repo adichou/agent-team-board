@@ -430,10 +430,15 @@ const fakePlugin = path.join(fakeRoot, 'fake-plugin');
 fs.mkdirSync(path.join(fakePlugin, 'scripts', 'lib'), { recursive: true });
 fs.copyFileSync(guard, path.join(fakePlugin, 'scripts', 'state-guard.mjs'));
 // REQ-20260918-002：state-guard.mjs 静态 import lib/commit-store.mjs（提交主题规范核验），
-// 伪插件副本须一并带上依赖，否则 import 报模块不存在。
+// 伪插件副本须一并带上依赖，否则 import 报模块不存在；REQ-20260923-001 起豁免清单另依赖
+// lib/publish-flow.mjs（PUBLISH_DOC_KEYS / customDocsOf），同样带上。
 fs.copyFileSync(
   path.join(pluginRoot, 'scripts', 'lib', 'commit-store.mjs'),
   path.join(fakePlugin, 'scripts', 'lib', 'commit-store.mjs'),
+);
+fs.copyFileSync(
+  path.join(pluginRoot, 'scripts', 'lib', 'publish-flow.mjs'),
+  path.join(fakePlugin, 'scripts', 'lib', 'publish-flow.mjs'),
 );
 const sibling = path.join(fakeRoot, 'other-project');
 fs.mkdirSync(path.join(sibling, 'src'), { recursive: true });
