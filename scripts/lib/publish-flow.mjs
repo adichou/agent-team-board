@@ -326,50 +326,45 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
   return [...common, '', ...params].join('\n');
 }
 
-// AI 翻译提示词（REQ-20260921-012 阶段二）：以**已审核的默认语言文档磁盘内容为唯一翻译
-// 基准**（readFile 注入、全文嵌入提示词——启动时点即基准快照，检出基准更新时按最新磁盘
-// 内容重新生成即「按最新基准翻译」），逐文件产出剩余语言全部文件（4 × (N−1)）；子代理经
-// atb translate CLI 逐文件回执进度（正在翻译 → 已翻译待审核）。不得引入基准外信息、
-// 不得编造。
-export function buildDocTranslatePrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], readFile = null, atbPath = 'node scripts/atb.mjs' } = {}) {
+// AI 翻译提示词（REQ-20260921-012 阶段二；BUG-20260923-003 口径重构）：以**已人工审核的
+// 默认语言文档磁盘内容为唯一翻译基准**——提示词不内嵌文档全文（原 readFile 注入口径废弃，
+// 避免提示词体积随文档长度线性膨胀），只给出基准 → 目标文件名对应清单与项目路径，各子代理
+// 翻译时自行读盘（= 翻译时点最新已审核内容，等效且不旧于启动快照；启动前基准变更检测
+// baselineShift 口径不变）。BUG-20260923-003：不再携带关联范围条目单号（items 不进入翻译
+// 提示词，AI 总结阶段一口径不动）；派发口径由整批串行改为「每个目标文件一个子代理、全部
+// 并行（并行子代理数 = 目标文件数，不设上限）」，每个子代理只负责翻译自己名下的一个文件
+//（读自己名下基准 → 写自己名下目标 → 逐文件回执）。目标范围仍为剩余语言全部文件
+//（4 × (N−1)，含自定义文档其余语言份，单文件类 LICENSE 不进范围）；回执命令、账本、
+// translate.lock 与门禁行为不变；不得引入基准外信息、不得编造。
+export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs' } = {}) {
   const version = versionNumberOf(planId) || planId;
   const ls = docLangsOf({ langs });
-  // BUG-20260922-002：自定义文档随语言集展开后进入 AI 翻译——基准含其默认语言 <KEY>.md，
-  // 目标含其剩余语言 <KEY>_<lang>.md（与标准 4 类同口径）。
-  const baseFiles = defaultDocFiles(ls, customDocs);
+  // BUG-20260922-002：自定义文档随语言集展开后进入 AI 翻译——基准为其默认语言 <KEY>.md，
+  // 目标为其剩余语言 <KEY>_<lang>.md（与标准 4 类同口径）。
   const targets = restDocFiles(ls, customDocs);
   const customTargetCount = targets.filter((f) => f.custom).length;
   const targetShape = customTargetCount > 0
     ? `${PUBLISH_DOC_KEYS.length} 类 + ${customTargetCount} 自定义 × ${ls.length - 1} 语言`
     : `${PUBLISH_DOC_KEYS.length} 类 × ${ls.length - 1} 语言`;
-  const read = typeof readFile === 'function' ? readFile : () => null;
   const lines = [];
-  lines.push(`你是技术翻译人员，以子代理身份完成「${planId}」（版本号 ${version}）的发布文档 AI 翻译任务（阶段二：默认语言已全部人工审核）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`);
+  lines.push(`你是发布文档 AI 翻译任务的派发协调者，负责「${planId}」（版本号 ${version}）的翻译派发（阶段二：默认语言已全部人工审核）：对下列每个目标文件各派发一个子代理，全部并行（并行子代理数 = 目标文件数，不设上限），每个子代理只负责翻译自己名下的一个文件；派发与回执之外不展开代码修改。`);
   lines.push('');
   lines.push(`项目路径：${projectRoot || '（未提供）'}`);
   lines.push(`发布计划号：${planId}（版本号 ${version}）`);
   if (runId) lines.push(`执行编号：${runId}`);
-  lines.push('关联范围（翻译时了解本版内容语境，不展开代码修改）：');
-  lines.push(...docScopeLines(items));
   lines.push('');
-  lines.push(`翻译基准（已人工审核的默认语言 ${ls[0]} 文档，唯一基准——语义以此为准，不得引入基准外信息，不得编造）：`);
-  for (const f of baseFiles) {
-    const text = read(f.file);
-    lines.push(`===== ${f.file}（默认语言 ${ls[0]}，已审核基准） =====`);
-    lines.push(text == null ? '（文件缺失：跳过该类型翻译并在回执说明）' : String(text).replace(/\s*$/, ''));
-    lines.push('===== 基准结束 =====');
-  }
-  lines.push('');
-  lines.push(`请逐个产出以下 ${targets.length} 个剩余语言文档（${targetShape}，剩余语言 ${ls.slice(1).join(',')}），每个文件写入后其状态变为「已翻译待审核」，等待人工审查：`);
-  for (const f of targets) lines.push(`- ${f.file}（${langNameOf(f.lang)} / ${f.key}${f.custom ? ' / 自定义' : ''}，基准 ${f.key}.md）`);
+  lines.push(`翻译基准（唯一基准——已人工审核的默认语言 ${ls[0]} 文档，语义以基准文件为准，不得引入基准外信息，不得编造）：`);
+  lines.push(`基准文档全文不内嵌于本提示词：各子代理翻译前自行读取项目路径下基准文件的磁盘内容（即翻译时点磁盘上的最新已审核内容）；基准文件缺失时该子代理跳过翻译并在回执中说明，不得编造基准内容。`);
+  lines.push(`目标文件与基准文件对应（左基准 → 右目标，均在项目路径下，共 ${targets.length} 个目标文件，${targetShape}，剩余语言 ${ls.slice(1).join(',')}）：`);
+  for (const f of targets) lines.push(`- ${f.key}.md → ${f.file}（${langNameOf(f.lang)} / ${f.key}${f.custom ? ' / 自定义' : ''}）`);
   lines.push('');
   if (runId) {
-    lines.push('逐文件进度回执（在项目根执行；atb 指 ' + atbPath + '，下同）：');
-    lines.push(`1. 开始翻译某文件：atb translate file ${runId} --file <文件名> --state translating`);
+    lines.push('派发与逐文件进度回执（各子代理在项目根执行自己名下文件的回执命令；atb 指 ' + atbPath + '，下同）：');
+    lines.push(`1. 子代理开工先回执：atb translate file ${runId} --file <自己名下文件名> --state translating`);
     lines.push(`2. 该文件翻译完成（先写盘再回执）：atb translate file ${runId} --file <文件名> --state translated`);
-    lines.push(`3. 全部完成：atb translate done ${runId} --summary "<一两句要点>"`);
-    lines.push(`4. 中断 / 无法完成：atb translate fail ${runId} --reason "<短句原因>"`);
-    lines.push(`已审核（reviewed）的目标文件跳过不再翻译；不修改上述 ${targets.length} 个文档与基准文档以外的任何文件。`);
+    lines.push(`3. 全部子代理完成后收尾：atb translate done ${runId} --summary "<一两句要点>"`);
+    lines.push(`4. 某文件中断 / 无法完成：atb translate fail ${runId} --reason "<短句原因>"`);
+    lines.push(`已审核（reviewed）的目标文件跳过不再派发；每个子代理只读取自己名下的基准文件、只写自己名下的目标文件，不修改上述 ${targets.length} 个目标文档与基准文档以外的任何文件。`);
     lines.push('');
   }
   lines.push('翻译约束：');

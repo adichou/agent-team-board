@@ -1366,11 +1366,9 @@ async function translateCmd(rest) {
     const prompt = publishFlow.buildDocTranslatePrompt({
       projectRoot,
       planId: v.id,
-      items: v.items,
       runId: run.runId,
       langs,
       customDocs,
-      readFile: readDoc,
       atbPath: 'node scripts/atb.mjs',
     });
     const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt, baselineShift: flowEval.baselineShift };
