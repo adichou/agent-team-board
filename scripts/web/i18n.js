@@ -91,6 +91,9 @@ const EN = {
   // 词典缺口，英文界面悬停仍为中文）；toast 拼接句见 EN_DYNAMIC。
   // BUG-20260914-018：main 行「通过发布流程推送」徽标与 title 详释两条词条随界面删除一并清理。
   '同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。': 'Sync pushes local branches other than main only; main must be pushed through the release process.',
+  // REQ-20260923-004：删除同步提交反馈的兜底短句（server reason 缺省时前端兜底文案）
+  '同步提交失败：请在终端人工补提交该删除差异': 'Sync commit failed: please commit the deletion manually in the terminal',
+  '已跳过同步提交': 'sync commit skipped',
   'fetch --all --prune 拉取远端，再推送本地开发分支（main 除外）：确保本地与远端一致': 'fetch --all --prune to pull from the remote, then push local development branches (main excluded): keep local and remote consistent',
   '✓ 已同步远端：fetch 完成，没有可推送的开发分支；main 必须通过发布流程推送': '✓ Remote synced: fetch done; no development branch to push; main must be pushed through the release process',
   '✓ 已同步远端：fetch 完成，无可推送的开发分支': '✓ Remote synced: fetch done; no branch to push',
@@ -1810,11 +1813,16 @@ const EN_DYNAMIC = {
   '✓ 已创建 ◇（讨论中，无关联需求），请复制启动提示词到 Agent 新会话': '✓ Created $1 (open discussion, no linked requirement); copy the launch prompt into a new Agent session',
   '✓ 已初始化并切换到 ◇（◇）': '✓ Initialized and switched to $1 ($2)',
   '✓ 已删除 ◇': '✓ Deleted $1',
+  // REQ-20260923-004：删除同步提交反馈（committed 短号 / skipped 原因 / failed 前缀拼接）
+  '✓ 已删除 ◇（提交 ◇）': '✓ Deleted $1 (commit $2)',
+  '✓ 已删除 ◇（◇）': '✓ Deleted $1 ($2)',
+  '已删除 ◇，但◇': 'Deleted $1, but$2',
   '✓ 已导入并切换到 ◇（条目与状态保持原样）': '✓ Imported and switched to $1 (items and statuses untouched)',
   '✓ 已按原配置恢复执行：◇': '✓ Resumed with the original config: $1',
   '✓ 已终止完善任务：◇': '✓ Refine task aborted: $1',
   '✓ 已终止开发任务：◇': '✓ Develop task aborted: $1',
-  '「◇」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复。': '"$1" is still pending; deleting removes the whole item directory (including all documents) and cannot be undone on the board.',
+  // REQ-20260923-004：确认文案补「同步产生一条 git 提交留痕」说明（删除即入库）
+  '「◇」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复，并将同步产生一条 git 提交留痕。': '"$1" is still pending; deleting removes the whole item directory (including all documents), cannot be undone on the board, and also creates a git commit to record the deletion.',
   '「◇」模块已暂时隐藏，已回到需求模块': 'The "$1" module is temporarily hidden; returned to Requirements',
   '下属 Bug（◇，未完成 ◇）': 'Child bugs ($1, $2 unfinished)',
   '仅待接受条目可改；保存后标题与条目文档首行同步，描述整体替换 README「◇」节。': 'Only pending items can be edited; after saving, the title syncs with the first line of the item document and the description replaces the "$1" section of the README.',

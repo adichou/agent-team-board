@@ -2821,19 +2821,30 @@ function bindRenameButtons(root) {
 
 // 删除移除整个条目目录，看板层面不可撤销（找回只能依赖 git 历史），因此保留一次
 // 页面内 danger 确认；REQ-20260906-014 的「免确认 + 撤销」范式仅适用于可撤销的状态流转。
+// REQ-20260923-004：删除即留痕——服务端同步提交被删目录差异，反馈按 gitCommit.status
+// 分支（committed 含提交短号 / failed 转警示样式给人工补提交指引 / skipped 说明原因）。
 async function deleteItem(id) {
   const it = (state.board?.items || []).find((x) => x.id === id) || state.drawer.item;
   if (!it || it.status !== 'submitted') return;
   const ok = await uiConfirm({
     title: `删除 ${id}？`,
-    message: `「${it.title}」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复。`,
+    message: `「${it.title}」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复，并将同步产生一条 git 提交留痕。`,
     confirmText: '删除',
     danger: true,
   });
   if (!ok) return;
   try {
-    await api(`/api/item/${encodeURIComponent(id)}`, { method: 'DELETE' }, state.project);
-    toast(`✓ 已删除 ${id}`);
+    const r = await api(`/api/item/${encodeURIComponent(id)}`, { method: 'DELETE' }, state.project);
+    const gc = r && r.gitCommit;
+    if (gc && gc.status === 'failed') {
+      toast(`已删除 ${id}，但${gc.reason || '同步提交失败：请在终端人工补提交该删除差异'}`, true);
+    } else if (gc && gc.status === 'committed') {
+      toast(`✓ 已删除 ${id}（提交 ${gc.shortHash}）`);
+    } else if (gc) {
+      toast(`✓ 已删除 ${id}（${gc.reason || '已跳过同步提交'}）`);
+    } else {
+      toast(`✓ 已删除 ${id}`); // 旧服务无提交反馈：保持旧文案
+    }
     if (state.drawer.id === id) closeDrawer();
     await poll();
   } catch (e) {
