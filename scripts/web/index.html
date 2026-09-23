@@ -510,6 +510,10 @@
   <script src="/i18n.js"></script>
   <script src="/banner.js"></script>
   <script src="/highlight.min.js"></script>
+  <!-- BUG-20260923-002 Markdown 预览富媒体增强层：图片相对路径改写 + mermaid 渲染 + plantuml 降级
+       （在 app.js / oncall.js / req-disc.js 之前加载，宿主渲染后经 window.ATBMdRich?.enhance 调用；
+       mermaid 本体 /mermaid.min.js 由本层懒加载注入，不静态引入） -->
+  <script src="/md-rich.js"></script>
   <script src="/oncall.js"></script>
   <!-- REQ-20260909-003 需求文档引用讨论：需求抽屉区块（提示词/引用/纪要/应用），app.js 挂载 -->
   <script src="/req-disc.js"></script>

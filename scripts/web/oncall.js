@@ -501,6 +501,9 @@ const ATBOncall = (() => {
         <section id="ocPane" class="drawer-pane disc-pane${tab === 'actions' ? '' : ' hidden'}" data-pane="actions" role="tabpanel" aria-label="后续行动">${draftsHtml(d, createdIds)}</section>
       </div>`;
     linkupDiscImages(wrap, d.id); // REQ-20260910-028：讨论背景相对截图接管（旧讨论无图不受影响）
+    // BUG-20260923-002 富媒体增强：背景 / 纪要 / 逐轮问答的 mermaid 渲染、plantuml 降级与
+    // 图片失败占位（讨论附件截图仍由 linkupDiscImages 接管带灯箱，不改写其余相对路径）
+    window.ATBMdRich?.enhance(wrap);
     wrap.querySelector('#ocBack')?.addEventListener('click', closeDetail);
     // 旧绑定需求：跳回需求详情（REQ-20260908-022 兼容，新讨论不再绑定）
     wrap.querySelector('#ocGotoReq')?.addEventListener('click', () => {

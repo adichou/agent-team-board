@@ -768,6 +768,55 @@ span.state { color: var(--sc); font-weight: 650; }
   border-left: 3px solid var(--border);
   color: var(--muted);
 }
+/* BUG-20260923-002 Markdown 富媒体：图片宽度约束（.file-md img 先例口径——超宽图不撑破
+   栏布局、不拉横向滚动，覆盖 .md 各宿主、req-disc 阅读器 rd-rich 与审查对话框预览容器） */
+.md img, .rd-rich img, .bld-review-preview img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+/* mermaid 图表容器：SVG 按栏宽收敛（高度随比例），超宽图表面板内横向滚动兜底；
+   深浅色由 mermaid 主题随 prefers-color-scheme 跟随（md-rich 渲染时选择 dark/default） */
+.md-mermaid {
+  margin: 8px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+.md-mermaid-note { margin: 4px 0; }
+/* 图表失败 / plantuml 降级回退块：可见提示条 + 源码（pre 样式沿用 .md / 容器既有口径） */
+.md-diagram-fallback {
+  margin: 8px 0;
+}
+.md-diagram-fallback .md-diagram-err,
+.md-diagram-fallback .md-diagram-note {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  border-left: 3px solid var(--border);
+  padding: 2px 10px;
+  color: var(--muted);
+}
+.md-diagram-fallback .md-diagram-err {
+  border-left-color: #d97706;
+  color: inherit;
+}
+.md-diagram-fallback pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: rgba(127, 140, 170, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow: auto;
+  font-size: 12px;
+}
+/* 图片加载失败占位（md-rich 就地替换裂图） */
+.md-img-fallback {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
 
 /* ---------- 弹窗 ---------- */
 .modal-wrap {
