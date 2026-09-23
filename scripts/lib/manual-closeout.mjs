@@ -5,6 +5,8 @@
 // 快照（git-flow.captureManualTreeSnapshot，与批量预留 treeSnapshot 同构）为归因基线，
 // 执行与批量完全同口径的收口提交：
 //   · 分组规范 doc / test / 业务（消息「类型: 描述 单号」），只 commit 不 push；
+//   · REQ-20260923-002：本单条目目录文档随 doc 组提交；根第一层文档不随收口提交、
+//     不触发暂扣（ignoredDocs 保留在工作区走人工/发布文档流程）；
 //   · 由 atb 进程内部执行 git，不经 Agent Bash，不受 state-guard 拦截；
 //   · 幂等 / 失败续传沿用 autoCommitForRun 自身口径（重复上报只补交报告状态变动，
 //     已入库路径退出脏集合天然去重）；

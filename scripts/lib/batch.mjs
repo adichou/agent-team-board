@@ -1027,7 +1027,8 @@ export function finishRun(dataDir, runId, { result, reason = '', reportRef = nul
       ...(Array.isArray(autoCommit.pendingManual) && autoCommit.pendingManual.length
         ? { pendingManual: autoCommit.pendingManual.slice(0, 20) }
         : {}),
-      // REQ-20260922-007：被忽略的条目文档差异随回执显式上抛（不随收口提交，保留在工作区）
+      // REQ-20260923-002：被忽略的根第一层文档差异随回执显式上抛（不随收口提交，保留在工作区）
+      //（条目文档已恢复随收口 doc 组提交，不再出现在 ignoredDocs）
       ...(Array.isArray(autoCommit.ignoredDocs) && autoCommit.ignoredDocs.length
         ? { ignoredDocs: autoCommit.ignoredDocs.slice(0, 10) }
         : {}),
