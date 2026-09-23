@@ -50,8 +50,8 @@ function req(port, method, pathname, body) {
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
 
-// 隐藏范围口径（README「隐藏范围（默认清单）」）
-const HIDDEN_GROUPS = ['batch', 'run', 'refine', 'summary', 'translate']; // 整组隐藏（组 id）
+// 隐藏范围口径（README「隐藏范围（默认清单）」；REQ-20260924-001 起含 AI 校对 docscheck 组）
+const HIDDEN_GROUPS = ['batch', 'run', 'refine', 'summary', 'translate', 'docscheck']; // 整组隐藏（组 id）
 const HIDDEN_NAMES = ['claim', 'report', 'hold declare'];                  // 组内隐藏（Agent 例行操作）
 const KEPT_LIFECYCLE = ['new req', 'new bug', 'rename', 'delete', 'status', 'move', 'prune-locks'];
 const KEPT_HOLD = ['hold list', 'hold show', 'hold answer', 'hold resume', 'hold cancel'];
@@ -84,10 +84,10 @@ t('C1a 注册表命令面不变：隐藏范围带 agentOnly 标记，allCommands
   }
 });
 
-t('C1b visibleGroups：五组整体消失（无空分组标题残留），组内隐藏后其余命令保留', () => {
+t('C1b visibleGroups：六组整体消失（无空分组标题残留），组内隐藏后其余命令保留', () => {
   const groups = cliRegistry.visibleGroups();
   const labels = groups.map((g) => g.label);
-  for (const gone of ['AI 开发', 'AI 分析', '执行回执', '发布文档 AI 总结', '发布文档 AI 翻译']) {
+  for (const gone of ['AI 开发', 'AI 分析', '执行回执', '发布文档 AI 总结', '发布文档 AI 翻译', '发布文档 AI 校对']) {
     assert.ok(!labels.includes(gone), `可见分组不应再出现「${gone}」`);
   }
   for (const g of groups) assert.ok((g.commands || []).length > 0, `分组「${g.label}」不应残留空分组标题`);
@@ -102,7 +102,7 @@ t('C1b visibleGroups：五组整体消失（无空分组标题残留），组内
   const kept = ['init', 'migrate', 'rebuild', 'pack', 'confirm list', 'confirm show', 'list', 'show', 'commit log', 'commit which', 'serve', 'cli install', 'cli uninstall', 'cli status'];
   for (const n of kept) assert.ok(flat.includes(n), `保留命令 ${n} 应在可见清单`);
   // visibleGroups 不得改动注册表本体（过滤返回副本）
-  assert.equal(cliRegistry.CLI_GROUPS.length, 12, '注册表本体分组数不变（12）');
+  assert.equal(cliRegistry.CLI_GROUPS.length, 13, '注册表本体分组数不变（13，REQ-20260924-001 起含 docscheck）');
 });
 
 t('C1c validateRunRequest：agentOnly 命令拒绝下发（参数齐全也拒绝），保留命令照常通过', () => {
@@ -159,7 +159,7 @@ t('C2 /api/cli/commands 只下发可见分组；/api/cli/run 拒绝 agentOnly �
     // C2a 清单：可见分组 7 个，隐藏五组与组内三命令不出现，保留命令在
     let r = await req(port, 'GET', '/api/cli/commands');
     assert.equal(r.status, 200, `清单应可用：${r.text}`);
-    assert.equal(r.json.groups.length, 7, `可见分组应 7（12 − 整组隐藏 5）：${r.json.groups.length}`);
+    assert.equal(r.json.groups.length, 7, `可见分组应 7（13 − 整组隐藏 6）：${r.json.groups.length}`);
     const flat = r.json.groups.flatMap((g) => g.commands.map((c) => c.name));
     for (const n of flat) assert.ok(!isHidden(n), `清单不应含隐藏命令 ${n}`);
     for (const gone of ['batch next', 'run receipt', 'refine next', 'summary start', 'translate show', 'claim', 'report', 'hold declare']) {
