@@ -2838,9 +2838,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
 
   // REQ-20260921-012 AI 翻译启动：门禁 = 非 merging、默认语言四文件全部已审核（canTranslate，
   // 否则 400 带缺口明细）、语言集存在剩余语言；启动前求值基准变更检测（mtime 对比），检出
-  // 默认语言文档更新时响应带 baselineShift 与提示（提示词嵌入当前磁盘内容 = 按最新基准翻译）。
-  // 返回 runId + 翻译提示词（含 atb translate 逐文件回执指令），前端复制到剪贴板交给
-  // AI Agent 执行；独立锁 translate.lock 与 AI 总结 / AI 分析 / AI 开发互不占用。
+  // 默认语言文档更新时响应带 baselineShift 与提示（BUG-20260923-003 起提示词不内嵌基准全文，
+  // 子代理翻译时自行读盘 = 按翻译时点最新基准翻译）。
+  // 返回 runId + 翻译提示词（含按文件并行派发与 atb translate 逐文件回执指令），前端复制到
+  // 剪贴板交给 AI Agent 执行；独立锁 translate.lock 与 AI 总结 / AI 分析 / AI 开发互不占用。
   if (req.method === 'POST' && pathname === '/api/build/docs-translate/start') {
     return runPost((body) => {
       const board = requireBoard();
@@ -2862,11 +2863,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const prompt = flow.buildDocTranslatePrompt({
         projectRoot: root,
         planId: v.id,
-        items: v.items,
         runId: run.runId,
         langs,
         customDocs,
-        readFile: docReadFile,
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
       });
       const baselineShift = flowEval.baselineShift;
