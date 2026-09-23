@@ -1184,7 +1184,8 @@ const EN = {
   '复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结默认语言文档（标准 4 类 + 自定义文档；已审核文件跳过；也可不经 AI 总结直接审查）': 'Copy the AI summary prompt to the clipboard and hand it to an AI Agent to summarize the default-language files (4 standard types + custom documents; reviewed files are skipped; you can also review directly without AI summarization)',
   '打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核': 'Open the review dialog: doc-type tabs (four types + LICENSE + custom), one pane per language with synced scrolling, per-file edit / save / approve',
   '把语言集内文档、LICENSE.md 与自定义文档提交到本地 dev 分支（pathspec 限定，不夹带业务源码）': 'Commit the docs in the language set plus LICENSE.md and custom documents to the local dev branch (pathspec-limited, no business source code included)',
-  'LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，本单不做自动校验）': 'The LICENSE file matches the project\u2019s actual open-source terms (license type confirmed by a human; no automatic check in this change)',
+  // REQ-20260924-003 弹窗清单精简：「LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，
+  // 本单不做自动校验）」随静态占位行移除，词条已清理
   // REQ-20260922-005 选择开源协议弹框（「AI 总结」时 LICENSE.md 未编写触发；表格罗列主流协议
   // 的定义 / 官网 / 优劣）。协议名 / SPDX 标识 / 官网 URL 是标识，随 data-i18n-skip 豁免；
   // 目录 11 项 definition / pros / cons 逐句登记（键 = license-catalog.mjs 中文原文全文）。
@@ -1325,8 +1326,10 @@ const EN = {
   '尚不可提交：整体审查未完结（全部文件已审核后，请先「整体审查」确认完结）': 'Cannot commit yet: final review not completed (after all files are approved, confirm completion via "Final review" first)',
   '各语言内容语义一致（以已审核默认语言为基准）': 'Semantics consistent across languages (baseline: the approved default language)',
   'README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）': 'README cross-links per language are real and reachable (same-language CHANGELOG and FEATURES, links must actually work)',
-  '文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）': 'Doc content matches this release scope (features not in this release must not be described as released)',
-  '提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使完结失效回退。': 'Note: "Commit" is only available after completion; default-language doc updates or release-scope changes void the completion.',
+  // REQ-20260924-003 弹窗清单精简：「文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）」
+  // 随静态占位行移除，旧提示「提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使
+  // 完结失效回退。」收敛为新提示（⑥⑦ 人工口径不再单占检查行）
+  '提示：完结前请逐项核对；完结后范围变化会使完结失效回退。': 'Note: verify every item before confirming completion; any scope change afterwards voids the completion and reverts it.',
   '确认完结': 'Confirm completion',
   '完结中…': 'Completing…',
   '完结是人工确认动作：请逐项核对后再确认。': 'Completion is a manual confirmation: verify each item before confirming.',
@@ -1559,8 +1562,8 @@ const EN_DYNAMIC = {
   '尚不可提交：默认语言文档已更新（基准变更），◇ 个翻译文档需重新 AI 翻译并审核': 'Cannot commit yet: default-language docs updated (baseline changed); $1 translated doc(s) need re-translation and review',
   '文件（◇ · 默认语言 ◇/◇ 已审核 · 剩余语言 ◇/◇ 已审核）': 'Files ($1 · default language $2/$3 approved · remaining languages $4/$5 approved)',
   '整体审查完结（◇）': 'Final review completion ($1)',
-  '默认语言文件已全部审核（◇/◇）': 'All default-language files approved ($1/$2)',
-  '剩余语言文件已全部审核（◇/◇）': 'All remaining-language files approved ($1/$2)',
+  // REQ-20260924-003 弹窗清单精简：「默认语言文件已全部审核（◇/◇）」「剩余语言文件已全部审核
+  //（◇/◇）」两条随门禁行移除（门禁呈现仍在阶段条 / 步骤区计数词条），动态键已清理
   '整体审查已完结 ✓（时间 ◇；提交已解锁）': 'Final review completed ✓ (at $1; commit unlocked)',
   'AI 翻译未解锁：默认语言尚缺 ◇ 个文件审核（◇）': 'AI translation locked: $1 default-language file(s) still unapproved ($2)',
   '整体审查未解锁：尚缺 ◇ 个文件审核（◇）': 'Final review locked: $1 file(s) still unapproved ($2)',

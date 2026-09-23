@@ -3458,15 +3458,14 @@ ${langsField}
   // 打开。REQ-20260924-001 起三类自动检查驱动核对项 ✓/✗：① 各语言内容语言一致性（脚本，
   // 中文是中文内容、英文是英文内容……）；② 全部文档内链接可达性（脚本，死链红叉带明细）；
   // ③ 默认语言错别字与行文规范（「AI 校对」提示词派发 Agent 核查，结果经 docscheck 账本
-  // 自动上报）。①②由「运行自动检查」按钮触发（只读、不设门禁）；LICENSE 口径与本版发布
-  // 范围一致保持人工核对；「确认完结」仍是人工动作，完结有效性仍由 evaluateDocsFlow 求值判定。
+  // 自动上报）。①②由「运行自动检查」按钮触发（只读、不设门禁）。REQ-20260924-003 起清单
+  // 精简为仅上述 3 条实际检查项：默认 / 剩余语言「已全部审核」门禁两条（打开弹窗即必然
+  // 完成）与 LICENSE 口径、本版发布范围两条静态说明行不再单占检查行（口径收敛进底部提示）；
+  // 「确认完结」仍是人工动作，完结有效性仍由 evaluateDocsFlow 求值判定。
   function renderFinalizeModal(v) {
     const pf = v ? pfOf(v) : null;
     const fin = pf?.finalize;
     if (!fin?.open) return '';
-    const flowEval = normalizeFlowEval(pf?.plan || {});
-    const defTotal = flowEval.defaultFiles.length;
-    const restTotal = flowEval.restFiles.length;
     const checks = pf?.checks || null;
     const chkRun = pf?.plan?.docsCheck || null;
     const stOf = (state) => `st ${state === 'ok' ? 'st-ok' : state === 'fail' ? 'st-fail' : 'st-run'}`;
@@ -3550,19 +3549,15 @@ ${langsField}
             <button type="button" class="btn small quiet" data-pf-finalize-close aria-label="关闭对话框">✕ 关闭</button>
           </header>
           <ul class="bld-finalize-checklist">
-            ${item(flowEval.defaultReviewedCount === defTotal ? 'ok' : 'fail', `默认语言文件已全部审核（${flowEval.defaultReviewedCount}/${defTotal}）`)}
-            ${item(restTotal === 0 || flowEval.restReviewedCount === restTotal ? 'ok' : 'fail', `剩余语言文件已全部审核（${flowEval.restReviewedCount}/${restTotal}）`)}
             ${item(langState, '各语言内容语义一致（以已审核默认语言为基准）', langSub, langDetails)}
             ${item(linkState, '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）', linkSub, linkDetails)}
             ${item(chkState, '默认语言错别字与行文规范（AI 校对自动上报）', chkSub, chkDetails)}
-            <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，本单不做自动校验）</li>
-            <li><span class="st st-run"><i class="st-ico" aria-hidden="true">◐</i></span> 文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）</li>
           </ul>
           <div class="bld-finalize-actions">
             <button type="button" class="btn small" data-pf-checks${checks?.busy ? ' disabled' : ''} title="自动检查各语言内容语言一致性与全部文档内链接可达性（只读，不设门禁，结果即时呈现）">${checks?.busy ? '检查中…' : '运行自动检查'}</button>
             <button type="button" class="btn small" data-pf-proofread${pf?.proofBusy ? ' disabled' : ''} title="生成 AI 校对提示词并复制：派发 Agent 核查默认语言文档错别字与行文规范，结果自动回执">${pf?.proofBusy ? '校对中…' : 'AI 校对'}</button>
           </div>
-          <p class="muted small">提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使完结失效回退。</p>
+          <p class="muted small">提示：完结前请逐项核对；完结后范围变化会使完结失效回退。</p>
           <footer class="bld-review-foot">
             <span class="muted small">完结是人工确认动作：请逐项核对后再确认。</span>
             <span>
