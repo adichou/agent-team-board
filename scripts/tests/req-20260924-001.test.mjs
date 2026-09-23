@@ -524,7 +524,7 @@ function finalizeModalFns(source) {
 
 const READY_FLOW = { files: [], defaultReviewedCount: 4, restReviewedCount: 4, canFinalize: true, finalized: null };
 
-t('L4-1 整体审查对话框：未运行态（◐ 提示）+「运行自动检查」「AI 校对」按钮 + 人工项保留', () => {
+t('L4-1 整体审查对话框：未运行态（◐ 提示）+「运行自动检查」「AI 校对」按钮 + 三条实际检查项（REQ-20260924-003 精简后无静态人工项）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun(finalizeModalFns(source), L4_CTX, `renderFinalizeModal({ id: 'BLD-20260924-001', pf: {
     finalize: { open: true, busy: false },
@@ -541,8 +541,9 @@ t('L4-1 整体审查对话框：未运行态（◐ 提示）+「运行自动检�
   assert.ok(html.includes('默认语言错别字与行文规范'), 'AI 校对项');
   // 未运行提示
   assert.ok(html.includes('未运行'), '自动检查未运行提示');
-  // 人工项保留
-  assert.ok(html.includes('与本版发布范围一致'), '本版范围一致项保留');
+  // REQ-20260924-003：静态人工项（本版范围一致 / LICENSE 口径）与门禁计数行不再渲染
+  assert.ok(!html.includes('与本版发布范围一致'), '本版范围一致静态行随 REQ-20260924-003 移除');
+  assert.ok(!html.includes('LICENSE 文件与项目实际开源口径一致'), 'LICENSE 口径静态行随 REQ-20260924-003 移除');
   assert.ok(html.includes('data-pf-finalize-cancel') && html.includes('data-pf-finalize-confirm'), '取消 / 确认完结按钮');
 });
 
