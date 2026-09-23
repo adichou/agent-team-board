@@ -4260,11 +4260,19 @@ async function handleApi(req, res, u, pathname) {
 
   const itemMatch = pathname.match(/^\/api\/item\/([^/]+)$/);
   // REQ-20260908-003：删除待接受条目（仅 submitted；目录整体移除。跨站防护已在 /api/* 入口统一生效）
+  // REQ-20260923-004：删除即留痕——CLI 与网页端同口径同步提交被删目录的删除差异
+  //（只 commit 不 push），gitCommit 反馈随响应下发（toast 体现提交结果）。
   if (itemMatch && req.method === 'DELETE') {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);
     const id = decodeURIComponent(itemMatch[1]);
     const r = core.deleteItem(dataDir, id, { by: 'board' });
-    return sendJson(res, 200, { ok: true, id: r.id, title: r.title, type: r.type });
+    const gc = gitFlow.commitItemDeletion({ projectRoot: root, itemId: r.id, itemDir: r.dir });
+    return sendJson(res, 200, {
+      ok: true, id: r.id, title: r.title, type: r.type,
+      gitCommit: gc.status === 'committed'
+        ? { status: gc.status, shortHash: gc.shortHash, subject: gc.commit.subject }
+        : { status: gc.status, reason: gc.reason },
+    });
   }
   if (itemMatch && req.method === 'GET') {
     if (!dataDir) throw new core.AtbError(`未找到 ${core.DATA_REL_DIR}，请先初始化`);

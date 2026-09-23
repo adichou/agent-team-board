@@ -398,7 +398,13 @@ async function main() {
     if (!id) die('用法：atb delete <ID>');
     const r = core.deleteItem(dataDir, id, { by: core.actor() });
     console.log(`✓ 已删除 ${r.id}「${r.title}」（待接受，条目目录已整体移除，不可恢复）`);
-    if (jsonOut) console.log(JSON.stringify({ ok: true, id: r.id, title: r.title, type: r.type }, null, 2));
+    // REQ-20260923-004：删除即留痕——同步提交被删目录的删除差异（只 commit 不 push、
+    // 不卷入其他改动）；失败不回滚删除，差异留工作区，按 reason 指引人工补提交。
+    const gc = gitFlow.commitItemDeletion({ projectRoot: cwd, itemId: r.id, itemDir: r.dir });
+    if (gc.status === 'committed') console.log(`  ↳ 已同步提交 ${gc.shortHash}：${gc.commit.subject}`);
+    else if (gc.status === 'failed') console.log(`  ⚠ ${gc.reason}`);
+    else console.log(`  ↳ ${gc.reason}`);
+    if (jsonOut) console.log(JSON.stringify({ ok: true, id: r.id, title: r.title, type: r.type, gitCommit: { status: gc.status, ...(gc.commit ? { shortHash: gc.shortHash, subject: gc.commit.subject } : { reason: gc.reason }) } }, null, 2));
     return;
   }
 

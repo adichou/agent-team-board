@@ -408,6 +408,57 @@ function commitPaths(root, paths, subject) {
   return { hash, subject };
 }
 
+// 已删除目录的真实路径：目录本体不存在时逐级上溯取最近存在祖先的真实路径后回接
+// 剩余段（macOS 临时目录 /var → /private/var 等符号链接前缀会让 path.relative 逃逸
+// 出仓库根，porcelain pathspec 静默落空——先归一再求相对，对齐测试与服务端的
+// realpath 口径）。
+function realpathDeep(dir) {
+  const abs = path.resolve(dir);
+  try { return fs.realpathSync(abs); } catch { /* 目录已删除：上溯 */ }
+  const parent = path.dirname(abs);
+  const base = parent === abs ? abs : realpathDeep(parent);
+  return path.join(base, path.basename(abs));
+}
+
+// ---------- REQ-20260923-004 删除待接受条目的同步提交 ----------
+// 「删除即留痕」：core.deleteItem 物理移除条目目录后，由 CLI（atb delete）与网页端
+//（DELETE /api/item/:id）两条通道调用，把该目录的删除差异立即入库——消息含被删单号
+//（git 历史可检索），路径 --only 限定绝不卷入工作区其他脏改动，只 commit、不 push、
+// 不切分支（与 autoCommitForRun 同收口内核 commitPaths + 消息规范核验）。
+// 永不抛错：提交失败不回滚删除（目录已移除的事实保持），差异保留在工作区，reason
+// 携带人工补提交指引，不静默吞错。不写 commits 账本（committedItemIndex）：被删条目
+// 已不在看板，「已提交」徽标无从挂靠，只留 git 历史。
+export function commitItemDeletion({ projectRoot, itemId, itemDir }) {
+  try {
+    if (!isGitRepo(projectRoot)) {
+      return { status: 'skipped', commit: null, reason: '非 git 仓库，无法同步提交' };
+    }
+    const repoTop = fs.realpathSync(gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim());
+    const itemRel = path.relative(repoTop, realpathDeep(itemDir)).split(path.sep).join('/');
+    if (!itemRel || itemRel === '..' || itemRel.startsWith('../')) {
+      return { status: 'skipped', commit: null, reason: '被删条目目录不在当前 git 仓库内，无法同步提交' };
+    }
+    // 无差异（条目目录从未入库，如新建即删）→ 跳过，不产生空提交
+    const dirty = String(gitRaw(projectRoot, ['status', '--porcelain', '--', itemRel]).stdout || '');
+    if (!dirty.trim()) {
+      return { status: 'skipped', commit: null, reason: '被删条目目录无 git 差异（从未入库），无需同步提交' };
+    }
+    // 消息不含标题：恒过 validateCommitSubject（描述 ≤120 字），前缀 doc = 工程单据口径
+    const subject = commitSubjectOf('doc', '删除待接受条目', itemId);
+    const commit = commitPaths(projectRoot, [itemRel], subject);
+    const err = validateCommitSubject(commit.subject, itemId);
+    if (err) throw new AtbError(`删除提交消息不合规：${err}`);
+    return { status: 'committed', commit, shortHash: String(commit.hash).slice(0, 7), reason: null };
+  } catch (e) {
+    const msg = String(e && e.message ? e.message : e).slice(0, 120);
+    return {
+      status: 'failed',
+      commit: null,
+      reason: `同步提交失败：${msg}；请在终端人工补提交该删除差异（消息含单号 ${itemId}）`,
+    };
+  }
+}
+
 // 自动提交主入口（永不抛错：失败原样记录，改动保留在工作区，可 atb run autocommit 重试）。
 // run 需携带预留时的工作区快照（batch.nextItem 写入 run.treeSnapshot）。
 export function autoCommitForRun({ dataDir, projectRoot, run }) {
