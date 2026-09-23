@@ -8,8 +8,10 @@
 //   2. 自动提交：autoCommitForRun —— 批量开发回执核验通过（reported）后，以
 //      「领取时工作区快照 → 收尾时差集」做确定性归因，把本单改动按 doc / test /
 //      业务三组提交（git add -A 指定路径 + git commit --only，只 commit 不 push）。
-//      REQ-20260922-007：本单条目目录内的文档编写差异不随收口提交（记入 ignoredDocs
-//      保留在工作区，经文档讨论轮/人工通道提交）；板级共享路径仍随 doc 组收纳。
+//      REQ-20260923-002：本单条目目录（工程单据、用户数据）文档随 doc 组提交；
+//      仓库根第一层文档文件（AGENTS.md / README.md 等发布协作文档）不随收口提交、
+//      不触发 pendingManual 暂扣（记入 ignoredDocs 保留在工作区，由人工 / 发布文档
+//      流程处理）；板级共享路径仍随 doc 组收纳。
 //      由 atb 进程内部 spawnSync 执行，不经 Agent Bash 工具，天然不受 state-guard
 //      拦截（REQ-20260911-009 授权口径：批量批次内 = 视同人工授权）。
 //   3. 索引：itemCommitLog / itemOfCommit —— 条目 ↔ commit 双向关联；正向与看板
@@ -334,6 +336,19 @@ export function saveManualRunResult(dataDir, itemId, autoCommit) {
 //   其删除/变更同样归板级共享——出库迁移随执行迁移的单收口提交（主题带迁移单单号），
 //   不得因原路径在他条目目录而被排除在外。
 const TRACE_DOC_BASENAMES = new Set(['confirmations.md', 'decisions.md']);
+
+// REQ-20260923-002 根第一层文档判定：相对仓库根不含目录分隔符且以 .md 结尾的文档文件
+//（AGENTS.md / README.md / CHANGELOG.md / FEATURES.md / DESIGN.md 及根目录其他 .md，含
+// 语言变体 <KEY>_<lang>.md 与 LICENSE.md——根第一层文档一律由人工 / 发布文档流程管理；
+// 根目录非 .md 文件不在此列，走常规归因）。git status --porcelain 路径恒相对仓库根
+//（与 cwd 无关），「无分隔符」即根第一层。收口归因与人工确认候选范围对根文档一律忽略：
+// 不进任何提交分组（doc / test / 业务均不含）、不触发 pendingManual 暂扣、不做确认候选；
+// 差异保留在工作区（不提交、不还原）。未跟踪（??）的根 .md 同样忽略（新写的根文档也是根文档）。
+const isRootLevelDoc = (p) => {
+  const rel = String(p || '');
+  return rel !== '' && !rel.includes('/') && rel.toLowerCase().endsWith('.md');
+};
+
 function owningItemIdOf(boardRel, p) {
   const pref = boardRel ? boardRel + '/' : 'agent-team-board/';
   const legacyPref = LEGACY_DATA_REL_DIR.split(path.sep).join('/') + '/';
@@ -447,20 +462,23 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
       || p.startsWith(legacyBoardRel + '/')
       || (itemRel && (p === itemRel || p.startsWith(itemRel + '/')));
 
-    // 归因集合（design 定稿口径；REQ-20260916-007 新布局；REQ-20260922-007 文档口径）：
+    // 归因集合（design 定稿口径；REQ-20260916-007 新布局；REQ-20260923-002 文档口径）：
     //   doc 组 = 看板板根（agent-team-board/，实际脏路径来自 data/）与过渡期旧前缀
     //            （docs/agent-team-board/，存量迁移产生的删除/搬移）内当前全部脏路径，
-    //            排除其他条目目录；看板共享文件随本单 doc 提交收纳；
-    //            重命名（R 码，git mv 位置搬移）一律视为板级共享：纯搬移不按单排除，
-    //            保证迁移成对入库（git log --follow 历史可循）；
-    //   ignoredDocs（REQ-20260922-007）= 本单条目目录（agent-team-board/data/{requirements,
-    //            bugs}/<本单ID>/）内的文档编写差异——不随收口提交、不还原，保留在工作区，
-    //            经文档讨论轮（pathspec + 单号主题）/人工通道提交；重命名与留痕文档出库
-    //            （owner 解析为 null 的板级共享）不在此列，仍随 doc 组收纳；
+    //            排除其他条目目录；看板共享文件随本单 doc 提交收纳；本单条目目录
+    //            （工程单据、用户数据）文档恢复随收口提交（REQ-20260923-002 回退
+    //            REQ-20260922-007 的忽略口径）；重命名（R 码，git mv 位置搬移）一律
+    //            视为板级共享：纯搬移不按单排除，保证迁移成对入库（git log --follow
+    //            历史可循）；
+    //   ignoredDocs（REQ-20260923-002）= 仓库根第一层文档文件（isRootLevelDoc）——
+    //            无论认领前是否已脏、运行期是否被本单修改，一律不随收口提交、不触发
+    //            pendingManual 暂扣、不进任何分组；差异保留在工作区（不提交、不还原），
+    //            由人工 / 发布文档流程处理（REQ-20260918-002 提交通道不受影响）；
     //   test / 业务组 = 严格按快照差集（非看板路径）——预留前已存在的无关改动绝不卷入。
     //   BUG-20260913-006：非看板路径若「预留前已脏且本单动过」（同码内容变，或码也变
     //   但快照有预留前内容基线——整文件提交会连带预留前旧脏内容），不自动归因，列入
-    //   pendingManual 待人工核对，不再静默留脏。
+    //   pendingManual 待人工核对，不再静默留脏。根第一层文档例外：即便「预留前已脏 +
+    //   本单动过」也不进 pendingManual（根文档不归收口管，REQ-20260923-002）。
     const groups = { doc: [], test: [], biz: [] };
     const excluded = [];
     const pendingManual = [];
@@ -470,13 +488,13 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     );
     const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
     for (const p of allDirty) {
+      if (isRootLevelDoc(p)) { ignoredDocs.push(p); continue; } // REQ-20260923-002：根第一层文档不随收口提交、不暂扣
       const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
       if (isBoardPath(p)) {
         const code = nowSnap.entries[p] || '';
         const renamed = code.startsWith('R') || code.includes('R');
         const owner = renamed ? null : owningItemIdOf(boardRel, p);
         if (owner && owner !== itemId && !inItem) { excluded.push(p); continue; }
-        if (inItem && owner === itemId) { ignoredDocs.push(p); continue; } // REQ-20260922-007：本单条目文档不随收口提交
         groups.doc.push(p);
         continue;
       }
@@ -505,7 +523,7 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
     if (pendingManual.length) plan = plan.filter(([kind]) => kind === 'doc');
 
     if (!plan.length) {
-      // 无可自动提交分组（可能仍有待人工路径 / 仅剩被忽略的条目文档差异）：
+      // 无可自动提交分组（可能仍有待人工路径 / 仅剩被忽略的根目录文档差异）：
       // 明细如实落盘，不误报 committed、不产生空提交
       const reason = pendingManual.length
         ? manualPendingReason(pendingManual, heldGroups)
@@ -515,7 +533,7 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
           run, itemId, title, commits: [], excluded, pendingManual, heldGroups,
           ...(ignoredDocs.length ? { ignoredDocs } : {}),
           ...(!pendingManual.length
-            ? { summaryNote: '收口跳过：仅条目文档改动（REQ-20260922-007 不随收口提交，保留在工作区走文档流程）' }
+            ? { summaryNote: '收口跳过：仅根目录文档改动（REQ-20260923-002 不随收口提交，保留在工作区走人工/发布文档流程）' }
             : {}),
         });
       }
@@ -576,7 +594,7 @@ export function autoCommitForRun({ dataDir, projectRoot, run }) {
       }
       : (ignoredDocs.length
         ? {
-          status: 'committed', // 源码/测试照常收口；条目文档差异被忽略（REQ-20260922-007），如实携带
+          status: 'committed', // 源码/测试/条目文档照常收口；根目录文档差异被忽略（REQ-20260923-002），如实携带
           commits,
           excluded,
           ignoredDocs,
@@ -618,10 +636,10 @@ function manualPendingReason(pendingManual, heldGroups) {
     + (held ? `；本单 test/业务 ${held} 个路径已一并暂扣待人工处理后补提交` : '');
 }
 
-// REQ-20260922-007 条目文档差异被忽略的原因短句（≤200 字）：committed 时为随行说明，
-// 仅文档改动时为 skipped 原因——均如实注明「不随收口提交、保留在工作区走文档流程」。
+// REQ-20260923-002 根第一层文档差异被忽略的原因短句（≤200 字）：committed 时为随行说明，
+// 仅根文档改动时为 skipped 原因——均如实注明「不随收口提交、保留在工作区走人工/发布文档流程」。
 function docsIgnoredReason(ignoredDocs) {
-  return `条目文档 ${ignoredDocs.length} 个路径按 REQ-20260922-007 不随收口提交，已保留在工作区，经文档讨论轮/人工通道提交`;
+  return `根目录文档 ${ignoredDocs.length} 个路径按 REQ-20260923-002 不随收口提交，已保留在工作区，由人工/发布文档流程处理`;
 }
 
 // 自动提交账本：写入 commits/runs/（runId 采用 commit 账本形态），phase=committed 供
@@ -669,7 +687,7 @@ function writeAutoCommitLedger(dataDir, { run, itemId, title, commits, excluded,
       pendingManual: pending,
       pendingManualAdvice: pending.length ? PENDING_MANUAL_ADVICE : undefined,
       ...(heldGroups ? { heldGroups } : {}),
-      // REQ-20260922-007：被忽略的条目文档差异如实入明细（不提交、保留在工作区走文档流程）
+      // REQ-20260923-002：被忽略的根第一层文档差异如实入明细（不提交、保留在工作区走人工/发布文档流程）
       ...(Array.isArray(ignoredDocs) && ignoredDocs.length ? { ignoredDocs } : {}),
       ...(errorFull ? { errorFull: String(errorFull).slice(0, 4000) } : {}),
     });
@@ -732,6 +750,8 @@ function changeKindOf(code) {
 //     混有系统计数器、其他任务写入，不得只因出现在工作区差集中就归为本单）；非看板
 //     「预留前已脏且本单动过」路径（原 pendingManual 口径，无法安全区分归属）；
 //   excluded —— 其他条目目录路径（不越权收纳他人单据）。
+// REQ-20260923-002：根第一层文档（isRootLevelDoc）不进入任何候选——确认闭环的授权补交
+//   不把根文档当候选（既不自动提交，也不要求人工逐项排除）；根文档由人工 / 发布文档流程处理。
 // 预留前已脏且运行期未动的非看板路径与本单无关，不计入。返回 null 表示无法扫描
 // （非 git / 无快照 / 状态不可读）——呈现层显示「待核对」，不得显示误导性 0。
 export function confirmScopeForRun({ dataDir, projectRoot, run }) {
@@ -756,6 +776,7 @@ export function confirmScopeForRun({ dataDir, projectRoot, run }) {
   const excluded = [];
   const allDirty = new Set([...Object.keys(nowSnap.entries), ...changed, ...dirtyTouched]);
   for (const p of [...allDirty].sort()) {
+    if (isRootLevelDoc(p)) continue; // REQ-20260923-002：根第一层文档不做确认候选
     const kind = changeKindOf(nowSnap.entries[p]);
     const inItem = itemRel && (p === itemRel || p.startsWith(itemRel + '/'));
     if (p.startsWith(boardPref) || p.startsWith(legacyBoardRel + '/') || inItem) {

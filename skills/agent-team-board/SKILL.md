@@ -74,9 +74,10 @@ $ATB show <ID>                                   # 详情 + 历史
 $ATB claim <ID> [--by <会话标识>]                # 认领（accepted/planned → in-progress；批次开发中被拒）
 $ATB report <ID> --coverage 87 --framework "…" --summary "…" [--by 会话] [--run RUN-ID]
                                                  # 写测试报告并标记待测试；不带 --run（手动 /dev）时
-                                                 # report 成功后系统自动收口提交本单源码与测试到 dev
+                                                 # report 成功后系统自动收口提交本单源码、测试与条目文档到 dev
                                                  # （BUG-20260915-007：认领时快照归因，与批量同口径；
-                                                 # 条目文档不随收口提交，REQ-20260922-007，走文档讨论轮）
+                                                 # 根目录文档不随收口提交、不触发暂扣，REQ-20260923-002，
+                                                 # 保留在工作区走人工/发布文档流程）
 $ATB status <ID> <状态>                          # 仅人工终端用；Agent 会被拦
 $ATB move <BUG-ID> --req <REQ-ID> | --standalone # 整理存量 Bug 归属（新建一律独立，不再归属）
 $ATB batch create                                 # 批量开发：创建批次并输出主调度提示词（幂等，冻结全部可实施候选）
@@ -132,7 +133,7 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 2. **读文档**：条目 `README.md`、`design.md`、`test-cases.md`（Bug 读 README 与 design 的引入来源节）。信息不足先澄清或补文档（直接编辑 markdown，允许）；实施要点写入 design.md 作为实施记录。
 3. `$ATB claim <ID> --by <会话名>`（accepted/planned → in-progress）。失败说明被其他会话认领或状态不对，如实转告用户。
 4. **TDD**：test-cases.md 补用例并**写测试跑红** → 实现代码**跑绿** → 重构。新问题按 `/bug` 登记（登记时不填引入来源）。**修复 Bug 必须归因**：根因分析与 test-report 写明引入来源（design.md「引入来源（源单）」节已有则引用，缺失则排查补充并写入，三选一 REQ-/BUG-（`atb list` 核验存在）/未定位（附排查过程），禁止编造），并在 Bug README 开头头部补写 `- 引入来源：…` 行（第一屏可见，样式见 BUG-20260907-017）。**开源选型（REQ-20260909-015）**：方案优先复用成熟开源库，以依赖方式引入（npm / SPM / CocoaPods），禁止复制开源库源码进项目仓库（仅 vendor 例外且须标注复制范围与原因）；仅用开源友好许可（MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / ISC / 0BSD / Unlicense），GPL / LGPL / AGPL / SSPL 及 License 不明禁止引入；引入开源库须在条目目录维护 `licenses.md`（库名 / 版本 / 引入方式 / License / 仓库地址），未使用不创建；自研须写三选一理由（引用了哪些库 / 无合适库的原因 / 引入成本高于自研的原因）。
-5. **提交与待测试**：必须读取并执行 [dev 收尾规则](dev-closeout.md)：真实测试通过 → report（系统随后自动收口提交本单代码与测试，BUG-20260915-007；条目文档不随收口提交，REQ-20260922-007——保留在工作区经文档讨论轮/人工通道提交；Agent 不再手工执行 git 提交）→ 核验提交 hash 和本轮待测试状态。用户明确授权例外开发也须按该规则收尾；收口/上报失败时明确报告未完成项，不宣称完整交付。不自动 push，不代替人工验收。
+5. **提交与待测试**：必须读取并执行 [dev 收尾规则](dev-closeout.md)：真实测试通过 → report（系统随后自动收口提交本单代码、测试与条目文档，BUG-20260915-007；根目录文档不随收口提交、不触发暂扣，REQ-20260923-002——保留在工作区由人工/发布文档流程处理；Agent 不再手工执行 git 提交）→ 核验提交 hash 和本轮待测试状态。用户明确授权例外开发也须按该规则收尾；收口/上报失败时明确报告未完成项，不宣称完整交付。不自动 push，不代替人工验收。
 6. **实施中需人工决策**（范围/口径确认、方案取舍、账号或真机操作、排除项批准等，REQ-20260911-007）：
    `$ATB hold declare <ID> (--question "决策问题")… [--reason "…"] --by <会话名>` 声明后告知用户到
    Status Board「待人工确认」区作答并复工；不得代替人工作答或复工（`hold answer/resume` 为人工专属）。
@@ -182,5 +183,5 @@ $ATB cli uninstall [--to <目录>] | cli status     # 卸载（仅删指向本�
 | `待人工决策（N 项未答）` | 条目正等人工作答（REQ-20260911-007）：请人工在 Status Board「待人工确认」补决策并复工后再实施 |
 | `非法流转：…` | 状态机单向；检查当前状态（`$ATB show <ID>`） |
 | 钩子拦截提示 | 你触碰了铁律 1/2，改用 `$ATB` 子命令或请用户人工操作 |
-| `流程外 git commit 已拦截` | 看板项目内 Agent 提交仅放行条目目录用户数据（`agent-team-board/data/{requirements,bugs}/<条目ID>/` 内）：命令带 pathspec + 提交主题含条目编号；无 pathspec、含源码/runtime 路径或主题无单号会被拦（REQ-20260917-002）。开发收口由 `run receipt` 后系统自动提交（只提交源码与测试；条目文档按 REQ-20260922-007 保留在工作区，经本表文档讨论轮口径提交），不要手工 commit |
+| `流程外 git commit 已拦截` | 看板项目内 Agent 提交仅放行条目目录用户数据（`agent-team-board/data/{requirements,bugs}/<条目ID>/` 内）：命令带 pathspec + 提交主题含条目编号；无 pathspec、含源码/runtime 路径或主题无单号会被拦（REQ-20260917-002）。开发收口由 `run receipt` 后系统自动提交（提交源码、测试与条目文档；根目录文档按 REQ-20260923-002 保留在工作区、不触发暂扣，经发布文档提交通道提交），不要手工 commit |
 | 终端嫌 `node <插件>/scripts/atb.mjs` 太长 | 提示用户执行一次 `$ATB cli install`，之后终端直接敲 `atb …`（REQ-20260908-007） |
