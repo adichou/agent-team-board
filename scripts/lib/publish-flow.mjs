@@ -371,6 +371,14 @@ export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, lan
   lines.push('- 以基准文档为唯一翻译基准：与默认语言语义一致，不增删信息，不得编造能力或范围。');
   lines.push('- 各剩余语言行文地道（README / CHANGELOG 面向用户，AGENTS 为协作规则），结构与基准对应。');
   lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${ls.slice(1).map((l) => `README_${l}.md → CHANGELOG_${l}.md / FEATURES_${l}.md`).join('；')}），链接必须真实可达。`);
+  // BUG-20260923-004：文内链接重定向只改目标、不改文本——「链接必须真实可达」曾诱导 AI 把
+  // 同语言变体目标文件名连文本一起改写（[AGENTS.md](./AGENTS.md) → [AGENTS_en.md](./AGENTS_en.md)）；
+  // 补约束：可见链接文本保持基准原文，不把带语言后缀的文件名写进链接文本。
+  const restLangs = ls.slice(1);
+  if (restLangs.length) {
+    const ex = restLangs[0];
+    lines.push(`- 文内链接指向同语言变体文件时（如 AGENTS.md → AGENTS_${ex}.md）只改链接目标：可见链接文本保持基准原文（如 [AGENTS.md](./AGENTS_${ex}.md)），不得把带语言后缀的文件名写进链接文本。`);
+  }
   lines.push('- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。');
   lines.push('- 完成后以短回执汇报（哪些文件已翻译 / 关键结论），不粘贴全文。');
   return lines.join('\n');
