@@ -492,13 +492,15 @@ t('L4-2 renderReviewModal：LICENSE 页签（x/1）单栏；栏头标注不分�
   assert.ok(html.includes('待审核'), 'pending 状态文案');
 });
 
-t('L4-3 renderFinalizeModal：新增 LICENSE 开源口径人工核对项；默认语言计数含 LICENSE', () => {
+t('L4-3 renderFinalizeModal：REQ-20260924-003 清单精简后 LICENSE 口径行与默认语言计数行不再渲染（计数含 LICENSE 仍在文档面板 / 门禁条呈现）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun([extractFn(source, 'renderFinalizeModal'), extractFn(source, 'renderDocsPane')].join('\n'), L4_CTX, `renderFinalizeModal({ id: 'V', pf: {
     finalize: { open: true, busy: false },
     plan: { langs: ['cn', 'en'], docsFlow: { files: ${JSON.stringify(filesStub({}))}, defaultReviewedCount: 5, restReviewedCount: 4, missing: [] } } } })`);
-  assert.ok(html.includes('LICENSE 文件与项目实际开源口径一致'), 'D 口径人工核对项');
-  assert.match(html, /默认语言文件已全部审核（5\/5）/, '默认语言计数分母含 LICENSE');
+  assert.ok(!html.includes('LICENSE 文件与项目实际开源口径一致'), 'D 口径人工核对项随 REQ-20260924-003 移除');
+  assert.ok(!html.includes('默认语言文件已全部审核'), '默认语言计数门禁行随 REQ-20260924-003 移除');
+  // 3 条实际检查项仍在（清单精简不裁自动检查）
+  assert.ok(html.includes('各语言内容语义一致'), '语言一致项保留');
 });
 
 /* ---------- L6 i18n ---------- */
@@ -509,7 +511,8 @@ t('L6-1 i18n：新增文案中英同步；往返不变形', () => {
   const { EN, EN_DYNAMIC } = I._dict;
   const statics = ['未编写', '待审核', '（未编写）', '（待审核）', '不分语言'];
   for (const k of statics) assert.ok(typeof EN[k] === 'string' && EN[k], `静态词条缺失：${k}`);
-  assert.ok(typeof EN['LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，本单不做自动校验）'] === 'string', '完核新核对项词条');
+  // REQ-20260924-003：完核清单静态行移除，词条随之清理
+  assert.ok(!('LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，本单不做自动校验）' in EN), '完核静态行词条随 REQ-20260924-003 清理');
   const dynamics = [
     '✓ 语言集已应用：◇（文档清单 4 类 × ◇ 语言 + LICENSE 单文件）',
     '◇ 内容已修改：回到「待审核」，需重新审查',
