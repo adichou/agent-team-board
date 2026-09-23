@@ -1695,6 +1695,9 @@ async function openFile(key, opts = {}) {
       const div = document.createElement('div');
       div.className = 'md file-md';
       div.innerHTML = renderMd(f.content);
+      // BUG-20260923-002 预览富媒体增强：仓库相对路径图片按当前 md 文件所在目录解析改写到
+      // /api/fs/raw 白名单端点（与审查对话框同口径，锚点从项目根细化为文件目录）+ mermaid 渲染。
+      globalThis.ATBMdRich?.enhance(div, { imgBase: (raw) => apiUrl(`/api/fs/raw?path=${encodeURIComponent(globalThis.ATBMdRich.relFrom(key.split('/').slice(0, -1).join('/'), raw))}`) });
       viewer.appendChild(div);
       return;
     }
@@ -4738,6 +4741,8 @@ function activateDrawerTab(tab) {
     view.innerHTML = cached;
     linkupDocDemo(view, state.drawer.id);
     linkupDocImages(view, state.drawer.id); // REQ-20260909-009：回填内容重新接管相对截图
+    // BUG-20260923-002：回填内容重新增强（缓存可能停留在「渲染中」占位，md-rich 对 data-pending 重跑）
+    globalThis.ATBMdRich?.enhance(view);
     return;
   }
   view.innerHTML = '<p class="muted">加载中…</p>';
@@ -4817,6 +4822,9 @@ async function loadDoc(name, setActive) {
     if (view) view.innerHTML = renderMd(res.content);
     linkupDocDemo(view, state.drawer.id); // BUG-20260908-021：接管相对 .html 演示链接（防站点根 404）
     linkupDocImages(view, state.drawer.id); // REQ-20260909-009：接管相对截图引用（防站点根 404 + 点击放大）
+    // BUG-20260923-002 条目文档富媒体增强：mermaid 渲染 / plantuml 降级 + 图片失败占位
+    //（attachments/ 截图仍由 linkupDocImages 接管带灯箱；其余相对路径无端点语义不改写）
+    globalThis.ATBMdRich?.enhance(view);
     // REQ-20260909-014：渲染后为顶层块标注源行（右键「讨论」引用映射）；缓存取标注后的 HTML，回填保留标注
     if (view) {
       if (name === 'licenses.md') decorateLicensesDoc(view); // REQ-20260909-015：开源许可警示在写缓存前处理，缓存回填自带标识

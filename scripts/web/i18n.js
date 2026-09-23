@@ -1119,6 +1119,11 @@ const EN = {
   '隔离分析': 'Isolation analysis',
   '目标远端': 'Target remote',
   '（空文档）': '(empty document)',
+  // BUG-20260923-002 预览富媒体增强层（md-rich.js 插入时经 t() 自译——容器整体 data-i18n-skip，
+  // MutationObserver 接不住，动态插值句见 EN_DYNAMIC）
+  '正在渲染 Mermaid 图表…': 'Rendering Mermaid diagram…',
+  '⚠ Mermaid 渲染库加载失败（/mermaid.min.js）：已回退为源码展示': '⚠ Failed to load the Mermaid renderer (/mermaid.min.js): fallen back to source below',
+  'PlantUML 图表暂不支持本地渲染：为保持「本地优先 · 无外部依赖」未接入在线渲染服务，以下为源码': 'PlantUML diagrams cannot be rendered locally yet: no online rendering service is used to stay local-first with zero external dependencies; source below',
   '未配置（设置中配置官网仓库根目录）': 'Not configured (set the website repository root in Settings)',
   '合并入 main，请勿重复触发': 'Merge into main — please do not trigger again',
   // ---------- REQ-20260921-008 文档编写页（总结 → 审查 → 提交流水线） ----------
@@ -1655,6 +1660,10 @@ const EN_DYNAMIC = {
   'Git 状态加载失败：◇': 'Failed to load Git status: $1',
   // REQ-20260920-002 失败提示改切换导向口径：真实原因 + 可重试 + 不丢弃工作区修改
   '失败：◇（可重试；不会丢弃工作区修改）': 'Failed: $1 (retryable; workspace changes are never discarded)',
+  // BUG-20260923-002 预览富媒体增强层（md-rich.js）：图片失败占位与 mermaid 渲染失败回退
+  '图片 ◇ 无法加载（不存在、越出项目根或超过 8MB 上限）': 'Image $1 failed to load (missing, outside the project root, or over the 8MB limit)',
+  '图片 ◇ 加载失败（外链不可达、路径不存在或格式不受支持）': 'Image $1 failed to load (unreachable link, missing path, or unsupported format)',
+  '⚠ Mermaid 图表渲染失败（◇）：已回退为源码展示': '⚠ Mermaid diagram rendering failed ($1): fallen back to source below',
   // BUG-20260912-001：状态行改为按段翻译（见 EN 区注释），原整句动态键移除
   '已选 ◇ 项': '$1 selected',
   '接受 ◇': 'Accept $1',

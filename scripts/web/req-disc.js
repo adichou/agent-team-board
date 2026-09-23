@@ -432,6 +432,9 @@ const ATBReqDisc = (() => {
         // 列表/引用/表格等：正常渲染，不做选文行映射（引导行号整段引用）
         body.classList.add('rd-rich');
         body.innerHTML = renderMd(b.text);
+        // BUG-20260923-002 富媒体增强：mermaid 渲染 / plantuml 降级 + 图片失败占位
+        //（AI 文本无仓库锚点，不做相对路径改写）
+        window.ATBMdRich?.enhance(body);
       }
       row.appendChild(body);
       art.appendChild(row);
@@ -687,6 +690,8 @@ const ATBReqDisc = (() => {
     const body = document.createElement('div');
     body.className = 'rd-min-body md';
     body.innerHTML = renderMd(out.minutes);
+    // BUG-20260923-002 富媒体增强：纪要同为 Markdown（mermaid / plantuml / 图片失败占位）
+    window.ATBMdRich?.enhance(body);
     pane.appendChild(body);
 
     const actions = document.createElement('div');

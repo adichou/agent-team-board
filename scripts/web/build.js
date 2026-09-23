@@ -4455,6 +4455,14 @@ ${langsField}
       if (e.target?.id === 'bldReviewWrap' && !state.pf?.review?.busy) closeReview();
     });
     if (reviewWrap) bindReviewSyncScroll(reviewWrap); // 双栏同步滚动（编辑态 + 预览态）
+    // BUG-20260923-002 预览富媒体增强：仓库相对路径图片改写到 /api/fs/raw 白名单端点
+    //（发布文档位于被管理项目根，与端点的项目根解析一致；project 参数绑定当前项目，
+    // 越权 / 超限 / 不存在由端点拒绝 → 前端占位提示）+ mermaid 渲染 / plantuml 降级（md-rich 共享层）。
+    if (reviewWrap) {
+      for (const el of reviewWrap.querySelectorAll('.bld-review-preview.md')) {
+        window.ATBMdRich?.enhance(el, { imgBase: state.project ? (raw) => `/api/fs/raw?path=${encodeURIComponent(raw)}&project=${encodeURIComponent(state.project)}` : null });
+      }
+    }
     // REQ-20260922-005 选择开源协议弹框：行选中 / 写入并继续 / 暂不选择 / 关闭 / 重试（Esc + 遮罩）
     for (const el of view.querySelectorAll('[data-license-row]')) {
       el.addEventListener('click', () => {
