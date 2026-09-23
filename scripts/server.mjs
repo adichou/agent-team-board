@@ -38,6 +38,9 @@ import * as refine from './lib/refine-store.mjs';
 import * as docsSummary from './lib/docs-summary-store.mjs';
 // REQ-20260921-012：发布文档 AI 翻译执行账本（独立锁 translate.lock，与总结/分析/开发互斥隔离）。
 import * as docsTranslate from './lib/docs-translate-store.mjs';
+// REQ-20260924-001：发布文档 AI 校对执行账本（独立锁 docscheck.lock）与整体审查自动检查纯函数。
+import * as docsCheck from './lib/docs-check-store.mjs';
+import * as docsReviewChecks from './lib/docs-review-checks.mjs';
 // REQ-20260922-005：主流开源协议目录（弹框「选择开源协议」静态数据源，含 SPDX 标准文本）。
 import * as licenseCatalog from './lib/license-catalog.mjs';
 // REQ-20260911-010：commit-store（提交规范内核/已提交索引）不再被服务端直接引用——
@@ -315,11 +318,14 @@ function projectTaskRows(root) {
   const rfBatches = refine.unfinishedRefineBatches(dataDir).filter((b) => !b.aborted);
   const sumRuns = docsSummary.unfinishedSummaryRuns(dataDir);
   const trRuns = docsTranslate.unfinishedTranslateRuns(dataDir);
+  const chkRuns = docsCheck.unfinishedCheckRuns(dataDir);
   const rows = [];
   devBatches.forEach((b) => rows.push(batch.batchBrief(dataDir, b)));
   rfBatches.forEach((b) => rows.push(refine.refineBatchBrief(dataDir, b)));
   sumRuns.forEach((r) => rows.push(docsSummary.summaryBrief(r)));
   trRuns.forEach((r) => rows.push(docsTranslate.translateBrief(r)));
+  // REQ-20260924-001：AI 校对（独立锁 docscheck.lock）同口径进入全局聚合——进行中展示、收尾移出。
+  chkRuns.forEach((r) => rows.push(docsCheck.checkBrief(r)));
   return rows;
 }
 
@@ -2688,6 +2694,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       summary: docsSummary.summaryRunView(docsSummary.latestSummaryRun(dataDir, v.id)),
       // REQ-20260921-012：AI 翻译 run 视图（阶段二进度，文档编写页 / 任务模块）
       translate: docsTranslate.translateRunView(docsTranslate.latestTranslateRun(dataDir, v.id)),
+      // REQ-20260924-001：AI 校对 run 视图（整体审查自动检查之错别字与行文规范核查结果）
+      docsCheck: docsCheck.checkRunView(docsCheck.latestCheckRun(dataDir, v.id)),
       sitePrompt: config.homepageRepoRoot
         ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
         : null,
@@ -2833,7 +2841,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         translate = docsTranslate.translateRunView(docsTranslate.latestTranslateRun(board, verId));
       } catch { /* 版本读取失败不阻塞进度展示 */ }
     }
-    return sendJson(res, 200, { run: docsSummary.summaryRunView(latest), translate, docsFlow });
+    // REQ-20260924-001：单次轮询同吸总结 / 翻译 / 校对进度与三阶段求值
+    const docsCheckRun = verId ? docsCheck.checkRunView(docsCheck.latestCheckRun(board, verId)) : null;
+    return sendJson(res, 200, { run: docsSummary.summaryRunView(latest), translate, docsCheck: docsCheckRun, docsFlow });
   }
 
   // REQ-20260921-012 AI 翻译启动：门禁 = 非 merging、默认语言四文件全部已审核（canTranslate，
@@ -3011,6 +3021,75 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         docsFlow: docsFlowOf(board, buildStore.readVersion(board, body.id)),
       });
     });
+  }
+
+  // REQ-20260924-001 整体审查自动检查（只读，不改盘、不设门禁）：① 各语言内容语言一致性
+  //（中文是中文内容、英文是英文内容……启发式文字体系判定）；② 文档内链接可达性（本地相对
+  // 链接按项目根判存在；http/https 远程链接 HEAD→GET 回退请求判可达，超时 / 网络错误 /
+  // HTTP≥400 记死链带原因）。前端「整体审查」对话框「运行自动检查」按钮触发，结果即时渲染
+  //（✓/✗ + 逐文件明细），供人工完结前核对；完结门禁求值不受影响（仍由 evaluateDocsFlow 判定）。
+  if (req.method === 'POST' && pathname === '/api/build/docs/review-checks') {
+    return runPost(async (body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      const docFiles = flow.publishDocFiles(flow.docLangsOf(v), flow.customDocsOf(v));
+      const lang = docsReviewChecks.checkDocLangs(docFiles, docReadFile);
+      const links = await docsReviewChecks.checkDocLinks(docFiles, docReadFile, {
+        existsFile: (f) => fs.existsSync(path.join(root, f)),
+        fetchFn: (...a) => globalThis.fetch(...a),
+      });
+      return sendJson(res, 200, { ok: true, lang, links });
+    });
+  }
+
+  // REQ-20260924-001 AI 校对启动（整体审查自动检查之三——默认语言错别字与行文规范，提示词
+  // 派发 Agent 核查、结果经 docscheck 账本自动上报）：门禁 = 非 merging + 默认语言非单文件
+  // 文件全部已审核（与 AI 翻译解锁同口径，缺口 400 明细）；创建 run 返回 runId + 提示词，
+  // 前端复制给 AI Agent 执行；独立锁 docscheck.lock 与 AI 总结 / 翻译 / 分析 / 开发互不占用。
+  if (req.method === 'POST' && pathname === '/api/build/docs-proofread/start') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可启动 AI 校对');
+      const flowEval = docsFlowOf(board, v);
+      const defFiles = flowEval.defaultFiles.filter((f) => !f.single);
+      const missing = defFiles.filter((f) => f.state !== 'reviewed');
+      if (missing.length) {
+        const gap = missing.map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、');
+        throw new core.AtbError(
+          `AI 校对未解锁：默认语言尚缺 ${missing.length} 个文件审核（${gap}）；请先在「审查」中完成默认语言文档的人工审核`,
+        );
+      }
+      const langs = flow.docLangsOf(v);
+      const customDocs = flow.customDocsOf(v);
+      const run = docsCheck.createCheckRun(board, { verId: v.id, owner: 'docscheck', langs, customDocs });
+      const prompt = flow.buildDocProofreadPrompt({
+        projectRoot: root,
+        planId: v.id,
+        runId: run.runId,
+        langs,
+        customDocs,
+        atbPath: `node ${JSON.stringify(ATB_CLI)}`,
+      });
+      return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsCheck.checkRunView(run) });
+    });
+  }
+
+  // REQ-20260924-001 AI 校对进度：最新 run 视图（结果 pass / fail + issues）+ 该版本三阶段
+  // 求值（整体审查对话框 / 文档编写页轮询；可选 id= 过滤指定版本，缺省取项目内最新）。
+  if (req.method === 'GET' && pathname === '/api/build/docs-proofread/current') {
+    const board = requireBoard();
+    const idParam = u.searchParams.get('id');
+    const latest = docsCheck.latestCheckRun(board, idParam);
+    const verId = idParam || latest?.verId || null;
+    let docsFlow = null;
+    if (verId) {
+      try {
+        const v = buildStore.readVersion(board, verId);
+        docsFlow = docsFlowOf(board, v);
+      } catch { /* 版本读取失败不阻塞进度展示 */ }
+    }
+    return sendJson(res, 200, { run: docsCheck.checkRunView(latest), docsFlow });
   }
 
   // POST /api/build/docs/open-ide {id, app}：用 TRAE CN / TRAE 打开当前项目根目录；未安装 /

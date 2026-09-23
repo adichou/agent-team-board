@@ -32,6 +32,9 @@ import * as manualCloseout from './lib/manual-closeout.mjs';
 import * as docsSummary from './lib/docs-summary-store.mjs';
 // REQ-20260921-012：发布文档 AI 翻译执行账本（独立锁 translate.lock，与总结/分析/开发互斥隔离）。
 import * as docsTranslate from './lib/docs-translate-store.mjs';
+// REQ-20260924-001：发布文档 AI 校对执行账本（独立锁 docscheck.lock，整体审查自动检查——
+// 默认语言文档错别字与行文规范核查，校对只读不改文档，核查结果经本账本自动上报看板）。
+import * as docsCheck from './lib/docs-check-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
 import * as publishFlow from './lib/publish-flow.mjs';
 
@@ -171,6 +174,15 @@ Oncall 咨询看板（REQ-20260907-001；咨询单独立 ASK 序列，不进 REQ
   atb translate done <RUN-ID> --summary <要点>  完成回执（待翻译文件均进入已翻译待审核）
   atb translate fail <RUN-ID> --reason <短句>   中断回执（残留「正在翻译」回退，不悬挂）
   atb translate show [RUN-ID]                   进度视图（x/N、当前文件、锁占用；缺省最新 run）
+
+发布文档 AI 校对（REQ-20260924-001；整体审查自动检查——默认语言文档错别字与语言习惯行文规范
+核查，校对只读不改文档；独立锁 docscheck.lock，与总结/翻译/分析/开发互不占用）：
+  atb docscheck start --id <BLD-ID> [--by 会话] 启动一轮 AI 校对（默认语言文件 pending；返回 runId + 提示词）
+  atb docscheck file <RUN-ID> --file <文件名> --state <checking|pass|fail> [--issues <问题清单>]
+                                              逐文件结果回执（fail 必带 issues：行号/原文片段与修改建议）
+  atb docscheck done <RUN-ID> --summary <要点>  完成回执（核查结果自动上报看板展示）
+  atb docscheck fail <RUN-ID> --reason <短句>   中断回执（残留「核查中」回落，不悬挂）
+  atb docscheck show [RUN-ID]                   结果视图（pass/fail/pending、问题清单；缺省最新 run）
 
 提交索引（REQ-20260911-009；条目 ↔ commit 双向查询，只读）：
   atb commit log <ITEM-ID>                     查该单全部提交（hash+消息；账本与 git 历史合并）
@@ -504,6 +516,13 @@ async function main() {
 
   if (cmd === 'translate') {
     await translateCmd(rest);
+    return;
+  }
+
+  // ---------- 发布文档 AI 校对（REQ-20260924-001） ----------
+
+  if (cmd === 'docscheck') {
+    await docsCheckCmd(rest);
     return;
   }
 
@@ -1429,6 +1448,104 @@ async function translateCmd(rest) {
   }
 
   die(TRANSLATE_USAGE);
+}
+
+// ---------- 发布文档 AI 校对（REQ-20260924-001）：docscheck 子命令 ----------
+// 供「AI 校对」提示词派发的校对子代理逐文件回执核查结果（独立锁 docscheck.lock，与 AI 总结 /
+// AI 翻译 / AI 分析 / AI 开发互不占用）；看板轮询同一账本自动展示结果（整体审查对话框 / 文档
+// 编写页 / 任务模块 / 全局任务面板）。只读口径：校对不修改文档，只回执 pass / fail + issues。
+
+const DOCS_CHECK_USAGE = `用法：
+  atb docscheck start --id <BLD-ID> [--by 会话]  启动一轮 AI 校对（默认语言文件 pending；返回 runId + 提示词）
+  atb docscheck file <RUN-ID> --file <文件名> --state <checking|pass|fail> [--issues <问题清单>]
+                                                逐文件结果回执（fail 必带 issues：行号 / 原文片段与修改建议）
+  atb docscheck done <RUN-ID> --summary <要点>   完成回执（核查结果自动上报看板展示）
+  atb docscheck fail <RUN-ID> --reason <短句>    中断回执（残留「核查中」回落，不悬挂）
+  atb docscheck show [RUN-ID]                    结果视图（pass/fail/pending、问题清单；缺省最新 run）
+
+口径：整体审查步骤的自动检查之一（REQ-20260924-001）——默认语言（语言集首语言）发布文档的
+错别字与语言习惯行文规范核查；校对只读不改文档，问题清单供人工在整体审查时复核；剩余语言
+文档由 AI 翻译产出、人工审查，人工审核 / 完结 / Git 提交仍在看板「文档编写」页执行。`;
+
+async function docsCheckCmd(rest) {
+  const [sub, ...subRest] = rest;
+  if (!sub) die(DOCS_CHECK_USAGE);
+  const dataDir = core.requireDataDir(cwd);
+  const projectRoot = core.projectRootOfBoard(dataDir);
+
+  if (sub === 'start') {
+    const { opts } = parseOpts(subRest, new Set(['id', 'by']));
+    if (!opts.id) die('用法：atb docscheck start --id <BLD-ID> [--by 会话]');
+    const v = buildStore.readVersion(dataDir, opts.id);
+    if (v.status === 'merging') die('版本合并中，暂不可启动 AI 校对');
+    const run = docsCheck.createCheckRun(dataDir, { verId: v.id, owner: opts.by || 'docscheck', langs: publishFlow.docLangsOf(v), customDocs: publishFlow.customDocsOf(v) });
+    const prompt = publishFlow.buildDocProofreadPrompt({
+      projectRoot,
+      planId: v.id,
+      runId: run.runId,
+      langs: publishFlow.docLangsOf(v),
+      customDocs: publishFlow.customDocsOf(v),
+      atbPath: 'node scripts/atb.mjs',
+    });
+    const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt };
+    if (jsonOut) { console.log(JSON.stringify(payload)); return; }
+    console.log(`✓ 已启动 AI 校对执行：${run.runId}（版本 ${v.id}，独立锁 docscheck.lock）`);
+    console.log('  逐文件结果回执：atb docscheck file <RUN-ID> --file <文件名> --state checking|pass|fail [--issues "<问题清单>"]');
+    console.log('  提示词（复制后在当前项目的 Agent 会话发送）：');
+    console.log('  -----');
+    for (const line of prompt.split('\n')) console.log(`  ${line}`);
+    console.log('  -----');
+    return;
+  }
+
+  if (sub === 'file') {
+    const { pos, opts } = parseOpts(subRest, new Set(['file', 'state', 'issues']));
+    const runId = pos[0];
+    if (!runId || !opts.file || !opts.state) die('用法：atb docscheck file <RUN-ID> --file <文件名> --state <checking|pass|fail> [--issues <问题清单>]');
+    const run = docsCheck.markCheckFile(dataDir, runId, opts.file, opts.state, opts.issues || '');
+    if (jsonOut) { console.log(JSON.stringify(docsCheck.checkRunView(run))); return; }
+    const label = { checking: '核查中', pass: '通过', fail: '发现问题' }[opts.state] || opts.state;
+    console.log(`✓ ${opts.file} → ${label}（${run.runId}）${opts.state === 'fail' ? `\n  问题清单：${run.issues[opts.file]}` : ''}`);
+    return;
+  }
+
+  if (sub === 'done' || sub === 'fail') {
+    const { pos, opts } = parseOpts(subRest, new Set(['summary', 'reason']));
+    const runId = pos[0];
+    if (!runId) die(sub === 'done' ? '用法：atb docscheck done <RUN-ID> --summary <要点>' : '用法：atb docscheck fail <RUN-ID> --reason <短句>');
+    const run = sub === 'done'
+      ? docsCheck.finishCheckRun(dataDir, runId, { result: 'done', summary: opts.summary || '' })
+      : docsCheck.finishCheckRun(dataDir, runId, { result: 'failed', reason: opts.reason || '' });
+    if (jsonOut) { console.log(JSON.stringify(docsCheck.checkRunView(run))); return; }
+    console.log(sub === 'done'
+      ? `✓ AI 校对完成（${run.runId}）：核查结果已自动上报，整体审查对话框可查看 pass / fail 与问题清单`
+      : `✓ AI 校对中断（${run.runId}）：${run.reason}；文件状态不悬挂「核查中」，可重新启动续跑`);
+    return;
+  }
+
+  if (sub === 'show') {
+    const { pos } = parseOpts(subRest, new Set());
+    const run = pos[0] ? docsCheck.getCheckRun(dataDir, pos[0]) : docsCheck.latestCheckRun(dataDir);
+    if (!run) {
+      if (jsonOut) { console.log(JSON.stringify({ run: null })); return; }
+      console.log('（暂无 AI 校对执行：看板「整体审查」对话框点击 AI 校对，或 atb docscheck start --id <BLD-ID>）');
+      return;
+    }
+    const view = docsCheck.checkRunView(run);
+    if (jsonOut) { console.log(JSON.stringify(view)); return; }
+    const PHASE_LABEL = { running: '进行中', done: '已完成', failed: '失败' };
+    console.log(`AI 校对 ${run.runId}（版本 ${run.verId}，owner ${run.owner}）：${PHASE_LABEL[run.phase] || run.phase}`);
+    console.log(`  结果 通过 ${view.counts.pass} · 发现问题 ${view.counts.fail} · 待核查 ${view.counts.pending} / 共 ${view.counts.total}${view.currentFile ? ` · 当前：${view.currentFile}（核查中）` : ''}`);
+    for (const [file, issues] of Object.entries(view.issues || {})) {
+      console.log(`  · ${file}：${issues}`);
+    }
+    if (view.reason) console.log(`  原因：${view.reason}`);
+    if (view.summary) console.log(`  要点：${view.summary}`);
+    console.log('  锁：docscheck（独立锁，与 AI 总结 / AI 翻译 / AI 分析 / AI 开发互不占用）');
+    return;
+  }
+
+  die(DOCS_CHECK_USAGE);
 }
 
 // ---------- 提交索引查询（REQ-20260911-009）：commit 子命令 ----------
