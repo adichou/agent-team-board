@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260923-002 界面演示 · 审查预览的图片与 mermaid / plantuml 支持</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f8fa; --panel: #ffffff; --panel-2: #f0f3f7;
+    --fg: #1c2330; --muted: #5b6472; --border: #d9dee7;
+    --accent: #2563eb; --accent-soft: #e8efff;
+    --code-bg: #f4f6fa; --code-fg: #24292f;
+    --ok: #1a7f37; --ok-bg: #e6f4ea; --warn: #9a6700; --warn-bg: #fff8c5;
+    --err: #cf222e; --err-bg: #ffebe9;
+    --chip-bg: #eef1f6; --chip-fg: #4a5568;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0d1117; --panel: #151b24; --panel-2: #1a2230;
+      --fg: #e6eaf0; --muted: #9aa4b2; --border: #2a323d;
+      --accent: #6ea1ff; --accent-soft: #1a2740;
+      --code-bg: #101722; --code-fg: #d6deea;
+      --ok: #3fb950; --ok-bg: #12261c; --warn: #d29922; --warn-bg: #2a230d;
+      --err: #f85149; --err-bg: #331512;
+      --chip-bg: #202a38; --chip-fg: #a9b4c4;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d1117; --panel: #151b24; --panel-2: #1a2230;
+    --fg: #e6eaf0; --muted: #9aa4b2; --border: #2a323d;
+    --accent: #6ea1ff; --accent-soft: #1a2740;
+    --code-bg: #101722; --code-fg: #d6deea;
+    --ok: #3fb950; --ok-bg: #12261c; --warn: #d29922; --warn-bg: #2a230d;
+    --err: #f85149; --err-bg: #331512;
+    --chip-bg: #202a38; --chip-fg: #a9b4c4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 18px 18px 60px; }
+
+  /* ---------- 演示控制条 ---------- */
+  .demo-bar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 16px;
+    display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+  .demo-bar .title { font-weight: 700; font-size: 13.5px; }
+  .demo-bar .title small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .ctrl { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: none; background: var(--panel); color: var(--fg); cursor: pointer;
+    padding: 4px 12px; font-size: 12.5px; font-family: inherit;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+  select {
+    font-family: inherit; font-size: 12.5px; color: var(--fg);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
+  }
+
+  .hint-card {
+    background: var(--accent-soft); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 16px; margin-bottom: 16px; font-size: 12.5px; color: var(--fg);
+  }
+
+  /* ---------- 审查对话框（模拟，平铺展示） ---------- */
+  .rel-modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .bld-review-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600;
+  }
+  .rel-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
+  .rel-tab {
+    border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+    border-radius: 999px; padding: 3px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+  }
+  .rel-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .bld-review-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bld-review-col { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); }
+  .bld-review-col:last-child { border-right: none; }
+  .bld-review-col-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel-2);
+    font-size: 12.5px;
+  }
+  .bld-doc-fname { font-weight: 600; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .tag { font-size: 11px; padding: 0 8px; border-radius: 999px; background: var(--chip-bg); color: var(--chip-fg); border: 1px solid var(--border); }
+  .st-chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); border: 1px solid var(--border); }
+  .bld-review-col-acts { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+    border-radius: 8px; padding: 2px 10px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .bld-review-col-body { flex: 1; min-height: 0; display: flex; height: 460px; }
+  .bld-review-col-body textarea {
+    flex: 1; border: none; outline: none; resize: none;
+    background: var(--bg); color: var(--fg); padding: 10px 12px;
+    font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace;
+  }
+  .bld-review-preview {
+    flex: 1; margin: 0; overflow: auto; padding: 12px 16px;
+    background: var(--bg); font-size: 13px; line-height: 1.7;
+  }
+  .md h1 { font-size: 18px; margin: 4px 0 8px; }
+  .md h2 { font-size: 15px; margin: 16px 0 6px; }
+  .md p { margin: 6px 0; }
+  .md pre {
+    background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; overflow: auto;
+    font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .md pre.src-only { border-color: var(--err); border-style: dashed; }
+  .bld-review-foot {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted);
+  }
+
+  /* 占位 / 反馈 */
+  .placeholder { padding: 14px; border-radius: 10px; font-size: 12.5px; }
+  .placeholder.loading { color: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  .placeholder.empty { color: var(--muted); border: 1px dashed var(--border); text-align: center; }
+  .fig-fail {
+    border: 1px dashed var(--err); background: var(--err-bg); color: var(--err);
+    padding: 8px 12px; border-radius: 10px; font-size: 12px; margin: 8px 0;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .fig-fail .alt { display: block; font-weight: 700; }
+  .broken-img {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px dashed var(--muted); padding: 6px 10px; border-radius: 8px;
+    color: var(--muted); font-size: 12px; margin: 8px 0; background: var(--panel-2);
+  }
+  .broken-img .x { color: var(--err); font-size: 16px; font-weight: 700; }
+  .img-404-note { font-size: 11.5px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; margin: 2px 0 10px; }
+  .img-404-note b { color: var(--err); }
+  .notice-bar {
+    display: flex; gap: 8px; align-items: flex-start;
+    border-radius: 10px; padding: 8px 12px; font-size: 12px; margin: 10px 0;
+    border: 1px solid var(--border);
+  }
+  .notice-bar.err { background: var(--err-bg); color: var(--err); border-color: var(--err); }
+  .notice-bar.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  .render-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--ok); border: 1px solid var(--ok);
+    border-radius: 999px; padding: 0 8px; margin: 6px 0 2px; background: var(--ok-bg);
+  }
+  .demo-note { font-size: 11px; color: var(--muted); margin: 2px 0 8px; }
+
+  /* 演示级图表 */
+  .mmd { margin: 8px 0; }
+  .mmd-TD { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+  .mmd-LR { display: flex; flex-direction: row; align-items: center; gap: 0; flex-wrap: wrap; }
+  .mmd-node {
+    border: 1.5px solid var(--accent); background: var(--accent-soft); color: var(--fg);
+    border-radius: 10px; padding: 4px 14px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  }
+  .mmd-arrow { color: var(--muted); font-size: 15px; padding: 0 4px; }
+  .mmd-TD .mmd-arrow { padding: 0 0 0 22px; }
+  .md-fig { max-width: 100%; height: auto; display: block; margin: 8px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .wide-wrap-bug { overflow-x: auto; border: 1px dashed var(--err); border-radius: 10px; margin: 8px 0; }
+  .wide-wrap-bug .md-fig { max-width: none; width: 1600px; border: none; border-radius: 10px; }
+  .wide-note { font-size: 11px; color: var(--err); margin: 2px 0 10px; }
+
+  .empty-tab {
+    padding: 40px 20px; text-align: center; color: var(--muted);
+  }
+  .empty-tab .card { display: inline-block; text-align: left; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 22px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 18px; font-size: 13px; opacity: 0; pointer-events: none;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.18); transition: all .25s ease; max-width: 80vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { border-color: var(--err); color: var(--err); }
+
+  @media (max-width: 860px) {
+    .bld-review-cols { grid-template-columns: 1fr; }
+    .bld-review-col { border-right: none; border-bottom: 1px solid var(--border); }
+    .bld-review-col:last-child { border-bottom: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 演示用 markdown 源码（README 预置内容，避免 JS 转义） -->
+<script type="text/markdown" id="src-cn">
+# Agent Team Board
+
+智能体团队看板 —— 需求 / Bug 文件化管理 + Agent TDD 开发流程 + 本地网页状态板。
+
+## 产品界面
+
+![1790092127929](image/README/1790092127929.png)
+
+目前版本主要通过浏览器使用，执行 `bin/atb serve --open` 打开本地看板。
+
+## 发布流水线
+
+```mermaid
+graph TD
+A[AI 总结] --> B[人工审查]
+B --> C[AI 翻译]
+C --> D[整体审查]
+D --> E[提交 dev]
+```
+
+## 协作时序
+
+```plantuml
+@startuml
+用户 -> Agent: 登记需求
+Agent -> 看板: 创建条目
+看板 --> 用户: 待人工接受
+@enduml
+```
+
+## 横幅大图（外链）
+
+![wide-banner](https://example.com/very-wide-banner.png)
+</script>
+
+<script type="text/markdown" id="src-en">
+# Agent Team Board
+
+Requirements & bugs as versioned files, plus an agent TDD workflow and a local web status board.
+
+## Product UI
+
+![1790092216439](image/README/1790092216439_en.png)
+
+Open the local board with `bin/atb serve --open`.
+
+## Release pipeline
+
+```mermaid
+graph TD
+A[AI summary] --> B[human review]
+B --> C[AI translate]
+C --> D[finalize]
+D --> E[commit dev]
+```
+</script>
+
+<script type="text/markdown" id="src-bad">
+# 语法错误样例
+
+```mermaid
+graph TD
+A[AI 总结] --> ]坏节点
+```
+</script>
+
+<div class="page">
+  <div class="demo-bar">
+    <div class="title">BUG-20260923-002 界面演示
+      <small>审查界面预览 · 图片 / mermaid / plantuml 支持（演示数据，与真实看板无交互）</small>
+    </div>
+    <div class="ctrl">对照：
+      <span class="seg" role="radiogroup" aria-label="缺陷现状或期望修复后">
+        <button type="button" id="modeBug" class="on">缺陷现状</button>
+        <button type="button" id="modeFixed">期望修复后</button>
+      </span>
+    </div>
+    <div class="ctrl">内容状态：
+      <select id="docState" aria-label="模拟文档状态">
+        <option value="normal">正常文档（图片 + 图表）</option>
+        <option value="empty">空文档</option>
+        <option value="loading">加载中</option>
+        <option value="imgfail">图片缺失（坏路径）</option>
+        <option value="badsyntax">图表语法错误</option>
+      </select>
+    </div>
+    <div class="ctrl">主题：
+      <span class="seg" role="radiogroup" aria-label="主题">
+        <button type="button" id="thAuto" class="on">跟随系统</button>
+        <button type="button" id="thLight">浅色</button>
+        <button type="button" id="thDark">深色</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="hint-card">
+    「缺陷现状」= 当前 dev 分支行为：仓库相对路径图片 404 裂图、外链大图撑破栏布局、mermaid / plantuml 只显示源码文本；
+    「期望修复后」= 本单验收目标：相对路径图片经 <code>/api/fs/raw</code> 白名单端点正常显示、图片宽度受约束、图表围栏渲染为图形、
+    失败时给占位 / 回退源码提示。切换上方「内容状态」可模拟空态、加载、失败等反馈。演示中的图片为内联 SVG 占位、流程图为演示级渲染（非真实 mermaid 引擎）。
+  </div>
+
+  <!-- ===== 审查对话框（平铺模拟） ===== -->
+  <div class="rel-modal" id="reviewModal" role="dialog" aria-label="审查发布文档">
+    <header class="bld-review-head">
+      <span>审查发布文档（v2026.09-demo）</span>
+      <button type="button" class="btn" id="closeBtn">✕ 关闭</button>
+    </header>
+    <nav class="rel-tabs" role="tablist" aria-label="文档类型页签" id="tabs"></nav>
+    <div id="tabBody"></div>
+    <footer class="bld-review-foot">
+      <span id="footStat">全部 1/9 已审核 · 本页签 1/2 · 各栏同步滚动：一侧滚动其余按比例跟随</span>
+      <button type="button" class="btn" id="closeBtn2">关闭</button>
+    </footer>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = {
+    mode: 'bug',            // bug | fixed
+    docState: 'normal',     // normal | empty | loading | imgfail | badsyntax
+    tab: 'README',
+    colMode: { cn: 'preview', en: 'preview' },
+  };
+
+  var TABS = [
+    { key: 'README', label: 'README（1/2）', main: true },
+    { key: 'CHANGELOG', label: 'CHANGELOG（0/2）' },
+    { key: 'FEATURES', label: 'FEATURES（0/2）' },
+    { key: 'AGENTS', label: 'AGENTS（0/2）' },
+    { key: 'LICENSE', label: 'LICENSE（0/1）' },
+    { key: 'MIGRATION', label: 'MIGRATION（0/2）' },
+  ];
+
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var t = $('#toast');
+    t.textContent = msg;
+    t.className = isErr ? 'err show' : 'show';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ''; }, 2200);
+  }
+
+  /* ---------- 内联 SVG 占位图（模拟仓库截图 / 外链大图，无外网依赖） ---------- */
+  function svgBoardShot(id, title, sub, w, h) {
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="img" aria-label="' + esc(title) + '">';
+    s += '<rect width="' + w + '" height="' + h + '" rx="10" fill="#eef2f7"/>';
+    s += '<rect x="14" y="14" width="' + (w - 28) + '" height="34" rx="8" fill="#2563eb"/>';
+    s += '<text x="28" y="36" font-family="sans-serif" font-size="15" fill="#fff">' + esc(title) + '</text>';
+    var cols = ['#dbe7ff', '#d9f2e3', '#ffe9c7', '#f0d9ff'];
+    for (var i = 0; i < 4; i++) {
+      var cx = 14 + i * ((w - 28 - 30) / 4 + 10);
+      var cw = (w - 28 - 30) / 4;
+      s += '<rect x="' + cx + '" y="60" width="' + cw + '" height="' + (h - 100) + '" rx="8" fill="' + cols[i] + '"/>';
+      s += '<rect x="' + (cx + 10) + '" y="72" width="' + (cw - 20) + '" height="12" rx="3" fill="#ffffff"/>';
+      for (var j = 0; j < 4; j++) {
+        s += '<rect x="' + (cx + 10) + '" y="' + (96 + j * 26) + '" width="' + (cw - 20) + '" height="18" rx="4" fill="#ffffff" opacity="0.85"/>';
+      }
+    }
+    s += '<text x="' + (w / 2) + '" y="' + (h - 16) + '" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5b6472">' + esc(sub) + '</text>';
+    s += '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+  }
+
+  function svgSeq() {
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 240" width="520" role="img" aria-label="plantuml sequence demo">';
+    s += '<rect width="520" height="240" fill="none"/>';
+    var actors = [['用户', 60], ['Agent', 240], ['看板', 420]];
+    actors.forEach(function (a) {
+      s += '<rect x="' + (a[1] - 38) + '" y="12" width="76" height="28" rx="6" fill="#e8efff" stroke="#2563eb"/>';
+      s += '<text x="' + a[1] + '" y="31" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#1c2330">' + esc(a[0]) + '</text>';
+      s += '<line x1="' + a[1] + '" y1="40" x2="' + a[1] + '" y2="215" stroke="#9aa4b2" stroke-dasharray="4 4"/>';
+    });
+    var msgs = [['用户', 'Agent', '登记需求', 70], ['Agent', '看板', '创建条目', 120], ['看板', '用户', '待人工接受', 170]];
+    msgs.forEach(function (m) {
+      var x1 = null, x2 = null;
+      actors.forEach(function (a) { if (a[0] === m[0]) x1 = a[1]; if (a[0] === m[1]) x2 = a[1]; });
+      var y = m[3];
+      var head = x2 > x1 ? 8 : -8;
+      s += '<line x1="' + x1 + '" y1="' + y + '" x2="' + (x2 - head) + '" y2="' + y + '" stroke="#1c2330" stroke-width="1.4"/>';
+      s += '<polygon points="' + x2 + ',' + y + ' ' + (x2 - head * 1.8) + ',' + (y - 4.5) + ' ' + (x2 - head * 1.8) + ',' + (y + 4.5) + '" fill="#1c2330"/>';
+      s += '<text x="' + ((x1 + x2) / 2) + '" y="' + (y - 7) + '" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5b6472">' + esc(m[2]) + '</text>';
+    });
+    s += '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+  }
+
+  /* ---------- 演示级 mermaid 解析（仅 graph TD/LR + 链式 -->，解析失败即抛错） ---------- */
+  function parseMermaid(src) {
+    var lines = String(src).split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (!lines.length) throw new Error('空图表源码');
+    var m0 = lines[0].match(/^graph\s+(TD|LR)$/i);
+    if (!m0) throw new Error('首行必须是 graph TD 或 graph LR');
+    var dir = m0[1].toUpperCase();
+    var order = [], labels = {};
+    for (var i = 1; i < lines.length; i++) {
+      var segs = lines[i].split('-->');
+      if (segs.length < 2) throw new Error('第 ' + (i + 1) + ' 行缺少 --> 连接：' + lines[i]);
+      for (var k = 0; k < segs.length; k++) {
+        var t = segs[k].trim();
+        var mm = t.match(/^([A-Za-z0-9_]+)(?:\[([^\]]*)\])?$/);
+        if (!mm) throw new Error('第 ' + (i + 1) + ' 行节点语法错误：' + t);
+        if (!(mm[1] in labels)) { labels[mm[1]] = mm[2] || mm[1]; order.push(mm[1]); }
+        else if (mm[2]) labels[mm[1]] = mm[2];
+      }
+    }
+    return { dir: dir, order: order, labels: labels };
+  }
+
+  function renderMermaidFig(src) {
+    var g = parseMermaid(src);
+    var html = '<div class="mmd mmd-' + g.dir + '">';
+    g.order.forEach(function (id, i) {
+      if (i > 0) html += '<span class="mmd-arrow">' + (g.dir === 'TD' ? '↓' : '→') + '</span>';
+      html += '<span class="mmd-node">' + esc(g.labels[id]) + '</span>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  /* ---------- 预览渲染 ---------- */
+  function renderBrokenImg(alt, src) {
+    return '<div class="broken-img"><span class="x">✕</span>' + esc(alt) + '</div>' +
+      '<p class="img-404-note">GET ' + esc(src) + ' <b>404 not found</b>（SPA 页面路径 / 相对解析到站点根，静态服务只映射 scripts/web）</p>';
+  }
+
+  function renderPreviewBody(lang) {
+    var fixed = state.mode === 'fixed';
+    var src = lang === 'cn' ? $('#src-cn').textContent : $('#src-en').textContent;
+
+    if (state.docState === 'loading') {
+      return '<div class="placeholder loading">正在读取文档内容…</div>';
+    }
+    if (state.docState === 'empty') {
+      return '<div class="placeholder empty">（空文档）</div>';
+    }
+    if (state.docState === 'badsyntax') {
+      var badSrc = $('#src-bad').textContent;
+      var badBlock = badSrc.match(/```mermaid\n([\s\S]*?)```/);
+      var code = esc(badBlock ? badBlock[1].trim() : '');
+      if (fixed) {
+        return '<div class="md"><h2>语法错误样例</h2></div>' +
+          '<div class="notice-bar err" role="alert">⚠ mermaid 渲染失败：第 2 行节点语法错误：<code>A[AI 总结] --&gt; ]坏节点</code>——已回退源码显示，可修正后重试。</div>' +
+          '<pre class="src-only">' + code + '</pre>';
+      }
+      return '<div class="md"><h2>语法错误样例</h2></div>' +
+        '<pre>' + code + '</pre>' +
+        '<p class="demo-note">（缺陷现状：mermaid 围栏仅显示源码文本，无渲染、无错误提示）</p>';
+    }
+
+    var html = '';
+
+    // 标题与段落（固定演示文案，与源码对应）
+    if (lang === 'cn') {
+      html += '<div class="md"><h1>Agent Team Board</h1><p>智能体团队看板 —— 需求 / Bug 文件化管理 + Agent TDD 开发流程 + 本地网页状态板。</p><h2>产品界面</h2></div>';
+    } else {
+      html += '<div class="md"><h1>Agent Team Board</h1><p>Requirements &amp; bugs as versioned files, plus an agent TDD workflow and a local web status board.</p><h2>Product UI</h2></div>';
+    }
+
+    // 图片：![alt](repo-relative.png)
+    var imgAlt = lang === 'cn' ? '1790092127929' : '1790092216439';
+    var imgSrc = lang === 'cn' ? 'image/README/1790092127929.png' : 'image/README/1790092216439_en.png';
+    if (state.docState === 'imgfail') {
+      var badPath = 'image/README/missing-' + (lang === 'cn' ? 'cn' : 'en') + '.png';
+      if (fixed) {
+        html += '<div class="fig-fail" role="alert"><span class="alt">⚠ 图片无法加载</span>' + esc(badPath) + '（路径不存在或越出项目根；仅放行图片 MIME 白名单、≤8MB）</div>';
+      } else {
+        html += renderBrokenImg(imgAlt, badPath);
+      }
+    } else if (fixed) {
+      var dataUri = svgBoardShot('demo', lang === 'cn' ? 'Agent Team Board 看板' : 'Agent Team Board', lang === 'cn' ? '仓库内相对路径图片 · 经 /api/fs/raw 白名单端点显示 · max-width:100%' : 'repo-relative image via /api/fs/raw · max-width:100%', 640, 300);
+      html += '<img class="md-fig" src="' + dataUri + '" alt="' + esc(imgAlt) + '">';
+      html += '<p class="demo-note">' + esc(imgSrc) + '（相对路径改写到 /api/fs/raw?path=… 后正常显示）</p>';
+    } else {
+      html += renderBrokenImg(imgAlt, imgSrc);
+    }
+
+    if (lang === 'cn') {
+      html += '<div class="md"><p>目前版本主要通过浏览器使用，执行 <code>bin/atb serve --open</code> 打开本地看板。</p><h2>发布流水线</h2></div>';
+    } else {
+      html += '<div class="md"><p>Open the local board with <code>bin/atb serve --open</code>.</p><h2>Release pipeline</h2></div>';
+    }
+
+    // mermaid 围栏
+    var mblock = src.match(/```mermaid\n([\s\S]*?)```/);
+    var msrc = mblock ? mblock[1].trim() : 'graph TD\nA --> B';
+    if (fixed) {
+      try {
+        html += '<span class="render-badge">✓ mermaid 已渲染</span>';
+        html += renderMermaidFig(msrc);
+      } catch (e) {
+        html += '<div class="notice-bar err" role="alert">⚠ mermaid 渲染失败：' + esc(e.message) + '——已回退源码显示。</div><pre class="src-only">' + esc(msrc) + '</pre>';
+      }
+    } else {
+      html += '<pre>' + esc(msrc) + '</pre>';
+      html += '<p class="demo-note">（缺陷现状：```mermaid 围栏只是普通代码块）</p>';
+    }
+
+    // plantuml 围栏（仅中文栏含）
+    var pblock = src.match(/```plantuml\n([\s\S]*?)```/);
+    if (pblock) {
+      var psrc = pblock[1].trim();
+      if (fixed) {
+        html += '<div class="md"><h2>协作时序</h2></div>';
+        html += '<span class="render-badge">✓ plantuml 已渲染（演示级示意）</span>';
+        html += '<img class="md-fig" src="' + svgSeq() + '" alt="plantuml sequence demo">';
+      } else {
+        html += '<div class="md"><h2>协作时序</h2></div>';
+        html += '<pre>' + esc(psrc) + '</pre>';
+        html += '<p class="demo-note">（缺陷现状：```plantuml 围栏只是普通代码块；真实渲染方式见 README「待确认 2」）</p>';
+      }
+    }
+
+    // 外链大图（仅中文栏）
+    if (lang === 'cn' && /wide-banner/.test(src)) {
+      html += '<div class="md"><h2>横幅大图（外链）</h2></div>';
+      var banner = svgBoardShot('demo2', 'very-wide-banner.png', '', 1600, 200);
+      if (fixed) {
+        html += '<img class="md-fig" src="' + banner + '" alt="wide-banner">';
+        html += '<p class="demo-note">（修复后：外链图片可加载且宽度受约束，不撑破栏布局）</p>';
+      } else {
+        html += '<div class="wide-wrap-bug"><img class="md-fig" src="' + banner + '" alt="wide-banner"></div>';
+        html += '<p class="wide-note">（缺陷现状：无 img 尺寸规则，超宽外链图横向撑破栏布局 → 可左右滚动）</p>';
+      }
+    }
+
+    return html;
+  }
+
+  /* ---------- 对话框渲染 ---------- */
+  function colHtml(lang) {
+    var fname = lang === 'cn' ? 'README.md（中文）' : 'README_en.md（English）';
+    var mode = state.colMode[lang];
+    var body;
+    if (mode === 'edit') {
+      var src = (lang === 'cn' ? $('#src-cn') : $('#src-en')).textContent.trim();
+      body = '<textarea rows="18" spellcheck="false" data-lang="' + lang + '">' + esc(src) + '</textarea>';
+    } else {
+      body = '<div class="bld-review-preview md" data-lang="' + lang + '">' + renderPreviewBody(lang) + '</div>';
+    }
+    return '<div class="bld-review-col">' +
+      '<div class="bld-review-col-head">' +
+      '<span class="bld-doc-fname">' + esc(fname) + '</span>' +
+      '<span class="st-chip">已总结待审核</span>' +
+      '<div class="bld-review-col-acts">' +
+      '<span class="seg" role="group" aria-label="编辑或预览">' +
+      '<button type="button" class="btn' + (mode === 'edit' ? ' on' : '') + '" data-mode="' + lang + ':edit">编辑</button>' +
+      '<button type="button" class="btn' + (mode === 'preview' ? ' on' : '') + '" data-mode="' + lang + ':preview">预览</button>' +
+      '</span>' +
+      '<button type="button" class="btn" data-act="save">保存</button>' +
+      '<button type="button" class="btn primary" data-act="approve">' + (lang === 'cn' ? '通过审核' : '通过审核') + '</button>' +
+      '</div></div>' +
+      '<div class="bld-review-col-body">' + body + '</div></div>';
+  }
+
+  function render() {
+    // 页签
+    $('#tabs').innerHTML = TABS.map(function (t) {
+      return '<button type="button" class="rel-tab' + (state.tab === t.key ? ' active' : '') + '" role="tab" aria-selected="' + (state.tab === t.key) + '" data-tab="' + t.key + '">' + t.label + '</button>';
+    }).join('');
+
+    var main = TABS.find(function (t) { return t.main; });
+    if (state.tab !== main.key) {
+      $('#tabBody').innerHTML = '<div class="bld-review-cols"><div class="bld-review-col" style="grid-column:1/-1">' +
+        '<div class="bld-review-col-body" style="display:block"><div class="empty-tab">' +
+        '<div class="card"><strong>' + esc(state.tab) + ' 页签</strong><br>本演示聚焦 README 页签的预览渲染缺陷与修复对照；<br>其余页签结构与 README 一致（各语言栏并排、每栏 编辑 / 预览 / 保存 / 通过审核）。' +
+        '</div></div></div></div></div>';
+    } else {
+      $('#tabBody').innerHTML = '<div class="bld-review-cols">' + colHtml('cn') + colHtml('en') + '</div>';
+      bindSyncScroll();
+    }
+
+    // 对照开关按钮态
+    $('#modeBug').className = state.mode === 'bug' ? 'on' : '';
+    $('#modeFixed').className = state.mode === 'fixed' ? 'on' : '';
+  }
+
+  /* ---------- 双栏同步滚动（演示级：按比例跟随） ---------- */
+  var scrollLock = false;
+  function bindSyncScroll() {
+    var boxes = document.querySelectorAll('.bld-review-preview');
+    boxes.forEach(function (a) {
+      a.addEventListener('scroll', function () {
+        if (scrollLock) return;
+        scrollLock = true;
+        var ratio = a.scrollTop / Math.max(1, a.scrollHeight - a.clientHeight);
+        boxes.forEach(function (b) {
+          if (b !== a) b.scrollTop = ratio * (b.scrollHeight - b.clientHeight);
+        });
+        scrollLock = false;
+      });
+    });
+  }
+
+  /* ---------- 事件 ---------- */
+  $('#modeBug').addEventListener('click', function () { state.mode = 'bug'; render(); });
+  $('#modeFixed').addEventListener('click', function () { state.mode = 'fixed'; render(); });
+
+  $('#docState').addEventListener('change', function (e) {
+    state.docState = e.target.value;
+    state.colMode = { cn: 'preview', en: 'preview' }; // 状态切换回预览态观察反馈
+    render();
+    var labels = {
+      normal: '正常文档：图片 + mermaid / plantuml 图表',
+      empty: '空文档：预览态显示「（空文档）」占位',
+      loading: '加载中：读取文档内容反馈',
+      imgfail: '图片缺失：缺陷态 404 裂图 / 修复态占位提示',
+      badsyntax: '语法错误：修复态回退源码 + 错误提示条',
+    };
+    toast('已切换：' + labels[state.docState]);
+  });
+
+  $('#tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tab]');
+    if (!b) return;
+    state.tab = b.dataset.tab;
+    render();
+  });
+
+  $('#tabBody').addEventListener('click', function (e) {
+    var mb = e.target.closest('[data-mode]');
+    if (mb) {
+      var parts = mb.dataset.mode.split(':');
+      state.colMode[parts[0]] = parts[1];
+      render();
+      return;
+    }
+    var ab = e.target.closest('[data-act]');
+    if (ab) {
+      if (ab.dataset.act === 'save') toast('✓ 已保存（演示）：' + (state.tab + '.md') + '（未提交：需审查通过并「提交」后进入本地 dev）');
+      else toast('✓ 已通过审核（演示）：全部 2/9 已审核');
+    }
+  });
+
+  $('#closeBtn').addEventListener('click', function () { toast('演示：关闭动作无实际效果（本页为静态演示）'); });
+  $('#closeBtn2').addEventListener('click', function () { toast('演示：关闭动作无实际效果（本页为静态演示）'); });
+
+  // 主题
+  function setTheme(t) {
+    document.documentElement.removeAttribute('data-theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    $('#thAuto').className = t === 'auto' ? 'on' : '';
+    $('#thLight').className = t === 'light' ? 'on' : '';
+    $('#thDark').className = t === 'dark' ? 'on' : '';
+  }
+  $('#thAuto').addEventListener('click', function () { setTheme('auto'); });
+  $('#thLight').addEventListener('click', function () { setTheme('light'); });
+  $('#thDark').addEventListener('click', function () { setTheme('dark'); });
+
+  render();
+})();
+</script>
+</body>
+</html>
