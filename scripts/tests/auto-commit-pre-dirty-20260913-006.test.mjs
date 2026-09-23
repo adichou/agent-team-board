@@ -147,20 +147,21 @@ function runPreDirtyFlow(root, title = '预留前脏路径自动提交单', { bo
   return { dataDir, item, runId: nx.runId, receipt };
 }
 
-t('P3 核心场景：预留前已脏且运行期被修改的路径不再静默留脏——列入 pendingManual 并如实标记；test/业务组暂扣保证历史自洽；条目文档不随收口提交（REQ-20260922-007）', () => {
+t('P3 核心场景：预留前已脏且运行期被修改的路径不再静默留脏——列入 pendingManual 并如实标记；test/业务组暂扣保证历史自洽；条目文档随 doc 组提交（REQ-20260923-002）', () => {
   const root = mkProject();
   const { dataDir, item, runId, receipt } = runPreDirtyFlow(root);
 
   const ac = receipt.autoCommit;
-  assert.equal(ac.status, 'skipped', '暂扣场景无可提交分组（条目文档被忽略，doc 组为空）');
-  assert.equal(ac.commits.length, 0, '不得产生提交');
+  assert.equal(ac.status, 'committed', '暂扣场景 doc 组照常提交（条目文档随收口提交，部分提交标记 committed）');
+  assert.equal(ac.commits.length, 1, '只提交 doc 组（test/业务暂扣）');
   assert.ok(Array.isArray(ac.pendingManual) && ac.pendingManual.includes('scripts/web/build.js'),
     '回执应显式携带待人工路径 scripts/web/build.js');
   assert.ok(ac.reason && ac.reason.includes('待人工'), 'reason 应说明待人工处理');
 
-  // 提交历史自洽：不再产生「测试已提交、被测实现（build.js）未提交」的矛盾组合
+  // 提交历史自洽：不产生「测试已提交、被测实现（build.js）未提交」的矛盾组合
   const subjects = logSubjectsOf(root, item.id);
-  assert.equal(subjects.length, 0, '暂扣场景不应产生任何本单提交');
+  assert.equal(subjects.length, 1, '暂扣场景只产生 doc 一组提交');
+  assert.ok(subjects[0].startsWith('doc: '), `应为条目文档 doc 提交：${subjects[0]}`);
   for (const s of subjects) {
     assert.equal(commitStore.validateCommitSubject(s, item.id), null, `消息须过规范核验：${s}`);
   }
@@ -171,7 +172,7 @@ t('P3 核心场景：预留前已脏且运行期被修改的路径不再静默�
   assert.match(st, /impl\.test\.mjs/, '暂扣的 test 改动应保留在工作区');
   assert.match(st, /impl\.mjs/, '暂扣的业务改动应保留在工作区');
   const itemRel = path.relative(root, core.resolveItemDir(dataDir, item.id).dir);
-  assert.ok(st.split('\n').some((l) => l.includes(itemRel)), '条目文档应保留在工作区（不随收口提交）');
+  assert.ok(!st.split('\n').some((l) => l.slice(3).trim().startsWith(itemRel + '/')), '条目文档应随 doc 组入库（不再滞留工作区）');
 
   // 账本如实：auto-commit.json 明细记录 pendingManual（路径 + 建议）与 heldGroups
   const detail = JSON.parse(fs.readFileSync(
@@ -181,9 +182,9 @@ t('P3 核心场景：预留前已脏且运行期被修改的路径不再静默�
   assert.ok(detail.heldGroups && detail.heldGroups.test.includes('scripts/tests/impl.test.mjs'),
     '明细应记录暂扣的 test 组路径');
   assert.ok(detail.heldGroups.biz.includes('scripts/lib/impl.mjs'), '明细应记录暂扣的业务组路径');
-  // 无实际提交不点亮徽标（不误报 committed）
+  // doc 组已提交：徽标点亮如实
   const idx = commitStore.committedItemIndex(dataDir);
-  assert.equal((idx.get(item.id) || { commits: [] }).commits.length, 0);
+  assert.equal((idx.get(item.id) || { commits: [] }).commits.length, 1);
 });
 
 t('P4 回归：未动的预留前脏路径不计入不卷入；预留时干净路径照常三组提交；未跟踪内容哈希机制不受影响', () => {
@@ -195,13 +196,13 @@ t('P4 回归：未动的预留前脏路径不计入不卷入；预留时干净�
   git(root, ['add', '.']);
   git(root, ['commit', '-q', '-m', 'chore: build.js 入库']);
   fs.appendFileSync(path.join(root, 'scripts', 'web', 'build.js'), '预留前脏改动\n'); // 预留前已脏
-  fs.writeFileSync(path.join(root, 'scratch.md'), '预留前未跟踪\n'); // 预留前已存在的未跟踪文件
+  fs.writeFileSync(path.join(root, 'scratch.txt'), '预留前未跟踪\n'); // 预留前已存在的未跟踪文件（根 .md 已按 REQ-20260923-002 属忽略范围，改用 .txt 保持原意）
 
   batch.createBatch(dataDir, { projectRoot: root });
   const nx = batch.nextItem(dataDir, batch.queueHeadBatch(dataDir).batchId, { owner: 'w1' });
   core.claim(dataDir, item.id, 'w1');
-  // 运行期不动 build.js；scratch.md 追加内容（?? 同码内容变 → 按原口径整文件归本单）
-  fs.appendFileSync(path.join(root, 'scratch.md'), '本单补充\n');
+  // 运行期不动 build.js；scratch.txt 追加内容（?? 同码内容变 → 按原口径整文件归本单）
+  fs.appendFileSync(path.join(root, 'scratch.txt'), '本单补充\n');
   fs.writeFileSync(path.join(root, 'biz.txt'), 'b\n');
   fs.mkdirSync(path.join(root, 'scripts', 'tests'), { recursive: true });
   fs.writeFileSync(path.join(root, 'scripts', 'tests', 'x.test.mjs'), 't\n');
@@ -210,11 +211,11 @@ t('P4 回归：未动的预留前脏路径不计入不卷入；预留时干净�
 
   const ac = receipt.autoCommit;
   assert.equal(ac.status, 'committed');
-  assert.equal(ac.commits.length, 2, 'test/业务两组照常提交（条目文档不进 doc 组，REQ-20260922-007）');
+  assert.equal(ac.commits.length, 3, 'doc/test/业务三组照常提交（条目文档恢复进 doc 组，REQ-20260923-002）');
   assert.ok(!ac.pendingManual, '无待人工路径时不得出现 pendingManual 字段');
   const st = git(root, ['status', '--porcelain', '-uall']).stdout;
   assert.match(st, /M\s+scripts\/web\/build\.js/, '未动过的预留前脏路径不得被卷入提交');
-  assert.ok(!st.includes('scratch.md'), '预留前未跟踪但运行期改动的文件应整文件提交（原口径不变）');
+  assert.ok(!st.includes('scratch.txt'), '预留前未跟踪但运行期改动的文件应整文件提交（原口径不变）');
   assert.ok(!st.includes('biz.txt'), '预留时干净的新脏路径照常提交');
 });
 
@@ -256,7 +257,7 @@ t('P5 全部非看板改动均待人工且无 doc 可提交：状态如实 skipp
 t('P6 幂等：待人工回执重复收尾幂等返回；挂起后 autocommit 重试指向人工确认闭环，不产生新提交', () => {
   const root = mkProject();
   const { dataDir, item, runId } = runPreDirtyFlow(root);
-  assert.equal(logSubjectsOf(root, item.id).length, 0);
+  assert.equal(logSubjectsOf(root, item.id).length, 1, '暂扣场景已提交 doc 一组（REQ-20260923-002）');
   const r2 = batch.finishRun(dataDir, runId, { result: 'reported', reportRef: 'test-report.md' });
   assert.equal(r2.idempotent, true, '重复回执应幂等返回');
   // REQ-20260914-001：存在待人工路径的收尾已挂起（待人工确认提交）——重试入口不越过人工确认
@@ -265,7 +266,8 @@ t('P6 幂等：待人工回执重复收尾幂等返回；挂起后 autocommit �
   const ac = jsonOf(again).autoCommit;
   assert.equal(ac.status, 'skipped');
   assert.match(ac.reason, /待人工确认/, '应指向人工确认闭环');
-  assert.equal(logSubjectsOf(root, item.id).length, 0, '不得产生重复提交');
+  assert.equal(logSubjectsOf(root, item.id).length, 1, '不得产生重复提交');
+  void dataDir;
 });
 
 t('P7 BUG-20260914-021 长标题：doc 组暂扣场景（板级共享仍提交）提交消息完整保留标题，不再截断到 20 字', () => {

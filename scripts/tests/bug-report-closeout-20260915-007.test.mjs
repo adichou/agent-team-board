@@ -58,15 +58,14 @@ try {
     write(a.root, 'src/fix.js', '本单实现');
     write(a.root, 'scripts/tests/fix.test.mjs', '本单测试');
     const out = a.run('report', item.id, '--framework', 'node:test', '--summary', '通过', '--by', 'w1');
-    assert.match(out, /系统收口提交 2 组/, 'report 输出应说明系统收口提交分组（条目文档不随收口提交，REQ-20260922-007）');
+    assert.match(out, /系统收口提交 3 组/, 'report 输出应说明系统收口提交分组（条目文档随收口 doc 组提交，REQ-20260923-002）');
 
     const log = a.git('log', '--format=%s');
-    for (const t of ['test', 'fix']) {
+    for (const t of ['doc', 'test', 'fix']) {
       assert.match(log, new RegExp(`^${t}: 手动收口自动提交 ${item.id}$`, 'm'), `${t} 组提交消息带单号`);
     }
-    assert.doesNotMatch(log, new RegExp(`^doc: 手动收口自动提交 ${item.id}$`, 'm'), '条目文档不得随收口提交');
     assert.equal(a.git('status', '--porcelain', '--', 'src', 'scripts/tests'), '', '本单代码/测试全部入库');
-    assert.match(a.git('status', '--porcelain', '--', itemRel), /test-report\.md/, '条目文档保留在工作区（经文档流程提交）');
+    assert.equal(a.git('status', '--porcelain', '--', itemRel), '', '条目文档随收口 doc 组全部入库（REQ-20260923-002）');
     assert.match(a.git('status', '--porcelain', '--', 'other-task.txt'), /other-task\.txt/, '其他任务改动保留');
     assert.equal(a.git('remote'), '', '只 commit 不 push（无远端）');
 
@@ -77,17 +76,17 @@ try {
     assert.equal(rec.autoCommit.status, 'committed');
     assert.ok(rec.treeSnapshot && rec.treeSnapshot.entries, '认领时快照作为归因基线');
     const commitLog = a.run('commit', 'log', item.id);
-    assert.match(commitLog, /2 个/, 'atb commit log 可查本单全部提交');
+    assert.match(commitLog, /3 个/, 'atb commit log 可查本单全部提交');
 
-    // ---------- 场景 B：重复 report 幂等——报告状态属条目文档不随收口提交，不再补交 ----------
+    // ---------- 场景 B：重复 report 幂等——只补交报告状态变动（条目文档），代码/测试不重复提交 ----------
     const head1 = a.git('rev-parse', 'HEAD');
     a.run('report', item.id, '--framework', 'node:test', '--summary', '复验仍通过', '--by', 'w1');
     const head2 = a.git('rev-parse', 'HEAD');
-    assert.equal(head1, head2, '重复上报不产生新提交（test-report.md 属条目文档，保留在工作区走文档流程）');
+    assert.notEqual(head1, head2, '重复上报补交报告状态变动（test-report.md 属条目文档，随收口 doc 组提交）');
     assert.equal(a.git('log', '--oneline', '--', 'src/fix.js').split('\n').length, 1, '实现不重复提交');
     assert.equal(a.git('log', '--oneline', '--', 'scripts/tests/fix.test.mjs').split('\n').length, 1, '测试不重复提交');
     assert.equal(a.git('status', '--porcelain', '--', 'src', 'scripts/tests'), '', '本单代码测试保持入库');
-    assert.match(a.git('status', '--porcelain', '--', itemRel), /test-report\.md/, '条目文档仍保留在工作区');
+    assert.equal(a.git('status', '--porcelain', '--', itemRel), '', '条目文档随补交入库');
   }
 
   // ---------- 场景 C：提交失败不静默——挂起待人工确认，上报不受阻断 ----------
