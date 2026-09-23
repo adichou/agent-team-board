@@ -7558,6 +7558,9 @@ function renderSummaryPanel() {
         <p class="small" style="margin:6px 0">当前：<code>${esc(run.currentFile || '—')}</code>${run.currentFile ? '（正在总结）' : '（等待下一文件回执）'}</p>
         <p class="muted small">锁：summary（独立锁，与 AI 分析 / AI 开发隔离，互不占用） · 执行会话 ${esc(run.owner)}</p>
         <p class="muted small">进度由执行子代理经 atb summary file 逐文件回执，本面板随轮询自动刷新；完成后到发布模块「文档编写」页人工审查并提交。</p>
+        <div class="drawer-actions" style="justify-content:flex-end">
+          <button type="button" class="btn danger" id="summaryAbort" title="中断收尾：残留「正在总结」回退、已完成文件保留、释放独立锁 summary；在途子代理需在对应会话人工停止">终止任务</button>
+        </div>
       </section>`;
   }
   if (run.phase === 'failed') {
@@ -7624,6 +7627,9 @@ function renderTranslatePanel() {
         <p class="small" style="margin:6px 0">当前：<code>${esc(run.currentFile || '—')}</code>${run.currentFile ? '（正在翻译）' : '（等待下一文件回执）'}</p>
         <p class="muted small">锁：translate（独立锁，与 AI 总结 / AI 分析 / AI 开发隔离，互不占用） · 执行会话 ${esc(run.owner)}</p>
         <p class="muted small">进度由执行子代理经 atb translate file 逐文件回执，本面板随轮询自动刷新；完成后到发布模块「文档编写」页人工审查。</p>
+        <div class="drawer-actions" style="justify-content:flex-end">
+          <button type="button" class="btn danger" id="translateAbort" title="中断收尾：残留「正在翻译」回退、已完成文件保留、释放独立锁 translate；在途子代理需在对应会话人工停止">终止任务</button>
+        </div>
       </section>`;
   }
   if (run.phase === 'failed') {
@@ -7756,6 +7762,58 @@ async function abortDevTask() {
     toast(`✓ 已终止开发任务：${r.notice || ''}`);
     state.batchSig = '';
     await refreshBatch();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// REQ-20260924-002 终止 AI 总结任务：二次确认（与 AI 开发 / AI 分析终止同交互形态）→
+// 既有 fail 收尾口径——run 置 failed（人工终止类原因）、残留「正在总结」回退、已完成文件
+// 保留可续跑、独立锁 summary 释放；终止后随轮询切换到既有 failed 视图，可立即重启。
+async function abortSummaryTask() {
+  const run = state.summary.data?.run;
+  if (!run || run.phase !== 'running') return;
+  const ok = await uiConfirm({
+    title: '终止 AI 总结任务？',
+    message: '确认后本轮任务中断收尾：残留「正在总结」回退待处理、已总结文件保留，独立锁释放，可立即重新启动续跑。在途执行子代理需在对应 Agent 会话人工停止。',
+    confirmText: '终止任务',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const r = await api('/api/build/docs-summary/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: run.runId }),
+    });
+    toast(`✓ 已终止 AI 总结任务：${r.notice || ''}`);
+    state.summary.sig = '';
+    await refreshSummary();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+// REQ-20260924-002 终止 AI 翻译任务：与 abortSummaryTask 同构（锁名与文案按翻译适配）。
+async function abortTranslateTask() {
+  const run = state.translate.data?.run;
+  if (!run || run.phase !== 'running') return;
+  const ok = await uiConfirm({
+    title: '终止 AI 翻译任务？',
+    message: '确认后本轮任务中断收尾：残留「正在翻译」回退待处理、已翻译文件保留，独立锁释放，可立即重新启动续跑。在途执行子代理需在对应 Agent 会话人工停止。',
+    confirmText: '终止任务',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const r = await api('/api/build/docs-translate/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: run.runId }),
+    });
+    toast(`✓ 已终止 AI 翻译任务：${r.notice || ''}`);
+    state.translate.sig = '';
+    await refreshTranslate();
   } catch (e) {
     toast(e.message, true);
   }
@@ -8027,6 +8085,11 @@ function bindBatchDrawer() {
   if (rfAbort) rfAbort.addEventListener('click', abortRefineTask);
   const devAbort = drawer.querySelector('#batchAbort');
   if (devAbort) devAbort.addEventListener('click', abortDevTask);
+  // REQ-20260924-002：AI 总结 / AI 翻译进行中面板的「终止任务」按钮绑定
+  const sumAbort = drawer.querySelector('#summaryAbort');
+  if (sumAbort) sumAbort.addEventListener('click', abortSummaryTask);
+  const trAbort = drawer.querySelector('#translateAbort');
+  if (trAbort) trAbort.addEventListener('click', abortTranslateTask);
   const rfRecopy = drawer.querySelector('#refineRecopy');
   if (rfRecopy) rfRecopy.addEventListener('click', async () => {
     const p = state.refine.data?.batch?.prompt;

@@ -2892,7 +2892,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
-  // REQ-20260921-012 AI 翻译进度：最新 run 视图 + 该版本三阶段求值（任务模块「AI 翻译」页签
+  // REQ-20260924-002 AI 翻译进度：最新 run 视图 + 该版本三阶段求值（任务模块「AI 翻译」页签
   // 随轮询刷新；可选 id= 过滤指定版本，缺省取项目内最新）。
   if (req.method === 'GET' && pathname === '/api/build/docs-translate/current') {
     const board = requireBoard();
@@ -2907,6 +2907,50 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       } catch { /* 版本读取失败不阻塞进度展示 */ }
     }
     return sendJson(res, 200, { run: docsTranslate.translateRunView(latest), docsFlow });
+  }
+
+  // REQ-20260924-002 终止 AI 总结 / AI 翻译任务（人工，二次确认后调用）：走既有 fail 收尾口径——
+  // run 置 failed（reason 带「人工终止」，≤200 字）、残留「正在总结 / 正在翻译」回退 pending 不悬挂、
+  // 已完成文件保留跨 run 可续跑、释放独立锁 summary.lock / translate.lock（finishXxxRun 统一处理，
+  // 锁无超时自动接管，不收尾即悬挂、无法启动新一轮）；全局任务面板随收尾自动移出该 run。
+  // 在途执行子代理会话不受远端影响，需人工到对应会话停止（前端确认弹层提示，与 AI 开发 /
+  // AI 分析终止提示口径一致）。目标 run 解析：body.runId 优先（须进行中），缺省取唯一进行中 run。
+  const DOCS_ABORT_REASON = '人工终止任务：看板「终止任务」收尾（在途执行子代理需在对应 Agent 会话人工停止）';
+  const runningDocsRunId = (runs, runId, label) => {
+    const active = runs.filter((r) => r.phase === 'running');
+    if (runId) {
+      const hit = active.find((r) => r.runId === String(runId));
+      if (!hit) throw new core.AtbError(`AI ${label}任务不在进行中（可能已收尾）：${runId}`);
+      return hit.runId;
+    }
+    if (!active.length) throw new core.AtbError(`尚无进行中的 AI ${label}任务`);
+    return active[active.length - 1].runId;
+  };
+  if (req.method === 'POST' && pathname === '/api/build/docs-summary/abort') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const runId = runningDocsRunId(docsSummary.unfinishedSummaryRuns(board), body.runId, '总结');
+      const r = docsSummary.finishSummaryRun(board, runId, { result: 'failed', reason: DOCS_ABORT_REASON });
+      return sendJson(res, 200, {
+        ok: true,
+        runId: r.runId,
+        run: docsSummary.summaryRunView(r),
+        notice: '残留「正在总结」已回退，已总结文件保留可续跑；独立锁 summary 已释放，可立即重新启动',
+      });
+    });
+  }
+  if (req.method === 'POST' && pathname === '/api/build/docs-translate/abort') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const runId = runningDocsRunId(docsTranslate.unfinishedTranslateRuns(board), body.runId, '翻译');
+      const r = docsTranslate.finishTranslateRun(board, runId, { result: 'failed', reason: DOCS_ABORT_REASON });
+      return sendJson(res, 200, {
+        ok: true,
+        runId: r.runId,
+        run: docsTranslate.translateRunView(r),
+        notice: '残留「正在翻译」已回退，已翻译文件保留可续跑；独立锁 translate 已释放，可立即重新启动',
+      });
+    });
   }
 
   // REQ-20260921-008 人工通过审核（审查对话框「通过审核」）：固化当前磁盘内容 hash；
