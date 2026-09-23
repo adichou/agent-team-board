@@ -149,16 +149,16 @@ t('L1-4 AI 总结提示词（核心）：自定义并入默认语言文档清单
   assert.ok(!p0.includes('自定义'), '无自定义不出现自定义字样');
 });
 
-t('L1-5 AI 翻译提示词：BUG-20260922-002 起自定义进入翻译（基准与目标均含其余语言份）', () => {
+t('L1-5 AI 翻译提示词：BUG-20260922-002 起自定义进入翻译（基准与目标对应清单均含其余语言份；路径化口径随 BUG-20260923-003）', () => {
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'])) contents[f.file] = `# ${f.key}\n`;
   contents['MIGRATION.md'] = '# 迁移说明\n';
   const tp = flow.buildDocTranslatePrompt({ projectRoot: '/tmp/p', planId: 'BLD-20260922-003', runId: 'tr-20260922-000101-cd01', langs: ['cn', 'en'], readFile: readsOf(contents), customDocs: ['MIGRATION'] });
-  assert.ok(tp.includes('- MIGRATION_en.md（English / MIGRATION / 自定义，基准 MIGRATION.md）'), '翻译目标含自定义其余语言份');
-  assert.ok(tp.includes('===== MIGRATION.md（默认语言 cn，已审核基准） ====='), '翻译基准含自定义默认语言份');
-  assert.ok(tp.includes('请逐个产出以下 5 个剩余语言文档（4 类 + 1 自定义 × 1 语言，剩余语言 en）'), '目标计数随清单联动');
+  assert.ok(tp.includes('- MIGRATION.md → MIGRATION_en.md（English / MIGRATION / 自定义）'), '翻译目标含自定义其余语言份（基准 = 默认语言 KEY.md）');
+  assert.ok(!tp.includes('=====') && !tp.includes('# 迁移说明'), '翻译基准不内嵌全文（BUG-20260923-003 路径化）');
+  assert.ok(tp.includes('共 5 个目标文件，4 类 + 1 自定义 × 1 语言，剩余语言 en'), '目标计数随清单联动');
   const tp0 = flow.buildDocTranslatePrompt({ projectRoot: '/tmp/p', planId: 'BLD-20260922-003', langs: ['cn', 'en'], readFile: readsOf(contents) });
-  assert.ok(tp0.includes('请逐个产出以下 4 个剩余语言文档'), '无自定义翻译目标数不变（4 × (N−1)）');
+  assert.ok(tp0.includes('共 4 个目标文件'), '无自定义翻译目标数不变（4 × (N−1)）');
 });
 
 t('L1-6 自定义文档七态：未总结 → 正在总结 → 已总结待审核 → 已审核（hash）；编辑回退；scopeStale 失效', () => {

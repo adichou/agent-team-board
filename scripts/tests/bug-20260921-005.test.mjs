@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // BUG-20260921-005 AI 总结 / AI 翻译提示词不再逐条内嵌条目标题 —— TDD 分层测试。
-// L1-1 关联范围精简（两提示词同口径）：REQ 条目仅列编号（不带 commit 短 hash、不带
-//    标题）；BUG 条目不逐条罗列、不引导读取，汇总一句「修复了 N 个 bug」；提示词全文
-//    不再出现任何条目标题。
+// L1-1 关联范围精简（AI 总结口径；BUG-20260923-003 起翻译提示词不再携带关联范围）：
+//    REQ 条目仅列编号（不带 commit 短 hash、不带标题）；BUG 条目不逐条罗列、不引导读取，
+//    汇总一句「修复了 N 个 bug」；提示词全文不再出现任何条目标题。
 // L1-2 路径规则：给出条目说明文件路径规则 <项目根>/agent-team-board/data/requirements/
 //    <REQ-ID>/，引导子代理按编号自行读取 REQ 条目文件；BUG 无需逐条了解。
+//    BUG-20260923-003：翻译提示词不再输出关联范围节 / 编号 / 汇总句 / 路径规则。
 // L1-3 其余要素保持既有口径：项目路径 / 计划号 / 版本号 / 执行编号 / 文档清单（按语言集
-//    展开）/ atb summary / translate 逐文件回执指令 / 写作与翻译约束 / 翻译唯一基准。
+//    展开）/ atb summary / translate 逐文件回执指令 / 写作与翻译约束 / 翻译唯一基准
+//    （BUG-20260923-003 起翻译基准为路径化口径，全文不内嵌）。
 // L1-4 量化缩短：341 条（165 REQ + 176 BUG，各 200 字标题）场景下，整份提示词长度 <
 //    旧口径「关联范围」逐条标题块（编号 + 短 hash + 标题）长度的 50%。
 // L1-5 边界：无 BUG 条目不出现汇总句；无 REQ 条目不出现路径规则行；items 为空时
@@ -45,30 +47,37 @@ function translatePrompt(items = ITEMS) {
   });
 }
 
-/* ---------- L1-1 / L1-2 关联范围精简（两提示词同口径） ---------- */
+/* ---------- L1-1 / L1-2 关联范围精简（AI 总结口径；BUG-20260923-003 起翻译不再携带关联范围） ---------- */
 
-for (const [name, build] of [['AI 总结', summaryPrompt], ['AI 翻译', translatePrompt]]) {
-  t(`L1-1 ${name}提示词不逐条内嵌标题：REQ 仅编号、BUG 汇总一句`, () => {
-    const p = build();
-    for (const it of ITEMS) {
-      assert.ok(!p.includes(it.title), `${name}提示词不应内嵌标题「${it.title}」`);
-    }
-    assert.ok(p.includes('- REQ-20260921-001') && p.includes('- REQ-20260921-002'), 'REQ 条目保留编号清单');
-    assert.ok(!/- REQ-20260921-\d+（commit/.test(p) && !/- BUG-20260921-\d+（commit/.test(p), '编号行不再附带 commit 短 hash');
-    assert.ok(!p.includes('- BUG-20260921-001') && !p.includes('- BUG-20260921-002'), 'BUG 编号不逐条罗列');
-    assert.ok(p.includes('修复了 2 个 bug'), 'BUG 条目汇总为一句并带条数');
-    assert.ok(p.includes('关联范围'), '关联范围小节保留');
-  });
+t('L1-1 AI 总结提示词不逐条内嵌标题：REQ 仅编号、BUG 汇总一句', () => {
+  const p = summaryPrompt();
+  for (const it of ITEMS) {
+    assert.ok(!p.includes(it.title), `总结提示词不应内嵌标题「${it.title}」`);
+  }
+  assert.ok(p.includes('- REQ-20260921-001') && p.includes('- REQ-20260921-002'), 'REQ 条目保留编号清单');
+  assert.ok(!/- REQ-20260921-\d+（commit/.test(p) && !/- BUG-20260921-\d+（commit/.test(p), '编号行不再附带 commit 短 hash');
+  assert.ok(!p.includes('- BUG-20260921-001') && !p.includes('- BUG-20260921-002'), 'BUG 编号不逐条罗列');
+  assert.ok(p.includes('修复了 2 个 bug'), 'BUG 条目汇总为一句并带条数');
+  assert.ok(p.includes('关联范围'), '关联范围小节保留');
+});
 
-  t(`L1-2 ${name}提示词给出 REQ 条目文件路径规则，引导自行读取`, () => {
-    const p = build();
-    assert.ok(
-      p.includes('<项目根>/agent-team-board/data/requirements/<REQ-ID>/'),
-      '条目说明文件路径规则（占位符形态，项目路径已在提示词头部给出）',
-    );
-    assert.ok(!p.includes('data/bugs/'), '不引导读取 BUG 条目文件');
-  });
-}
+t('L1-2 AI 总结提示词给出 REQ 条目文件路径规则，引导自行读取', () => {
+  const p = summaryPrompt();
+  assert.ok(
+    p.includes('<项目根>/agent-team-board/data/requirements/<REQ-ID>/'),
+    '条目说明文件路径规则（占位符形态，项目路径已在提示词头部给出）',
+  );
+  assert.ok(!p.includes('data/bugs/'), '不引导读取 BUG 条目文件');
+});
+
+t('L1-2b AI 翻译提示词不再携带关联范围（BUG-20260923-003：翻译以基准文档为唯一语境）', () => {
+  const tp = translatePrompt();
+  assert.ok(!tp.includes('- REQ-20260921-001') && !tp.includes('- REQ-20260921-002'), '翻译提示词不再列出 REQ 编号');
+  assert.ok(!tp.includes('- BUG-20260921-001') && !tp.includes('- BUG-20260921-002'), 'BUG 编号不出现');
+  assert.ok(!tp.includes('修复了'), '无 BUG 汇总句');
+  assert.ok(!tp.includes('关联范围'), '「关联范围」节不再输出');
+  assert.ok(!tp.includes('<项目根>/agent-team-board/data/requirements/<REQ-ID>/'), '无条目路径规则行');
+});
 
 /* ---------- L1-3 其余要素保持既有口径 ---------- */
 
@@ -84,10 +93,10 @@ t('L1-3 AI 总结提示词其余要素保持：项目路径/计划号/版本号/
   assert.ok(p.includes('不得编造'), '写作约束保留');
 });
 
-t('L1-3 AI 翻译提示词其余要素保持：唯一基准嵌入/目标清单/回执指令/翻译约束', () => {
+t('L1-3 AI 翻译提示词其余要素保持：目标清单/回执指令/翻译约束；基准改路径化（BUG-20260923-003）', () => {
   const tp = translatePrompt();
   assert.ok(tp.includes('tr-20260921-010101-cd01'), '翻译提示词带 runId');
-  assert.ok(tp.includes('# 基准'), '翻译基准（已审核默认语言全文）嵌入提示词');
+  assert.ok(!tp.includes('# 基准'), '翻译基准全文不再内嵌提示词（BUG-20260923-003 路径化口径）');
   assert.ok(tp.includes('唯一') && tp.includes('基准'), '唯一基准约束');
   for (const f of ['README_en.md', 'CHANGELOG_en.md', 'FEATURES_en.md', 'AGENTS_en.md']) {
     assert.ok(tp.includes(f), `翻译目标清单含 ${f}`);
@@ -137,7 +146,7 @@ t('L1-5 边界：无 BUG 不出汇总句；无 REQ 不出路径规则行；空 i
   assert.ok(!pEmpty.includes('修复了') && !pEmpty.includes('<REQ-ID>'), '空 items 不产出条目行与路径规则');
 
   const tReq = translatePrompt(reqOnly);
-  assert.ok(!tReq.includes('修复了') && tReq.includes('- REQ-20260921-001'), '翻译提示词同口径（无 BUG 不出汇总句）');
+  assert.ok(!tReq.includes('修复了') && !tReq.includes('REQ-20260921-001'), '翻译提示词不携带条目单号（BUG-20260923-003：无 BUG 也不列 REQ）');
 });
 
 /* ---------- 汇总输出 ---------- */

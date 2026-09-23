@@ -122,7 +122,7 @@ t('L1-3 展开重名拦截：MIGRATION_EN 之类的手工逐语种 workaround �
   assert.equal(flow.customDocsExpandConflict(['MIGRATION', 'SECURITY'], ['cn', 'en']), null, '无冲突返回 null');
 });
 
-t('L1-4 AI 翻译提示词：目标清单与基准均含自定义；计数随清单联动；无自定义保持原文', () => {
+t('L1-4 AI 翻译提示词：目标与基准对应清单含自定义；计数随清单联动；无自定义保持原文（基准路径化口径随 BUG-20260923-003）', () => {
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) contents[f.file] = `# ${f.key} ${f.lang || ''}\n`;
   contents['MIGRATION.md'] = '# 迁移说明\n';
@@ -130,15 +130,15 @@ t('L1-4 AI 翻译提示词：目标清单与基准均含自定义；计数随清
     projectRoot: '/tmp/p', planId: 'BLD-20260922-001', runId: 'tr-20260922-000101-ab01',
     langs: ['cn', 'en'], readFile: readsOf(contents), customDocs: ['MIGRATION'],
   });
-  assert.ok(tp.includes('- MIGRATION_en.md（English / MIGRATION / 自定义，基准 MIGRATION.md）'), '目标清单含自定义其余语言文件（基准 = 默认语言 KEY.md）');
-  assert.ok(tp.includes('===== MIGRATION.md（默认语言 cn，已审核基准） ====='), '翻译基准嵌入自定义默认语言内容');
-  assert.ok(tp.includes('请逐个产出以下 5 个剩余语言文档（4 类 + 1 自定义 × 1 语言，剩余语言 en）'), '目标计数与构成随清单联动');
+  assert.ok(tp.includes('- MIGRATION.md → MIGRATION_en.md（English / MIGRATION / 自定义）'), '对应清单含自定义其余语言文件（基准 = 默认语言 KEY.md）');
+  assert.ok(!tp.includes('=====') && !tp.includes('# 迁移说明'), '基准全文不内嵌（BUG-20260923-003 路径化口径）');
+  assert.ok(tp.includes('共 5 个目标文件，4 类 + 1 自定义 × 1 语言，剩余语言 en'), '目标计数与构成随清单联动');
 
   const tp0 = flow.buildDocTranslatePrompt({
     projectRoot: '/tmp/p', planId: 'BLD-20260922-001', runId: 'tr-20260922-000101-ab01',
     langs: ['cn', 'en'], readFile: readsOf(contents),
   });
-  assert.ok(tp0.includes('请逐个产出以下 4 个剩余语言文档（4 类 × 1 语言，剩余语言 en）'), '无自定义保持原文口径');
+  assert.ok(tp0.includes('共 4 个目标文件，4 类 × 1 语言，剩余语言 en'), '无自定义保持原文口径');
   assert.ok(!tp0.includes('MIGRATION'), '无自定义不出现自定义字样');
 });
 
@@ -411,8 +411,8 @@ t('L3 服务接口：添加一次全语种展开 → 全审 → AI 翻译含自�
     // AI 翻译启动（canTranslate 含自定义默认语言全审）：提示词与账本含自定义
     r = await req(port, 'POST', `/api/build/docs-translate/start${P}`, { id: vid });
     assert.equal(r.status, 200, `AI 翻译启动：${r.text}`);
-    assert.ok(r.json.prompt.includes('- MIGRATION_en.md（English / MIGRATION / 自定义，基准 MIGRATION.md）'), '翻译目标含自定义');
-    assert.ok(r.json.prompt.includes('===== MIGRATION.md（默认语言 cn，已审核基准） ====='), '翻译基准含自定义');
+    assert.ok(r.json.prompt.includes('- MIGRATION.md → MIGRATION_en.md（English / MIGRATION / 自定义）'), '翻译目标含自定义');
+    assert.ok(!r.json.prompt.includes('====='), '翻译基准不内嵌全文（BUG-20260923-003 路径化）');
     assert.equal(r.json.run.counts.total, 5, '翻译账本 total = 4 + 1 自定义');
     translateStore.finishTranslateRun(dataDir, r.json.runId, { result: 'done', summary: '完成' });
 

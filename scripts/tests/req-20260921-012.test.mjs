@@ -118,7 +118,9 @@ t('L1-3 提示词：AI 总结仅默认语言 4 文件；AI 翻译以已审核默
   });
   assert.ok(tp.includes('tr-20260921-010101-cd01'), '翻译提示词带 runId');
   assert.ok(!tp.includes('三阶段流程'), 'BUG-20260921-005：翻译提示词关联范围同样不内嵌标题');
-  assert.ok(tp.includes('# 默认语言基准内容'), '翻译基准（已审核默认语言全文）嵌入提示词');
+  assert.ok(!tp.includes('REQ-20260921-012') && !tp.includes('关联范围'), 'BUG-20260923-003：翻译提示词不再携带条目单号');
+  assert.ok(!tp.includes('# 默认语言基准内容') && !tp.includes('====='), 'BUG-20260923-003：基准全文不内嵌，改路径化口径');
+  assert.ok(tp.includes('README.md → README_en.md'), 'BUG-20260923-003：基准 → 目标文件对应清单');
   assert.ok(tp.includes('唯一') && tp.includes('基准'), '声明唯一基准约束');
   for (const f of ['README_en.md', 'CHANGELOG_en.md', 'FEATURES_en.md', 'AGENTS_en.md']) {
     assert.ok(tp.includes(f), `翻译目标清单含 ${f}`);
@@ -423,12 +425,13 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 400, '未全审不可提交');
 
-    // AI 翻译启动：200 返回 runId + 提示词（基准嵌入）
+    // AI 翻译启动：200 返回 runId + 提示词（基准路径化，BUG-20260923-003）
     r = await req(port, 'POST', `/api/build/docs-translate/start${P}`, { id: vid });
     assert.equal(r.status, 200, `translate start：${r.text}`);
     const trRunId = r.json.runId;
     assert.ok(trRunId.startsWith('tr-'));
-    assert.ok(r.json.prompt.includes('README_en.md') && r.json.prompt.includes('# README'), '翻译提示词含目标清单与基准');
+    assert.ok(r.json.prompt.includes('README_en.md') && r.json.prompt.includes('README.md → README_en.md'), '翻译提示词含目标清单与基准对应路径');
+    assert.ok(!r.json.prompt.includes('# README'), '翻译提示词不内嵌基准全文（BUG-20260923-003）');
     assert.deepEqual(r.json.baselineShift || [], [], '启动时无基准变更');
     // 重复 start 拒绝
     r = await req(port, 'POST', `/api/build/docs-translate/start${P}`, { id: vid });
