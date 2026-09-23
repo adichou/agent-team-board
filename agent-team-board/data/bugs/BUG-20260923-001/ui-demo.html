@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260923-001 界面演示 — 挂起确认面板无法关闭</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #dcdfe3; --text: #1f2329; --muted: #8a919c;
+    --accent: #2f6fed; --accent-weak: #e8effd; --ok: #1f9d55; --ok-weak: #e6f6ec;
+    --warn: #b25e09; --warn-weak: #fdf3e3; --err: #d54941; --err-weak: #fbeae9;
+    --shadow: 0 8px 28px rgba(31,35,41,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d; --panel: #21242b; --line: #363b45; --text: #e6e8ed; --muted: #9aa1ad;
+      --accent: #5b8cff; --accent-weak: #1e2a44; --ok: #4cc38a; --ok-weak: #17322a;
+      --warn: #e5a54b; --warn-weak: #382c17; --err: #ff7873; --err-weak: #3d1f1e;
+      --shadow: 0 8px 28px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); padding: 16px; }
+  h1 { font-size: 17px; margin-bottom: 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .toolbar .scen { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .toolbar .scen.on { border-color: var(--accent); color: var(--accent); background: var(--accent-weak); }
+  .hint { font-size: 12.5px; color: var(--muted); width: 100%; }
+  .badge { display: inline-block; border-radius: 999px; font-size: 12px; padding: 1px 10px; }
+  .badge.bug { background: var(--err-weak); color: var(--err); }
+  .badge.fix { background: var(--ok-weak); color: var(--ok); }
+  /* 任务页卡片 */
+  .page { max-width: 860px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .card header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h3 { font-size: 14.5px; }
+  .chip { font-size: 12px; border-radius: 6px; padding: 1px 8px; background: var(--warn-weak); color: var(--warn); }
+  .flag { font-size: 12px; color: var(--warn); background: var(--warn-weak); border-radius: 6px; padding: 1px 8px; }
+  .card p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .card .act { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .progress { flex: 1; min-width: 160px; height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; display: none; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .progress.run { display: block; }
+  .verdict { font-size: 12.5px; margin-top: 6px; display: none; }
+  .verdict.ok { display: block; color: var(--ok); }
+  .verdict.bad { display: block; color: var(--err); }
+  /* 按钮 */
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  /* 侧拉面板 */
+  .side-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; }
+  .side-mask.open { display: block; }
+  .side { position: fixed; top: 0; right: -480px; width: 460px; max-width: 94vw; height: 100%; background: var(--panel); box-shadow: var(--shadow); display: flex; flex-direction: column; transition: right .22s ease; z-index: 10; }
+  .side.open { right: 0; }
+  .side-head { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .side-head .tt { flex: 1; }
+  .side-head h3 { font-size: 15px; }
+  .side-head .scope { color: var(--muted); font-size: 12.5px; }
+  .icon-btn { border: 0; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+  .icon-btn:hover { background: var(--bg); color: var(--text); }
+  .side-body { flex: 1; overflow: auto; padding: 14px 16px; }
+  .side-foot { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .msg { border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; white-space: pre-line; display: none; }
+  .msg.show { display: block; }
+  .msg.err { background: var(--err-weak); color: var(--err); }
+  .msg.ok { background: var(--ok-weak); color: var(--ok); }
+  .msg.info { background: var(--accent-weak); color: var(--accent); }
+  .grp-head { font-size: 13px; color: var(--muted); margin: 10px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .st-in { color: var(--ok); } .st-out { color: var(--warn); }
+  .chg { border-radius: 5px; padding: 0 6px; font-size: 12px; }
+  .chg.k-add { background: var(--ok-weak); color: var(--ok); }
+  .chg.k-mod { background: var(--accent-weak); color: var(--accent); }
+  select, textarea { font: inherit; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--text); padding: 4px 8px; }
+  textarea { width: 100%; min-height: 56px; resize: vertical; }
+  .muted { color: var(--muted); }
+  .loading, .err-view { text-align: center; padding: 40px 10px; color: var(--muted); }
+  .err-view .btn { margin: 10px 6px 0; }
+  .ignored-tip { position: fixed; right: 12px; bottom: 12px; background: var(--err-weak); color: var(--err); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; display: none; z-index: 20; max-width: 320px; }
+  .ignored-tip.show { display: block; }
+  .kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; font-size: 12px; background: var(--bg); }
+</style>
+</head>
+<body>
+<h1>BUG-20260923-001 — 挂起确认面板无法关闭（界面演示）</h1>
+<p class="sub">对照「缺陷现状 / 修复期望」两种模式：在确认任务运行中分别点击右上角 ✕、底部「关闭」或按 <span class="kbd">Esc</span>，观察面板能否关闭、任务是否继续。纯前端模拟，无网络依赖。</p>
+
+<div class="toolbar">
+  <span class="seg" id="modeSeg">
+    <button type="button" data-mode="bug" class="on">缺陷现状</button>
+    <button type="button" data-mode="fixed">修复期望</button>
+  </span>
+  <button type="button" class="scen on" data-scen="form">场景：正常表单</button>
+  <button type="button" class="scen" data-scen="fail">场景：确认失败</button>
+  <button type="button" class="scen" data-scen="resolved">场景：已确认（终态）</button>
+  <span class="hint" id="modeHint"></span>
+</div>
+
+<div class="page">
+  <article class="card" id="card">
+    <header>
+      <span class="chip">提交挂起</span>
+      <h3>REQ-20260922-009 · 任务页「待人工确认」</h3>
+      <span class="flag">部分提交，开发未完成</span>
+    </header>
+    <p>已提交：1 组 · 本单可归属 2 · 归属待确认 1 —— 队列已挂起，等待人工确认补交。</p>
+    <div class="act">
+      <button type="button" class="btn small" id="verifyBtn">重新核验</button>
+      <button type="button" class="btn primary small" id="openBtn">查看并确认</button>
+      <div class="progress" id="cardProgress"><i></i></div>
+      <span class="muted" id="cardState" style="font-size:12.5px"></span>
+    </div>
+    <p class="verdict" id="verdict"></p>
+  </article>
+</div>
+
+<div class="side-mask" id="mask"></div>
+<aside class="side" id="side" role="dialog" aria-label="挂起确认">
+  <div class="side-head">
+    <div class="tt">
+      <h3 id="panelTitle">提交挂起 · REQ-20260922-009</h3>
+      <div class="scope">核对文件与差异后确认：服务端将重新核验、补交并验证测试，通过后恢复队列</div>
+    </div>
+    <button type="button" class="icon-btn" id="xBtn" title="关闭（Esc）" aria-label="关闭挂起确认面板">✕</button>
+  </div>
+  <div class="side-body" id="panelBody">
+    <div class="msg" id="msg"></div>
+    <div id="viewLoading" class="loading" hidden>正在读取挂起详情…</div>
+    <div id="viewError" class="err-view" hidden>
+      <p>挂起详情读取失败：服务暂不可用（模拟）</p>
+      <button type="button" class="btn" id="errClose">关闭</button>
+      <button type="button" class="btn primary" id="errRetry">重试</button>
+    </div>
+    <div id="viewForm" hidden>
+      <div class="grp-head">本单可归属（2）</div>
+      <table>
+        <thead><tr><th>文件</th><th>变更</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td>scripts/lib/queue.mjs</td><td><span class="chg k-mod">修改</span></td><td class="st-in">已入库</td></tr>
+          <tr><td>scripts/web/app.js</td><td><span class="chg k-mod">修改</span></td><td class="st-out">未提交</td></tr>
+        </tbody>
+      </table>
+      <div class="grp-head">归属待确认（1）——全局 / 来源不明，不得静默归为本单</div>
+      <table>
+        <thead><tr><th>文件</th><th>变更</th><th>状态</th><th>归属选择</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>README.md</td><td><span class="chg k-add">新增</span></td><td class="st-out">未提交</td>
+            <td><select id="attrSel" aria-label="归属选择">
+              <option value="">待选择（归属待确认）</option>
+              <option value="include">计入本次补交</option>
+              <option value="exclude">排除（保持工作区）</option>
+            </select></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="grp-head">说明（可选）</div>
+      <textarea id="note" placeholder="补充说明将随确认留档…"></textarea>
+    </div>
+  </div>
+  <div class="side-foot">
+    <span class="muted" style="font-size:12px;margin-right:auto" id="footState"></span>
+    <button type="button" class="btn" id="keepBtn">保持挂起</button>
+    <button type="button" class="btn primary" id="goBtn">确认并继续</button>
+    <button type="button" class="btn" id="closeBtn">关闭</button>
+  </div>
+</aside>
+
+<div class="ignored-tip" id="ignoredTip"></div>
+
+<script>
+(function () {
+  'use strict';
+  var state = {
+    mode: 'bug',          // bug = 缺陷现状，fixed = 修复期望
+    scen: 'form',         // form | fail | resolved
+    open: false,
+    view: 'loading',      // loading | error | form
+    busy: false,          // 对应 confirmSide.busy
+    running: false,       // 服务端确认任务运行中（关闭面板不影响）
+    resolved: false,
+    ignored: 0,
+    timer: null,
+    prog: 0
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var side = $('side'), mask = $('mask'), msg = $('msg'), ignoredTip = $('ignoredTip');
+
+  function setMsg(text, kind) {
+    if (!text) { msg.className = 'msg'; msg.textContent = ''; return; }
+    msg.className = 'msg show ' + (kind || 'info');
+    msg.textContent = text;
+  }
+  function footState() {
+    $('footState').textContent = state.resolved ? '已确认恢复（终态只读）'
+      : state.running ? '确认任务运行中（服务端）…'
+      : state.busy ? '确认中（busy）…' : '';
+  }
+  function renderButtons() {
+    var lock = state.busy || state.running || state.resolved;
+    $('keepBtn').disabled = lock;
+    $('goBtn').disabled = state.busy || state.resolved;
+    $('goBtn').textContent = state.busy ? '正在核验提交与测试…' : (state.resolved ? '已确认恢复' : '确认并继续');
+    $('attrSel').disabled = lock;
+    $('note').disabled = state.resolved;
+    footState();
+  }
+  function setView(v) {
+    state.view = v;
+    $('viewLoading').hidden = v !== 'loading';
+    $('viewError').hidden = v !== 'error';
+    $('viewForm').hidden = v !== 'form';
+  }
+  function openPanel(delayLoad) {
+    state.open = true; state.ignored = 0;
+    side.classList.add('open'); mask.classList.add('open');
+    setMsg('');
+    if (delayLoad) { setView('loading'); setTimeout(function () { setView('form'); renderButtons(); }, 600); }
+    else { setView(state.view === 'form' || state.view === 'error' ? state.view : 'form'); }
+    renderButtons();
+  }
+  function closePanel() {
+    state.open = false;
+    side.classList.remove('open'); mask.classList.remove('open');
+    ignoredTip.classList.remove('show');
+  }
+  // 三入口统一走这里：缺陷模式下 busy 期间被静默吞掉
+  function requestClose(via) {
+    if (!state.open) return;
+    if (state.mode === 'bug' && state.busy) {
+      state.ignored += 1;
+      ignoredTip.textContent = '缺陷现状：' + via + ' 已点击 ' + state.ignored + ' 次，无任何响应（按钮未禁用、无提示）——当前只能刷新页面关闭面板';
+      ignoredTip.classList.add('show');
+      return;
+    }
+    closePanel();
+  }
+  function cardRunning(text) {
+    $('cardProgress').classList.add('run');
+    $('cardState').textContent = text || '确认任务运行中：核验 / 补交 / 测试复验…';
+  }
+  function cardProgress(p) { $('cardProgress').querySelector('i').style.width = p + '%'; }
+  function cardVerdict(ok, text) {
+    $('cardProgress').classList.remove('run');
+    $('cardState').textContent = '';
+    var v = $('verdict');
+    v.className = 'verdict ' + (ok ? 'ok' : 'bad');
+    v.textContent = text;
+  }
+  function startConfirm() {
+    if (state.busy || state.resolved) return;
+    var attr = $('attrSel').value;
+    if (!attr) {
+      setMsg('确认被拦截：归属待确认项未处理（README.md）——每个路径须显式选择「计入本次补交 / 排除」，全局文件不得静默整批归为本单', 'err');
+      return;
+    }
+    state.busy = true; state.running = true; state.prog = 0;
+    $('verdict').className = 'verdict';
+    setMsg('');
+    cardRunning();
+    renderButtons();
+    var fail = state.scen === 'fail';
+    var total = fail ? 2200 : 6000;
+    var t0 = Date.now();
+    state.timer = setInterval(function () {
+      var k = Math.min(1, (Date.now() - t0) / total);
+      state.prog = Math.round(k * 100);
+      cardProgress(state.prog);
+      if (k >= 1) {
+        clearInterval(state.timer); state.timer = null;
+        state.running = false; state.busy = false;
+        if (fail) {
+          cardVerdict(false, '最近核验：未通过——测试复验失败（可重试）');
+          setMsg('确认失败：测试复验未通过（可重试）', 'err');
+        } else {
+          state.resolved = true;
+          cardVerdict(true, '最近核验：通过 · 已确认恢复：补交 1 组提交，队列已恢复');
+          setMsg('已确认恢复：补交 1 组提交，核验通过，队列已恢复；条目验收仍走「确认完成」', 'ok');
+        }
+        renderButtons();
+      }
+    }, 200);
+  }
+  function resetAll(scen) {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.scen = scen;
+    state.busy = false; state.running = false; state.resolved = false;
+    $('cardProgress').classList.remove('run'); cardProgress(0);
+    $('cardState').textContent = '';
+    $('verdict').className = 'verdict'; $('verdict').textContent = '';
+    $('attrSel').value = scen === 'form' ? '' : 'include';
+    $('note').value = '';
+    closePanel();
+    setMsg('');
+    if (scen === 'resolved') {
+      state.resolved = true;
+      cardVerdict(true, '最近核验：通过 · 已确认恢复：无需补交（已完整入库），队列已恢复');
+    }
+  }
+  function renderMode() {
+    var bug = state.mode === 'bug';
+    $('modeHint').innerHTML = bug
+      ? '<span class="badge bug">缺陷现状</span> 「确认并继续」后 busy 贯穿整个任务观察期（默认约 60 分 20 秒）：✕ / 「关闭」 / Esc 全部静默无响应，仅刷新可关。'
+      : '<span class="badge fix">修复期望</span> 任何时刻均可关闭面板；已受理的确认任务在服务端继续执行，卡片进度与结论照常回填，重开面板状态正确。';
+    ignoredTip.classList.remove('show');
+  }
+
+  // 事件绑定
+  $('modeSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-mode]'); if (!b) return;
+    state.mode = b.dataset.mode;
+    Array.prototype.forEach.call($('modeSeg').children, function (x) { x.classList.toggle('on', x === b); });
+    renderMode();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.scen'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.scen'), function (x) { x.classList.toggle('on', x === b); });
+      resetAll(b.dataset.scen);
+    });
+  });
+  $('openBtn').addEventListener('click', function () { openPanel(true); });
+  $('xBtn').addEventListener('click', function () { requestClose('右上角 ✕'); });
+  $('closeBtn').addEventListener('click', function () { requestClose('底部「关闭」'); });
+  mask.addEventListener('click', function () { requestClose('遮罩点击'); });
+  $('errClose').addEventListener('click', closePanel);
+  $('errRetry').addEventListener('click', function () { setView('loading'); setTimeout(function () { setView('form'); renderButtons(); }, 500); });
+  $('goBtn').addEventListener('click', startConfirm);
+  $('keepBtn').addEventListener('click', function () {
+    setMsg('已保持挂起：现场与队列暂停保留（演示反馈，不发请求）', 'ok');
+  });
+  $('verifyBtn').addEventListener('click', function () {
+    cardRunning('重新核验运行中…'); cardProgress(40);
+    setTimeout(function () { cardProgress(100); cardVerdict(true, '最近核验：通过 · 提交完整'); }, 1200);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && state.open) requestClose('Esc');
+  });
+
+  renderMode();
+  setView('form');
+})();
+</script>
+</body>
+</html>
