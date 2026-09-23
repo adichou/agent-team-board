@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260923-004 删除需求需要同步提交 — 界面演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea; --text: #1f2328;
+    --muted: #6b7280; --accent: #2563eb; --danger: #dc2626; --ok: #16a34a;
+    --warn-bg: #fef2f2; --code-bg: #f3f4f6; --card-hover: #fafbfc;
+    --chip-req: #dbeafe; --chip-req-text: #1d4ed8; --chip-bug: #fee2e2; --chip-bug-text: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #1a1f26; --line: #2a313a; --text: #e6e8eb;
+      --muted: #9aa3af; --accent: #60a5fa; --danger: #f87171; --ok: #4ade80;
+      --warn-bg: #2a1a1a; --code-bg: #0f1318; --card-hover: #20262e;
+      --chip-req: #1e3a5f; --chip-req-text: #93c5fd; --chip-bug: #3f1d1d; --chip-bug-text: #fca5a5;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+         background: var(--bg); color: var(--text); padding: 20px; font-size: 14px; line-height: 1.6; }
+  header { max-width: 1100px; margin: 0 auto 14px; }
+  header h1 { font-size: 18px; margin-bottom: 4px; }
+  header p { color: var(--muted); font-size: 13px; }
+  .controls { max-width: 1100px; margin: 0 auto 14px; background: var(--panel); border: 1px solid var(--line);
+              border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .controls .label { font-weight: 600; font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: transparent; color: var(--text); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; user-select: none; }
+  .switch input { accent-color: var(--accent); width: 15px; height: 15px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px;
+         padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .btn:hover { background: var(--card-hover); }
+  main { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 5fr 6fr; gap: 14px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .panel h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 10px;
+              display: flex; justify-content: space-between; align-items: center; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+          transition: opacity .25s, transform .25s; }
+  .card.removing { opacity: 0; transform: translateX(12px); }
+  .card .row { display: flex; align-items: center; gap: 8px; }
+  .chip { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+  .chip.req { background: var(--chip-req); color: var(--chip-req-text); }
+  .chip.bug { background: var(--chip-bug); color: var(--chip-bug-text); }
+  .card .title { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .del { border: 1px solid var(--danger); color: var(--danger); background: transparent; border-radius: 7px;
+         padding: 3px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .del:hover:not(:disabled) { background: var(--danger); color: #fff; }
+  .del:disabled { opacity: .55; cursor: wait; }
+  .empty { border: 1px dashed var(--line); border-radius: 10px; padding: 26px; text-align: center;
+           color: var(--muted); font-size: 13px; }
+  .log { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  .log .commit { padding: 7px 8px; border-radius: 7px; margin-bottom: 6px; background: var(--code-bg); }
+  .log .commit.new { outline: 2px solid var(--ok); animation: flash 1.2s ease 2; }
+  @keyframes flash { 50% { outline-color: transparent; } }
+  .log .hash { color: var(--ok); font-weight: 700; margin-right: 8px; }
+  .log .msg { word-break: break-all; }
+  .log .date { color: var(--muted); margin-left: 8px; font-size: 11px; }
+  .diff { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  .diff .line { padding: 4px 8px; border-radius: 6px; margin-bottom: 4px; background: var(--code-bg);
+                word-break: break-all; }
+  .diff .code-d { color: var(--danger); font-weight: 700; margin-right: 8px; }
+  .diff .clean { color: var(--muted); text-align: center; padding: 14px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .manual-commit { margin-top: 8px; }
+  /* 确认弹层 */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
+             align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-width: 460px;
+           width: 100%; padding: 18px; }
+  .modal h3 { font-size: 15px; margin-bottom: 10px; color: var(--danger); }
+  .modal p { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+  .modal p.note { color: var(--muted); }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .modal .confirm { background: var(--danger); border-color: var(--danger); color: #fff; }
+  /* toast */
+  .toasts { position: fixed; top: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+  .toast { border-radius: 10px; padding: 10px 14px; font-size: 13px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,.18);
+           word-break: break-all; animation: slidein .25s ease; }
+  .toast.ok { border-color: var(--ok); }
+  .toast.warn { border-color: var(--danger); background: var(--warn-bg); }
+  .toast.info { border-color: var(--accent); }
+  .toast .t { font-weight: 600; margin-bottom: 2px; }
+  .toast code { font-family: ui-monospace, Menlo, Consolas, monospace; background: var(--code-bg);
+                padding: 0 4px; border-radius: 4px; font-size: 12px; }
+  @keyframes slidein { from { transform: translateX(24px); opacity: 0; } }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--danger);
+          border-top-color: transparent; border-radius: 50%; animation: rot .7s linear infinite;
+          vertical-align: -2px; margin-right: 4px; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>REQ-20260923-004 删除需求需要同步提交 — 界面演示</h1>
+  <p>模拟 Status Board 网页端「待接受条目删除」入口：danger 二次确认 → 删除 → 反馈 git 同步提交结果。右侧并排展示 git 提交历史与工作区差异，对照「旧行为（不提交，差异滞留工作区）」与「新行为（删除即产生含单号的提交）」。CLI <code>atb delete</code> 行为与网页端同口径。</p>
+</header>
+
+<div class="controls">
+  <span class="label">行为模式</span>
+  <div class="seg" id="modeSeg">
+    <button data-mode="new" class="active">新：删除同步提交</button>
+    <button data-mode="old">旧：仅删除不提交（现状）</button>
+  </div>
+  <label class="switch"><input type="checkbox" id="failSwitch"> 模拟提交失败（index.lock）</label>
+  <label class="switch"><input type="checkbox" id="nogitSwitch"> 模拟非 git 仓库</label>
+  <button class="btn" id="resetBtn">重置演示</button>
+</div>
+
+<main>
+  <div class="col">
+    <div class="panel">
+      <h2>待接受（submitted）<span id="countBadge" style="font-weight:400"></span></h2>
+      <div id="list"></div>
+    </div>
+    <div class="panel">
+      <h2>说明</h2>
+      <div class="hint">
+        正常：删除成功且产生含单号提交，工作区无残留差异。<br>
+        提交失败：目录已移除不回滚，警示反馈 + 人工补提交指引（面板内可点「人工补提交」完成闭环）。<br>
+        非 git 仓库：删除成功，跳过同步提交并如实说明。<br>
+        空：待接受列表清空后的占位状态；删除中按钮进入加载态防重复点击。
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel">
+      <h2>git 提交历史 <span id="gitState" style="font-weight:400"></span></h2>
+      <div class="log" id="log"></div>
+    </div>
+    <div class="panel">
+      <h2>工作区差异（git status）</h2>
+      <div class="diff" id="diff"></div>
+      <button class="btn manual-commit" id="manualBtn" style="display:none">人工补提交（git add -A -- &lt;目录&gt; &amp;&amp; git commit）</button>
+    </div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="mTitle">删除 ？</h3>
+    <p id="mBody"></p>
+    <p class="note" id="mNote"></p>
+    <div class="actions">
+      <button class="btn" id="mCancel">取消</button>
+      <button class="btn confirm" id="mConfirm">删除</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  var INITIAL_ITEMS = [
+    { id: 'REQ-20260923-005', type: 'req', title: '看板列表支持按状态过滤', files: ['README.md', 'design.md', 'test-cases.md'] },
+    { id: 'REQ-20260923-006', type: 'req', title: '导出周报 Markdown 摘要', files: ['README.md', 'design.md'] },
+    { id: 'BUG-20260923-002', type: 'bug', title: '深色模式下确认弹层文字对比度不足', files: ['README.md'] }
+  ];
+  var BASE_COMMITS = [
+    { hash: 'c3f8a91', msg: 'doc: 开发收口恢复提交条目文档 REQ-20260923-002', date: '09-23 14:12' },
+    { hash: '8d21e07', msg: 'test: 状态过滤用例补齐 REQ-20260922-006', date: '09-23 10:40' }
+  ];
+  var state = { mode: 'new', items: [], commits: [], dirty: [], busy: false };
+
+  function $(id) { return document.getElementById(id); }
+  function randHash() {
+    var s = ''; var hex = '0123456789abcdef';
+    for (var i = 0; i < 7; i++) s += hex[Math.floor(Math.random() * 16)];
+    return s;
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function nowStamp() {
+    var d = new Date();
+    return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function render() {
+    var list = $('list');
+    $('countBadge').textContent = state.items.length ? state.items.length + ' 条' : '';
+    if (!state.items.length) {
+      list.innerHTML = '<div class="empty">待接受队列为空<br>（新登记的条目会出现在这里）</div>';
+    } else {
+      var html = '';
+      for (var i = 0; i < state.items.length; i++) {
+        var it = state.items[i];
+        html += '<div class="card" data-id="' + it.id + '"><div class="row">'
+          + '<span class="chip ' + (it.type === 'req' ? 'req' : 'bug') + '">' + it.id + '</span>'
+          + '<span class="title">' + it.title + '</span>'
+          + '<button class="del" data-del="' + it.id + '"' + (state.busy ? ' disabled' : '') + '>删除</button>'
+          + '</div><div class="meta">agent-team-board/data/' + (it.type === 'req' ? 'requirements' : 'bugs') + '/' + it.id + '/（' + it.files.length + ' 个文件）</div></div>';
+      }
+      list.innerHTML = html;
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-del]'), function (b) {
+      b.addEventListener('click', function () { askDelete(b.dataset.del); });
+    });
+
+    var nogit = $('nogitSwitch').checked;
+    $('gitState').textContent = nogit ? '（当前目录不是 git 仓库）' : '';
+    var log = $('log');
+    if (nogit) {
+      log.innerHTML = '<div class="clean">fatal: not a git repository — 同步提交将跳过</div>';
+    } else if (!state.commits.length) {
+      log.innerHTML = '<div class="clean">（尚无提交）</div>';
+    } else {
+      var h = '';
+      for (var j = 0; j < state.commits.length; j++) {
+        var c = state.commits[j];
+        h += '<div class="commit' + (c.fresh ? ' new' : '') + '"><span class="hash">' + c.hash + '</span>'
+          + '<span class="msg">' + c.msg + '</span><span class="date">' + c.date + '</span></div>';
+      }
+      log.innerHTML = h;
+    }
+
+    var diff = $('diff');
+    if (nogit) {
+      diff.innerHTML = '<div class="clean">非 git 仓库，无工作区差异概念</div>';
+      $('manualBtn').style.display = 'none';
+    } else if (!state.dirty.length) {
+      diff.innerHTML = '<div class="clean">工作区干净（无未提交差异）</div>';
+      $('manualBtn').style.display = 'none';
+    } else {
+      var dh = '';
+      for (var k = 0; k < state.dirty.length; k++) {
+        dh += '<div class="line"><span class="code-d">D</span>' + state.dirty[k] + '</div>';
+      }
+      diff.innerHTML = dh;
+      $('manualBtn').style.display = '';
+    }
+  }
+
+  function toast(kind, title, body) {
+    var t = document.createElement('div');
+    t.className = 'toast ' + kind;
+    t.innerHTML = '<div class="t">' + title + '</div>' + (body ? '<div>' + body + '</div>' : '');
+    $('toasts').appendChild(t);
+    if (kind !== 'warn') setTimeout(function () { t.remove(); }, 4200);
+    else {
+      var x = document.createElement('button');
+      x.className = 'btn'; x.textContent = '知道了'; x.style.marginTop = '6px';
+      x.addEventListener('click', function () { t.remove(); });
+      t.appendChild(x);
+    }
+  }
+
+  var pendingId = null;
+  function askDelete(id) {
+    if (state.busy) return;
+    var it = state.items.filter(function (x) { return x.id === id; })[0];
+    if (!it) return;
+    pendingId = id;
+    $('mTitle').textContent = '删除 ' + id + '？';
+    $('mBody').innerHTML = '「' + it.title + '」仍在待接受阶段；删除将移除整个条目目录（含全部文档），看板层面不可恢复。';
+    $('mNote').textContent = state.mode === 'new' && !$('nogitSwitch').checked
+      ? '删除将同步产生一条含单号的 git 提交（仅提交该目录的删除差异，不卷入其他改动，不 push）。'
+      : '';
+    $('overlay').classList.add('show');
+  }
+
+  function doDelete() {
+    var id = pendingId;
+    $('overlay').classList.remove('show');
+    if (!id) return;
+    var it = state.items.filter(function (x) { return x.id === id; })[0];
+    if (!it) return;
+    var nogit = $('nogitSwitch').checked;
+    var fail = $('failSwitch').checked;
+    var dirRel = 'agent-team-board/data/' + (it.type === 'req' ? 'requirements' : 'bugs') + '/' + it.id + '/';
+    state.busy = true;
+    render();
+    var btn = document.querySelector('[data-del="' + id + '"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>删除中'; }
+    var card = document.querySelector('.card[data-id="' + id + '"]');
+    if (card) card.style.opacity = '.55';
+
+    setTimeout(function () {
+      state.busy = false;
+      state.items = state.items.filter(function (x) { return x.id !== id; });
+      var dirtyPaths = it.files.map(function (f) { return dirRel + f; });
+
+      if (nogit) {
+        toast('info', '✓ 已删除 ' + id, '当前目录不是 git 仓库，已跳过同步提交；删除不可恢复。');
+      } else if (state.mode === 'old') {
+        state.dirty = state.dirty.concat(dirtyPaths);
+        toast('ok', '✓ 已删除 ' + id, '（旧行为：不产生提交）删除差异滞留工作区，git 历史无痕，需人工补提交。');
+      } else if (fail) {
+        state.dirty = state.dirty.concat(dirtyPaths);
+        state.pendingManual = { id: id, title: it.title };
+        toast('warn', '⚠ 已删除 ' + id + '，但同步提交失败',
+          'fatal: Unable to create index.lock: File exists<br>删除已生效、不回滚；请在终端补提交：<code>git add -A -- ' + dirRel + ' &amp;&amp; git commit -m "删除 ' + id + '"</code>');
+      } else {
+        state.commits.unshift({
+          hash: randHash(), fresh: true,
+          msg: 'doc: 删除待接受条目 ' + it.title + ' ' + id,
+          date: nowStamp()
+        });
+        toast('ok', '✓ 已删除 ' + id, '同步提交 <code>' + state.commits[0].hash + '</code> 已入库（仅含该条目目录的删除差异，未 push）。');
+        setTimeout(function () { state.commits.forEach(function (c) { c.fresh = false; }); render(); }, 2600);
+      }
+      render();
+    }, 900);
+  }
+
+  $('mCancel').addEventListener('click', function () { $('overlay').classList.remove('show'); pendingId = null; });
+  $('overlay').addEventListener('click', function (e) { if (e.target === e.currentTarget) { e.currentTarget.classList.remove('show'); pendingId = null; } });
+  $('mConfirm').addEventListener('click', doDelete);
+
+  $('manualBtn').addEventListener('click', function () {
+    if (!state.dirty.length) return;
+    var n = state.dirty.length;
+    state.commits.unshift({
+      hash: randHash(), fresh: true,
+      msg: 'fix: 人工确认补交（删除差异 ' + n + ' 个路径）',
+      date: nowStamp()
+    });
+    state.dirty = [];
+    toast('ok', '✓ 人工补提交完成', '提交 <code>' + state.commits[0].hash + '</code>：删除差异已入库，工作区恢复干净。');
+    setTimeout(function () { state.commits.forEach(function (c) { c.fresh = false; }); render(); }, 2600);
+    render();
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('#modeSeg button'), function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('#modeSeg button').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+      state.mode = b.dataset.mode;
+      render();
+    });
+  });
+  $('failSwitch').addEventListener('change', render);
+  $('nogitSwitch').addEventListener('change', render);
+  $('resetBtn').addEventListener('click', reset);
+
+  function reset() {
+    state.mode = document.querySelector('#modeSeg button.active').dataset.mode;
+    state.items = JSON.parse(JSON.stringify(INITIAL_ITEMS));
+    state.commits = JSON.parse(JSON.stringify(BASE_COMMITS));
+    state.dirty = [];
+    state.busy = false;
+    render();
+  }
+  reset();
+})();
+</script>
+</body>
+</html>
