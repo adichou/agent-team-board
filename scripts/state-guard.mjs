@@ -4,18 +4,20 @@
 // Codex 用 hooks/codex.json 的 command schema——BUG-20260906-014），hook 输入 JSON 从 stdin 读取：
 //   state-guard.mjs file  ① Write/Edit 直写 agent-team-board/runtime/status/**.json（条目实时状态）
 //                         ② 无有效认领锁时 Write/Edit 本插件源码（scripts/commands/skills/hooks/manifest 等；
-//                            插件根第一层 README.md 例外——REQ-20260918-002：纯文档，无锁即可更新）
+//                            插件根第一层发布文档例外——REQ-20260918-002 根 README.md，REQ-20260923-001
+//                            扩展到四类标准发布文档 CHANGELOG/FEATURES/AGENTS 与版本记录 v.customDocs
+//                            清单内自定义文档：纯文档，无锁即可更新）
 //   state-guard.mjs bash  ① 改写 intent 触碰 status.json（cat 等只读放行）
 //                         ② atb status <ID> accepted|planned|done（人工专属）
 //                         ③ curl 打 Status Board 人工 API
 //                         ④ 无有效认领锁时 Bash 改写本插件源码（sed/tee/重定向等；插件根第一层
-//                            README.md 同样豁免——REQ-20260918-002）
+//                            发布文档同口径豁免——REQ-20260918-002 / REQ-20260923-001）
 //                         ⑤ 流程外 git commit（仅看板项目内；REQ-20260911-009——系统自动
 //                            提交不经 Agent Bash；REQ-20260917-002 起放行文档讨论轮提交：
 //                            仅条目目录用户数据 + 带 pathspec + 主题含条目编号；REQ-20260918-002
-//                            起放行根 README.md 文档提交：pathspec 全为插件根 README.md + 主题
-//                            「类型: 描述 单号」合规；参数文本中的 git+commit 字样不再误拦
-//                            ——按命令位语义识别真实提交命令）
+//                            起放行根 README.md 文档提交，REQ-20260923-001 扩展为全部豁免发布
+//                            文档：pathspec 全为豁免文档 + 主题「类型: 描述 单号」合规；参数文本
+//                            中的 git+commit 字样不再误拦——按命令位语义识别真实提交命令）
 // 放行条件（源码保护）：当前项目看板 .locks/ 下存在未过期（24h）认领锁。
 // 锁生命周期（BUG-20260903-002）：claim 创建 → report / 确认完成 / 驳回 即释放，
 // 残留锁可用 atb prune-locks 清理——「有锁=确有会话在开发中」的放行条件因此重新收紧。
@@ -26,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCommitSubject } from './lib/commit-store.mjs';
+import { PUBLISH_DOC_KEYS, customDocsOf } from './lib/publish-flow.mjs';
 
 const mode = process.argv[2];
 
@@ -68,6 +71,45 @@ const CLAIM_LOCK_STALE_MS = 24 * 60 * 60 * 1000;
 // Bash 侧 token 判定（BUG-20260907-008）统一口径。
 // REQ-20260918-002：插件根第一层的 README.md（纯文档）豁免——无锁改写放行，仅此单文件，
 // 其他根下文件与目录内同名 README.md 保护不变。
+// REQ-20260918-002：插件根第一层的 README.md（纯文档）豁免——无锁改写放行。
+// REQ-20260923-001：豁免扩展为插件根第一层「发布文档」单文件集合——
+//   ① 四类标准发布文档（publish-flow PUBLISH_DOC_KEYS：README / CHANGELOG / FEATURES /
+//      AGENTS 各 <KEY>.md，与 publishDocFiles 默认语言文件名一致）；
+//   ② 自定义发布文档（文档编写页「＋ 添加文档」加入，REQ-20260922-003）：以版本记录
+//      v.customDocs 为事实源（<插件根>/agent-team-board/runtime/builds/versions/<BLD-*>/
+//      version.json，发布文档位于板根上一级 = 插件根第一层，守卫按目标落点取值、与
+//      hook.cwd 无关；多条版本记录取并集——守卫做静态判定无「当前活跃版本」可用，
+//      比活跃版口径宽的部分见条目 test-report.md 待人工落定）。
+// 边界保守口径（README「待确认」1/2 落定前不弱化既有拦截）：语言变体 <KEY>_<lang>.md
+// 与点号命名（README_en.md / README.en.md / MIGRATION_en.md）不豁免；LICENSE.md（单文件
+// 类，保留名不可能进 customDocs）与不在清单内的文件不豁免。文件名大小写敏感（customDocsOf
+// 归一为大写 KEY，publishDocFiles 恒输出大写文件名；小写变体不匹配不豁免，与既有 README
+// 口径一致）。
+let exemptRootDocsCache = null;
+function exemptRootDocNames() {
+  if (exemptRootDocsCache) return exemptRootDocsCache;
+  const names = new Set(PUBLISH_DOC_KEYS.map((key) => `${key}.md`));
+  const versionsRoot = path.join(PLUGIN_ROOT, 'agent-team-board', 'runtime', 'builds', 'versions');
+  let versionDirs = [];
+  try {
+    versionDirs = fs.readdirSync(versionsRoot);
+  } catch { /* 无看板版本记录（如缓存安装形态）→ 仅标准四类 */ }
+  for (const name of versionDirs) {
+    if (!/^BLD-\d{8}-\d{3}$/.test(name)) continue;
+    try {
+      const v = JSON.parse(fs.readFileSync(path.join(versionsRoot, name, 'version.json'), 'utf8'));
+      for (const key of customDocsOf(v)) names.add(`${key}.md`);
+    } catch { /* 单条版本记录损坏不影响其余 */ }
+  }
+  exemptRootDocsCache = names;
+  return names;
+}
+
+// 豁免精确到插件根第一层的文档单文件名（REQ-20260923-001 规则 5）。
+function isExemptRootDocName(name) {
+  return typeof name === 'string' && exemptRootDocNames().has(name);
+}
+
 function realpathAncestralHitsPluginRoot(absPath) {
   let abs = path.resolve(absPath);
   const suffix = [];
@@ -77,8 +119,14 @@ function realpathAncestralHitsPluginRoot(absPath) {
         const real = fs.realpathSync(abs);
         const rel = path.relative(PLUGIN_ROOT, real);
         if (rel.startsWith('..') || path.isAbsolute(rel)) return false; // 插件根之外
-        if (rel === '') return suffix.length > 0 && suffix[0] !== 'docs' && suffix[0] !== 'agent-team-board' && suffix[0] !== 'README.md'; // 祖先即插件根：剩余段决定落点
-        return rel !== 'README.md' // 插件根第一层 README.md 豁免（REQ-20260918-002）
+        if (rel === '') {
+          // 祖先即插件根：剩余段决定落点——docs/ 与 agent-team-board/ 整目录豁免；
+          // 发布文档豁免精确到第一层单文件（suffix 恰一段且在豁免清单内）。
+          if (suffix.length === 0) return false;
+          if (suffix[0] === 'docs' || suffix[0] === 'agent-team-board') return false;
+          return !(suffix.length === 1 && isExemptRootDocName(suffix[0]));
+        }
+        return !isExemptRootDocName(rel) // 插件根第一层豁免发布文档（REQ-20260918-002 / REQ-20260923-001）
           && !rel.startsWith(`docs${path.sep}`) && !rel.startsWith(`agent-team-board${path.sep}`); // 看板数据目录豁免（docs/ 历史前缀 + agent-team-board/ 板根，REQ-20260916-007）
       } catch {
         return false;
@@ -91,17 +139,17 @@ function realpathAncestralHitsPluginRoot(absPath) {
   }
 }
 
-// REQ-20260918-002：判定路径归一（realpath，兼容软链别名与目标不存在时的祖先回溯）后
-// 是否恰好是插件根第一层的 README.md——提交豁免的范围口径，精确到该单文件。
-function isPluginRootReadme(absPath) {
+// REQ-20260918-002 / REQ-20260923-001：判定路径归一（realpath，兼容软链别名与目标不存在时
+// 的祖先回溯）后是否恰好是插件根第一层的豁免发布文档——提交豁免的范围口径，精确到单文件。
+function isPluginRootExemptDoc(absPath) {
   let abs = path.resolve(absPath);
   const suffix = [];
   for (;;) {
     if (fs.existsSync(abs)) {
       try {
         const real = fs.realpathSync(abs);
-        if (suffix.length === 0) return path.relative(PLUGIN_ROOT, real) === 'README.md';
-        return real === PLUGIN_ROOT && suffix.length === 1 && suffix[0] === 'README.md';
+        if (suffix.length === 0) return isExemptRootDocName(path.relative(PLUGIN_ROOT, real));
+        return real === PLUGIN_ROOT && suffix.length === 1 && isExemptRootDocName(suffix[0]);
       } catch {
         return false;
       }
@@ -604,13 +652,14 @@ function pathspecInItemScope(spec, baseDir, boardRoot) {
   return isItemUserDataAbs(path.resolve(baseDir, s), boardRoot);
 }
 
-// REQ-20260918-002：pathspec 归一后是否恰好落在插件根第一层 README.md（提交豁免范围）。
-// 静态口径与 pathspecInItemScope 同源（magic 前缀 / glob 元字符不展开直接拦）。
-function pathspecIsPluginRootReadme(spec, baseDir) {
+// REQ-20260918-002 / REQ-20260923-001：pathspec 归一后是否恰好是插件根第一层的豁免发布
+// 文档（提交豁免范围）。静态口径与 pathspecInItemScope 同源（magic 前缀 / glob 元字符
+// 不展开直接拦）。
+function pathspecIsExemptRootDoc(spec, baseDir) {
   const s = String(spec);
   if (!s || s === '-' || s.startsWith(':') || s.startsWith('^')) return false;
   if (/[*?[\]]/.test(s)) return false;
-  return isPluginRootReadme(path.resolve(baseDir, s));
+  return isPluginRootExemptDoc(path.resolve(baseDir, s));
 }
 
 // 环境变量赋值前缀 token（VAR=…）
@@ -756,8 +805,9 @@ function hasStdinShellConsumer(segments) {
 const COMMIT_SCOPE_HINT =
   '看板项目内 Agent 提交通道：①AI 开发到待测试由系统自动提交（run receipt 核验通过后执行，不经 Agent）；' +
   '②文档讨论轮可提交条目目录用户数据（agent-team-board/data/{requirements,bugs}/<条目ID>/ 内，' +
-  '命令带 pathspec 且提交主题含条目编号 REQ-/BUG-）；③根 README.md 纯文档可提交（pathspec 全为插件根' +
-  'README.md，主题须符合「类型: 描述 单号」提交规范，REQ-20260918-002）；④其余场景请人工在终端执行 git commit。' +
+  '命令带 pathspec 且提交主题含条目编号 REQ-/BUG-）；③插件根第一层发布文档可提交（README/CHANGELOG/' +
+  'FEATURES/AGENTS 与 v.customDocs 清单内自定义文档，pathspec 全为豁免文档，主题须符合「类型: 描述 单号」' +
+  '提交规范，REQ-20260918-002 / REQ-20260923-001）；④其余场景请人工在终端执行 git commit。' +
   '源码、runtime 应用数据、status.json、无 pathspec 裸提交与 --amend 等不可静态核验形态不在此列。';
 
 // 从 cwd 向上找看板板根（agent-team-board/，REQ-20260916-007 新布局）；无看板 = 非看板项目，不管辖
@@ -927,19 +977,20 @@ if (mode === 'bash') {
             && args.messages.length > 0
             && ITEM_ID_RE.test(args.messages.join('\n'))
             && args.pathspecs.every((spec) => pathspecInItemScope(spec, base, boardDir));
-          // 通道 ②（REQ-20260918-002）：pathspec 全为插件根第一层 README.md + 主题行
-          // 符合提交规范「类型: 描述 单号」（复用 lib/commit-store.mjs validateCommitSubject：
+          // 通道 ②（REQ-20260918-002 → REQ-20260923-001 扩展）：pathspec 全为插件根第一层
+          // 豁免发布文档（README/CHANGELOG/FEATURES/AGENTS + v.customDocs 清单内自定义文档）+
+          // 主题行符合提交规范「类型: 描述 单号」（复用 lib/commit-store.mjs validateCommitSubject：
           // 五类前缀 / 描述非空 ≤120 字 / 含单号——单号取主题行首个条目编号）。
           // pathspec 限定提交（git --only 语义）只提交指定路径的改动，预先 git add 的
           // 其他文件不进入该提交，无源码夹带通道（E1 端到端核验）。
           const subjectLine = args.messages.length > 0 ? args.messages.join('\n').split('\n')[0].trim() : '';
           const subjectId = subjectLine ? ITEM_ID_RE.exec(subjectLine) : null;
-          const readmeCommitOk = !args.blocked
+          const docCommitOk = !args.blocked
             && args.pathspecs.length > 0
             && subjectId !== null
             && validateCommitSubject(subjectLine, subjectId[0]) === null
-            && args.pathspecs.every((spec) => pathspecIsPluginRootReadme(spec, base));
-          const allowed = itemDataOk || readmeCommitOk;
+            && args.pathspecs.every((spec) => pathspecIsExemptRootDoc(spec, base));
+          const allowed = itemDataOk || docCommitOk;
           if (!allowed) {
             deny(`流程外 git commit 已拦截（命令片段：${seg.trim()}）。${COMMIT_SCOPE_HINT}`);
           }

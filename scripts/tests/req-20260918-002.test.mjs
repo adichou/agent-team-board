@@ -47,6 +47,8 @@ const fakePlugin = path.join(fakeHome, 'fake-plugin');
 fs.mkdirSync(path.join(fakePlugin, 'scripts', 'lib'), { recursive: true });
 fs.copyFileSync(GUARD, path.join(fakePlugin, 'scripts', 'state-guard.mjs'));
 fs.copyFileSync(path.join(pluginRoot, 'scripts', 'lib', 'commit-store.mjs'), path.join(fakePlugin, 'scripts', 'lib', 'commit-store.mjs'));
+// REQ-20260923-001 起守卫豁免清单依赖 publish-flow（PUBLISH_DOC_KEYS / customDocsOf）
+fs.copyFileSync(path.join(pluginRoot, 'scripts', 'lib', 'publish-flow.mjs'), path.join(fakePlugin, 'scripts', 'lib', 'publish-flow.mjs'));
 const fakeGuard = path.join(fakePlugin, 'scripts', 'state-guard.mjs');
 fs.writeFileSync(path.join(fakePlugin, 'README.md'), '# t\n');
 
@@ -92,11 +94,13 @@ t('R3 无锁：同批命令改受保护源码仍拦（保护面不弱化）', as
 // ---------- X 系列：豁免范围精确 ----------
 
 t('X1 无锁：插件根其他直接子文件改写仍拦', async () => {
+  // REQ-20260923-001 起 AGENTS.md 属四类标准发布文档豁免（已移出本拦截面）；LANGUAGE 变体
+  // （README.en.md）与单文件类 LICENSE.md 维持拦截（该单「待确认」保守口径）。
   const targets = [
-    path.join(pluginRoot, 'AGENTS.md'),
     path.join(pluginRoot, 'package.json'),
     path.join(pluginRoot, 'index.html'),
     path.join(pluginRoot, 'README.en.md'),
+    path.join(pluginRoot, 'LICENSE.md'),
     path.join(pluginRoot, 'bin', 'x1.tmp'), // 新建文件（bin/ 保护）
   ];
   for (const file_path of targets) {
@@ -165,7 +169,7 @@ t('C1 无锁：仅含根 README.md、主题合规的 git commit 放行', async (
 t('C2 提交拦截不回退：混入源码 / 裸提交 / -a / --amend / 无 -m 均拦', async () => {
   const commands = [
     `git commit -m "doc: x ${ID}" README.md scripts/state-guard.mjs`,
-    `git commit -m "doc: x ${ID}" README.md AGENTS.md`,
+    `git commit -m "doc: x ${ID}" README.md LICENSE.md`, // REQ-20260923-001 起 AGENTS.md 豁免，改用恒不豁免的 LICENSE.md
     `git commit -m "doc: x ${ID}" README.en.md`,
     `git add scripts/lib/core.mjs; git commit -m "doc: 夹带 ${ID}"`,
     `git add scripts/lib/core.mjs && git commit -m "doc: 裸夹带 ${ID}" README.md scripts/lib/core.mjs`,
