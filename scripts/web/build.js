@@ -2112,20 +2112,44 @@ const ATBBuild = (() => {
     }
   }
 
+  // REQ-20260924-004：AI 校对问题行「✎ 修改」——先关闭整体审查完结对话框（一次一层：确认
+  // 完结请求进行中不放行让位），再打开审查对话框跳到目标文件编辑态并定位该行（openReview
+  // 参数化）；AI 校对结果不因修改清除或失效，重新「AI 校对」后按最新磁盘内容覆盖（docscheck
+  // 既有口径）；不改 ①② 检查与 canFinalize / canCommit 门禁。
+  function editFromProofread(file, line) {
+    const pf = state.pf;
+    if (!pf || pf.phase !== 'ready' || !file) return;
+    if (pf.finalize) {
+      if (pf.finalize.busy) return;
+      pf.finalize = null;
+    }
+    openReview({ file, line });
+  }
+
   /* ---------- REQ-20260921-008 审查对话框（中英双栏同步滚动；010 起 N 栏） ---------- */
 
-  function openReview() {
+  // REQ-20260924-004 参数化：target = { file, line }（AI 校对「修改」跳入）——切到该文件
+  // 所属类型页签（含自定义 KEY）、目标文件栏进入编辑态（其余栏预览态不受影响）、记录
+  // pendingFocus 供内容加载完成后 focusReviewIssue 定位突出该行；无参调用保持现状
+  //（README 页签 + 全栏预览态）。文件不在当前清单（清单已变化）回落默认页签不定位。
+  function openReview(target) {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.phase !== 'ready') {
       toast('发布流程数据未就绪：请先刷新或重试后再审查', true);
       return;
     }
+    const files = docFilesOf(pf.plan?.langs, pf.plan?.customDocs);
+    const hit = target && target.file ? files.find((f) => f.file === String(target.file)) : null;
     const modes = {};
-    for (const f of docFilesOf(pf.plan?.langs, pf.plan?.customDocs)) modes[f.file] = 'preview';
-    pf.review = { open: true, key: 'README', modes, contents: {}, busy: false };
+    for (const f of files) modes[f.file] = hit && f.file === hit.file ? 'edit' : 'preview';
+    pf.review = { open: true, key: hit ? hit.key : 'README', modes, contents: {}, busy: false };
+    if (hit) {
+      const ln = parseInt(target.line, 10);
+      pf.review.pendingFocus = { file: hit.file, line: Number.isFinite(ln) && ln >= 1 ? ln : null };
+    }
     render();
-    loadReviewPair('README');
+    loadReviewPair(pf.review.key).then(() => focusReviewIssue());
   }
 
   function closeReview() {
@@ -2168,6 +2192,32 @@ const ATBBuild = (() => {
       }
     }));
     if (state.pf === pf && pf.review?.open && pf.review.key === key) render();
+  }
+
+  // REQ-20260924-004：定位突出 AI 校对问题行——审查对话框内容加载完成后一次性消费
+  // pf.review.pendingFocus：textarea 按行号累计偏移计算该行首尾选区（浏览器原生选区即
+  // 原文片段突出）+ 聚焦 + 按行高估算滚动到该行附近 + 短暂描边提示落点（2 秒后移除）；
+  // 行号超界收敛末行；无行号 / 空内容（读取失败兜底）/ 目标栏不在 DOM 时只保持编辑态，
+  // 不定位不报错（最低口径：打开该文件编辑态）。
+  function focusReviewIssue() {
+    const pf = state.pf;
+    const target = pf?.review?.pendingFocus;
+    if (!pf?.review?.open || !target) return;
+    pf.review.pendingFocus = null; // 一次性消费：重复渲染 / 迟到加载不重触发
+    const box = $(`.bld-review-editor[data-review-file="${String(target.file || '').replace(/"/g, '')}"]`);
+    if (!box) return;
+    box.focus();
+    const value = String(box.value || '');
+    if (!target.line || !value) return; // 无行号或空内容：仅编辑态不定位
+    const lines = value.split('\n');
+    const idx = Math.min(target.line, lines.length) - 1;
+    let start = 0;
+    for (let i = 0; i < idx; i++) start += lines[i].length + 1;
+    box.setSelectionRange(start, start + lines[idx].length);
+    const lh = parseFloat(getComputedStyle(box).lineHeight) || 20;
+    box.scrollTop = Math.max(0, (idx + 0.5) * lh - (box.clientHeight || 0) / 2);
+    box.classList.add('bld-review-focus-flash');
+    setTimeout(() => { box.classList?.remove('bld-review-focus-flash'); }, 2000);
   }
 
   // 重渲染前把对话框内编辑框当前值同步回 contents（防后台刷新冲掉未保存输入）
@@ -3454,6 +3504,25 @@ ${langsField}
       </div>`;
   }
 
+  // REQ-20260924-004 AI 校对 issues 逐条拆分（口径 a：提示词约束回执每条一行、行号开头，
+  // 账本仍存整段文本——兼容既有 run）：按换行拆分、trim、去空行、保序；无换行的整段返回
+  // 单条整段（不丢内容）；空文本返回空数组（渲染端兜底整段一条）。
+  function splitProofreadIssues(text) {
+    const rows = String(text || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    return rows.length ? rows : [String(text || '').trim()].filter(Boolean);
+  }
+
+  // REQ-20260924-004 行号解析（启发式，解析不到不算缺陷——跳转兜底为仅打开编辑态）：
+  // 优先命中「第 N 行」形态；其次行首「N. / N、 / N: / N： / N) / L N:」序号形态。
+  function parseIssueLineNo(text) {
+    const s = String(text || '');
+    let m = s.match(/第\s*(\d{1,5})\s*行/);
+    if (m) return Math.max(1, parseInt(m[1], 10));
+    m = s.match(/^\s*(?:L\s*)?(\d{1,5})\s*[.、:：)）]/);
+    if (m) return Math.max(1, parseInt(m[1], 10));
+    return null;
+  }
+
   // REQ-20260921-012 整体审查完结对核对话框：语言集内全部文件已审核后由「整体审查」按钮
   // 打开。REQ-20260924-001 起三类自动检查驱动核对项 ✓/✗：① 各语言内容语言一致性（脚本，
   // 中文是中文内容、英文是英文内容……）；② 全部文档内链接可达性（脚本，死链红叉带明细）；
@@ -3537,7 +3606,21 @@ ${langsField}
           chkState = 'fail';
           const failedFiles = Object.entries(chkRun.files || {}).filter(([, s]) => s === 'fail').map(([f]) => f);
           chkSub = `不通过 ${pass}/${total}：${failedFiles.join('、')}`;
-          chkDetails = failedFiles.map((f) => `<li><code data-i18n-skip>${esc(f)}</code> <span data-i18n-skip>${esc((chkRun.issues || {})[f] || '')}</span></li>`).join('');
+          // REQ-20260924-004：fail 文件按文件分组、问题逐条渲染（splitProofreadIssues 按行
+          // 拆分；整段作一条不丢内容），每条独立一行带「✎ 修改」按钮——editFromProofread
+          // 关闭本对话框并打开审查对话框定位该行（editFromProofread）；行号解析不到的条目
+          // 按钮按文件级跳转（无 data-proof-line）。回执原文 data-i18n-skip（AI 回执内容
+          // 不进界面词典）；序号 ①②…（超 20 条退数字）仅为可辨性，不参与翻译。
+          chkDetails = failedFiles.map((f) => {
+            const items = splitProofreadIssues((chkRun.issues || {})[f] || '');
+            const rows = (items.length ? items : ['']).map((text, i) => {
+              const no = i < 20 ? String.fromCodePoint(0x2460 + i) : `${i + 1}.`;
+              const line = parseIssueLineNo(text);
+              const title = line ? `${f} · 第 ${line} 行` : f;
+              return `<li class="bld-finalize-issue"><span class="bld-finalize-issue-no" aria-hidden="true">${no}</span><span class="bld-finalize-issue-text" data-i18n-skip>${esc(text)}</span><button type="button" class="btn small" data-proof-edit="${esc(f)}"${line ? ` data-proof-line="${line}"` : ''} title="${esc(title)}">✎ 修改</button></li>`;
+            }).join('');
+            return `<li class="bld-finalize-file"><code data-i18n-skip>${esc(f)}</code><ul class="bld-finalize-issues">${rows}</ul></li>`;
+          }).join('');
         }
       }
     }
@@ -4512,7 +4595,7 @@ ${langsField}
     q('[data-pf-refresh]')?.addEventListener('click', refreshDocsPane);
     q('[data-pf-summary]')?.addEventListener('click', startSummary);
     q('[data-pf-translate]')?.addEventListener('click', startTranslation);
-    q('[data-pf-review]')?.addEventListener('click', openReview);
+    q('[data-pf-review]')?.addEventListener('click', () => openReview()); // REQ-20260924-004：无参调用保持现状（防事件对象被误作跳转目标）
     q('[data-pf-finalize]')?.addEventListener('click', openFinalize);
     q('[data-pf-commit]')?.addEventListener('click', commitDocs);
     q('[data-pf-finalize-close]')?.addEventListener('click', closeFinalize);
@@ -4521,6 +4604,10 @@ ${langsField}
     // REQ-20260924-001：整体审查自动检查（语言一致 + 链接可达）与 AI 校对（提示词派发核查）
     q('[data-pf-checks]')?.addEventListener('click', runReviewChecks);
     q('[data-pf-proofread]')?.addEventListener('click', startProofread);
+    // REQ-20260924-004：AI 校对逐条问题「✎ 修改」——关闭整体审查对话框并跳转审查编辑定位
+    for (const el of view.querySelectorAll('[data-proof-edit]')) {
+      el.addEventListener('click', () => editFromProofread(el.dataset.proofEdit, el.dataset.proofLine));
+    }
     const finalizeWrap = q('#bldFinalizeWrap');
     finalizeWrap?.addEventListener('click', (e) => {
       if (e.target?.id === 'bldFinalizeWrap' && !state.pf?.finalize?.busy) closeFinalize();
@@ -4702,6 +4789,8 @@ ${langsField}
     // REQ-20260921-008：文档编写页流水线接缝（刷新 / AI 总结 / 审查对话框 / 提交）；
     // REQ-20260921-012：AI 翻译与整体审查完结接缝
     ensurePublishPlan, refreshDocsPane, startSummary, startTranslation, openReview, closeReview,
+    // REQ-20260924-004：AI 校对问题「修改」跳转（关闭整体审查 → 审查编辑定位）行为接缝
+    editFromProofread, focusReviewIssue,
     openFinalize, closeFinalize, confirmFinalize,
     // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
     confirmLicensePick, skipLicensePick, closeLicensePicker,

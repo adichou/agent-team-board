@@ -1575,6 +1575,8 @@ const EN_DYNAMIC = {
   '通过 ◇/◇': 'Passed $1/$2',
   '不通过 ◇/◇：◇': 'Failed $1/$2: $3',
   '死链 ◇ 个': '$1 dead link(s)',
+  // REQ-20260924-004 AI 校对逐条「✎ 修改」按钮 title 摘要（◇ = 文件名 / 行号，均为数据）
+  '◇ · 第 ◇ 行': '$1 · line $2',
   '基准已更新：◇ 个翻译文档将按最新基准重新翻译': 'Baseline updated: $1 translated doc(s) will be re-translated against the latest baseline',
   'AI 翻译 · ◇ · 执行 ◇ · 创建 ◇': 'AI translation · $1 · run $2 · created $3',
   '中断时间 ◇ · 执行会话 ◇ · 锁已释放（translate）。': 'Interrupted at $1 · executing session $2 · lock released (translate).',
