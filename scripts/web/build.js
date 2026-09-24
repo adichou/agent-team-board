@@ -1638,6 +1638,13 @@ const ATBBuild = (() => {
       // loading(目录加载中), error(加载失败), list(协议目录，含标准文本) }
       license: null,
       siteBusy: false,
+      // REQ-20260924-006 二次编辑弹窗（默认语言单语言）：edit = { open, file, mode:
+      // 'edit'|'preview', content(草稿), disk(最近已知磁盘内容，null=读取中/读取失败),
+      // busy(保存中), loadErr, pending(未保存保护挂起动作), savedNote, pendingFocus }
+      edit: null,
+      // REQ-20260924-006 AI 校对建议：chkFile（侧栏选中文件）、chkDecisions（决断会话态
+      //'runId|file|idx' → accepted/rejected/stale，不持久化）、chkBusy（接受请求进行中）
+      chkFile: null, chkDecisions: null, chkBusy: null,
       // REQ-20260921-015 一键加入所有依赖提交：depBusy 执行中防重复触发；depSkip 最近一次
       // 服务端返回的跳过清单（{ commit, subject, reason }[]），就地在隔离分析节内展示原因
       depBusy: false,
@@ -1876,10 +1883,23 @@ const ATBBuild = (() => {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.busy || !state.project || pf.phase !== 'ready') return;
+    // REQ-20260924-006 ④ 步门禁：最新校对轮未处理的建议先逐条接受 / 拒绝（阻止误以为
+    // 校对结束；翻译基准取处理完建议并保存后的最新默认语言文档）。旧提取口径兼容：typeof
+    // 守卫使 vm 中未提取 chkPendingCount 的既有单测按 0 处理。
+    const pendingChk = typeof chkPendingCount === 'function' ? chkPendingCount(pf.plan, pf.chkDecisions) : 0;
+    if (pendingChk > 0) {
+      toast(`AI 翻译未解锁：尚有 ${pendingChk} 条校对建议未处理（逐条接受或拒绝后解锁，见右侧校对建议栏）`, true);
+      return;
+    }
     // aria-disabled 按钮（HTML disabled 不派发 click）：点击给真实缺口反馈
     const flowEval = normalizeFlowEval(pf.plan || {});
     if (flowEval.canTranslate !== true) {
       const gap = (flowEval.translateMissing || []).map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、');
+      // REQ-20260924-006 单语言版本：默认语言全审且无剩余语言 → 无翻译目标，明确可跳过
+      if (!gap && !(flowEval.restFiles || []).length) {
+        toast('语言集只有一个语言：无翻译目标，可跳过翻译（直接进行整体审查与提交）');
+        return;
+      }
       toast(`AI 翻译未解锁：默认语言尚缺 ${(flowEval.translateMissing || []).length} 个文件审核（${gap || '无文件'}）`, true);
       return;
     }
@@ -1990,12 +2010,14 @@ const ATBBuild = (() => {
     if (state.pf === pf) render();
   }
 
-  // 「AI 校对」：启动默认语言文档错别字与行文规范核查（阶段门禁：默认语言非单文件文件全部
-  // 已审核）；成功复制提示词，交给 AI Agent 执行，结果经 docscheck 账本轮询自动回显。
+  // 「AI 校对」：启动默认语言文档核查（提示词覆盖链接有效性 / 错别字 / 语法与行文规范）；
+  // 成功复制提示词，交给 AI Agent 执行，结果经 docscheck 账本轮询自动回显（文档编写页
+  // 右侧建议栏 + 整体审查对话框）。REQ-20260924-006：③ 步入口直接可用，不再要求先打开
+  // 整体审查对话框（该入口照常保留）；提示词新增「无法验证的链接标待确认」口径。
   async function startProofread() {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
-    if (!pf?.finalize?.open || pf.proofBusy || !state.project) return;
+    if (!pf || pf.phase !== 'ready' || pf.proofBusy || !state.project) return;
     pf.proofBusy = true;
     render();
     try {
@@ -3131,16 +3153,33 @@ const ATBBuild = (() => {
               ${pf.langsBusy ? '<span class="muted small" role="status">保存中…</span>' : ''}
               ${pf.langsErr ? `<p class="rel-form-err small bld-docs-langset-err" role="alert">${esc(pf.langsErr)}</p>` : ''}
             </div>`;
-    // 六按钮恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。
+    // 六按钮恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。REQ-20260924-006：
+    // 主操作迁入五步条（① 总结 ② 二次编辑 ③ 校对 ④ 翻译 ⑤ 提交），本行保留辅助动作
+    // 刷新 / 审查 / 整体审查（既有入口与门禁不移除——边界第 1 条）。
     const actionsHtml = `
           <div class="bld-docs-actions">
             <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
-            <button type="button" class="btn small" data-pf-summary${pf.busy ? ' disabled' : ''} title="复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结默认语言文档（标准 4 类 + 自定义文档；已审核文件跳过；也可不经 AI 总结直接审查）">${summaryBtnText(pf)}</button>
-            ${translateBtnHtml(pf)}
             <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核">审查</button>
             ${finalizeBtnHtml(pf)}
-            ${commitBtnHtml(pf)}
           </div>`;
+    // REQ-20260924-006 五步操作条（主流程顺序入口；状态就地呈现，加载 / 失败态恒渲染——
+    // 数据钩子与六按钮口径一致）：① AI 总结（复制提示词不代表编写完成，进度经回执回显）
+    // ② 二次编辑（默认语言单语言弹窗）③ AI 校对（右侧建议栏逐条处理）④ AI 翻译（处理完
+    // 建议并保存的最新默认语言为基准）⑤ 提交（集中展示清单与缺口）。proofStepText 用可选链
+    // 计算（plan 未就绪时回落静态文案，不触碰新助手函数——旧提取口径兼容）。
+    const proofRun = pf?.plan?.docsCheck || null;
+    const proofStepText = proofRun && proofRun.phase === 'running'
+      ? `③ 校对中 ${(proofRun.counts?.pass || 0) + (proofRun.counts?.fail || 0)}/${proofRun.counts?.total || 0}`
+      : '③ AI 校对';
+    const stepsBarHtml = `
+        <nav class="bld-docs-steps" role="group" aria-label="文档编写五步操作">
+          <span class="muted small">五步：</span>
+          <button type="button" class="btn small" data-pf-summary${pf.busy ? ' disabled' : ''} title="① 复制 AI 总结提示词：依据本版关联需求与实际变更编写默认语言初稿（任务完成后逐文件回显；复制提示词本身不代表编写完成）">${pf?.plan?.summary?.phase === 'running' ? `① 总结中 ${(pf.plan.summary.counts?.summarized || 0)}/${pf.plan.summary.counts?.total || 0}` : '① AI 总结'}</button>
+          <button type="button" class="btn small" data-pf-edit${pf.phase === 'ready' ? '' : ' disabled'} title="② 打开默认语言文档编辑弹窗：文件切换 / 刷新 / 编辑 / 预览 / 保存（只显示默认语言，不含其他语种对照列；其余语言由 ④ AI 翻译产出）">② 二次编辑</button>
+          <button type="button" class="btn small" data-pf-proofstep${pf.proofBusy ? ' disabled' : ''} title="③ 复制 AI 校对提示词：核查默认语言文档的超链接有效性、错别字、语法与行文规范；无法验证的链接标待确认；结果逐文件显示在右侧建议栏，逐条接受或拒绝">${proofStepText}</button>
+          ${translateBtnHtml(pf)}
+          ${commitBtnHtml(pf)}
+        </nav>`;
     // BUG-20260921-017：删「文档编写 · 三阶段」标题与副标题教学式文案（信息由页签 / 阶段条 /
     // 门禁条 / 按钮 title 缺口提示承载），语言集簇与六按钮合并同一水平行，窄屏 flex-wrap 换行。
     const subBar = `
@@ -3148,9 +3187,9 @@ const ATBBuild = (() => {
 ${langsField}
           ${actionsHtml}
         </div>`;
-    if (pf.phase === 'loading') return `<div class="bld-docs-pane">${subBar}<p class="muted" role="status">正在加载发布流程数据…</p></div>`;
+    if (pf.phase === 'loading') return `<div class="bld-docs-pane">${subBar}${stepsBarHtml}<p class="muted" role="status">正在加载发布流程数据…</p></div>`;
     if (pf.phase === 'error' || !pf.plan) {
-      return `<div class="bld-docs-pane">${subBar}
+      return `<div class="bld-docs-pane">${subBar}${stepsBarHtml}
         <p class="rel-form-err" role="alert">发布流程数据读取失败：${esc(pf.error || '未知原因')}</p>
         <p><button type="button" class="btn small" data-pf-retry>重试</button></p></div>`;
     }
@@ -3273,15 +3312,104 @@ ${langsField}
             ${pf.addDoc.err ? `<p class="rel-form-err small bld-docs-addrow-err" role="alert">${esc(pf.addDoc.err)}</p>` : ''}
           </div>`
       : '';
+    // REQ-20260924-006 AI 校对建议侧栏（③ 步结果区，文件列表右侧；窄屏纵向堆叠）：文件下拉
+    //（默认语言非单文件清单，选中文件记忆于 pf.chkFile）+ 待处理计数 + 逐条建议卡片。
+    // 空态明确（尚未校对 / 未发现问题）；running / failed 有进度与重试。建议解析只发生在
+    // docsCheck 存在的分支（旧测试 vm 提取口径不带新助手函数，夹具无 docsCheck 不经过）。
+    const chkRun = p.docsCheck || null;
+    const chkDefaults = flowEval.defaultFiles.filter((f) => !f.single);
+    const chkFiles = (chkRun && Object.keys(chkRun.files || {}).length ? Object.keys(chkRun.files) : chkDefaults.map((f) => f.file));
+    const chkSel = (pf.chkFile && chkFiles.includes(pf.chkFile) ? pf.chkFile : null)
+      || (chkRun ? (chkFiles.find((f) => (chkRun.issues || {})[f]) || chkFiles[0]) : chkFiles[0])
+      || null;
+    const chkPending = chkRun && chkRun.phase === 'done' ? chkPendingCount(p, pf.chkDecisions) : 0;
+    const chkStateChip = (state) => {
+      const cls = state === 'accepted' ? 'st-ok' : state === 'stale' ? 'st-wait' : state === 'rejected' ? 'st-mute' : state === '待确认' ? 'st-wait' : 'st-run';
+      const label = state === 'accepted' ? '已接受' : state === 'rejected' ? '已拒绝' : state === 'stale' ? '过期' : state === '待确认' ? '待确认' : '待处理';
+      return `<span class="st ${cls}" title="${esc(label)}"><i class="st-ico" aria-hidden="true">${state === 'accepted' ? '✔' : state === 'stale' || state === '待确认' ? '●' : '◐'}</i>${esc(label)}</span>`;
+    };
+    const chkBodyHtml = (() => {
+      if (!chkRun) return '<p class="muted small" role="status">尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。</p>';
+      const c = chkRun.counts || {};
+      if (chkRun.phase === 'running') {
+        return `<p class="small" role="status">校对进行中：${(c.pass || 0) + (c.fail || 0)}/${c.total || 0}${chkRun.currentFile ? ` · 当前：<code data-i18n-skip>${esc(chkRun.currentFile)}</code>（正在核查）` : ''}——本栏与整体审查对话框随回执自动刷新。</p>`;
+      }
+      if (chkRun.phase === 'failed') {
+        return `<p class="rel-form-err small" role="alert">AI 校对中断：${esc(chkRun.reason || '未知原因')}——已回执结论保留，可重试续查。</p>
+          <p><button type="button" class="btn small" data-chk-retry title="重新复制 AI 校对提示词并派发核查（新一轮 run 覆盖旧结论）">重试 AI 校对</button></p>`;
+      }
+      if (!chkSel) return '<p class="muted small" role="status">当前版本没有默认语言文档可校对。</p>';
+      const rows = splitProofreadIssues((chkRun.issues || {})[chkSel] || '');
+      if (!rows.length) return '<p class="small" role="status">该文件未发现问题 ✓（校对基准为回执时点磁盘内容）</p>';
+      const cards = rows.map((row, i) => {
+        const sug = parseChkSuggestion(row);
+        const type = classifyChkIssue(row);
+        const key = `${chkRun.runId}|${chkSel}|${i}`;
+        const dec = (pf.chkDecisions || {})[key] || null;
+        const state = dec || (type === '待确认' ? '待确认' : 'pending');
+        const diffHtml = sug.applicable
+          ? `<details class="bld-chk-diff">
+              <summary>查看修改前后差异</summary>
+              <div class="bld-chk-diff-grid">
+                <div class="bld-chk-before"><span class="bld-chk-tag del">修改前（删除）</span><pre data-i18n-skip><del>${esc(sug.before)}</del></pre></div>
+                <div class="bld-chk-after"><span class="bld-chk-tag ins">修改后（新增）</span><pre data-i18n-skip><ins>${esc(sug.after)}</ins></pre></div>
+              </div>
+            </details>`
+          : '';
+        const busy = pf.chkBusy === key;
+        const canAccept = sug.applicable && !dec && type !== '待确认';
+        const acceptBtn = canAccept
+          ? `<button type="button" class="btn small primary" data-chk-accept="${esc(chkSel)}|${i}"${busy || pf.chkBusy ? ' disabled' : ''} title="按差异应用这一条建议并保存（应用前先核对磁盘原文一致，不一致标记过期不覆盖）">接受</button>`
+          : (sug.applicable || dec ? '' : `<button type="button" class="btn small" disabled title="无法自动应用（未解析出修改前后文本）：请点「✎ 修改」手动处理">接受</button>`);
+        const rejectBtn = !dec
+          ? `<button type="button" class="btn small" data-chk-reject="${esc(chkSel)}|${i}"${busy || pf.chkBusy ? ' disabled' : ''} title="不采纳该条建议：原文保持不变（不计入待处理）">拒绝</button>`
+          : '';
+        return `
+            <li class="bld-chk-issue">
+              <div class="bld-chk-issue-head">
+                <span class="bld-chk-type">${esc(type)}</span>
+                <span class="bld-chk-pos">${sug.line ? `第 ${sug.line} 行` : '无行号'}</span>
+                ${chkStateChip(state)}
+              </div>
+              <p class="bld-chk-text" data-i18n-skip>${esc(row)}</p>
+              ${diffHtml}
+              ${dec === 'stale' ? '<p class="muted small" role="note">建议基于的文本已变化：未覆盖当前内容，请重新校对或点「✎ 修改」手动处理。</p>' : ''}
+              <div class="bld-chk-acts">
+                ${acceptBtn}${rejectBtn}
+                <button type="button" class="btn small" data-chk-edit="${esc(chkSel)}"${sug.line ? ` data-chk-line="${sug.line}"` : ''} title="${esc(sug.line ? `${chkSel} · 第 ${sug.line} 行` : chkSel)}">✎ 修改</button>
+              </div>
+            </li>`;
+      }).join('');
+      // 默认语言文档在校对后又有修改（任一非 reviewed）：提示接受前的原文核对口径
+      const dirtyNote = flowEval.defaultFiles.some((f) => f.state !== 'reviewed')
+        ? '<p class="muted small" role="note">默认语言文档已修改：接受前会逐条核对磁盘原文，不一致将标记过期，不覆盖人工修改。</p>'
+        : '';
+      return `${dirtyNote}<ul class="bld-chk-list">${cards}</ul>`;
+    })();
+    const chkPanelHtml = `
+        <aside class="bld-docs-chk" aria-label="校对建议">
+          <div class="bld-docs-chk-head">
+            <span class="bld-docs-chk-title">校对建议</span>
+            ${chkRun && chkRun.phase === 'done' ? `<span class="bld-docs-chk-count${chkPending ? '' : ' ok'}" title="未处理的建议数量：全部接受或拒绝后「④ AI 翻译」解锁">待处理 ${chkPending} 项</span>` : ''}
+          </div>
+          <label class="bld-docs-chk-file"><span>文件</span>
+            <select data-chk-file${pf.chkBusy ? ' disabled' : ''} aria-label="选择要查看校对建议的文件">
+              ${chkFiles.map((f) => `<option value="${esc(f)}"${f === chkSel ? ' selected' : ''} data-i18n-skip>${esc(f)}${chkRun && (chkRun.issues || {})[f] ? `（${splitProofreadIssues(chkRun.issues[f]).length}）` : ''}</option>`).join('')}
+            </select>
+          </label>
+          <div class="bld-docs-chk-body">${chkBodyHtml}</div>
+        </aside>`;
     return `
       <div class="bld-docs-pane">
         ${subBar}
+        ${stepsBarHtml}
         ${stagesHtml}
         ${promptBox}
         ${tPromptBox}
         ${sumInfo}
         ${trInfo}
         ${baselineNote}
+        <div class="bld-docs-main">
         <section class="bld-docs-files" aria-label="发布文档文件列表">
           <div class="bld-docs-files-head"><span>文件（${total} · 默认语言 ${flowEval.defaultReviewedCount}/${defTotal} 已审核 · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核）</span><span class="bld-docs-head-right"><span>状态</span><button type="button" class="btn small primary" data-doc-add-open${pf.phase === 'ready' ? '' : ' disabled'} title="添加一份自定义发布文档（可添加多份；添加一次即随语言集自动展开全部语言文件；命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）">＋ 添加文档</button></span></div>
           ${addRowHtml}
@@ -3289,6 +3417,8 @@ ${langsField}
           ${langPanelsHtml}
           ${pf.refreshing ? '<div class="bld-docs-loading" role="status">正在读取最新内容…</div>' : ''}
         </section>
+        ${chkPanelHtml}
+        </div>
         ${gateBar}
         ${finalizedNote}
         ${pf.commitMsg ? `<p class="small" role="status">${esc(pf.commitMsg)}</p>` : ''}
@@ -3364,20 +3494,32 @@ ${langsField}
     return tr && tr.phase === 'running' ? `翻译中 ${tr.counts.translated}/${tr.counts.total}` : 'AI 翻译';
   }
 
-  // AI 翻译按钮：默认语言 4/4 已审核前禁用（aria-disabled + title 列默认语言缺口明细——
-  // 哪些默认语言文件未审核、各处什么状态；模式同 BUG-20260920-006）；运行中禁用并显示进度。
+  // AI 翻译按钮（④ 步）：默认语言 4/4 已审核前禁用（aria-disabled + title 列默认语言缺口
+  // 明细——哪些默认语言文件未审核、各处什么状态；模式同 BUG-20260920-006）；运行中禁用并
+  // 显示进度。REQ-20260924-006：① 未处理校对建议 > 0 时禁用并提示数量（决断后解锁）；
+  // ② 单语言版本（默认全审且无剩余语言）显示「无翻译目标，可跳过翻译」空态说明（不报缺口）。
+  // typeof 守卫：旧测试 vm 提取口径不带 chkPendingCount 时按 0 处理（兼容不回归）。
   function translateBtnHtml(pf) {
-    if (!pf?.plan) return '<button type="button" class="btn small" data-pf-translate aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">AI 翻译</button>';
+    if (!pf?.plan) return '<button type="button" class="btn small" data-pf-translate aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">④ AI 翻译</button>';
     if (pf.plan.translate?.phase === 'running') {
-      return `<button type="button" class="btn small" data-pf-translate disabled title="AI 翻译进行中：提示词已交给 AI Agent，进度经 atb translate 逐文件回执，本页与任务模块自动刷新">${translateBtnText(pf)}</button>`;
+      return `<button type="button" class="btn small" data-pf-translate disabled title="AI 翻译进行中：提示词已交给 AI Agent，进度经 atb translate 逐文件回执，本页与任务模块自动刷新">④ ${translateBtnText(pf)}</button>`;
     }
     const flowEval = normalizeFlowEval(pf.plan);
-    const can = flowEval.canTranslate === true;
     const gap = flowEval.translateMissing || [];
-    const reason = can
-      ? '复制 AI 翻译提示词到剪贴板：以已审核的默认语言文档为唯一基准，交给 AI Agent 逐文件翻译剩余语言文档（默认语言全部审核后解锁）'
-      : `AI 翻译未解锁：默认语言尚缺 ${gap.length} 个文件审核（${gap.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`;
-    return `<button type="button" class="btn small" data-pf-translate${can ? '' : ' aria-disabled="true"'} title="${esc(reason)}">${translateBtnText(pf)}</button>`;
+    const pendingChk = typeof chkPendingCount === 'function' ? chkPendingCount(pf.plan, pf.chkDecisions) : 0;
+    let can = flowEval.canTranslate === true;
+    let reason;
+    if (pendingChk > 0) {
+      can = false;
+      reason = `AI 翻译未解锁：尚有 ${pendingChk} 条校对建议未处理（逐条接受或拒绝后解锁，见右侧校对建议栏）`;
+    } else if (can) {
+      reason = '复制 AI 翻译提示词到剪贴板：以已审核的默认语言文档为唯一基准，交给 AI Agent 逐文件翻译剩余语言文档（默认语言全部审核后解锁）';
+    } else if (!gap.length && !(flowEval.restFiles || []).length) {
+      reason = '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行整体审查与提交）';
+    } else {
+      reason = `AI 翻译未解锁：默认语言尚缺 ${gap.length} 个文件审核（${gap.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`;
+    }
+    return `<button type="button" class="btn small" data-pf-translate${can ? '' : ' aria-disabled="true"'} title="${esc(reason)}">④ ${translateBtnText(pf)}</button>`;
   }
 
   // 整体审查按钮：语言集内全部文件（4×N）已审核前禁用（title 列缺口）；完结后可重新核对
@@ -3394,15 +3536,15 @@ ${langsField}
     return `<button type="button" class="btn small${can ? ' primary' : ''}" data-pf-finalize${can ? '' : ' aria-disabled="true"'} title="${esc(reason)}">整体审查</button>`;
   }
 
-  // 提交按钮：需「全部文件已审核 + 整体审查已完结」（canCommit 含完结条件，在原门禁之上
-  // 叠加、不弱化；aria-disabled：HTML disabled 不派发 click，点击由 commitDocs 守卫 toast
+  // 提交按钮（⑤ 步）：需「全部文件已审核 + 整体审查已完结」（canCommit 含完结条件，在原门禁
+  // 之上叠加、不弱化；aria-disabled：HTML disabled 不派发 click，点击由 commitDocs 守卫 toast
   // 真实缺口）；已提交 / 提交中 / 可提交三态文案；数据未就绪（加载 / 失败态）给明确 title。
   function commitBtnHtml(pf) {
-    if (!pf?.plan) return '<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">提交</button>';
+    if (!pf?.plan) return '<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">⑤ 提交</button>';
     const flowEval = normalizeFlowEval(pf.plan);
     const committed = pf.plan?.docs?.overall === 'committed' && pf.plan?.docs?.commitHash;
-    if (committed) return `<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="已提交到本地 dev 分支（${esc(short(pf.plan.docs.commitHash))}）">已提交 ✓</button>`;
-    if (pf.busy) return '<button type="button" class="btn small primary" data-pf-commit disabled>提交中…</button>';
+    if (committed) return `<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="已提交到本地 dev 分支（${esc(short(pf.plan.docs.commitHash))}）">⑤ 已提交 ✓</button>`;
+    if (pf.busy) return '<button type="button" class="btn small primary" data-pf-commit disabled>⑤ 提交中…</button>';
     const ok = flowEval.canCommit === true;
     const missing = flowEval.missing || [];
     const reason = ok
@@ -3410,7 +3552,7 @@ ${langsField}
       : missing.length
         ? `还需 ${missing.length} 个文件通过审查：${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}`
         : '整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交';
-    return `<button type="button" class="btn small primary" data-pf-commit${ok ? '' : ' aria-disabled="true"'} title="${esc(reason)}">提交</button>`;
+    return `<button type="button" class="btn small primary" data-pf-commit${ok ? '' : ' aria-disabled="true"'} title="${esc(reason)}">⑤ 提交</button>`;
   }
 
   // REQ-20260921-011 预览态 Markdown 渲染：与 app.js / req-disc.js / oncall.js 三处 renderMd
@@ -3521,6 +3663,378 @@ ${langsField}
     m = s.match(/^\s*(?:L\s*)?(\d{1,5})\s*[.、:：)）]/);
     if (m) return Math.max(1, parseInt(m[1], 10));
     return null;
+  }
+
+  /* ---------- REQ-20260924-006 AI 校对建议（③ 步）纯函数：解析 / 分类 / 应用 / 计数 ---------- */
+
+  // 单条建议解析（REQ-20260924-004 回执口径「第 N 行：原文「A」→ 建议「B」」；账本仍存整段
+  // 文本，本层按行解析出可应用的前后文本对）：line 复用 parseIssueLineNo；before/after 取
+  // 「…」→ 建议「…」捕获组（无「原文」前缀亦可）；applicable = 前后对存在且 before 非空且
+  // 前后不同（after 可为空 = 删除型建议）。解析不出前后对的条目只展示，走「✎ 修改」人工处理。
+  function parseChkSuggestion(text) {
+    const s = String(text || '');
+    const m = s.match(/「([^「」]*)」\s*(?:→|->)\s*(?:建议\s*)?「([^「」]*)」/);
+    const before = m ? m[1] : null;
+    const after = m ? m[2] : null;
+    return {
+      line: parseIssueLineNo(s),
+      before,
+      after,
+      applicable: !!m && before !== '' && before !== after,
+    };
+  }
+
+  // 问题类型启发式分类（回执无结构化类型字段——REQ 待确认口径，本层按文本特征尽力归类，
+  // 只影响展示标签不影响应用）：「待确认」优先（无法验证的链接不得判成有效或确定失效）；
+  // 其后链接 / 错别字 / 语法标点；默认行文规范。
+  function classifyChkIssue(text) {
+    const s = String(text || '');
+    if (s.includes('待确认') || (s.includes('无法') && (s.includes('验证') || s.includes('确认')))) return '待确认';
+    if (/链接|死链|超链|可达|https?:\/\/|www\./.test(s)) return '链接';
+    if (/错别字|同音|形近|多字|漏字|笔误|应为/.test(s)) return '错别字';
+    if (/语法|标点|句读|主语|搭配|残缺/.test(s)) return '语法';
+    return '行文规范';
+  }
+
+  // 建议应用（纯文本定位替换，不修改入参）：有行号先按行定位（该行包含 before 才替换，
+  // 行号超界收敛末行）；行内不含或全文找不到 before → stale（建议基于的文本已变化，不覆盖
+  // 人工修改）；无行号全文首处定位。before 为空 / 前后相同 → error（调用方先拦截，双保险）。
+  function applyChkSuggestion(content, s) {
+    const before = String(s?.before ?? '');
+    const after = String(s?.after ?? '');
+    if (!before || before === after) return { error: '无可应用文本' };
+    const text = String(content ?? '');
+    if (s?.line != null && s.line >= 1) {
+      const lines = text.split('\n');
+      const idx = Math.min(s.line, lines.length) - 1;
+      if (!lines[idx].includes(before)) return { stale: true };
+      lines[idx] = lines[idx].replace(before, after);
+      return { content: lines.join('\n') };
+    }
+    const at = text.indexOf(before);
+    if (at === -1) return { stale: true };
+    return { content: text.slice(0, at) + after + text.slice(at + before.length) };
+  }
+
+  // 未处理建议计数（AI 翻译 ④ 步门禁）：最新 done run 的 issues 按行计待处理；决断
+  // accepted / rejected / stale 均视为已处理（stale 不可应用，不阻塞）；非 done 或无 run 计 0。
+  function chkPendingCount(plan, decisions) {
+    const run = plan?.docsCheck;
+    if (!run || run.phase !== 'done') return 0;
+    const dec = decisions || {};
+    let n = 0;
+    for (const [file, text] of Object.entries(run.issues || {})) {
+      splitProofreadIssues(text).forEach((row, i) => {
+        const st = dec[`${run.runId}|${file}|${i}`];
+        if (!st || st === 'pending') n += 1;
+      });
+    }
+    return n;
+  }
+
+  /* ---------- REQ-20260924-006 ② 二次编辑弹窗（默认语言单语言）与 ③ 建议接受 / 拒绝 ---------- */
+
+  // 未保存判定：disk 已知（读取成功或保存成功回写）且草稿与磁盘不一致。
+  function editUnsaved(pf) {
+    return !!(pf?.edit?.open && pf.edit.disk != null && pf.edit.content != null && pf.edit.content !== pf.edit.disk);
+  }
+
+  // 打开二次编辑弹窗（target = { file, line }：建议栏「✎ 修改」跳入定位；无参默认首个默认
+  // 语言文件、编辑态）。只列默认语言文件（4 类 + LICENSE + 自定义 KEY.md）——移除其他语种
+  // 对照列；读取 / 保存沿用既有 docs 白名单通道。
+  function openSecondaryEdit(target) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf || pf.phase !== 'ready') {
+      toast('发布流程数据未就绪：请先刷新或重试后再编辑', true);
+      return;
+    }
+    const defaults = normalizeFlowEval(pf.plan || {}).defaultFiles;
+    if (!defaults.length) {
+      toast('当前版本没有默认语言文档可编辑', true);
+      return;
+    }
+    const hit = target && target.file ? defaults.find((f) => f.file === String(target.file)) : null;
+    const file = hit ? hit.file : defaults[0].file;
+    const ln = target?.line != null ? parseInt(target.line, 10) : null;
+    pf.edit = {
+      open: true, file, mode: 'edit', content: null, disk: null, busy: false,
+      loadErr: null, pending: null, savedNote: null,
+      pendingFocus: hit && Number.isFinite(ln) && ln >= 1 ? { line: ln } : null,
+    };
+    render();
+    loadEditFile(file).then(() => focusEditIssue());
+  }
+
+  // 读取弹窗当前文件磁盘内容（迟到响应按 pf 身份 + seq + 文件丢弃；失败给原因与重试，
+  // 不丢已输入草稿——content 仅在读取成功时覆盖）。
+  async function loadEditFile(file) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf?.edit?.open || pf.edit.file !== file || !state.project) return;
+    const stamp = ++pf.seq;
+    try {
+      const r = await fetch(`/api/build/docs?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}&file=${encodeURIComponent(file)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
+      if (state.pf !== pf || pf.seq !== stamp || !pf.edit?.open || pf.edit.file !== file) return;
+      pf.edit.content = data.content == null ? '' : data.content;
+      pf.edit.disk = pf.edit.content;
+      pf.edit.loadErr = null;
+    } catch (e) {
+      if (state.pf !== pf || !pf.edit?.open || pf.edit.file !== file) return;
+      pf.edit.loadErr = e.message; // content/disk 保持：读取失败不覆盖已有输入
+    }
+    if (state.pf === pf) render();
+  }
+
+  // 定位突出建议行（弹窗内容加载完成后一次性消费 pendingFocus）：选区该行首尾 + 聚焦 +
+  // 滚动定位（口径同 focusReviewIssue，目标为单语言编辑框）。
+  function focusEditIssue() {
+    const pf = state.pf;
+    const target = pf?.edit?.pendingFocus;
+    if (!pf?.edit?.open || !target) return;
+    pf.edit.pendingFocus = null;
+    const box = $('.bld-edit-editor');
+    if (!box) return;
+    box.focus();
+    const value = String(box.value || '');
+    if (!target.line || !value) return;
+    const lines = value.split('\n');
+    const idx = Math.min(target.line, lines.length) - 1;
+    let start = 0;
+    for (let i = 0; i < idx; i++) start += lines[i].length + 1;
+    box.setSelectionRange(start, start + lines[idx].length);
+    const lh = parseFloat(getComputedStyle(box).lineHeight) || 20;
+    box.scrollTop = Math.max(0, (idx + 0.5) * lh - (box.clientHeight || 0) / 2);
+  }
+
+  // 切换 / 刷新 / 关闭的未保存保护入口：有未保存修改先进挂起态（弹窗内联三动作：
+  // 保存并继续 / 放弃修改并继续 / 留在本文件），不直接执行、不丢字；无未保存直接执行。
+  function requestEditSwitch(file) {
+    const pf = state.pf;
+    if (!pf?.edit?.open || pf.edit.busy || !file || file === pf.edit.file) return;
+    if (editUnsaved(pf)) { pf.edit.pending = { kind: 'switch', file }; render(); return; }
+    doEditSwitch(file);
+  }
+
+  function requestEditRefresh() {
+    const pf = state.pf;
+    if (!pf?.edit?.open || pf.edit.busy) return;
+    if (editUnsaved(pf)) { pf.edit.pending = { kind: 'refresh' }; render(); return; }
+    doEditRefresh();
+  }
+
+  function requestEditClose() {
+    const pf = state.pf;
+    if (!pf?.edit?.open || pf.edit.busy) return;
+    if (editUnsaved(pf)) { pf.edit.pending = { kind: 'close' }; render(); return; }
+    closeEditDialog();
+  }
+
+  function doEditSwitch(file) {
+    const pf = state.pf;
+    if (!pf?.edit?.open || !file) return;
+    pf.edit.pending = null;
+    pf.edit.file = file;
+    pf.edit.content = null;
+    pf.edit.disk = null;
+    pf.edit.loadErr = null;
+    pf.edit.savedNote = null;
+    render();
+    loadEditFile(file);
+  }
+
+  function doEditRefresh() {
+    const pf = state.pf;
+    if (!pf?.edit?.open) return;
+    const file = pf.edit.file;
+    pf.edit.pending = null;
+    pf.edit.content = null;
+    pf.edit.disk = null;
+    pf.edit.loadErr = null;
+    render();
+    loadEditFile(file);
+  }
+
+  function closeEditDialog() {
+    const pf = state.pf;
+    if (!pf?.edit?.open) return;
+    pf.edit = null;
+    render();
+    ensurePublishPlan(true); // 关闭后同步最新四态与门禁
+  }
+
+  // 挂起动作裁决：cancel 留在当前文件；discard 放弃草稿执行挂起动作；save 先保存（成功才
+  // 执行挂起动作，失败保留输入留在原文件）。返回值：save 路径透传保存结果。
+  async function resolveEditPending(action) {
+    const pf = state.pf;
+    const pending = pf?.edit?.pending;
+    if (!pending || pf.edit.busy) return false;
+    const perform = () => {
+      if (pending.kind === 'switch') doEditSwitch(pending.file);
+      else if (pending.kind === 'refresh') doEditRefresh();
+      else closeEditDialog();
+    };
+    if (action === 'cancel') { pf.edit.pending = null; render(); return false; }
+    if (action === 'discard') { perform(); return true; }
+    const ok = await saveEditFile();
+    if (ok) perform();
+    return ok;
+  }
+
+  // 保存弹窗当前文件（沿用 /api/build/docs/save 白名单 + ≤2MiB 口径）；成功回写 disk 与
+  // 成功反馈（已保存 ≠ 已提交），失败保留输入不误标（savedNote 不设置）。
+  async function saveEditFile() {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    if (!pf?.edit?.open || pf.edit.busy || !state.project || pf.edit.content == null) return false;
+    pf.edit.busy = true;
+    pf.edit.savedNote = null;
+    pf.edit.pending = null;
+    render();
+    try {
+      const r = await fetch(`/api/build/docs/save?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, file: pf.edit.file, content: String(pf.edit.content ?? '') }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
+      if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
+      pf.edit.disk = String(pf.edit.content ?? '');
+      pf.edit.savedNote = '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）';
+      toast(`✓ 已保存 ${pf.edit.file}（未提交：需审核通过并「提交」后进入本地 dev）`);
+      return true;
+    } catch (e) {
+      toast(`✕ 保存失败：${e.message}（内容已保留在编辑框中，可重试）`, true);
+      return false;
+    } finally {
+      if (pf.edit) pf.edit.busy = false;
+      if (state.pf === pf) render();
+    }
+  }
+
+  // ③ 建议接受：取磁盘最新内容 → 定位替换（applyChkSuggestion，行级 / 全文包含校验）→
+  // 保存成功才记「已接受」（幂等：已决断条目直接返回；保存失败不误标）；文本已变化记
+  // 「过期」不覆盖人工修改。
+  async function acceptChkSuggestion(file, idx) {
+    const v = selVersion();
+    const pf = v ? pfOf(v) : null;
+    const run = pf?.plan?.docsCheck;
+    if (!pf || pf.phase !== 'ready' || !state.project || !run || run.phase !== 'done') return;
+    if (!pf.chkDecisions) pf.chkDecisions = {};
+    const key = `${run.runId}|${file}|${idx}`;
+    const cur = pf.chkDecisions[key];
+    if (cur === 'accepted' || cur === 'rejected' || cur === 'stale') return; // 幂等不重复应用
+    if (pf.chkBusy) return;
+    const sug = parseChkSuggestion(splitProofreadIssues((run.issues || {})[file] || '')[idx] || '');
+    if (!sug || !sug.applicable) return;
+    pf.chkBusy = key;
+    render();
+    try {
+      const r0 = await fetch(`/api/build/docs?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}&file=${encodeURIComponent(file)}`);
+      const d0 = await r0.json().catch(() => ({}));
+      if (!r0.ok) throw new Error(d0.error || `读取失败（${r0.status}）`);
+      const applied = applyChkSuggestion(d0.content == null ? '' : d0.content, sug);
+      if (applied.stale || applied.error) {
+        pf.chkDecisions[key] = 'stale';
+        toast('✕ 建议已过期：建议基于的文本已变化，未覆盖当前内容（请重新校对或点「✎ 修改」手动处理）', true);
+        return;
+      }
+      const r = await fetch(`/api/build/docs/save?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: v.id, file, content: applied.content }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
+      if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
+      pf.chkDecisions[key] = 'accepted';
+      toast(`✓ 已接受并保存 ${file} 的建议：文件回到待审核，翻译基准已更新`);
+    } catch (e) {
+      toast(`✕ 接受失败：${e.message}（文档未修改，可重试）`, true);
+    } finally {
+      pf.chkBusy = null;
+      if (state.pf === pf) render();
+    }
+  }
+
+  // ③ 建议拒绝：仅记「已拒绝」，原文不动（与接受结果可区分；已决断幂等）。
+  function rejectChkSuggestion(file, idx) {
+    const pf = state.pf;
+    const run = pf?.plan?.docsCheck;
+    if (!run || pf.chkBusy) return;
+    if (!pf.chkDecisions) pf.chkDecisions = {};
+    const key = `${run.runId}|${file}|${idx}`;
+    const cur = pf.chkDecisions[key];
+    if (cur === 'accepted' || cur === 'rejected' || cur === 'stale') return;
+    pf.chkDecisions[key] = 'rejected';
+    toast('已拒绝该条建议：原文保持不变');
+    render();
+  }
+
+  // 二次编辑弹窗渲染：默认语言单语言（文件下拉只列默认语言文件，无其他语种对照列）；
+  // 顶部文件选择 + 刷新 + 编辑/预览切换，底部保存 / 关闭；未保存提示与挂起三动作内联呈现。
+  function renderSecondaryEditModal(v) {
+    const pf = v ? pfOf(v) : null;
+    const ed = pf?.edit;
+    if (!ed?.open) return '';
+    const flowEval = normalizeFlowEval(pf.plan || {});
+    const files = flowEval.defaultFiles;
+    const mode = ed.mode === 'preview' ? 'preview' : 'edit';
+    const unsaved = ed.disk != null && ed.content != null && ed.content !== ed.disk;
+    const body = ed.content == null
+      ? (ed.loadErr
+        ? `<p class="rel-form-err small" role="alert">读取失败：${esc(ed.loadErr)}</p>
+          <p><button type="button" class="btn small" data-edit-retry title="重新读取该文件的磁盘内容">重试读取</button></p>`
+        : '<p class="muted small" role="status">正在读取文档内容…</p>')
+      : mode === 'edit'
+        ? `<textarea class="bld-edit-editor" rows="20" spellcheck="false" aria-label="默认语言文档内容（编辑）">${esc(ed.content)}</textarea>`
+        : (!String(ed.content).trim()
+          ? '<div class="bld-review-preview muted small">（空文档）</div>'
+          : `<div class="bld-review-preview md" data-i18n-skip>${renderMd(ed.content)}</div>`);
+    const footNote = ed.busy
+      ? '保存中…'
+      : ed.savedNote
+        ? ed.savedNote
+        : ed.loadErr
+          ? '读取失败：内容尚未加载（可重试读取）'
+          : '默认语言初稿编辑（其余语言由「④ AI 翻译」产出）';
+    return `
+      <div class="rel-modal-wrap bld-edit-wrap" id="bldEditWrap" role="dialog" aria-modal="true" aria-label="二次编辑（默认语言）">
+        <div class="rel-modal bld-edit-modal">
+          <header class="bld-review-head">
+            <span>二次编辑 · 默认语言（${esc(v?.id || '')}）</span>
+            <button type="button" class="btn small quiet" data-edit-close aria-label="关闭对话框">✕ 关闭</button>
+          </header>
+          <div class="bld-edit-bar">
+            <label class="field-inline" for="bldEditFileSel">文件</label>
+            <select id="bldEditFileSel" data-edit-file${ed.busy ? ' disabled' : ''}>
+              ${files.map((f) => `<option value="${esc(f.file)}"${f.file === ed.file ? ' selected' : ''} data-i18n-skip>${esc(f.file)}</option>`).join('')}
+            </select>
+            <button type="button" class="btn small" data-edit-refresh${ed.busy || ed.content == null ? ' disabled' : ''} title="重新从磁盘读取该文件（外部修改后取回最新内容；有未保存修改时会先询问保存或放弃）">刷新</button>
+            <span class="bld-doc-mode" role="group" aria-label="编辑或预览">
+              <button type="button" class="btn small${mode === 'edit' ? ' on' : ''}" data-edit-mode="edit">编辑</button>
+              <button type="button" class="btn small${mode === 'preview' ? ' on' : ''}" data-edit-mode="preview">预览</button>
+            </span>
+          </div>
+          <div class="bld-edit-body">${body}</div>
+          ${unsaved && !ed.pending ? '<p class="small bld-edit-unsaved" role="status">有未保存的修改：切换文件 / 刷新 / 关闭前会先询问保存或放弃。</p>' : ''}
+          ${ed.pending ? `
+          <div class="bld-edit-pending" role="alertdialog" aria-label="处理未保存修改">
+            <span>有未保存的修改：</span>
+            <button type="button" class="btn small primary" data-edit-keep${ed.busy ? ' disabled' : ''}>保存并继续</button>
+            <button type="button" class="btn small" data-edit-discard${ed.busy ? ' disabled' : ''}>放弃修改并继续</button>
+            <button type="button" class="btn small quiet" data-edit-stay>留在本文件</button>
+          </div>` : ''}
+          <footer class="bld-review-foot">
+            <span class="small" role="status">${esc(footNote)}</span>
+            <span>
+              <button type="button" class="btn small" data-edit-save${ed.busy || ed.content == null ? ' disabled' : ''}>保存</button>
+              <button type="button" class="btn small" data-edit-close${ed.busy ? ' disabled' : ''}>关闭</button>
+            </span>
+          </footer>
+        </div>
+      </div>`;
   }
 
   // REQ-20260921-012 整体审查完结对核对话框：语言集内全部文件已审核后由「整体审查」按钮
@@ -4317,7 +4831,8 @@ ${langsField}
       ${renderRelPlanModal()}
       ${renderReviewModal(selVersion())}
       ${renderFinalizeModal(selVersion())}
-      ${renderLicenseModal(selVersion())}`;
+      ${renderLicenseModal(selVersion())}
+      ${renderSecondaryEditModal(selVersion())}`;
     bindCommon(view);
     // REQ-20260920-003：文档 / 合并 / 正式发布步按需自愈加载——详情在这些步但 pf 数据缺失 /
     // 版本不匹配（切换版本 / 选中失效回落 / 恢复快照）时只读拉取；ensurePublishPlan 同步置
@@ -4598,6 +5113,58 @@ ${langsField}
     q('[data-pf-review]')?.addEventListener('click', () => openReview()); // REQ-20260924-004：无参调用保持现状（防事件对象被误作跳转目标）
     q('[data-pf-finalize]')?.addEventListener('click', openFinalize);
     q('[data-pf-commit]')?.addEventListener('click', commitDocs);
+    // REQ-20260924-006 五步条新增入口：② 二次编辑（默认语言单语言弹窗）与 ③ AI 校对
+    //（直接启动，不要求先开整体审查对话框；与该对话框内既有 data-pf-proofread 入口并存）
+    q('[data-pf-edit]')?.addEventListener('click', () => openSecondaryEdit());
+    q('[data-pf-proofstep]')?.addEventListener('click', startProofread);
+    // REQ-20260924-006 ③ 校对建议侧栏：文件切换 / 接受 / 拒绝 / 重试 / 跳二次编辑定位
+    const chkSel = q('[data-chk-file]');
+    chkSel?.addEventListener('change', () => {
+      const pf = state.pf;
+      if (pf && chkSel.value) { pf.chkFile = chkSel.value; render(); }
+    });
+    for (const el of view.querySelectorAll('[data-chk-accept]')) {
+      el.addEventListener('click', () => {
+        const [file, idx] = String(el.dataset.chkAccept || '').split('|');
+        acceptChkSuggestion(file, parseInt(idx, 10));
+      });
+    }
+    for (const el of view.querySelectorAll('[data-chk-reject]')) {
+      el.addEventListener('click', () => {
+        const [file, idx] = String(el.dataset.chkReject || '').split('|');
+        rejectChkSuggestion(file, parseInt(idx, 10));
+      });
+    }
+    q('[data-chk-retry]')?.addEventListener('click', startProofread);
+    for (const el of view.querySelectorAll('[data-chk-edit]')) {
+      el.addEventListener('click', () => openSecondaryEdit({ file: el.dataset.chkEdit, line: el.dataset.chkLine }));
+    }
+    // REQ-20260924-006 ② 二次编辑弹窗：文件切换 / 刷新 / 编辑·预览 / 保存 / 关闭 / 未保存
+    // 挂起三动作（内联保护，不用阻塞式 confirm——BUG-20260907-009 口径）；编辑框 input 即
+    // 回写草稿（重渲染不丢字）；遮罩点击走关闭保护。
+    const editSel = q('[data-edit-file]');
+    editSel?.addEventListener('change', () => requestEditSwitch(editSel.value));
+    q('[data-edit-refresh]')?.addEventListener('click', requestEditRefresh);
+    q('[data-edit-retry]')?.addEventListener('click', () => { if (state.pf?.edit?.open) doEditRefresh(); });
+    for (const el of view.querySelectorAll('[data-edit-mode]')) {
+      el.addEventListener('click', () => {
+        const pf = state.pf;
+        if (!pf?.edit?.open) return;
+        pf.edit.mode = el.dataset.editMode === 'preview' ? 'preview' : 'edit';
+        render();
+      });
+    }
+    q('[data-edit-save]')?.addEventListener('click', saveEditFile);
+    q('[data-edit-close]')?.addEventListener('click', requestEditClose);
+    q('[data-edit-keep]')?.addEventListener('click', () => resolveEditPending('save'));
+    q('[data-edit-discard]')?.addEventListener('click', () => resolveEditPending('discard'));
+    q('[data-edit-stay]')?.addEventListener('click', () => resolveEditPending('cancel'));
+    const editBox = q('.bld-edit-editor');
+    if (editBox) editBox.addEventListener('input', () => { const pf = state.pf; if (pf?.edit?.open) pf.edit.content = editBox.value; });
+    const editWrap = q('#bldEditWrap');
+    editWrap?.addEventListener('click', (e) => {
+      if (e.target?.id === 'bldEditWrap' && !state.pf?.edit?.busy) requestEditClose();
+    });
     q('[data-pf-finalize-close]')?.addEventListener('click', closeFinalize);
     q('[data-pf-finalize-cancel]')?.addEventListener('click', closeFinalize);
     q('[data-pf-finalize-confirm]')?.addEventListener('click', confirmFinalize);
@@ -4742,6 +5309,11 @@ ${langsField}
     if (state.rel?.planModal) { closeRelPlan(); return; } // BUG-20260915-014：发布计划确认弹窗（取消不发请求）
     if (state.pf?.license?.open) { closeLicensePicker(); return; } // REQ-20260922-005：选择开源协议弹框 Esc 关闭（不启动总结）
     if (state.pf?.finalize?.open) { closeFinalize(); return; } // REQ-20260921-012：整体审查完结对话框 Esc 关闭
+    if (state.pf?.edit?.open) { // REQ-20260924-006：二次编辑弹窗 Esc——挂起态先撤提示，未保存走关闭保护
+      if (state.pf.edit.pending) { state.pf.edit.pending = null; render(); }
+      else requestEditClose();
+      return;
+    }
     if (state.pf?.review?.open) { closeReview(); return; } // REQ-20260921-008：审查对话框 Esc 关闭
     if (state.pushConfirm) { state.pushConfirm = null; render(); return; }
     if (state.deleteConfirm) { if (!state.deleteBusy) { state.deleteConfirm = null; render(); } return; }
@@ -4791,6 +5363,11 @@ ${langsField}
     ensurePublishPlan, refreshDocsPane, startSummary, startTranslation, openReview, closeReview,
     // REQ-20260924-004：AI 校对问题「修改」跳转（关闭整体审查 → 审查编辑定位）行为接缝
     editFromProofread, focusReviewIssue,
+    // REQ-20260924-006：② 二次编辑弹窗（打开 / 未保存保护 / 保存）与 ③ 建议接受 / 拒绝、
+    // 校对建议解析与应用纯函数（测试与交互共用）
+    openSecondaryEdit, requestEditSwitch, requestEditRefresh, requestEditClose, resolveEditPending,
+    saveEditFile, acceptChkSuggestion, rejectChkSuggestion,
+    parseChkSuggestion, classifyChkIssue, applyChkSuggestion, chkPendingCount,
     openFinalize, closeFinalize, confirmFinalize,
     // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
     confirmLicensePick, skipLicensePick, closeLicensePicker,

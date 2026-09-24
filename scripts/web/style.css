@@ -3794,6 +3794,56 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
 }
 .bld-docs-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; }
+/* REQ-20260924-006 五步操作条：① AI 总结 → ② 二次编辑 → ③ AI 校对 → ④ AI 翻译 → ⑤ 提交
+   （主流程顺序入口；与语言集 / 辅助动作行分离，窄屏 flex-wrap 换行） */
+.bld-docs-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-docs-steps .btn { font-weight: 600; }
+/* 文件列表 + 校对建议侧栏两栏栅格（建议栏固定宽、窄屏纵向堆叠——REQ-20260924-006 ③ 步结果区） */
+.bld-docs-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .bld-docs-main { grid-template-columns: 1fr; } }
+.bld-docs-chk {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px; font-size: 13px; min-width: 0;
+}
+.bld-docs-chk-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-docs-chk-title { font-weight: 600; }
+.bld-docs-chk-count { font-size: 12px; background: rgba(217, 119, 6, 0.12); color: var(--inprogress); border-radius: 999px; padding: 2px 8px; }
+.bld-docs-chk-count.ok { background: var(--ok-bg, #ecfdf5); color: var(--ok-text, #047857); }
+.bld-docs-chk-file { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bld-docs-chk-file span { flex: none; color: var(--muted); font-size: 12.5px; }
+.bld-docs-chk-file select { flex: 1 1 auto; min-width: 0; font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel, #fff); color: inherit; }
+.bld-docs-chk-body { display: flex; flex-direction: column; gap: 6px; }
+.bld-docs-chk-body .bld-chk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
+.bld-chk-issue { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.bld-chk-issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bld-chk-type { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
+.bld-chk-pos { font-size: 12px; color: var(--muted); }
+.bld-chk-text { margin: 0; font-size: 12.5px; word-break: break-word; line-height: 1.6; }
+.bld-chk-diff summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.bld-chk-diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+@media (max-width: 640px) { .bld-chk-diff-grid { grid-template-columns: 1fr; } }
+/* 前后差异高亮：删除浅红 / 新增浅绿 + 文字标签（不只靠颜色区分），深色随 CSS 变量适配 */
+.bld-chk-tag { display: inline-block; font-size: 11.5px; margin-bottom: 4px; border-radius: 4px; padding: 1px 6px; }
+.bld-chk-tag.del { background: rgba(220, 38, 38, 0.1); color: var(--warn); }
+.bld-chk-tag.ins { background: var(--ok-bg, #ecfdf5); color: var(--ok-text, #047857); }
+.bld-chk-before pre, .bld-chk-after pre {
+  margin: 0; padding: 6px 8px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-size: 12px; line-height: 1.6;
+}
+.bld-chk-before pre { background: rgba(220, 38, 38, 0.08); }
+.bld-chk-after pre { background: rgba(5, 150, 105, 0.1); }
+.bld-chk-before del { text-decoration: none; color: var(--warn); font-weight: 600; }
+.bld-chk-after ins { text-decoration: none; color: var(--ok-text, #047857); font-weight: 600; }
+.bld-chk-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* REQ-20260924-006 ② 二次编辑弹窗（默认语言单语言）：文件条 + 编辑 / 预览主体 + 未保存挂起条 */
+.bld-edit-wrap { z-index: 70; padding: 16px; }
+.bld-edit-modal { max-width: 860px; display: flex; flex-direction: column; max-height: calc(100vh - 64px); }
+.bld-edit-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 16px 0; }
+.bld-edit-bar select { font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel, #fff); color: inherit; max-width: 260px; }
+.bld-edit-body { padding: 10px 16px; overflow-y: auto; min-height: 260px; }
+.bld-edit-body .bld-edit-editor { width: 100%; font: inherit; line-height: 1.7; }
+.bld-edit-unsaved { margin: 0 16px 6px; color: var(--inprogress); }
+.bld-edit-pending { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 16px 8px; padding: 8px 10px; border: 1px dashed var(--inprogress); border-radius: 8px; }
 /* 文件列表（4 类 × 语言集语言数）：文件名等宽、右侧状态 chip（图标独立元素 i.st-ico，保证状态文字整节点可翻译） */
 .bld-docs-files { position: relative; }
 .bld-docs-files-head {
