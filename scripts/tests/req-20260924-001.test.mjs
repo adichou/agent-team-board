@@ -515,9 +515,12 @@ const L4_CTX = {
 };
 
 function finalizeModalFns(source) {
-  // 显式带 normalizeFlowEval（不依赖其他用例先运行对沙箱的注入）
+  // 显式带 normalizeFlowEval（不依赖其他用例先运行对沙箱的注入）；
+  // REQ-20260924-004 起 ③ 项明细经 splitProofreadIssues / parseIssueLineNo 逐条渲染，一并注入
   return [
     extractFn(source, 'normalizeFlowEval'),
+    extractFn(source, 'splitProofreadIssues'),
+    extractFn(source, 'parseIssueLineNo'),
     extractFn(source, 'renderFinalizeModal'),
   ].join('\n');
 }
