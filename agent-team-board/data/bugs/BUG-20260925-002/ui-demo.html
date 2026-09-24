@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260925-002 交互演示 · AI 校对建议接受后刷新再提示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1d2430; --muted: #667085;
+    --line: #d8dee8; --accent: #2563eb; --ok: #15803d; --ok-bg: #e8f6ec;
+    --wait: #b45309; --wait-bg: #fdf3e2; --mute: #5b6472; --mute-bg: #eceff3;
+    --run: #1d4ed8; --run-bg: #e5edff; --err: #b91c1c; --err-bg: #fdeaea;
+    --chip-ink: #334155;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181f; --panel: #1c222b; --ink: #e6e9ef; --muted: #98a2b3;
+      --line: #333c49; --accent: #6ea8fe; --ok: #4ade80; --ok-bg: #173324;
+      --wait: #fbbf24; --wait-bg: #3a2c10; --mute: #a8b1bf; --mute-bg: #2a323d;
+      --run: #93b4ff; --run-bg: #1d2a4a; --err: #f87171; --err-bg: #3c1a1a;
+      --chip-ink: #cbd5e1;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    padding: 16px;
+  }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  header.bar {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
+    justify-content: space-between; margin-bottom: 10px;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .controls label { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); }
+  select, textarea {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 8px; font: inherit;
+  }
+  .btn {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .explain {
+    background: var(--panel); border: 1px dashed var(--line); border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 12px; font-size: 13px;
+  }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .step {
+    border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
+    padding: 3px 12px; font-size: 12.5px; color: var(--muted);
+  }
+  .step.done { color: var(--ok); border-color: var(--ok); }
+  .step.active { color: var(--run); border-color: var(--run); }
+  .step button {
+    all: inherit; cursor: pointer; padding: 0; color: inherit;
+  }
+  .step button:hover { text-decoration: underline; }
+  .layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.4fr); gap: 12px; }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .files-head, .chk-head {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    font-weight: 600; margin-bottom: 8px;
+  }
+  ul.files { list-style: none; margin: 0; padding: 0; }
+  ul.files li {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 6px 4px; border-bottom: 1px solid var(--line);
+  }
+  ul.files li:last-child { border-bottom: none; }
+  code.file { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .st {
+    display: inline-flex; align-items: center; gap: 4px; border-radius: 999px;
+    padding: 1px 9px; font-size: 11.5px; white-space: nowrap; color: var(--chip-ink);
+    border: 1px solid var(--line); background: var(--mute-bg);
+  }
+  .st.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
+  .st.wait { color: var(--wait); background: var(--wait-bg); border-color: var(--wait); }
+  .st.run { color: var(--run); background: var(--run-bg); border-color: var(--run); }
+  .st.mute { color: var(--mute); background: var(--mute-bg); border-color: var(--mute); }
+  .chk-file { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12.5px; color: var(--muted); }
+  ul.chk { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .issue { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .issue-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; font-size: 12px; }
+  .issue-head .type { color: var(--muted); }
+  .issue p.text { margin: 4px 0; font-size: 13px; }
+  .note { color: var(--muted); font-size: 12px; margin: 4px 0; }
+  .note.err { color: var(--err); }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  details.diff { margin: 6px 0 2px; font-size: 12.5px; }
+  details.diff summary { cursor: pointer; color: var(--accent); }
+  .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  @media (max-width: 560px) { .diff-grid { grid-template-columns: 1fr; } }
+  .diff-grid pre {
+    margin: 4px 0 0; padding: 6px 8px; border-radius: 6px; white-space: pre-wrap;
+    word-break: break-all; font-size: 12px; border: 1px solid var(--line);
+  }
+  .del { color: var(--err); text-decoration: line-through; }
+  .ins { color: var(--ok); text-decoration: none; }
+  .tag { font-size: 11px; color: var(--muted); }
+  .gate {
+    margin-top: 12px; border: 1px solid var(--line); background: var(--panel);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px;
+  }
+  .gate.locked { border-color: var(--wait); background: var(--wait-bg); color: var(--wait); }
+  .gate.open { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex;
+    align-items: center; justify-content: center; z-index: 50; padding: 16px;
+  }
+  .overlay[hidden] { display: none; }
+  .dialog {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    width: min(720px, 100%); max-height: 86vh; display: flex; flex-direction: column; padding: 12px 14px;
+  }
+  .dialog h2 { font-size: 14.5px; margin: 0 0 6px; }
+  .dialog textarea { width: 100%; height: 260px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .dialog footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  #toasts { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; z-index: 60; max-width: min(420px, 90vw); }
+  .toast {
+    background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--ok);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  .toast.err { border-left-color: var(--err); }
+  .toast.info { border-left-color: var(--accent); }
+  footer.demo {
+    margin-top: 14px; color: var(--muted); font-size: 12px;
+    border-top: 1px solid var(--line); padding-top: 8px;
+  }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div>
+    <h1>BUG-20260925-002 交互演示 · AI 校对建议：接受后刷新再提示 / 再次接受误报过期</h1>
+    <p class="muted small">内存模拟，不读取或修改真实文档；仅演示文档编写页相关区域，非完整产品界面。</p>
+  </div>
+  <div class="controls">
+    <label>演示模式
+      <select id="modeSel">
+        <option value="defect">缺陷现象</option>
+        <option value="expected">期望修复后</option>
+      </select>
+    </label>
+    <label>场景
+      <select id="sceneSel">
+        <option value="done">校对完成（含建议）</option>
+        <option value="running">校对进行中</option>
+        <option value="failed">校对中断</option>
+        <option value="none">尚未校对</option>
+      </select>
+    </label>
+    <button class="btn" id="resetBtn">重置演示</button>
+  </div>
+</header>
+
+<div class="explain" id="explain"></div>
+
+<div class="steps" id="steps"></div>
+
+<div class="layout">
+  <section class="panel" aria-label="发布文档文件列表（演示）">
+    <div class="files-head"><span id="filesTitle">文件</span></div>
+    <ul class="files" id="fileList"></ul>
+    <p class="note" id="dirtyNote" hidden>默认语言文档已修改：接受前会逐条核对磁盘原文，不一致将标记过期，不覆盖人工修改。</p>
+  </section>
+
+  <aside class="panel" aria-label="校对建议（演示）">
+    <div class="chk-head">
+      <span>校对建议</span>
+      <span id="pendingChip"></span>
+    </div>
+    <label class="chk-file">文件
+      <select id="chkFileSel"></select>
+    </label>
+    <div id="chkBody"></div>
+  </aside>
+</div>
+
+<div class="gate" id="gate"></div>
+
+<footer class="demo">
+  本页为评审演示（评审控件：模式 / 场景切换、模拟刷新与重置），不是产品新增功能；状态标签、文案与交互参照当前 dev 代码口径，修复方案以 design.md 定稿为准。
+</footer>
+
+<div class="overlay" id="editorOverlay" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="✎ 修改（演示编辑弹窗）">
+    <h2 id="editorTitle">✎ 修改</h2>
+    <p class="muted small">演示编辑器：模拟「✎ 修改」跳入的二次编辑弹窗（真实产品为默认语言单语言弹窗，带未保存保护）。</p>
+    <textarea id="editorArea" spellcheck="false"></textarea>
+    <footer>
+      <button class="btn" id="editorCancel">关闭</button>
+      <button class="btn primary" id="editorSave">保存</button>
+    </footer>
+  </div>
+</div>
+
+<div class="overlay" id="loadingOverlay" hidden>
+  <div class="dialog" style="width:min(360px,100%)">
+    <h2 id="loadingText">正在读取最新内容…</h2>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ---------- 模拟数据 ---------- */
+
+const SUGGESTIONS = [
+  {
+    file: 'README.md', idx: 0, line: 3, type: '行文规范',
+    before: '本产品提供看板与发布流程管理。',
+    after: '本产品提供看板与发布流程的管理。',
+    text: '第 3 行：行文规范：「本产品提供看板与发布流程管理。」→ 建议「本产品提供看板与发布流程的管理。」',
+  },
+  {
+    file: 'README.md', idx: 1, line: 5, type: '错别字',
+    before: '支持中英文。',
+    after: '支持中英双语。',
+    text: '第 5 行：错别字：「支持中英文。」→ 建议「支持中英双语。」',
+  },
+];
+
+const INITIAL_DOCS = {
+  'README.md': [
+    '# README（演示）',
+    '',
+    '本产品提供看板与发布流程管理。',
+    '',
+    '界面文案集中管理，支持中英文。',
+    '',
+    '- 协作规范见仓库 AGENTS.md。',
+  ],
+  'FEATURES.md': [
+    '# FEATURES（演示）',
+    '',
+    '- 功能一：看板管理',
+    '- 功能二：发布流程',
+  ],
+};
+
+const FILES = ['README.md', 'FEATURES.md'];
+
+/* ---------- 状态 ---------- */
+
+let st;
+let timers = [];
+
+function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+function freshState() {
+  return {
+    mode: 'defect',
+    scene: 'done',                 // done | running | failed | none
+    runId: 1,
+    newRun: false,                 // 重试产生的新一轮 run
+    decisions: {},                 // 'file|idx' -> accepted | rejected | stale
+    applied: {},                   // 'file|idx' -> true（内容已替换并保存）
+    busyKey: null,
+    chkFile: 'README.md',
+    docs: JSON.parse(JSON.stringify(INITIAL_DOCS)),
+    fileState: { 'README.md': '已审核', 'FEATURES.md': '已审核' },
+    editor: null,                  // { file, line }
+  };
+}
+
+/* ---------- 工具 ---------- */
+
+const $ = (sel) => document.querySelector(sel);
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function toast(msg, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (kind || 'ok');
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4600); // 独立于演示计时器，场景切换不残留
+}
+function decisionsOf(sug) { return st.decisions[sug.file + '|' + sug.idx] || null; }
+function pendingCount() {
+  return SUGGESTIONS.filter((s) => { const d = decisionsOf(s); return !d || d === 'pending'; }).length;
+}
+function stateChip(state) {
+  const map = {
+    accepted: ['ok', '✔ 已接受'],
+    rejected: ['mute', '○ 已拒绝'],
+    stale: ['wait', '● 过期'],
+    '待确认': ['wait', '● 待确认'],
+    pending: ['run', '◐ 待处理'],
+  };
+  const [cls, label] = map[state] || map.pending;
+  return '<span class="st ' + cls + '">' + label + '</span>';
+}
+function fileChip(state) {
+  return '<span class="st ' + (state === '已审核' ? 'ok' : 'wait') + '">' + esc(state) + '</span>';
+}
+
+/* ---------- 渲染 ---------- */
+
+function render() {
+  renderExplain();
+  renderSteps();
+  renderFiles();
+  renderChk();
+  renderGate();
+}
+
+function renderExplain() {
+  let txt;
+  if (st.mode === 'defect') {
+    txt = '<strong>缺陷现象模式：</strong>按「接受一条建议 → 点击「刷新页面（模拟浏览器整页刷新）」→ 该建议回到「待处理」→ 再次点击「接受」→ 出现「建议基于的文本已变化」过期报错」走一遍即可复现。决断仅存于会话，整页刷新即丢失。';
+  } else {
+    txt = '<strong>期望修复后模式：</strong>接受 / 拒绝建议后点击「刷新页面（模拟浏览器整页刷新）」，决断保持：已接受 / 已拒绝状态不回退、「待处理 N 项」计数不回涨、「④ AI 翻译」门禁不回退；已决断条目不再提供「接受」入口，不会误报过期。';
+  }
+  if (st.newRun) {
+    txt += ' <span class="small muted">（当前为新一轮校对 run-' + st.runId + '：旧决断随新 run 失效，口径「待确认」，见 README。）</span>';
+  }
+  $('#explain').innerHTML = txt;
+}
+
+function renderSteps() {
+  const s3 = st.scene === 'done' ? 'done' : st.scene === 'none' ? '' : 'active';
+  const running = st.scene === 'running';
+  const third = running ? '③ 校对中' : '③ AI 校对';
+  $('#steps').innerHTML = [
+    '<span class="step done">① AI 总结 ✔</span>',
+    '<span class="step done">② 二次编辑 ✔</span>',
+    '<span class="step ' + s3 + '"><button type="button" id="stepProof" title="点击重新派发校对：产生新 run 并覆盖旧结论（旧决断随之失效，口径待确认）">' + third + (s3 === 'done' ? ' ✔' : '') + '</button></span>',
+    '<span class="step"><button type="button" id="stepTranslate" title="有待处理建议时提示未解锁">④ AI 翻译</button></span>',
+    '<span class="step">⑤ 提交</span>',
+    '<button class="btn" id="refreshSim" title="模拟浏览器整页刷新（重新加载 Web 界面后重新进入文档编写页）；页面内「刷新」按钮不会复现本缺陷">刷新页面（模拟浏览器整页刷新）</button>',
+  ].join('');
+  $('#stepProof').addEventListener('click', startProofrun);
+  $('#stepTranslate').addEventListener('click', () => {
+    const n = pendingCount();
+    if (st.scene === 'done' && n > 0) {
+      toast('AI 翻译未解锁：尚有 ' + n + ' 条校对建议未处理（逐条接受或拒绝后解锁，见右侧校对建议栏）', 'err');
+    } else if (st.scene === 'done') {
+      toast('演示：门禁通过，「④ AI 翻译」解锁（翻译流程未模拟）', 'info');
+    } else {
+      toast('演示：当前场景（' + sceneLabel() + '）下未模拟翻译门禁', 'info');
+    }
+  });
+  $('#refreshSim').addEventListener('click', simulateReload);
+}
+
+function sceneLabel() {
+  return { done: '校对完成', running: '校对进行中', failed: '校对中断', none: '尚未校对' }[st.scene] || st.scene;
+}
+
+function renderFiles() {
+  const reviewed = FILES.filter((f) => st.fileState[f] === '已审核').length;
+  $('#filesTitle').textContent = '文件（' + FILES.length + ' · 默认语言 ' + reviewed + '/' + FILES.length + ' 已审核）';
+  $('#fileList').innerHTML = FILES.map((f) =>
+    '<li><code class="file">' + esc(f) + '</code>' + fileChip(st.fileState[f]) + '</li>'
+  ).join('');
+  const dirty = FILES.some((f) => st.fileState[f] !== '已审核');
+  $('#dirtyNote').hidden = !dirty;
+}
+
+function renderChk() {
+  const chip = $('#pendingChip');
+  const sel = $('#chkFileSel');
+  const body = $('#chkBody');
+
+  if (st.scene === 'none') {
+    chip.textContent = '';
+    sel.innerHTML = FILES.map((f) => '<option>' + esc(f) + '</option>').join('');
+    sel.value = st.chkFile;
+    body.innerHTML = '<p class="muted small" role="status">尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。</p>';
+    return;
+  }
+  if (st.scene === 'running') {
+    chip.textContent = '';
+    body.innerHTML = '<p class="small" role="status">校对进行中：1/2 · 当前：<code>FEATURES.md</code>（正在核查）——本栏与整体审查对话框随回执自动刷新。</p>';
+    return;
+  }
+  if (st.scene === 'failed') {
+    chip.textContent = '';
+    body.innerHTML = '<p class="small" role="alert" style="color:var(--err)">AI 校对中断：网络中断——已回执结论保留，可重试续查。</p>' +
+      '<p><button class="btn" id="chkRetry" title="重新复制 AI 校对提示词并派发核查（新一轮 run 覆盖旧结论）">重试 AI 校对</button></p>';
+    $('#chkRetry').addEventListener('click', () => retryProofrun());
+    return;
+  }
+
+  // done：待处理计数 + 文件下拉 + 建议卡片
+  const n = pendingCount();
+  chip.innerHTML = '<span class="st ' + (n ? 'run' : 'ok') + '" title="未处理的建议数量：全部接受或拒绝后「④ AI 翻译」解锁">待处理 ' + n + ' 项</span>';
+
+  sel.innerHTML = FILES.map((f) => {
+    const cnt = SUGGESTIONS.filter((s) => s.file === f).length;
+    return '<option value="' + esc(f) + '">' + esc(f) + (cnt ? '（' + cnt + '）' : '') + '</option>';
+  }).join('');
+  sel.value = st.chkFile;
+  sel.disabled = !!st.busyKey;
+
+  const rows = SUGGESTIONS.filter((s) => s.file === st.chkFile);
+  if (!rows.length) {
+    body.innerHTML = '<p class="small" role="status">该文件未发现问题 ✓（校对基准为回执时点磁盘内容）</p>';
+    return;
+  }
+  const cards = rows.map((sug) => {
+    const key = sug.file + '|' + sug.idx;
+    const dec = decisionsOf(sug);
+    const state = dec || 'pending';
+    const busy = st.busyKey === key;
+    const anyBusy = !!st.busyKey;
+    const diff =
+      '<details class="diff"><summary>查看修改前后差异</summary>' +
+      '<div class="diff-grid">' +
+      '<div><span class="tag">修改前（删除）</span><pre><span class="del">' + esc(sug.before) + '</span></pre></div>' +
+      '<div><span class="tag">修改后（新增）</span><pre><span class="ins">' + esc(sug.after) + '</span></pre></div>' +
+      '</div></details>';
+    const canAccept = !dec;
+    const acceptBtn = canAccept
+      ? '<button class="btn primary" data-accept="' + esc(key) + '"' + (busy || anyBusy ? ' disabled' : '') + ' title="按差异应用这一条建议并保存（应用前先核对磁盘原文一致，不一致标记过期不覆盖）">' + (busy ? '接受中…' : '接受') + '</button>'
+      : '';
+    const rejectBtn = !dec
+      ? '<button class="btn" data-reject="' + esc(key) + '"' + (busy || anyBusy ? ' disabled' : '') + ' title="不采纳该条建议：原文保持不变（不计入待处理）">拒绝</button>'
+      : '';
+    const staleNote = dec === 'stale'
+      ? '<p class="note err" role="note">建议基于的文本已变化：未覆盖当前内容，请重新校对或点「✎ 修改」手动处理。</p>'
+      : '';
+    return (
+      '<li class="issue">' +
+      '<div class="issue-head"><span class="type">' + esc(sug.type) + '</span>' +
+      '<span class="type">第 ' + sug.line + ' 行</span>' + stateChip(state) + '</div>' +
+      '<p class="text">' + esc(sug.text) + '</p>' +
+      diff + staleNote +
+      '<div class="acts">' + acceptBtn + rejectBtn +
+      '<button class="btn" data-edit="' + esc(sug.file) + '" data-line="' + sug.line + '"' + (anyBusy ? ' disabled' : '') + ' title="' + esc(sug.file) + ' · 第 ' + sug.line + ' 行">✎ 修改</button>' +
+      '</div></li>'
+    );
+  }).join('');
+  body.innerHTML = '<ul class="chk">' + cards + '</ul>';
+
+  body.querySelectorAll('[data-accept]').forEach((b) =>
+    b.addEventListener('click', () => acceptSuggestion(b.getAttribute('data-accept'))));
+  body.querySelectorAll('[data-reject]').forEach((b) =>
+    b.addEventListener('click', () => rejectSuggestion(b.getAttribute('data-reject'))));
+  body.querySelectorAll('[data-edit]').forEach((b) =>
+    b.addEventListener('click', () => openEditor(b.getAttribute('data-edit'), parseInt(b.getAttribute('data-line'), 10))));
+}
+
+function renderGate() {
+  const g = $('#gate');
+  if (st.scene !== 'done') {
+    g.className = 'gate';
+    g.textContent = '校对建议门禁（演示）：当前场景「' + sceneLabel() + '」，未模拟 ④ 门禁计数。';
+    return;
+  }
+  const n = pendingCount();
+  if (n > 0) {
+    g.className = 'gate locked';
+    g.textContent = '④ AI 翻译门禁：尚有 ' + n + ' 条校对建议未处理（逐条接受或拒绝后解锁）——点击「④ AI 翻译」可见未解锁提示。';
+  } else {
+    g.className = 'gate open';
+    g.textContent = '④ AI 翻译门禁：校对建议已全部处理，翻译解锁 ✓（演示）。';
+  }
+}
+
+/* ---------- 交互 ---------- */
+
+function acceptSuggestion(key) {
+  if (st.scene !== 'done' || st.busyKey) return;
+  const sug = SUGGESTIONS.find((s) => s.file + '|' + s.idx === key);
+  if (!sug || decisionsOf(sug)) return;
+  st.busyKey = key;
+  render();
+  later(() => {
+    st.busyKey = null;
+    const lines = st.docs[sug.file];
+    const i = Math.min(sug.line, lines.length) - 1;
+    if (lines[i] != null && lines[i].includes(sug.before)) {
+      lines[i] = lines[i].replace(sug.before, sug.after);
+      st.applied[key] = true;
+      st.decisions[key] = 'accepted';
+      st.fileState[sug.file] = '已总结待审核';
+      toast('✓ 已接受并保存 ' + sug.file + ' 的建议：文件回到待审核，翻译基准已更新');
+    } else {
+      st.decisions[key] = 'stale';
+      toast('✕ 建议已过期：建议基于的文本已变化，未覆盖当前内容（请重新校对或点「✎ 修改」手动处理）', 'err');
+    }
+    render();
+  }, 700);
+}
+
+function rejectSuggestion(key) {
+  if (st.scene !== 'done' || st.busyKey) return;
+  const sug = SUGGESTIONS.find((s) => s.file + '|' + s.idx === key);
+  if (!sug || decisionsOf(sug)) return;
+  st.decisions[key] = 'rejected';
+  toast('已拒绝该条建议：原文保持不变');
+  render();
+}
+
+function openEditor(file, line) {
+  st.editor = { file, line };
+  $('#editorTitle').textContent = '✎ 修改 · ' + file + ' · 第 ' + line + ' 行（演示）';
+  $('#editorArea').value = st.docs[file].join('\n');
+  $('#editorOverlay').hidden = false;
+}
+
+function closeEditor() {
+  $('#editorOverlay').hidden = true;
+  st.editor = null;
+}
+
+function simulateReload() {
+  if ($('#loadingOverlay').hidden === false) return;
+  $('#loadingText').textContent = '正在读取最新内容…（模拟浏览器整页刷新）';
+  $('#loadingOverlay').hidden = false;
+  later(() => {
+    $('#loadingOverlay').hidden = true;
+    // 磁盘内容与文件状态跨刷新保留（真实磁盘如此）；差异只在会话决断
+    if (st.mode === 'defect') {
+      st.decisions = {};   // 缺陷：决断不持久化，整页刷新即丢失
+      toast('模拟刷新完成：会话决断已丢失，已接受建议回到「待处理」（缺陷口径）', 'info');
+    } else {
+      toast('模拟刷新完成：决断保持，待处理计数不回涨（期望口径）', 'info');
+    }
+    const first = FILES.find((f) => SUGGESTIONS.some((s) => s.file === f)) || FILES[0];
+    st.chkFile = first; // 会话态 chkFile 同样重建，回落到首个有问题文件
+    render();
+  }, 900);
+}
+
+function startProofrun() {
+  if (st.scene === 'running') { toast('演示：校对进行中，请稍候', 'info'); return; }
+  st.scene = 'running';
+  st.newRun = true;
+  st.runId += 1;
+  st.decisions = {}; // 新一轮 run：旧决断随 runId 失效（口径待确认，见 README）
+  render();
+  toast('演示：已重新派发校对（run-' + st.runId + '），旧决断随新 run 失效——该口径「待确认」', 'info');
+  later(() => { st.scene = 'done'; render(); }, 2000);
+}
+
+function retryProofrun() {
+  st.scene = 'running';
+  st.newRun = true;
+  st.runId += 1;
+  st.decisions = {};
+  render();
+  later(() => { st.scene = 'done'; render(); }, 2000);
+}
+
+/* ---------- 控件接线 ---------- */
+
+$('#modeSel').addEventListener('change', (e) => {
+  st.mode = e.target.value; // 切模式只改口径与后续刷新行为，既有状态由「刷新页面」演示体现
+  render();
+});
+$('#sceneSel').addEventListener('change', (e) => {
+  clearTimers();
+  const prev = st.scene;
+  st.scene = e.target.value;
+  if (st.scene === 'running' && prev !== 'running') {
+    later(() => { if (st.scene === 'running') { st.scene = 'done'; render(); } }, 2200);
+  }
+  if (st.scene === 'done') st.newRun = false;
+  render();
+});
+$('#chkFileSel').addEventListener('change', (e) => { st.chkFile = e.target.value; render(); });
+$('#resetBtn').addEventListener('click', () => {
+  clearTimers();
+  $('#editorOverlay').hidden = true;
+  $('#loadingOverlay').hidden = true;
+  st = freshState();
+  $('#modeSel').value = st.mode;
+  $('#sceneSel').value = st.scene;
+  render();
+});
+$('#editorCancel').addEventListener('click', closeEditor);
+$('#editorSave').addEventListener('click', () => {
+  if (!st.editor) return;
+  const { file } = st.editor;
+  const next = $('#editorArea').value.split('\n');
+  const changed = next.join('\n') !== st.docs[file].join('\n');
+  st.docs[file] = next;
+  if (changed) {
+    st.fileState[file] = '已总结待审核';
+    toast('✓ 已保存 ' + file + '（演示）：内容已修改，文件回到待审核');
+  }
+  closeEditor();
+  render();
+});
+
+/* ---------- 启动 ---------- */
+
+st = freshState();
+$('#modeSel').value = st.mode;
+$('#sceneSel').value = st.scene;
+render();
+</script>
+</body>
+</html>
