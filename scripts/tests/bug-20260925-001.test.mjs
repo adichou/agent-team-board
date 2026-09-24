@@ -268,6 +268,8 @@ function chkFns(source) {
     extractFn(source, 'parseIssueLineNo'),
     extractFn(source, 'parseChkSuggestion'),
     extractFn(source, 'applyChkSuggestion'),
+    extractFn(source, 'alreadyAppliedChk'),
+    extractFn(source, 'persistChkDecision'),
     extractFn(source, 'chkPendingCount'),
     extractFn(source, 'acceptChkSuggestion'),
     extractFn(source, 'rejectChkSuggestion'),
