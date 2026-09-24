@@ -1645,6 +1645,9 @@ const ATBBuild = (() => {
       // REQ-20260924-006 AI 校对建议：chkFile（侧栏选中文件）、chkDecisions（决断会话态
       //'runId|file|idx' → accepted/rejected/stale，不持久化）、chkBusy（接受请求进行中）
       chkFile: null, chkDecisions: null, chkBusy: null,
+      // BUG-20260925-001 滚动保留：chkAnchor（接受 / 拒绝后待锚定的条目 { runId, file, idx }，
+      // 决断渲染一次性消费；busy 中间渲染保留）、chkScrollReset（主动换文件后列表从顶部开始）
+      chkAnchor: null, chkScrollReset: false,
       // REQ-20260921-015 一键加入所有依赖提交：depBusy 执行中防重复触发；depSkip 最近一次
       // 服务端返回的跳过清单（{ commit, subject, reason }[]），就地在隔离分析节内展示原因
       depBusy: false,
@@ -3364,8 +3367,9 @@ ${langsField}
         const rejectBtn = !dec
           ? `<button type="button" class="btn small" data-chk-reject="${esc(chkSel)}|${i}"${busy || pf.chkBusy ? ' disabled' : ''} title="不采纳该条建议：原文保持不变（不计入待处理）">拒绝</button>`
           : '';
+        // BUG-20260925-001：data-chk-idx 为滚动锚点钩子（决断后重渲染锚定刚操作条目用）
         return `
-            <li class="bld-chk-issue">
+            <li class="bld-chk-issue" data-chk-idx="${i}">
               <div class="bld-chk-issue-head">
                 <span class="bld-chk-type">${esc(type)}</span>
                 <span class="bld-chk-pos">${sug.line ? `第 ${sug.line} 行` : '无行号'}</span>
@@ -3930,6 +3934,8 @@ ${langsField}
     const sug = parseChkSuggestion(splitProofreadIssues((run.issues || {})[file] || '')[idx] || '');
     if (!sug || !sug.applicable) return;
     pf.chkBusy = key;
+    // BUG-20260925-001：锚定刚操作的条目（busy 中间渲染保留，决断渲染消费滚动到该条）
+    pf.chkAnchor = { runId: run.runId, file, idx };
     render();
     try {
       const r0 = await fetch(`/api/build/docs?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}&file=${encodeURIComponent(file)}`);
@@ -3968,8 +3974,49 @@ ${langsField}
     const cur = pf.chkDecisions[key];
     if (cur === 'accepted' || cur === 'rejected' || cur === 'stale') return;
     pf.chkDecisions[key] = 'rejected';
+    // BUG-20260925-001：拒绝同样锚定当前条目（重渲染后视图不跳回第一条）
+    pf.chkAnchor = { runId: run.runId, file, idx };
     toast('已拒绝该条建议：原文保持不变');
     render();
+  }
+
+  // BUG-20260925-001 校对建议列表滚动保留：render() 全量重建「文档编写」窗格 DOM，建议列表
+  // .bld-chk-list（max-height 460px 纵向滚动容器）随重建丢 scrollTop——接受 / 拒绝与校对 run
+  // 轮询刷新都触发重渲染，视图每次跳回第一条。修复分三段：
+  // ① captureChkScroll：重渲染前记忆旧列表滚动位置；
+  // ② restoreChkListScroll：重建后先恢复记忆位置，再把锚点条目按 nearest 口径微调进可视区
+  //   （完全可见不动；上方露出上移贴顶；下方越界下移贴底——不引入整页滚动）；
+  // ③ applyChkScrollAfterRender：锚点仅在决断渲染（chkBusy 已清空）消费一次，busy 中间渲染
+  //   保留到决断渲染；换 run 锚点失效丢弃；主动换文件（chkScrollReset）从顶部开始。
+  function captureChkScroll(view) {
+    const el = view?.querySelector?.('.bld-chk-list');
+    return el ? { top: el.scrollTop || 0 } : null;
+  }
+
+  function restoreChkListScroll(listEl, saved, anchor) {
+    if (!listEl) return;
+    if (saved && typeof saved.top === 'number') listEl.scrollTop = saved.top;
+    if (!anchor) return;
+    const card = listEl.querySelector ? listEl.querySelector(`.bld-chk-issue[data-chk-idx="${anchor.idx}"]`) : null;
+    if (!card || typeof card.getBoundingClientRect !== 'function' || typeof listEl.getBoundingClientRect !== 'function') return;
+    const lr = listEl.getBoundingClientRect();
+    const cr = card.getBoundingClientRect();
+    if (cr.top < lr.top) listEl.scrollTop += cr.top - lr.top;
+    else if (cr.bottom > lr.bottom) listEl.scrollTop += cr.bottom - lr.bottom;
+  }
+
+  function applyChkScrollAfterRender(view, saved) {
+    const pf = state.pf;
+    if (!pf) return;
+    const runId = pf.plan?.docsCheck?.runId;
+    if (pf.chkAnchor && pf.chkAnchor.runId !== runId) pf.chkAnchor = null; // 换 run 丢弃
+    const anchor = !pf.chkBusy && pf.chkAnchor ? pf.chkAnchor : null; // busy 渲染不消费
+    if (anchor) pf.chkAnchor = null; // 决断渲染一次性消费
+    const listEl = view?.querySelector?.('.bld-chk-list');
+    const reset = !!pf.chkScrollReset;
+    pf.chkScrollReset = false;
+    if (!listEl || reset) return; // 主动换文件：新文件列表从顶部开始
+    restoreChkListScroll(listEl, saved, anchor);
   }
 
   // 二次编辑弹窗渲染：默认语言单语言（文件下拉只列默认语言文件，无其他语种对照列）；
@@ -4818,6 +4865,8 @@ ${langsField}
     const newBtn = state.tab === 'versions' && d?.isRepo
       ? '<button type="button" class="btn primary" id="bldNewBtn">＋ 新建版本</button>'
       : '';
+    // BUG-20260925-001：重建前记忆校对建议列表滚动位置（重建后 applyChkScrollAfterRender 恢复 / 锚定）
+    const chkScrollSaved = captureChkScroll(view);
     view.innerHTML = `
       <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}<span class="bld-tabs-tools">${newBtn}</span></nav>
       ${body}
@@ -4834,6 +4883,8 @@ ${langsField}
       ${renderLicenseModal(selVersion())}
       ${renderSecondaryEditModal(selVersion())}`;
     bindCommon(view);
+    // BUG-20260925-001：校对建议列表滚动位置恢复 / 刚操作条目锚定（轮询等被动重渲染不打断）
+    applyChkScrollAfterRender(view, chkScrollSaved);
     // REQ-20260920-003：文档 / 合并 / 正式发布步按需自愈加载——详情在这些步但 pf 数据缺失 /
     // 版本不匹配（切换版本 / 选中失效回落 / 恢复快照）时只读拉取；ensurePublishPlan 同步置
     // loading 态，重入 render 不再触发（无请求循环）
@@ -5121,7 +5172,8 @@ ${langsField}
     const chkSel = q('[data-chk-file]');
     chkSel?.addEventListener('change', () => {
       const pf = state.pf;
-      if (pf && chkSel.value) { pf.chkFile = chkSel.value; render(); }
+      // BUG-20260925-001：主动换文件是切列表——清锚点并从顶部开始（不沿用旧文件滚动偏移）
+      if (pf && chkSel.value) { pf.chkFile = chkSel.value; pf.chkAnchor = null; pf.chkScrollReset = true; render(); }
     });
     for (const el of view.querySelectorAll('[data-chk-accept]')) {
       el.addEventListener('click', () => {
