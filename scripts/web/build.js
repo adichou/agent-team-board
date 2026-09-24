@@ -1643,7 +1643,8 @@ const ATBBuild = (() => {
       // busy(保存中), loadErr, pending(未保存保护挂起动作), savedNote, pendingFocus }
       edit: null,
       // REQ-20260924-006 AI 校对建议：chkFile（侧栏选中文件）、chkDecisions（决断会话态
-      //'runId|file|idx' → accepted/rejected/stale，不持久化）、chkBusy（接受请求进行中）
+      //'runId|file|idx' → accepted/rejected/stale——BUG-20260925-002：从 plan.docsCheck.decisions
+      // 播种并逐条落库持久化，见 seedChkDecisions / persistChkDecision）、chkBusy（接受请求进行中）
       chkFile: null, chkDecisions: null, chkBusy: null,
       // BUG-20260925-001 滚动保留：chkAnchor（接受 / 拒绝后待锚定的条目 { runId, file, idx }，
       // 决断渲染一次性消费；busy 中间渲染保留）、chkScrollReset（主动换文件后列表从顶部开始）
@@ -1677,6 +1678,7 @@ const ATBBuild = (() => {
       if (state.pf !== pf || pf.seq !== seq) return;
       pf.plan = data;
       pf.phase = 'ready';
+      seedChkDecisions(pf); // BUG-20260925-002：决断从服务端账本重播种（刷新 / 切版本重进不丢）
     } catch (e) {
       if (state.pf !== pf || pf.seq !== seq) return;
       pf.plan = null;
@@ -2031,6 +2033,7 @@ const ATBBuild = (() => {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `启动失败（${r.status}）`);
       pf.plan = { ...(pf.plan || {}), docsCheck: data.run };
+      seedChkDecisions(pf); // BUG-20260925-002：新 run 决断从空账本播种（旧 run 决断不带入）
       const ok = await copyText(data.prompt);
       if (ok) toast('✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（错别字与行文规范），结果自动回执');
       else toast('提示词已生成但复制失败：请在下方提示词文本框中全选（⌘A）并手动复制', true);
@@ -2436,6 +2439,7 @@ const ATBBuild = (() => {
       if (!changed) return;
       // REQ-20260924-001：docsCheck（AI 校对 run）随单次轮询同吸——整体审查对话框结果自动刷新
       pf.plan = { ...(pf.plan || {}), summary: next, translate: nextTr, ...(data.docsFlow ? { docsFlow: data.docsFlow } : {}), docsCheck: nextChk };
+      seedChkDecisions(pf); // BUG-20260925-002：docsCheck 替换后决断重播种（服务端账本 + 本会话同 run 覆盖）
       render();
     } catch { /* 轮询网络异常静默 */ }
   }
@@ -3326,12 +3330,17 @@ ${langsField}
       || (chkRun ? (chkFiles.find((f) => (chkRun.issues || {})[f]) || chkFiles[0]) : chkFiles[0])
       || null;
     const chkPending = chkRun && chkRun.phase === 'done' ? chkPendingCount(p, pf.chkDecisions) : 0;
+    // BUG-20260925-002：新 run 旧决断失效的可感知说明（服务端 supersededDecided = 上一轮
+    // 已决断数）——不让用户误以为刚处理过的建议凭空回到待处理。
+    const chkSupersededNote = chkRun && chkRun.supersededDecided > 0
+      ? `<p class="muted small" role="note">上一轮校对已处理 ${chkRun.supersededDecided} 条：决断随新一轮校对失效，本轮结论需逐条重新接受或拒绝。</p>`
+      : '';
     const chkStateChip = (state) => {
       const cls = state === 'accepted' ? 'st-ok' : state === 'stale' ? 'st-wait' : state === 'rejected' ? 'st-mute' : state === '待确认' ? 'st-wait' : 'st-run';
       const label = state === 'accepted' ? '已接受' : state === 'rejected' ? '已拒绝' : state === 'stale' ? '过期' : state === '待确认' ? '待确认' : '待处理';
       return `<span class="st ${cls}" title="${esc(label)}"><i class="st-ico" aria-hidden="true">${state === 'accepted' ? '✔' : state === 'stale' || state === '待确认' ? '●' : '◐'}</i>${esc(label)}</span>`;
     };
-    const chkBodyHtml = (() => {
+    const chkBodyHtml = chkSupersededNote + (() => {
       if (!chkRun) return '<p class="muted small" role="status">尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。</p>';
       const c = chkRun.counts || {};
       if (chkRun.phase === 'running') {
@@ -3736,6 +3745,39 @@ ${langsField}
     return n;
   }
 
+  // BUG-20260925-002 决断播种：plan.docsCheck.decisions（服务端校对账本事实源，键 'file|idx'）
+  // → 会话决断表（键 'runId|file|idx'）。本会话同 runId 已有决断覆盖其上（并发未落库不丢）；
+  // 换 run（新一轮校对新 runId）旧键自然丢弃（旧决断不带入新 run，侧栏另有失效提示）。
+  // 拉取 / 轮询替换 pf.plan(.docsCheck) 后调用——整页刷新与版本切换重进即重播种，决断不丢。
+  function seedChkDecisions(pf) {
+    const run = pf?.plan?.docsCheck;
+    const out = {};
+    if (run && run.runId) {
+      for (const [k, st] of Object.entries(run.decisions || {})) out[`${run.runId}|${k}`] = st;
+      for (const [k, st] of Object.entries(pf.chkDecisions || {})) {
+        if (k.startsWith(`${run.runId}|`)) out[k] = st;
+      }
+    }
+    pf.chkDecisions = out;
+    return out;
+  }
+
+  // BUG-20260925-002 已应用识别（纯函数）：接受定位失败（stale）时区分「此前已应用」与
+  //「原文被人工改过」——after 非空且按 applyChkSuggestion 同定位口径（有行号查该行、行号
+  // 超界收敛末行；无行号查全文）能找到 after ⇒ 已应用；after 为空（删除型）无法从内容可靠
+  // 区分，保守返回 false（走过期口径，「不一致不覆盖人工修改」的既有保护不回退）。
+  function alreadyAppliedChk(content, s) {
+    const after = String(s?.after ?? '');
+    if (!after) return false;
+    const text = String(content ?? '');
+    if (s?.line != null && s.line >= 1) {
+      const lines = text.split('\n');
+      const idx = Math.min(s.line, lines.length) - 1;
+      return lines[idx].includes(after);
+    }
+    return text.includes(after);
+  }
+
   /* ---------- REQ-20260924-006 ② 二次编辑弹窗（默认语言单语言）与 ③ 建议接受 / 拒绝 ---------- */
 
   // 未保存判定：disk 已知（读取成功或保存成功回写）且草稿与磁盘不一致。
@@ -3918,9 +3960,24 @@ ${langsField}
     }
   }
 
+  // BUG-20260925-002 决断落库：接受 / 拒绝 / 过期逐条 POST 到服务端校对账本（run.json
+  // decisions），刷新 / 切版本重进后重播种不丢；持久化失败不阻塞会话内决断（降级回内存
+  // 口径，刷新后由 alreadyAppliedChk 已应用识别兜底不误报）。
+  async function persistChkDecision(pf, run, file, idx, decision) {
+    if (!state.project) return false;
+    try {
+      const r = await fetch(`/api/build/docs-check/decision?project=${encodeURIComponent(state.project)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pf.verId, runId: run.runId, file, idx, decision }),
+      });
+      return r.ok;
+    } catch { return false; }
+  }
+
   // ③ 建议接受：取磁盘最新内容 → 定位替换（applyChkSuggestion，行级 / 全文包含校验）→
-  // 保存成功才记「已接受」（幂等：已决断条目直接返回；保存失败不误标）；文本已变化记
-  // 「过期」不覆盖人工修改。
+  // 保存成功才记「已接受」（幂等：已决断条目直接返回；保存失败不误标）；文本已变化先区分
+  //「此前已应用」（after 已在磁盘——BUG-20260925-002：决断丢失后重复接受不误报过期，标
+  // accepted 计已处理）与「原文被人工改过」（仍标过期不覆盖人工修改）；决断逐条落库持久化。
   async function acceptChkSuggestion(file, idx) {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
@@ -3943,8 +4000,13 @@ ${langsField}
       if (!r0.ok) throw new Error(d0.error || `读取失败（${r0.status}）`);
       const applied = applyChkSuggestion(d0.content == null ? '' : d0.content, sug);
       if (applied.stale || applied.error) {
-        pf.chkDecisions[key] = 'stale';
-        toast('✕ 建议已过期：建议基于的文本已变化，未覆盖当前内容（请重新校对或点「✎ 修改」手动处理）', true);
+        // BUG-20260925-002：定位失败先识别「此前已应用」（after 已在磁盘内容中——刷新丢
+        // 决断后重复接受给非失败反馈，不误报「文本已变化」）；「原文被人工改过」仍标过期。
+        const wasApplied = applied.stale ? alreadyAppliedChk(d0.content == null ? '' : d0.content, sug) : false;
+        pf.chkDecisions[key] = wasApplied ? 'accepted' : 'stale';
+        await persistChkDecision(pf, run, file, idx, wasApplied ? 'accepted' : 'stale');
+        if (wasApplied) toast('✓ 该建议此前已应用：当前内容已是建议后的文本，无需重复操作');
+        else toast('✕ 建议已过期：建议基于的文本已变化，未覆盖当前内容（请重新校对或点「✎ 修改」手动处理）', true);
         return;
       }
       const r = await fetch(`/api/build/docs/save?project=${encodeURIComponent(state.project)}`, {
@@ -3955,6 +4017,7 @@ ${langsField}
       if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
       if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
       pf.chkDecisions[key] = 'accepted';
+      await persistChkDecision(pf, run, file, idx, 'accepted');
       toast(`✓ 已接受并保存 ${file} 的建议：文件回到待审核，翻译基准已更新`);
     } catch (e) {
       toast(`✕ 接受失败：${e.message}（文档未修改，可重试）`, true);
@@ -3964,8 +4027,9 @@ ${langsField}
     }
   }
 
-  // ③ 建议拒绝：仅记「已拒绝」，原文不动（与接受结果可区分；已决断幂等）。
-  function rejectChkSuggestion(file, idx) {
+  // ③ 建议拒绝：仅记「已拒绝」，原文不动（与接受结果可区分；已决断幂等）；决断落库持久化
+  //（BUG-20260925-002），刷新 / 切版本重进后不再回到待处理。
+  async function rejectChkSuggestion(file, idx) {
     const pf = state.pf;
     const run = pf?.plan?.docsCheck;
     if (!run || pf.chkBusy) return;
@@ -3978,6 +4042,7 @@ ${langsField}
     pf.chkAnchor = { runId: run.runId, file, idx };
     toast('已拒绝该条建议：原文保持不变');
     render();
+    await persistChkDecision(pf, run, file, idx, 'rejected');
   }
 
   // BUG-20260925-001 校对建议列表滚动保留：render() 全量重建「文档编写」窗格 DOM，建议列表
@@ -5420,6 +5485,8 @@ ${langsField}
     openSecondaryEdit, requestEditSwitch, requestEditRefresh, requestEditClose, resolveEditPending,
     saveEditFile, acceptChkSuggestion, rejectChkSuggestion,
     parseChkSuggestion, classifyChkIssue, applyChkSuggestion, chkPendingCount,
+    // BUG-20260925-002：决断播种与已应用识别纯函数（测试与交互共用）
+    seedChkDecisions, alreadyAppliedChk,
     openFinalize, closeFinalize, confirmFinalize,
     // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
     confirmLicensePick, skipLicensePick, closeLicensePicker,

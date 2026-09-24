@@ -9,6 +9,9 @@
 //   - 不并入 TASK_KINDS、不进 REQ/BUG 状态机、不占条目状态——只服务于版本发布文档。
 // 事实源：<dataDir>/runtime/docs-check/runs/<runId>/run.json（runId 形如 chk-YYYYMMDD-HHMMSS-xxxx）。
 // 校对只读不改文档（提示词约束）；账本只记录核查结论与问题清单，不改审核状态、不设门禁。
+// BUG-20260925-002：建议决断（接受 / 拒绝 / 过期）持久化到 run.decisions（键 'file|idx'
+// → accepted/rejected/stale）——决断随 run 落盘（runtime 应用数据），整页刷新 / 换浏览器
+// 重进后前端从视图 decisions 重播种，决断不丢；旧 run 无 decisions 字段首次落库时补空。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -139,6 +142,7 @@ export function createCheckRun(dataDir, { verId, owner, langs, customDocs = [] }
     phase: 'running',
     files,
     issues,
+    decisions: {}, // BUG-20260925-002 建议决断账本（键 'file|idx' → accepted/rejected/stale）
     createdAt: nowIso(),
     updatedAt: nowIso(),
     startedAt: nowIso(),
@@ -211,6 +215,49 @@ export function finishCheckRun(dataDir, runId, { result, summary = '', reason = 
   return run;
 }
 
+// ---------- BUG-20260925-002 建议决断账本（接受 / 拒绝 / 过期持久化） ----------
+
+// 建议行数（与前端 splitProofreadIssues 口径一致：按换行拆、trim、去空行）——idx 校验依据。
+const proofreadIssueRows = (text) => String(text ?? '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length;
+
+// 逐条决断落库：UI「接受 / 拒绝 / 定位失败（过期 / 已应用）」后调用。校验：decision 三值、
+// run 属本版本、file 在 run 账本、idx 在该文件 issues 行数内、run 已收尾（done）才可记
+//（running / failed 的结论未定，不记决断）。同一建议后写覆盖（最后一次决断为准）。
+export function recordCheckDecision(dataDir, { verId, runId, file, idx, decision } = {}) {
+  if (!['accepted', 'rejected', 'stale'].includes(decision)) {
+    throw new AtbError(`decision 必须是 accepted | rejected | stale，得到：${decision}`);
+  }
+  const run = getCheckRun(dataDir, String(runId || ''));
+  if (run.verId !== String(verId || '')) throw new AtbError(`校对执行 ${run.runId} 不属于版本 ${verId || '（空）'}`);
+  if (run.phase !== 'done') throw new AtbError(`运行 ${run.runId} 未收尾（${run.phase}）：建议决断仅在完成后记录`);
+  const f = String(file || '');
+  if (!Object.prototype.hasOwnProperty.call(run.files || {}, f)) {
+    throw new AtbError(`非 AI 校对目标文件：${f}（仅默认语言发布文档可记决断）`);
+  }
+  const rows = proofreadIssueRows((run.issues || {})[f]);
+  const i = Number(idx);
+  if (!Number.isInteger(i) || i < 0 || i >= rows) {
+    throw new AtbError(`建议序号越界：${idx}（${f} 共 ${rows} 条建议）`);
+  }
+  run.decisions = run.decisions || {}; // 旧 run（无字段）首次落库补空
+  run.decisions[`${f}|${i}`] = decision;
+  saveCheckRun(dataDir, run);
+  return run;
+}
+
+// 上一轮已决断数（新 run 旧决断失效的前端提示依据）：同版本、创建早于当前 run 的最近一个
+// 有决断的 run 的决断条数；无则 0。决断按 runId 绑定不带入新 run（口径不变），此计数让
+// 界面可感知「刚处理过的建议为何回到待处理」。
+export function supersededCheckDecisionCount(dataDir, verId, currentRunId) {
+  const runs = listCheckRuns(dataDir).filter((r) => r.verId === String(verId || ''));
+  const at = runs.findIndex((r) => r.runId === String(currentRunId || ''));
+  for (let i = (at === -1 ? runs.length : at) - 1; i >= 0; i--) {
+    const n = Object.keys(runs[i].decisions || {}).length;
+    if (n) return n;
+  }
+  return 0;
+}
+
 // ---------- 视图（文档编写页 / 整体审查对话框 / 任务模块） ----------
 
 // 面板视图：进度计数（pass / fail / pending）+ 当前核查文件 + issues 透出 + 独立锁标注。
@@ -228,6 +275,7 @@ export function checkRunView(run) {
     lock: 'docscheck', // 独立锁标注（与 AI 总结 / AI 翻译 / AI 分析 / AI 开发隔离）
     files: { ...(run.files || {}) },
     issues: { ...(run.issues || {}) },
+    decisions: { ...(run.decisions || {}) }, // BUG-20260925-002 决断随视图透出（前端播种事实源）
     counts: {
       pass: count('pass'),
       fail: count('fail'),

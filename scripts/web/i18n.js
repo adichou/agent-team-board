@@ -1424,6 +1424,8 @@ const EN = {
   '服务已重启，执行结果未知（记录丢失），可重试或到终端核实。': 'Service restarted and the run record was lost; the result is unknown — retry or verify in a terminal.',
   '不允许在参数中携带 --dir：项目根由服务端统一注入': '--dir is not allowed in arguments: the project root is injected by the server',
   '该项目没有命令执行记录（服务可能已重启；此前在途执行的结果未知）': 'No command run record for this project (the service may have restarted; the outcome of the previous in-flight run is unknown)',
+  // BUG-20260925-002 已应用建议再次接受：非失败口径（区别于过期误报）
+  '✓ 该建议此前已应用：当前内容已是建议后的文本，无需重复操作': '✓ This suggestion was already applied: the current text already matches the suggestion — no action needed',
 };
 
 // 命令注册表词条（REQ-20260920-004，scripts/lib/cli-registry.mjs 数据：分组名 / 说明 / 参数
@@ -1642,6 +1644,8 @@ const EN_DYNAMIC = {
   '读取失败：◇': 'Read failed: $1',
   'AI 翻译未解锁：尚有 ◇ 条校对建议未处理（逐条接受或拒绝后解锁，见右侧校对建议栏）': 'AI translation locked: $1 proofread suggestion(s) unresolved (accept or reject each to unlock; see the suggestions panel on the right)',
   '✓ 已接受并保存 ◇ 的建议：文件回到待审核，翻译基准已更新': '✓ Suggestion accepted & saved for $1: the file returns to awaiting review and the translation baseline is refreshed',
+  // BUG-20260925-002 新一轮校对后旧决断失效提示（◇ = 上一轮已决断条数）
+  '上一轮校对已处理 ◇ 条：决断随新一轮校对失效，本轮结论需逐条重新接受或拒绝。': 'The previous proofread round resolved $1 suggestion(s): those decisions expired with the new round — resolve the current findings one by one.',
   '✕ 接受失败：◇（文档未修改，可重试）': '✕ Accept failed: $1 (document unchanged, retry available)',
   '✓ 已保存 ◇（未提交：需审核通过并「提交」后进入本地 dev）': '✓ Saved $1 (not committed: approve in review, then "Commit" to land on local dev)',
   '✕ 保存失败：◇（内容已保留在编辑框中，可重试）': '✕ Save failed: $1 (content kept in the editor, retry available)',
