@@ -93,29 +93,68 @@ function migrateItemDir(root, itemAbs, dataTargetAbs, runtimeStatusDir, tracked,
       // 其余子目录（attachments 等）：整目录搬移
       const dst = path.join(dataTargetAbs, name);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
-      movePath(root, src, dst, tracked ? tracked.has(rel) : false, moved);
+      movePath(root, src, dst, tracked, moved);
       continue;
     }
     if (isItemStatusFile(name)) {
       const dst = path.join(runtimeStatusDir, `${id}.json`);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
-      movePath(root, src, dst, tracked ? tracked.has(rel) : false, moved, { untrack: true });
+      movePath(root, src, dst, tracked, moved, { untrack: true });
       continue;
     }
     const dst = path.join(dataTargetAbs, name);
-    movePath(root, src, dst, tracked ? tracked.has(rel) : false, moved);
+    movePath(root, src, dst, tracked, moved);
   }
+}
+
+// 同名文件内容比对（字节级）：一致 → 判为已迁移/重复，不产生第二份副本
+function sameFileContent(a, b) {
+  const ba = fs.readFileSync(a);
+  const bb = fs.readFileSync(b);
+  return ba.length === bb.length && ba.equals(bb);
 }
 
 // 路径搬移：已跟踪 → git mv（保留历史）；未跟踪 → 直接 rename。
 // untrack（应用数据退出版本控制）：git rm --cached 后 rename（本地保留）。
-function movePath(root, src, dst, isTracked, moved, { untrack = false } = {}) {
+// tracked 为仓库跟踪路径集合（无 git 时 null，全部按未跟踪处理），递归合并时逐路径查询。
+// BUG-20260924-001：目标已存在不再一律报错——
+//   · 目录对目录：递归合并（源内逐项迁入目标，不重名互不干扰，完成后源壳清空）；
+//   · 同名同内容文件：判为已迁移/重复，保留一份副本（源已跟踪且目标未跟踪时移除目标
+//     副本后走 git mv / untrack 流程保历史；否则保留目标副本、清掉源副本）；
+//   · 同名异内容 / 目录-文件类型冲突：报「迁移冲突」并定位具体路径，双方数据原样保留。
+function movePath(root, src, dst, tracked, moved, { untrack = false } = {}) {
   if (!fs.existsSync(src)) return; // 已迁移过（幂等重入）
   fs.mkdirSync(path.dirname(dst), { recursive: true });
-  if (fs.existsSync(dst)) {
-    throw new AtbError(`迁移目标已存在：${dst}（源 ${src}）；请人工核对后重试`);
-  }
   const rel = path.relative(root, src).split(path.sep).join('/');
+  const isTracked = tracked ? tracked.has(rel) : false;
+  if (fs.existsSync(dst)) {
+    const srcDir = fs.statSync(src).isDirectory();
+    const dstDir = fs.statSync(dst).isDirectory();
+    if (srcDir && dstDir) {
+      for (const name of fs.readdirSync(src).sort()) {
+        movePath(root, path.join(src, name), path.join(dst, name), tracked, moved, { untrack });
+      }
+      try { if (!fs.readdirSync(src).length) fs.rmdirSync(src); } catch { /* 并发写入兜底：留待重试 */ }
+      return;
+    }
+    if (!srcDir && !dstDir) {
+      if (!sameFileContent(src, dst)) {
+        throw new AtbError(`迁移冲突：${dst}（源 ${src}）同名文件内容不同；双方数据均已保留，请人工核对处理后再重试`);
+      }
+      const dstTracked = tracked ? tracked.has(path.relative(root, dst).split(path.sep).join('/')) : false;
+      if (isTracked && !dstTracked) {
+        fs.rmSync(dst); // 内容一致：让位给 git mv / untrack 流程（保历史与跟踪口径）
+      } else {
+        if (isTracked) gitOk(root, ['rm', '-q', '--', rel], 'git rm（重复副本清理）');
+        else fs.rmSync(src);
+        moved.dup.push(rel);
+        return;
+      }
+    } else {
+      const kind = (b) => (b ? '目录' : '文件');
+      throw new AtbError(`迁移冲突：${dst}（源 ${src}）类型不一致（源为${kind(srcDir)}、目标为${kind(dstDir)}）；双方数据均已保留，请人工核对处理后再重试`);
+    }
+  }
   if (untrack && isTracked) {
     gitOk(root, ['rm', '-q', '--cached', '--', rel], 'git rm --cached');
     fs.renameSync(src, dst);
@@ -195,7 +234,7 @@ export function migrateLayout(cwd, { skillsDir = null } = {}) {
   const beforeMigrated = itemInventory(dataDir, path.join(runtimeDir, 'status'));
   for (const [id, rec] of beforeMigrated) if (!before.has(id)) before.set(id, rec);
 
-  const moved = { gitted: [], plain: [], untracked: [] };
+  const moved = { gitted: [], plain: [], untracked: [], dup: [] };
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(path.join(runtimeDir, 'status'), { recursive: true });
 
@@ -205,14 +244,14 @@ export function migrateLayout(cwd, { skillsDir = null } = {}) {
     // skillsDir 显式给出时按用户数据处理
     if (name === 'batch-execution.md' && skillsDir) {
       fs.mkdirSync(skillsDir, { recursive: true });
-      movePath(root, src, path.join(skillsDir, name), tracked ? tracked.has(`docs/agent-team-board/${name}`) : false, moved);
+      movePath(root, src, path.join(skillsDir, name), tracked, moved);
       continue;
     }
     if (name === 'requirements' || name === 'bugs') {
       for (const itemName of fs.readdirSync(src).sort()) {
         const itemAbs = path.join(src, itemName);
         if (!fs.statSync(itemAbs).isDirectory()) { // 非条目杂项：归 runtime
-          movePath(root, itemAbs, path.join(runtimeDir, name, itemName), tracked && tracked.has(`docs/agent-team-board/${name}/${itemName}`), moved, { untrack: true });
+          movePath(root, itemAbs, path.join(runtimeDir, name, itemName), tracked, moved, { untrack: true });
           continue;
         }
         migrateItemDir(root, itemAbs, path.join(dataDir, name, itemName), path.join(runtimeDir, 'status'), tracked, moved);
@@ -220,8 +259,7 @@ export function migrateLayout(cwd, { skillsDir = null } = {}) {
       continue;
     }
     // 其余（应用数据）：整目录/文件 → runtime，被跟踪者退出版本控制（本地保留）
-    const rel = `docs/agent-team-board/${name}`;
-    movePath(root, src, path.join(runtimeDir, name), tracked ? tracked.has(rel) : false, moved, { untrack: true });
+    movePath(root, src, path.join(runtimeDir, name), tracked, moved, { untrack: true });
   }
 
   // 兜底：旧前缀下仍被跟踪的残留（如空目录占位）退出索引；随后递归清除空旧目录
@@ -261,7 +299,7 @@ export function migrateLayout(cwd, { skillsDir = null } = {}) {
     projectRoot: root,
     dataDir,
     runtimeDir,
-    moved: { gitMv: moved.gitted.length, plain: moved.plain.length, untracked: moved.untracked.length },
+    moved: { gitMv: moved.gitted.length, plain: moved.plain.length, untracked: moved.untracked.length, duplicate: moved.dup.length },
     items: afterKeys.length,
   };
 }

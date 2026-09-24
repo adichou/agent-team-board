@@ -298,7 +298,7 @@ async function main() {
       return;
     }
     console.log(`✓ 已迁移到新布局：${r.dataDir}`);
-    console.log(`  条目 ${r.items} 个；git mv ${r.moved.gitMv} 项、移动未跟踪 ${r.moved.plain} 项、应用数据退出跟踪 ${r.moved.untracked} 项（本地保留）`);
+    console.log(`  条目 ${r.items} 个；git mv ${r.moved.gitMv} 项、移动未跟踪 ${r.moved.plain} 项、应用数据退出跟踪 ${r.moved.untracked} 项（本地保留）${r.moved.duplicate ? `、同名同内容判重 ${r.moved.duplicate} 项` : ''}`);
     console.log('  变更留在工作区/索引，请随下一次提交入库（本仓库批量/收口提交会自动收纳）');
     if (jsonOut) console.log(JSON.stringify(r, null, 2));
     return;

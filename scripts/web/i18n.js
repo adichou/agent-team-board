@@ -1637,6 +1637,8 @@ const EN_DYNAMIC = {
   // REQ-20260916-007 数据布局迁移：检测失败 / 迁移失败（插值 e.message）
   '布局检测失败：◇': 'Layout detection failed: $1',
   '失败：◇（可重试；迁移幂等，已完成部分不会重复执行）': 'Failed: $1 (retryable; migration is idempotent — completed steps are not repeated)',
+  // BUG-20260924-001 迁移真实冲突（同名异内容 / 类型不一致）失败：需人工核对，不诱导直接重试
+  '失败：◇（真实冲突：需人工核对处理，直接重试不会自动解决）': 'Failed: $1 (real conflict: manual review required — retrying without resolving it will fail again)',
   // REQ-20260913-001 构建模块搜索反馈（命中数动态拼接）
   '命中 ◇ / 共 ◇ 个版本（按版本名 / 单号）': '$1 of $2 versions matched (by name / item id)',
   // REQ-20260913-004 支持版本删除：弹窗标题 / 成功失败反馈（动态拼接）
@@ -2071,6 +2073,9 @@ const ALLOWLIST = {
   // 已驳回完成（退回开发） / 已驳回接受（退回待接受））；原泛化兜底键 '✓ ◇ 已◇' 因反向模式
   // 无英文锚点会自匹配中文提示叠字而移除，新增未收录标签按「未命中保持原文」降级。
   '✓ ◇ 已◇': 'toast 动态模板源码形态（label 动态），具体标签各有精确词条；泛化兜底键因反向自匹配叠字移除（BUG-20260912-004）',
+  // BUG-20260924-001：app.js 判定迁移失败是否为真实冲突的后端错误标记（lib/migrate-layout.mjs
+  // 抛出 AtbError 的前缀），非界面展示文案；展示层词条见 EN_DYNAMIC「失败：◇（真实冲突：…）」
+  '迁移冲突：': '后端迁移冲突错误标记（startsWith 判定用逻辑键），非界面展示文案（BUG-20260924-001）',
 };
 
 // ---------- 运行时 ----------
