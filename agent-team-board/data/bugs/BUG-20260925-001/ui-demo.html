@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260925-001 演示 — AI 校对建议侧栏：接受后跳回第一条（缺陷） vs 保留当前条目（期望）</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d8dde5; --text: #1f2937; --muted: #6b7280;
+    --ok-bg: #ecfdf5; --ok-text: #047857; --warn: #b45309; --warn-bg: #fffbeb;
+    --run: #2563eb; --run-bg: #eff6ff; --err: #b91c1c; --err-bg: #fef2f2;
+    --del-bg: rgba(220, 38, 38, 0.08); --ins-bg: rgba(5, 150, 105, 0.1);
+    --primary: #2563eb; --primary-h: #1d4ed8;
+  }
+  html.dark {
+    --bg: #111827; --panel: #1f2937; --border: #374151; --text: #e5e7eb; --muted: #9ca3af;
+    --ok-bg: rgba(4, 120, 87, 0.25); --ok-text: #6ee7b7; --warn: #fbbf24; --warn-bg: rgba(180, 83, 9, 0.2);
+    --run-bg: rgba(37, 99, 235, 0.2); --err-bg: rgba(185, 28, 28, 0.25);
+    --del-bg: rgba(220, 38, 38, 0.18); --ins-bg: rgba(5, 150, 105, 0.25);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 14px 18px 6px; }
+  header h1 { font-size: 17px; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .console { margin: 12px 18px; border: 1px dashed var(--warn); border-radius: 8px; padding: 10px 12px; background: var(--warn-bg); display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12.5px; }
+  .console b { font-weight: 600; }
+  .console label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; margin-right: 8px; }
+  .console button, .chk-acts button { font: inherit; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  .console button.primary, .chk-acts button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .console button.primary:hover, .chk-acts button.primary:hover { background: var(--primary-h); }
+  .console button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .mode-note { flex-basis: 100%; margin: 0; color: var(--muted); }
+  .stage { display: flex; gap: 14px; margin: 0 18px 90px; align-items: flex-start; flex-wrap: wrap; }
+  .pane-note { flex: 1 1 260px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 12px 14px; font-size: 12.5px; color: var(--muted); }
+  .pane-note h2 { font-size: 13.5px; color: var(--text); margin: 0 0 6px; }
+  .pane-note code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 11.5px; }
+  /* —— 校对建议侧栏（复刻 scripts/web/build.js renderDocsPane + style.css .bld-docs-chk）—— */
+  .bld-docs-chk { flex: 1 1 430px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .bld-docs-chk-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .bld-docs-chk-title { font-weight: 600; }
+  .bld-docs-chk-count { font-size: 12px; background: rgba(217, 119, 6, 0.12); color: var(--warn); border-radius: 999px; padding: 2px 8px; }
+  .bld-docs-chk-count.ok { background: var(--ok-bg); color: var(--ok-text); }
+  .bld-docs-chk-file { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .bld-docs-chk-file span { flex: none; color: var(--muted); font-size: 12.5px; }
+  .bld-docs-chk-file select { flex: 1 1 auto; min-width: 0; font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: inherit; }
+  .bld-docs-chk-body { display: flex; flex-direction: column; gap: 6px; }
+  .bld-chk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
+  .bld-chk-issue { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .bld-chk-issue.busy { outline: 2px solid var(--run); outline-offset: -2px; }
+  .bld-chk-issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .bld-chk-type { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
+  .bld-chk-pos { font-size: 12px; color: var(--muted); }
+  .st { font-size: 12px; border-radius: 999px; padding: 1px 8px; display: inline-flex; align-items: center; gap: 4px; }
+  .st-run { background: var(--run-bg); color: var(--run); }
+  .st-ok { background: var(--ok-bg); color: var(--ok-text); }
+  .st-mute { background: var(--bg); color: var(--muted); }
+  .st-wait { background: var(--warn-bg); color: var(--warn); }
+  .bld-chk-text { margin: 0; font-size: 12.5px; word-break: break-word; line-height: 1.6; }
+  .bld-chk-diff summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  .bld-chk-diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  @media (max-width: 640px) { .bld-chk-diff-grid { grid-template-columns: 1fr; } }
+  .bld-chk-tag { display: inline-block; font-size: 11.5px; margin-bottom: 4px; border-radius: 4px; padding: 1px 6px; }
+  .bld-chk-tag.del { background: var(--del-bg); color: var(--warn); }
+  .bld-chk-tag.ins { background: var(--ins-bg); color: var(--ok-text); }
+  .bld-chk-before pre, .bld-chk-after pre { margin: 0; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; padding: 6px 8px; border-radius: 6px; }
+  .bld-chk-before pre { background: var(--del-bg); }
+  .bld-chk-after pre { background: var(--ins-bg); }
+  .bld-chk-before del { text-decoration: none; color: var(--warn); font-weight: 600; }
+  .bld-chk-after ins { text-decoration: none; color: var(--ok-text); font-weight: 600; }
+  .bld-chk-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .stale-note, .dirty-note { margin: 0; font-size: 12px; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; margin: 0; }
+  .rel-form-err { color: var(--err); background: var(--err-bg); border-radius: 6px; padding: 6px 8px; }
+  #toastBox { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; display: flex; flex-direction: column; gap: 6px; z-index: 9; }
+  .toast { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--ok-text); border-radius: 6px; padding: 6px 14px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,0.15); }
+  .toast.err { border-left-color: var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>BUG-20260925-001 演示 — 「文档编写」③ AI 校对建议侧栏：接受一条后跳回第一条</h1>
+  <p>复刻发布模块「文档编写」步右侧「校对建议」侧栏（scripts/web/build.js renderDocsPane / style.css .bld-chk-list）。本页仅为条目文档演示，非产品源码。</p>
+</header>
+
+<div class="console" role="group" aria-label="演示控制台">
+  <span><b>演示控制台</b></span>
+  <span>
+    对比模式：
+    <label><input type="radio" name="mode" value="before" checked> 修复前（当前缺陷）</label>
+    <label><input type="radio" name="mode" value="after"> 修复后（期望行为）</label>
+  </span>
+  <span>
+    状态：
+    <label><input type="radio" name="phase" value="done" checked> 已完成</label>
+    <label><input type="radio" name="phase" value="running"> 进行中</label>
+    <label><input type="radio" name="phase" value="empty"> 未运行（空态）</label>
+    <label><input type="radio" name="phase" value="failed"> 失败（中断）</label>
+  </span>
+  <button type="button" id="darkBtn">深浅色</button>
+  <button type="button" id="resetBtn">重置演示</button>
+  <p class="mode-note" id="modeNote"></p>
+  <p class="mode-note">建议操作：把右侧列表滚到中间偏后某一条（第 4 条及以后），点「接受」或「拒绝」，观察列表滚动位置。切换文件下拉、展开差异亦可交互。</p>
+</div>
+
+<div class="stage">
+  <aside class="bld-docs-chk" aria-label="校对建议（演示）">
+    <div class="bld-docs-chk-head">
+      <span class="bld-docs-chk-title">校对建议</span>
+      <span class="bld-docs-chk-count" id="pendingChip" title="未处理的建议数量：全部接受或拒绝后「④ AI 翻译」解锁"></span>
+    </div>
+    <label class="bld-docs-chk-file"><span>文件</span>
+      <select id="fileSel" aria-label="选择要查看校对建议的文件"></select>
+    </label>
+    <div class="bld-docs-chk-body" id="chkBody"></div>
+  </aside>
+  <div class="pane-note">
+    <h2>观察要点</h2>
+    <p><b>修复前（当前缺陷）</b>：点「接受」/「拒绝」后整块重渲染，列表滚动位置被重置回顶部——视图跳到第一条，需重新滚动定位（对应 <code>acceptChkSuggestion</code> / <code>rejectChkSuggestion</code> 决断后 <code>render()</code> 全量重建 DOM，<code>.bld-chk-list</code> 滚动位置丢失）。</p>
+    <p><b>修复后（期望行为）</b>：决断后视图保留在当前处理的条目上（锚定该条），状态徽标、待处理计数与 toast 照常更新，可直接继续处理下一条；轮询等被动刷新亦不打断当前查看位置。</p>
+    <p>状态切换：进行中（进度文本）／失败（中断原因 + 重试按钮）／空态（尚未校对）／已完成（逐条卡片 + 待处理计数）。</p>
+  </div>
+</div>
+
+<div id="toastBox" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  // —— 演示数据（形态对照 scripts/web/build.js parseChkSuggestion / splitProofreadIssues 口径）——
+  var FILES = {
+    'README.md': [
+      { type: '错别字', line: 12, text: '第 12 行：原文「看板工具（atb）：用 /req /bug /dev /board 命令，或直接提及 atb」中的「提及」疑为笔误，建议改为「提到」；同段重复出现两次。', before: '或直接提及 atb', after: '或直接提到 atb' },
+      { type: '链接', line: 15, text: '第 15 行：链接 https://example.com/docs/quickstart 返回 404（已验证不可达），建议更新为 https://example.com/docs/start 。', before: 'https://example.com/docs/quickstart', after: 'https://example.com/docs/start' },
+      { type: '语法', line: 23, text: '第 23 行：句子「包含标准文档、自定义文档及既有不分语言文档规则」缺少谓语，建议改为「包含标准文档、自定义文档及既有的不分语言文档规则」。', before: '及既有不分语言文档规则', after: '及既有的不分语言文档规则' },
+      { type: '行文规范', line: 31, text: '第 31 行：原文「然后你就应该去把这个配置项打开，这样就可以了」口语化明显，建议改为「随后开启该配置项即可」。', before: '然后你就应该去把这个配置项打开，这样就可以了', after: '随后开启该配置项即可' },
+      { type: '错别字', line: 34, text: '第 34 行：原文「发布文档按三阶段推进（REQ-20260921-012）」中「三阶段」后建议补「进行」，即「按三阶段进行推进」，避免歧义。', before: '发布文档按三阶段推进（REQ-20260921-012）', after: '发布文档按三阶段进行推进（REQ-20260921-012）' },
+      { type: '语法', line: 40, text: '第 40 行：「已回退或入口隐藏的能力须按实际状态描述」前建议补充主语「文档」，改为「文档中已回退或入口隐藏的能力须按实际状态描述」。', before: '已回退或入口隐藏的能力须按实际状态描述', after: '文档中已回退或入口隐藏的能力须按实际状态描述' },
+      { type: '待确认', line: 48, text: '第 48 行：链接 https://internal.example.com/handbook 无法验证（需登录或网络不可达），标为「待确认」，请人工核实后处理。', before: null, after: null },
+      { type: '行文规范', line: 52, text: '第 52 行：原文「这个功能很好用，推荐大家试试」营销语气偏重，发布文档建议改为「该功能经过验证，可供使用」。', before: '这个功能很好用，推荐大家试试', after: '该功能经过验证，可供使用' },
+      { type: '链接', line: 60, text: '第 60 行：链接 https://example.com/old-page 已迁移（301），建议更新为 https://example.com/new-page 。', before: 'https://example.com/old-page', after: 'https://example.com/new-page' }
+    ],
+    'CHANGELOG.md': [
+      { type: '错别字', line: 8, text: '第 8 行：原文「修复会话恢复时偶现的闪退问题（BUG-20260918-003）」中「偶现」建议写作「偶发」，与全篇用词一致。', before: '偶现的闪退问题', after: '偶发的闪退问题' },
+      { type: '语法', line: 14, text: '第 14 行：「新增批量任务导入导出」条目缺少宾语补足，建议改为「新增批量任务的导入导出能力」。', before: '新增批量任务导入导出', after: '新增批量任务的导入导出能力' }
+    ],
+    'FEATURES.md': []
+  };
+  var runId = 'demo-run-001';
+  var state = { mode: 'before', phase: 'done', file: 'README.md', decisions: {}, busy: null };
+  var $ = function (id) { return document.getElementById(id); };
+  var fileSel = $('fileSel'), chkBody = $('chkBody'), pendingChip = $('pendingChip'), toastBox = $('toastBox');
+
+  // —— 工具 ——
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function toast(msg, isErr) {
+    var el = document.createElement('div');
+    el.className = 'toast' + (isErr ? ' err' : '');
+    el.textContent = msg;
+    toastBox.appendChild(el);
+    setTimeout(function () { el.remove(); }, 2600);
+  }
+  function pendingCount() {
+    var n = 0;
+    Object.keys(FILES).forEach(function (f) {
+      FILES[f].forEach(function (_, i) { var st = state.decisions[runId + '|' + f + '|' + i]; if (!st) n += 1; });
+    });
+    return n;
+  }
+  function chipHtml(state2) {
+    var map = { '已接受': ['st-ok', '✔'], '已拒绝': ['st-mute', '✔'], '过期': ['st-wait', '●'], '待确认': ['st-wait', '●'], '待处理': ['st-run', '◐'] };
+    var m = map[state2] || map['待处理'];
+    return '<span class="st ' + m[0] + '"><i aria-hidden="true">' + m[1] + '</i>' + esc(state2) + '</span>';
+  }
+  function cardHtml(file, item, i) {
+    var key = runId + '|' + file + '|' + i;
+    var dec = state.decisions[key] || null;
+    var st = dec || (item.type === '待确认' ? '待确认' : '待处理');
+    var applicable = item.before != null && item.before !== item.after;
+    var diff = applicable
+      ? '<details class="bld-chk-diff"><summary>查看修改前后差异</summary><div class="bld-chk-diff-grid">'
+        + '<div class="bld-chk-before"><span class="bld-chk-tag del">修改前（删除）</span><pre><del>' + esc(item.before) + '</del></pre></div>'
+        + '<div class="bld-chk-after"><span class="bld-chk-tag ins">修改后（新增）</span><pre><ins>' + esc(item.after) + '</ins></pre></div>'
+        + '</div></details>'
+      : '';
+    var busy = state.busy === key;
+    var accept = (applicable && !dec && item.type !== '待确认')
+      ? '<button type="button" class="btn primary" data-accept="' + i + '"' + (busy || state.busy ? ' disabled' : '') + ' title="按差异应用这一条建议并保存">接受</button>'
+      : (applicable || dec ? '' : '<button type="button" disabled title="无法自动应用：请点「✎ 修改」手动处理">接受</button>');
+    var reject = !dec ? '<button type="button" data-reject="' + i + '"' + (busy || state.busy ? ' disabled' : '') + ' title="不采纳该条建议：原文保持不变">拒绝</button>' : '';
+    return '<li class="bld-chk-issue' + (busy ? ' busy' : '') + '" data-card="' + i + '">'
+      + '<div class="bld-chk-issue-head"><span class="bld-chk-type">' + esc(item.type) + '</span>'
+      + '<span class="bld-chk-pos">第 ' + item.line + ' 行</span>' + chipHtml(st) + '</div>'
+      + '<p class="bld-chk-text">' + esc(item.text) + '</p>' + diff
+      + (dec === 'stale' ? '<p class="stale-note">建议基于的文本已变化：未覆盖当前内容，请重新校对或点「✎ 修改」手动处理。</p>' : '')
+      + '<div class="bld-chk-acts">' + accept + reject
+      + '<button type="button" data-edit="' + i + '" title="' + esc(file) + ' · 第 ' + item.line + ' 行">✎ 修改</button></div></li>';
+  }
+
+  // —— 渲染（对照真实 render()：全量重建侧栏内容）——
+  function render(keepViewCard) {
+    // 文件下拉
+    fileSel.innerHTML = Object.keys(FILES).map(function (f) {
+      var n = FILES[f].length;
+      return '<option value="' + esc(f) + '"' + (f === state.file ? ' selected' : '') + '>' + esc(f) + (n ? '（' + n + '）' : '') + '</option>';
+    }).join('');
+    // 待处理徽标
+    var pc = pendingCount();
+    pendingChip.textContent = pc ? '待处理 ' + pc + ' 项' : '待处理 0 项 ✓';
+    pendingChip.className = 'bld-docs-chk-count' + (pc ? '' : ' ok');
+    // 主体
+    if (state.phase === 'running') {
+      chkBody.innerHTML = '<p class="small" role="status">校对进行中：3/9 · 当前：<code>FEATURES.md</code>（正在核查）——本栏随回执自动刷新。</p>';
+      return;
+    }
+    if (state.phase === 'failed') {
+      chkBody.innerHTML = '<p class="small rel-form-err" role="alert">AI 校对中断：Agent 回执超时——已回执结论保留，可重试续查。</p>'
+        + '<p><button type="button" class="btn" id="retryBtn" title="重新复制 AI 校对提示词并派发核查（新一轮 run 覆盖旧结论）">重试 AI 校对</button></p>';
+      $('retryBtn').addEventListener('click', function () { state.phase = 'done'; syncRadios(); render(); toast('已重试：新一轮校对回执到达（演示）'); });
+      return;
+    }
+    if (state.phase === 'empty') {
+      chkBody.innerHTML = '<p class="muted small" role="status">尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。</p>';
+      return;
+    }
+    var items = FILES[state.file];
+    if (!items.length) {
+      chkBody.innerHTML = '<p class="small" role="status">该文件未发现问题 ✓（校对基准为回执时点磁盘内容）</p>';
+      return;
+    }
+    var dirty = '<p class="muted small dirty-note">默认语言文档已修改：接受前会逐条核对磁盘原文，不一致将标记过期，不覆盖人工修改。</p>';
+    chkBody.innerHTML = dirty + '<ul class="bld-chk-list" id="chkList">'
+      + items.map(function (it, i) { return cardHtml(state.file, it, i); }).join('') + '</ul>';
+    // —— 滚动行为：缺陷（before）跳回顶部 vs 期望（after）保留当前条目 ——
+    var list = $('chkList');
+    if (list) {
+      if (keepViewCard != null) {
+        if (state.mode === 'before') {
+          list.scrollTop = 0; // 缺陷复现：重渲染后滚动位置丢失，视图跳回第一条
+        } else {
+          var card = list.querySelector('[data-card="' + keepViewCard + '"]');
+          if (card) card.scrollIntoView({ block: 'nearest' }); // 期望：锚定当前处理的条目
+        }
+      }
+    }
+    bindCards();
+  }
+  function bindCards() {
+    chkBody.querySelectorAll('[data-accept]').forEach(function (btn) {
+      btn.addEventListener('click', function () { accept(parseInt(btn.dataset.accept, 10)); });
+    });
+    chkBody.querySelectorAll('[data-reject]').forEach(function (btn) {
+      btn.addEventListener('click', function () { reject(parseInt(btn.dataset.reject, 10)); });
+    });
+    chkBody.querySelectorAll('[data-edit]').forEach(function (btn) {
+      btn.addEventListener('click', function () { toast('演示：跳入「二次编辑」弹窗并定位到第 ' + FILES[state.file][parseInt(btn.dataset.edit, 10)].line + ' 行（略）'); });
+    });
+  }
+
+  // —— 接受 / 拒绝（对照真实 acceptChkSuggestion / rejectChkSuggestion 的决断-重渲染时序）——
+  function accept(i) {
+    var key = runId + '|' + state.file + '|' + i;
+    if (state.decisions[key] || state.busy) return;
+    state.busy = key;
+    render(i); // 真实行为：忙碌态即重渲染（before 模式此刻滚动已跳顶）
+    setTimeout(function () {
+      state.decisions[key] = 'accepted';
+      state.busy = null;
+      toast('✓ 已接受并保存 ' + state.file + ' 的建议：文件回到待审核，翻译基准已更新');
+      render(i); // 决断完成重渲染：before 跳回第一条 / after 保留当前条目
+    }, 420);
+  }
+  function reject(i) {
+    var key = runId + '|' + state.file + '|' + i;
+    if (state.decisions[key] || state.busy) return;
+    state.decisions[key] = 'rejected';
+    toast('已拒绝该条建议：原文保持不变');
+    render(i);
+  }
+
+  // —— 控制台 ——
+  function syncRadios() {
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.checked = r.value === state.mode; });
+    document.querySelectorAll('input[name="phase"]').forEach(function (r) { r.checked = r.value === state.phase; });
+    $('modeNote').textContent = state.mode === 'before'
+      ? '修复前（当前缺陷）：点「接受」/「拒绝」后列表跳回第一条，需重新滚动定位。'
+      : '修复后（期望行为）：点「接受」/「拒绝」后视图锚定当前条目，可继续处理下一条。';
+  }
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.mode = r.value; syncRadios(); render(); });
+  });
+  document.querySelectorAll('input[name="phase"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.phase = r.value; syncRadios(); render(); });
+  });
+  fileSel.addEventListener('change', function () { state.file = fileSel.value; render(); }); // 主动切换文件：从顶部开始（正常行为）
+  $('darkBtn').addEventListener('click', function () { document.documentElement.classList.toggle('dark'); });
+  $('resetBtn').addEventListener('click', function () { state.decisions = {}; state.busy = null; state.file = 'README.md'; state.phase = 'done'; syncRadios(); render(); toast('演示已重置'); });
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
+  syncRadios();
+  render();
+})();
+</script>
+</body>
+</html>
