@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260924-004 · 整体审查 AI 校对逐项修改按钮演示</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #d9dee4; --text: #1f2430; --muted: #6b7280;
+    --ok: #16794c; --ok-bg: #e3f4ea; --run: #9a6700; --run-bg: #fff3d6;
+    --wait: #a16207; --wait-bg: #fdf0d5; --mute: #6b7280; --mute-bg: #eef0f3;
+    --fail: #b3261e; --fail-bg: #fdebea; --primary: #2563eb; --primary-bg: #dbeafe;
+    --code-bg: #f0f2f5; --shadow: 0 10px 30px rgba(15, 23, 42, .14);
+    --hl: #fde68a;
+  }
+  html[data-theme="dark"] {
+    --bg: #14161a; --card: #1d2026; --line: #34383f; --text: #e6e8ec; --muted: #9aa1ab;
+    --ok: #5bd695; --ok-bg: #12331f; --run: #e3b341; --run-bg: #3a2f10;
+    --wait: #d9a441; --wait-bg: #33290f; --mute: #9aa1ab; --mute-bg: #262a31;
+    --fail: #f08a84; --fail-bg: #3a1715; --primary: #6ea8ff; --primary-bg: #16294d;
+    --code-bg: #262a31; --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --hl: #7a5d0e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.65 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .note { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 14px; }
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px;
+    background: var(--card); border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; }
+  .demo-bar .lbl { color: var(--muted); font-size: 12.5px; }
+  .demo-bar .grp { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  button.btn, select.btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button.btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  button.btn.on { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  button.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  html[data-theme="dark"] button.btn.primary { color: #0d1220; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  button.btn.quiet { border-color: transparent; }
+
+  /* 文档编写页背景（简化） */
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 10px; }
+  .steps button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .steps button.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .stagebar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stage { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 12.5px; }
+  .stage.done { color: var(--ok); border-color: var(--ok); }
+  .stage.cur { color: var(--run); border-color: var(--run); font-weight: 600; }
+  .arrow { color: var(--muted); }
+  .sub { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+  .sub p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; max-width: 520px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .files-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  ul.files { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.files li { display: flex; justify-content: space-between; align-items: center; padding: 5px 4px; border-bottom: 1px solid var(--line); gap: 10px; }
+  ul.files li.group { color: var(--muted); font-size: 12px; border-bottom: 1px dashed var(--line); padding-top: 8px; }
+  .fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .st { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 10px; font-size: 12px; white-space: nowrap; }
+  .st i { font-style: normal; }
+  .st-ok { color: var(--ok); background: var(--ok-bg); }
+  .st-run { color: var(--run); background: var(--run-bg); }
+  .st-wait { color: var(--wait); background: var(--wait-bg); }
+  .st-mute { color: var(--mute); background: var(--mute-bg); }
+  .st-fail { color: var(--fail); background: var(--fail-bg); }
+  .gate { border-radius: 8px; padding: 9px 13px; font-size: 12.5px; margin-top: 12px; border: 1px solid var(--line); background: var(--mute-bg); }
+  .gate.ok { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+  .fin-note { color: var(--ok); font-size: 12.5px; margin: 8px 0 0; }
+
+  /* 对话框 */
+  .modal-wrap { position: fixed; inset: 0; background: rgba(10, 14, 20, .5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal-wrap[hidden] { display: none; }
+  .modal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    width: min(900px, 100%); max-height: 88vh; display: flex; flex-direction: column; }
+  .modal.narrow { width: min(640px, 100%); }
+  .modal header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .modal .body { padding: 12px 16px; overflow-y: auto; }
+  .modal footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+
+  /* 整体审查 3 条核对项 */
+  ul.checklist { list-style: none; margin: 0; padding: 0; }
+  ul.checklist > li { padding: 9px 2px; border-bottom: 1px solid var(--line); }
+  ul.checklist > li:last-child { border-bottom: none; }
+  .chk-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .chk-sub { color: var(--muted); font-size: 12.5px; margin: 4px 0 0 26px; }
+  /* 逐条问题行（本需求核心） */
+  ul.issues { list-style: none; margin: 6px 0 0 26px; padding: 0; }
+  ul.issues li.issue { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border: 1px solid var(--line);
+    border-radius: 8px; margin-bottom: 6px; flex-wrap: wrap; background: var(--bg); }
+  ul.issues li.file-head { color: var(--muted); font-size: 12.5px; padding-top: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .issue .lno { font-size: 12px; color: var(--run); background: var(--run-bg); border-radius: 6px; padding: 0 8px; white-space: nowrap; }
+  .issue .txt { flex: 1; min-width: 220px; font-size: 12.5px; }
+  .issue .txt .org { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--fail); }
+  .issue .txt .adv { color: var(--muted); }
+  .issue button.fix { white-space: nowrap; border: 1px solid var(--primary); color: var(--primary); background: transparent;
+    border-radius: 7px; padding: 2px 12px; font-size: 12.5px; cursor: pointer; }
+  .issue button.fix:hover { background: var(--primary-bg); }
+  .fin-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .fin-tip { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+
+  /* 审查对话框 */
+  .tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-wrap: wrap; }
+  .tabs button { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px 8px 0 0; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .tabs button.active { background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); overflow-x: auto; }
+  .col { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
+  .col:last-child { border-right: none; }
+  .col-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .col-head .l { display: inline-flex; gap: 8px; align-items: center; font-size: 12.5px; }
+  .col-acts { display: inline-flex; gap: 4px; align-items: center; }
+  .col-body { padding: 10px 12px; flex: 1; min-height: 260px; max-height: 46vh; overflow: auto; }
+  textarea.editor { width: 100%; height: 320px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg);
+    color: var(--text); font: 12.5px/20px ui-monospace, Menlo, Consolas, monospace; padding: 8px 10px; resize: vertical; white-space: pre; }
+  textarea.editor::selection, textarea.editor *::selection { background: var(--hl); }
+  .md { font-size: 13px; line-height: 1.7; }
+  .md h1, .md h2, .md h3 { margin: 10px 0 6px; font-size: 14.5px; }
+  .md ul { padding-left: 20px; margin: 6px 0; }
+  .md code { background: var(--code-bg); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .read-err { color: var(--fail); font-size: 12.5px; }
+  .loc-tip { color: var(--primary); font-size: 12px; margin: 0 0 6px; }
+
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 99; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  #toast .t { background: var(--card); color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--primary);
+    border-radius: 8px; padding: 8px 16px; font-size: 13px; box-shadow: var(--shadow); max-width: 80vw; }
+  #toast .t.err { border-left-color: var(--fail); }
+  #toast .t.ok { border-left-color: var(--ok); }
+  .confirm-mask { position: fixed; inset: 0; background: rgba(10,14,20,.45); z-index: 80; display: flex; align-items: center; justify-content: center; }
+  .confirm-mask[hidden] { display: none; }
+  .confirm-box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); width: min(420px, 92vw); padding: 16px 18px; }
+  .confirm-box p { margin: 0 0 12px; font-size: 13.5px; }
+  .confirm-box .row { display: flex; justify-content: flex-end; gap: 8px; }
+  kbd { background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260924-004 · 整体审查完结对话框：AI 校对逐项「修改」按钮</h1>
+  <p class="note">单文件交互演示（内联 CSS/JS，无外网依赖）。核心：③「默认语言错别字与行文规范（AI 校对自动上报）」的问题清单逐条渲染，每条带「修改」按钮 → 跳转审查对话框对应页签与默认语言栏编辑态并定位高亮问题行 → 保存回退「已总结待审核」→ 重新审核 → 重新「AI 校对」覆盖结果。可开深浅色、可切五种校对状态。</p>
+
+  <div class="demo-bar">
+    <span class="lbl">模拟 · 校对状态：</span>
+    <span class="grp" id="chkStateBtns">
+      <button class="btn" data-chk="notrun">未运行</button>
+      <button class="btn" data-chk="running">校对中（快照）</button>
+      <button class="btn" data-chk="pass">全部通过</button>
+      <button class="btn on" data-chk="fail">发现问题（2 文件 3 条）</button>
+      <button class="btn" data-chk="interrupted">中断</button>
+    </span>
+    <span class="lbl">｜</span>
+    <label class="lbl"><input type="checkbox" id="simReadFail"> 模拟目标文件读取失败</label>
+    <span class="lbl">｜</span>
+    <button class="btn" id="themeBtn">深浅色切换</button>
+    <button class="btn" id="openFinBtn">打开整体审查对话框</button>
+  </div>
+
+  <!-- 文档编写页背景（简化，仅衬托） -->
+  <div class="card" id="docsPane">
+    <div class="steps">
+      <button>版本计划</button><button>关联条目与提交</button><button class="active">文档编写</button><button>合并入 main</button><button>正式发布</button>
+    </div>
+    <div class="stagebar">
+      <span class="stage done">① 默认语言先行 ✔</span><span class="arrow">──</span>
+      <span class="stage done">② AI 翻译与审查 ✔</span><span class="arrow">──</span>
+      <span class="stage cur">③ 整体审查完结 ● 进行中</span>
+    </div>
+    <div class="sub">
+      <div>
+        <strong>文档编写</strong>
+        <p>先总结审查默认语言文档，审核完毕后 AI 翻译生成剩余语言文档，逐语言审查，最后整体审查完结后方可提交。</p>
+      </div>
+      <div class="actions">
+        <button class="btn" disabled title="与本需求无关，演示中禁用">刷新</button>
+        <button class="btn" disabled title="与本需求无关，演示中禁用">AI 总结</button>
+        <button class="btn" disabled title="与本需求无关，演示中禁用">AI 翻译</button>
+        <button class="btn" id="paneReviewBtn">审查</button>
+        <button class="btn primary" id="paneFinalizeBtn">整体审查</button>
+        <button class="btn" id="paneCommitBtn" disabled title="整体审查完结后解锁">提交</button>
+      </div>
+    </div>
+    <div class="files-head"><span id="filesHeadTxt">文件（8 · 默认语言 4/4 已审核 · 剩余语言 4/4 已审核）</span><span>状态</span></div>
+    <ul class="files" id="fileList"></ul>
+    <div class="gate" id="gateBar"></div>
+    <p class="fin-note" id="finNote" hidden></p>
+  </div>
+
+  <div class="card">
+    <strong style="font-size:13.5px;">演示要点（对应 README）</strong>
+    <ul class="note" style="margin-bottom:0;padding-left:18px;">
+      <li>「修改」按钮只在 ③ 项逐条问题行出现：未运行 / 校对中 / 中断 / 全部通过均不出现。</li>
+      <li>点击「修改」：先关闭整体审查对话框再打开审查对话框（弹层关系为「待确认」项，此处按倾向口径示意），切到对应类型页签、默认语言栏进入编辑态，滚动定位到问题行并高亮原文片段。</li>
+      <li>编辑保存后：文件回退「已总结待审核」→ 整体审查入口缺口重现（门禁不变）；重新「通过审核」后可再次打开整体审查；若此前已确认完结，完结失效回退（现状口径）。</li>
+      <li>AI 校对结果不因修改自动清除；重新点「AI 校对」启动新一轮（演示为快进动画）按最新内容覆盖。</li>
+      <li>issues 逐条拆分口径（提示词约束 / 账本结构化）、行级定位实现、逐条「已处理」标记为设计待确认项，演示按「行号 + 原文片段 + 建议」结构示意。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 整体审查完结对话框 -->
+<div class="modal-wrap" id="finalizeWrap" hidden>
+  <div class="modal narrow" role="dialog" aria-label="整体审查完结">
+    <header><span id="finTitle">整体审查完结（BLD-20260923-001）</span><button class="btn quiet" data-close-finalize>✕ 关闭</button></header>
+    <div class="body">
+      <ul class="checklist" id="checkList"></ul>
+      <div class="fin-actions">
+        <button class="btn" id="autoCheckBtn">运行自动检查</button>
+        <button class="btn" id="proofreadBtn">AI 校对</button>
+      </div>
+      <p class="fin-tip">提示：完结前请逐项核对；完结后范围变化会使完结失效回退。</p>
+    </div>
+    <footer>
+      <span>完结是人工确认动作：请逐项核对后再确认。</span>
+      <span style="display:inline-flex;gap:8px;">
+        <button class="btn" data-close-finalize>取消</button>
+        <button class="btn primary" id="confirmFinBtn">确认完结</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<!-- 审查对话框 -->
+<div class="modal-wrap" id="reviewWrap" hidden>
+  <div class="modal" role="dialog" aria-label="审查发布文档">
+    <header><span id="rvTitle">审查发布文档（BLD-20260923-001）</span><button class="btn quiet" data-close-review>✕ 关闭</button></header>
+    <div class="tabs" id="rvTabs"></div>
+    <div class="cols" id="rvCols"></div>
+    <footer>
+      <span id="rvFoot"></span>
+      <button class="btn" data-close-review>关闭</button>
+    </footer>
+  </div>
+</div>
+
+<!-- 二次确认 -->
+<div class="confirm-mask" id="confirmMask" hidden>
+  <div class="confirm-box">
+    <p id="confirmText"></p>
+    <div class="row"><button class="btn" id="confirmNo">取消</button><button class="btn primary" id="confirmYes">确认</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+/* ---------- 样例数据（语言集 cn,en；默认语言 cn） ---------- */
+const KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+const FILES = [
+  { file: 'README.md', key: 'README', lang: 'cn', def: true },
+  { file: 'CHANGELOG.md', key: 'CHANGELOG', lang: 'cn', def: true },
+  { file: 'FEATURES.md', key: 'FEATURES', lang: 'cn', def: true },
+  { file: 'AGENTS.md', key: 'AGENTS', lang: 'cn', def: true },
+  { file: 'README_en.md', key: 'README', lang: 'en', def: false },
+  { file: 'CHANGELOG_en.md', key: 'CHANGELOG', lang: 'en', def: false },
+  { file: 'FEATURES_en.md', key: 'FEATURES', lang: 'en', def: false },
+  { file: 'AGENTS_en.md', key: 'AGENTS', lang: 'en', def: false },
+];
+
+/* 文档样例内容：README.md 第 12 行 / 37 行、CHANGELOG.md 第 8 行埋有问题文本 */
+const readmeLines = [];
+readmeLines.push('# agent-team-board', '', 'Agent 团队看板与批量执行工具。', '');        // 1–4
+readmeLines.push('## 安装', '', '复制插件目录到本地，或在市场添加后安装。', '');        // 5–8
+readmeLines.push('## 快速开始', '', '1. 安装后在 ZCode 中启用本插件。');                // 9–11
+readmeLines.push('2. 部署到生产坏境后，执行数据迁移脚本即可完成升级。');                 // 第 12 行（问题行）
+readmeLines.push('', '## 文档', '', '- `/req`、`/bug` 登记需求与缺陷', '- `/dev` 领取开发任务', '- `/board` 打开看板', '', '## 语言', ''); // 13–21
+while (readmeLines.length < 36) readmeLines.push('');
+readmeLines.push('本工具支持多语言文档的的生成与翻译流水线。');                          // 第 37 行（问题行）
+readmeLines.push('', '## 许可', '', 'MIT License.');
+const DOC_CONTENT = {
+  'README.md': readmeLines.join('\n'),
+  'CHANGELOG.md': ['# 更新日志', '', '## 20260923-001', '', '- 新增整体审查自动检查：语言一致性、链接可达性、AI 校对', '', '### 修复', '- 修复了登陆后无法加载看板的问题', '- 优化任务面板终止任务交互', '', '## 20260921-001', '', '- 发布文档三阶段流程基线版'].join('\n'),
+  'FEATURES.md': ['# 功能说明', '', '- 看板与条目状态机', '- 两阶段 TDD', '- 发布模块五步流程', '- 文档编写三阶段（总结 / 翻译 / 整体审查）', '', '详见各章节。'].join('\n'),
+  'AGENTS.md': ['# AGENTS.md', '', '本文件面向在本仓库开发的 Agent 与人。', '', '## 开发必须走看板', '', '1. 改前先登记；2. 认领后修改；3. report 收口。'].join('\n'),
+};
+DOC_CONTENT['README_en.md'] = DOC_CONTENT['README.md'].split('\n').map((l, i) => (i === 11 ? '2. After deploying to the production environment, run the data migration script to finish the upgrade.' : i === 36 ? 'This tool supports multi-language document generation and a translation pipeline.' : l)).join('\n');
+DOC_CONTENT['CHANGELOG_en.md'] = DOC_CONTENT['CHANGELOG.md'].replace('修复了登陆后无法加载看板的问题', 'Fixed the issue that the board failed to load after sign-in');
+DOC_CONTENT['FEATURES_en.md'] = DOC_CONTENT['FEATURES.md'];
+DOC_CONTENT['AGENTS_en.md'] = DOC_CONTENT['AGENTS.md'];
+
+/* AI 校对问题清单（演示按「行号 + 原文片段 + 建议」结构化示意；真实 issues 为整段文本，拆分口径待确认） */
+const ISSUES = {
+  'README.md': [
+    { line: 12, snippet: '部署到生产坏境', advice: '建议改为「部署到生产环境」（坏境 → 环境，形近错别字）' },
+    { line: 37, snippet: '支持多语言文档的的生成', advice: '建议改为「支持多语言文档的生成」（删去多余「的」）' },
+  ],
+  'CHANGELOG.md': [
+    { line: 8, snippet: '修复了登陆后无法加载看板', advice: '建议改为「修复了登录后无法加载看板」（登陆 → 登录）' },
+  ],
+};
+
+/* ---------- 全局状态 ---------- */
+const state = {
+  files: Object.fromEntries(FILES.map((f) => [f.file, { ...f, state: 'reviewed' }])),
+  chk: 'fail',            // notrun | running | pass | fail | interrupted
+  chkRun: null,           // running 快照 / 结果视图
+  checks: { lang: null, links: null, busy: false },  // ①② 未运行=null
+  finOpen: false,
+  finalized: null,        // { at } —— 确认完结后
+  committed: false,
+  rvOpen: false,
+  rv: null,               // { key, modes:{}, locate:null|{file,line,snippet}, loaded:{}, err:{} , saving:false, backToFin:false }
+  timer: null,
+};
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(msg, cls) {
+  const t = document.createElement('div');
+  t.className = 't' + (cls ? ' ' + cls : '');
+  t.textContent = msg;
+  $('#toast').appendChild(t);
+  setTimeout(() => t.remove(), 3400);
+}
+
+/* ---------- 校对状态视图 ---------- */
+function chkSnapshot(kind) {
+  if (kind === 'notrun') return null;
+  if (kind === 'pass') return { phase: 'done', counts: { pass: 4, fail: 0, total: 4 }, files: {}, issues: {} };
+  if (kind === 'fail') return { phase: 'done', counts: { pass: 2, fail: 2, total: 4 }, files: {}, issues: ISSUES };
+  if (kind === 'interrupted') return { phase: 'failed', reason: '执行子代理会话被人工终止', counts: { pass: 2, fail: 0, total: 4 }, files: {}, issues: {} };
+  // running 快照：CHANGELOG.md 正在核查，README 已过
+  return { phase: 'running', currentFile: 'CHANGELOG.md', counts: { pass: 1, fail: 0, total: 4 }, files: {}, issues: {} };
+}
+function setChk(kind) {
+  stopProofreadAnim();
+  state.chk = kind;
+  state.chkRun = chkSnapshot(kind);
+  if (kind === 'running') { state.chkRun.currentFile = 'CHANGELOG.md'; }
+  document.querySelectorAll('#chkStateBtns button').forEach((b) => b.classList.toggle('on', b.dataset.chk === kind));
+  renderAll();
+}
+
+/* 「AI 校对」快进动画：pending → checking → pass/fail 逐文件推进，收尾 done */
+function startProofreadAnim() {
+  stopProofreadAnim();
+  const seq = [
+    { f: 'README.md', st: 'checking' }, { f: 'README.md', st: 'pass' },
+    { f: 'CHANGELOG.md', st: 'checking' }, { f: 'CHANGELOG.md', st: 'fail' },
+    { f: 'FEATURES.md', st: 'checking' }, { f: 'FEATURES.md', st: 'pass' },
+    { f: 'AGENTS.md', st: 'checking' }, { f: 'AGENTS.md', st: 'pass' },
+  ];
+  const run = { phase: 'running', currentFile: null, counts: { pass: 0, fail: 0, total: 4 }, issues: {} };
+  state.chk = 'running';
+  state.chkRun = run;
+  let i = 0;
+  state.timer = setInterval(() => {
+    if (i >= seq.length) {
+      stopProofreadAnim();
+      run.phase = 'done';
+      run.currentFile = null;
+      run.issues = ISSUES;
+      state.chk = 'fail';
+      document.querySelectorAll('#chkStateBtns button').forEach((b) => b.classList.toggle('on', b.dataset.chk === 'fail'));
+      renderAll();
+      toast('✓ AI 校对完成：不通过 2/4，问题清单已逐条展示（逐项可「修改」）', 'ok');
+      return;
+    }
+    const step = seq[i++];
+    run.currentFile = step.st === 'checking' ? step.f : null;
+    if (step.st === 'pass') run.counts.pass++;
+    if (step.st === 'fail') run.counts.fail++;
+    renderAll();
+  }, 850);
+}
+function stopProofreadAnim() { if (state.timer) { clearInterval(state.timer); state.timer = null; } }
+
+/* ---------- 文档编写页背景 ---------- */
+const ST_LABEL = { reviewed: ['✔', 'st-ok', '已审核'], summarized: ['◐', 'st-wait', '已总结待审核'] };
+function renderDocsPane() {
+  const list = $('#fileList');
+  const rows = [];
+  rows.push('<li class="group">— 默认语言（cn，无后缀）—</li>');
+  for (const f of FILES.filter((x) => x.def)) rows.push(fileRow(f));
+  rows.push('<li class="group">— en（剩余语言，AI 翻译）—</li>');
+  for (const f of FILES.filter((x) => !x.def)) rows.push(fileRow(f));
+  list.innerHTML = rows.join('');
+  const defOk = FILES.filter((x) => x.def).filter((x) => state.files[x.file].state === 'reviewed').length;
+  const restOk = FILES.filter((x) => !x.def).filter((x) => state.files[x.file].state === 'reviewed').length;
+  $('#filesHeadTxt').textContent = `文件（8 · 默认语言 ${defOk}/4 已审核 · 剩余语言 ${restOk}/4 已审核）`;
+  const all = defOk === 4 && restOk === 4;
+  const gate = $('#gateBar');
+  if (state.committed) {
+    gate.className = 'gate ok';
+    gate.textContent = '已提交到本地 dev 分支（hash a1b2c3d，仅语言集内文档 pathspec）：满足「合并入 main」前置。';
+  } else if (all && state.finalized) {
+    gate.className = 'gate ok';
+    gate.textContent = '提交门禁：8/8 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。';
+  } else {
+    gate.className = 'gate';
+    const missing = FILES.filter((x) => state.files[x.file].state !== 'reviewed').map((x) => `${x.file}（${ST_LABEL[state.files[x.file].state][2]}）`);
+    gate.textContent = `提交门禁：默认语言 ${defOk}/4 · 剩余语言 ${restOk}/4 已审核 —— ${missing.length ? `整体审查入口尚缺：${missing.join('、')}` : '整体审查未完结（确认完结后可提交）'}。`;
+  }
+  const note = $('#finNote');
+  if (state.finalized) {
+    note.hidden = false;
+    note.textContent = `整体审查已完结 ✓（时间 ${state.finalized.at}；提交已解锁）`;
+  } else note.hidden = true;
+  $('#paneCommitBtn').disabled = !(state.finalized && all) || state.committed;
+}
+function fileRow(f) {
+  const st = state.files[f.file].state;
+  const [ico, cls, label] = ST_LABEL[st];
+  return `<li><span class="fname">${esc(f.file)}</span><span class="st ${cls}"><i>${ico}</i>${label}</span></li>`;
+}
+
+/* ---------- 整体审查完结对话框 ---------- */
+function issueRow(file, it, idx) {
+  return `<li class="issue">
+    <span class="lno">第 ${it.line} 行</span>
+    <span class="txt">「<span class="org">${esc(it.snippet)}</span>」<span class="adv">${esc(it.advice)}</span></span>
+    <button class="fix" data-fix-file="${esc(file)}" data-fix-idx="${idx}" title="打开审查对话框：${esc(file)} 编辑态并定位到第 ${it.line} 行">修改</button>
+  </li>`;
+}
+function renderFinalize() {
+  $('#finalizeWrap').hidden = !state.finOpen;
+  if (!state.finOpen) return;
+  const c = state.checks;
+  const st = (ok) => ok === true ? ['✔', 'st-ok'] : ok === false ? ['✕', 'st-fail'] : ['◐', 'st-run'];
+  const [l1, lc1] = st(c.lang === 'ok');
+  const [l2, lc2] = st(c.links === 'ok');
+  let chkIco = '◐', chkCls = 'st-run', chkSub = 'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执', issueHtml = '';
+  const r = state.chkRun;
+  if (r) {
+    if (r.phase === 'running') {
+      chkSub = `校对进行中 ${(r.counts.pass || 0) + (r.counts.fail || 0)}/${r.counts.total}${r.currentFile ? ` · 当前：<code>${esc(r.currentFile)}</code>` : ''}`;
+    } else if (r.phase === 'failed') {
+      chkIco = '✕'; chkCls = 'st-fail';
+      chkSub = `AI 校对中断：${esc(r.reason || '')}（已完成文件保留，可重新「AI 校对」续跑）`;
+    } else if (r.phase === 'done') {
+      const pass = r.counts.pass, fail = r.counts.fail;
+      if (fail === 0) { chkIco = '✔'; chkCls = 'st-ok'; chkSub = `通过 ${pass}/${r.counts.total}`; }
+      else {
+        chkIco = '✕'; chkCls = 'st-fail';
+        const failedFiles = Object.keys(r.issues || {});
+        chkSub = `不通过 ${pass}/${r.counts.total}：${failedFiles.join('、')}`;
+        issueHtml = failedFiles.map((f) =>
+          `<li class="file-head">${esc(f)}</li>` + (r.issues[f] || []).map((it, i) => issueRow(f, it, i)).join('')
+        ).join('');
+      }
+    }
+  }
+  const li = (ico, cls, text, sub, details) =>
+    `<li><div class="chk-line"><span class="st ${cls}"><i>${ico}</i></span><span>${text}</span></div>` +
+    (sub ? `<div class="chk-sub">${sub}</div>` : '') + (details ? `<ul class="issues">${details}</ul>` : '') + `</li>`;
+  $('#checkList').innerHTML = [
+    li(l1, lc1, '各语言内容语义一致（以已审核默认语言为基准）',
+      c.busy ? '自动检查运行中…' : c.lang === 'ok' ? '通过 8/8' : '语言一致自动检查未运行：点击「运行自动检查」'),
+    li(l2, lc2, '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）',
+      c.busy ? '自动检查运行中…' : c.links === 'ok' ? '通过 21/21' : '链接可达性自动检查未运行：点击「运行自动检查」'),
+    li(chkIco, chkCls, '默认语言错别字与行文规范（AI 校对自动上报）', chkSub, issueHtml),
+  ].join('');
+  const running = r && r.phase === 'running';
+  $('#autoCheckBtn').disabled = c.busy || running;
+  $('#autoCheckBtn').textContent = c.busy ? '检查中…' : '运行自动检查';
+  $('#proofreadBtn').disabled = c.busy || running;
+  $('#proofreadBtn').textContent = running ? '校对中…' : 'AI 校对';
+}
+
+/* ---------- 审查对话框 ---------- */
+function openReview(locate) {
+  // locate: { file, line, snippet } | null（null = 常规「审查」入口）
+  const key = locate ? state.files[locate.file].key : 'README';
+  const modes = {};
+  for (const f of FILES) modes[f.file] = locate && f.file === locate.file ? 'edit' : 'preview';
+  state.rv = { key, modes, locate: locate || null, err: {}, retry: null, saving: false, backToFin: state.finOpen };
+  state.rvOpen = true;
+  state.finOpen = false; // 弹层关系「待确认」：演示按先关闭整体审查对话框再打开
+  renderAll();
+  if (locate) {
+    toast(`已定位：${locate.file} 编辑态 · 第 ${locate.line} 行（原文片段已高亮选中）`, 'ok');
+  }
+}
+function closeReview() {
+  state.rvOpen = false;
+  state.rv = null;
+  renderAll();
+}
+function mdPreview(text) {
+  return text.split('\n').map((l) => {
+    if (/^### /.test(l)) return `<h3>${esc(l.slice(4))}</h3>`;
+    if (/^## /.test(l)) return `<h2>${esc(l.slice(3))}</h2>`;
+    if (/^# /.test(l)) return `<h1>${esc(l.slice(2))}</h1>`;
+    if (/^- /.test(l)) return `<li>${esc(l.slice(2))}</li>`;
+    if (!l.trim()) return '';
+    return `<p>${esc(l)}</p>`;
+  }).join('');
+}
+function renderReview() {
+  $('#reviewWrap').hidden = !state.rvOpen;
+  if (!state.rvOpen || !state.rv) return;
+  const rv = state.rv;
+  $('#rvTabs').innerHTML = KEYS.map((k) => {
+    const per = FILES.filter((f) => f.key === k);
+    const n = per.filter((f) => state.files[f.file].state === 'reviewed').length;
+    return `<button class="${rv.key === k ? 'active' : ''}" data-tab="${k}">${k}（${n}/${per.length}）</button>`;
+  }).join('');
+  const pair = FILES.filter((f) => f.key === rv.key);
+  $('#rvCols').innerHTML = pair.map((f) => {
+    const st = state.files[f.file];
+    const mode = rv.modes[f.file] === 'edit' ? 'edit' : 'preview';
+    const fail = $('#simReadFail').checked && rv.locate && f.file === rv.locate.file;
+    let body;
+    if (fail) {
+      body = `<p class="read-err" role="alert">✕ ${esc(f.file)} 读取失败：网络错误（演示模拟）</p>
+        <p><button class="btn" data-retry="${esc(f.file)}">重试</button></p>`;
+    } else if (mode === 'edit') {
+      const locTip = rv.locate && rv.locate.file === f.file
+        ? `<p class="loc-tip">▲ AI 校对问题：第 ${rv.locate.line} 行「${esc(rv.locate.snippet)}」——修改后保存（保存后本文件回退「已总结待审核」，需重新通过审核）</p>` : '';
+      body = `${locTip}<textarea class="editor" data-file="${esc(f.file)}" spellcheck="false">${esc(DOC_CONTENT[f.file])}</textarea>`;
+    } else {
+      body = `<div class="md">${mdPreview(DOC_CONTENT[f.file]) || '<p style="color:var(--muted)">（空文档）</p>'}</div>`;
+    }
+    const [ico, cls, label] = ST_LABEL[st.state];
+    return `<div class="col">
+      <div class="col-head">
+        <span class="l"><span class="fname">${esc(f.file)}</span><span class="st ${cls}"><i>${ico}</i>${label}</span></span>
+        <span class="col-acts">
+          <button class="btn ${mode === 'edit' ? 'on' : ''}" data-mode="${esc(f.file)}" data-m="edit">编辑</button>
+          <button class="btn ${mode === 'preview' ? 'on' : ''}" data-mode="${esc(f.file)}" data-m="preview">预览</button>
+          <button class="btn" data-save="${esc(f.file)}"${mode !== 'edit' || rv.saving ? ' disabled title="编辑态才能保存"' : ''}>${rv.saving && mode === 'edit' ? '保存中…' : '保存'}</button>
+          <button class="btn primary" data-approve="${esc(f.file)}"${st.state === 'reviewed' ? ' disabled title="已审核：编辑保存后才会回退待审核"' : ''}>${st.state === 'reviewed' ? '✔ 已审核' : '通过审核'}</button>
+        </span>
+      </div>
+      <div class="col-body">${body}</div>
+    </div>`;
+  }).join('');
+  const allN = FILES.filter((f) => state.files[f.file].state === 'reviewed').length;
+  const pairN = pair.filter((f) => state.files[f.file].state === 'reviewed').length;
+  $('#rvFoot').textContent = `全部 ${allN}/8 已审核 · 本页签 ${pairN}/${pair.length} · 各栏同步滚动：一侧滚动其余按比例跟随`;
+  locateEditor();
+}
+/* 行定位：选中原文片段并滚动到该行附近（textarea 无原生行定位，演示用行高估算） */
+function locateEditor() {
+  const rv = state.rv;
+  if (!rv || !rv.locate) return;
+  const ta = document.querySelector(`textarea.editor[data-file="${CSS.escape(rv.locate.file)}"]`);
+  if (!ta) return;
+  const lines = ta.value.split('\n');
+  let idx = 0;
+  for (let i = 0; i < rv.locate.line - 1 && i < lines.length; i++) idx += lines[i].length + 1;
+  const snip = ta.value.indexOf(rv.locate.snippet, idx);
+  const start = snip >= 0 ? snip : idx;
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(start, start + rv.locate.snippet.length);
+  ta.scrollTop = Math.max(0, (rv.locate.line - 4) * 20);
+}
+
+/* ---------- 渲染入口 ---------- */
+function renderAll() {
+  renderDocsPane();
+  renderFinalize();
+  renderReview();
+}
+renderAll();
+
+/* ---------- 事件绑定 ---------- */
+document.querySelectorAll('#chkStateBtns button').forEach((b) => b.addEventListener('click', () => setChk(b.dataset.chk)));
+$('#themeBtn').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme === 'dark' ? '' : 'dark';
+  document.documentElement.dataset.theme = cur;
+});
+$('#openFinBtn').addEventListener('click', openFinalize);
+$('#paneFinalizeBtn').addEventListener('click', openFinalize);
+function openFinalize() {
+  const missing = FILES.filter((f) => state.files[f.file].state !== 'reviewed');
+  if (missing.length) {
+    toast(`✕ 整体审查未解锁：尚缺 ${missing.length} 个文件审核（${missing.map((f) => f.file).join('、')}）——先在审查对话框重新「通过审核」`, 'err');
+    return;
+  }
+  state.finOpen = true;
+  renderAll();
+}
+document.querySelectorAll('[data-close-finalize]').forEach((b) => b.addEventListener('click', () => { state.finOpen = false; renderAll(); }));
+$('#finalizeWrap').addEventListener('click', (e) => { if (e.target.id === 'finalizeWrap') { state.finOpen = false; renderAll(); } });
+
+$('#autoCheckBtn').addEventListener('click', () => {
+  state.checks.busy = true;
+  renderAll();
+  setTimeout(() => {
+    state.checks = { lang: 'ok', links: 'ok', busy: false };
+    renderAll();
+    toast('✓ 自动检查完成：语言一致性 通过 8/8 · 链接可达 通过 21/21（只读，不设门禁）', 'ok');
+  }, 900);
+});
+$('#proofreadBtn').addEventListener('click', () => {
+  toast('✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（演示为快进动画）', 'ok');
+  startProofreadAnim();
+});
+
+/* 逐条「修改」：核心交互 */
+document.addEventListener('click', (e) => {
+  const fixBtn = e.target.closest('[data-fix-file]');
+  if (fixBtn) {
+    const file = fixBtn.dataset.fixFile;
+    const it = state.chkRun.issues[file][Number(fixBtn.dataset.fixIdx)];
+    openReview({ file, line: it.line, snippet: it.snippet });
+    return;
+  }
+  const tab = e.target.closest('[data-tab]');
+  if (tab) {
+    state.rv.key = tab.dataset.tab;
+    renderAll();
+    return;
+  }
+  const mode = e.target.closest('[data-mode]');
+  if (mode) {
+    // 切编辑/预览前回填草稿（防丢字，演示直接回填 textarea）
+    syncDrafts();
+    state.rv.modes[mode.dataset.mode] = mode.dataset.m;
+    renderAll();
+    return;
+  }
+  const save = e.target.closest('[data-save]');
+  if (save) { doSave(save.dataset.save); return; }
+  const approve = e.target.closest('[data-approve]');
+  if (approve) { doApprove(approve.dataset.approve); return; }
+  const retry = e.target.closest('[data-retry]');
+  if (retry) {
+    $('#simReadFail').checked = false;
+    renderAll();
+    toast('✓ 重试成功：内容已读取', 'ok');
+    return;
+  }
+});
+function syncDrafts() {
+  document.querySelectorAll('textarea.editor').forEach((ta) => { DOC_CONTENT[ta.dataset.file] = ta.value; });
+}
+function doSave(file) {
+  syncDrafts();
+  state.rv.saving = true;
+  renderAll();
+  setTimeout(() => {
+    state.rv.saving = false;
+    const wasReviewed = state.files[file].state === 'reviewed';
+    state.files[file].state = 'summarized';
+    if (state.finalized) {
+      state.finalized = null;
+      toast('✓ 已保存：文件回退「已总结待审核」，需重新通过审核；整体审查已完结失效回退（内容已变化）', 'ok');
+    } else if (wasReviewed) {
+      toast('✓ 已保存：文件回退「已总结待审核」，需重新通过审核（整体审查入口缺口重现）', 'ok');
+    } else {
+      toast('✓ 已保存：仍为「已总结待审核」，请「通过审核」', 'ok');
+    }
+    renderAll();
+  }, 500);
+}
+function doApprove(file) {
+  if (state.files[file].state === 'reviewed') return;
+  state.files[file].state = 'reviewed';
+  renderAll();
+  toast(`✓ ${file} 已通过审核`, 'ok');
+}
+document.querySelectorAll('[data-close-review]').forEach((b) => b.addEventListener('click', closeReview));
+$('#reviewWrap').addEventListener('click', (e) => { if (e.target.id === 'reviewWrap') closeReview(); });
+$('#paneReviewBtn').addEventListener('click', () => openReview(null));
+
+$('#paneCommitBtn').addEventListener('click', () => {
+  state.committed = true;
+  renderAll();
+  toast('✓ 已提交到本地 dev 分支（hash a1b2c3d，仅语言集内文档 pathspec，示意）', 'ok');
+});
+
+/* 确认完结（二次确认 + 门禁不变：文件未全审时拒绝） */
+$('#confirmFinBtn').addEventListener('click', () => {
+  const missing = FILES.filter((f) => state.files[f.file].state !== 'reviewed');
+  if (missing.length) {
+    toast(`✕ 整体审查完结失败：尚缺 ${missing.length} 个文件审核（${missing.map((f) => f.file).join('、')}）——门禁不变`, 'err');
+    return;
+  }
+  askConfirm('确认整体审查完结？完结是人工确认动作，请确认已逐项核对（① 语言一致 · ② 链接可达 · ③ AI 校对）。完结后「提交」解锁。', () => {
+    state.finalized = { at: new Date().toLocaleTimeString('zh-CN', { hour12: false }) };
+    state.finOpen = false;
+    renderAll();
+    toast('✓ 整体审查已完结：文档编写三阶段完成，「提交」已解锁', 'ok');
+  });
+});
+function askConfirm(text, onYes) {
+  $('#confirmText').textContent = text;
+  const mask = $('#confirmMask');
+  mask.hidden = false;
+  const yes = $('#confirmYes'), no = $('#confirmNo');
+  const done = (fn) => { mask.hidden = true; yes.onclick = null; no.onclick = null; if (fn) fn(); };
+  yes.onclick = () => done(onYes);
+  no.onclick = () => done(null);
+}
+
+/* Esc 关闭最上层对话框（审查 > 整体审查 > 确认层） */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('#confirmMask').hidden) { $('#confirmMask').hidden = true; return; }
+  if (state.rvOpen) { closeReview(); return; }
+  if (state.finOpen) { state.finOpen = false; renderAll(); }
+});
+
+/* 初始引导 */
+setTimeout(() => { state.finOpen = true; renderAll(); }, 300);
+</script>
+</body>
+</html>
