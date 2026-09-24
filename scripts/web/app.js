@@ -8877,7 +8877,11 @@ function bindSettingsView(view) {
       state.layout.busy = false;
       paintSettingsView(view);
       const st2 = view.querySelector('#lmStatus');
-      if (st2) st2.textContent = `失败：${e.message}（可重试；迁移幂等，已完成部分不会重复执行）`;
+      // BUG-20260924-001：真实冲突（同名异内容 / 目录-文件类型不一致）需人工核对，直接重试
+      // 不会自动解决，不再无条件附带「可重试」提示；其余失败（临时环境问题等）仍提示可重试
+      if (st2) st2.textContent = String(e.message || '').startsWith('迁移冲突：')
+        ? `失败：${e.message}（真实冲突：需人工核对处理，直接重试不会自动解决）`
+        : `失败：${e.message}（可重试；迁移幂等，已完成部分不会重复执行）`;
     }
   });
 
