@@ -2666,6 +2666,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     { statFile: docStatFile },
   );
 
+  // BUG-20260925-002：校对 run 视图 + 决断持久化字段（decisions，前端重播种事实源）+
+  // 上一轮已决断数（supersededDecided：新 run 旧决断失效的前端可感知提示依据）。
+  const docsCheckView = (dir, verId) => {
+    const run = docsCheck.latestCheckRun(dir, verId);
+    if (!run) return null;
+    return {
+      ...docsCheck.checkRunView(run),
+      supersededDecided: docsCheck.supersededCheckDecisionCount(dir, verId, run.runId),
+    };
+  };
+
   // GET /api/build/publish-plan?id=：五步导航装配（版本号 / 步骤门禁 / 文档状态 / AI 总结与
   // 官网提示词 / 合并影响分析 / 当前分支与主分支 / 发布状态），只读。
   // REQ-20260921-008：新增 docsFlow（八文件四态求值：未总结/正在总结/已总结待审核/已审核）与
@@ -2694,8 +2705,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       summary: docsSummary.summaryRunView(docsSummary.latestSummaryRun(dataDir, v.id)),
       // REQ-20260921-012：AI 翻译 run 视图（阶段二进度，文档编写页 / 任务模块）
       translate: docsTranslate.translateRunView(docsTranslate.latestTranslateRun(dataDir, v.id)),
-      // REQ-20260924-001：AI 校对 run 视图（整体审查自动检查之错别字与行文规范核查结果）
-      docsCheck: docsCheck.checkRunView(docsCheck.latestCheckRun(dataDir, v.id)),
+      // REQ-20260924-001：AI 校对 run 视图（整体审查自动检查之错别字与行文规范核查结果）；
+      // BUG-20260925-002：decisions（决断账本）与 supersededDecided（上一轮决断数）随视图透出
+      docsCheck: docsCheckView(dataDir, v.id),
       sitePrompt: config.homepageRepoRoot
         ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
         : null,
@@ -2841,8 +2853,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         translate = docsTranslate.translateRunView(docsTranslate.latestTranslateRun(board, verId));
       } catch { /* 版本读取失败不阻塞进度展示 */ }
     }
-    // REQ-20260924-001：单次轮询同吸总结 / 翻译 / 校对进度与三阶段求值
-    const docsCheckRun = verId ? docsCheck.checkRunView(docsCheck.latestCheckRun(board, verId)) : null;
+    // REQ-20260924-001：单次轮询同吸总结 / 翻译 / 校对进度与三阶段求值；
+    // BUG-20260925-002：docsCheck 视图带决断字段（decisions / supersededDecided）
+    const docsCheckRun = verId ? docsCheckView(board, verId) : null;
     return sendJson(res, 200, { run: docsSummary.summaryRunView(latest), translate, docsCheck: docsCheckRun, docsFlow });
   }
 
@@ -3115,7 +3128,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         customDocs,
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
       });
-      return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsCheck.checkRunView(run) });
+      // BUG-20260925-002：回执 run 视图带 supersededDecided（新 run 旧决断失效提示依据）
+      return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsCheckView(board, v.id) });
     });
   }
 
@@ -3133,7 +3147,28 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         docsFlow = docsFlowOf(board, v);
       } catch { /* 版本读取失败不阻塞进度展示 */ }
     }
-    return sendJson(res, 200, { run: docsCheck.checkRunView(latest), docsFlow });
+    // BUG-20260925-002：docsCheck 视图带决断字段（decisions / supersededDecided）
+    return sendJson(res, 200, { run: verId ? docsCheckView(board, verId) : null, docsFlow });
+  }
+
+  // BUG-20260925-002 校对建议决断落库：接受 / 拒绝 / 过期逐条持久化到校对 run 账本
+  //（run.json decisions），publish-plan / current 视图随带——整页刷新 / 版本切换重进后
+  // 前端重播种，决断不丢、④ 门禁不回退。校验：run 属本版本、file 在 run 账本、idx 在该
+  // 文件 issues 行数内、decision 三值、run 已收尾（done）才可记；后写覆盖（最后一次为准）。
+  if (req.method === 'POST' && pathname === '/api/build/docs-check/decision') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const verId = String(body.id || '');
+      buildStore.readVersion(board, verId); // 版本不存在 → AtbError → 400
+      const run = docsCheck.recordCheckDecision(board, {
+        verId,
+        runId: String(body.runId || ''),
+        file: String(body.file || ''),
+        idx: body.idx,
+        decision: String(body.decision || ''),
+      });
+      return sendJson(res, 200, { ok: true, run: docsCheckView(board, run.verId) });
+    });
   }
 
   // POST /api/build/docs/open-ide {id, app}：用 TRAE CN / TRAE 打开当前项目根目录；未安装 /
