@@ -3759,6 +3759,14 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
    .bld-doc-chip）随编辑收敛进审查对话框移除；新样式见下方 REQ-20260921-008 区块 */
 .bld-doc-mode .btn.on { border-color: var(--accent, #2563eb); font-weight: 600; }
 .bld-docs-gate { border-left: 3px solid var(--warn, #d97706); padding-left: 8px; }
+/* BUG-20260925-004 后台静默同步失败轻量横幅：保留现有内容不打断界面（行内提示 + 重试
+   按钮，弱化呈现不与门禁条 / 状态 chip 抢焦点，深浅色取主题变量适配两种外观） */
+.bld-docs-sync-err {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  border: 1px dashed var(--warn, #d97706); border-radius: 8px; padding: 6px 10px;
+  color: var(--inprogress); font-size: 12.5px;
+}
+.bld-docs-sync-err .btn { flex: none; }
 .bld-merge-pane ul, .bld-release-pane ul { margin: 2px 0 0; padding-left: 18px; }
 .bld-merge-pane li, .bld-release-pane li { margin: 2px 0; }
 /* REQ-20260921-015 合并页简洁隔离分析：阻止性信息单行状态条（非红色长文）＋ 一行汇总 ＋
