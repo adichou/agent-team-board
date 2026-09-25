@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260925-005 演示 — 二次编辑的编辑/预览与审查界面一致</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1f2329; --muted: #6b7280;
+    --border: #d9dde3; --accent: #2f6fed; --ok: #1a9e6c; --err: #d5453c;
+    --code-bg: rgba(127,140,170,.12); --flash: #f0a020;
+    --preview-font-size: 13.5px; --preview-pad: 4px 18px; --preview-radius: 10px; --preview-border: 1px solid var(--border);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191d; --panel: #1f2228; --text: #e6e8ec; --muted: #9aa1ac;
+      --border: #34383f; --accent: #6d9bff; --ok: #3ecf8e; --err: #ff7b72;
+      --code-bg: rgba(127,140,170,.18); --flash: #f0b040;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 18px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  /* 评审控件 */
+  .review-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; background: transparent; color: var(--text); padding: 6px 14px; cursor: pointer; font: inherit; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .seg button.on.bugseg { background: var(--err); }
+  .review-ctl .hint { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.bug { color: var(--err); border-color: var(--err); }
+  .badge.fixed { color: var(--ok); border-color: var(--ok); }
+
+  /* 模拟弹窗 */
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    display: flex; flex-direction: column; max-width: 860px; overflow: hidden; }
+  .m-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .m-head span:first-child { font-weight: 600; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 7px;
+    padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.small { font-size: 12.5px; padding: 3px 10px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.quiet { border-color: transparent; }
+  .m-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px 0; }
+  .m-bar label { font-size: 13px; color: var(--muted); }
+  .m-bar select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--panel); color: var(--text); max-width: 240px; }
+  .modegrp { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .m-body { padding: 12px 16px; min-height: 300px; max-height: 420px; overflow-y: auto; }
+  .m-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 10px 16px; border-top: 1px solid var(--border); }
+  .m-foot .note { font-size: 12.5px; color: var(--muted); }
+
+  /* 编辑器：缺陷=继承字体 / 期望=等宽（审查口径） */
+  textarea.editor { width: 100%; min-height: 300px; border: none; outline: none; resize: vertical;
+    background: var(--panel); color: var(--text); padding: 4px 2px; }
+  body[data-mode="bug"] textarea.editor { font: inherit; line-height: 1.7; }
+  body[data-mode="fixed"] textarea.editor { font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace; }
+  textarea.editor.flash { animation: flashAnim .65s ease-in-out 3; }
+  @keyframes flashAnim { 0%,100% { box-shadow: none; } 50% { box-shadow: 0 0 0 3px var(--flash); border-radius: 6px; } }
+
+  /* 预览排版：缺陷=.md 通用样式（外框）/ 期望=审查容器口径（无外框、13px） */
+  .preview { overflow-wrap: break-word; }
+  body[data-mode="bug"] .preview { border: var(--preview-border); border-radius: var(--preview-radius);
+    padding: var(--preview-pad); font-size: var(--preview-font-size); }
+  body[data-mode="fixed"] .preview { border: none; padding: 2px 4px; font-size: 13px; line-height: 1.7; }
+  .preview h1 { font-size: 1.3em; margin: .9em 0 .45em; }
+  .preview h2 { font-size: 1.15em; margin: .8em 0 .35em; }
+  .preview p { margin: .5em 0; }
+  .preview ul { margin: .4em 0; padding-left: 1.4em; }
+  .preview blockquote { margin: .5em 0; padding: 2px 12px; border-left: 3px solid var(--border); color: var(--muted); }
+  .preview table { border-collapse: collapse; margin: .5em 0; }
+  .preview th, .preview td { border: 1px solid var(--border); padding: 4px 10px; font-size: .92em; }
+  .preview code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: .9em;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .preview pre { background: var(--code-bg); border-radius: 8px; padding: 10px 12px; overflow: auto; }
+  .preview pre code { background: none; padding: 0; }
+  .preview img.svgpic { max-width: 100%; border-radius: 8px; display: block; }
+
+  /* 裂图（缺陷模式）：模拟浏览器原生裂图观感 */
+  .broken-img { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border: 1px dashed var(--err); border-radius: 8px; color: var(--muted); font-size: .9em; }
+  .broken-img .ico { color: var(--err); font-size: 1.2em; font-family: ui-monospace, monospace; }
+
+  /* 期望模式：图片失败占位（带路径与原因）与 mermaid 容器（md-rich 口径） */
+  .md-img-error { margin: 6px 0; padding: 8px 12px; border: 1px dashed var(--err); border-radius: 8px;
+    color: var(--muted); font-size: .88em; }
+  .md-img-error b { color: var(--err); }
+  .md-mermaid { margin: 8px 0; overflow-x: auto; text-align: center; }
+  .md-mermaid svg { max-width: 100%; height: auto; }
+  .md-mermaid-note, .md-diagram-fallback { margin: 4px 0; font-size: .85em; color: var(--muted); text-align: center; }
+  .demo-note { font-size: .8em; color: var(--muted); text-align: center; margin: 2px 0 8px; }
+
+  .empty-doc { color: var(--muted); font-size: .9em; }
+  .load-note, .err-note { font-size: .92em; }
+  .err-note { color: var(--err); }
+  .pending-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 16px 10px;
+    padding: 8px 12px; border: 1px solid var(--flash); border-radius: 8px; background: var(--panel);
+    background: color-mix(in srgb, var(--flash) 8%, transparent); }
+  .unsaved-note { margin: 6px 16px 0; font-size: .85em; color: var(--flash); }
+
+  /* 侧栏 */
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .card h3 { margin: 0 0 8px; font-size: 13.5px; }
+  .issue { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+  .issue .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); margin-right: 6px; }
+  .issue p { margin: 4px 0; }
+  .diff-row { display: grid; grid-template-columns: 76px 1fr; gap: 6px 8px; font-size: 12.5px; margin: 6px 0; }
+  .diff-row .k { color: var(--muted); }
+  .diff-row .now { color: var(--err); }
+  .diff-row .want { color: var(--ok); }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .closed-wrap { text-align: center; padding: 40px 16px; color: var(--muted); }
+</style>
+</head>
+<body data-mode="bug">
+
+<h1>BUG-20260925-005 交互演示</h1>
+<p class="sub">二次编辑界面的编辑和预览功能要和审查界面保持一致。本页为评审用模拟演示：数据均在内存中，不读取 / 不修改真实文档、不发送网络请求（图片与 mermaid 图以内联 SVG 模拟），不代表修复已完成。</p>
+
+<div class="review-ctl">
+  <span class="badge bug" id="modeBadge">当前：缺陷现状</span>
+  <div class="seg" role="group" aria-label="演示模式">
+    <button type="button" id="segBug" class="on bugseg">缺陷现状</button>
+    <button type="button" id="segFixed">期望修复后</button>
+  </div>
+  <span class="hint">切换后同一文档即时对照；编辑草稿与弹窗状态保留</span>
+</div>
+
+<div class="layout">
+  <div class="modal" id="modal">
+    <div class="m-head">
+      <span>二次编辑 · 默认语言（v1.2.0 演示）</span>
+      <button type="button" class="btn small quiet" id="btnCloseHead">✕ 关闭</button>
+    </div>
+    <div class="m-bar">
+      <label for="fileSel">文件</label>
+      <select id="fileSel"></select>
+      <button type="button" class="btn small" id="btnRefresh" title="重新读取磁盘内容（有未保存修改先询问保存或放弃）">刷新</button>
+      <span class="modegrp" role="group" aria-label="编辑或预览">
+        <button type="button" class="btn small on" id="btnEdit">编辑</button>
+        <button type="button" class="btn small" id="btnPreview">预览</button>
+      </span>
+    </div>
+    <p class="unsaved-note" id="unsavedNote" hidden>有未保存的修改：切换文件 / 刷新 / 关闭前会先询问保存或放弃。</p>
+    <div class="pending-bar" id="pendingBar" hidden>
+      <span>有未保存的修改：</span>
+      <button type="button" class="btn small primary" id="btnKeep">保存并继续</button>
+      <button type="button" class="btn small" id="btnDiscard">放弃修改并继续</button>
+      <button type="button" class="btn small quiet" id="btnStay">留在本文件</button>
+    </div>
+    <div class="m-body" id="modalBody"></div>
+    <div class="m-foot">
+      <span class="note" id="footNote">默认语言初稿编辑（其余语言由「④ AI 翻译」产出）</span>
+      <span>
+        <button type="button" class="btn small" id="btnSave">保存</button>
+        <button type="button" class="btn small" id="btnCloseFoot">关闭</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h3>③ 校对建议（模拟）</h3>
+      <div class="issue">
+        <p><span class="tag">待处理</span><b>第 1 行</b> · 错别字</p>
+        <p>「智能体团队看版」→ 建议「智能体团队看板」</p>
+        <button type="button" class="btn small" id="btnJump">✎ 修改（跳二次编辑定位）</button>
+        <p class="legend">定位反馈：缺陷模式仅选中滚动；期望模式另有 2 秒描边闪烁（与审查界面一致）。</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>差异对照（代码核实）</h3>
+      <div class="diff-row"><span class="k">预览·富媒体</span><span>现状 <span class="now">图片裂图、mermaid 只见代码块</span>；期望 <span class="want">图片显示或带原因占位、mermaid 成图</span></span></div>
+      <div class="diff-row"><span class="k">预览·排版</span><span>现状 <span class="now">带外框的通用样式</span>；期望 <span class="want">与审查容器同口径（无外框）</span></span></div>
+      <div class="diff-row"><span class="k">编辑·字体</span><span>现状 <span class="now">界面默认字体</span>；期望 <span class="want">等宽字体（同审查编辑框）</span></span></div>
+      <div class="diff-row"><span class="k">定位·落点</span><span>现状 <span class="now">无闪烁提示</span>；期望 <span class="want">选中 + 滚动 + 描边闪烁</span></span></div>
+      <p class="legend">文件下拉含四种状态：正常（README.md）/ 简单（CHANGELOG.md）/ 空文档（EMPTY.md）/ 读取失败（docs-lost.md，含重试）。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ---------- 演示数据（模拟，非真实文档） ---------- */
+const PIC_OK = 'image/board-preview.png';    // 期望模式：模拟 /api/fs/raw 端点加载成功
+const PIC_MISSING = 'image/missing.png';     // 期望模式：模拟端点拒绝 → 占位；缺陷模式：裂图
+const DOCS = {
+  'README.md': [
+    '# 智能体团队看版（演示文档）',
+    '',
+    '这是 **BUG-20260925-005** 的演示文档：同一份内容在「二次编辑」弹窗中，按上方模式开关分别呈现缺陷现状与期望修复后的效果。',
+    '',
+    '## 五步流程',
+    '',
+    '- AI 总结',
+    '- 二次编辑（本弹窗）',
+    '- AI 校对',
+    '- AI 翻译',
+    '- 提交',
+    '',
+    '## 流程图（mermaid）',
+    '',
+    '```mermaid',
+    'graph LR; A[AI 总结] --> B[二次编辑] --> C[AI 校对] --> D[AI 翻译] --> E[提交];',
+    '```',
+    '',
+    '## 截图（仓库相对路径图片）',
+    '',
+    '![' + PIC_OK + '](' + PIC_OK + ')',
+    '',
+    '![缺失图示例](' + PIC_MISSING + ')',
+    '',
+    '## 引用与代码',
+    '',
+    '> 预览必须展示即将提交的原文。',
+    '',
+    '行内代码如 `renderMd`，表格：',
+    '',
+    '| 界面 | 字体 |',
+    '| --- | --- |',
+    '| 审查编辑框 | 等宽 |',
+    '| 二次编辑编辑框 | 见模式 |',
+    ''
+  ].join('\n'),
+  'CHANGELOG.md': [
+    '# 更新日志（演示）',
+    '',
+    '- 修复：二次编辑预览富媒体与审查界面不一致',
+    '',
+    '> 简单文档：无图片与图表。'
+  ].join('\n'),
+  'EMPTY.md': '',
+  'docs-lost.md': null // null = 模拟读取必失败
+};
+const FILE_ORDER = ['README.md', 'CHANGELOG.md', 'EMPTY.md', 'docs-lost.md'];
+
+/* ---------- 状态 ---------- */
+const state = {
+  mode: 'bug',            // bug | fixed
+  open: true,
+  file: 'README.md',
+  view: 'edit',           // edit | preview
+  draft: {},              // 文件 -> 草稿（docs-lost.md 无草稿）
+  loading: false,
+  loadErr: null,
+  pending: null,          // {kind:'switch'|'refresh'|'close', file}
+  busy: false,            // 保存中
+  savedNote: null,
+  pendingFocus: null      // {line}
+};
+Object.keys(DOCS).forEach((k) => { if (DOCS[k] != null) state.draft[k] = DOCS[k]; });
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- 内联 SVG：模拟图片加载成功（期望模式） ---------- */
+function svgPic() {
+  return '<svg class="svgpic" width="420" height="150" viewBox="0 0 420 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="看板截图（模拟）">'
+    + '<rect width="420" height="150" rx="10" fill="#2b3a67"/><rect x="14" y="14" width="90" height="122" rx="6" fill="#3d4f86"/>'
+    + '<rect x="26" y="28" width="66" height="12" rx="3" fill="#8fa3e0"/><rect x="26" y="50" width="66" height="8" rx="3" fill="#6a7db8"/>'
+    + '<rect x="26" y="66" width="66" height="8" rx="3" fill="#6a7db8"/><rect x="26" y="90" width="66" height="26" rx="5" fill="#4d63a5"/>'
+    + '<rect x="114" y="14" width="140" height="58" rx="6" fill="#3d4f86"/><rect x="126" y="26" width="80" height="12" rx="3" fill="#8fa3e0"/>'
+    + '<rect x="126" y="46" width="116" height="14" rx="4" fill="#4d63a5"/>'
+    + '<rect x="264" y="14" width="142" height="58" rx="6" fill="#3d4f86"/><rect x="276" y="26" width="84" height="12" rx="3" fill="#8fa3e0"/>'
+    + '<rect x="276" y="46" width="118" height="14" rx="4" fill="#4d63a5"/>'
+    + '<rect x="114" y="82" width="292" height="54" rx="6" fill="#3d4f86"/><rect x="128" y="96" width="264" height="10" rx="3" fill="#6a7db8"/>'
+    + '<rect x="128" y="114" width="200" height="10" rx="3" fill="#6a7db8"/>'
+    + '<text x="210" y="145" font-size="9" fill="#aebbeb" text-anchor="middle">模拟：image/board-preview.png 经 /api/fs/raw 端点加载成功</text></svg>';
+}
+
+/* ---------- 内联 SVG：模拟 mermaid 渲染产物（期望模式） ---------- */
+function svgMermaid() {
+  const box = (x, label) => '<g><rect x="' + x + '" y="26" width="86" height="34" rx="8" fill="transparent" stroke="currentColor" stroke-width="1.4"/>'
+    + '<text x="' + (x + 43) + '" y="47" font-size="12" fill="currentColor" text-anchor="middle">' + label + '</text></g>';
+  const arrow = (x) => '<path d="M' + x + ' 43 h18 m-6 -5 l6 5 l-6 5" fill="none" stroke="currentColor" stroke-width="1.4"/>';
+  return '<div class="md-mermaid"><svg width="470" height="86" viewBox="0 0 470 86" xmlns="http://www.w3.org/2000/svg">'
+    + box(2, 'AI 总结') + arrow(90) + box(112, '二次编辑') + arrow(200) + box(222, 'AI 校对') + arrow(310) + box(332, 'AI 翻译')
+    + '<text x="424" y="47" font-size="12" fill="currentColor">…</text></svg>'
+    + '<div class="md-mermaid-note">（演示：mermaid 围栏渲染为图；实际由 md-rich 懒加载 mermaid 渲染 SVG，深浅色自适应）</div></div>';
+}
+
+/* ---------- 迷你 Markdown 渲染（仅覆盖演示文档所需语法，输出已转义） ---------- */
+function renderPreview(md, mode) {
+  const lines = String(md).split('\n');
+  const out = [];
+  let i = 0;
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  while (i < lines.length) {
+    const ln = lines[i];
+    if (ln.startsWith('```')) { // 围栏
+      const lang = ln.slice(3).trim().toLowerCase();
+      const buf = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i++; }
+      i++;
+      if (lang === 'mermaid' && mode === 'fixed') out.push(svgMermaid());
+      else if (lang === 'mermaid' && mode === 'bug') {
+        out.push('<pre><code class="language-mermaid">' + esc('```mermaid\n' + buf.join('\n') + '\n```') + '</code></pre>');
+      } else out.push('<pre><code>' + esc(buf.join('\n')) + '</code></pre>');
+      continue;
+    }
+    const img = ln.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (img) {
+      const alt = img[1], src = img[2];
+      if (mode === 'fixed') {
+        out.push(src === PIC_OK
+          ? svgPic()
+          : '<div class="md-img-error"><b>图片加载失败</b>：' + esc(src) + ' —— 文件不存在或超出白名单范围（演示模拟 /api/fs/raw 端点拒绝）</div>');
+      } else {
+        out.push('<span class="broken-img"><span class="ico">&#128433;&#65038;</span>' + esc(alt || src) + '</span>'
+          + '<div class="demo-note">（缺陷模拟：浏览器原生裂图——相对路径 ' + esc(src) + ' 未改写即加载失败，无占位提示）</div>');
+      }
+      i++;
+      continue;
+    }
+    if (/^###\s/.test(ln)) { out.push('<h3>' + inline(ln.slice(4)) + '</h3>'); i++; continue; }
+    if (/^##\s/.test(ln)) { out.push('<h2>' + inline(ln.slice(3)) + '</h2>'); i++; continue; }
+    if (/^#\s/.test(ln)) { out.push('<h1>' + inline(ln.slice(2)) + '</h1>'); i++; continue; }
+    if (/^>\s?/.test(ln)) { out.push('<blockquote>' + inline(ln.replace(/^>\s?/, '')) + '</blockquote>'); i++; continue; }
+    if (/^[-]\s/.test(ln)) {
+      const items = [];
+      while (i < lines.length && /^[-]\s/.test(lines[i])) { items.push('<li>' + inline(lines[i].slice(2)) + '</li>'); i++; }
+      out.push('<ul>' + items.join('') + '</ul>');
+      continue;
+    }
+    if (/^\|/.test(ln)) { // 表格
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = (r) => r.split('|').slice(1, -1).map((c) => c.trim());
+      let html = '<table><tr>' + cells(rows[0]).map((c) => '<th>' + inline(c) + '</th>').join('') + '</tr>';
+      for (let r = 2; r < rows.length; r++) html += '<tr>' + cells(rows[r]).map((c) => '<td>' + inline(c) + '</td>').join('') + '</tr>';
+      out.push(html + '</table>');
+      continue;
+    }
+    if (!ln.trim()) { i++; continue; }
+    out.push('<p>' + inline(ln) + '</p>');
+    i++;
+  }
+  return '<div class="preview">' + out.join('') + '</div>';
+}
+
+/* ---------- 弹窗渲染 ---------- */
+function unsaved() {
+  return state.open && state.file !== 'docs-lost.md'
+    && state.draft[state.file] != null && state.draft[state.file] !== DOCS[state.file];
+}
+
+function renderBody() {
+  const body = $('#modalBody');
+  if (state.loading) { body.innerHTML = '<p class="load-note" role="status">正在读取文档内容…</p>'; return; }
+  if (state.loadErr) {
+    body.innerHTML = '<p class="err-note" role="alert">读取失败：' + esc(state.loadErr) + '</p>'
+      + '<p><button type="button" class="btn small" id="btnRetry">重试读取</button></p>';
+    $('#btnRetry').addEventListener('click', () => loadFile(state.file));
+    return;
+  }
+  const content = state.draft[state.file];
+  if (content == null) { body.innerHTML = '<p class="load-note">（无内容）</p>'; return; }
+  if (state.view === 'edit') {
+    body.innerHTML = '<textarea class="editor" id="editorBox" spellcheck="false" aria-label="默认语言文档内容（编辑）"></textarea>';
+    const box = $('#editorBox');
+    box.value = content;
+    box.addEventListener('input', () => { state.draft[state.file] = box.value; state.savedNote = null; updateUnsavedNote(); });
+    if (state.pendingFocus) focusIssue(box);
+  } else {
+    body.innerHTML = String(content).trim()
+      ? renderPreview(content, state.mode)
+      : '<div class="preview"><span class="empty-doc">（空文档）</span></div>';
+  }
+}
+
+function focusIssue(box) {
+  const target = state.pendingFocus;
+  state.pendingFocus = null;
+  box.focus();
+  const lines = String(box.value || '').split('\n');
+  if (!target.line || !lines.length) return;
+  const idx = Math.min(target.line, lines.length) - 1;
+  let start = 0;
+  for (let k = 0; k < idx; k++) start += lines[k].length + 1;
+  box.setSelectionRange(start, start + lines[idx].length);
+  const lh = parseFloat(getComputedStyle(box).lineHeight) || 20;
+  box.scrollTop = Math.max(0, (idx + 0.5) * lh - (box.clientHeight || 0) / 2);
+  if (state.mode === 'fixed') { // 期望：与审查界面一致的落点闪烁
+    box.classList.add('flash');
+    setTimeout(() => box.classList.remove('flash'), 2000);
+  }
+}
+
+function render() {
+  document.body.dataset.mode = state.mode;
+  $('#modeBadge').textContent = state.mode === 'bug' ? '当前：缺陷现状' : '当前：期望修复后';
+  $('#segBug').classList.toggle('on', state.mode === 'bug');
+  $('#segFixed').classList.toggle('on', state.mode === 'fixed');
+  $('#modal').style.display = state.open ? '' : 'none';
+  if (!state.open) return;
+  const sel = $('#fileSel');
+  sel.innerHTML = FILE_ORDER.map((f) => '<option value="' + esc(f) + '"' + (f === state.file ? ' selected' : '') + '>' + esc(f) + (f === 'docs-lost.md' ? '（模拟读取失败）' : '') + '</option>').join('');
+  sel.disabled = state.busy;
+  $('#btnRefresh').disabled = state.busy || state.loading;
+  $('#btnEdit').classList.toggle('on', state.view === 'edit');
+  $('#btnPreview').classList.toggle('on', state.view === 'preview');
+  $('#btnSave').disabled = state.busy || state.loading || state.loadErr != null || state.draft[state.file] == null;
+  $('#btnCloseHead').disabled = state.busy;
+  $('#btnCloseFoot').disabled = state.busy;
+  $('#pendingBar').hidden = !state.pending;
+  updateUnsavedNote();
+  $('#footNote').textContent = state.busy ? '保存中…'
+    : state.savedNote || (state.loadErr ? '读取失败：内容尚未加载（可重试读取）' : '默认语言初稿编辑（其余语言由「④ AI 翻译」产出）');
+  renderBody();
+}
+
+function updateUnsavedNote() { $('#unsavedNote').hidden = !unsaved() || !!state.pending; }
+
+/* ---------- 模拟读取（600ms；docs-lost.md 必失败且不覆盖已有输入） ---------- */
+let loadTimer = null;
+function loadFile(file) {
+  clearTimeout(loadTimer);
+  state.loading = true;
+  state.loadErr = null;
+  render();
+  loadTimer = setTimeout(() => {
+    state.loading = false;
+    if (DOCS[file] == null) state.loadErr = '文件不存在（演示模拟：docs-lost.md 用于失败态与重试）';
+    else { state.draft[file] = DOCS[file]; }
+    render();
+  }, 600);
+}
+
+/* ---------- 交互 ---------- */
+function requestSwitch(file) {
+  if (!file || file === state.file || state.busy) return;
+  if (unsaved()) { state.pending = { kind: 'switch', file }; render(); return; }
+  doSwitch(file);
+}
+function doSwitch(file) {
+  state.pending = null;
+  state.file = file;
+  state.savedNote = null;
+  state.view = 'edit';
+  loadFile(file);
+}
+function requestRefresh() {
+  if (state.busy) return;
+  if (unsaved()) { state.pending = { kind: 'refresh' }; render(); return; }
+  doRefresh();
+}
+function doRefresh() {
+  state.pending = null;
+  state.savedNote = null;
+  loadFile(state.file); // 演示：磁盘无变化，读回原内容（放弃的修改被丢弃）
+}
+function requestClose() {
+  if (state.busy) return;
+  if (unsaved()) { state.pending = { kind: 'close' }; render(); return; }
+  doClose();
+}
+function doClose() {
+  state.pending = null;
+  state.open = false;
+  render();
+  // 关闭后占位与重开入口（评审控件）
+  $('#modal').style.display = '';
+  $('#modal').innerHTML = '<div class="closed-wrap"><p>弹窗已关闭（演示）。</p><p><button type="button" class="btn small primary" id="btnReopen">重新打开「② 二次编辑」</button></p>'
+    + '<p class="legend">注：关联条目 BUG-20260925-004 另行处理关闭后整页刷新的问题，本演示不涉及。</p></div>';
+  $('#btnReopen').addEventListener('click', () => {
+    rebuildModal();
+    state.open = true;
+    state.savedNote = null;
+    render();
+  });
+}
+
+/* 关闭会销毁弹窗 DOM，重开时按初始结构重建（评审演示简化实现） */
+function rebuildModal() {
+  $('#modal').innerHTML = modalSkeleton;
+  bindModal();
+}
+
+function resolvePending(action) {
+  const p = state.pending;
+  if (!p) return;
+  if (action === 'cancel') { state.pending = null; render(); return; }
+  if (action === 'discard') {
+    state.draft[state.file] = DOCS[state.file];
+    state.pending = null;
+    if (p.kind === 'switch') doSwitch(p.file);
+    else if (p.kind === 'refresh') doRefresh();
+    else doClose();
+    return;
+  }
+  // 保存并继续
+  state.busy = true;
+  render();
+  setTimeout(() => {
+    state.busy = false;
+    DOCS[state.file] = state.draft[state.file];
+    state.savedNote = '✓ 已保存 ' + state.file + '（演示模拟，未写入磁盘）';
+    state.pending = null;
+    if (p.kind === 'switch') doSwitch(p.file);
+    else if (p.kind === 'refresh') doRefresh();
+    else doClose();
+  }, 500);
+}
+
+function save() {
+  if (state.busy || state.draft[state.file] == null) return;
+  state.busy = true;
+  render();
+  setTimeout(() => {
+    state.busy = false;
+    DOCS[state.file] = state.draft[state.file];
+    state.savedNote = '✓ 已保存 ' + state.file + '（演示模拟，未写入磁盘）';
+    render();
+  }, 500);
+}
+
+/* ---------- 弹窗骨架与绑定 ---------- */
+const modalSkeleton = $('#modal').innerHTML;
+
+function bindModal() {
+  $('#fileSel').addEventListener('change', (e) => requestSwitch(e.target.value));
+  $('#btnRefresh').addEventListener('click', requestRefresh);
+  $('#btnEdit').addEventListener('click', () => { state.view = 'edit'; render(); });
+  $('#btnPreview').addEventListener('click', () => { state.view = 'preview'; state.pendingFocus = null; render(); });
+  $('#btnSave').addEventListener('click', save);
+  $('#btnCloseHead').addEventListener('click', requestClose);
+  $('#btnCloseFoot').addEventListener('click', requestClose);
+  $('#btnKeep').addEventListener('click', () => resolvePending('save'));
+  $('#btnDiscard').addEventListener('click', () => resolvePending('discard'));
+  $('#btnStay').addEventListener('click', () => resolvePending('cancel'));
+}
+bindModal();
+
+$('#segBug').addEventListener('click', () => { state.mode = 'bug'; render(); });
+$('#segFixed').addEventListener('click', () => { state.mode = 'fixed'; render(); });
+$('#btnJump').addEventListener('click', () => {
+  // 模拟「✎ 修改」：跳 README.md 编辑态并定位第 6 行（含建议错别字行）
+  state.file = 'README.md';
+  state.view = 'edit';
+  state.loadErr = null;
+  state.loading = false;
+  if (state.draft['README.md'] == null) state.draft['README.md'] = DOCS['README.md'];
+  state.pendingFocus = { line: 1 };
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
