@@ -3964,9 +3964,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-finalize-issue-no { flex: none; min-width: 1.2em; text-align: center; }
 .bld-finalize-issue-text { flex: 1 1 auto; min-width: 0; word-break: break-word; }
 .bld-finalize-issue .btn { flex: none; }
-/* 审查编辑器定位落点短暂描边（focusReviewIssue 2 秒后移除）；
-   BUG-20260925-005 二次编辑弹窗 focusEditIssue 同口径复用（含 keyframes） */
-.bld-review-editor.bld-review-focus-flash, .bld-edit-editor.bld-review-focus-flash { animation: bldReviewFocusFlash 0.6s ease-in-out 3; }
+/* 编辑器定位落点短暂描边（BUG-20260925-005 二次编辑弹窗 focusEditIssue 使用，2 秒后移除；
+   BUG-20260925-006 审查对话框只读化后 .bld-review-editor 已移除，仅剩编辑弹窗选择器） */
+.bld-edit-editor.bld-review-focus-flash { animation: bldReviewFocusFlash 0.6s ease-in-out 3; }
 @keyframes bldReviewFocusFlash {
   0%, 100% { box-shadow: none; }
   50% { box-shadow: 0 0 0 2px var(--accent, #2563eb); }

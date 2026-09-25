@@ -1183,7 +1183,8 @@ const EN = {
   '（等待下一文件回执）': '(waiting for the next file receipt)',
   '重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）': 'Re-read all files and their states from disk (pick up external IDE edits and re-run the baseline-change check)',
   '复制 AI 总结提示词到剪贴板，交给 AI Agent 逐文件总结默认语言文档（标准 4 类 + 自定义文档；已审核文件跳过；也可不经 AI 总结直接审查）': 'Copy the AI summary prompt to the clipboard and hand it to an AI Agent to summarize the default-language files (4 standard types + custom documents; reviewed files are skipped; you can also review directly without AI summarization)',
-  '打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核': 'Open the review dialog: doc-type tabs (four types + LICENSE + custom), one pane per language with synced scrolling, per-file edit / save / approve',
+  // BUG-20260925-006：审查对话框去编辑化——title 收敛为只读核对 + 通过审核（编辑走②二次编辑）
+  '打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件通过审核（只读核对，编辑走「② 二次编辑」）': 'Open the review dialog: doc-type tabs (four types + LICENSE + custom), one pane per language with synced scrolling, per-file approve (read-only checking; edit in "2) Secondary edit")',
   '把语言集内文档、LICENSE.md 与自定义文档提交到本地 dev 分支（pathspec 限定，不夹带业务源码）': 'Commit the docs in the language set plus LICENSE.md and custom documents to the local dev branch (pathspec-limited, no business source code included)',
   // REQ-20260924-003 弹窗清单精简：「LICENSE 文件与项目实际开源口径一致（许可证类型由人工确认，
   // 本单不做自动校验）」随静态占位行移除，词条已清理
@@ -1272,7 +1273,8 @@ const EN = {
   '正在读取文档内容…': 'Reading document content…',
   '通过审核': 'Approve',
   '✔ 已审核': '✔ Reviewed',
-  '已审核：编辑保存后才会回退待审核': 'Reviewed: editing and saving reverts it to awaiting review',
+  // BUG-20260925-006：审查对话框已无编辑入口，禁用提示改为内容变化口径（服务端读盘比对回退）
+  '已审核：内容再变化会自动回退待审核': 'Reviewed: any further content change reverts it to awaiting review automatically',
   '文档类型页签': 'Doc type tabs',
   '关闭对话框': 'Close dialog',
   '✕ 关闭': '✕ Close',
