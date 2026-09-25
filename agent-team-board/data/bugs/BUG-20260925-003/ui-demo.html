@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260925-003 界面演示 · 英文界面下校对建议侧栏等文案不翻译</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --line: #d9dee5; --txt: #24292f; --muted: #6a737d;
+    --accent: #0969da; --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --chip-bg: #f0f3f6;
+    --del-bg: #ffebe9; --ins-bg: #dafbe1; --skip: #959da5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --line: #30363d; --txt: #e6edf3; --muted: #8b949e;
+      --accent: #4493f8; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --chip-bg: #21262d;
+      --del-bg: #3d1d20; --ins-bg: #12261e; --skip: #6e7681;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--txt);
+         font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--panel);
+              border: 1px dashed var(--skip); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; }
+  .demo-bar .grp { display: inline-flex; align-items: center; gap: 6px; }
+  .demo-bar label { font-size: 12.5px; color: var(--muted); }
+  button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel);
+           color: var(--txt); border-radius: 6px; padding: 3px 10px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.quiet { border-color: transparent; color: var(--muted); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  select, textarea { font: inherit; color: var(--txt); background: var(--panel);
+                     border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .pane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+  .step { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line);
+          border-radius: 999px; padding: 3px 12px; background: var(--chip-bg); }
+  .step.done { border-color: var(--ok); color: var(--ok); }
+  .note { color: var(--muted); font-size: 12.5px; }
+  .main { display: grid; grid-template-columns: minmax(260px, 5fr) minmax(320px, 6fr); gap: 14px; }
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+  .files, .chk { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .files-head, .chk-head { display: flex; justify-content: space-between; align-items: center;
+                           gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 8px; }
+  .chk-title { font-weight: 600; }
+  .chk-file { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .chk-file span { color: var(--muted); font-size: 12.5px; }
+  .chk-file select { flex: 1; }
+  ul.cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .card-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .type { font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; color: var(--muted); }
+  .pos { font-size: 12px; color: var(--muted); }
+  .st { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid; }
+  .st.run { color: var(--warn); border-color: var(--warn); }
+  .st.ok { color: var(--ok); border-color: var(--ok); }
+  .st.mute { color: var(--skip); border-color: var(--skip); }
+  .st.wait { color: var(--warn); border-color: var(--warn); }
+  .card-text { margin: 6px 0; font-size: 13px; }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  details.diff { margin: 6px 0; }
+  details.diff summary { color: var(--accent); font-size: 12.5px; cursor: pointer; }
+  .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  @media (max-width: 560px) { .diff-grid { grid-template-columns: 1fr; } }
+  .diff-grid pre { margin: 4px 0 0; padding: 6px 8px; border-radius: 6px; font-size: 12px;
+                   white-space: pre-wrap; word-break: break-all; }
+  .tag { font-size: 11.5px; color: var(--muted); }
+  .del pre { background: var(--del-bg); }
+  .ins pre { background: var(--ins-bg); }
+  .frow { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .frow:last-child { border-bottom: none; }
+  .frow .fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .stale-note { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+  /* 弹窗 */
+  .wrap { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
+          align-items: center; justify-content: center; padding: 16px; z-index: 30; }
+  .wrap.open { display: flex; }
+  .modal { background: var(--panel); color: var(--txt); border-radius: 10px; width: min(720px, 100%);
+           max-height: 90vh; display: flex; flex-direction: column; }
+  .modal header, .modal footer { display: flex; justify-content: space-between; align-items: center;
+                                  gap: 8px; padding: 10px 14px; }
+  .modal header { border-bottom: 1px solid var(--line); }
+  .modal footer { border-top: 1px solid var(--line); }
+  .ebar { display: flex; gap: 8px; align-items: center; padding: 8px 14px 0; flex-wrap: wrap; }
+  .ebody { padding: 10px 14px; overflow: auto; }
+  .ebody textarea { width: 100%; resize: vertical; }
+  .unsaved { color: var(--warn); font-size: 12.5px; padding: 0 14px; }
+  .pending { margin: 8px 14px 10px; border: 1px solid var(--warn); border-radius: 8px;
+             padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  /* toast */
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 50; max-width: min(480px, 90vw); }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+           border-radius: 8px; padding: 8px 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); font-size: 13px; }
+  .toast.bad { border-left-color: var(--bad); }
+  .toast.ok { border-left-color: var(--ok); }
+  /* 缺陷演示标注：EN + 缺陷现象下，运行时查不到的词条 */
+  .no-tr { text-decoration: underline dashed var(--bad); text-underline-offset: 3px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-bottom: 2px dashed var(--bad); margin-right: 4px; }
+  .kbd { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>BUG-20260925-003 · 英文界面下 AI 校对建议侧栏等文案不翻译</h1>
+<p class="sub">复刻「发布 → 文档编写」步核心区域。文案词条分三类：<b>EN_CLI 静态</b>（本 Bug 受影响）、<b>主 EN</b>（既有词典，不受影响）、<b>EN_DYNAMIC 动态</b>（不受影响）。</p>
+
+<div class="demo-bar" role="group" aria-label="演示控制（非真实界面部分）">
+  <span class="grp"><label>语言</label>
+    <button id="langZh" class="on" type="button">中</button><button id="langEn" type="button">EN</button>
+  </span>
+  <span class="grp"><label>对照</label>
+    <button id="modeBug" class="on" type="button" title="复刻当前缺陷：t() 只查主 EN 词典，EN_CLI 静态词条查不到">缺陷现象</button>
+    <button id="modeFixed" type="button" title="期望修复后：EN_CLI 词条并入 t() 查表口径">修复后</button>
+  </span>
+  <span class="grp"><label>侧栏状态</label>
+    <select id="chkState">
+      <option value="issues" selected>完成 · 有建议（正常）</option>
+      <option value="idle">尚未校对（空态）</option>
+      <option value="running">校对中（进行）</option>
+      <option value="failed">失败（中断 + 重试）</option>
+      <option value="clean">完成 · 未发现问题</option>
+    </select>
+  </span>
+  <span class="grp"><label><input type="checkbox" id="diskChanged"> 模拟：磁盘原文已变化（点「接受」走过期路径）</label></span>
+</div>
+
+<div class="pane">
+  <div class="steps" role="group" aria-label="文档编写五步操作" id="stepsBar"></div>
+  <div class="main">
+    <section class="files" aria-label="发布文档文件列表">
+      <div class="files-head" id="filesHead"></div>
+      <div id="fileRows"></div>
+    </section>
+    <aside class="chk" aria-label="校对建议" id="chkAside">
+      <div class="chk-head">
+        <span class="chk-title" id="chkTitle"></span>
+        <span id="chkCount"></span>
+      </div>
+      <label class="chk-file"><span id="lblFile"></span>
+        <select id="chkFile" aria-label="选择要查看校对建议的文件"></select>
+      </label>
+      <div id="chkBody"></div>
+    </aside>
+  </div>
+  <div class="legend"><span><i></i>虚线下划线 = EN_CLI 静态词条，仅「EN + 缺陷现象」下保持中文</span>
+    <span id="modeNote" class="kbd"></span></div>
+</div>
+
+<!-- 二次编辑弹窗 -->
+<div class="wrap" id="editWrap" role="dialog" aria-modal="true">
+  <div class="modal">
+    <header><span id="editTitle"></span><button type="button" class="quiet" id="editClose0"></button></header>
+    <div class="ebar">
+      <label class="kbd" for="editFileSel" id="lblFile2">文件</label>
+      <select id="editFileSel"></select>
+      <button type="button" id="editRefresh" title=""></button>
+      <span role="group" aria-label="编辑或预览" class="kbd">
+        <button type="button" id="modeEdit" class="on"></button><button type="button" id="modePrev"></button>
+      </span>
+    </div>
+    <div class="ebody"><textarea id="editArea" rows="10" spellcheck="false" aria-label="默认语言文档内容（编辑）"></textarea></div>
+    <p class="unsaved" id="editUnsaved" hidden></p>
+    <div class="pending" id="editPending" hidden role="alertdialog" aria-label="处理未保存修改">
+      <span id="pendLbl"></span>
+      <button type="button" class="primary" id="pendKeep"></button>
+      <button type="button" id="pendDiscard"></button>
+      <button type="button" class="quiet" id="pendStay"></button>
+    </div>
+    <footer><span class="note" id="editNote"></span>
+      <span><button type="button" id="editSave"></button> <button type="button" id="editClose1"></button></span>
+    </footer>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ---------- 词条表：src ∈ cli（EN_CLI，受影响）| main（主 EN）| dyn（EN_DYNAMIC）----------
+   中文 = i18n.js 原文键；英文 = 词典值。dyn 词条以 {…} 占位。 */
+const D = {
+  '五步：': { en: 'Five steps:', src: 'cli' },
+  '① AI 总结': { en: '① AI summary', src: 'cli' },
+  '② 二次编辑': { en: '② Second edit', src: 'cli' },
+  '③ AI 校对': { en: '③ AI proofread', src: 'cli' },
+  '④ AI 翻译': { en: '④ AI translation', src: 'cli' },
+  '⑤ 提交': { en: '⑤ Commit', src: 'cli' },
+  '⑤ 提交中…': { en: '⑤ Committing…', src: 'cli' },
+  '⑤ 已提交 ✓': { en: '⑤ Committed ✓', src: 'cli' },
+  '校对建议': { en: 'Proofread suggestions', src: 'cli' },
+  '未处理的建议数量：全部接受或拒绝后「④ AI 翻译」解锁': { en: 'Unresolved suggestions: accept or reject them all to unlock "④ AI translation"', src: 'cli' },
+  '修改': { en: 'Modified', src: 'main' },
+  '文件': { en: 'File', src: 'main' },
+  '选择要查看校对建议的文件': { en: 'Select a file to view its proofread suggestions', src: 'cli' },
+  '尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。': { en: 'Not proofread yet: click "③ AI proofread" to copy the prompt and hand it to the AI agent; results appear in this panel automatically (links / typos / grammar / style).', src: 'cli' },
+  '该文件未发现问题 ✓（校对基准为回执时点磁盘内容）': { en: 'No issues found in this file ✓ (checked against the on-disk content at receipt time)', src: 'cli' },
+  '当前版本没有默认语言文档可校对。': { en: 'No default-language documents to proofread for this version.', src: 'cli' },
+  '重试 AI 校对': { en: 'Retry AI proofread', src: 'cli' },
+  '重新复制 AI 校对提示词并派发核查（新一轮 run 覆盖旧结论）': { en: 'Copy the AI proofread prompt again and dispatch the check (a new run overrides previous conclusions)', src: 'cli' },
+  '过期': { en: 'Stale', src: 'cli' },
+  '已拒绝': { en: 'Rejected', src: 'cli' },
+  '已接受': { en: 'Accepted', src: 'main' },
+  '待处理': { en: 'Pending items', src: 'main' },
+  '待确认': { en: 'To confirm', src: 'main' },
+  '无行号': { en: 'No line number', src: 'cli' },
+  '查看修改前后差异': { en: 'View before/after diff', src: 'cli' },
+  '修改前（删除）': { en: 'Before (deletion)', src: 'cli' },
+  '修改后（新增）': { en: 'After (insertion)', src: 'cli' },
+  '错别字': { en: 'Typo', src: 'cli' },
+  '链接': { en: 'Link', src: 'cli' },
+  '语法': { en: 'Grammar', src: 'cli' },
+  '行文规范': { en: 'Writing style', src: 'cli' },
+  '接受': { en: 'Accept', src: 'main' },
+  '拒绝': { en: 'Reject', src: 'main' },
+  '已拒绝该条建议：原文保持不变': { en: 'Suggestion rejected: the original text is unchanged', src: 'cli' },
+  '✕ 建议已过期：建议基于的文本已变化，未覆盖当前内容（请重新校对或点「✎ 修改」手动处理）': { en: '✕ Suggestion stale: the text it was based on has changed; the current content was not overwritten (re-run proofreading or edit manually via "✎ Edit")', src: 'cli' },
+  '建议基于的文本已变化：未覆盖当前内容，请重新校对或点「✎ 修改」手动处理。': { en: 'The text this suggestion was based on has changed: the current content was not overwritten; re-run proofreading or edit manually via "✎ Edit".', src: 'cli' },
+  '按差异应用这一条建议并保存（应用前先核对磁盘原文一致，不一致标记过期不覆盖）': { en: 'Apply just this suggestion per the diff and save (disk content is re-checked first; a mismatch marks it stale and nothing is overwritten)', src: 'cli' },
+  '不采纳该条建议：原文保持不变（不计入待处理）': { en: 'Dismiss this suggestion: the original text stays unchanged (no longer counts as pending)', src: 'cli' },
+  '无法自动应用（未解析出修改前后文本）：请点「✎ 修改」手动处理': { en: 'Cannot auto-apply (before/after text not parsed): edit manually via "✎ Edit"', src: 'cli' },
+  '二次编辑（默认语言）': { en: 'Second edit (default language)', src: 'cli' },
+  '处理未保存修改': { en: 'Handle unsaved changes', src: 'cli' },
+  '保存并继续': { en: 'Save & continue', src: 'cli' },
+  '放弃修改并继续': { en: 'Discard & continue', src: 'cli' },
+  '留在本文件': { en: 'Stay on this file', src: 'cli' },
+  '有未保存的修改：': { en: 'Unsaved changes:', src: 'cli' },
+  '有未保存的修改：切换文件 / 刷新 / 关闭前会先询问保存或放弃。': { en: 'Unsaved changes: switching files, refreshing or closing will ask whether to save or discard first.', src: 'cli' },
+  '默认语言初稿编辑（其余语言由「④ AI 翻译」产出）': { en: 'Edit the default-language draft (other languages come from "④ AI translation")', src: 'cli' },
+  '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）': { en: 'Saved ✓ (not committed: approve in review, then "Commit" to land on local dev; default-language changes invalidate the translation baseline)', src: 'cli' },
+  '刷新': { en: 'Refresh', src: 'main' },
+  '编辑': { en: 'Edit', src: 'main' },
+  '预览': { en: 'Preview', src: 'main' },
+  '保存': { en: 'Save', src: 'main' },
+  '关闭': { en: 'Close', src: 'main' },
+  '✕ 关闭': { en: '✕ Close', src: 'main' },
+  '重新从磁盘读取该文件（外部修改后取回最新内容；有未保存修改时会先询问保存或放弃）': { en: 'Re-read this file from disk (pick up external edits; unsaved changes are confirmed first)', src: 'cli' },
+};
+
+const state = {
+  lang: 'zh',          // zh | en
+  mode: 'bug',         // bug（缺陷现象）| fixed（修复后）
+  chk: 'issues',       // idle | running | failed | issues | clean
+  diskChanged: false,
+  commitPhase: 0,      // 0 提交 / 1 提交中 / 2 已提交
+  file: 'README.md',
+  cards: [
+    { file: 'README.md', type: '错别字', line: 12, state: 'pending',
+      text: '第 12 行「详细参看下一节」中的「参看」建议改为「参见」。',
+      before: '详细参看下一节', after: '详细参见下一节' },
+    { file: 'README.md', type: '行文规范', line: null, state: 'pending',
+      text: '「使用方法」一节存在连续三个短句，建议合并或改用列表呈现。' },
+    { file: 'README.md', type: '链接', line: 30, state: '待确认',
+      text: '第 30 行链接 https://example.invalid/docs 无法访问，需人工确认是否死链（演示环境不发起请求）。' },
+    { file: 'CHANGELOG.md', type: '语法', line: 8, state: 'pending',
+      text: '第 8 行「修复了……问题，并优化了……」顿号使用不当，建议改逗号。',
+      before: '修复了 X 问题、并优化了 Y', after: '修复了 X 问题，并优化了 Y' },
+  ],
+};
+
+/* ---------- 翻译口径模拟 ----------
+   zh：原文返回；en：main/dyn 正常翻译，cli 仅在 fixed 模式翻译（bug 模式保持中文 = 线上缺陷）。 */
+function t(key) {
+  if (state.lang === 'zh') return key;
+  const e = D[key];
+  if (!e) return key;
+  if (e.src === 'cli' && state.mode === 'bug') return key;
+  return e.en;
+}
+/* 动态词条（EN_DYNAMIC，运行时正常翻译，不受本 Bug 影响） */
+function dyn(zhParts, enParts) {
+  return state.lang === 'zh' ? zhParts.join('') : enParts.join('');
+}
+function isBroken(key) {
+  return state.lang === 'en' && state.mode === 'bug' && D[key] && D[key].src === 'cli';
+}
+/* 输出：标记运行时查不到的词条（虚线下划线） */
+function out(key) {
+  const v = t(key);
+  return isBroken(key) ? `<span class="no-tr" title="EN_CLI 词条：运行时 t() 查不到，保持中文">${esc(v)}</span>` : esc(v);
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+/* ---------- 渲染 ---------- */
+const $ = (s) => document.querySelector(s);
+
+function renderSteps() {
+  const steps = ['① AI 总结', '② 二次编辑', '③ AI 校对', '④ AI 翻译'];
+  const commitKeys = ['⑤ 提交', '⑤ 提交中…', '⑤ 已提交 ✓'];
+  const html = [`<span class="note">${out('五步：')}</span>`]
+    .concat(steps.map((s) => `<span class="step done">${out(s)}</span>`))
+    .concat([`<button type="button" class="step${state.commitPhase === 2 ? ' done' : ''}" id="stepCommit" title="${esc('点击切换：提交 → 提交中… → 已提交 ✓（演示）')}">${out(commitKeys[state.commitPhase])}</button>`]);
+  $('#stepsBar').innerHTML = html.join('<span class="note" aria-hidden="true">──</span>');
+  $('#stepCommit').addEventListener('click', () => {
+    state.commitPhase = (state.commitPhase + 1) % 3;
+    renderSteps();
+  });
+}
+
+function renderFiles() {
+  $('#filesHead').innerHTML = `<span>${dyn(['文件（4 · 默认语言 4/4 已审核 · 剩余语言 0/8 已审核）'],
+                                                 ['Files (4 · default language 4/4 approved · remaining languages 0/8 approved)'])}</span>`;
+  const rows = [
+    ['README.md', '已接受'], ['README_en.md', '已接受'], ['CHANGELOG.md', '已接受'], ['FEATURES.md', '已接受'],
+  ].map(([f, s]) => `<div class="frow"><span class="fname">${esc(f)}</span><span class="st ok">${out(s)}</span></div>`).join('');
+  $('#fileRows').innerHTML = rows;
+}
+
+function pendingCount() {
+  return state.cards.filter((c) => c.state === 'pending' || c.state === '待确认').length;
+}
+
+function chip(stateName) {
+  const map = { pending: ['run', '待处理'], accepted: ['ok', '已接受'], rejected: ['mute', '已拒绝'],
+                stale: ['wait', '过期'], '待确认': ['wait', '待确认'] };
+  const [cls, key] = map[stateName];
+  return `<span class="st ${cls}">${out(key)}</span>`;
+}
+
+function renderChk() {
+  $('#chkTitle').innerHTML = out('校对建议');
+  $('#lblFile').textContent = t('文件');
+  const sel = $('#chkFile');
+  const files = [...new Set(state.cards.map((c) => c.file))].concat('FEATURES.md');
+  sel.innerHTML = files.map((f) => {
+    const n = state.cards.filter((c) => c.file === f).length;
+    return `<option value="${esc(f)}"${f === state.file ? ' selected' : ''}>${esc(f)}${n ? `（${n}）` : ''}</option>`;
+  }).join('');
+  sel.setAttribute('aria-label', t('选择要查看校对建议的文件'));
+
+  const count = pendingCount();
+  $('#chkCount').innerHTML = (state.chk === 'issues' || state.chk === 'clean') && count >= 0
+    ? `<span class="st ${count ? 'run' : 'ok'}" title="${esc(t('未处理的建议数量：全部接受或拒绝后「④ AI 翻译」解锁'))}">${dyn([`待处理 ${count} 项`], [`${count} pending`])}</span>`
+    : '';
+
+  const body = $('#chkBody');
+  if (state.chk === 'idle') {
+    body.innerHTML = `<p class="note" role="status">${out('尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。')}</p>`;
+    return;
+  }
+  if (state.chk === 'running') {
+    body.innerHTML = `<p class="note" role="status">${dyn(['校对进行中：2/4 · 当前：README.md（正在核查）——本栏与整体审查对话框随回执自动刷新。'],
+                                                           ['Proofreading 2/4 · current: README.md (checking) — this panel and the review dialog refresh on receipt.'])}</p>`;
+    return;
+  }
+  if (state.chk === 'failed') {
+    body.innerHTML = `<p class="note" role="alert">${dyn(['AI 校对中断：演示模拟中断原因——已回执结论保留，可重试续查。'],
+                                                          ['AI proofread interrupted: simulated reason — received conclusions are kept; retry to resume.'])}</p>
+      <p><button type="button" class="primary" id="chkRetry" title="${esc(t('重新复制 AI 校对提示词并派发核查（新一轮 run 覆盖旧结论）'))}">${out('重试 AI 校对')}</button></p>`;
+    $('#chkRetry').addEventListener('click', () => { state.chk = 'running'; $('#chkState').value = 'running'; renderChk(); setTimeout(() => { state.chk = 'issues'; $('#chkState').value = 'issues'; renderChk(); }, 1500); });
+    return;
+  }
+  if (state.chk === 'clean') {
+    body.innerHTML = `<p class="note" role="status">${out('该文件未发现问题 ✓（校对基准为回执时点磁盘内容）')}</p>`;
+    return;
+  }
+  const cards = state.cards.filter((c) => c.file === state.file);
+  if (!cards.length) {
+    body.innerHTML = `<p class="note" role="status">${out('该文件未发现问题 ✓（校对基准为回执时点磁盘内容）')}</p>`;
+    return;
+  }
+  body.innerHTML = `<ul class="cards">${cards.map((c, i) => cardHtml(c, i)).join('')}</ul>`;
+  bindCards();
+}
+
+function cardHtml(c, i) {
+  const diff = c.before
+    ? `<details class="diff"><summary>${out('查看修改前后差异')}</summary>
+         <div class="diff-grid">
+           <div class="del"><span class="tag">${out('修改前（删除）')}</span><pre><del>${esc(c.before)}</del></pre></div>
+           <div class="ins"><span class="tag">${out('修改后（新增）')}</span><pre><ins>${esc(c.after)}</ins></pre></div>
+         </div></details>` : '';
+  const staleNote = c.state === 'stale'
+    ? `<p class="stale-note" role="note">${out('建议基于的文本已变化：未覆盖当前内容，请重新校对或点「✎ 修改」手动处理。')}</p>` : '';
+  const decided = c.state !== 'pending' && c.state !== '待确认';
+  const canAccept = c.before && !decided && c.state !== '待确认';
+  const acceptBtn = canAccept
+    ? `<button type="button" class="primary" data-accept="${i}" title="${esc(t('按差异应用这一条建议并保存（应用前先核对磁盘原文一致，不一致标记过期不覆盖）'))}">${out('接受')}</button>`
+    : (c.before && !decided ? `<button type="button" disabled title="${esc(t('无法自动应用（未解析出修改前后文本）：请点「✎ 修改」手动处理'))}">${out('接受')}</button>` : '');
+  const rejectBtn = !decided
+    ? `<button type="button" data-reject="${i}" title="${esc(t('不采纳该条建议：原文保持不变（不计入待处理）'))}">${out('拒绝')}</button>` : '';
+  return `<li class="card">
+    <div class="card-head">
+      <span class="type">${out(c.type)}</span>
+      <span class="pos">${c.line ? dyn([`第 ${c.line} 行`], [`line ${c.line}`]) : out('无行号')}</span>
+      ${chip(c.state === 'pending' ? 'pending' : c.state === 'accepted' ? 'accepted' : c.state === 'rejected' ? 'rejected' : c.state === 'stale' ? 'stale' : '待确认')}
+    </div>
+    <p class="card-text">${esc(c.text)}</p>
+    ${diff}${staleNote}
+    <div class="acts">${acceptBtn}${rejectBtn}<button type="button" data-edit="1" title="${esc(dyn([`${state.file} · ${c.line ? `第 ${c.line} 行` : ''}`], [`${state.file}${c.line ? ` · line ${c.line}` : ''}`]))}">✎ ${out('修改')}</button></div>
+  </li>`;
+}
+
+function bindCards() {
+  document.querySelectorAll('[data-accept]').forEach((b) => b.addEventListener('click', () => {
+    const c = state.cards.filter((x) => x.file === state.file)[+b.dataset.accept];
+    if (state.diskChanged) {
+      c.state = 'stale';
+      const staleKey = '✕ 建议已过期：建议基于的文本已变化，未覆盖当前内容（请重新校对或点「✎ 修改」手动处理）';
+      toast(t(staleKey), 'bad', isBroken(staleKey));
+    } else {
+      c.state = 'accepted';
+      toast(dyn([`✓ 已接受并保存 ${state.file} 的建议：文件回到待审核，翻译基准已更新`],
+                [`✓ Suggestion accepted & saved for ${state.file}: the file returns to awaiting review and the translation baseline is refreshed`]), 'ok');
+    }
+    renderChk();
+  }));
+  document.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', () => {
+    const c = state.cards.filter((x) => x.file === state.file)[+b.dataset.reject];
+    c.state = 'rejected';
+    const key = '已拒绝该条建议：原文保持不变';
+    toast(t(key), 'bad', isBroken(key));
+    renderChk();
+  }));
+  document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', openEdit));
+}
+
+/* ---------- toast ---------- */
+function toast(msg, cls, broken) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (cls || '');
+  el.innerHTML = broken ? `<span class="no-tr" title="EN_CLI 词条：运行时 t() 查不到">${esc(msg)}</span>` : esc(msg);
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+/* ---------- 二次编辑弹窗 ---------- */
+const edit = { dirty: false, pending: null, file: 'README.md' };
+function openEdit() {
+  edit.dirty = false; edit.pending = null;
+  $('#editFileSel').innerHTML = ['README.md', 'CHANGELOG.md'].map((f) => `<option>${esc(f)}</option>`).join('');
+  $('#editArea').value = '# README\n\n详细参看下一节。\n';
+  $('#editWrap').classList.add('open');
+  renderEdit();
+}
+function renderEdit() {
+  $('#editTitle').innerHTML = `<span aria-label="${esc(t('二次编辑（默认语言）'))}">${dyn([`二次编辑 · 默认语言（V2026.09.24_2）`], [`Second edit · default language (V2026.09.24_2)`])}</span>`;
+  $('#editClose0').textContent = t('✕ 关闭');
+  $('#editRefresh').textContent = t('刷新');
+  $('#editRefresh').title = t('重新从磁盘读取该文件（外部修改后取回最新内容；有未保存修改时会先询问保存或放弃）');
+  $('#modeEdit').textContent = t('编辑');
+  $('#modePrev').textContent = t('预览');
+  $('#editUnsaved').innerHTML = out('有未保存的修改：切换文件 / 刷新 / 关闭前会先询问保存或放弃。');
+  $('#editUnsaved').hidden = !(edit.dirty && !edit.pending);
+  $('#pendLbl').innerHTML = out('有未保存的修改：');
+  $('#pendKeep').textContent = t('保存并继续');
+  $('#pendDiscard').textContent = t('放弃修改并继续');
+  $('#pendStay').textContent = t('留在本文件');
+  $('#editPending').hidden = !edit.pending;
+  $('#editNote').innerHTML = out('默认语言初稿编辑（其余语言由「④ AI 翻译」产出）');
+  $('#editSave').textContent = t('保存');
+  $('#editClose1').textContent = t('关闭');
+}
+function askPending(next) { edit.pending = next; renderEdit(); }
+$('#editArea').addEventListener('input', () => { edit.dirty = true; renderEdit(); });
+$('#editFileSel').addEventListener('change', () => { if (edit.dirty) askPending('switch'); });
+$('#editRefresh').addEventListener('click', () => { if (edit.dirty) askPending('refresh'); });
+function closeEdit() { $('#editWrap').classList.remove('open'); }
+$('#editClose0').addEventListener('click', () => { if (edit.dirty) askPending('close'); else closeEdit(); });
+$('#editClose1').addEventListener('click', () => { if (edit.dirty) askPending('close'); else closeEdit(); });
+$('#pendStay').addEventListener('click', () => { edit.pending = null; renderEdit(); });
+$('#pendDiscard').addEventListener('click', () => {
+  edit.dirty = false;
+  const p = edit.pending; edit.pending = null;
+  if (p === 'close') closeEdit();
+  renderEdit();
+});
+$('#pendKeep').addEventListener('click', () => {
+  const key = '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）';
+  toast(t(key), 'ok', isBroken(key));
+  edit.dirty = false;
+  const p = edit.pending; edit.pending = null;
+  if (p === 'close') closeEdit();
+  renderEdit();
+});
+$('#editSave').addEventListener('click', () => {
+  const key = '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）';
+  edit.dirty = false;
+  toast(t(key), 'ok', isBroken(key));
+  renderEdit();
+});
+$('#modeEdit').addEventListener('click', () => { $('#modeEdit').classList.add('on'); $('#modePrev').classList.remove('on'); });
+$('#modePrev').addEventListener('click', () => { $('#modePrev').classList.add('on'); $('#modeEdit').classList.remove('on'); });
+
+/* ---------- 控制条 ---------- */
+function setLangBtns() {
+  $('#langZh').classList.toggle('on', state.lang === 'zh');
+  $('#langEn').classList.toggle('on', state.lang === 'en');
+  $('#modeBug').classList.toggle('on', state.mode === 'bug');
+  $('#modeFixed').classList.toggle('on', state.mode === 'fixed');
+  document.documentElement.setAttribute('lang', state.lang === 'en' ? 'en' : 'zh-CN');
+  $('#modeNote').innerHTML = state.lang === 'zh'
+    ? '当前：中文（全部文案原样，本 Bug 仅影响英文界面）'
+    : state.mode === 'bug'
+      ? '当前：EN + 缺陷现象 —— 虚线标注的 EN_CLI 词条保持中文，其余正常翻译（线上中英混排）'
+      : '当前：EN + 修复后 —— 全部词条经 t() 翻译为英文';
+}
+$('#langZh').addEventListener('click', () => { state.lang = 'zh'; setLangBtns(); renderAll(); });
+$('#langEn').addEventListener('click', () => { state.lang = 'en'; setLangBtns(); renderAll(); });
+$('#modeBug').addEventListener('click', () => { state.mode = 'bug'; setLangBtns(); renderAll(); });
+$('#modeFixed').addEventListener('click', () => { state.mode = 'fixed'; setLangBtns(); renderAll(); });
+$('#chkState').addEventListener('change', (e) => { state.chk = e.target.value; renderChk(); });
+$('#diskChanged').addEventListener('change', (e) => { state.diskChanged = e.target.checked; });
+$('#chkFile').addEventListener('change', (e) => { state.file = e.target.value; renderChk(); });
+
+function renderAll() { renderSteps(); renderFiles(); renderChk(); }
+setLangBtns();
+renderAll();
+</script>
+</body>
+</html>
