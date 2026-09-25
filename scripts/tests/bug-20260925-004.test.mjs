@@ -87,15 +87,15 @@ const flush = async () => { for (let i = 0; i < 10; i += 1) await Promise.resolv
 
 /* ---------- L4 行为：关闭路径不整块刷新 ---------- */
 
-t('L4-1 closeReview：只摘审查对话框元素（#bldReviewWrap.remove），不重渲染窗格、不进 loading、改走后台静默同步；草稿回同步先行；不再调用 ensurePublishPlan(true)', () => {
+t('L4-1 closeReview：只摘审查对话框元素（#bldReviewWrap.remove），不重渲染窗格、不进 loading、改走后台静默同步；BUG-20260925-006 起对话框只读无草稿回同步；不再调用 ensurePublishPlan(true)', () => {
   const source = SOURCE();
   const fn = extractFn(source, 'closeReview');
-  const calls = { syncDrafts: 0, silent: 0, removed: 0 };
-  const pf = { phase: 'ready', plan: panePlan(), review: { open: true, key: 'README', modes: {}, contents: {}, busy: false } };
+  const calls = { removed: 0, silent: 0 };
+  const pf = { phase: 'ready', plan: panePlan(), review: { open: true, key: 'README', contents: {}, busy: false } };
   const wrap = { remove() { calls.removed += 1; } };
   const ctx = {
     state: { pf },
-    syncReviewDrafts: () => { calls.syncDrafts += 1; },
+    syncReviewDrafts: () => { throw new Error('BUG-20260925-006：审查对话框已只读，不应再有草稿回同步'); },
     $: (sel) => (sel === '#bldReviewWrap' ? wrap : null),
     syncDocsPlanSilently: () => { calls.silent += 1; },
     ensurePublishPlan: () => { throw new Error('closeReview 不应再触发 ensurePublishPlan（整块刷新根因）'); },
@@ -103,7 +103,6 @@ t('L4-1 closeReview：只摘审查对话框元素（#bldReviewWrap.remove），�
   };
   vmRun(fn, ctx, 'closeReview()');
   assert.equal(pf.review, null, '审查对话框状态关闭');
-  assert.equal(calls.syncDrafts, 1, '关闭前回同步编辑草稿（防丢字）');
   assert.equal(calls.removed, 1, '只摘对话框元素（窗格 DOM 不重建）');
   assert.equal(calls.silent, 1, '关闭后转后台静默同步');
   // 源级回归：关闭路径不再包含强制刷新调用

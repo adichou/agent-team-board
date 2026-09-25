@@ -2,8 +2,9 @@
 // REQ-20260924-004 整体审核界面的 AI 校对逐项增加修改按钮 —— 分层测试。
 // L1 纯逻辑（publish-flow：AI 校对提示词回执格式约束——口径 a 每条一行、行号开头）；
 // L4 前端静态契约（build.js：splitProofreadIssues / parseIssueLineNo 纯函数；
-//    renderFinalizeModal ③ 项逐条渲染 + 「✎ 修改」按钮；openReview 参数化；
-//    editFromProofread 弹层让位；focusReviewIssue 行定位突出）；
+//    renderFinalizeModal ③ 项逐条渲染 + 「✎ 修改」按钮；BUG-20260925-006 起「✎ 修改」
+//    经 editFromProofread 改跳「② 二次编辑」弹窗定位（原 openReview 参数化 + 审查侧
+//    focusReviewIssue 编辑态路径随审查去编辑化移除）；弹层让位口径保持）；
 // L6 i18n（新增动态键 ◇ · 第 ◇ 行；✎ 修改 词条复用；往返不变形）。
 // 用法：node scripts/tests/req-20260924-004.test.mjs
 
@@ -230,10 +231,10 @@ t('L4-8 修改不改门禁：①② 检查区、顶层 3 条检查项、取消 /
   assert.ok(html.includes('data-pf-finalize-cancel') && html.includes('data-pf-finalize-confirm'), '取消 / 确认完结保持');
 });
 
-/* ---------- L4 行为：openReview 参数化 / editFromProofread / focusReviewIssue ---------- */
+/* ---------- L4 行为：editFromProofread 改跳二次编辑（BUG-20260925-006） ---------- */
 
 function behaviorCtx() {
-  const calls = { toast: [], render: 0, load: [], focus: 0, gates: [] };
+  const calls = { toast: [], render: 0, load: [], secondary: [] };
   const v = { id: 'BLD-20260924-004', pf: null };
   const ctx = {
     state: { pf: null },
@@ -244,13 +245,11 @@ function behaviorCtx() {
     esc: L4_CTX.esc,
     toast: (m, e) => calls.toast.push([m, e]),
     render: () => { calls.render += 1; },
-    // 加载门：openReview 内部 loadReviewPair(key).then(focusReviewIssue) 链在门放行前
-    // 不消费 pendingFocus——断言跳转状态后放行验证链路（浏览器中即内容加载完成后定位）。
     loadReviewPair: (key) => {
       calls.load.push(key);
-      return new Promise((resolve) => calls.gates.push(resolve));
+      return Promise.resolve();
     },
-    focusReviewIssue: () => { calls.focus += 1; },
+    openSecondaryEdit: (target) => { calls.secondary.push(target); },
     $: () => null,
     getComputedStyle: () => ({ lineHeight: '20px' }),
     setTimeout: (fn) => { fn(); },
@@ -268,150 +267,79 @@ function behaviorFns(source) {
   return [
     extractFn(source, 'openReview'),
     extractFn(source, 'editFromProofread'),
-    extractFn(source, 'focusReviewIssue'),
   ].join('\n');
 }
 
-t('L4-5 openReview 参数化：无参 = README 页签全栏预览（现状不变）；带 file/line = 切对应页签、目标栏编辑态、pendingFocus；非法行号归 null', async () => {
+t('L4-5 openReview：BUG-20260925-006 起恒 README 页签全栏只读（无参数化跳转、无 modes / pendingFocus）；未就绪 toast 不开', async () => {
   const { ctx, calls, v } = behaviorCtx();
-  // 无参：现状不变
   await vmRun(behaviorFns(SOURCE()), ctx, 'openReview()');
-  assert.equal(v.pf.review.key, 'README', '无参默认 README 页签');
-  assert.ok(Object.values(v.pf.review.modes).every((m) => m === 'preview'), '全栏预览态');
-  assert.ok(!v.pf.review.pendingFocus, '无 pendingFocus');
+  assert.equal(v.pf.review.key, 'README', '默认 README 页签');
+  assert.ok(!('modes' in v.pf.review), '无 modes（审查侧编辑态形态已移除）');
+  assert.ok(!('pendingFocus' in v.pf.review), '无 pendingFocus（行定位迁至②二次编辑）');
+  assert.equal(Object.keys(v.pf.review.contents).length, 0, 'contents 初始为空');
   assert.deepEqual(calls.load, ['README'], '加载 README 页签');
-  // 带 file + line：切页签 + 目标栏编辑态 + 其余预览 + pendingFocus（vm 跨 realm 对象按字段断言）
+  // 历史跳转参数不再被消费（落点已迁至②二次编辑弹窗）
   await vmRun(behaviorFns(SOURCE()), ctx, 'openReview({ file: "CHANGELOG.md", line: 12 })');
-  assert.equal(v.pf.review.key, 'CHANGELOG', '切到 CHANGELOG 页签');
-  assert.equal(v.pf.review.modes['CHANGELOG.md'], 'edit', '目标默认语言栏编辑态');
-  assert.equal(v.pf.review.modes['CHANGELOG_en.md'], 'preview', '其余栏预览不受影响');
-  assert.equal(v.pf.review.pendingFocus?.file, 'CHANGELOG.md', 'pendingFocus 文件');
-  assert.equal(v.pf.review.pendingFocus?.line, 12, 'pendingFocus 行号');
-  assert.deepEqual(calls.load[calls.load.length - 1], 'CHANGELOG', '加载目标页签');
-  // 自定义文档：切到 KEY 页签
-  await vmRun(behaviorFns(SOURCE()), ctx, 'openReview({ file: "MIGRATION.md", line: 3 })');
-  assert.equal(v.pf.review.key, 'MIGRATION', '自定义文档切到 KEY 页签');
-  assert.equal(v.pf.review.modes['MIGRATION.md'], 'edit');
-  assert.equal(v.pf.review.pendingFocus?.file, 'MIGRATION.md');
-  assert.equal(v.pf.review.pendingFocus?.line, 3);
-  // 非法 / 缺省行号归 null；不存在的文件回落 README
-  await vmRun(behaviorFns(SOURCE()), ctx, 'openReview({ file: "FEATURES.md", line: "abc" })');
-  assert.equal(v.pf.review.pendingFocus?.file, 'FEATURES.md');
-  assert.equal(v.pf.review.pendingFocus?.line, null, '非法行号归 null');
-  await vmRun(behaviorFns(SOURCE()), ctx, 'openReview({ file: "NOPE.md" })');
-  assert.equal(v.pf.review.key, 'README', '未知文件回落默认页签');
-  assert.ok(!v.pf.review.pendingFocus, '未知文件不定位');
-  // 门放行：内容加载完成链路触发 focusReviewIssue（消费 pendingFocus，不悬挂不报错）
-  for (const g of calls.gates) g();
-  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-  assert.equal(v.pf.review.pendingFocus, undefined, '加载完成后 pendingFocus 消费不悬挂');
+  assert.equal(v.pf.review.key, 'README', '跳转参数不再切页签');
+  // 未就绪：toast 且不开
+  v.pf.phase = 'loading';
+  v.pf.review = null;
+  await vmRun(behaviorFns(SOURCE()), ctx, 'openReview()');
+  assert.equal(v.pf.review, null, '未就绪不打开');
+  assert.equal(calls.toast.length, 1, '未就绪 toast 提示');
 });
 
-t('L4-6 editFromProofread：先关闭整体审查对话框再打开审查对话框；finalize.busy 不放行；未就绪不动作', async () => {
+t('L4-6 editFromProofread：先关闭整体审查对话框，再改跳「② 二次编辑」弹窗定位该行（BUG-20260925-006，不再开审查对话框编辑态）；finalize.busy 不放行；未就绪 / 无文件不动作', async () => {
   const source = SOURCE();
-  // 正常态：finalize open → 关闭 + 打开 review 定位目标
+  // 正常态：finalize open → 关闭 + 打开二次编辑定位目标
   {
-    const { ctx, v } = behaviorCtx();
+    const { ctx, calls, v } = behaviorCtx();
     v.pf.finalize = { open: true, busy: false };
     await vmRun(behaviorFns(source), ctx, 'editFromProofread("CHANGELOG.md", "12")');
     assert.equal(v.pf.finalize, null, '整体审查对话框已关闭');
-    assert.equal(v.pf.review.key, 'CHANGELOG', '审查对话框切到目标页签');
-    assert.equal(v.pf.review.modes['CHANGELOG.md'], 'edit', '目标栏编辑态');
-    assert.equal(v.pf.review.pendingFocus?.file, 'CHANGELOG.md');
-    assert.equal(v.pf.review.pendingFocus?.line, 12);
+    assert.equal(calls.secondary.length, 1, '打开②二次编辑一次');
+    assert.equal(calls.secondary[0].file, 'CHANGELOG.md', '跳转目标文件');
+    assert.equal(calls.secondary[0].line, '12', '带行号定位');
+    assert.equal(v.pf.review, null, '不再打开审查对话框（只读核对化）');
   }
   // busy：确认完结请求进行中不让位
   {
-    const { ctx, v } = behaviorCtx();
+    const { ctx, calls, v } = behaviorCtx();
     v.pf.finalize = { open: true, busy: true };
     await vmRun(behaviorFns(source), ctx, 'editFromProofread("CHANGELOG.md", "12")');
     assert.deepEqual(v.pf.finalize, { open: true, busy: true }, 'busy 不关闭');
-    assert.equal(v.pf.review, null, 'busy 不打开审查对话框');
+    assert.deepEqual(calls.secondary, [], 'busy 不打开二次编辑');
   }
   // finalize 未开（直调）：也可打开（幂等）
   {
-    const { ctx, v } = behaviorCtx();
+    const { ctx, calls, v } = behaviorCtx();
     await vmRun(behaviorFns(source), ctx, 'editFromProofread("MIGRATION.md", "8")');
-    assert.equal(v.pf.review.key, 'MIGRATION', '无 finalize 时直接打开');
+    assert.equal(calls.secondary.length, 1, '无 finalize 时直接打开');
+    assert.equal(calls.secondary[0].file, 'MIGRATION.md');
   }
   // 数据未就绪：不动作
   {
-    const { ctx, v } = behaviorCtx();
+    const { ctx, calls, v } = behaviorCtx();
     v.pf.phase = 'loading';
     v.pf.finalize = { open: true, busy: false };
     await vmRun(behaviorFns(source), ctx, 'editFromProofread("CHANGELOG.md", "12")');
     assert.deepEqual(v.pf.finalize, { open: true, busy: false }, '未就绪不动 finalize');
-    assert.equal(v.pf.review, null, '未就绪不打开 review');
+    assert.deepEqual(calls.secondary, [], '未就绪不打开');
+  }
+  // 无文件参数：不动作
+  {
+    const { ctx, calls, v } = behaviorCtx();
+    await vmRun(behaviorFns(source), ctx, 'editFromProofread("", "12")');
+    assert.deepEqual(calls.secondary, [], '无文件不动作');
   }
 });
 
-t('L4-7 focusReviewIssue：行号选区该行首尾 + 滚动居中 + 短暂描边；超界收敛末行；无行号 / 空内容只聚焦；一次性消费', async () => {
+t('L4-7 审查侧行定位随编辑入口移除：focusReviewIssue 无定义、无导出；「✎ 修改」行定位职责由②二次编辑 focusEditIssue 承接', () => {
   const source = SOURCE();
-  const mkBox = (value, clientHeight = 400) => {
-    const calls = { sel: [], focus: 0, cls: [] };
-    return {
-      value, clientHeight, scrollTop: 0,
-      focus: () => { calls.focus += 1; },
-      setSelectionRange: (a, b) => { calls.sel.push([a, b]); },
-      classList: { add: (c) => calls.cls.push(['add', c]), remove: (c) => calls.cls.push(['remove', c]) },
-      __calls: calls,
-    };
-  };
-  const lines = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`);
-  const value = lines.join('\n');
-  // 行号 12：选区 = 第 12 行首尾（偏移累计），滚动居中，描边类先加后移
-  {
-    const box = mkBox(value);
-    const { ctx, v } = behaviorCtx();
-    ctx.$ = () => box;
-    v.pf.review = { open: true, key: 'CHANGELOG', pendingFocus: { file: 'CHANGELOG.md', line: 12 } };
-    vmRun(behaviorFns(source), ctx, 'focusReviewIssue()');
-    let start = 0;
-    for (let i = 0; i < 11; i++) start += lines[i].length + 1;
-    assert.deepEqual(box.__calls.sel, [[start, start + lines[11].length]], '选区第 12 行首尾');
-    assert.equal(box.__calls.focus, 1, '聚焦');
-    assert.ok(box.scrollTop > 0, '滚动定位');
-    assert.ok(box.__calls.cls.some(([, c]) => c === 'bld-review-focus-flash' && true), '加描边类');
-    assert.ok(v.pf.review.pendingFocus == null, '一次性消费');
-  }
-  // 行号超界（999）：收敛末行（第 20 行）
-  {
-    const box = mkBox(value);
-    const { ctx, v } = behaviorCtx();
-    ctx.$ = () => box;
-    v.pf.review = { open: true, key: 'CHANGELOG', pendingFocus: { file: 'CHANGELOG.md', line: 999 } };
-    vmRun(behaviorFns(source), ctx, 'focusReviewIssue()');
-    let start = 0;
-    for (let i = 0; i < 19; i++) start += lines[i].length + 1;
-    assert.deepEqual(box.__calls.sel, [[start, start + lines[19].length]], '收敛末行');
-  }
-  // 无行号：只聚焦不选区
-  {
-    const box = mkBox(value);
-    const { ctx, v } = behaviorCtx();
-    ctx.$ = () => box;
-    v.pf.review = { open: true, key: 'CHANGELOG', pendingFocus: { file: 'CHANGELOG.md', line: null } };
-    vmRun(behaviorFns(source), ctx, 'focusReviewIssue()');
-    assert.deepEqual(box.__calls.sel, [], '无行号不选区');
-    assert.equal(box.__calls.focus, 1, '仍聚焦（打开编辑态）');
-  }
-  // 空内容（读取失败兜底）：只聚焦
-  {
-    const box = mkBox('');
-    const { ctx, v } = behaviorCtx();
-    ctx.$ = () => box;
-    v.pf.review = { open: true, key: 'CHANGELOG', pendingFocus: { file: 'CHANGELOG.md', line: 5 } };
-    vmRun(behaviorFns(source), ctx, 'focusReviewIssue()');
-    assert.deepEqual(box.__calls.sel, [], '空内容不选区');
-  }
-  // 目标不在 DOM：安全返回仍消费
-  {
-    const { ctx, v } = behaviorCtx();
-    ctx.$ = () => null;
-    v.pf.review = { open: true, key: 'CHANGELOG', pendingFocus: { file: 'CHANGELOG.md', line: 5 } };
-    vmRun(behaviorFns(source), ctx, 'focusReviewIssue()');
-    assert.ok(v.pf.review.pendingFocus == null, '不在 DOM 也一次性消费不悬挂');
-  }
+  assert.ok(!source.includes('focusReviewIssue'), 'focusReviewIssue 已随 BUG-20260925-006 审查去编辑化移除');
+  assert.match(source, /function focusEditIssue\(/, '②二次编辑 focusEditIssue 保留（承接行定位）');
+  assert.match(source, /pendingFocus/, '定位链数据保留（openSecondaryEdit { file, line } → focusEditIssue）');
+  assert.match(source, /editFromProofread[\s\S]{0,400}openSecondaryEdit\(\{ file, line \}\)/, 'editFromProofread 落点为②二次编辑');
 });
 
 /* ---------- L6 i18n ---------- */

@@ -568,22 +568,22 @@ t('L4-2 renderDocsPane：AI 总结运行中移除禁用（title 提示）；总�
   assert.match(html, /总结中 0\/5/, '总结按钮分母含自定义');
 });
 
-t('L4-3 renderReviewModal：自定义文档追加类型页签（BUG-20260922-002 起多语言多栏 x/2），操作按钮齐全', () => {
+t('L4-3 renderReviewModal：自定义文档追加类型页签（BUG-20260922-002 起多语言多栏 x/2），仅通过审核（BUG-20260925-006 移除编辑/保存）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun([
     extractFn(source, 'sanitizeHtml'), extractFn(source, 'renderMd'), extractFn(source, 'renderReviewModal'),
   ].join('\n'), {
     pfOf: (v) => v.pf, esc: (s) => String(s), ...FLOW_STUB,
   }, `renderReviewModal({ id: 'V', pf: {
-    review: { open: true, key: 'MIGRATION', modes: { 'MIGRATION.md': 'preview' }, contents: { 'MIGRATION.md': '# 迁移\\n' } },
+    review: { open: true, key: 'MIGRATION', contents: { 'MIGRATION.md': '# 迁移\\n' } },
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({ 'MIGRATION.md': 'summarized' }))}, reviewedCount: 0 } } } })`);
   assert.match(html, /data-review-tab="MIGRATION"[^>]*>MIGRATION（0\/2）/, '自定义类型页签 x/2（按语言计数）');
   const cols = (html.match(/bld-review-col"/g) || []).length;
   assert.equal(cols, 2, '多语言两栏（MIGRATION.md + MIGRATION_en.md）');
   assert.match(html, /MIGRATION\.md[\s\S]{0,160}自定义/, '栏头标注自定义');
-  assert.ok(html.includes('data-review-save="MIGRATION.md"') && html.includes('data-review-approve="MIGRATION.md"'), '保存 / 通过审核按钮');
-  assert.ok(html.includes('data-review-mode="MIGRATION.md"'), '编辑 / 预览切换');
+  assert.ok(html.includes('data-review-approve="MIGRATION.md"'), '通过审核按钮');
+  assert.ok(!html.includes('data-review-save="MIGRATION.md"') && !html.includes('data-review-mode="MIGRATION.md"'), 'BUG-20260925-006：无保存 / 编辑切换');
   assert.ok(html.includes('已总结待审核'), '七态状态文案');
 });
 
