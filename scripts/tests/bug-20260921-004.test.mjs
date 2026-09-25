@@ -76,7 +76,7 @@ t('B2 渲染层：文档编写页文件名标识声明 data-i18n-skip（列表�
   };
   const context = vm.createContext(ctx);
   // REQ-20260921-012：renderDocsPane 新增依赖（阶段条 / AI 翻译 / 整体审查 / 分组求值兜底）
-  vm.runInContext([pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'), pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'), pick('renderReviewModal')].join('\n'), context);
+  vm.runInContext([pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'), pick('renderReviewModal')].join('\n'), context);
   const html = vm.runInContext(`renderDocsPane({
     id: 'V',
     pf: {

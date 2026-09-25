@@ -453,7 +453,7 @@ t('L4-1 renderDocsPane：LICENSE.md 行在默认语言页签面板并标「不�
   const html = vmRun([
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'), extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'), extractFn(source, 'commitBtnHtml'),
+    extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'), extractFn(source, 'renderDocsPane'),
   ].join('\n'), L4_CTX, `renderDocsPane({ id: 'BLD-20260922-002', pf: { phase: 'ready', plan: {
     langs: ['cn', 'en'],

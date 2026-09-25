@@ -340,7 +340,6 @@ function paneFns(source) {
     extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'),
     extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'),
     extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'),
     extractFn(source, 'splitProofreadIssues'),

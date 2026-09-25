@@ -48,7 +48,7 @@ function renderWith(pfOverrides) {
   const context = vm.createContext(ctx);
   vm.runInContext([
     pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'),
-    pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
+    pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'), // finalizeBtnHtml 随 BUG-20260926-001 删除（入口落阶段条）
   ].join('\n'), context);
   const plan = { langs: ['cn', 'en'], docs: { overall: 'none', reasons: [] } };
   const pf = { phase: 'ready', plan, ...pfOverrides };

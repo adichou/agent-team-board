@@ -446,7 +446,7 @@ function renderPaneWith(pfOverrides) {
   const context = vm.createContext(ctx);
   vm.runInContext([
     pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'),
-    pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
+    pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
     pick('parseIssueLineNo'), pick('splitProofreadIssues'), pick('parseChkSuggestion'),
     pick('classifyChkIssue'), pick('chkPendingCount'),
   ].join('\n'), context);

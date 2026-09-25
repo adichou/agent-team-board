@@ -49,7 +49,7 @@ function renderWith(pfOverrides) {
   const context = vm.createContext(ctx);
   vm.runInContext([
     pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'),
-    pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
+    pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'), // finalizeBtnHtml 随 BUG-20260926-001 删除（入口落阶段条）
   ].join('\n'), context);
   const plan = { langs: ['cn', 'en'], docs: { overall: 'none', reasons: [] } };
   const pf = { phase: 'ready', plan, ...pfOverrides };
@@ -184,7 +184,7 @@ t('L4-2 i18n：语言集与六按钮在用词条保留（title 悬浮提示全�
   for (const k of [
     '语言集',
     '逗号分隔的语言缩写（2–3 个字母，国际规范）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用',
-    '保存中…', '刷新', 'AI 总结', 'AI 翻译', '审查', '整体审查', '提交',
+    '保存中…', '刷新', 'AI 总结', 'AI 翻译', '审查', '提交', // '整体审查' 词条随 BUG-20260926-001 独立按钮移除清理
   ]) {
     assert.ok(k in EN, `在用词条缺失：${k.slice(0, 12)}…`);
   }
