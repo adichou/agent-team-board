@@ -1631,8 +1631,8 @@ const ATBBuild = (() => {
       // REQ-20260922-003 自定义文档：addDoc = 内联添加行 { open, input, err, busy, focus }
       //（草稿重渲染不丢字）；docBusy = 移除请求进行中防重复触发
       addDoc: null, docBusy: false,
-      // 审查对话框：{ open, key（文档类型页签）, modes: { file: 'edit'|'preview' },
-      // contents: { file: 文本 }, busy }；编辑态草稿经 syncReviewDrafts 回同步防丢
+      // 审查对话框（BUG-20260925-006 起只读核对 + 通过审核，编辑一律走「② 二次编辑」弹窗）：
+      // { open, key（文档类型页签）, contents: { file: 文本 }, busy }
       review: null,
       // REQ-20260922-005 选择开源协议弹框：{ open, sel(选中 SPDX id), busy(写入中),
       // loading(目录加载中), error(加载失败), list(协议目录，含标准文本) }
@@ -1745,7 +1745,6 @@ const ATBBuild = (() => {
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.refreshing) return;
     pf.refreshing = true;
-    syncReviewDrafts();
     render();
     try {
       await ensurePublishPlan(true);
@@ -1790,7 +1789,7 @@ const ATBBuild = (() => {
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data.error || `保存失败（${resp.status}）`);
       pf.langsInput = null;
-      if (pf.review?.open) { syncReviewDrafts(); pf.review.modes = {}; pf.review.contents = {}; } // 语言集变化：对话框按新清单重建
+      if (pf.review?.open) { pf.review.contents = {}; } // 语言集变化：对话框按新清单重建（只读预览，无编辑草稿）
       await ensurePublishPlan(true);
       if (pf.review?.open) await loadReviewPair(pf.review.key);
       toast(`✓ 语言集已应用：${next}（文档清单 4 类 × ${r.langs.length} 语言 + LICENSE 单文件）`);
@@ -2191,9 +2190,11 @@ const ATBBuild = (() => {
   }
 
   // REQ-20260924-004：AI 校对问题行「✎ 修改」——先关闭整体审查完结对话框（一次一层：确认
-  // 完结请求进行中不放行让位），再打开审查对话框跳到目标文件编辑态并定位该行（openReview
-  // 参数化）；AI 校对结果不因修改清除或失效，重新「AI 校对」后按最新磁盘内容覆盖（docscheck
-  // 既有口径）；不改 ①② 检查与 canFinalize / canCommit 门禁。
+  // 完结请求进行中不放行让位），再打开「② 二次编辑」弹窗并定位该行（BUG-20260925-006：
+  // 原跳审查对话框编辑态的路径随审查去编辑化移除——openSecondaryEdit 已支持 { file, line }
+  // 定位，且 AI 校对只覆盖默认语言文件，与该弹窗范围一致）；AI 校对结果不因修改清除或失效，
+  // 重新「AI 校对」后按最新磁盘内容覆盖（docscheck 既有口径）；不改 ①② 检查与 canFinalize /
+  // canCommit 门禁。
   function editFromProofread(file, line) {
     const pf = state.pf;
     if (!pf || pf.phase !== 'ready' || !file) return;
@@ -2201,52 +2202,42 @@ const ATBBuild = (() => {
       if (pf.finalize.busy) return;
       pf.finalize = null;
     }
-    openReview({ file, line });
+    openSecondaryEdit({ file, line });
   }
 
   /* ---------- REQ-20260921-008 审查对话框（中英双栏同步滚动；010 起 N 栏） ---------- */
 
-  // REQ-20260924-004 参数化：target = { file, line }（AI 校对「修改」跳入）——切到该文件
-  // 所属类型页签（含自定义 KEY）、目标文件栏进入编辑态（其余栏预览态不受影响）、记录
-  // pendingFocus 供内容加载完成后 focusReviewIssue 定位突出该行；无参调用保持现状
-  //（README 页签 + 全栏预览态）。文件不在当前清单（清单已变化）回落默认页签不定位。
-  function openReview(target) {
+  // BUG-20260925-006：审查对话框收敛为只读核对 + 通过审核——不再接受 { file, line } 跳转
+  // 目标（原「AI 校对修改」跳入编辑态的入口已改走 openSecondaryEdit），恒开 README 页签、
+  // 全栏预览态；文档编辑一律走「② 二次编辑」弹窗。
+  function openReview() {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.phase !== 'ready') {
       toast('发布流程数据未就绪：请先刷新或重试后再审查', true);
       return;
     }
-    const files = docFilesOf(pf.plan?.langs, pf.plan?.customDocs);
-    const hit = target && target.file ? files.find((f) => f.file === String(target.file)) : null;
-    const modes = {};
-    for (const f of files) modes[f.file] = hit && f.file === hit.file ? 'edit' : 'preview';
-    pf.review = { open: true, key: hit ? hit.key : 'README', modes, contents: {}, busy: false };
-    if (hit) {
-      const ln = parseInt(target.line, 10);
-      pf.review.pendingFocus = { file: hit.file, line: Number.isFinite(ln) && ln >= 1 ? ln : null };
-    }
+    pf.review = { open: true, key: 'README', contents: {}, busy: false };
     render();
-    loadReviewPair(pf.review.key).then(() => focusReviewIssue());
+    loadReviewPair(pf.review.key);
   }
 
   function closeReview() {
     const pf = state.pf;
     if (!pf?.review) return;
-    syncReviewDrafts();
     pf.review = null;
     // BUG-20260925-004：关闭是轻量本地操作——只摘对话框元素，窗格 DOM 不整块重建
     //（原关闭即强制刷新：先置 loading 占位再整块重建，导致闪烁与滚动 / 页签丢失）；
-    // 最新四态与门禁由后台静默同步按需更新。
+    // 最新四态与门禁由后台静默同步按需更新。BUG-20260925-006：对话框已只读，无编辑
+    // 草稿需回同步。
     $('#bldReviewWrap')?.remove();
     syncDocsPlanSilently();
   }
 
-  // 切换类型页签：先回同步当前栏草稿（防丢字），再读目标页签两文件内容
+  // 切换类型页签：读目标页签全语言文件内容（只读预览，无草稿回同步）
   function switchReviewTab(key) {
     const pf = state.pf;
     if (!pf?.review?.open || pf.review.key === key) return;
-    syncReviewDrafts();
     pf.review.key = key;
     render();
     loadReviewPair(key);
@@ -2275,88 +2266,14 @@ const ATBBuild = (() => {
     if (state.pf === pf && pf.review?.open && pf.review.key === key) render();
   }
 
-  // REQ-20260924-004：定位突出 AI 校对问题行——审查对话框内容加载完成后一次性消费
-  // pf.review.pendingFocus：textarea 按行号累计偏移计算该行首尾选区（浏览器原生选区即
-  // 原文片段突出）+ 聚焦 + 按行高估算滚动到该行附近 + 短暂描边提示落点（2 秒后移除）；
-  // 行号超界收敛末行；无行号 / 空内容（读取失败兜底）/ 目标栏不在 DOM 时只保持编辑态，
-  // 不定位不报错（最低口径：打开该文件编辑态）。
-  function focusReviewIssue() {
-    const pf = state.pf;
-    const target = pf?.review?.pendingFocus;
-    if (!pf?.review?.open || !target) return;
-    pf.review.pendingFocus = null; // 一次性消费：重复渲染 / 迟到加载不重触发
-    const box = $(`.bld-review-editor[data-review-file="${String(target.file || '').replace(/"/g, '')}"]`);
-    if (!box) return;
-    box.focus();
-    const value = String(box.value || '');
-    if (!target.line || !value) return; // 无行号或空内容：仅编辑态不定位
-    const lines = value.split('\n');
-    const idx = Math.min(target.line, lines.length) - 1;
-    let start = 0;
-    for (let i = 0; i < idx; i++) start += lines[i].length + 1;
-    box.setSelectionRange(start, start + lines[idx].length);
-    const lh = parseFloat(getComputedStyle(box).lineHeight) || 20;
-    box.scrollTop = Math.max(0, (idx + 0.5) * lh - (box.clientHeight || 0) / 2);
-    box.classList.add('bld-review-focus-flash');
-    setTimeout(() => { box.classList?.remove('bld-review-focus-flash'); }, 2000);
-  }
-
-  // 重渲染前把对话框内编辑框当前值同步回 contents（防后台刷新冲掉未保存输入）
-  function syncReviewDrafts() {
-    const pf = state.pf;
-    if (!pf?.review?.open) return;
-    const view = $('#buildView');
-    for (const box of view?.querySelectorAll?.('.bld-review-editor') || []) {
-      const file = box.dataset?.reviewFile;
-      if (file) pf.review.contents[file] = box.value;
-    }
-  }
-
-  // 对话框内保存单文件（沿用白名单 + ≤ 2 MiB 口径）；已审核文件编辑保存后回退待审核
-  //（四类回退「已总结待审核」，单文件类回退「待审核」，REQ-20260922-002）
-  async function saveReviewFile(file) {
-    const v = selVersion();
-    const pf = v ? pfOf(v) : null;
-    if (!pf?.review?.open || pf.review.busy || !state.project) return;
-    syncReviewDrafts();
-    const entry = (pf.plan?.docsFlow?.files || []).find((f) => f.file === file);
-    const wasReviewed = entry && entry.state === 'reviewed';
-    // REQ-20260922-003：自定义文档编辑保存回退「已总结待审核」（七态），仅 LICENSE 回退「待审核」
-    const isSingle = /^LICENSE\.md$/.test(file) || (!!entry?.single && !entry?.custom);
-    pf.review.busy = true;
-    render();
-    try {
-      const r = await fetch(`/api/build/docs/save?project=${encodeURIComponent(state.project)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: v.id, file, content: String(pf.review.contents[file] ?? '') }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `保存失败（${r.status}）`);
-      if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
-      if (wasReviewed && isSingle) toast(`${file} 内容已修改：回到「待审核」，需重新审查`, true);
-      else if (wasReviewed) toast(`${file} 内容已修改：回到「已总结待审核」，需重新审查`, true);
-      else toast(`✓ 已保存 ${file}（未提交：需审查通过并「提交」后进入本地 dev）`);
-    } catch (e) {
-      toast(`✕ 保存失败：${e.message}（内容已保留，可重试）`, true);
-    } finally {
-      if (pf.review) pf.review.busy = false;
-      if (state.pf === pf) render();
-    }
-  }
-
-  // 「通过审核」：记录当前内容审核基准；此后内容再变自动回退待审核
+  // 「通过审核」：直接以磁盘内容为审核基准记录（BUG-20260925-006：对话框内已无编辑草稿，
+  // 不再有「未保存草稿先保存再审核」的过渡——内容改动一律经「② 二次编辑」保存，已审核文件
+  // 改动保存后回退待审核再重新通过审核）；此后内容再变自动回退待审核（服务端每次求值读盘
+  // 比对，口径不变）。
   async function approveReviewFile(file) {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.review?.open || pf.review.busy || !state.project) return;
-    syncReviewDrafts();
-    // 有未保存编辑先保存再审核（审核基准 = 磁盘内容；直接审核未保存草稿会立即回退）
-    const draft = pf.review.contents[file];
-    const r0 = await fetch(`/api/build/docs?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}&file=${encodeURIComponent(file)}`);
-    const d0 = await r0.json().catch(() => ({}));
-    if (r0.ok && draft != null && (d0.content || '') !== draft) {
-      await saveReviewFile(file);
-    }
     pf.review.busy = true;
     render();
     try {
@@ -2378,12 +2295,13 @@ const ATBBuild = (() => {
     }
   }
 
-  // 双栏同步滚动：编辑态同步 textarea、预览态同步内容区——按 scrollHeight 比例跟随，
+  // 双栏同步滚动：各栏同步内容区——按 scrollHeight 比例跟随，
   // 互斥标志防回环（一侧滚动时另一侧跟随不再反触发）。
-  // REQ-20260921-011：预览态改为富文本容器 .bld-review-preview（滚动主体；渲染异常回退的
-  // <pre> 与围栏代码块在容器内部随容器滚动，不单独绑定），三种模式组合同一绑定覆盖。
+  // REQ-20260921-011：预览态为富文本容器 .bld-review-preview（滚动主体；渲染异常回退的
+  // <pre> 与围栏代码块在容器内部随容器滚动，不单独绑定）。BUG-20260925-006：对话框只读化，
+  // 各栏恒为预览态（编辑态 textarea 已随编辑入口移除），绑定只覆盖预览容器。
   function bindReviewSyncScroll(view) {
-    const bodies = [...view.querySelectorAll('.bld-review-col-body textarea, .bld-review-col-body .bld-review-preview')];
+    const bodies = [...view.querySelectorAll('.bld-review-col-body .bld-review-preview')];
     if (bodies.length < 2) return;
     let syncing = false;
     const scrollRatio = (el) => {
@@ -3219,7 +3137,7 @@ const ATBBuild = (() => {
     const actionsHtml = `
           <div class="bld-docs-actions">
             <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
-            <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件编辑 / 保存 / 通过审核">审查</button>
+            <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件通过审核（只读核对，编辑走「② 二次编辑」）">审查</button>
             ${finalizeBtnHtml(pf)}
           </div>`;
     // REQ-20260924-006 五步操作条（主流程顺序入口；状态就地呈现，加载 / 失败态恒渲染——
@@ -3649,9 +3567,10 @@ ${langsField}
   // LICENSE 页签 A1 单栏并标「不分语言」；REQ-20260922-003 起自定义文档各占一个追加页签，
   // BUG-20260922-002 起随语言集展开为多语言多栏——页签计数 x/语言数），页签内全语言栏并排
   //（语言集内全部文件可达；REQ-20260921-010 起列随语言集动态展开——原中英双栏泛化为 N 栏，
-  // 栅格列数 = 语言数）；每栏独立 编辑/预览 切换、保存、通过审核；各栏同步滚动
-  //（bindReviewSyncScroll 按比例跟随）；编辑已审核文件保存后回退「已总结待审核」（单文件类
-  // 回退「待审核」）需重新审查。文件名 data-i18n-skip（标识豁免）。
+  // 栅格列数 = 语言数）；各栏同步滚动（bindReviewSyncScroll 按比例跟随）。BUG-20260925-006：
+  // 对话框收敛为只读核对 + 通过审核——各栏不再有 编辑/预览 切换、保存按钮与可输入 textarea，
+  // 栏内容恒为 Markdown 预览态（空文档占位 / 读取中不变），文档编辑一律走「② 二次编辑」弹窗。
+  // 文件名 data-i18n-skip（标识豁免）。
   function renderReviewModal(v) {
     const pf = v ? pfOf(v) : null;
     const rv = pf?.review;
@@ -3669,32 +3588,24 @@ ${langsField}
     }).join('');
     const pair = docFiles.filter((f) => f.key === rv.key);
     const colsHtml = pair.map((f) => {
-      const mode = rv.modes[f.file] === 'edit' ? 'edit' : 'preview';
       const st = stateOf(f.file);
       const content = rv.contents?.[f.file] ?? null;
+      // REQ-20260921-011 预览态：Markdown 渲染为富文本（.md 排版：标题/列表/表格/引用/代码），
+      // 空文档显示占位不渲染空白区。富文本容器 data-i18n-skip——文档内容是各自语言的本体
+      //（README.md 中文 / README_en.md 英文），不进界面词典翻译（BUG-20260921-004 同口径），
+      // 预览必须展示即将提交的原文；空文档占位是界面文案，不豁免、可随界面语言翻译。
       const body = content == null
         ? '<p class="muted small" role="status">正在读取文档内容…</p>'
-        : mode === 'edit'
-          ? `<textarea class="bld-review-editor" data-review-file="${esc(f.file)}" rows="18" spellcheck="false">${esc(content)}</textarea>`
-          // REQ-20260921-011 预览态：Markdown 渲染为富文本（.md 排版：标题/列表/表格/引用/代码），
-          // 空文档显示占位不渲染空白区。富文本容器 data-i18n-skip——文档内容是各自语言的本体
-          //（README.md 中文 / README_en.md 英文），不进界面词典翻译（BUG-20260921-004 同口径），
-          // 预览必须展示即将提交的原文；空文档占位是界面文案，不豁免、可随界面语言翻译。
-          : !String(content).trim()
-            ? `<div class="bld-review-preview muted small" data-review-file="${esc(f.file)}">（空文档）</div>`
-            : `<div class="bld-review-preview md" data-review-file="${esc(f.file)}" data-i18n-skip>${renderMd(content)}</div>`;
+        : !String(content).trim()
+          ? `<div class="bld-review-preview muted small" data-review-file="${esc(f.file)}">（空文档）</div>`
+          : `<div class="bld-review-preview md" data-review-file="${esc(f.file)}" data-i18n-skip>${renderMd(content)}</div>`;
       return `
             <div class="bld-review-col" data-col="${esc(f.file)}">
               <div class="bld-review-col-head">
                 <span class="bld-doc-fname" data-i18n-skip>${esc(f.file)}${f.single ? '' : `（${esc(langNameOf(f.lang))}）`}</span>${f.single && !f.custom ? '<span class="bld-doc-single-tag">不分语言</span>' : ''}${f.custom ? '<span class="bld-doc-custom-tag">自定义</span>' : ''}
                 <span class="st ${DOCS_FLOW_CLS[st] || 'st-mute'}"><i class="st-ico" aria-hidden="true">${DOCS_FLOW_ICON[st] || ''}</i>${esc(DOCS_FLOW_LABEL[st] || st)}</span>
                 <div class="bld-review-col-acts">
-                  <span class="bld-doc-mode" role="group" aria-label="编辑或预览">
-                    <button type="button" class="btn small${mode === 'edit' ? ' on' : ''}" data-review-mode="${esc(f.file)}" data-mode="edit">编辑</button>
-                    <button type="button" class="btn small${mode === 'preview' ? ' on' : ''}" data-review-mode="${esc(f.file)}" data-mode="preview">预览</button>
-                  </span>
-                  <button type="button" class="btn small" data-review-save="${esc(f.file)}"${rv.busy ? ' disabled' : ''}>保存</button>
-                  <button type="button" class="btn small primary" data-review-approve="${esc(f.file)}"${st === 'reviewed' ? ' disabled title="已审核：编辑保存后才会回退待审核"' : ''}>${st === 'reviewed' ? '✔ 已审核' : '通过审核'}</button>
+                  <button type="button" class="btn small primary" data-review-approve="${esc(f.file)}"${st === 'reviewed' ? ' disabled title="已审核：内容再变化会自动回退待审核"' : ''}>${st === 'reviewed' ? '✔ 已审核' : '通过审核'}</button>
                 </div>
               </div>
               <div class="bld-review-col-body">${body}</div>
@@ -3896,7 +3807,7 @@ ${langsField}
   }
 
   // 定位突出建议行（弹窗内容加载完成后一次性消费 pendingFocus）：选区该行首尾 + 聚焦 +
-  // 滚动定位 + 短暂描边闪烁（BUG-20260925-005：补齐落点闪烁，口径与 focusReviewIssue 完全
+  // 滚动定位 + 短暂描边闪烁（BUG-20260925-005：补齐落点闪烁，口径与原审查侧定位完全
   // 一致，目标为单语言编辑框）；行号缺失 / 空内容保持既有兜底（仅编辑态，不定位不报错）。
   function focusEditIssue() {
     const pf = state.pf;
@@ -4300,9 +4211,10 @@ ${langsField}
           chkSub = `不通过 ${pass}/${total}：${failedFiles.join('、')}`;
           // REQ-20260924-004：fail 文件按文件分组、问题逐条渲染（splitProofreadIssues 按行
           // 拆分；整段作一条不丢内容），每条独立一行带「✎ 修改」按钮——editFromProofread
-          // 关闭本对话框并打开审查对话框定位该行（editFromProofread）；行号解析不到的条目
-          // 按钮按文件级跳转（无 data-proof-line）。回执原文 data-i18n-skip（AI 回执内容
-          // 不进界面词典）；序号 ①②…（超 20 条退数字）仅为可辨性，不参与翻译。
+          // 关闭本对话框并打开「② 二次编辑」弹窗定位该行（BUG-20260925-006 起落点，原审查
+          // 对话框编辑态路径已移除）；行号解析不到的条目按钮按文件级跳转（无 data-proof-line）。
+          // 回执原文 data-i18n-skip（AI 回执内容不进界面词典）；序号 ①②…（超 20 条退数字）
+          // 仅为可辨性，不参与翻译。
           chkDetails = failedFiles.map((f) => {
             const items = splitProofreadIssues((chkRun.issues || {})[f] || '');
             const rows = (items.length ? items : ['']).map((text, i) => {
@@ -4954,13 +4866,13 @@ ${langsField}
   // syncModalDrafts=false 供 parseAnswerPreview 跳过草稿回同步（解析结果刚写入 state，
   // 旧 DOM 输入值不应覆盖预填值）；其余调用方默认 true——重渲染前把弹窗内未保存的
   // 回答草稿与回填编辑值写回 state，防止后台刷新冲掉用户输入（REQ-20260913-006）；
-  // REQ-20260921-008：审查对话框编辑框同样回同步（syncReviewDrafts，防轮询冲掉未保存文档）
+  // BUG-20260925-006：审查对话框只读化后无编辑草稿，不再回同步（二次编辑弹窗草稿由
+  // pf.edit.content 承载，input 即回写）
   function render(syncModalDrafts = true) {
     const view = $('#buildView');
     if (!view) return;
     if (syncModalDrafts && state.rendered) {
       syncAnswerDraft();
-      syncReviewDrafts();
       syncPlanEditDraft(); // REQ-20260921-014：概况页签编辑草稿回同步（防后台重渲染冲掉输入）
     }
     if (state.phase === 'loading') {
@@ -5415,22 +5327,10 @@ ${langsField}
     });
     q('[data-pf-push]')?.addEventListener('click', pushMain);
     q('[data-pf-scan]')?.addEventListener('click', () => siteScan(true));
-    // REQ-20260921-008 审查对话框交互：类型页签 / 每栏 编辑·预览·保存·通过审核 / 关闭（含遮罩点击）
+    // REQ-20260921-008 审查对话框交互：类型页签 / 每栏通过审核 / 关闭（含遮罩点击）。
+    // BUG-20260925-006：编辑·预览切换与保存控件随审查只读化移除，编辑走「② 二次编辑」弹窗。
     for (const el of view.querySelectorAll('[data-review-tab]')) {
       el.addEventListener('click', () => switchReviewTab(el.dataset.reviewTab));
-    }
-    for (const el of view.querySelectorAll('[data-review-mode]')) {
-      el.addEventListener('click', () => {
-        const pf = state.pf;
-        const file = el.dataset.reviewMode;
-        if (!pf?.review?.open || !file) return;
-        syncReviewDrafts();
-        pf.review.modes[file] = el.dataset.mode === 'edit' ? 'edit' : 'preview';
-        render();
-      });
-    }
-    for (const el of view.querySelectorAll('[data-review-save]')) {
-      el.addEventListener('click', () => saveReviewFile(el.dataset.reviewSave));
     }
     for (const el of view.querySelectorAll('[data-review-approve]')) {
       el.addEventListener('click', () => approveReviewFile(el.dataset.reviewApprove));
@@ -5442,7 +5342,7 @@ ${langsField}
     reviewWrap?.addEventListener('click', (e) => {
       if (e.target?.id === 'bldReviewWrap' && !state.pf?.review?.busy) closeReview();
     });
-    if (reviewWrap) bindReviewSyncScroll(reviewWrap); // 双栏同步滚动（编辑态 + 预览态）
+    if (reviewWrap) bindReviewSyncScroll(reviewWrap); // 各栏同步滚动（恒预览态，BUG-20260925-006）
     // BUG-20260923-002 预览富媒体增强：仓库相对路径图片改写到 /api/fs/raw 白名单端点
     //（发布文档位于被管理项目根，与端点的项目根解析一致；project 参数绑定当前项目，
     // 越权 / 超限 / 不存在由端点拒绝 → 前端占位提示）+ mermaid 渲染 / plantuml 降级（md-rich 共享层）。
@@ -5555,8 +5455,9 @@ ${langsField}
     // REQ-20260921-008：文档编写页流水线接缝（刷新 / AI 总结 / 审查对话框 / 提交）；
     // REQ-20260921-012：AI 翻译与整体审查完结接缝
     ensurePublishPlan, refreshDocsPane, startSummary, startTranslation, openReview, closeReview,
-    // REQ-20260924-004：AI 校对问题「修改」跳转（关闭整体审查 → 审查编辑定位）行为接缝
-    editFromProofread, focusReviewIssue,
+    // REQ-20260924-004：AI 校对问题「修改」跳转（关闭整体审查 → 二次编辑定位——BUG-20260925-006
+    // 起落点为②二次编辑弹窗，审查对话框已只读）行为接缝
+    editFromProofread,
     // REQ-20260924-006：② 二次编辑弹窗（打开 / 未保存保护 / 保存）与 ③ 建议接受 / 拒绝、
     // 校对建议解析与应用纯函数（测试与交互共用）
     openSecondaryEdit, requestEditSwitch, requestEditRefresh, requestEditClose, resolveEditPending,
@@ -5567,7 +5468,7 @@ ${langsField}
     openFinalize, closeFinalize, confirmFinalize,
     // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
     confirmLicensePick, skipLicensePick, closeLicensePicker,
-    loadReviewPair, saveReviewFile, approveReviewFile, commitDocs, pushMain, siteScan, summaryPoll,
+    loadReviewPair, approveReviewFile, commitDocs, pushMain, siteScan, summaryPoll,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };
