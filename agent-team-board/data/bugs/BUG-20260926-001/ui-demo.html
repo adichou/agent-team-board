@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260926-001 界面演示 · 文档编写操作条合行</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1f2328; --muted: #656d76;
+    --border: #d0d7de; --primary: #1f6feb; --primary-text: #ffffff;
+    --ok-bg: #dafbe1; --ok-fg: #1a7f37; --warn-bg: #fff8c5; --warn-fg: #9a6700;
+    --mute-bg: #eff1f3; --mute-fg: #6e7781; --err-bg: #ffebe9; --err-fg: #cf222e;
+    --chip-note-bg: #ddf4ff; --chip-note-fg: #0969da; --toast-bg: #ffffff;
+  }
+  body.dark {
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --primary: #388bfd; --primary-text: #ffffff;
+    --ok-bg: #0f2f1c; --ok-fg: #3fb950; --warn-bg: #332a06; --warn-fg: #d29922;
+    --mute-bg: #21262d; --mute-fg: #8b949e; --err-bg: #3c1618; --err-fg: #f85149;
+    --chip-note-bg: #0c2d6b; --chip-note-fg: #79c0ff; --toast-bg: #1c2128;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 20px 16px 90px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+
+  /* 演示控制台 */
+  .console {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 16px;
+  }
+  .console .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .console .lbl { color: var(--muted); font-size: 12.5px; }
+  button { font: inherit; cursor: pointer; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; background: var(--panel); color: var(--text); padding: 5px 12px; font-size: 13px;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .seg button:not(.on):hover { background: var(--mute-bg); }
+
+  /* 通用按钮（模拟状态板 .btn.small） */
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 12px; font-size: 13px; white-space: nowrap;
+  }
+  .btn:hover:not([disabled]):not(.ad) { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .btn.primary:hover:not([disabled]):not(.ad) { filter: brightness(1.1); color: var(--primary-text); }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .btn.ad { opacity: .55; cursor: not-allowed; }
+
+  /* 模拟「文档编写」面板 */
+  .pane {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 18px;
+  }
+  .pane-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .pane-title .ver { color: var(--muted); font-size: 12.5px; }
+  .tag-tab {
+    display: inline-block; background: var(--chip-note-bg); color: var(--chip-note-fg);
+    font-size: 11.5px; border-radius: 999px; padding: 1px 10px;
+  }
+
+  /* 第一行 / 五步行（本单主体） */
+  .bld-docs-sub {
+    display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  }
+  .bld-docs-sub + .bld-docs-sub { margin-top: 8px; }
+  .langset { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .langset label { color: var(--muted); font-size: 13px; }
+  .langset input {
+    width: 150px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); color: var(--text); font: inherit;
+  }
+  .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .steps .btn { font-weight: 600; }
+  .steps .five-lbl { color: var(--muted); font-size: 12.5px; }
+
+  /* 修复后态的待确认标注 */
+  .note {
+    margin-top: 8px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--chip-note-bg); color: var(--chip-note-fg);
+    border-radius: 8px; padding: 4px 10px; font-size: 12.5px;
+  }
+
+  /* 阶段条 */
+  .stages {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px;
+    border: 1px dashed var(--border); border-radius: 10px; padding: 8px 12px;
+  }
+  .stages .lbl { color: var(--muted); font-size: 12.5px; }
+  .stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+  .stage .arrow { color: var(--muted); }
+  .st { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; border-radius: 999px; padding: 1px 8px; }
+  .st-ok  { background: var(--ok-bg);  color: var(--ok-fg); }
+  .st-run { background: var(--warn-bg); color: var(--warn-fg); }
+  .st-mute{ background: var(--mute-bg); color: var(--mute-fg); }
+  /* 修复后：阶段条 ③ 整体审查完结 = 完结核对对话框入口（可点击按钮；未解锁 aria-disabled 点击给缺口反馈） */
+  .stage-fin {
+    background: none; border: 0; padding: 0; margin: 0;
+    font: inherit; color: inherit; cursor: pointer;
+  }
+  .stage-fin[aria-disabled="true"] { cursor: not-allowed; }
+  .stage-fin:not([aria-disabled="true"]):hover { text-decoration: underline; }
+
+  /* 数据区：语言页签 + 文件列表 */
+  .data { margin-top: 12px; }
+  .lang-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .lang-tabs button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 999px; padding: 3px 14px; font-size: 12.5px;
+  }
+  .lang-tabs button.on { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .files { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .frow {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .frow:last-child { border-bottom: 0; }
+  .frow .name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .frow .mini { color: var(--muted); font-size: 11.5px; border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
+  .loading-line { color: var(--muted); padding: 18px 4px; }
+  .err-line {
+    background: var(--err-bg); color: var(--err-fg); border-radius: 8px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .err-line .btn { border-color: var(--err-fg); color: var(--err-fg); }
+
+  /* toast */
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 99; max-width: 420px; }
+  .toast {
+    background: var(--toast-bg); border: 1px solid var(--border); border-left: 4px solid var(--primary);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.15);
+    animation: tin .18s ease-out;
+  }
+  .toast.err { border-left-color: var(--err-fg); }
+  @keyframes tin { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .legend { color: var(--muted); font-size: 12px; margin-top: 14px; }
+  .legend code { background: var(--mute-bg); border-radius: 4px; padding: 0 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260926-001 界面演示 · 文档编写操作条合行</h1>
+  <p class="sub">发布模块「文档编写」步顶部操作区布局缺陷：去掉「整体审查」独立按钮，五步按钮上移到「审查」那一行。数据与动作为模拟，仅示意布局 / 交互 / 状态反馈。</p>
+
+  <div class="console">
+    <div class="grp">
+      <span class="lbl">布局对比</span>
+      <div class="seg" id="segMode">
+        <button type="button" data-mode="before" class="on">修复前（缺陷）</button>
+        <button type="button" data-mode="after">修复后（期望）</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lbl">数据状态</span>
+      <div class="seg" id="segPhase">
+        <button type="button" data-phase="ready" class="on">正常</button>
+        <button type="button" data-phase="loading">加载中</button>
+        <button type="button" data-phase="error">失败</button>
+      </div>
+    </div>
+    <div class="grp">
+      <span class="lbl">主题</span>
+      <div class="seg" id="segTheme">
+        <button type="button" data-theme="light" class="on">浅色</button>
+        <button type="button" data-theme="dark">深色</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane">
+    <div class="pane-title">
+      <span class="tag-tab">发布模块 · 文档编写（模拟）</span>
+      <span class="ver">版本 ver-20260925-01 · 演示数据</span>
+    </div>
+    <div id="bars"></div>
+    <div id="dataArea"></div>
+  </div>
+
+  <p class="legend">说明：按钮悬停有 title 提示；「④ AI 翻译」「⑤ 提交」等 aria-disabled 按钮点击给缺口反馈（与状态板现状口径一致）。修复后态的完结核对对话框入口落到阶段条「③ 整体审查完结」（design.md 定稿；点击未解锁项给缺口反馈，解锁后打开完结对核，完结后仍可点击重新核对再确认）。</p>
+</div>
+<div id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  var state = { mode: 'before', phase: 'ready', lang: 'zh', refreshing: false };
+
+  var FILES = {
+    zh: [
+      { name: 'zh/README.md',    st: 'st-ok',   stText: '已审核' },
+      { name: 'zh/CHANGELOG.md', st: 'st-run',  stText: '已总结待审核' },
+      { name: 'zh/FEATURES.md',  st: 'st-mute', stText: '未总结' },
+      { name: 'zh/AGENTS.md',    st: 'st-mute', stText: '未总结' }
+    ],
+    en: [
+      { name: 'en/README.md',    st: 'st-mute', stText: '未翻译' },
+      { name: 'en/CHANGELOG.md', st: 'st-mute', stText: '未翻译' },
+      { name: 'en/FEATURES.md',  st: 'st-mute', stText: '未翻译' },
+      { name: 'en/AGENTS.md',    st: 'st-mute', stText: '未翻译' }
+    ]
+  };
+  var LICENSE_ROW = { name: 'LICENSE.md', st: 'st-mute', stText: '待审核', single: true };
+  var GAP_TRANSLATE = 'AI 翻译未解锁：默认语言尚缺 3 个文件审核（zh/CHANGELOG.md（已总结待审核）、zh/FEATURES.md（未总结）、zh/AGENTS.md（未总结））';
+  var GAP_FINALIZE = '整体审查未解锁：尚缺 4 个文件审核（zh/CHANGELOG.md（已总结待审核）、zh/FEATURES.md（未总结）、zh/AGENTS.md（未总结）、LICENSE.md（待审核））';
+  var GAP_COMMIT = '还需 4 个文件通过审查：zh/CHANGELOG.md（已总结待审核）、zh/FEATURES.md（未总结）、zh/AGENTS.md（未总结）、LICENSE.md（待审核）';
+  var NOT_READY = '发布流程数据未就绪：请先刷新或重试';
+
+  function toast(msg, err) {
+    var box = document.getElementById('toasts');
+    var el = document.createElement('div');
+    el.className = 'toast' + (err ? ' err' : '');
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(function () { el.remove(); }, 3600);
+  }
+
+  function btn(opts) {
+    var disabled = opts.disabled ? ' disabled' : '';
+    var ad = opts.ad ? ' class="btn ad" data-ad="1" data-msg="' + opts.adMsg.replace(/"/g, '&quot;') + '"' : ' class="btn' + (opts.primary ? ' primary' : '') + '"';
+    return '<button type="button"' + ad + disabled + (opts.title ? ' title="' + opts.title.replace(/"/g, '&quot;') + '"' : '') + ' data-act="' + opts.act + '">' + opts.text + '</button>';
+  }
+
+  // 顶部操作条：mode=before 两行（辅助行含整体审查）；mode=after 一行（五步上移、无整体审查）
+  function barsHtml() {
+    var ready = state.phase === 'ready';
+    var refreshText = state.refreshing ? '正在读取…' : '刷新';
+    var refreshDisabled = state.refreshing || state.phase === 'loading';
+    var langset =
+      '<div class="langset"><label for="demoLangs">语言集</label>' +
+      '<input id="demoLangs" type="text" value="zh,en" autocomplete="off" spellcheck="false"' +
+      (ready ? '' : ' disabled') + ' title="逗号分隔的语言缩写（2–3 个字母）；第一个语言为默认语言（文件不带后缀），其余语言文件为 KEY_lang.md；回车或失焦应用"></div>';
+
+    var refreshBtn = btn({ act: 'refresh', text: refreshText, disabled: refreshDisabled,
+      title: '重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）' });
+    var reviewBtn = btn({ act: 'review', text: '审查',
+      title: '打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件通过审核（只读核对，编辑走「② 二次编辑」）' });
+
+    if (state.mode === 'before') {
+      var finalize = ready
+        ? btn({ act: 'finalize', ad: true, adMsg: GAP_FINALIZE, text: '整体审查', title: GAP_FINALIZE })
+        : btn({ act: 'finalize', ad: true, adMsg: NOT_READY, text: '整体审查', title: NOT_READY });
+      var row1 = '<div class="bld-docs-sub">' + langset +
+        '<div class="actions">' + refreshBtn + reviewBtn + finalize + '</div></div>';
+      var sum = ready ? btn({ act: 'summary', text: '① AI 总结', title: '① 复制 AI 总结提示词：依据本版关联需求与实际变更编写默认语言初稿（任务完成后逐文件回显）' })
+                      : btn({ act: 'summary', text: '① AI 总结', disabled: true, title: '发布流程数据未就绪' });
+      var edit = ready ? btn({ act: 'edit', text: '② 二次编辑', title: '② 打开默认语言文档编辑弹窗：文件切换 / 刷新 / 编辑 / 预览 / 保存（只显示默认语言）' })
+                       : btn({ act: 'edit', text: '② 二次编辑', disabled: true });
+      var proof = ready ? btn({ act: 'proof', text: '③ AI 校对', title: '③ 复制 AI 校对提示词：核查默认语言文档的超链接有效性、错别字、语法与行文规范' })
+                        : btn({ act: 'proof', text: '③ AI 校对', disabled: true });
+      var tr = ready ? btn({ act: 'translate', ad: true, adMsg: GAP_TRANSLATE, text: '④ AI 翻译', title: GAP_TRANSLATE })
+                     : btn({ act: 'translate', ad: true, adMsg: NOT_READY, text: '④ AI 翻译', title: NOT_READY });
+      var commit = ready ? btn({ act: 'commit', ad: true, adMsg: GAP_COMMIT, text: '⑤ 提交', primary: true, title: GAP_COMMIT })
+                         : btn({ act: 'commit', ad: true, adMsg: NOT_READY, text: '⑤ 提交', primary: true, title: NOT_READY });
+      return row1 +
+        '<div class="bld-docs-sub steps"><span class="five-lbl">五步：</span>' + sum + edit + proof + tr + commit + '</div>';
+    }
+    // 修复后：单行 = 语言集 + 刷新 / 审查 + 五步按钮（无独立「整体审查」按钮）
+    return '<div class="bld-docs-sub">' + langset +
+      '<div class="actions">' + refreshBtn + reviewBtn + '</div>' +
+      '<div class="steps"><span class="five-lbl">五步：</span>' +
+      (ready ? btn({ act: 'summary', text: '① AI 总结', title: '① 复制 AI 总结提示词（口径不变）' }) : btn({ act: 'summary', text: '① AI 总结', disabled: true })) +
+      (ready ? btn({ act: 'edit', text: '② 二次编辑', title: '② 打开默认语言文档编辑弹窗（口径不变）' }) : btn({ act: 'edit', text: '② 二次编辑', disabled: true })) +
+      (ready ? btn({ act: 'proof', text: '③ AI 校对', title: '③ 复制 AI 校对提示词（口径不变）' }) : btn({ act: 'proof', text: '③ AI 校对', disabled: true })) +
+      (ready ? btn({ act: 'translate', ad: true, adMsg: GAP_TRANSLATE, text: '④ AI 翻译', title: GAP_TRANSLATE }) : btn({ act: 'translate', ad: true, adMsg: NOT_READY, text: '④ AI 翻译', title: NOT_READY })) +
+      (ready ? btn({ act: 'commit', ad: true, adMsg: GAP_COMMIT, text: '⑤ 提交', primary: true, title: GAP_COMMIT }) : btn({ act: 'commit', ad: true, adMsg: NOT_READY, text: '⑤ 提交', primary: true, title: NOT_READY })) +
+      '</div></div>' +
+      '<div class="note">ⓘ 「整体审查」独立按钮已移除，五步按钮上移至本行；完结核对对话框入口落到阶段条「③ 整体审查完结」（点击给缺口反馈，解锁后打开完结对核；「⑤ 提交」门禁不弱化）</div>';
+  }
+
+  // 阶段条：mode=after 时 ③ 整体审查完结 为完结入口按钮（data-pf-finalize 落点，design.md 定稿）
+  function stagesHtml() {
+    var stage3 = state.mode === 'after'
+      ? '<button type="button" class="stage stage-fin" aria-disabled="true" title="' + GAP_FINALIZE.replace(/"/g, '&quot;') + '" data-ad data-msg="' + GAP_FINALIZE.replace(/"/g, '&quot;') + '">③ 整体审查完结 <span class="st st-mute">○ 未解锁</span></button>'
+      : '<span class="stage">③ 整体审查完结 <span class="st st-mute">○ 未解锁</span></span>';
+    return '<div class="stages"><span class="lbl">阶段：</span>' +
+      '<span class="stage">① 默认语言先行 <span class="st st-run">● 进行中</span></span><span class="stage arrow" aria-hidden="true">──</span>' +
+      '<span class="stage">② AI 翻译与审查 <span class="st st-mute">○ 未解锁</span></span><span class="stage arrow" aria-hidden="true">──</span>' +
+      stage3 + '</div>';
+  }
+
+  function dataHtml() {
+    if (state.phase === 'loading') return '<div class="data"><p class="loading-line" role="status">正在加载发布流程数据…</p></div>';
+    if (state.phase === 'error') return '<div class="data"><div class="err-line" role="alert"><span>发布流程数据读取失败：读取超时（模拟）</span>' +
+      '<button type="button" class="btn" data-act="retry">重试</button></div></div>';
+    var rows = FILES[state.lang].map(function (f) {
+      return '<div class="frow"><span class="name">' + f.name + '</span><span class="st ' + f.st + '">' + f.stText + '</span></div>';
+    }).join('');
+    rows += '<div class="frow"><span class="name">' + LICENSE_ROW.name + '</span><span class="mini">不分语言</span><span class="st ' + LICENSE_ROW.st + '">' + LICENSE_ROW.stText + '</span></div>';
+    return '<div class="data"><div class="lang-tabs">' +
+      '<button type="button" data-lang="zh" class="' + (state.lang === 'zh' ? 'on' : '') + '">zh（默认语言）</button>' +
+      '<button type="button" data-lang="en" class="' + (state.lang === 'en' ? 'on' : '') + '">en</button>' +
+      '</div><div class="files">' + rows + '</div></div>';
+  }
+
+  function render() {
+    document.getElementById('bars').innerHTML = barsHtml() + stagesHtml();
+    document.getElementById('dataArea').innerHTML = dataHtml();
+  }
+
+  function setSeg(segId, attr, val) {
+    var seg = document.getElementById(segId);
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) {
+      b.classList.toggle('on', b.getAttribute(attr) === val);
+    });
+  }
+
+  document.getElementById('segMode').addEventListener('click', function (e) {
+    var m = e.target.getAttribute('data-mode');
+    if (!m) return;
+    state.mode = m; setSeg('segMode', 'data-mode', m); render();
+  });
+  document.getElementById('segPhase').addEventListener('click', function (e) {
+    var p = e.target.getAttribute('data-phase');
+    if (!p) return;
+    state.phase = p; state.refreshing = false; setSeg('segPhase', 'data-phase', p); render();
+  });
+  document.getElementById('segTheme').addEventListener('click', function (e) {
+    var t = e.target.getAttribute('data-theme');
+    if (!t) return;
+    document.body.classList.toggle('dark', t === 'dark');
+    setSeg('segTheme', 'data-theme', t);
+  });
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act],[data-ad],[data-lang]');
+    if (!t) return;
+    var lang = t.getAttribute('data-lang');
+    if (lang) { state.lang = lang; render(); return; }
+    if (t.hasAttribute('disabled')) return;
+    if (t.hasAttribute('data-ad')) { toast(t.getAttribute('data-msg'), true); return; }
+    var act = t.getAttribute('data-act');
+    if (act === 'refresh') {
+      if (state.refreshing) return;
+      state.refreshing = true; render();
+      setTimeout(function () { state.refreshing = false; render(); toast('✓ 已重新读取全部文件内容与状态（模拟）'); }, 900);
+    } else if (act === 'review') {
+      toast('（模拟）打开审查对话框：按类型页签逐文件通过审核');
+    } else if (act === 'summary') {
+      toast('（模拟）已复制 ① AI 总结提示词到剪贴板');
+    } else if (act === 'edit') {
+      toast('（模拟）打开 ② 二次编辑弹窗（默认语言单语言编辑）');
+    } else if (act === 'proof') {
+      toast('（模拟）已复制 ③ AI 校对提示词，结果将显示在右侧建议栏');
+    } else if (act === 'retry') {
+      state.phase = 'ready'; setSeg('segPhase', 'data-phase', 'ready'); render();
+      toast('✓ 重试成功：发布流程数据已加载（模拟）');
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
