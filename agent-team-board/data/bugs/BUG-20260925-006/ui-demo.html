@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260925-006 演示 · 文档编写审查界面删除编辑功能</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9; --bg-card: #ffffff; --fg: #1c2330; --fg-muted: #5b6472;
+    --border: #dde2ea; --accent: #2563eb; --accent-soft: #e8efff;
+    --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7;
+    --err: #b91c1c; --err-bg: #fee2e2; --mut: #64748b; --mut-bg: #e2e8f0;
+    --code-bg: #f1f5f9; --shadow: rgba(15, 23, 42, 0.18);
+  }
+  html.dark {
+    --bg: #0d1117; --bg-card: #151b24; --fg: #e6eaf0; --fg-muted: #9aa4b2;
+    --border: #2a323d; --accent: #6ea1ff; --accent-soft: #1a2740;
+    --ok: #4ade80; --ok-bg: #14351f; --warn: #fbbf24; --warn-bg: #3a2c0a;
+    --err: #f87171; --err-bg: #3b1414; --mut: #94a3b8; --mut-bg: #232b36;
+    --code-bg: #1b2330; --shadow: rgba(0, 0, 0, 0.55);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); line-height: 1.65;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 18px 60px; }
+  header.demo-top {
+    position: sticky; top: 0; z-index: 30; background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-top .wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 18px; }
+  .demo-top h1 { font-size: 1rem; margin: 0; font-weight: 700; }
+  .demo-top .sub { color: var(--fg-muted); font-size: 0.85rem; }
+  .grow { flex: 1; }
+  .btn {
+    border: 1px solid var(--border); background: var(--bg-card); color: var(--fg);
+    border-radius: 8px; padding: 4px 12px; font-size: 0.85rem; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 2px 9px; font-size: 0.8rem; }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--fg-muted); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .console {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; margin: 16px 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  .console .lbl { font-size: 0.82rem; color: var(--fg-muted); }
+  .console .grp { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .note {
+    background: var(--accent-soft); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; font-size: 0.86rem; margin: 12px 0;
+  }
+  .panebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; }
+  .panebar .title { font-weight: 700; font-size: 0.95rem; }
+  .steps { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .steps .cap { color: var(--fg-muted); font-size: 0.8rem; }
+  .filelist { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); padding: 8px 12px; margin: 8px 0 4px; }
+  .filelist .row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 0.85rem; }
+  .filelist .row code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.82rem; }
+  .chip { display: inline-block; padding: 0 9px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); }
+  .chip.wait { background: var(--warn-bg); color: var(--warn); }
+  .chip.mut { background: var(--mut-bg); color: var(--mut); }
+  .gate { font-size: 0.83rem; color: var(--fg-muted); margin: 6px 0 0; }
+  .modal-wrap {
+    position: fixed; inset: 0; z-index: 40; background: var(--shadow);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 18px 50px var(--shadow); width: min(1020px, 96vw);
+    max-height: 92vh; display: flex; flex-direction: column;
+  }
+  .modal-head, .modal-foot {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border-bottom: 1px solid var(--border); font-size: 0.9rem; font-weight: 600;
+  }
+  .modal-foot { border-bottom: 0; border-top: 1px solid var(--border); font-weight: 400; color: var(--fg-muted); font-size: 0.8rem; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 8px 14px 0; }
+  .tab {
+    border: 1px solid var(--border); background: transparent; color: var(--fg);
+    border-radius: 8px 8px 0 0; padding: 4px 12px; font-size: 0.83rem; cursor: pointer;
+  }
+  .tab.active { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  .cols { display: grid; gap: 10px; padding: 12px 14px; overflow: auto; flex: 1; }
+  .col { border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; }
+  .col-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 9px; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+  .col-head .fname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78rem; font-weight: 600; }
+  .col-head .lang { color: var(--fg-muted); }
+  .col-head .acts { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; }
+  .col-body {
+    padding: 10px 12px; overflow: auto; font-size: 0.84rem; min-height: 280px; max-height: 46vh;
+  }
+  .col-body textarea {
+    width: 100%; height: 100%; min-height: 280px; border: 0; outline: none; resize: vertical;
+    background: var(--bg); color: var(--fg); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; line-height: 1.6;
+  }
+  .md h1 { font-size: 1.05rem; margin: 0 0 6px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .md h2 { font-size: 0.95rem; margin: 12px 0 4px; }
+  .md h3 { font-size: 0.88rem; margin: 10px 0 4px; }
+  .md p, .md ul, .md ol { margin: 4px 0; }
+  .md code { background: var(--code-bg); border-radius: 4px; padding: 0 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78rem; }
+  .md li { margin: 2px 0 2px 18px; }
+  .md .muted { color: var(--fg-muted); }
+  .loading, .empty { color: var(--fg-muted); font-size: 0.85rem; }
+  .failbox { color: var(--err); font-size: 0.85rem; }
+  .edit-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
+  select {
+    border: 1px solid var(--border); background: var(--bg-card); color: var(--fg);
+    border-radius: 8px; padding: 3px 8px; font-size: 0.82rem;
+  }
+  .unsaved { color: var(--warn); font-size: 0.8rem; }
+  .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+  .toast {
+    background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 8px 12px; font-size: 0.84rem; box-shadow: 0 8px 24px var(--shadow);
+    animation: tin 0.18s ease-out;
+  }
+  .toast.ok { border-left-color: var(--ok); }
+  .toast.warn { border-left-color: var(--warn); }
+  .toast.err { border-left-color: var(--err); }
+  @keyframes tin { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .demo-flag { font-size: 0.76rem; color: var(--fg-muted); }
+  .defect-flag { color: var(--err); font-weight: 700; }
+  .fixed-flag { color: var(--ok); font-weight: 700; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr !important; } .col-body { max-height: 34vh; } }
+</style>
+</head>
+<body>
+<header class="demo-top">
+  <div class="wrap">
+    <h1>BUG-20260925-006 演示</h1>
+    <span class="sub">文档编写「审查」界面删除编辑功能（数据与提交均为模拟）</span>
+    <span class="grow"></span>
+    <button class="btn small" id="modeBtn" type="button"></button>
+    <button class="btn small" id="themeBtn" type="button">深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="console">
+    <span class="lbl">演示控制台：</span>
+    <span class="grp">
+      <button class="btn small primary" id="openReview" type="button">打开「审查」对话框</button>
+      <button class="btn small" id="openEdit" type="button">打开「② 二次编辑」弹窗</button>
+    </span>
+    <span class="grp">
+      <span class="lbl">状态：</span>
+      <button class="btn small on" data-state="normal" type="button">正常</button>
+      <button class="btn small" data-state="loading" type="button">加载中</button>
+      <button class="btn small" data-state="fail" type="button">读取失败</button>
+      <button class="btn small" data-state="empty" type="button">空文档</button>
+    </span>
+  </div>
+  <div class="note" id="modeNote"></div>
+
+  <div class="panebar">
+    <span class="title">发布模块 · BLD-20260925-001（演示版本 20260925-001）· 文档编写</span>
+  </div>
+  <div class="steps">
+    <span class="cap">五步：</span>
+    <button class="btn small" type="button" disabled title="演示聚焦审查对话框，此步仅示意">① AI 总结</button>
+    <button class="btn small" id="openEdit2" type="button" title="② 打开默认语言文档编辑弹窗：文件切换 / 刷新 / 编辑 / 预览 / 保存（只显示默认语言）">② 二次编辑</button>
+    <button class="btn small" type="button" disabled title="演示聚焦审查对话框，此步仅示意">③ AI 校对</button>
+    <button class="btn small" type="button" disabled title="演示聚焦审查对话框，此步仅示意">④ AI 翻译</button>
+    <button class="btn small" type="button" disabled title="演示聚焦审查对话框，此步仅示意">⑤ 提交</button>
+    <span style="flex:1"></span>
+    <button class="btn small" type="button" disabled>刷新</button>
+    <button class="btn small" id="openReview2" type="button" title="打开审查对话框：按文档类型页签、全语言栏同步滚动对比，逐文件通过审核（修复后无编辑）">审查</button>
+    <button class="btn small" type="button" disabled>整体审查</button>
+  </div>
+
+  <div class="filelist" id="fileList"></div>
+  <p class="gate" id="gateLine"></p>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 演示状态 ---------- */
+  var MODES = { defect: '修复前（缺陷）', fixed: '修复后（期望）' };
+  var state = {
+    mode: 'defect',            // defect = 审查对话框仍带编辑（缺陷）；fixed = 已删除编辑
+    view: 'normal',            // normal | loading | fail | empty
+    reviewOpen: false,
+    editOpen: false,
+    tab: 'README',
+    reviewModes: {},           // 缺陷态各栏 edit/preview（文件名 → 'edit'|'preview'）
+    drafts: {},                // 缺陷态各栏未保存草稿
+    editFile: 'README.md',
+    editMode: 'edit',
+    editDraft: null,           // 二次编辑弹窗草稿
+    editLoaded: true,
+  };
+
+  var FILES = [
+    { file: 'README.md',        key: 'README',    lang: 'zh', single: false },
+    { file: 'README_en.md',     key: 'README',    lang: 'en', single: false },
+    { file: 'CHANGELOG.md',     key: 'CHANGELOG', lang: 'zh', single: false },
+    { file: 'CHANGELOG_en.md',  key: 'CHANGELOG', lang: 'en', single: false },
+    { file: 'FEATURES.md',      key: 'FEATURES',  lang: 'zh', single: false },
+    { file: 'FEATURES_en.md',   key: 'FEATURES',  lang: 'en', single: false },
+    { file: 'AGENTS.md',        key: 'AGENTS',    lang: 'zh', single: false },
+    { file: 'AGENTS_en.md',     key: 'AGENTS',    lang: 'en', single: false },
+    { file: 'LICENSE.md',       key: 'LICENSE',   lang: null, single: true }
+  ];
+  var TABS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS', 'LICENSE'];
+
+  /* 状态：reviewed 已审核 / wait 已总结待审核 / unsum 未总结 */
+  var status = {};
+  FILES.forEach(function (f) {
+    status[f.file] = f.single ? 'wait' : (f.lang === 'zh' ? 'wait' : 'unsum');
+  });
+  status['README.md'] = 'reviewed';
+  status['CHANGELOG.md'] = 'reviewed';
+
+  var CONTENT = {
+    'README.md': '# Agent Team Board\n\n智能体团队看板：需求与 Bug 文件化管理、Agent TDD 流程与本地状态板。\n\n## 核心能力\n\n- 文件化事实源：条目文档随 git 提交评审\n- 单向状态机：接受与确认仅人工可操作\n- 批量开发 / 批量完善：队列派发子代理\n\n## 快速启动\n\n执行 `node scripts/atb.mjs init` 初始化看板。',
+    'README_en.md': '# Agent Team Board\n\nA kanban for agent teams: requirements and bugs as files, an agent TDD flow, and a local status board.\n\n## Capabilities\n\n- File-based source of truth, committed and reviewed with git\n- One-way state machine; accept / confirm are human-only\n- Batch develop / refine with a dispatch queue\n\n## Quick Start\n\nRun `node scripts/atb.mjs init` to initialize the board.',
+    'CHANGELOG.md': '# 更新日志\n\n## 20260925-001\n\n- 文档编写五步流程：AI 总结、二次编辑、AI 校对、AI 翻译、提交\n- 整体审查自动检查与 AI 校对建议栏\n\n## 20260924-002\n\n- 一键迁移修复与执行账本',
+    'CHANGELOG_en.md': '# Changelog\n\n## 20260925-001\n\n- Five-step document flow: summary, secondary edit, proofread, translate, commit\n- Overall-review auto checks and the proofreading suggestion panel\n\n## 20260924-002\n\n- One-shot migration fix and run ledger',
+    'FEATURES.md': '# 功能清单\n\n- 需求 / Bug 看板与状态流转\n- 文档编写五步流程与提交门禁\n- 版本计划与发布流水线\n- 待人工决策（hold）闭环',
+    'FEATURES_en.md': '# Features\n\n- Requirement / bug board with one-way state flow\n- Five-step document writing pipeline with commit gates\n- Version planning and the release pipeline\n- Hold loop deferring decisions to humans',
+    'AGENTS.md': '# AGENTS.md\n\n本仓库使用 agent-team-board 看板协作开发：\n\n1. 新需求 / 缺陷先登记，人工接受后 Agent 才能认领实施；\n2. 实施完成后 report，不代替人工验收；\n3. 修复 Bug 必须归因引入来源，来源禁止编造。',
+    'AGENTS_en.md': '# AGENTS.md\n\nThis repository develops with the agent-team-board kanban:\n\n1. Register requirements / bugs first; agents may claim only after human acceptance;\n2. Agents report after implementation; humans do the acceptance;\n3. Bug fixes must attribute the introducing source; never fabricate one.',
+    'LICENSE.md': '# LICENSE\n\nMIT License\n\nCopyright (c) 2026 Agent Team Board contributors'
+  };
+  var EMPTY_FILES = { 'FEATURES.md': true, 'FEATURES_en.md': true };
+
+  var ST_LABEL = { reviewed: ['已审核', 'ok'], wait: ['已总结待审核', 'wait'], unsum: ['未总结', 'mut'] };
+
+  /* ---------- 工具 ---------- */
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function toast(msg, kind) {
+    var box = document.createElement('div');
+    box.className = 'toast ' + (kind || '');
+    box.textContent = msg;
+    $('#toasts').appendChild(box);
+    setTimeout(function () { box.remove(); }, 3200);
+  }
+  /* 迷你 Markdown 渲染（标题 / 列表 / 行内 code，够演示预览态） */
+  function renderMd(text) {
+    var lines = String(text || '').split('\n');
+    var out = [], inList = false;
+    function inline(s) {
+      return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+    lines.forEach(function (ln) {
+      var m;
+      if ((m = ln.match(/^(#{1,3})\s+(.*)$/))) {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push('<h' + m[1].length + '>' + inline(m[2]) + '</h' + m[1].length + '>');
+      } else if ((m = ln.match(/^[-*]\s+(.*)$/))) {
+        if (!inList) { out.push('<ul>'); inList = true; }
+        out.push('<li>' + inline(m[1]) + '</li>');
+      } else if ((m = ln.match(/^\d+[.、]\s+(.*)$/))) {
+        if (!inList) { out.push('<ul>'); inList = true; }
+        out.push('<li>' + inline(m[1]) + '</li>');
+      } else if (ln.trim() === '') {
+        if (inList) { out.push('</ul>'); inList = false; }
+      } else {
+        if (inList) { out.push('</ul>'); inList = false; }
+        out.push('<p>' + inline(ln) + '</p>');
+      }
+    });
+    if (inList) out.push('</ul>');
+    return out.join('');
+  }
+  function contentOf(f) {
+    if (EMPTY_FILES[f]) return '';
+    return state.drafts[f] != null ? state.drafts[f] : CONTENT[f];
+  }
+  function pairOf(key) { return FILES.filter(function (f) { return f.key === key; }); }
+  function reviewedCount(list) { return list.filter(function (f) { return status[f.file] === 'reviewed'; }).length; }
+
+  /* ---------- 文件列表与门禁 ---------- */
+  function renderFileList() {
+    var rows = FILES.map(function (f) {
+      var st = ST_LABEL[status[f.file]];
+      return '<div class="row"><code>' + esc(f.file) + '</code>' +
+        (f.single ? '<span class="chip mut">不分语言</span>' : '') +
+        '<span style="flex:1"></span><span class="chip ' + st[1] + '">' + st[0] + '</span></div>';
+    }).join('');
+    $('#fileList').innerHTML = rows;
+    var n = reviewedCount(FILES);
+    $('#gateLine').textContent = '提交门禁：' + n + '/' + FILES.length + ' 已审核 · 整体审查未完结（确认完结后可提交）——演示口径与真实看板一致。';
+  }
+
+  /* ---------- 模式说明 ---------- */
+  function renderModeNote() {
+    $('#modeBtn').textContent = MODES[state.mode];
+    $('#modeBtn').className = 'btn small ' + (state.mode === 'defect' ? 'on' : 'primary');
+    if (state.mode === 'defect') {
+      $('#modeNote').innerHTML = '<span class="defect-flag">修复前（缺陷）</span>：审查对话框各语言栏保留「编辑 | 预览」切换与「保存」按钮，可直接改正文（已审核文件被编辑保存即回退待审核）；与「② 二次编辑」弹窗形成两个并存的编辑入口。';
+    } else {
+      $('#modeNote').innerHTML = '<span class="fixed-flag">修复后（期望）</span>：审查对话框只读核对——各栏恒为 Markdown 预览，仅保留「通过审核」；编辑一律走「② 二次编辑」弹窗（默认语言）。可切换上方状态开关观察加载 / 失败 / 空文档反馈。';
+    }
+  }
+
+  /* ---------- 审查对话框 ---------- */
+  function openReview() {
+    state.reviewOpen = true;
+    state.reviewModes = {};
+    FILES.forEach(function (f) { state.reviewModes[f.file] = 'preview'; });
+    state.drafts = {};
+    render();
+  }
+  function closeReview() {
+    /* 缺陷态：未保存草稿直接关闭即丢弃（真实实现有栏内草稿同步，此处演示提示） */
+    var dirty = Object.keys(state.drafts).some(function (k) { return state.drafts[k] !== CONTENT[k]; });
+    state.reviewOpen = false;
+    state.drafts = {};
+    render();
+    if (dirty && state.mode === 'defect') toast('已关闭审查对话框（演示：未保存的栏内草稿按现状口径处理）', 'warn');
+  }
+  function switchTab(key) { state.tab = key; render(); }
+
+  function colBodyHtml(f) {
+    if (state.view === 'loading') return '<p class="loading">正在读取文档内容…</p>';
+    if (state.view === 'fail' && f.lang === 'en') {
+      return '<p class="failbox">✕ ' + esc(f.file) + ' 读取失败：模拟的网络错误（500）</p>' +
+        '<p><button class="btn small" data-retry type="button">重试</button></p>';
+    }
+    var mode = state.mode === 'defect' && state.reviewModes[f.file] === 'edit' ? 'edit' : 'preview';
+    var c = contentOf(f.file);
+    if (mode === 'edit') {
+      return '<textarea data-draft="' + esc(f.file) + '" rows="14" spellcheck="false">' + esc(c) + '</textarea>';
+    }
+    return String(c).trim()
+      ? '<div class="md" data-preview="' + esc(f.file) + '">' + renderMd(c) + '</div>'
+      : '<p class="empty">（空文档）</p>';
+  }
+
+  function renderReviewModal() {
+    if (!state.reviewOpen) return '';
+    var tabs = TABS.map(function (k) {
+      var per = pairOf(k);
+      var n = reviewedCount(per);
+      return '<button type="button" class="tab' + (state.tab === k ? ' active' : '') + '" data-tab="' + k + '">' +
+        k + '（' + n + '/' + per.length + '）</button>';
+    }).join('');
+    var pair = pairOf(state.tab);
+    var cols = pair.map(function (f) {
+      var st = ST_LABEL[status[f.file]];
+      var acts = '';
+      if (state.mode === 'defect') {
+        var mode = state.reviewModes[f.file] === 'edit' ? 'edit' : 'preview';
+        acts = '<span class="acts">' +
+          '<button type="button" class="btn small' + (mode === 'edit' ? ' on' : '') + '" data-mode="' + esc(f.file) + '|edit">编辑</button>' +
+          '<button type="button" class="btn small' + (mode === 'preview' ? ' on' : '') + '" data-mode="' + esc(f.file) + '|preview">预览</button>' +
+          '<button type="button" class="btn small" data-save="' + esc(f.file) + '">保存</button>' +
+          approveBtn(f) + '</span>';
+      } else {
+        acts = '<span class="acts">' + approveBtn(f) + '</span>';
+      }
+      return '<div class="col">' +
+        '<div class="col-head"><span class="fname">' + esc(f.file) + '</span>' +
+        (f.single ? '<span class="chip mut">不分语言</span>' : '<span class="lang">' + (f.lang === 'zh' ? '中文' : 'English') + '</span>') +
+        '<span class="chip ' + st[1] + '">' + st[0] + '</span>' + acts + '</div>' +
+        '<div class="col-body">' + colBodyHtml(f) + '</div></div>';
+    }).join('');
+    var totalN = reviewedCount(FILES);
+    var pairN = reviewedCount(pair);
+    var foot = state.mode === 'fixed'
+      ? '全部 ' + totalN + '/' + FILES.length + ' 已审核 · 本页签 ' + pairN + '/' + pair.length + ' · 各栏同步滚动 · 编辑请使用「② 二次编辑」'
+      : '全部 ' + totalN + '/' + FILES.length + ' 已审核 · 本页签 ' + pairN + '/' + pair.length + ' · 各栏同步滚动：一侧滚动其余按比例跟随';
+    return '<div class="modal-wrap" id="reviewWrap">' +
+      '<div class="modal" role="dialog" aria-modal="true" aria-label="审查发布文档">' +
+      '<div class="modal-head"><span>审查发布文档（BLD-20260925-001）</span><span class="demo-flag">' +
+      (state.mode === 'defect' ? '<span class="defect-flag">修复前：各栏可编辑</span>' : '<span class="fixed-flag">修复后：只读核对</span>') +
+      '</span><span style="flex:1"></span><button type="button" class="btn small quiet" data-close-review>✕ 关闭</button></div>' +
+      '<nav class="tabs">' + tabs + '</nav>' +
+      '<div class="cols" style="grid-template-columns:repeat(' + pair.length + ',minmax(0,1fr))">' + cols + '</div>' +
+      '<div class="modal-foot"><span>' + foot + '</span><span style="flex:1"></span><button type="button" class="btn small" data-close-review>关闭</button></div>' +
+      '</div></div>';
+  }
+  function approveBtn(f) {
+    return status[f.file] === 'reviewed'
+      ? '<button type="button" class="btn small" disabled title="已审核：内容再变化会回退待审核">✔ 已审核</button>'
+      : '<button type="button" class="btn small primary" data-approve="' + esc(f.file) + '">通过审核</button>';
+  }
+
+  function saveReviewCol(file) {
+    var wasReviewed = status[file] === 'reviewed';
+    if (wasReviewed) status[file] = 'wait'; /* 回退：LICENSE「待审核」/ 四类「已总结待审核」演示统一为 wait 态 */
+    /* 保存：草稿转正为内容（演示内存态） */
+    if (state.drafts[file] != null) CONTENT[file] = state.drafts[file];
+    delete state.drafts[file];
+    state.reviewModes[file] = 'preview';
+    render();
+    if (wasReviewed) toast(file + ' 内容已修改：回到「' + (file === 'LICENSE.md' ? '待审核' : '已总结待审核') + '」，需重新审查', 'warn');
+    else toast('✓ 已保存 ' + file + '（模拟，未提交）', 'ok');
+  }
+  function approveReviewCol(file) {
+    if (state.reviewModes[file] === 'edit' && state.drafts[file] != null && state.drafts[file] !== CONTENT[file]) {
+      /* 缺陷态现状口径：先自动保存未保存草稿再审核 */
+      saveReviewCol(file);
+    }
+    status[file] = 'reviewed';
+    render();
+    toast('✓ ' + file + ' 已通过审核（' + reviewedCount(FILES) + '/' + FILES.length + '）', 'ok');
+  }
+
+  /* ---------- ② 二次编辑弹窗（两种模式均存在，修复后为唯一编辑入口） ---------- */
+  function defaultFiles() { return FILES.filter(function (f) { return f.single || f.lang === 'zh'; }).map(function (f) { return f.file; }); }
+  function openEdit() {
+    state.editOpen = true;
+    state.editFile = defaultFiles()[0];
+    state.editMode = 'edit';
+    state.editDraft = CONTENT[state.editFile];
+    state.editLoaded = true;
+    render();
+  }
+  function renderEditModal() {
+    if (!state.editOpen) return '';
+    var opts = defaultFiles().map(function (f) {
+      return '<option value="' + esc(f) + '"' + (f === state.editFile ? ' selected' : '') + '>' + esc(f) + '</option>';
+    }).join('');
+    var body;
+    if (!state.editLoaded) {
+      body = '<p class="loading">正在读取文档内容…</p>';
+    } else if (state.editMode === 'edit') {
+      body = '<textarea id="editBox" rows="14" spellcheck="false">' + esc(state.editDraft) + '</textarea>';
+    } else {
+      body = String(state.editDraft).trim() ? '<div class="md">' + renderMd(state.editDraft) + '</div>' : '<p class="empty">（空文档）</p>';
+    }
+    var unsaved = state.editDraft != null && state.editDraft !== CONTENT[state.editFile];
+    return '<div class="modal-wrap" id="editWrap">' +
+      '<div class="modal" role="dialog" aria-modal="true" aria-label="二次编辑（默认语言）" style="width:min(760px,94vw)">' +
+      '<div class="modal-head"><span>二次编辑 · 默认语言（BLD-20260925-001）</span><span style="flex:1"></span>' +
+      '<button type="button" class="btn small quiet" data-close-edit>✕ 关闭</button></div>' +
+      '<div class="edit-bar"><label for="editSel">文件</label><select id="editSel">' + opts + '</select>' +
+      '<button type="button" class="btn small" data-edit-mode="edit">编辑</button>' +
+      '<button type="button" class="btn small" data-edit-mode="preview">预览</button>' +
+      '<span class="demo-flag">只列默认语言文件（其余语言由 ④ AI 翻译产出）</span></div>' +
+      '<div class="col-body" style="min-height:300px">' + body + '</div>' +
+      (unsaved ? '<div class="edit-bar"><span class="unsaved">有未保存的修改：切换文件 / 关闭前需保存或放弃（真实界面为三动作内联保护，此处演示简化）。</span></div>' : '') +
+      '<div class="modal-foot"><span class="demo-flag">默认语言初稿编辑（本弹窗为修复后唯一编辑入口）</span><span style="flex:1"></span>' +
+      '<button type="button" class="btn small primary" data-save-edit>保存</button>' +
+      '<button type="button" class="btn small" data-close-edit>关闭</button></div>' +
+      '</div></div>';
+  }
+  function saveEdit() {
+    var wasReviewed = status[state.editFile] === 'reviewed';
+    CONTENT[state.editFile] = state.editDraft;
+    if (wasReviewed) status[state.editFile] = 'wait';
+    render();
+    if (wasReviewed) toast(state.editFile + ' 内容已修改：回到「' + (state.editFile === 'LICENSE.md' ? '待审核' : '已总结待审核') + '」，需重新审查', 'warn');
+    else toast('✓ 已保存 ' + state.editFile + '（模拟，未提交）', 'ok');
+  }
+
+  /* ---------- 同步滚动（预览态容器 / 编辑态 textarea 按比例跟随） ---------- */
+  function bindSyncScroll() {
+    var bodies = $all('#reviewWrap .col-body');
+    if (bodies.length < 2) return;
+    var syncing = false;
+    bodies.forEach(function (el) {
+      el.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        var max = el.scrollHeight - el.clientHeight;
+        var ratio = max > 0 ? el.scrollTop / max : null;
+        if (ratio != null) {
+          bodies.forEach(function (other) {
+            if (other === el) return;
+            var omax = other.scrollHeight - other.clientHeight;
+            if (omax > 0) other.scrollTop = ratio * omax;
+          });
+        }
+        setTimeout(function () { syncing = false; }, 0);
+      });
+    });
+  }
+
+  /* ---------- 渲染与事件 ---------- */
+  function render() {
+    renderFileList();
+    renderModeNote();
+    var root = $('#modalRoot');
+    root.innerHTML = renderReviewModal() + renderEditModal();
+
+    $all('[data-tab]', root).forEach(function (b) {
+      b.addEventListener('click', function () { switchTab(b.dataset.tab); });
+    });
+    $all('[data-mode]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = b.dataset.mode.split('|');
+        state.reviewModes[p[0]] = p[1];
+        var box = $('textarea[data-draft="' + p[0] + '"]', root);
+        if (box) state.drafts[p[0]] = box.value;
+        render();
+      });
+    });
+    $all('[data-draft]', root).forEach(function (box) {
+      box.addEventListener('input', function () { state.drafts[box.dataset.draft] = box.value; });
+    });
+    $all('[data-save]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var f = b.dataset.save;
+        var box = $('textarea[data-draft="' + f + '"]', root);
+        if (box) state.drafts[f] = box.value;
+        saveReviewCol(f);
+      });
+    });
+    $all('[data-approve]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var f = b.dataset.approve;
+        var box = $('textarea[data-draft="' + f + '"]', root);
+        if (box) state.drafts[f] = box.value;
+        approveReviewCol(f);
+      });
+    });
+    $all('[data-retry]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.view = 'normal';
+        $all('[data-state]').forEach(function (x) { x.classList.toggle('on', x.dataset.state === 'normal'); });
+        render();
+        toast('✓ 重试读取成功（演示）', 'ok');
+      });
+    });
+    $all('[data-close-review]', root).forEach(function (b) {
+      b.addEventListener('click', closeReview);
+    });
+    $('#reviewWrap', root) && $('#reviewWrap', root).addEventListener('click', function (e) {
+      if (e.target.id === 'reviewWrap') closeReview();
+    });
+
+    var sel = $('#editSel', root);
+    if (sel) sel.addEventListener('change', function () {
+      var box = $('#editBox', root);
+      if (box && state.editDraft !== CONTENT[state.editFile]) toast('上一文件的未保存修改已按演示简化处理（真实界面有三动作保护）', 'warn');
+      state.editFile = sel.value;
+      state.editDraft = CONTENT[state.editFile];
+      state.editMode = 'edit';
+      render();
+    });
+    $all('[data-edit-mode]', root).forEach(function (b) {
+      b.addEventListener('click', function () { state.editMode = b.dataset.editMode; render(); });
+    });
+    var editBox = $('#editBox', root);
+    if (editBox) editBox.addEventListener('input', function () { state.editDraft = editBox.value; });
+    var saveBtn = $('[data-save-edit]', root);
+    if (saveBtn) saveBtn.addEventListener('click', saveEdit);
+    $all('[data-close-edit]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.editOpen = false;
+        render();
+      });
+    });
+    $('#editWrap', root) && $('#editWrap', root).addEventListener('click', function (e) {
+      if (e.target.id === 'editWrap') { state.editOpen = false; render(); }
+    });
+
+    bindSyncScroll();
+  }
+
+  $('#openReview').addEventListener('click', openReview);
+  $('#openReview2').addEventListener('click', openReview);
+  $('#openEdit').addEventListener('click', openEdit);
+  $('#openEdit2').addEventListener('click', openEdit);
+  $('#modeBtn').addEventListener('click', function () {
+    state.mode = state.mode === 'defect' ? 'fixed' : 'defect';
+    state.drafts = {};
+    state.reviewModes = {};
+    render();
+    toast('已切换到「' + MODES[state.mode] + '」视角' + (state.reviewOpen ? '（审查对话框保持打开，可直接对比）' : ''), '');
+  });
+  $all('[data-state]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.view = b.dataset.state;
+      $all('[data-state]').forEach(function (x) { x.classList.toggle('on', x === b); });
+      render();
+      var map = { normal: '正常状态', loading: '加载中：栏目显示「正在读取文档内容…」', fail: '读取失败：英文栏显示错误与重试入口', empty: '空文档：切到 FEATURES 页签可见两栏「（空文档）」占位' };
+      toast(map[state.view], '');
+    });
+  });
+  $('#themeBtn').addEventListener('click', function () {
+    var dark = document.documentElement.classList.toggle('dark');
+    $('#themeBtn').textContent = dark ? '浅色' : '深色';
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
