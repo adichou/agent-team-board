@@ -414,7 +414,7 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInputï¼šè¯
   const context = vm.createContext(ctx);
   vm.runInContext([
     pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'),
-    pick('finalizeBtnHtml'), pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
+    pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
     pick('renderReviewModal'), pick('validateLangSetInput'),
   ].join('\n'), context);
 

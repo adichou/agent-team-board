@@ -443,7 +443,7 @@ const FLOW_STUB = {
 
 t('L4-1 renderDocsPane：副标题 + 六按钮 + 八文件行七态 chip + 门禁条（REQ-20260921-012 三阶段口径）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const fns = ['summaryBtnText', 'translateBtnText', 'normalizeFlowEval', 'translateBtnHtml', 'finalizeBtnHtml', 'commitBtnHtml', 'docsStageBar', 'renderDocsPane']
+  const fns = ['summaryBtnText', 'translateBtnText', 'normalizeFlowEval', 'translateBtnHtml', 'commitBtnHtml', 'docsStageBar', 'renderDocsPane']
     .map((n) => extractFn(source, n)).join('\n');
   const html = vmRun(fns, {
     pfOf: (v) => v.pf,
@@ -493,7 +493,7 @@ t('L4-1 renderDocsPane：副标题 + 六按钮 + 八文件行七态 chip + 门�
 
 t('L4-2 提交按钮门禁与失败态：aria-disabled + title 缺口；加载失败保留按钮与错误反馈', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const fn = ['summaryBtnText', 'translateBtnText', 'normalizeFlowEval', 'translateBtnHtml', 'finalizeBtnHtml', 'commitBtnHtml', 'docsStageBar', 'renderDocsPane']
+  const fn = ['summaryBtnText', 'translateBtnText', 'normalizeFlowEval', 'translateBtnHtml', 'commitBtnHtml', 'docsStageBar', 'renderDocsPane']
     .map((n) => extractFn(source, n)).join('\n');
   const ctx = {
     pfOf: (v) => v.pf, esc: (s) => String(s), short: (h) => String(h || '').slice(0, 8), fmtTime: () => 't',

@@ -549,7 +549,7 @@ function docsPaneFns(source) {
   return [
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'),
-    extractFn(source, 'translateBtnHtml'), extractFn(source, 'finalizeBtnHtml'),
+    extractFn(source, 'translateBtnHtml'),
     extractFn(source, 'commitBtnHtml'), extractFn(source, 'docsStageBar'),
     extractFn(source, 'renderDocsPane'), extractFn(source, 'renderFinalizeModal'),
   ].join('\n');
@@ -718,7 +718,7 @@ t('L6-1 i18n：新增文案中英词条齐备；门禁动态键随口径迁移�
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN, EN_DYNAMIC } = I._dict;
   const statics = [
-    'AI 翻译', '整体审查', '未翻译', '正在翻译', '已翻译待审核',
+    'AI 翻译', '未翻译', '正在翻译', '已翻译待审核', // '整体审查' 词条随 BUG-20260926-001 独立按钮移除清理
     '① 默认语言先行', '② AI 翻译与审查', '③ 整体审查完结', '已完成', '进行中', '未解锁', '阶段：',
     '确认完结', '取消',
     '各语言内容语义一致（以已审核默认语言为基准）',

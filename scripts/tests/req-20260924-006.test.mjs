@@ -76,7 +76,6 @@ function paneFns(source) {
     extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'),
     extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'),
     extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'),
     extractFn(source, 'splitProofreadIssues'),
@@ -262,9 +261,10 @@ t('L4-5 renderDocsPane 五步操作条：①–⑤ 顺序入口（data-pf-summar
   for (const s of ['① AI 总结', '② 二次编辑', '③ AI 校对', '④ AI 翻译', '⑤ 提交']) {
     assert.ok(html.includes(s), `步骤文案：${s}`);
   }
-  // 辅助动作与既有结构保留（边界第 1 条：不删既有入口 / 门禁）
+  // 辅助动作与既有结构保留（BUG-20260926-001：「整体审查」独立按钮移除，data-pf-finalize
+  // 完结入口落阶段条「③ 整体审查完结」；刷新 / 审查等既有入口与门禁不回退）
   for (const k of ['data-pf-refresh', 'data-pf-review', 'data-pf-finalize']) {
-    assert.ok(html.includes(k), `辅助动作保留：${k}`);
+    assert.ok(html.includes(k), `入口保留：${k}`);
   }
   assert.ok(html.includes('① 默认语言先行'), '三阶段条保留');
   assert.ok(html.includes('bld-docs-stages'), '阶段条容器保留');

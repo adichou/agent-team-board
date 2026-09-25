@@ -519,7 +519,7 @@ t('L4-1 renderDocsPane：＋添加文档按钮 + 内联添加行；自定义行�
   const html = vmRun([
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'), extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'), extractFn(source, 'commitBtnHtml'),
+    extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'), extractFn(source, 'renderDocsPane'),
   ].join('\n'), L4_CTX, `renderDocsPane({ id: 'BLD-20260922-003', pf: { phase: 'ready',
     addDoc: { open: true, input: 'MIG', err: '文件名不能为空（如 MIGRATION.md）', busy: false },
@@ -553,7 +553,7 @@ t('L4-2 renderDocsPane：AI 总结运行中移除禁用（title 提示）；总�
   const html = vmRun([
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'), extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'), extractFn(source, 'commitBtnHtml'),
+    extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'), extractFn(source, 'renderDocsPane'),
   ].join('\n'), L4_CTX, `renderDocsPane({ id: 'V', pf: { phase: 'ready', addDoc: null,
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],

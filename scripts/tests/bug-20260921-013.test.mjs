@@ -75,7 +75,7 @@ function docsPaneFns(source) {
   return [
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'), extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'), extractFn(source, 'commitBtnHtml'),
+    extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'), extractFn(source, 'renderDocsPane'),
   ].join('\n');
 }

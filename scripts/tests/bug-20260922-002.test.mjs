@@ -508,7 +508,7 @@ t('L4-2 renderDocsPane：自定义行出现在每个语言页签；en 行走翻�
   const html = vmRun([
     extractFn(source, 'summaryBtnText'), extractFn(source, 'translateBtnText'),
     extractFn(source, 'normalizeFlowEval'), extractFn(source, 'translateBtnHtml'),
-    extractFn(source, 'finalizeBtnHtml'), extractFn(source, 'commitBtnHtml'),
+    extractFn(source, 'commitBtnHtml'),
     extractFn(source, 'docsStageBar'), extractFn(source, 'renderDocsPane'),
   ].join('\n'), L4_CTX, `renderDocsPane({ id: 'V', pf: { phase: 'ready', addDoc: null,
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
