@@ -1294,7 +1294,6 @@ const EN = {
   // 七态文案 / 阶段条 / AI 翻译按钮与提示词 / 整体审查完结对核对话框 / 基准变更提示 /
   // 门禁条新口径（计数词条见 EN_DYNAMIC）。文件名与语言代码是标识，沿用 data-i18n-skip 豁免。
   'AI 翻译': 'AI translation',
-  '整体审查': 'Final review',
   '整体审查完结': 'Final review completion',
   '未翻译': 'Not translated',
   '正在翻译': 'Translating',
@@ -1325,8 +1324,8 @@ const EN = {
   '· 独立锁 translate（与 AI 总结 / AI 分析 / AI 开发互不占用）': 'independent lock translate (never conflicts with AI summary / analysis / development)',
   '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁': 'Open the final-review checklist: semantics consistent across languages, README cross-links per language, content matching this release scope; confirming completion unlocks "Commit"',
   '整体审查已完结；点击可重新核对新再次确认（更新完结时间）': 'Final review completed; click to re-check and confirm again (updates the completion time)',
-  '整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交': 'Final review not completed: after all files are approved, confirm completion via "Final review" before committing',
-  '尚不可提交：整体审查未完结（全部文件已审核后，请先「整体审查」确认完结）': 'Cannot commit yet: final review not completed (after all files are approved, confirm completion via "Final review" first)',
+  '整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交': 'Final review not completed: after all files are approved, confirm completion via "③ Final review completion" in the stage bar before committing',
+  '尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）': 'Cannot commit yet: final review not completed (after all files are approved, confirm completion via "③ Final review completion" in the stage bar first)',
   '各语言内容语义一致（以已审核默认语言为基准）': 'Semantics consistent across languages (baseline: the approved default language)',
   'README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）': 'README cross-links per language are real and reachable (same-language CHANGELOG and FEATURES, links must actually work)',
   // REQ-20260924-003 弹窗清单精简：「文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）」

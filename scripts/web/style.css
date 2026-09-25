@@ -3796,15 +3796,16 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
   background: var(--panel); color: var(--text); font: inherit;
 }
 .bld-docs-langset-err { flex-basis: 100%; text-align: right; margin: 0; }
-/* 顶部单行条（BUG-20260921-017：标题 / 副标题已删）：语言集簇 + 六按钮同一水平行；窄屏两簇各自换行 */
+/* 顶部单行条（BUG-20260921-017：标题 / 副标题已删；BUG-20260926-001：语言集簇 + 辅助动作
+   （刷新 / 审查）+ 五步按钮同一水平行，「整体审查」独立按钮移除；窄屏三簇各自换行） */
 .bld-docs-sub {
   display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
   border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
 }
 .bld-docs-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; }
-/* REQ-20260924-006 五步操作条：① AI 总结 → ② 二次编辑 → ③ AI 校对 → ④ AI 翻译 → ⑤ 提交
-   （主流程顺序入口；与语言集 / 辅助动作行分离，窄屏 flex-wrap 换行） */
-.bld-docs-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* REQ-20260924-006 五步操作条（BUG-20260926-001 起并入 .bld-docs-sub 单行，不再独立成行）：
+   ① AI 总结 → ② 二次编辑 → ③ AI 校对 → ④ AI 翻译 → ⑤ 提交（主流程顺序入口，窄屏换行） */
+.bld-docs-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 1 auto; min-width: 0; }
 .bld-docs-steps .btn { font-weight: 600; }
 /* 文件列表 + 校对建议侧栏两栏栅格（建议栏固定宽、窄屏纵向堆叠——REQ-20260924-006 ③ 步结果区） */
 .bld-docs-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; align-items: start; }
@@ -3927,6 +3928,15 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 }
 .bld-docs-stages .bld-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .bld-docs-stages .st { font-size: 12px; }
+/* BUG-20260926-001 完结入口落阶段条：③ 整体审查完结 为可点击按钮（「整体审查」独立按钮
+   已移除）——按钮样式重置为阶段文字观感，未解锁（aria-disabled）不显手型，解锁态 hover
+   下划线提示可点 */
+.bld-docs-stages .bld-stage-fin {
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; color: inherit; cursor: pointer;
+}
+.bld-docs-stages .bld-stage-fin[aria-disabled="true"] { cursor: default; }
+.bld-docs-stages .bld-stage-fin:not([aria-disabled="true"]):hover { text-decoration: underline; }
 /* BUG-20260921-013 文件区域语言页签：每语言一个页签（复用 .rel-tabs/.rel-tab，含窄屏
    flex-wrap 换行不横向溢出）；审核计数角标弱化呈现（全审绿色强调），运行中 ◐ 角标提示
    非激活页签的 AI 当前文件（不自动切换页签） */

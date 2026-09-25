@@ -2344,7 +2344,7 @@ const ATBBuild = (() => {
       } else if ((flowEval.baselineShift || []).length) {
         toast(`尚不可提交：默认语言文档已更新（基准变更），${flowEval.baselineShift.length} 个翻译文档需重新 AI 翻译并审核`, true);
       } else {
-        toast('尚不可提交：整体审查未完结（全部文件已审核后，请先「整体审查」确认完结）', true);
+        toast('尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）', true);
       }
       return;
     }
@@ -3107,13 +3107,14 @@ const ATBBuild = (() => {
   }
 
   // REQ-20260921-012 文档编写步三阶段视图：阶段条（① 默认语言先行 → ② AI 翻译与审查 →
-  // ③ 整体审查完结）+ 六按钮（刷新 / AI 总结 / AI 翻译 / 审查 / 整体审查 / 提交）+ 按语言
-  // 页签的文件七态列表（BUG-20260921-013：每语言一个页签，替代平铺单列分组标题行）+
-  // 门禁条（编辑收敛进审查对话框）。在 REQ-20260921-008 三段布局与 REQ-20260921-010
-  // 语言集动态清单（4 类 × N）之上落位。
-  // - 刷新 / AI 总结 / 审查三按钮恒可用（数据加载失败给错误反馈而非隐藏按钮）；
+  // ③ 整体审查完结）+ 一行操作条（BUG-20260926-001：语言集 + 刷新 / 审查 + 五步
+  // ① AI 总结 / ② 二次编辑 / ③ AI 校对 / ④ AI 翻译 / ⑤ 提交 同一水平行；「整体审查」独立
+  // 按钮移除，完结入口落阶段条 ③）+ 按语言页签的文件七态列表（BUG-20260921-013：每语言一个
+  // 页签，替代平铺单列分组标题行）+ 门禁条（编辑收敛进审查对话框）。在 REQ-20260921-008
+  // 三段布局与 REQ-20260921-010 语言集动态清单（4 类 × N）之上落位。
+  // - 刷新 / 审查按钮恒可用（数据加载失败给错误反馈而非隐藏按钮）；
   // - AI 翻译在默认语言 4/4 已审核前禁用（aria-disabled + title 列默认语言缺口，模式同
-  //   BUG-20260920-006）；整体审查在语言集内全部文件已审核前禁用；提交需「全部已审核 +
+  //   BUG-20260920-006）；整体审查完结入口在语言集内全部文件已审核前禁用；提交需「全部已审核 +
   //   整体审查已完结」（在原「全部已审核」门禁之上叠加完结条件，不弱化）；
   // - 文件名是标识不是文案：一律 data-i18n-skip（BUG-20260921-004 口径，防反向词典误译）。
   function renderDocsPane(v) {
@@ -3131,43 +3132,46 @@ const ATBBuild = (() => {
               ${pf.langsBusy ? '<span class="muted small" role="status">保存中…</span>' : ''}
               ${pf.langsErr ? `<p class="rel-form-err small bld-docs-langset-err" role="alert">${esc(pf.langsErr)}</p>` : ''}
             </div>`;
-    // 六按钮恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。REQ-20260924-006：
-    // 主操作迁入五步条（① 总结 ② 二次编辑 ③ 校对 ④ 翻译 ⑤ 提交），本行保留辅助动作
-    // 刷新 / 审查 / 整体审查（既有入口与门禁不移除——边界第 1 条）。
+    // 辅助动作恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。BUG-20260926-001：
+    // 「整体审查」独立按钮移除——完结核对对话框入口落阶段条「③ 整体审查完结」（见
+    // docsStageBar），本行保留辅助动作 刷新 / 审查；REQ-20260924-006 边界第 1 条对整体审查
+    // 按钮的保留要求由本单取代，其门禁与对话框能力不变。
     const actionsHtml = `
           <div class="bld-docs-actions">
             <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
             <button type="button" class="btn small" data-pf-review title="打开审查对话框：按文档类型页签（四类 + LICENSE + 自定义）、全语言栏同步滚动对比，逐文件通过审核（只读核对，编辑走「② 二次编辑」）">审查</button>
-            ${finalizeBtnHtml(pf)}
           </div>`;
-    // REQ-20260924-006 五步操作条（主流程顺序入口；状态就地呈现，加载 / 失败态恒渲染——
-    // 数据钩子与六按钮口径一致）：① AI 总结（复制提示词不代表编写完成，进度经回执回显）
-    // ② 二次编辑（默认语言单语言弹窗）③ AI 校对（右侧建议栏逐条处理）④ AI 翻译（处理完
-    // 建议并保存的最新默认语言为基准）⑤ 提交（集中展示清单与缺口）。proofStepText 用可选链
-    // 计算（plan 未就绪时回落静态文案，不触碰新助手函数——旧提取口径兼容）。
+    // BUG-20260926-001 五步操作并入顶部单行（主流程顺序入口；状态就地呈现，加载 / 失败态
+    // 恒渲染——数据钩子与辅助动作口径一致；「五步：」标签保留）：① AI 总结（复制提示词不
+    // 代表编写完成，进度经回执回显）② 二次编辑（默认语言单语言弹窗）③ AI 校对（右侧建议栏
+    // 逐条处理）④ AI 翻译（处理完建议并保存的最新默认语言为基准）⑤ 提交（集中展示清单与
+    // 缺口）。proofStepText 用可选链计算（plan 未就绪时回落静态文案，不触碰新助手函数——
+    // 旧提取口径兼容）。
     const proofRun = pf?.plan?.docsCheck || null;
     const proofStepText = proofRun && proofRun.phase === 'running'
       ? `③ 校对中 ${(proofRun.counts?.pass || 0) + (proofRun.counts?.fail || 0)}/${proofRun.counts?.total || 0}`
       : '③ AI 校对';
     const stepsBarHtml = `
-        <nav class="bld-docs-steps" role="group" aria-label="文档编写五步操作">
-          <span class="muted small">五步：</span>
-          <button type="button" class="btn small" data-pf-summary${pf.busy ? ' disabled' : ''} title="① 复制 AI 总结提示词：依据本版关联需求与实际变更编写默认语言初稿（任务完成后逐文件回显；复制提示词本身不代表编写完成）">${pf?.plan?.summary?.phase === 'running' ? `① 总结中 ${(pf.plan.summary.counts?.summarized || 0)}/${pf.plan.summary.counts?.total || 0}` : '① AI 总结'}</button>
-          <button type="button" class="btn small" data-pf-edit${pf.phase === 'ready' ? '' : ' disabled'} title="② 打开默认语言文档编辑弹窗：文件切换 / 刷新 / 编辑 / 预览 / 保存（只显示默认语言，不含其他语种对照列；其余语言由 ④ AI 翻译产出）">② 二次编辑</button>
-          <button type="button" class="btn small" data-pf-proofstep${pf.proofBusy ? ' disabled' : ''} title="③ 复制 AI 校对提示词：核查默认语言文档的超链接有效性、错别字、语法与行文规范；无法验证的链接标待确认；结果逐文件显示在右侧建议栏，逐条接受或拒绝">${proofStepText}</button>
-          ${translateBtnHtml(pf)}
-          ${commitBtnHtml(pf)}
-        </nav>`;
+          <nav class="bld-docs-steps" role="group" aria-label="文档编写五步操作">
+            <span class="muted small">五步：</span>
+            <button type="button" class="btn small" data-pf-summary${pf.busy ? ' disabled' : ''} title="① 复制 AI 总结提示词：依据本版关联需求与实际变更编写默认语言初稿（任务完成后逐文件回显；复制提示词本身不代表编写完成）">${pf?.plan?.summary?.phase === 'running' ? `① 总结中 ${(pf.plan.summary.counts?.summarized || 0)}/${pf.plan.summary.counts?.total || 0}` : '① AI 总结'}</button>
+            <button type="button" class="btn small" data-pf-edit${pf.phase === 'ready' ? '' : ' disabled'} title="② 打开默认语言文档编辑弹窗：文件切换 / 刷新 / 编辑 / 预览 / 保存（只显示默认语言，不含其他语种对照列；其余语言由 ④ AI 翻译产出）">② 二次编辑</button>
+            <button type="button" class="btn small" data-pf-proofstep${pf.proofBusy ? ' disabled' : ''} title="③ 复制 AI 校对提示词：核查默认语言文档的超链接有效性、错别字、语法与行文规范；无法验证的链接标待确认；结果逐文件显示在右侧建议栏，逐条接受或拒绝">${proofStepText}</button>
+            ${translateBtnHtml(pf)}
+            ${commitBtnHtml(pf)}
+          </nav>`;
     // BUG-20260921-017：删「文档编写 · 三阶段」标题与副标题教学式文案（信息由页签 / 阶段条 /
-    // 门禁条 / 按钮 title 缺口提示承载），语言集簇与六按钮合并同一水平行，窄屏 flex-wrap 换行。
+    // 门禁条 / 按钮 title 缺口提示承载）；BUG-20260926-001：语言集簇、辅助动作与五步按钮
+    // 合并同一水平行（一行操作条），窄屏 flex-wrap 换行，不再保留单独的五步操作行。
     const subBar = `
         <div class="bld-docs-sub">
 ${langsField}
           ${actionsHtml}
+          ${stepsBarHtml}
         </div>`;
-    if (pf.phase === 'loading') return `<div class="bld-docs-pane">${subBar}${stepsBarHtml}<p class="muted" role="status">正在加载发布流程数据…</p></div>`;
+    if (pf.phase === 'loading') return `<div class="bld-docs-pane">${subBar}<p class="muted" role="status">正在加载发布流程数据…</p></div>`;
     if (pf.phase === 'error' || !pf.plan) {
-      return `<div class="bld-docs-pane">${subBar}${stepsBarHtml}
+      return `<div class="bld-docs-pane">${subBar}
         <p class="rel-form-err" role="alert">发布流程数据读取失败：${esc(pf.error || '未知原因')}</p>
         <p><button type="button" class="btn small" data-pf-retry>重试</button></p></div>`;
     }
@@ -3391,7 +3395,6 @@ ${langsField}
     return `
       <div class="bld-docs-pane">
         ${subBar}
-        ${stepsBarHtml}
         ${stagesHtml}
         ${promptBox}
         ${tPromptBox}
@@ -3452,12 +3455,23 @@ ${langsField}
   // 阶段条（三阶段推进视图）：① 默认语言先行（默认语言 4/4 已审核完成）→ ② AI 翻译与审查
   //（剩余语言全部已审核完成；无剩余语言视为完成）→ ③ 整体审查完结（人工确认完结完成）。
   // 各阶段 ✔ 已完成 / ● 进行中 / ○ 未解锁（chip 三重区分）。
+  // BUG-20260926-001 完结入口落阶段条：③ 整体审查完结 为可点击按钮（替代第一行独立
+  // 「整体审查」按钮）——保留 data-pf-finalize 既有绑定与 openFinalize 守卫（未就绪 /
+  // 未解锁点击 toast 缺口，不静默）；未解锁 aria-disabled + title 列缺口明细（模式同
+  // BUG-20260920-006）；解锁 title 为完结核对说明；完结后 title 为重新核对再确认（更新
+  // 完结时间，能力不回退）。① ② 阶段保持纯展示。
   function docsStageBar(flowEval) {
     const defTotal = flowEval.defaultFiles.length;
     const restTotal = flowEval.restFiles.length;
     const defDone = defTotal > 0 && flowEval.defaultReviewedCount === defTotal;
     const restDone = restTotal === 0 || flowEval.restReviewedCount === restTotal;
     const finDone = !!flowEval.finalized;
+    const finCan = flowEval.canFinalize === true;
+    const finReason = finCan
+      ? (finDone
+        ? '整体审查已完结；点击可重新核对新再次确认（更新完结时间）'
+        : '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁')
+      : `整体审查未解锁：尚缺 ${(flowEval.missing || []).length} 个文件审核（${(flowEval.missing || []).map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`;
     const mark = (done, active) => (done
       ? '<span class="st st-ok"><i class="st-ico" aria-hidden="true">✔</i>已完成</span>'
       : active
@@ -3468,7 +3482,7 @@ ${langsField}
           <span class="muted small">阶段：</span>
           <span class="bld-stage">① 默认语言先行 ${mark(defDone, true)}</span><span class="muted small" aria-hidden="true">──</span>
           <span class="bld-stage">② AI 翻译与审查 ${mark(restDone, defDone && !restDone)}</span><span class="muted small" aria-hidden="true">──</span>
-          <span class="bld-stage">③ 整体审查完结 ${mark(finDone, defDone && restDone && !finDone)}</span>
+          <button type="button" class="bld-stage bld-stage-fin" data-pf-finalize${finCan ? '' : ' aria-disabled="true"'} title="${esc(finReason)}">③ 整体审查完结 ${mark(finDone, defDone && restDone && !finDone)}</button>
         </div>`;
   }
 
@@ -3512,23 +3526,10 @@ ${langsField}
     return `<button type="button" class="btn small" data-pf-translate${can ? '' : ' aria-disabled="true"'} title="${esc(reason)}">④ ${translateBtnText(pf)}</button>`;
   }
 
-  // 整体审查按钮：语言集内全部文件（4×N）已审核前禁用（title 列缺口）；完结后可重新核对
-  // 再确认（再次确认只更新完结时间，门禁口径不变）。
-  function finalizeBtnHtml(pf) {
-    if (!pf?.plan) return '<button type="button" class="btn small" data-pf-finalize aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">整体审查</button>';
-    const flowEval = normalizeFlowEval(pf.plan);
-    const can = flowEval.canFinalize === true;
-    const reason = can
-      ? (flowEval.finalized
-        ? '整体审查已完结；点击可重新核对新再次确认（更新完结时间）'
-        : '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁')
-      : `整体审查未解锁：尚缺 ${(flowEval.missing || []).length} 个文件审核（${(flowEval.missing || []).map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`;
-    return `<button type="button" class="btn small${can ? ' primary' : ''}" data-pf-finalize${can ? '' : ' aria-disabled="true"'} title="${esc(reason)}">整体审查</button>`;
-  }
-
   // 提交按钮（⑤ 步）：需「全部文件已审核 + 整体审查已完结」（canCommit 含完结条件，在原门禁
   // 之上叠加、不弱化；aria-disabled：HTML disabled 不派发 click，点击由 commitDocs 守卫 toast
   // 真实缺口）；已提交 / 提交中 / 可提交三态文案；数据未就绪（加载 / 失败态）给明确 title。
+  // BUG-20260926-001：完结缺口文案指向阶段条新入口（「整体审查」独立按钮已移除）。
   function commitBtnHtml(pf) {
     if (!pf?.plan) return '<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">⑤ 提交</button>';
     const flowEval = normalizeFlowEval(pf.plan);
@@ -3541,7 +3542,7 @@ ${langsField}
       ? '把语言集内文档与 LICENSE.md 提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
       : missing.length
         ? `还需 ${missing.length} 个文件通过审查：${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}`
-        : '整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交';
+        : '整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交';
     return `<button type="button" class="btn small primary" data-pf-commit${ok ? '' : ' aria-disabled="true"'} title="${esc(reason)}">⑤ 提交</button>`;
   }
 
