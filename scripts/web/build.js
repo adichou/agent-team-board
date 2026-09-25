@@ -3896,7 +3896,8 @@ ${langsField}
   }
 
   // 定位突出建议行（弹窗内容加载完成后一次性消费 pendingFocus）：选区该行首尾 + 聚焦 +
-  // 滚动定位（口径同 focusReviewIssue，目标为单语言编辑框）。
+  // 滚动定位 + 短暂描边闪烁（BUG-20260925-005：补齐落点闪烁，口径与 focusReviewIssue 完全
+  // 一致，目标为单语言编辑框）；行号缺失 / 空内容保持既有兜底（仅编辑态，不定位不报错）。
   function focusEditIssue() {
     const pf = state.pf;
     const target = pf?.edit?.pendingFocus;
@@ -3914,6 +3915,8 @@ ${langsField}
     box.setSelectionRange(start, start + lines[idx].length);
     const lh = parseFloat(getComputedStyle(box).lineHeight) || 20;
     box.scrollTop = Math.max(0, (idx + 0.5) * lh - (box.clientHeight || 0) / 2);
+    box.classList.add('bld-review-focus-flash');
+    setTimeout(() => { box.classList?.remove('bld-review-focus-flash'); }, 2000);
   }
 
   // 切换 / 刷新 / 关闭的未保存保护入口：有未保存修改先进挂起态（弹窗内联三动作：
@@ -5347,6 +5350,15 @@ ${langsField}
     editWrap?.addEventListener('click', (e) => {
       if (e.target?.id === 'bldEditWrap' && !state.pf?.edit?.busy) requestEditClose();
     });
+    // BUG-20260925-005 二次编辑预览富媒体增强：与审查对话框（BUG-20260923-002）逐字同口径
+    // ——仓库相对路径图片改写 /api/fs/raw 白名单端点（project 绑定当前项目，越权 / 超限 /
+    // 不存在由端点拒绝 → 前端占位提示）+ mermaid 渲染 / plantuml 降级（md-rich 共享层，
+    // 可选链调用：模块或图表库缺失均静默降级不白屏；render 重建后随 bindCommon 重跑）。
+    if (editWrap) {
+      for (const el of editWrap.querySelectorAll('.bld-review-preview.md')) {
+        window.ATBMdRich?.enhance(el, { imgBase: state.project ? (raw) => `/api/fs/raw?path=${encodeURIComponent(raw)}&project=${encodeURIComponent(state.project)}` : null });
+      }
+    }
     q('[data-pf-finalize-close]')?.addEventListener('click', closeFinalize);
     q('[data-pf-finalize-cancel]')?.addEventListener('click', closeFinalize);
     q('[data-pf-finalize-confirm]')?.addEventListener('click', confirmFinalize);

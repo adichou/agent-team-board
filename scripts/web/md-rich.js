@@ -2,7 +2,8 @@
 // BUG-20260923-002 Markdown 预览富媒体增强层（图片相对路径改写 + mermaid 渲染 + plantuml 降级）。
 // 设计：renderMd / sanitizeHtml 四处逐字同口径实现保持零改动，本模块在富文本容器渲染完成后
 // 做 DOM 后置增强——与 app.js linkupDocImages（REQ-20260909-009 条目文档截图接管）同构先例。
-// 宿主（build.js 审查对话框 / app.js 文件面板与条目文档 / req-disc.js / oncall.js）渲染后调用
+// 宿主（build.js 审查对话框与二次编辑弹窗（BUG-20260925-005）/ app.js 文件面板与条目文档 /
+// req-disc.js / oncall.js）渲染后调用
 // ATBMdRich.enhance(container, opts)，可选链调用：模块缺失或图表库缺失均静默降级，不白屏。
 // - 图片：相对 src（无协议、非 / # 开头）经 opts.imgBase(raw) → 端点 URL 改写（./ 前缀先归一）；
 //   所有图片挂 error 就地占位（含路径与原因），不渲染裸裂图；协议 / 根相对 / 锚点不改写。

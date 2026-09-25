@@ -3849,7 +3849,15 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-edit-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 16px 0; }
 .bld-edit-bar select { font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel, #fff); color: inherit; max-width: 260px; }
 .bld-edit-body { padding: 10px 16px; overflow-y: auto; min-height: 260px; }
-.bld-edit-body .bld-edit-editor { width: 100%; font: inherit; line-height: 1.7; }
+/* BUG-20260925-005 编辑框等宽与审查编辑框同口径（Markdown 源码表格 / 缩进对齐观感一致） */
+.bld-edit-body .bld-edit-editor { width: 100%; font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace; }
+/* BUG-20260925-005 预览排版与审查界面同口径：去 .md 外框（无边框 / 圆角 / 底色，滚动主体
+   仍为 .bld-edit-body）、13px/1.7，围栏代码等宽收敛换行（对齐 .bld-review-col-body 口径） */
+.bld-edit-body .bld-review-preview { margin: 0; border: none; border-radius: 0; padding: 0; background: transparent; font-size: 13px; line-height: 1.7; }
+.bld-edit-body .bld-review-preview pre {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
+}
 .bld-edit-unsaved { margin: 0 16px 6px; color: var(--inprogress); }
 .bld-edit-pending { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 16px 8px; padding: 8px 10px; border: 1px dashed var(--inprogress); border-radius: 8px; }
 /* 文件列表（4 类 × 语言集语言数）：文件名等宽、右侧状态 chip（图标独立元素 i.st-ico，保证状态文字整节点可翻译） */
@@ -3956,8 +3964,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-finalize-issue-no { flex: none; min-width: 1.2em; text-align: center; }
 .bld-finalize-issue-text { flex: 1 1 auto; min-width: 0; word-break: break-word; }
 .bld-finalize-issue .btn { flex: none; }
-/* 审查编辑器定位落点短暂描边（focusReviewIssue 2 秒后移除） */
-.bld-review-editor.bld-review-focus-flash { animation: bldReviewFocusFlash 0.6s ease-in-out 3; }
+/* 审查编辑器定位落点短暂描边（focusReviewIssue 2 秒后移除）；
+   BUG-20260925-005 二次编辑弹窗 focusEditIssue 同口径复用（含 keyframes） */
+.bld-review-editor.bld-review-focus-flash, .bld-edit-editor.bld-review-focus-flash { animation: bldReviewFocusFlash 0.6s ease-in-out 3; }
 @keyframes bldReviewFocusFlash {
   0%, 100% { box-shadow: none; }
   50% { box-shadow: 0 0 0 2px var(--accent, #2563eb); }
