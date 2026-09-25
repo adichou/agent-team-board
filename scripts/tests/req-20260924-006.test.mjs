@@ -416,6 +416,10 @@ function behaviorCtx({ plan, fetchImpl } = {}) {
     toast: (m, e) => calls.toast.push([m, e]),
     render: () => { calls.renders += 1; },
     ensurePublishPlan: async () => {},
+    // BUG-20260925-004：closeEditDialog 关闭改为摘弹窗元素 + 后台静默同步（不再强制
+    // ensurePublishPlan），沙箱补两个新协作桩（无 DOM / 静默同步空转）
+    $: () => null,
+    syncDocsPlanSilently: async () => {},
     fetch: async (url, opts) => fetchImpl(url, opts, calls),
     copyText: async () => true,
     esc: ESC,
