@@ -1561,6 +1561,8 @@ const EN_CLI = {
   '当前版本没有默认语言文档可校对。': 'No default-language documents to proofread for this version.',
   '该文件未发现问题 ✓（校对基准为回执时点磁盘内容）': 'No issues found in this file ✓ (checked against the on-disk content at receipt time)',
   '重试 AI 校对': 'Retry AI proofread',
+  // BUG-20260925-004 文档编写窗格后台静默同步失败轻量横幅（重试按钮；横幅句见 EN_DYNAMIC）
+  '重试同步': 'Retry sync',
   '重新复制 AI 校对提示词并派发核查（新一轮 run 覆盖旧结论）': 'Copy the AI proofread prompt again and dispatch the check (a new run overrides previous conclusions)',
   '过期': 'Stale',
   '待确认': 'To verify',
@@ -1656,6 +1658,8 @@ const EN_DYNAMIC = {
   '✕ 接受失败：◇（文档未修改，可重试）': '✕ Accept failed: $1 (document unchanged, retry available)',
   '✓ 已保存 ◇（未提交：需审核通过并「提交」后进入本地 dev）': '✓ Saved $1 (not committed: approve in review, then "Commit" to land on local dev)',
   '✕ 保存失败：◇（内容已保留在编辑框中，可重试）': '✕ Save failed: $1 (content kept in the editor, retry available)',
+  // BUG-20260925-004 后台静默同步失败横幅（◇ = 错误信息，为数据不译）：保留现有内容的口径说明
+  '后台同步失败：◇——当前内容保持不变，可重试或点「刷新」全量更新': 'Background sync failed: $1 — current content is unchanged; retry, or use "Refresh" for a full reload',
   '基准已更新：◇ 个翻译文档将按最新基准重新翻译': 'Baseline updated: $1 translated doc(s) will be re-translated against the latest baseline',
   'AI 翻译 · ◇ · 执行 ◇ · 创建 ◇': 'AI translation · $1 · run $2 · created $3',
   '中断时间 ◇ · 执行会话 ◇ · 锁已释放（translate）。': 'Interrupted at $1 · executing session $2 · lock released (translate).',

@@ -1653,6 +1653,9 @@ const ATBBuild = (() => {
       // 服务端返回的跳过清单（{ commit, subject, reason }[]），就地在隔离分析节内展示原因
       depBusy: false,
       depSkip: null,
+      // BUG-20260925-004 关闭编辑界面后的后台静默同步失败信息（轻量横幅 + 重试入口的
+      // 数据；成功同步 / 常规强刷成功清空，窗格内容与 phase 不受失败影响）
+      syncErr: null,
     };
   }
 
@@ -1678,6 +1681,7 @@ const ATBBuild = (() => {
       if (state.pf !== pf || pf.seq !== seq) return;
       pf.plan = data;
       pf.phase = 'ready';
+      pf.syncErr = null; // BUG-20260925-004：常规加载成功即撤后台同步失败横幅
       seedChkDecisions(pf); // BUG-20260925-002：决断从服务端账本重播种（刷新 / 切版本重进不丢）
     } catch (e) {
       if (state.pf !== pf || pf.seq !== seq) return;
@@ -1686,6 +1690,52 @@ const ATBBuild = (() => {
       pf.error = e.message;
     }
     render();
+  }
+
+  // BUG-20260925-004 关闭编辑界面（审查对话框 / ② 二次编辑弹窗）后的重渲染保持 #buildView
+  //（.build-view 滚动容器）滚动位置：render() 为全量 innerHTML 重建（BUG-20260925-001 注释
+  // 已佐证），替换瞬间滚动高度塌陷 scrollTop 归零；窗格内文件列表随整页滚动（bld-docs-list
+  // 自身不滚），重建前记忆、重建后恢复即可不回顶。
+  function renderPreservingDocsScroll() {
+    const view = $('#buildView');
+    const top = view ? view.scrollTop : null;
+    render();
+    if (view && typeof top === 'number' && top > 0) {
+      try { view.scrollTop = top; } catch { /* 测试沙箱滚动容器不可写：忽略 */ }
+    }
+  }
+
+  // BUG-20260925-004 关闭编辑界面后的后台静默同步（替代原关闭路径的 ensurePublishPlan(true)
+  // 强刷——先置 phase=loading 再整块重建导致「关闭 = 整页刷新」闪烁与滚动丢失）。口径：
+  // - 未就绪 / 无数据回落常规 ensurePublishPlan(true)（首次进入仍走既有加载占位）；
+  // - 成功：数据有变化才保持滚动重绘（状态徽标 / 门禁 / 计数随新数据更新），无变化不重绘；
+  // - 失败：保留现有内容（plan / phase 不动，不进整页 error 态），pf.syncErr 轻量横幅 +
+  //   重试入口；迟到响应按闭包身份 + seq 丢弃（与 ensurePublishPlan 同口径）。
+  async function syncDocsPlanSilently() {
+    const v = selVersion();
+    if (!v || !state.project) return;
+    const pf = pfOf(v);
+    if (!pf) return;
+    if (pf.phase !== 'ready' || !pf.plan) { await ensurePublishPlan(true); return; }
+    const seq = ++pf.seq;
+    try {
+      const r = await fetch(`/api/build/publish-plan?project=${encodeURIComponent(state.project)}&id=${encodeURIComponent(v.id)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
+      if (state.pf !== pf || pf.seq !== seq) return;
+      if (JSON.stringify(pf.plan) === JSON.stringify(data)) {
+        if (pf.syncErr) { pf.syncErr = null; renderPreservingDocsScroll(); } // 仅撤失败横幅，内容不动
+        return;
+      }
+      pf.plan = data;
+      pf.syncErr = null;
+      seedChkDecisions(pf); // 数据替换后决断重播种（BUG-20260925-002 口径不回归）
+      renderPreservingDocsScroll();
+    } catch (e) {
+      if (state.pf !== pf || pf.seq !== seq) return;
+      pf.syncErr = e.message; // 轻量提示（renderDocsPane 横幅 + 重试），内容与 phase 保持
+      renderPreservingDocsScroll();
+    }
   }
 
   // REQ-20260921-008「刷新」：重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新）；
@@ -2185,8 +2235,11 @@ const ATBBuild = (() => {
     if (!pf?.review) return;
     syncReviewDrafts();
     pf.review = null;
-    render();
-    ensurePublishPlan(true); // 关闭后同步最新四态与门禁
+    // BUG-20260925-004：关闭是轻量本地操作——只摘对话框元素，窗格 DOM 不整块重建
+    //（原关闭即强制刷新：先置 loading 占位再整块重建，导致闪烁与滚动 / 页签丢失）；
+    // 最新四态与门禁由后台静默同步按需更新。
+    $('#bldReviewWrap')?.remove();
+    syncDocsPlanSilently();
   }
 
   // 切换类型页签：先回同步当前栏草稿（防丢字），再读目标页签两文件内容
@@ -3273,6 +3326,11 @@ ${langsField}
     const baselineNote = (flowEval.baselineShift || []).length
       ? `<p class="rel-form-err" role="alert">默认语言文档已更新：${flowEval.baselineShift.length} 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）：<code data-i18n-skip>${esc(flowEval.baselineShift.join('、'))}</code>；若整体审查已完结则已失效回退。</p>`
       : '';
+    // BUG-20260925-004 后台静默同步失败轻量横幅：保留现有内容（不进整页 error 态），
+    // 仅提示 + 重试入口；成功同步 / 常规刷新后随 syncErr 清空消失。
+    const syncErrNote = pf.syncErr
+      ? `<div class="bld-docs-sync-err" role="alert"><span>后台同步失败：${esc(pf.syncErr)}——当前内容保持不变，可重试或点「刷新」全量更新</span><button type="button" class="btn small" data-pf-sync-retry>重试同步</button></div>`
+      : '';
     // 完结终态标识（整体审查确认完结后呈现，与门禁条同屏）
     const finalizedNote = flowEval.finalized
       ? `<p class="small" role="status">整体审查已完结 ✓（时间 ${fmtTime(flowEval.finalized.at)}；提交已解锁）</p>`
@@ -3422,6 +3480,7 @@ ${langsField}
         ${sumInfo}
         ${trInfo}
         ${baselineNote}
+        ${syncErrNote}
         <div class="bld-docs-main">
         <section class="bld-docs-files" aria-label="发布文档文件列表">
           <div class="bld-docs-files-head"><span>文件（${total} · 默认语言 ${flowEval.defaultReviewedCount}/${defTotal} 已审核 · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核）</span><span class="bld-docs-head-right"><span>状态</span><button type="button" class="btn small primary" data-doc-add-open${pf.phase === 'ready' ? '' : ' disabled'} title="添加一份自定义发布文档（可添加多份；添加一次即随语言集自动展开全部语言文件；命名字母开头，字母 / 数字 / 连字符 / 下划线，.md 后缀可省略）">＋ 添加文档</button></span></div>
@@ -3831,7 +3890,9 @@ ${langsField}
       if (state.pf !== pf || !pf.edit?.open || pf.edit.file !== file) return;
       pf.edit.loadErr = e.message; // content/disk 保持：读取失败不覆盖已有输入
     }
-    if (state.pf === pf) render();
+    // BUG-20260925-004：渲染只服务弹窗内容落点——弹窗已关（关闭动作与读取竞态）不再
+    // 重渲染窗格（避免「随即关闭」仍触发整块重建与滚动回顶）。
+    if (state.pf === pf && pf.edit?.open) render();
   }
 
   // 定位突出建议行（弹窗内容加载完成后一次性消费 pendingFocus）：选区该行首尾 + 聚焦 +
@@ -3907,8 +3968,10 @@ ${langsField}
     const pf = state.pf;
     if (!pf?.edit?.open) return;
     pf.edit = null;
-    render();
-    ensurePublishPlan(true); // 关闭后同步最新四态与门禁
+    // BUG-20260925-004：同 closeReview——只摘弹窗元素不整块重建窗格，最新四态与门禁由
+    // 后台静默同步按需更新（不进 loading 占位、不回顶）。
+    $('#bldEditWrap')?.remove();
+    syncDocsPlanSilently();
   }
 
   // 挂起动作裁决：cancel 留在当前文件；discard 放弃草稿执行挂起动作；save 先保存（成功才
@@ -5224,6 +5287,8 @@ ${langsField}
       });
     }
     q('[data-pf-refresh]')?.addEventListener('click', refreshDocsPane);
+    // BUG-20260925-004 后台静默同步失败横幅的重试入口（轻量重试，不清窗格）
+    q('[data-pf-sync-retry]')?.addEventListener('click', () => syncDocsPlanSilently());
     q('[data-pf-summary]')?.addEventListener('click', startSummary);
     q('[data-pf-translate]')?.addEventListener('click', startTranslation);
     q('[data-pf-review]')?.addEventListener('click', () => openReview()); // REQ-20260924-004：无参调用保持现状（防事件对象被误作跳转目标）
