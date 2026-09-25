@@ -501,7 +501,8 @@ const EN = {
   '待开发': 'To develop',
   '待核对': 'Needs review',
   '待检测': 'To check',
-  '待确认': 'To confirm',
+  // 「待确认」唯一定义在下方 EN_CLI（'To verify'——校对建议状态 chip 语义，REQ-20260924-006；
+  // BUG-20260925-003 收口：此处旧值 'To confirm' 无独立渲染点，删除消除双定义歧义）
   '快捷键': 'Shortcuts',
   '快捷键 ?': 'Shortcuts ?',
   '快捷键 ←': 'shortcut ←',
@@ -1431,14 +1432,15 @@ const EN = {
 // 命令注册表词条（REQ-20260920-004，scripts/lib/cli-registry.mjs 数据：分组名 / 说明 / 参数
 // 标签 / 占位提示 / 常用选项）。CLI help 原文语义客观含 atb batch 命令组的组名词汇，
 // 与「UI 无排队概念」断言（realtime-round RT-09）隔离成独立块；分组名沿用既有 'AI 开发' /
-// 'AI 分析' 词条不重复定义。组装时并入 EN（t() 单一查表口径不变）。
+// 'AI 分析' 词条不重复定义（「人工决策」「挂起确认」「重试读取」同口径沿用主 EN 既有
+// 词条，BUG-20260925-003 删除本块内的重复定义）。组装：紧随本块的 Object.assign 把
+// 词条并入 EN——t() / ZH_EXACT 与 _dict.EN 同一查表口径（BUG-20260925-003：此前仅并入
+// _dict.EN 测试口径，运行时 t() 查不到，英文界面漏译）。
 const EN_CLI = {
 
   '数据与分发': 'Data & distribution',
   '条目生命周期': 'Item lifecycle',
   '执行回执': 'Run receipts',
-  '人工决策': 'Manual decisions',
-  '挂起确认': 'Pending confirmations',
   '发布文档 AI 总结': 'Release-docs AI summary',
   '发布文档 AI 翻译': 'Release-docs AI translation',
   '启动一轮 AI 翻译（默认语言 4/4 已审核才可启动；独立锁 translate，与总结 / 分析 / 开发互不占用）': 'Start a round of AI translating (requires the default language to be 4/4 approved; independent lock translate, never conflicting with summary / analysis / development)',
@@ -1584,7 +1586,6 @@ const EN_CLI = {
   '保存并继续': 'Save & continue',
   '放弃修改并继续': 'Discard & continue',
   '留在本文件': 'Stay on this file',
-  '重试读取': 'Retry read',
   '读取失败：内容尚未加载（可重试读取）': 'Read failed: content not loaded yet (retry available)',
   '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）': 'Saved ✓ (not committed: approve in review, then "Commit" to land on local dev; default-language changes invalidate the translation baseline)',
   '默认语言初稿编辑（其余语言由「④ AI 翻译」产出）': 'Edit the default-language draft (other languages come from "④ AI translation")',
@@ -1596,6 +1597,12 @@ const EN_CLI = {
   '发布流程数据未就绪：请先刷新或重试后再编辑': 'Publish flow data not ready: refresh or retry before editing',
   '当前版本没有默认语言文档可编辑': 'No default-language documents to edit for this version',
 };
+
+// BUG-20260925-003：EN_CLI 组装并入 EN——运行时 t() 与反向词典 ZH_EXACT 同用并入后的
+// 词典，_dict.EN 直接引用 EN（测试口径 = 运行时口径，不再分叉）。必须位于 ZH_EXACT
+// 构建之前，否则反向词典缺 EN_CLI 词条（en→zh 切换留英文残段）。键唯一性由
+// i18n-dict D1c/D1e 在并入后的词典上把关。
+Object.assign(EN, EN_CLI);
 
 // ---------- 英文词典（动态：键中 ◇ = 插值占位，编译为 ^…(.+?)…$ 锚定正则） ----------
 const EN_DYNAMIC = {
@@ -2353,7 +2360,9 @@ function init() {
 
 const ATBI18N = {
   detect, initLang, getLang, langSource, setLang, t, translateTree, applyLang, init,
-  _dict: { EN: { ...EN, ...EN_CLI }, EN_DYNAMIC, ALLOWLIST },
+  // BUG-20260925-003：EN 已在上方 Object.assign 并入 EN_CLI——测试导出直接引用运行时
+  // 同一对象，杜绝「测试查合并副本、运行时查主词典」的分叉再次漏检。
+  _dict: { EN, EN_DYNAMIC, ALLOWLIST },
 };
 
 if (typeof window !== 'undefined') window.ATBI18N = ATBI18N;
