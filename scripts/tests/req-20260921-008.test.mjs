@@ -513,7 +513,7 @@ t('L4-2 提交按钮门禁与失败态：aria-disabled + title 缺口；加载�
   assert.ok(failed.includes('重试'), '失败态提供重试');
 });
 
-t('L4-3 审查对话框：四类型页签 × 中英双栏 / 编辑预览 / 保存 / 通过审核 / 同步滚动绑定', () => {
+t('L4-3 审查对话框：四类型页签 × 中英双栏 / 只读预览（BUG-20260925-006 移除编辑保存）/ 通过审核 / 同步滚动绑定', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   // REQ-20260921-011：预览态改 Markdown 富文本渲染，renderReviewModal 新依赖 renderMd /
   // sanitizeHtml 一并提取（本 vm 上下文无 window，renderMd 自动落入源码回退分支，断言口径不变）
@@ -526,7 +526,7 @@ t('L4-3 审查对话框：四类型页签 × 中英双栏 / 编辑预览 / 保�
     }, `renderReviewModal({
     id: 'BLD-20260921-001',
     pf: {
-      review: { open: true, key: 'README', modes: { 'README.md': 'preview', 'README_en.md': 'edit' },
+      review: { open: true, key: 'README',
         contents: { 'README.md': '# 中', 'README_en.md': '# EN' } },
       plan: { docsFlow: { files: [
         { key: 'README', lang: 'cn', file: 'README.md', state: 'reviewed' }, { key: 'README', lang: 'en', file: 'README_en.md', state: 'unsummarized' },
@@ -538,8 +538,8 @@ t('L4-3 审查对话框：四类型页签 × 中英双栏 / 编辑预览 / 保�
     assert.ok(html.includes(`data-review-tab="${k}"`), `类型页签 ${k}`);
   }
   assert.ok(html.includes('README.md') && html.includes('README_en.md'), '页签内中英双栏');
-  assert.ok(html.includes('data-review-mode') && html.includes('data-mode="edit"') && html.includes('data-mode="preview"'), '编辑/预览切换');
-  assert.ok(html.includes('data-review-save'), '保存按钮');
+  // BUG-20260925-006：审查对话框只读化——编辑/预览切换与保存控件移除，编辑走「② 二次编辑」
+  assert.ok(!html.includes('data-review-mode') && !html.includes('data-review-save') && !html.includes('bld-review-editor'), '无编辑/预览切换与保存控件');
   assert.ok(html.includes('data-review-approve'), '通过审核按钮');
   assert.match(html, /已审核 \d+\/8|1\/8/, '页脚已审核计数');
   assert.match(html, /同步滚动/, '双栏同步滚动说明/标注');

@@ -2,8 +2,8 @@
 // REQ-20260921-011 发布模块的文档预览要支持 Markdown 格式预览 —— 分层测试。
 // L1 renderMd 渲染层（vm 加载真实 vendored marked v12.0.2：GFM 常用元素 / 消毒 /
 //    渲染器抛错回退 / marked 未加载回退）；
-// L2 renderReviewModal 预览态契约（富文本容器 / 编辑态不变 / 端到端消毒 / 空文档占位 /
-//    读取中 / data-i18n-skip 口径 / 同步滚动绑定与交互回归）；
+// L2 renderReviewModal 预览态契约（富文本容器 / BUG-20260925-006 起编辑态移除（恒预览） /
+//    端到端消毒 / 空文档占位 / 读取中 / data-i18n-skip 口径 / 同步滚动绑定与交互回归）；
 // L3 i18n 回归（占位与读取中文案词条中英齐备、往返不变形）。
 // 用法：node scripts/tests/req-20260921-011.test.mjs
 
@@ -143,10 +143,9 @@ function renderModal(ctx, review, plan = planOf(README_FILES)) {
   return vm.runInContext(`renderReviewModal(${JSON.stringify({ id: 'BLD-20260921-011', pf: { review, plan } })})`, ctx);
 }
 
-t('L2-1 预览态渲染富文本容器；编辑态源码 textarea 不变', () => {
+t('L2-1 预览态渲染富文本容器；编辑态已随 BUG-20260925-006 只读化移除（无 textarea）', () => {
   const html = renderModal(mdContext(), {
     open: true, key: 'README',
-    modes: { 'README.md': 'preview', 'README_en.md': 'edit' },
     contents: { 'README.md': GFM_MD, 'README_en.md': '# EN source' },
   });
   // 预览态：富文本容器（.md 排版口径）+ 渲染结果元素
@@ -155,15 +154,14 @@ t('L2-1 预览态渲染富文本容器；编辑态源码 textarea 不变', () =>
   assert.match(html, /<table>/, '表格渲染');
   // 旧「纯源码 pre 预览」形态不再出现
   assert.ok(!html.includes('<pre class="bld-review-preview"'), '不再以源码 pre 作预览');
-  // 编辑态：源码 textarea 保持
-  assert.match(html, /<textarea class="bld-review-editor" data-review-file="README_en\.md"[^>]*># EN source<\/textarea>/, '编辑态源码不变');
+  // BUG-20260925-006：编辑态 textarea 随审查去编辑化移除（编辑走②二次编辑弹窗）
+  assert.ok(!html.includes('bld-review-editor'), '无编辑态 textarea');
 });
 
 t('L2-2 端到端消毒：预览内容含 <script> 时富文本输出无 script 节点', () => {
   const md = '# 安全\n\n<script>alert(1)</script>\n\n<img src="x" onerror="alert(2)">\n';
   const html = renderModal(mdContext(), {
     open: true, key: 'README',
-    modes: { 'README.md': 'preview' },
     contents: { 'README.md': md, 'README_en.md': 'x' },
   });
   assert.ok(!/<script/i.test(html), 'script 不进入预览 DOM');
@@ -175,7 +173,6 @@ t('L2-3 空文档占位与读取中：空串/纯空白显示「（空文档）�
   const ctx = mdContext();
   const html = renderModal(ctx, {
     open: true, key: 'README',
-    modes: { 'README.md': 'preview', 'README_en.md': 'preview' },
     contents: { 'README.md': '', 'README_en.md': '  \n\t ' },
   });
   assert.equal((html.match(/（空文档）/g) || []).length, 2, '两栏空文档占位');
@@ -183,7 +180,7 @@ t('L2-3 空文档占位与读取中：空串/纯空白显示「（空文档）�
   assert.ok(!html.includes('bld-review-preview md'), '空文档不渲染富文本区');
 
   const loading = renderModal(mdContext(), {
-    open: true, key: 'README', modes: {}, contents: {},
+    open: true, key: 'README', contents: {},
   });
   assert.ok((loading.match(/正在读取文档内容…/g) || []).length >= 2, '内容未到达显示读取中');
   assert.ok(!loading.includes('（空文档）'), '读取中与空文档不混淆');
@@ -192,37 +189,33 @@ t('L2-3 空文档占位与读取中：空串/纯空白显示「（空文档）�
 t('L2-4 data-i18n-skip 口径：富文本容器豁免 / 占位与读取中不豁免（可随界面语言翻译）/ 文件名豁免沿用', () => {
   const html = renderModal(mdContext(), {
     open: true, key: 'README',
-    modes: { 'README.md': 'preview', 'README_en.md': 'edit' },
     contents: { 'README.md': GFM_MD, 'README_en.md': '# EN' },
   });
   assert.match(html, /class="bld-review-preview md" data-review-file="[^"]*" data-i18n-skip/, '富文本容器豁免：文档本体不进界面词典');
   assert.match(html, /class="bld-doc-fname" data-i18n-skip/, '文件名豁免沿用（BUG-20260921-004）');
-  // 编辑态 textarea 源码同样不经界面词典（文本节点在 textarea 内为默认值属性，不受 translateTree 改写）
   const empty = renderModal(mdContext(), {
-    open: true, key: 'README', modes: { 'README.md': 'preview' }, contents: { 'README.md': '' },
+    open: true, key: 'README', contents: { 'README.md': '' },
   });
   assert.doesNotMatch(empty, /class="bld-review-preview muted small" data-review-file="[^"]*" data-i18n-skip/, '空文档占位不豁免：可被 i18n 翻译');
 });
 
 t('L2-5 同步滚动绑定：预览容器纳入绑定，比例算法与调用点保留', () => {
   const fn = pick('bindReviewSyncScroll');
-  assert.match(fn, /bld-review-preview/, '选择器纳入富文本预览容器（预览-预览 / 编辑-预览组合生效）');
-  assert.match(fn, /textarea/, '编辑态 textarea 仍在绑定内（编辑-编辑组合）');
+  assert.match(fn, /bld-review-preview/, '选择器纳入富文本预览容器（恒预览态）');
+  assert.ok(!fn.includes('textarea'), 'BUG-20260925-006：编辑态 textarea 已随编辑入口移除');
   assert.match(fn, /scrollHeight/, '按滚动高度比例跟随');
   assert.match(SOURCE, /bindReviewSyncScroll\(reviewWrap\)/, '对话框渲染后仍调用同步滚动绑定');
 });
 
-t('L2-6 交互回归：页签 / 编辑·预览切换 / 保存 / 通过审核 / 关闭 / 计数均在', () => {
+t('L2-6 交互回归：页签 / 通过审核 / 关闭 / 计数均在；BUG-20260925-006 后无编辑·保存控件', () => {
   const html = renderModal(mdContext(), {
     open: true, key: 'README',
-    modes: { 'README.md': 'preview', 'README_en.md': 'edit' },
     contents: { 'README.md': GFM_MD, 'README_en.md': '# EN' },
   });
   for (const k of ['README', 'CHANGELOG', 'FEATURES', 'AGENTS']) {
     assert.ok(html.includes(`data-review-tab="${k}"`), `类型页签 ${k}`);
   }
-  assert.ok(html.includes('data-review-mode') && html.includes('data-mode="edit"') && html.includes('data-mode="preview"'), '编辑/预览切换');
-  assert.ok(html.includes('data-review-save'), '保存按钮');
+  assert.ok(!html.includes('data-review-mode') && !html.includes('data-review-save'), 'BUG-20260925-006：无编辑/预览切换与保存按钮');
   assert.ok(html.includes('data-review-approve'), '通过审核按钮');
   assert.ok(html.includes('data-review-close'), '关闭按钮');
   assert.match(html, /README（1\/2）/, '页签 n/N 计数');

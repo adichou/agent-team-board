@@ -474,21 +474,21 @@ t('L4-1 renderDocsPane：LICENSE.md 行在默认语言页签面板并标「不�
   assert.match(html, /data-pf-commit[^>]*title="[^"]*LICENSE\.md（未编写）/, '提交缺口 title 含 LICENSE');
 });
 
-t('L4-2 renderReviewModal：LICENSE 页签（x/1）单栏；栏头标注不分语言；操作按钮齐全', () => {
+t('L4-2 renderReviewModal：LICENSE 页签（x/1）单栏；栏头标注不分语言；仅通过审核（BUG-20260925-006 移除编辑/保存）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun([
     extractFn(source, 'sanitizeHtml'), extractFn(source, 'renderMd'), extractFn(source, 'renderReviewModal'),
   ].join('\n'), {
     pfOf: (v) => v.pf, esc: (s) => String(s), ...FLOW_STUB,
   }, `renderReviewModal({ id: 'V', pf: {
-    review: { open: true, key: 'LICENSE', modes: { 'LICENSE.md': 'preview' }, contents: { 'LICENSE.md': '# MIT\\n' } },
+    review: { open: true, key: 'LICENSE', contents: { 'LICENSE.md': '# MIT\\n' } },
     plan: { docsFlow: { files: ${JSON.stringify(filesStub({ 'LICENSE.md': 'pending' }))}, reviewedCount: 0 } } } })`);
   assert.match(html, /data-review-tab="LICENSE"[^>]*>LICENSE（0\/1）/, 'LICENSE 类型页签 x/1');
   const cols = (html.match(/bld-review-col"/g) || []).length;
   assert.equal(cols, 1, 'A1 单栏');
   assert.match(html, /LICENSE\.md[\s\S]{0,120}不分语言/, '栏头标注不分语言');
-  assert.ok(html.includes('data-review-save="LICENSE.md"') && html.includes('data-review-approve="LICENSE.md"'), '保存 / 通过审核按钮');
-  assert.ok(html.includes('data-review-mode="LICENSE.md"'), '编辑 / 预览切换');
+  assert.ok(html.includes('data-review-approve="LICENSE.md"'), '通过审核按钮');
+  assert.ok(!html.includes('data-review-save="LICENSE.md"') && !html.includes('data-review-mode="LICENSE.md"'), 'BUG-20260925-006：无保存 / 编辑切换');
   assert.ok(html.includes('待审核'), 'pending 状态文案');
 });
 

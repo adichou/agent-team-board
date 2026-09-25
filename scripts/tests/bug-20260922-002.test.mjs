@@ -523,7 +523,7 @@ t('L4-2 renderDocsPane：自定义行出现在每个语言页签；en 行走翻�
   assert.match(html, /文件（11 · 默认语言 0\/6 已审核 · 剩余语言 0\/5 已审核）/, '表头计数按新清单联动');
 });
 
-t('L4-3 renderReviewModal：自定义页签多语言多栏（x/2），每栏可编辑 / 保存 / 通过审核', () => {
+t('L4-3 renderReviewModal：自定义页签多语言多栏（x/2），每栏可通过审核（BUG-20260925-006 起只读核对，无编辑 / 保存）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun([
     extractFn(source, 'sanitizeHtml'), extractFn(source, 'renderMd'), extractFn(source, 'renderReviewModal'),
@@ -534,11 +534,12 @@ t('L4-3 renderReviewModal：自定义页签多语言多栏（x/2），每栏可�
       Array.isArray(customDocs) ? customDocs : [],
     ),
   }, `renderReviewModal({ id: 'V', pf: {
-    review: { open: true, key: 'MIGRATION', modes: {}, contents: { 'MIGRATION.md': '# 迁移\\n', 'MIGRATION_en.md': '# Migration\\n' } },
+    review: { open: true, key: 'MIGRATION', contents: { 'MIGRATION.md': '# 迁移\\n', 'MIGRATION_en.md': '# Migration\\n' } },
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({}))}, reviewedCount: 0 } } } })`);
   assert.match(html, /data-review-tab="MIGRATION"[^>]*>MIGRATION（0\/2）/, '自定义类型页签 x/2（按语言计数）');
-  assert.ok(html.includes('data-review-save="MIGRATION_en.md"') && html.includes('data-review-approve="MIGRATION_en.md"'), '其余语言栏可保存 / 通过审核');
+  assert.ok(html.includes('data-review-approve="MIGRATION_en.md"'), '其余语言栏可通过审核');
+  assert.ok(!html.includes('data-review-save="MIGRATION_en.md"') && !html.includes('data-review-mode="MIGRATION_en.md"'), 'BUG-20260925-006：其余语言栏无编辑 / 保存（修正走重新④AI翻译）');
   assert.match(html, /MIGRATION_en\.md[\s\S]{0,200}自定义/, '栏头标注自定义');
 });
 
