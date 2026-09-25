@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260925-004 演示 — 关闭文档编辑界面不应整页刷新</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #d9dce1; --text: #24292f; --muted: #6a737d;
+    --accent: #0969da; --ok: #1a7f37; --warn: #9a6700; --err: #cf222e;
+    --chip: #eaeef2; --shadow: 0 8px 28px rgba(0,0,0,.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --line: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --accent: #4493f8; --ok: #3fb950; --warn: #d29922; --err: #f85149;
+      --chip: #21262d; --shadow: 0 8px 28px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ===== 顶部演示控制条 ===== */
+  .demo-bar { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+    padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .demo-bar h1 { font-size: 14px; margin: 0 8px 0 0; }
+  .demo-bar label { display: inline-flex; align-items: center; gap: 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 14px; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 6px; padding: 5px 12px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12px; }
+  .demo-note { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; padding: 14px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ===== 模拟「文档编写」窗格 ===== */
+  .pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .pane-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .pane-head .title { font-weight: 600; margin-right: auto; }
+  .field-inline { display: inline-flex; align-items: center; gap: 6px; }
+  input[type="text"] { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; padding: 4px 8px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: center; }
+  .sync-badge { margin-left: auto; font-size: 12px; color: var(--muted); visibility: hidden; }
+  .sync-badge.show { visibility: visible; }
+  .sync-badge.ok { color: var(--ok); }
+  .sync-badge.err { color: var(--err); text-decoration: underline; cursor: pointer; }
+
+  .langtabs { display: flex; gap: 4px; padding: 8px 12px 0; flex-wrap: wrap; }
+  .langtabs button { border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--bg); color: var(--muted); padding: 5px 12px; }
+  .langtabs button.active { background: var(--card); color: var(--text); font-weight: 600; position: relative; top: 1px; }
+  .count { font-size: 11px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--chip); }
+  .count.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+
+  .doc-list { margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 0 0 8px 8px; list-style: none; padding: 4px 0; max-height: 300px; overflow-y: auto; }
+  .doc-list li { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+  .doc-list li:last-child { border-bottom: 0; }
+  .doc-list .name { font-family: ui-monospace, Menlo, monospace; }
+  .st { margin-left: auto; font-size: 12px; padding: 1px 10px; border-radius: 999px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+  .st.reviewed { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .st.pending { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .st.summarized { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .st.dirty { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); }
+
+  .gate { margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 12px; }
+
+  .pane-state { padding: 48px 16px; text-align: center; color: var(--muted); }
+  .pane-state.error { color: var(--err); }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== 编辑弹窗（模拟 ② 二次编辑） ===== */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 40; }
+  .overlay.open { display: flex; }
+  .dialog { width: min(680px, calc(100vw - 32px)); background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .dlg-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .dlg-head select { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 6px; padding: 3px 8px; }
+  .icon-btn { margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; padding: 4px 8px; border-radius: 6px; }
+  .icon-btn:hover { background: var(--bg); color: var(--text); }
+  .dlg-body { padding: 12px 14px; }
+  .editor { width: 100%; height: 220px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text);
+    font: 12px/1.6 ui-monospace, Menlo, monospace; padding: 10px; resize: vertical; }
+  .preview { width: 100%; height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .dlg-foot { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .saved-note { color: var(--ok); font-size: 12px; }
+  .pending-bar { margin: 0 14px 10px; padding: 8px 12px; border: 1px solid var(--warn); border-radius: 8px; background: color-mix(in srgb, var(--warn) 10%, transparent); font-size: 13px; }
+  .pending-bar .row { display: flex; gap: 8px; margin-top: 6px; }
+
+  /* ===== 右侧事件流 / toast ===== */
+  .events { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; align-self: start; }
+  .events h2 { font-size: 13px; margin: 0 0 8px; }
+  #eventList { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 420px; overflow-y: auto; }
+  #eventList li { padding: 4px 0; border-bottom: 1px dashed var(--line); color: var(--muted); }
+  #eventList li b { color: var(--text); font-weight: 600; }
+  #eventList li.neg b { color: var(--err); }
+  #eventList li.pos b { color: var(--ok); }
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--card); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; box-shadow: var(--shadow); opacity: 0; transition: opacity .25s; z-index: 50; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: var(--err); color: var(--err); }
+  #toast.ok { border-color: var(--ok); color: var(--ok); }
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <h1>BUG-20260925-004 演示</h1>
+  <div class="seg" role="group" aria-label="行为模式">
+    <button id="modeBug" class="active">缺陷现状</button>
+    <button id="modeFixed">修复后期望</button>
+  </div>
+  <label class="small"><input type="checkbox" id="simFail"> 模拟同步失败</label>
+  <button class="btn small" id="btnEmpty">切换空态</button>
+  <button class="btn small" id="btnReset">重置演示</button>
+  <p class="demo-note">操作路径：点「② 二次编辑」打开编辑弹窗 → 滚动左侧文件列表到中部 → 关闭弹窗，对照两种模式下窗格的行为差异（缺陷模式整块刷新 + 滚动回顶；期望模式窗格原样保留、后台静默同步）。</p>
+</div>
+
+<div class="layout">
+  <!-- 模拟「文档编写」窗格 -->
+  <section class="pane" aria-label="文档编写窗格（模拟）">
+    <div class="pane-head">
+      <span class="title">文档编写</span>
+      <span class="field-inline"><label for="docLangs" class="small muted">语言集</label>
+        <input type="text" id="docLangs" value="en,zh" size="8" title="逗号分隔；第一个为默认语言"></span>
+      <button class="btn small" id="btnRefresh">刷新</button>
+      <button class="btn small" id="btnReview" title="演示聚焦二次编辑弹窗，审查对话框关闭路径行为相同">审查</button>
+    </div>
+    <div class="steps">
+      <button class="btn small" disabled title="① 复制 AI 总结提示词">① AI 总结</button>
+      <button class="btn small primary" id="btnEdit">② 二次编辑</button>
+      <button class="btn small" disabled>③ AI 校对</button>
+      <button class="btn small" disabled title="默认语言全部审核后解锁">④ AI 翻译</button>
+      <button class="btn small" disabled title="全部审核 + 整体审查完结后解锁">⑤ 提交</button>
+      <span class="sync-badge" id="syncBadge" role="status"></span>
+    </div>
+    <div id="paneBody"></div>
+    <div class="gate" id="gateBar">门禁：AI 翻译需默认语言 4/4 已审核（当前 1/4）· 提交需全部已审核 + 整体审查完结</div>
+  </section>
+
+  <!-- 事件流 -->
+  <aside class="events" aria-label="事件流">
+    <h2>事件流（窗格行为观察）</h2>
+    <ul id="eventList"></ul>
+  </aside>
+</div>
+
+<!-- 二次编辑弹窗 -->
+<div class="overlay" id="editOverlay">
+  <div class="dialog" role="dialog" aria-label="二次编辑（默认语言）">
+    <div class="dlg-head">
+      <span class="muted small">② 二次编辑 · 默认语言</span>
+      <select id="editFile" aria-label="选择文件"></select>
+      <button class="icon-btn" id="editClose" title="关闭（有未保存修改时先确认）">✕</button>
+    </div>
+    <div id="pendingWrap"></div>
+    <div class="dlg-body">
+      <div class="small muted" style="margin-bottom:6px">
+        <button class="btn small" id="btnModeToggle">切换预览</button>
+        <span id="modeLabel">编辑态</span> · 已保存 ≠ 已提交（需审核通过并「提交」）
+      </div>
+      <textarea class="editor" id="editArea" spellcheck="false" aria-label="文档内容编辑"></textarea>
+      <div class="preview" id="editPreview" hidden></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn primary small" id="btnSave">保存</button>
+      <button class="btn small" id="btnApprove">通过审核</button>
+      <span class="saved-note small" id="savedNote"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 演示数据（默认语言 en + 翻译 zh；七态简化为五态徽标） ---------- */
+  var BASE_FILES = [
+    { lang: 'en', name: 'README.md',        st: 'reviewed',   label: '已审核' },
+    { lang: 'en', name: 'CHANGELOG.md',     st: 'summarized', label: '已总结待审核' },
+    { lang: 'en', name: 'FEATURES.md',      st: 'none',       label: '待总结' },
+    { lang: 'en', name: 'AGENTS.md',        st: 'reviewed',   label: '已审核' },
+    { lang: 'en', name: 'LICENSE.md',       st: 'pending',    label: '待审核' },
+    { lang: 'en', name: 'USAGE.md',         st: 'summarized', label: '已总结待审核' },
+    { lang: 'en', name: 'NOTES.md',         st: 'none',       label: '待总结' },
+    { lang: 'zh', name: 'README_zh.md',     st: 'none',       label: '待翻译' },
+    { lang: 'zh', name: 'CHANGELOG_zh.md',  st: 'none',       label: '待翻译' },
+    { lang: 'zh', name: 'FEATURES_zh.md',   st: 'none',       label: '待翻译' },
+    { lang: 'zh', name: 'AGENTS_zh.md',     st: 'none',       label: '待翻译' }
+  ];
+  var DOC_SEED = '# 标题\n\n本文件为演示占位内容。修改任意一行即可让演示进入「未保存修改」分支。\n\n- 要点一\n- 要点二\n';
+
+  var state = {
+    mode: 'bug',          // bug = 缺陷现状；fixed = 修复后期望
+    simFail: false,
+    empty: false,
+    phase: 'ready',       // ready | loading | error
+    files: BASE_FILES.map(function (f) { return Object.assign({}, f); }),
+    lang: 'en',
+    scrollTop: 0,
+    edit: null           // { file, draft, dirty, busy, pending, mode }
+  };
+
+  var $ = function (sel) { return document.querySelector(sel); };
+  var overlay = $('#editOverlay'), paneBody = $('#paneBody');
+  var editArea = $('#editArea'), editFile = $('#editFile'), savedNote = $('#savedNote');
+  var syncBadge = $('#syncBadge'), toastEl = $('#toast');
+
+  /* ---------- 事件流 / toast ---------- */
+  function log(text, kind) {
+    var li = document.createElement('li');
+    if (kind) li.className = kind;
+    var b = document.createElement('b'); b.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + ' ';
+    li.appendChild(b); li.appendChild(document.createTextNode(text));
+    var list = $('#eventList');
+    list.insertBefore(li, list.firstChild);
+    while (list.children.length > 60) list.removeChild(list.lastChild);
+  }
+  var toastTimer = null;
+  function toast(msg, kind) {
+    toastEl.textContent = msg;
+    toastEl.className = 'show' + (kind ? ' ' + kind : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = ''; }, 2600);
+  }
+
+  /* ---------- 窗格渲染 ---------- */
+  function langCounts(lang) {
+    var fs = state.files.filter(function (f) { return f.lang === lang; });
+    var done = fs.filter(function (f) { return f.st === 'reviewed'; }).length;
+    return { done: done, total: fs.length };
+  }
+
+  function renderPane() {
+    if (state.phase === 'loading') {
+      paneBody.innerHTML = '<div class="pane-state" role="status"><span class="spin"></span>正在加载发布流程数据…</div>';
+      return;
+    }
+    if (state.phase === 'error') {
+      paneBody.innerHTML = '<div class="pane-state error" role="alert">发布流程数据读取失败：模拟网络错误<br><br>' +
+        '<button class="btn" id="btnRetry">重试</button></div>';
+      $('#btnRetry').addEventListener('click', function () { reloadPane(true); });
+      return;
+    }
+    var langs = ['en', 'zh'];
+    var tabs = '<div class="langtabs" role="tablist">' + langs.map(function (l) {
+      var c = langCounts(l);
+      return '<button class="' + (state.lang === l ? 'active' : '') + '" data-lang="' + l + '" role="tab" aria-selected="' + (state.lang === l) + '">' +
+        l + (l === 'en' ? '（默认）' : '') + '<span class="count' + (c.total && c.done === c.total ? ' ok' : '') + '">' + c.done + '/' + c.total + '</span></button>';
+    }).join('') + '</div>';
+
+    var listHtml;
+    if (state.empty) {
+      listHtml = '<ul class="doc-list"><li class="muted">暂无文档文件——点击「① AI 总结」生成默认语言初稿（演示空态）</li></ul>';
+    } else {
+      var rows = state.files.filter(function (f) { return f.lang === state.lang; }).map(function (f) {
+        return '<li><span class="name">' + f.name + '</span><span class="st ' + f.st + '">' + f.label + '</span></li>';
+      }).join('');
+      listHtml = '<ul class="doc-list" id="docList">' + rows + '</ul>';
+    }
+    paneBody.innerHTML = tabs + listHtml;
+    Array.prototype.forEach.call(paneBody.querySelectorAll('[data-lang]'), function (b) {
+      b.addEventListener('click', function () { state.lang = b.dataset.lang; renderPane(); });
+    });
+    var list = $('#docList');
+    if (list) list.scrollTop = state.scrollTop;
+  }
+
+  function rememberScroll() {
+    var list = $('#docList');
+    if (list) state.scrollTop = list.scrollTop;
+  }
+
+  /* ---------- 关闭弹窗后的窗格刷新（缺陷核心） ---------- */
+  function reloadPane(isRetry) {
+    rememberScroll();
+    state.phase = 'loading';
+    renderPane();
+    log((isRetry ? '重试' : '关闭弹窗') + ' → 窗格进入 loading（「正在加载发布流程数据…」）', state.mode === 'bug' ? 'neg' : '');
+    setTimeout(function () {
+      if (state.simFail) {
+        state.phase = 'error';
+        renderPane();
+        log('publish-plan 请求失败 → 窗格整体变为 error 态（内容被清空）', 'neg');
+        toast('✕ 发布流程数据读取失败（模拟）', 'err');
+      } else {
+        state.phase = 'ready';
+        if (state.mode === 'bug') {
+          state.scrollTop = 0; // 缺陷：全量重建后滚动丢失，回到顶部
+          renderPane();
+          log('publish-plan 返回 → 窗格整体重建，滚动位置回到顶部', 'neg');
+        } else {
+          renderPane();
+          log('后台同步完成 → 仅局部更新状态徽标，窗格主体与滚动保留', 'pos');
+        }
+        toast('✓ 已同步最新四态与门禁', 'ok');
+      }
+    }, 1200);
+  }
+
+  function silentSync() {
+    syncBadge.textContent = '后台同步中…';
+    syncBadge.className = 'sync-badge show';
+    setTimeout(function () {
+      if (state.simFail) {
+        syncBadge.textContent = '后台同步失败 · 点击重试';
+        syncBadge.className = 'sync-badge show err';
+        log('后台同步失败 → 界面保持原样，仅轻量提示可重试（不打断）', 'pos');
+        toast('后台同步失败：模拟网络错误（界面未受影响）', 'err');
+      } else {
+        syncBadge.textContent = '已同步 ✓';
+        syncBadge.className = 'sync-badge show ok';
+        log('后台静默同步完成 → 徽标更新，未重绘窗格', 'pos');
+        toast('✓ 已同步最新四态与门禁', 'ok');
+        setTimeout(function () { syncBadge.className = 'sync-badge'; }, 2000);
+      }
+    }, 1200);
+  }
+
+  /* ---------- 编辑弹窗 ---------- */
+  function defaultFiles() {
+    return state.files.filter(function (f) { return f.lang === 'en'; });
+  }
+  function openEdit() {
+    if (state.empty) { toast('当前为空态：无默认语言文档可编辑', 'err'); return; }
+    var defs = defaultFiles();
+    editFile.innerHTML = defs.map(function (f) { return '<option value="' + f.name + '">' + f.name + '</option>'; }).join('');
+    state.edit = { dirty: false, pending: null, mode: 'edit', drafts: {} };
+    editFile.value = defs[0].name;
+    loadDraft(defs[0].name);
+    savedNote.textContent = '';
+    renderPending();
+    setEditMode('edit');
+    overlay.classList.add('open');
+    log('打开「② 二次编辑」弹窗：' + editFile.value);
+    editArea.focus();
+  }
+  function loadDraft(file) {
+    editArea.value = state.edit.drafts[file] != null ? state.edit.drafts[file] : DOC_SEED;
+  }
+  function setEditMode(mode) {
+    state.edit.mode = mode;
+    $('#modeLabel').textContent = mode === 'edit' ? '编辑态' : '预览态';
+    editArea.hidden = mode !== 'edit';
+    var pv = $('#editPreview');
+    pv.hidden = mode !== 'preview';
+    if (mode === 'preview') {
+      pv.innerHTML = '<pre style="margin:0;white-space:pre-wrap;font:12px/1.6 ui-monospace,Menlo,monospace"></pre>';
+      pv.firstChild.textContent = editArea.value;
+    }
+  }
+  function renderPending() {
+    var wrap = $('#pendingWrap');
+    if (!state.edit || !state.edit.pending) { wrap.innerHTML = ''; return; }
+    var p = state.edit.pending;
+    var label = p.kind === 'switch' ? '切换到 ' + p.file : (p.kind === 'close' ? '关闭编辑弹窗' : '重新加载');
+    wrap.innerHTML = '<div class="pending-bar">有未保存的修改：' + label + ' 前先处理草稿。' +
+      '<div class="row"><button class="btn small primary" data-act="save">保存并继续</button>' +
+      '<button class="btn small" data-act="discard">放弃修改并继续</button>' +
+      '<button class="btn small" data-act="cancel">留在本文件</button></div></div>';
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-act]'), function (b) {
+      b.addEventListener('click', function () { resolvePending(b.dataset.act); });
+    });
+  }
+  function saveCurrent() {
+    var file = editFile.value;
+    state.edit.drafts[file] = editArea.value;
+    var row = state.files.filter(function (f) { return f.name === file; })[0];
+    if (row && row.st === 'reviewed') {
+      row.st = 'pending'; row.label = '待审核（修改后回退）';
+    } else if (row) {
+      row.st = 'summarized'; row.label = '已保存 · 待审核';
+    }
+    state.edit.dirty = false;
+    savedNote.textContent = '已保存 ✓（未提交：需审核通过并「提交」）';
+    toast('✓ 已保存 ' + file + '（未提交）', 'ok');
+    log('弹窗内保存 ' + file + ' → 就地回写徽标（' + row.label + '），不刷新窗格', 'pos');
+    rememberScroll(); renderPane();
+    return true;
+  }
+  function resolvePending(action) {
+    var p = state.edit.pending;
+    if (action === 'cancel') { state.edit.pending = null; renderPending(); return; }
+    if (action === 'save') { if (!saveCurrent()) return; }
+    state.edit.pending = null;
+    renderPending();
+    if (p.kind === 'switch') { editFile.value = p.file; loadDraft(p.file); savedNote.textContent = ''; log('弹窗内切换文件 → ' + p.file); }
+    else if (p.kind === 'close') { closeEdit(false); }
+    else { loadDraft(editFile.value); savedNote.textContent = ''; log('弹窗内重新加载 ' + editFile.value); }
+  }
+  function requestClose() {
+    if (state.edit.dirty) { state.edit.pending = { kind: 'close' }; renderPending(); return; }
+    closeEdit(false);
+  }
+  function closeEdit() {
+    overlay.classList.remove('open');
+    log('关闭编辑弹窗', state.mode === 'bug' ? '' : 'pos');
+    if (state.mode === 'bug') {
+      reloadPane(false);           // 缺陷：关闭 → 整块 loading → 全量重建
+    } else {
+      rememberScroll(); renderPane(); // 窗格原样保留（徽标若变则局部更新）
+      silentSync();                 // 期望：后台静默同步四态与门禁
+    }
+  }
+
+  /* ---------- 接线 ---------- */
+  $('#btnEdit').addEventListener('click', openEdit);
+  $('#editClose').addEventListener('click', requestClose);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) requestClose(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) requestClose();
+  });
+  editArea.addEventListener('input', function () {
+    state.edit.dirty = true; savedNote.textContent = '';
+    state.edit.drafts[editFile.value] = editArea.value;
+  });
+  editFile.addEventListener('change', function () {
+    if (state.edit.dirty) { state.edit.pending = { kind: 'switch', file: editFile.value }; renderPending(); return; }
+    loadDraft(editFile.value); savedNote.textContent = ''; log('弹窗内切换文件 → ' + editFile.value);
+  });
+  $('#btnSave').addEventListener('click', function () { saveCurrent(); });
+  $('#btnApprove').addEventListener('click', function () {
+    if (state.edit.dirty) { toast('请先保存再通过审核（审核基准 = 磁盘内容）', 'err'); return; }
+    var row = state.files.filter(function (f) { return f.name === editFile.value; })[0];
+    if (row) { row.st = 'reviewed'; row.label = '已审核'; }
+    toast('✓ ' + editFile.value + ' 已通过审核', 'ok');
+    rememberScroll(); renderPane();
+    log('通过审核 ' + editFile.value + ' → 徽标局部更新为已审核');
+  });
+  $('#btnModeToggle').addEventListener('click', function () {
+    setEditMode(state.edit.mode === 'edit' ? 'preview' : 'edit');
+  });
+  $('#btnRefresh').addEventListener('click', function () {
+    log('点击「刷新」→ 主动全量重载（该入口保留 loading 属预期）');
+    reloadPane(true);
+  });
+  $('#btnReview').addEventListener('click', function () {
+    toast('审查对话框的关闭路径与二次编辑一致（演示从简）');
+    openEdit();
+  });
+
+  function setMode(mode) {
+    state.mode = mode;
+    $('#modeBug').classList.toggle('active', mode === 'bug');
+    $('#modeFixed').classList.toggle('active', mode === 'fixed');
+    log('切换演示模式 → ' + (mode === 'bug' ? '缺陷现状（关闭即整块刷新）' : '修复后期望（关闭轻量 + 后台静默同步）'));
+  }
+  $('#modeBug').addEventListener('click', function () { setMode('bug'); });
+  $('#modeFixed').addEventListener('click', function () { setMode('fixed'); });
+  $('#simFail').addEventListener('change', function (e) {
+    state.simFail = e.target.checked;
+    log('模拟同步失败：' + (state.simFail ? '开启（下一次刷新/同步将失败）' : '关闭'));
+  });
+  $('#btnEmpty').addEventListener('click', function () {
+    state.empty = !state.empty; state.phase = 'ready';
+    renderPane();
+    log(state.empty ? '切换到空态：暂无文档文件' : '恢复文件列表（正常态）');
+  });
+  $('#btnReset').addEventListener('click', function () {
+    state.files = BASE_FILES.map(function (f) { return Object.assign({}, f); });
+    state.phase = 'ready'; state.empty = false; state.scrollTop = 0; state.lang = 'en';
+    $('#simFail').checked = false; state.simFail = false;
+    syncBadge.className = 'sync-badge';
+    renderPane();
+    log('重置演示：恢复初始数据与正常态', 'pos');
+  });
+  syncBadge.addEventListener('click', function () {
+    if (syncBadge.classList.contains('err')) {
+      state.simFail = false; $('#simFail').checked = false;
+      syncBadge.textContent = '后台同步中…'; syncBadge.className = 'sync-badge show';
+      setTimeout(function () { syncBadge.textContent = '已同步 ✓'; syncBadge.className = 'sync-badge show ok'; log('后台同步重试成功', 'pos'); }, 1000);
+    }
+  });
+
+  renderPane();
+  log('演示就绪：缺陷现状模式。点「② 二次编辑」→ 关闭弹窗观察整块刷新', 'neg');
+})();
+</script>
+</body>
+</html>
