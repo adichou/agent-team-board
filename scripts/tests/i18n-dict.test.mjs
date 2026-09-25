@@ -56,6 +56,26 @@ t('D1e EN 值唯一：反向映射（切回中文）无歧义', () => {
   assert.deepEqual(dup, [], `英文值重复会让切回中文时无法还原：\n${dup.join('\n')}`);
 });
 
+// BUG-20260925-003：测试口径与运行时口径合一——_dict.EN（EN ∪ EN_CLI）每键必须经
+// 运行时 t() 可查且可往返。此前测试只查 _dict.EN 合并副本、运行时 t() 只查主 EN，
+// EN_CLI 词条分叉漏译未被本套件拦截。
+t('D1f 运行时查表合一：_dict.EN 每键经 t() 可查、en 译值可回 zh（BUG-20260925-003）', () => {
+  const before = I.getLang();
+  const notTranslated = [];
+  const notReversible = [];
+  I.setLang('en');
+  for (const [k, v] of Object.entries(EN)) {
+    if (I.t(k) !== v) notTranslated.push(`${k} → ${I.t(k)}（期望 ${v}）`);
+  }
+  I.setLang('zh');
+  for (const [k, v] of Object.entries(EN)) {
+    if (I.t(v) !== k) notReversible.push(`${v} → ${I.t(v)}（期望 ${k}）`);
+  }
+  I.setLang(before);
+  assert.deepEqual(notTranslated, [], `键在 _dict.EN 而 t() 查不到（运行时/测试口径分叉）：\n${notTranslated.slice(0, 15).map((s) => '  - ' + s).join('\n')}`);
+  assert.deepEqual(notReversible, [], `en 译值切回 zh 无法还原（ZH_EXACT 缺口）：\n${notReversible.slice(0, 15).map((s) => '  - ' + s).join('\n')}`);
+});
+
 for (const [name, fn] of cases) {
   fn();
   console.log(`✓ ${name}`);
