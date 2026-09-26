@@ -411,15 +411,12 @@ export function isAncestorOf(root, commit, ref) {
 
 // 只读影响分析（合并前展示）：对每个所选提交列出「目标分支可达之外、又不属于所选集合」的
 // 祖先提交（普通 merge 会把它们一并带入；隔离合并不带入，若所选改动依赖其内容将在执行时
-// 冲突阻止）。同一 commit 关联多个条目视为混合提交，列入 blocked（无法安全拆分）。
+// 冲突阻止）。REQ-20260926-002：条目与提交是多对多关系——同一 commit 关联多个条目不再判
+// 混合提交、不再阻断（blocked 随流程移除），shared 如实记录；执行侧 mergeIsolatedIntoMain
+// 按提交 hash 去重，共享提交只 cherry-pick 一次，各关联条目展示一致的合入结果。
 // BUG-20260921-015：所选集合 = 全部条目的全部提交（一条目多提交按提交 hash 去重展开，
 // 不按条目去重）；perItem 按条目聚合其全部提交的未选祖先（hash 去重），commit 字段保留
-// 首个提交（展示兼容），与「一键加入」、合并执行使用同一提交集合，分析口径一致收敛。
-// BUG-20260921-018：共享 hash 已是目标分支祖先 → 不判混合提交，降级为 exempted + notes
-// 豁免提示——执行侧 mergeIsolatedIntoMain 对其幂等记成功（alreadyIncluded），分析口径与
-// 执行语义一致，不再把必然幂等成功的合并整体挡住；不在目标分支上的共享 hash 仍判混合并
-// 阻断（重放按（条目 × 提交）展开不跨条目去重，会双重 cherry-pick 失败，前置干净阻断
-// 优于执行中途失败）。
+// 首个提交（展示兼容）。
 export function analyzePublishIsolation(root, items = []) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法分析发布范围');
   const targetBranch = resolveMainBranch(root) || 'main';
@@ -434,21 +431,12 @@ export function analyzePublishIsolation(root, items = []) {
   const shared = [...byCommit.entries()]
     .filter(([, ids]) => ids.length > 1)
     .map(([commit, itemIds]) => ({ commit, itemIds }));
-  const exempted = [];
-  const blocked = [];
-  for (const s of shared) {
-    // 豁免判定与执行侧同一函数同一口径（merge-base --is-ancestor），不存在「分析放行、
-    // 执行失败」的缝隙；豁免不静默，归入 exempted 明细与 notes 提示。
-    if (isAncestorOf(root, s.commit, targetBranch)) exempted.push(s);
-    else blocked.push(`同一提交 ${s.commit.slice(0, 12)} 关联多个条目（${s.itemIds.join('、')}）：混合提交无法安全拆分，请调整关联或先合并为一个条目`);
-  }
   const perItem = items.map((it) => {
     const intermediates = [];
     const seen = new Set();
     for (const commit of commitsOf(it)) {
       try {
-        // REQ-20260921-015：intermediates 附提交时间 %cI（date）——「一键加入所有依赖提交」对
-        // 同一条目落在依赖集合的多个提交取最新时以此比较；字段向后兼容（既有调用方不读）。
+        // REQ-20260921-015：intermediates 附提交时间 %cI（date）；字段向后兼容（既有调用方不读）。
         const out = gitOk(root, ['log', `${targetBranch}..${commit}`, '--format=%H%x09%cI%x09%s'], '读取范围提交');
         for (const line of out.split('\n')) {
           if (!line.trim()) continue;
@@ -463,14 +451,14 @@ export function analyzePublishIsolation(root, items = []) {
     return { itemId: it.itemId, commit: commitsOf(it)[0] || String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };
   });
   const notes = [];
-  // BUG-20260921-018：已在目标分支上的共享提交豁免混合判定——notes 提示（不静默），
-  // 明细见 exempted（前端合并页据此展示单行豁免说明）。
-  if (exempted.length) {
-    notes.push(`已豁免 ${exempted.length} 处共享提交的混合判定（提交已在 ${targetBranch} 上，合并时幂等记成功）：${exempted.map((s) => `${s.commit.slice(0, 12)}（关联 ${s.itemIds.length} 个条目）`).join('、')}`);
+  // REQ-20260926-002：共享提交不再阻断，notes 说明多对多关系下的执行语义（按 hash 去重、
+  // 只执行一次、各关联条目结果一致），不静默。
+  if (shared.length) {
+    notes.push(`共享提交 ${shared.length} 处按提交 hash 去重，挑选合并只执行一次（${shared.map((s) => `${s.commit.slice(0, 12)} → ${s.itemIds.join('、')}`).join('；')}），各关联条目展示一致的合入结果`);
   }
   const totalInter = perItem.reduce((n, x) => n + x.count, 0);
   if (totalInter) notes.push(`所选提交存在 ${totalInter} 个未选祖先提交：普通 merge 会一并带入 main，隔离合并不带入；若所选改动依赖这些内容，执行时将冲突阻止并说明原因`);
-  return { targetBranch, perItem, shared, blocked, exempted, notes };
+  return { targetBranch, perItem, shared, notes };
 }
 
 // 受限写（隔离合并）：把版本所选条目的 commit 逐条 cherry-pick 重放入主分支（-x 保留原始
@@ -483,14 +471,25 @@ export function analyzePublishIsolation(root, items = []) {
 // replays 为既有重放证据（original → replayed，重试续传时传入）：原始提交或其重放提交
 // 已在主分支 → 幂等记成功（alreadyIncluded），不重复 cherry-pick（重复重放会因补丁已
 // 应用变成空提交而失败）。
+// REQ-20260926-002：条目与提交多对多——一个提交关联多个条目时按提交 hash 去重只执行一次
+//（不因多对多关系报混合提交错误），每个关联条目各记一行一致结果；冲突报错附冲突文件清单
+// 与该提交主题（可诊断：展示具体提交、文件和原因）。
 export function mergeIsolatedIntoMain(root, { versionId, versionName, items = [], replays = [] } = {}) {
   const baseBranch = precheckMerge(root, items);
   const targetBranch = resolveMainBranch(root) || 'main';
   const knownReplays = new Map((Array.isArray(replays) ? replays : [])
     .filter((r) => r && r.original && r.replayed)
     .map((r) => [String(r.original).toLowerCase(), String(r.replayed).toLowerCase()]));
-  const ordered = replayPairsOrdered(root, items, targetBranch);
-  const results = [];
+  const orderedPairs = replayPairsOrdered(root, items, targetBranch);
+  // 共享提交按 hash 去重：同一提交只进一次执行循环（各关联条目共享同一执行结果）
+  const uniqueCommits = [];
+  {
+    const seen = new Set();
+    for (const p of orderedPairs) {
+      if (!seen.has(p.commit)) { seen.add(p.commit); uniqueCommits.push(p.commit); }
+    }
+  }
+  const outcome = new Map(); // commit → { ok, error?, alreadyIncluded? }（执行一次，多行复用）
   const replayRows = [];
   const warnings = [];
   const inPlace = baseBranch === targetBranch; // 理论上 dev 前置下不出现；保留与旧实现一致的兜底
@@ -505,30 +504,34 @@ export function mergeIsolatedIntoMain(root, { versionId, versionName, items = []
   }
   const cwd = inPlace ? root : wt;
   try {
-    for (const { itemId, commit } of ordered) {
+    for (const commit of uniqueCommits) {
       // 幂等续传：原始提交已是主分支祖先（旧 --no-ff 版本 / 已并入）→ 记成功不重放
       if (isAncestorOf(cwd, commit, targetBranch)) {
-        results.push({ itemId, commit, ok: true, alreadyIncluded: true });
+        outcome.set(commit, { ok: true, alreadyIncluded: true });
         continue;
       }
       // 幂等续传：该提交此前已重放（重放提交在主分支）→ 记成功不重放（补丁已在 main）
       const replayedKnown = knownReplays.get(commit);
       if (replayedKnown && isAncestorOf(cwd, replayedKnown, targetBranch)) {
-        results.push({ itemId, commit, ok: true, alreadyIncluded: true });
+        outcome.set(commit, { ok: true, alreadyIncluded: true });
         continue;
       }
       const r = gitRaw(cwd, ['cherry-pick', '-x', commit]);
       if (r.status === 0) {
         const replayed = String(gitRaw(cwd, ['rev-parse', 'HEAD']).stdout || '').trim().toLowerCase();
-        results.push({ itemId, commit, ok: true });
-        replayRows.push({ itemId, original: commit, replayed });
+        outcome.set(commit, { ok: true });
+        replayRows.push({ itemId: orderedPairs.find((p) => p.commit === commit)?.itemId || '', original: commit, replayed });
         continue;
       }
+      // 冲突可诊断：现场采集冲突文件清单（abort 前）与提交主题，报错含具体提交、文件和原因
+      const conflictFiles = String(gitRaw(cwd, ['diff', '--name-only', '--diff-filter=U']).stdout || '')
+        .split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 8);
+      const subject = String(gitRaw(root, ['log', '-1', '--format=%s', commit]).stdout || '').trim();
       const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
       gitRaw(cwd, ['cherry-pick', '--abort']); // 冲突现场清理（best-effort，不吞并报错）
-      results.push({
-        itemId, commit, ok: false,
-        error: `隔离合并冲突或依赖未选变化（${detail || '冲突'}）`.slice(0, 300),
+      outcome.set(commit, {
+        ok: false,
+        error: `隔离合并冲突（提交 ${commit.slice(0, 12)}${subject ? `「${subject.slice(0, 80)}」` : ''}${conflictFiles.length ? `；冲突文件：${conflictFiles.join('、')}` : ''}）：${(detail || '冲突').slice(0, 240)}`.slice(0, 400),
       });
       break; // 逐条推进：一条失败即中止，保留已成功条目供重试续传
     }
@@ -541,7 +544,97 @@ export function mergeIsolatedIntoMain(root, { versionId, versionName, items = []
       }
     }
   }
+  // 结果按（条目 × 提交）逐行展开：共享提交的执行结果复制到每个关联条目（各条目结果一致）
+  const results = [];
+  for (const { itemId, commit } of orderedPairs) {
+    const o = outcome.get(commit);
+    if (o) results.push({ itemId, commit, ...o });
+  }
   return { results, replays: replayRows, baseBranch, warnings };
+}
+
+// 受限写（REQ-20260926-002 文档合并）：把审核通过的发布文档提交（dev 上的 docs: 提交）
+// cherry-pick 重放入主分支（-x 保留溯源），返回重放提交与重放证据供 build-store.recordDocsMerge
+// 落账。幂等：原始提交已是 main 祖先（旧流程文档随功能先合入）或既有重放证据显示已重放且
+// 重放提交在 main → alreadyIncluded 不重复执行（重试不产生重复提交）。执行隔离与冲突中止
+// 口径同 mergeIsolatedIntoMain；返回 { ok, commitHash, replayedHash, mainSha, replays,
+// alreadyIncluded? }。
+export function mergeDocsCommitIntoMain(root, { versionId, commitHash, replays = [], docFiles = [] } = {}) {
+  if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再合并文档');
+  const targetBranch = resolveMainBranch(root) || 'main';
+  const h = String(commitHash || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(h)) throw new AtbError('文档合并缺少有效的文档提交号（40 位提交号）');
+  gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${targetBranch}`], `${targetBranch} 分支不存在`);
+  const probe = gitRaw(root, ['rev-parse', '--verify', '--quiet', `${h}^{commit}`]);
+  if (probe.status !== 0) throw new AtbError(`文档提交不存在：${h.slice(0, 12)}`);
+  const knownReplays = (Array.isArray(replays) ? replays : [])
+    .filter((r) => r && r.original && r.replayed)
+    .map((r) => ({ original: String(r.original).toLowerCase(), replayed: String(r.replayed).toLowerCase() }));
+  const known = new Map(knownReplays.map((r) => [r.original, r.replayed]));
+  const evidence = () => [{ itemId: 'docs', original: h, replayed: known.get(h) || h }];
+  // 幂等：该文档提交此前已重放且重放提交在 main → 不重复 cherry-pick
+  const replayedKnown = known.get(h);
+  if (replayedKnown && isAncestorOf(root, replayedKnown, targetBranch)) {
+    return { ok: true, alreadyIncluded: true, commitHash: h, replayedHash: replayedKnown, replays: evidence() };
+  }
+  // 幂等：原始文档提交已在 main（旧流程先文档后合并的存量计划）→ 不重放
+  if (isAncestorOf(root, h, targetBranch)) {
+    return { ok: true, alreadyIncluded: true, commitHash: h, replayedHash: h, replays: evidence() };
+  }
+  const wt = path.join(realTmpdir(), `atb-docmerge-${versionId || 'v'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const r = gitRaw(root, ['worktree', 'add', wt, targetBranch]);
+  if (r.status !== 0) {
+    const detail = String(r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+    throw new AtbError(`创建文档合并工作树失败：${detail}`.slice(0, 300));
+  }
+  try {
+    const pick = gitRaw(wt, ['cherry-pick', '-x', h]);
+    if (pick.status === 0) {
+      const replayedHash = String(gitRaw(wt, ['rev-parse', 'HEAD']).stdout || '').trim().toLowerCase();
+      const mainSha = String(gitRaw(wt, ['rev-parse', targetBranch]).stdout || '').trim().toLowerCase();
+      return {
+        ok: true,
+        commitHash: h,
+        replayedHash,
+        mainSha,
+        replays: [{ itemId: 'docs', original: h, replayed: replayedHash }],
+      };
+    }
+    // 冲突兜底（存量「先文档后合并」计划的增量文档提交，其差异基于上一文档提交而 main
+    // 尚无基础文件，补丁形态无法直接重放）：abort 后按文档白名单从该提交**树中**检出全部
+    // 文档内容（增量提交的树含此前文档提交的全部文件；白名单防止把 dev 上的业务文件带进
+    // main）落到 main，并以「docs: 发布文档 <计划号>（重放 <short>）」建重放提交——文档
+    // 合并的语义是文档内容进入 main（非逐行补丁），内容与文档提交时点一致，重放证据可溯。
+    gitRaw(wt, ['cherry-pick', '--abort']);
+    const whitelist = (Array.isArray(docFiles) ? docFiles : []).map((f) => path.basename(String(f || ''))).filter(Boolean);
+    const treeFiles = new Set(String(gitRaw(root, ['ls-tree', '--name-only', '-r', h]).stdout || '')
+      .split('\n').map((s) => s.trim()).filter(Boolean));
+    const files = (whitelist.length ? whitelist : [...treeFiles]).filter((f) => treeFiles.has(f));
+    if (!files.length) {
+      const detail = String(pick.stderr || pick.stdout || '').split('\n').filter(Boolean).slice(0, 3).join('；');
+      throw new AtbError(`文档合并冲突（提交 ${h.slice(0, 12)}）：${(detail || '冲突').slice(0, 300)}`.slice(0, 400));
+    }
+    gitOk(wt, ['checkout', h, '--', ...files], '检出文档内容');
+    const diff = gitRaw(wt, ['diff', '--cached', '--quiet']);
+    if (diff.status === 0) {
+      // 内容已与 main 一致（等价已合入）：不制造空提交
+      const mainSha = String(gitRaw(wt, ['rev-parse', targetBranch]).stdout || '').trim().toLowerCase();
+      return { ok: true, alreadyIncluded: true, commitHash: h, replayedHash: mainSha, mainSha, replays: [{ itemId: 'docs', original: h, replayed: mainSha }] };
+    }
+    gitOk(wt, ['commit', '-m', `docs: 发布文档 ${versionId || ''}（重放 ${h.slice(0, 12)}）`.trim()], '提交文档重放');
+    const replayedHash = String(gitRaw(wt, ['rev-parse', 'HEAD']).stdout || '').trim().toLowerCase();
+    const mainSha = String(gitRaw(wt, ['rev-parse', targetBranch]).stdout || '').trim().toLowerCase();
+    return {
+      ok: true,
+      commitHash: h,
+      replayedHash,
+      mainSha,
+      replays: [{ itemId: 'docs', original: h, replayed: replayedHash }],
+    };
+  } finally {
+    const rm = gitRaw(root, ['worktree', 'remove', '--force', wt]);
+    if (rm.status !== 0) gitRaw(root, ['worktree', 'prune']);
+  }
 }
 
 // 受限写（正式发布第一步）：把本地主分支（解析结果 main / master）推送到所选远端。

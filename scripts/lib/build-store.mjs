@@ -284,13 +284,19 @@ export function removeItems(dataDir, id, itemIds, { by = 'board' } = {}) {
   const ids = (Array.isArray(itemIds) ? itemIds : []).map(String);
   if (!ids.length) throw new AtbError('未指定要移出的条目');
   const set = new Set(ids);
+  const removed = v.items.filter((x) => set.has(x.itemId));
+  if (!removed.length) throw new AtbError('所选条目均不在本版本中');
+  // REQ-20260926-002 已合入事实不可静默抹除：提交已合并入 main 的条目不可移出——
+  // main 上的重放提交不回滚，计划内合入记录（mergedAt / 重放证据）保持可追溯；显式报错非静默。
+  const mergedHits = removed.filter((x) => x.mergedAt);
+  if (mergedHits.length) {
+    throw new BuildConflictError(`条目 ${mergedHits.map((x) => x.itemId).join('、')} 已合并入 main，不可移出（已合入事实保留在计划中；如需调整请新建版本）`);
+  }
   const keep = v.items.filter((x) => !set.has(x.itemId));
-  if (keep.length === v.items.length) throw new AtbError('所选条目均不在本版本中');
-  const removed = v.items.filter((x) => set.has(x.itemId)).map((x) => x.itemId);
   v.items = keep; // 允许清空（draft/failed 态）：移出后可重新添加，合并确认按当前清单生成
   v.by = by;
   // REQ-20260920-003：移出条目 → 发布范围变化，旧文档提交标识失效（需重新核对）
-  markDocsScopeStale(dataDir, v, `移出关联条目：${removed.join('、')}`);
+  markDocsScopeStale(dataDir, v, `移出关联条目：${removed.map((x) => x.itemId).join('、')}`);
   return v;
 }
 
@@ -302,6 +308,11 @@ export function setItemCommit(dataDir, id, itemId, commit, { by = 'board' } = {}
   assertItemsEditable(v);
   const it = v.items.find((x) => x.itemId === String(itemId || ''));
   if (!it) throw new AtbError(`${itemId} 不在本版本中`);
+  // REQ-20260926-002 已合入事实不可静默抹除：已合并条目更换提交关联会把 mergedAt 一并复位，
+  // 使「已合入 main」在计划内显示为未发生——改为显式拦截；追加新提交走 appendItemCommits。
+  if (it.mergedAt) {
+    throw new BuildConflictError(`条目 ${it.itemId} 已合并入 main，不可更换提交关联（追加新提交请用「补入提交」；如需调整请新建版本）`);
+  }
   const h = String(commit || '').trim().toLowerCase();
   if (!HASH_RE.test(h)) throw new AtbError(`${itemId} 缺少有效的关联 commit（40 位提交号）`);
   const prev = it.commit;
@@ -575,19 +586,45 @@ export function removeCustomDoc(dataDir, id, { key, by = 'board', projectRoot = 
   return writeVersion(dataDir, v);
 }
 
-// 合并前置门禁（REQ-20260920-003）：无条目 / 文档未完成（未提交、外部修改未提交、范围过期）
-// → AtbError（HTTP 400/409 由调用方映射），错误信息按最差项说明。
-export function assertMergeDocsGate(dataDir, id, readFile) {
+// REQ-20260926-002 文档合并落账：审核通过的发布文档单独提交后经 docs/merge 端点 cherry-pick
+// 合入 main，把「文档提交 → main 上的重放提交 → main 头」证据固化到 v.docsMerge（直接关联
+// BLD 计划号，不要求额外 REQ / BUG，也不通过功能条目的 done 门禁）。
+//   - commitHash = dev 上的文档提交（v.docs.commitHash 同源）；replayedHash = main 上的重放
+//     提交；mainSha = 合并后 main 头；replays = [{ itemId, original, replayed }] 重放证据；
+//   - 重试 / 范围变化后再次合并：history 逐次累积（已合入事实不抹除、可追溯），replays 按
+//     original 去重合并（同一原始提交不重复累积证据，重复合并幂等不丢既有记录）。
+export function recordDocsMerge(dataDir, id, { commitHash, replayedHash = null, mainSha = null, replays = [] } = {}) {
   const v = readVersion(dataDir, id);
-  if (!v.items.length) throw new AtbError('版本暂无关联条目：请先在「关联条目与提交」步骤关联后再合并');
-  const read = typeof readFile === 'function'
-    ? readFile
-    : (f) => { try { return fs.readFileSync(path.join(projectRootGuess(dataDir), f), 'utf8'); } catch { return null; } };
-  const evalr = flow.evaluateDocsState(v, read);
-  if (evalr.overall !== 'committed') {
-    throw new BuildConflictError(`文档未就绪，暂不可合并：${evalr.reasons[0] || '请完成文档编写并提交'}`);
-  }
-  return evalr;
+  if (!/^[0-9a-f]{40}$/i.test(String(commitHash || ''))) throw new AtbError('文档合并记录缺少有效 commit hash');
+  const rows = (Array.isArray(replays) ? replays : [])
+    .filter((r) => r && r.original && r.replayed)
+    .map((r) => ({
+      itemId: String(r.itemId || 'docs'),
+      original: String(r.original).toLowerCase(),
+      replayed: String(r.replayed).toLowerCase(),
+    }));
+  const entry = {
+    commitHash: String(commitHash).toLowerCase(),
+    replayedHash: replayedHash ? String(replayedHash).toLowerCase() : null,
+    mainSha: mainSha && /^[0-9a-f]{40}$/i.test(String(mainSha)) ? String(mainSha).toLowerCase() : null,
+    replays: rows,
+    mergedAt: nowIso(),
+  };
+  const prev = v.docsMerge || {};
+  const prevReplays = new Map((Array.isArray(prev.replays) ? prev.replays : [])
+    .filter((r) => r && r.original)
+    .map((r) => [String(r.original).toLowerCase(), r]));
+  for (const r of rows) prevReplays.set(r.original, r);
+  v.docsMerge = {
+    commitHash: entry.commitHash,
+    replayedHash: entry.replayedHash,
+    mainSha: entry.mainSha,
+    replays: [...prevReplays.values()],
+    mergedAt: entry.mergedAt,
+    history: [...(Array.isArray(prev.history) ? prev.history : []), entry],
+  };
+  v.by = 'board';
+  return writeVersion(dataDir, v);
 }
 
 // 推送成功记录：同基准（同 sha）重试 / 页面重载不重置起点；基准变化（main 前进后重新推送

@@ -149,11 +149,10 @@ t('R1a 详情标题下出现概况/发布页签，默认概况：原描述、关
   const inner = h.inner();
   assert.match(inner, /data-step="plan"[^>]*aria-selected="true"/, '概况页签默认激活');
   assert.match(inner, /data-step="release"[^>]*aria-selected="false"/, '发布页签存在且未激活');
-  assert.match(inner, />版本计划<\/button>/, '「版本计划」步文案（原「概况」，REQ-20260920-003）');
-  assert.match(inner, />正式发布<\/button>/, '「正式发布」步文案（原「发布」页签）');
+  assert.match(inner, />选择条目与提交<\/button>/, '「选择条目与提交」步文案（REQ-20260926-002 五步重定义）');
+  assert.match(inner, />发布<\/button>/, '「发布」步文案（REQ-20260926-002 五步重定义）');
   assert.match(inner, /bld-desc-block/, '版本计划步含描述块');
-  h.run(`window.ATBBuild.setStep('link')`);
-  assert.match(h.inner(), /关联条目与 commit/, '「关联条目与提交」步含关联条目列表');
+  assert.match(h.inner(), /关联条目与 commit/, '第一步（选择条目与提交）含关联条目列表（link 并入 plan）');
   assert.doesNotMatch(inner, /bld-rel-pane/, '概况不渲染发布区内容');
   assert.doesNotMatch(inner, /正在加载发布记录|当前版本暂无发布记录|发布记录读取失败/, '概况不出发布区状态内容');
 });

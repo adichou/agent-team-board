@@ -552,7 +552,7 @@ t('L4-4 文案更名与轮询：docs 页签「AI 写作」清零、官网侧已�
   const pane = source.match(/  function renderDocsPane\(v\) \{[\s\S]*?\n  \}/)[0];
   assert.ok(!pane.includes('AI 写作'), '文档编写页签内 AI 写作清零');
   // 008 当时官网侧保留不在本单范围；REQ-20260921-007 起随统一更名清理
-  assert.ok(source.includes('官网 AI 总结'), '正式发布步官网 AI 总结（REQ-20260921-007 统一更名）');
+  assert.ok(source.includes('官网资料更新'), '发布步官网资料更新动作（REQ-20260926-002 发布步两动作重排，更名沿袭 REQ-20260921-007 去写作化）');
   assert.ok(!source.includes('官网 AI 写作'), '正式发布步官网旧文案无残留');
   assert.ok(source.includes('docs-summary/current'), 'docs 步轮询 AI 总结进度');
   assert.ok(/summaryTimer|SUMMARY_POLL/.test(source), '轮询定时器管理存在');
@@ -598,7 +598,7 @@ t('L6-1 i18n：新增文案中英词条齐备；「AI 写作」文档页旧键�
   assert.equal(I.t('AI 总结'), 'AI 总结');
 });
 
-t('L6-2 回归：evaluateDocsState / publishStepsState 零改动（合并门禁不受影响）', () => {
+t('L6-2 回归（REQ-20260926-002 重排后）：evaluateDocsState 口径不变；挑选合并不再锁文档，门禁移至文档合并步', () => {
   // 无任何文件 → none；有已写文件但未提交记录 → uncommitted（存量口径：已写未提交）
   assert.equal(flow.evaluateDocsState({}, readsOf({})).overall, 'none', '存量状态机口径不变');
   assert.equal(flow.evaluateDocsState({}, readsOf({ 'README.md': '# r' })).overall, 'uncommitted');
@@ -609,7 +609,8 @@ t('L6-2 回归：evaluateDocsState / publishStepsState 零改动（合并门禁�
   for (const f of flow.publishDocFiles()) rec.files[f.file] = sha256(all[f.file]);
   assert.equal(flow.evaluateDocsState({ docs: rec }, readsOf(all)).overall, 'committed');
   const steps = flow.publishStepsState({ items: [{ itemId: 'X', commit: 'a' }], status: 'draft' }, { overall: 'none' });
-  assert.equal(steps.find((s) => s.key === 'merge').locked, true, '文档未提交仍锁合并');
+  assert.equal(steps.find((s) => s.key === 'merge').locked, false, '挑选合并不再被文档门禁锁定（REQ-20260926-002）');
+  assert.equal(steps.find((s) => s.key === 'docmerge').locked, true, '文档未提交锁文档合并');
 });
 
 /* ---------- 执行 ---------- */

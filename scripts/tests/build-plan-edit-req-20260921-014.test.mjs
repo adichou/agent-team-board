@@ -254,7 +254,7 @@ t('E6 取消放弃修改回展示态；切换版本 / 步骤 / 项目编辑态�
   // 切换步骤：编辑态重置
   h.openEdit();
   h.setName('切步骤丢弃');
-  h.run(`window.ATBBuild.setStep('link')`);
+  h.run(`window.ATBBuild.setStep('docs')`);
   assert.doesNotMatch(h.inner(), /bld-plan-name/, '切换步骤页签编辑态重置');
   h.run(`window.ATBBuild.setStep('plan')`);
   assert.doesNotMatch(h.inner(), /bld-plan-name/, '切回概况页签不恢复编辑态（草稿已丢弃）');

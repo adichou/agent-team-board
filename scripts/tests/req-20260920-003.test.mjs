@@ -177,20 +177,22 @@ t('L1-9 文档状态机：未提交 / 已提交 / 外部修改未提交 / 范围
   assert.ok(dirty.reasons.some((x) => x.includes('README.md')));
 });
 
-t('L1-10 五步门禁：空计划不可进合并/正式发布；文档未完成锁合并；merged 解锁正式发布', () => {
+t('L1-10 五步门禁（REQ-20260926-002 重排）：空计划锁合并；挑选合并不再锁文档；发布需已合并且文档已合并', () => {
   const mk = (over = {}) => ({ status: 'draft', items: [], docs: null, ...over });
+  const by = (steps, k) => steps.find((s) => s.key === k);
   let steps = flow.publishStepsState(mk(), { overall: 'none' });
-  let merge = steps.find((s) => s.key === 'merge');
+  let merge = by(steps, 'merge');
   assert.ok(merge.locked && /关联/.test(merge.reason), '空计划合并被锁且提示先关联');
-  assert.ok(steps.find((s) => s.key === 'release').locked);
+  assert.ok(by(steps, 'release').locked);
+  // REQ-20260926-002：挑选合并不再要求先完成发布文档（先合入功能，再依据实际合入内容编写文档）
   steps = flow.publishStepsState(mk({ items: [{ itemId: 'REQ-20260920-009', commit: 'a'.repeat(40) }] }), { overall: 'none' });
-  merge = steps.find((s) => s.key === 'merge');
-  assert.ok(merge.locked && /文档/.test(merge.reason), '文档未完成锁合并');
-  steps = flow.publishStepsState(mk({ items: [{ itemId: 'REQ-20260920-009', commit: 'a'.repeat(40) }] }), { overall: 'committed' });
-  assert.ok(!steps.find((s) => s.key === 'merge').locked, '文档已提交解锁合并');
-  assert.ok(steps.find((s) => s.key === 'release').locked, '未合并不可正式发布');
+  assert.ok(!by(steps, 'merge').locked, '挑选合并不再被文档门禁锁定');
+  assert.ok(by(steps, 'docmerge').locked, '文档未提交锁文档合并');
+  assert.ok(by(steps, 'release').locked, '未合并不可发布');
   steps = flow.publishStepsState(mk({ status: 'merged', items: [{ itemId: 'REQ-20260920-009', commit: 'a'.repeat(40) }] }), { overall: 'committed' });
-  assert.ok(!steps.find((s) => s.key === 'release').locked, '已合并解锁正式发布');
+  assert.ok(by(steps, 'release').locked, '已合并但文档未合并入 main 不可发布');
+  steps = flow.publishStepsState(mk({ status: 'merged', items: [{ itemId: 'REQ-20260920-009', commit: 'a'.repeat(40) }], docsMerge: { commitHash: 'c'.repeat(40), mergedAt: '2026-09-26T10:00:00.000Z' } }), { overall: 'committed' });
+  assert.ok(!by(steps, 'release').locked, '文档合并后解锁发布');
 });
 
 /* ---------- L2 数据层（build-store.mjs） ---------- */
@@ -210,8 +212,10 @@ t('L2-1 范围指纹随条目/commit 变化；文档提交记录与门禁', () =
 t('L2-2 文档提交记录 / 范围变化后旧提交标识不放行', () => {
   const dir = tmpdir('atb-pf-store2-');
   const v = buildStore.createVersion(dir, { items: [{ itemId: 'REQ-20260920-009', commit: 'a'.repeat(40) }] });
-  // 无文档记录 → 门禁拒绝
-  assert.throws(() => buildStore.assertMergeDocsGate(dir, v.id, () => null), /文档/);
+  // REQ-20260926-002：合并文档门禁随流程重排移除（assertMergeDocsGate 下线）——
+  // 「文档未提交不放行」的门禁语义改由 evaluateDocsState + 文档合并步 / docs/merge 端点承接
+  const evalNone = flow.evaluateDocsState(v, () => null);
+  assert.equal(evalNone.overall, 'none', '无文档记录求值为 none');
   // 记录提交（scopeFp 与当前一致）
   const files = {};
   for (const f of flow.publishDocFiles()) files[f.file] = `h(${f.file})`;
@@ -303,9 +307,9 @@ t('L3-3 隔离合并冲突：B 依赖 A（同文件同行）时阻止并保留�
   assert.equal(git(dir, ['branch', '--show-current']), 'dev');
 });
 
-// BUG-20260921-018 拆分：共享 hash 按是否已在目标分支分流——不在 main 的仍阻断（原口径），
-// 已在 main 的豁免（与执行侧 alreadyIncluded 幂等语义一致）。
-t('L3-4a 混合提交（同一 commit 关联多个条目）不在目标分支上：被分析阻止（文案不变）', () => {
+// REQ-20260926-002：共享提交不再判混合阻断（条目与提交多对多）——shared 如实记录，
+// notes 说明按 hash 去重只执行一次；执行侧 mergeIsolatedIntoMain 对已在 main 的提交幂等记成功。
+t('L3-4a 共享提交（同一 commit 关联多个条目）不在目标分支上：不判混合阻断，shared 如实记录', () => {
   const dir = mkRepo(tmpdir('atb-pf-git4-'));
   fs.writeFileSync(path.join(dir, 'x.txt'), 'x');
   git(dir, ['add', '-A']); git(dir, ['commit', '-m', 'init']);
@@ -317,11 +321,12 @@ t('L3-4a 混合提交（同一 commit 关联多个条目）不在目标分支上
     { itemId: 'REQ-20260920-001', commit: c },
     { itemId: 'REQ-20260920-002', commit: c },
   ]);
-  assert.ok(an.blocked.length >= 1 && /混|同一提交/.test(an.blocked[0]), '同一提交关联多条目应阻止并解释');
-  assert.equal((an.exempted || []).length, 0, '不在目标分支上的共享提交不豁免');
+  assert.equal(an.blocked, undefined, '混合提交阻断随流程移除');
+  assert.equal(an.shared.length, 1, '共享提交如实记录');
+  assert.ok(an.notes.some((n) => /一次/.test(n)), 'notes 说明共享提交只执行一次');
 });
 
-t('L3-4b 共享提交已在目标分支上（BUG-20260921-018）：豁免混合判定，不再阻断', () => {
+t('L3-4b 共享提交已在目标分支上（BUG-20260921-018 语义并入多对多口径）：不阻断，执行幂等记成功', () => {
   const dir = mkRepo(tmpdir('atb-pf-git4b-'));
   fs.writeFileSync(path.join(dir, 'x.txt'), 'x');
   git(dir, ['add', '-A']); git(dir, ['commit', '-m', 'init']);
@@ -334,10 +339,9 @@ t('L3-4b 共享提交已在目标分支上（BUG-20260921-018）：豁免混合�
     { itemId: 'REQ-20260920-001', commit: c },
     { itemId: 'REQ-20260920-002', commit: c },
   ]);
-  assert.equal(an.blocked.length, 0, '已在 main 的共享提交不判混合（合并不被误阻断）');
+  assert.equal(an.blocked, undefined, '共享提交不判混合（合并不被误阻断）');
   assert.equal(an.shared.length, 1, 'shared 仍如实记录');
-  assert.equal(an.exempted.length, 1, '豁免明细记录');
-  assert.ok(an.notes.some((n) => /豁免/.test(n) && n.includes('main')), 'notes 豁免提示');
+  assert.ok(an.notes.some((n) => /一次/.test(n)), 'notes 说明只执行一次（执行侧幂等记成功）');
 });
 
 t('L3-5 主分支推送：只推 main（不推 dev）、不强推；仅 master 仓库以 master 为目标', () => {
@@ -469,7 +473,7 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     // REQ-20260922-006：新计划版本号取自动分配的 x.y.z（首个 0.1.0），不再从计划编号派生
     assert.equal(r.json.versionNumber, r.json.version.version, '版本号 = 计划的 x.y.z 字段');
     assert.equal(r.json.version.version, '0.1.0', '本夹具为该看板首个计划，自动分配 0.1.0');
-    assert.deepEqual(r.json.steps.map((s) => s.key), ['plan', 'link', 'docs', 'merge', 'release']);
+    assert.deepEqual(r.json.steps.map((s) => s.key), ['plan', 'merge', 'docs', 'docmerge', 'release']);
     assert.equal(r.json.docsFlow.files.length, 9, 'docsFlow 4×2 + LICENSE（REQ-20260922-002）');
     assert.ok(r.json.docsFlow.files.filter((f) => f.isDefault && !f.single).every((f) => f.state === 'unsummarized'), '全新版本默认语言全未总结');
     assert.ok(r.json.docsFlow.files.filter((f) => !f.isDefault).every((f) => f.state === 'untranslated'), '剩余语言初始未翻译（REQ-20260921-012）');
@@ -478,10 +482,11 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.json.docsPrompt, undefined, '提示词不在总览（start 按需生成）');
     assert.ok(r.json.mergeAnalysis.perItem.length === 1, '合并分析含所选条目');
 
-    // 未完成文档 → 合并被门禁拦截
-    r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
-    assert.equal(r.status, 409, `文档未提交应 409：${r.text}`);
-    assert.match(r.json.error || '', /文档/);
+    // REQ-20260926-002：挑选合并不再被文档门禁拦截（门禁移到「文档合并」步）——
+    // publish-plan 门禁态核验，此处不执行合并（功能合入留到文档提交之后，与夹具后续断言兼容）
+    r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
+    assert.equal(r.json.steps.find((s) => s.key === 'merge').locked, false, '未提交文档不锁挑选合并');
+    assert.equal(r.json.steps.find((s) => s.key === 'docmerge').locked, true, '文档未提交锁文档合并');
 
     // 文档保存（八文件 + README 互链）→ 状态未提交
     const contents = {};
@@ -519,7 +524,7 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     // 无变化不空提交：先对未变更文件集合提交（此刻 8 文件均为新文件，有变化）
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `文档提交：${r.text}`);
-    const docCommitHash = r.json.commitHash;
+    let docCommitHash = r.json.commitHash;
     assert.ok(/^[0-9a-f]{40}$/.test(docCommitHash), '返回提交 hash');
     const stat = git(proj, ['show', '--name-only', '--format=', docCommitHash]).split('\n').filter(Boolean);
     assert.deepEqual(stat.sort(), Object.keys(contents).sort(), '提交范围只含八个文档');
@@ -530,15 +535,16 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.json.noop, true, '无变化不制造空提交');
 
     // 外部修改文档（不经界面保存）→ 已审核回退待审核 + mtime 基准变更：对应翻译文档回退
-    //「未翻译」、整体完结失效，合并再次被拦；重新审核 + 重译重审 + 重新完结后提交放行
+    //「未翻译」；文档合并被拦（REQ-20260926-002：合并门禁移至文档合并步）；重新审核 +
+    // 重译重审后提交放行
     fs.writeFileSync(path.join(proj, 'FEATURES.md'), '# FEATURES 改动\n');
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.equal(r.json.docsFlow.files.find((f) => f.file === 'FEATURES.md').state, 'summarized', '编辑后回退待审核');
     assert.deepEqual(r.json.docsFlow.baselineShift, ['FEATURES_en.md'], 'REQ-20260921-012：mtime 基准变更检测命中');
     assert.equal(r.json.docsFlow.files.find((f) => f.file === 'FEATURES_en.md').state, 'untranslated', '受影响翻译文档回退未翻译');
-    r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
-    assert.equal(r.status, 409);
-    assert.match(r.json.error || '', /未提交/);
+    r = await req(port, 'POST', `/api/build/docs/merge${P}`, { id: vid });
+    assert.equal(r.status, 400);
+    assert.match(r.json.error || '', /文档未就绪/);
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 400, '回退待审核后提交被门禁拦截');
     r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'FEATURES.md' });
@@ -549,6 +555,7 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.status, 200, `重新审核 FEATURES_en.md：${r.text}`);
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.ok(r.json.commitHash, '重新提交成功');
+    docCommitHash = r.json.commitHash; // REQ-20260926-002：文档合并落账以最新文档提交为准
 
     // 隔离合并：在 dev 上执行成功，main 不含 a.txt
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
@@ -560,6 +567,17 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.ok(git(proj, ['ls-tree', '--name-only', 'main']).includes('unrelated-draft.txt') === false, '业务草稿不入 main');
     const replays = r.json.version.merge.replays || [];
     assert.ok(replays.length === 1 && replays[0].original === commitB, '重放证据落账');
+
+    // REQ-20260926-002 文档合并：审核通过的文档提交单独 cherry-pick 合入 main（落账 docsMerge；
+    // 重试幂等不重复执行）
+    r = await req(port, 'POST', `/api/build/docs/merge${P}`, { id: vid });
+    assert.equal(r.status, 200, `文档合并：${r.text}`);
+    assert.equal(r.json.version.docsMerge.commitHash, docCommitHash, 'docsMerge 落账指向文档提交');
+    assert.ok(r.json.version.docsMerge.replayedHash, '重放证据落账');
+    assert.ok(git(proj, ['ls-tree', '--name-only', 'main']).includes('README.md'), 'main 含发布文档');
+    r = await req(port, 'POST', `/api/build/docs/merge${P}`, { id: vid });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.alreadyIncluded, true, '重试幂等：已合入不重复执行');
 
     // 后续发布检验认可隔离后的提交证据：PREL from-build 不因重放（原始 commit 非 main 祖先）误判缺失
     r = await req(port, 'POST', `/api/product-release/from-build${P}`, { bldId: vid, version: '1.0.0' });
@@ -619,12 +637,12 @@ t('L5-1 导航与模块命名：顶栏「构建」改为「发布」；五步流
   assert.match(html, /data-view="build"[^>]*>发布</, '顶栏入口文案为「发布」');
   const buildJs = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'build.js'), 'utf8');
   assert.ok(buildJs.includes('data-step='), '五步导航 data-step 结构存在');
-  for (const k of ['plan', 'link', 'docs', 'merge', 'release']) assert.ok(buildJs.includes(`'${k}'`), `五步导航含 ${k}`);
+  for (const k of ['plan', 'merge', 'docs', 'docmerge', 'release']) assert.ok(buildJs.includes(`'${k}'`), `五步导航含 ${k}`);
   assert.ok(buildJs.includes('发布流程') || buildJs.includes('五步'), '发布流程语义存在');
   // REQ-20260921-008：文档编写页重构为「总结 → 审查 → 提交」——AI 写作 / TRAE / 提交文档到 Git
   // 随旧布局移除，改为 AI 总结 / 刷新 / 审查 / 提交四按钮 + 审查对话框；官网侧入口保留
   //（REQ-20260921-007 起官网侧统一更名「官网 AI 总结」）
-  for (const s of ['AI 总结', 'data-pf-refresh', 'data-pf-summary', 'data-pf-review', 'data-pf-commit', '官网 AI 总结', '立即检测']) {
+  for (const s of ['AI 总结', 'data-pf-refresh', 'data-pf-summary', 'data-pf-review', 'data-pf-commit', '官网资料更新', '立即检测']) {
     assert.ok(buildJs.includes(s), `文档/发布页关键入口：${s}`);
   }
   assert.ok(buildJs.includes('docFilesOf'), '前端按语言集展开文档清单（REQ-20260921-010 起 DOC_FILES 常量下线）');

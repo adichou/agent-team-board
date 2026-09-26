@@ -146,7 +146,7 @@ t('M1 有关联条目（可合并）：首区块直接为「隔离分析」，�
   assert.ok(idx('隔离分析') < idx('当前分支 dev · 目标主分支 main'), '隔离分析应在分支提示之前');
   assert.ok(idx('当前分支 dev · 目标主分支 main') < pane.indexOf('data-ver-merge="BLD-OK"'), '分支提示应在合并主按钮之前');
   assert.ok(pane.indexOf('data-ver-merge="BLD-OK"') >= 0, '合并主按钮仍在');
-  assert.match(pane, /只发布所选条目提交与最新文档提交；冲突或依赖未选变化会阻止并说明原因。/, '主按钮说明保留');
+  assert.match(pane, /把所选提交按 hash 去重、按拓扑顺序 cherry-pick 进 main；冲突会展示具体提交、文件和原因，已合入提交不重复执行。/, '主按钮说明保留（REQ-20260926-002 口径）');
 });
 
 t('M2 无关联条目 / failed（部分合并）/ merged（已合并）状态均无「发布范围」区块与残留，结果反馈保留', async () => {
@@ -172,7 +172,7 @@ t('M2 无关联条目 / failed（部分合并）/ merged（已合并）状态均
   pane = mergePaneHtml(h.inner());
   assertNoScopeBlock(pane, 'failed（部分合并重试）');
   assert.match(pane, /合并失败：模拟合并失败（可重试，只补未合并条目）/, '合并失败原因保留');
-  assert.match(pane, /重试合并入 main/, '重试主按钮保留');
+  assert.match(pane, /重试挑选合并/, '重试主按钮保留（REQ-20260926-002 更名）');
   // merged：合并完成信息保留
   await h.detailAt('BLD-MERGED', 'merge');
   pane = mergePaneHtml(h.inner());

@@ -125,9 +125,13 @@ async function setupServer(prepare) {
   };
 }
 
-t('B1 一键加入：依赖条目与最新提交进版本、隔离分析收敛为无未选祖先、scopeStale 联动', async () => {
+/* REQ-20260926-002：条目与提交多对多组版、共享提交按 hash 去重只执行一次——
+// 「一键加入所有依赖提交」引导整体下线（不将未选祖先认定为必须加入的功能依赖），
+// POST /api/build/version/add-dependencies 端点不再注册（未知接口统一 404）。
+// 原 B1~B4 端点行为用例随端点下线移除；未选祖先在隔离分析中降级为只读明细（F 区用例）。 */
+t('B1 add-dependencies 端点已随 REQ-20260926-002 下线：请求返回 404（未知接口），版本范围不变', async () => {
   const h = await setupServer((c) => {
-    const A = c.mkItem('requirement', '依赖需求A');
+    const A = c.mkItem('requirement', '未选需求A');
     const B = c.mkItem('requirement', '所选需求B');
     c.markDone(A.id);
     c.markDone(B.id);
@@ -139,142 +143,15 @@ t('B1 一键加入：依赖条目与最新提交进版本、隔离分析收敛�
     const created = await req(h.port, 'POST', `/api/build/version${h.P}`, { items: [{ itemId: h.B.id, commit: h.cB }] });
     assert.equal(created.status, 201, `创建版本应成功：${created.text}`);
     const vid = created.json.version.id;
-    // 前置：隔离分析发现未选祖先（A 的提交）
-    let plan = await req(h.port, 'GET', `/api/build/publish-plan${h.P}&id=${encodeURIComponent(vid)}`);
-    assert.ok((plan.json.mergeAnalysis.perItem || []).some((x) => (x.intermediates || []).length >= 1), '前置：应存在未选祖先');
-    // 预置文档提交记录（验证 markDocsScopeStale 联动）
-    buildStore.recordDocsCommit(h.dataDir, vid, { commitHash: 'e'.repeat(40), files: { 'README.md': 'f'.repeat(64) }, scopeFp: 'x' });
+    // 前置：隔离分析仍如实给出未选祖先明细（只读参考，不再引导一键纳入）
+    const plan = await req(h.port, 'GET', `/api/build/publish-plan${h.P}&id=${encodeURIComponent(vid)}`);
+    assert.ok((plan.json.mergeAnalysis.perItem || []).some((x) => (x.intermediates || []).length >= 1), '前置：隔离分析含未选祖先明细');
+    assert.equal(plan.json.mergeAnalysis.blocked, undefined, '混合提交阻断随流程移除');
     const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r.status, 200, `一键加入应成功：${r.text}`);
-    assert.deepEqual((r.json.added || []).map((x) => ({ itemId: x.itemId, commit: x.commit })), [{ itemId: h.A.id, commit: h.cA }], '依赖条目按其最新（唯一）提交纳入');
-    assert.deepEqual(r.json.skipped, [], '本场景无跳过项');
-    assert.ok(r.json.version.items.some((x) => x.itemId === h.A.id && x.commit === h.cA), '返回版本含新入条目');
-    assert.equal(r.json.version.docs.scopeStale, true, '加入后发布范围变化（scopeStale 联动）');
-    assert.match(r.json.version.docs.staleReason || '', /新增关联条目/, 'scopeStale 原因含新增条目来源');
-    // 隔离分析收敛：重求值后无未选祖先
-    plan = await req(h.port, 'GET', `/api/build/publish-plan${h.P}&id=${encodeURIComponent(vid)}`);
-    const per = plan.json.mergeAnalysis.perItem || [];
-    assert.ok(per.every((x) => (x.intermediates || []).length === 0), `加入后应无未选祖先，实际：${JSON.stringify(per)}`);
+    assert.equal(r.status, 404, `一键加入端点应已下线（404）：${r.text}`);
+    assert.match(r.json.error || '', /未知接口/, '错误说明为未知接口');
     const version = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
-    assert.equal(version.items.length, 2, '版本关联 2 条（B + 新入 A）');
-  } finally {
-    await h.close();
-  }
-});
-
-t('B2 归因与校验：无归属 / 未 done / 被占用跳过并给原因；可归属取最新提交；已在本版本条目补入其余提交（BUG-20260921-015 修复后口径）', async () => {
-  const h = await setupServer((c) => {
-    const B = c.mkItem('requirement', '所选需求B');
-    const C = c.mkItem('requirement', '未完成依赖C');
-    const D = c.mkItem('requirement', '被占用依赖D');
-    const E = c.mkItem('bug', '双提交依赖E');
-    const F = c.mkItem('bug', '早提交依赖F');
-    for (const it of [B, D, E, F]) c.markDone(it.id); // C 保持未完成
-    const cU = c.commit('u.txt', 'chore: 无单号提交');
-    const cC = c.commit('c.txt', `feat: C ${C.id}`);
-    const cD = c.commit('d.txt', `feat: D ${D.id}`);
-    const cE1 = c.commit('e1.txt', `feat: E1 ${E.id}`);
-    const cE2 = c.commit('e2.txt', `feat: E2 ${E.id}`);
-    const cF0 = c.commit('f0.txt', `feat: F0 ${F.id}`);
-    const cF1 = c.commit('f1.txt', `feat: F1 ${F.id}`);
-    const cB = c.commit('b.txt', `feat: B ${B.id}`);
-    const occ = c.createVersion([{ itemId: D.id, commit: cD }], '占用版本');
-    return { B, C, D, E, F, cU, cC, cD, cE1, cE2, cF0, cF1, cB, occId: occ.id };
-  });
-  try {
-    // 主版本：B@所选 + F@cF1（cF0 为其未选祖先 → 归属条目已在本版本 → BUG-20260921-015 起补入而非跳过）
-    const created = await req(h.port, 'POST', `/api/build/version${h.P}`, {
-      items: [{ itemId: h.B.id, commit: h.cB }, { itemId: h.F.id, commit: h.cF1 }],
-    });
-    assert.equal(created.status, 201, `创建版本应成功：${created.text}`);
-    const vid = created.json.version.id;
-    const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r.status, 200, `一键加入应成功：${r.text}`);
-    // 可归属新条目：多个依赖提交全部保留（不再只取「最新」一个）
-    assert.deepEqual((r.json.added || []).map((x) => ({ itemId: x.itemId, commit: x.commit, commits: x.commits })),
-      [{ itemId: h.E.id, commit: h.cE1, commits: [h.cE1, h.cE2] }], '新依赖条目的全部提交纳入');
-    const skipped = r.json.skipped || [];
-    const byReason = (re) => skipped.filter((s) => re.test(s.reason || ''));
-    assert.equal(byReason(/无法归属/).length, 1, '无单号提交以「无法归属」跳过');
-    assert.equal(byReason(/无法归属/)[0].commit, h.cU, '跳过清单含 commit');
-    assert.equal(byReason(/尚未完成/).length, 1, '未 done 条目以「尚未完成」跳过');
-    assert.ok(byReason(/尚未完成/)[0].reason.includes(h.C.id), '跳过原因含条目号');
-    assert.equal(byReason(/已纳入版本/).length, 1, '被占用条目以「已纳入版本」跳过');
-    assert.ok(byReason(/已纳入版本/)[0].reason.includes(h.occId), '跳过原因含占用版本号');
-    assert.equal(byReason(/已在本版本/).length, 0, '不再按「已在本版本」跳过（补入该条目其余提交）');
-    // 已在本版本条目：补入清单（保留原关联 cF1，补 cF0）
-    assert.deepEqual(r.json.appended || [], [{ itemId: h.F.id, commits: [h.cF0] }], '早提交依赖补入本版本既有条目');
-    // 版本数据：E 已纳入（两提交），F 补齐两提交，其余不动
-    const version = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
-    const eItem = version.items.find((x) => x.itemId === h.E.id);
-    assert.ok(eItem && Array.isArray(eItem.commits) && eItem.commits.length === 2, '依赖条目已入版本且保留两个提交');
-    const fItem = version.items.find((x) => x.itemId === h.F.id);
-    assert.ok(fItem && fItem.commit === h.cF1 && Array.isArray(fItem.commits) && fItem.commits.length === 2, '既有条目保留原关联并补齐提交');
-    assert.equal(version.items.length, 3, '版本关联 3 条（B、F、新入 E）');
-  } finally {
-    await h.close();
-  }
-});
-
-t('B3 全部依赖不可纳入：added 空、版本范围不变、skipped 全量反馈（不静默）', async () => {
-  const h = await setupServer((c) => {
-    const B = c.mkItem('requirement', '所选需求B');
-    c.markDone(B.id); // 依赖提交无单号 → 全部无法归属
-    const cU1 = c.commit('u1.txt', 'chore: 杂项一');
-    const cU2 = c.commit('u2.txt', 'chore: 杂项二');
-    const cB = c.commit('b.txt', `feat: B ${B.id}`);
-    return { B, cU1, cU2, cB };
-  });
-  try {
-    const created = await req(h.port, 'POST', `/api/build/version${h.P}`, { items: [{ itemId: h.B.id, commit: h.cB }] });
-    assert.equal(created.status, 201, `创建版本应成功：${created.text}`);
-    const vid = created.json.version.id;
-    const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r.status, 200, `应 200（不可纳入不是错误，清单反馈）：${r.text}`);
-    assert.deepEqual(r.json.added, [], '无任何可纳入依赖');
-    assert.equal((r.json.skipped || []).length, 2, '跳过清单不静默丢失');
-    const version = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
-    assert.equal(version.items.length, 1, '版本范围不变');
-  } finally {
-    await h.close();
-  }
-});
-
-t('B4 锁定态与幂等：merging / 已推送 409；无依赖 200 added 空；版本不存在 400', async () => {
-  const h = await setupServer((c) => {
-    const items = [];
-    const commits = [];
-    for (let i = 0; i < 3; i++) { // 三个互不占用条目各一提交（一条目至多纳入一个版本）
-      const it = c.mkItem('requirement', `需求${i}`);
-      c.markDone(it.id);
-      commits.push(c.commit(`f${i}.txt`, `feat: ${i} ${it.id}`));
-      items.push(it);
-    }
-    return { items, commits };
-  });
-  try {
-    // 无依赖：所选提交无未选祖先（单提交历史下 main..cX 仅含所选 cX 自身 → 无依赖）
-    const v0 = await req(h.port, 'POST', `/api/build/version${h.P}`, { items: [{ itemId: h.items[0].id, commit: h.commits[0] }] });
-    assert.equal(v0.status, 201);
-    const r0 = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: v0.json.version.id });
-    assert.equal(r0.status, 200, `无依赖时一键加入应 200 幂等：${r0.text}`);
-    assert.deepEqual(r0.json.added, []);
-    assert.deepEqual(r0.json.skipped, []);
-    // merging：数据层直接置状态 → 409
-    const v1 = await req(h.port, 'POST', `/api/build/version${h.P}`, { name: '合并中版本', items: [{ itemId: h.items[1].id, commit: h.commits[1] }] });
-    buildStore.beginMerge(h.dataDir, v1.json.version.id);
-    const r1 = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: v1.json.version.id });
-    assert.equal(r1.status, 409, '合并中一键加入应 409');
-    assert.match(r1.json.error || '', /合并中/);
-    // 已推送：recordPushSuccess → 409
-    const v2 = await req(h.port, 'POST', `/api/build/version${h.P}`, { name: '推送版本', items: [{ itemId: h.items[2].id, commit: h.commits[2] }] });
-    buildStore.recordPushSuccess(h.dataDir, v2.json.version.id, { remote: 'origin', sha: 'a'.repeat(40) });
-    const r2 = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: v2.json.version.id });
-    assert.equal(r2.status, 409, '已正式发布一键加入应 409');
-    assert.match(r2.json.error || '', /已正式发布/);
-    // 版本不存在 → 400
-    const r3 = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: 'BLD-19990101-001' });
-    assert.equal(r3.status, 400, '版本不存在应 400');
+    assert.equal(version.items.length, 1, '版本只含所选条目（未选祖先不自动纳入）');
   } finally {
     await h.close();
   }
@@ -313,20 +190,20 @@ function ver(id, name, status = 'draft', extra = {}) {
   };
 }
 
-function plan({ currentBranch = 'dev', docsHash = null, mergeLocked = false, reason = '', perItem = null, blocked = null, notes = null } = {}) {
+function plan({ currentBranch = 'dev', docsHash = null, mergeLocked = false, reason = '', perItem = null, sharedList = null, notes = null } = {}) {
   return {
     currentBranch, mainBranch: 'main',
     steps: [
-      { key: 'plan', label: '版本计划', locked: false, reason: '' },
-      { key: 'link', label: '关联条目与提交', locked: false, reason: '' },
-      { key: 'docs', label: '文档编写', locked: false, reason: '' },
-      { key: 'merge', label: '合并入 main', locked: mergeLocked, reason },
-      { key: 'release', label: '正式发布', locked: false, reason: '' },
+      { key: 'plan', label: '选择条目与提交', locked: false, reason: '' },
+      { key: 'merge', label: '挑选合并', locked: mergeLocked, reason },
+      { key: 'docs', label: '文档与翻译', locked: false, reason: '' },
+      { key: 'docmerge', label: '文档合并', locked: false, reason: '' },
+      { key: 'release', label: '发布', locked: false, reason: '' },
     ],
     docs: { files: [], overall: docsHash ? 'committed' : 'none', commitHash: docsHash, reasons: [] },
     mergeAnalysis: {
       perItem: perItem || [],
-      blocked: blocked || [],
+      shared: sharedList || [],
       notes: notes || (perItem && perItem.some((x) => (x.intermediates || []).length)
         ? ['所选提交存在 3 个未选祖先提交：普通 merge 会一并带入 main，隔离合并不带入；若所选改动依赖这些内容，执行时将冲突阻止并说明原因']
         : []),
@@ -399,16 +276,16 @@ function mergePaneHtml(inner) {
   return inner.slice(i, i + 12000);
 }
 
-t('F1 有依赖：一行汇总 + 一键加入按钮 + 明细 details；红色长文与逐条目重复长句不再渲染', async () => {
+t('F1 有依赖（REQ-20260926-002 重排）：一行汇总 + 只读明细 details，无一键加入入口；红色长文与逐条目重复长句不再渲染', async () => {
   const h = setup({ versions: [ver('BLD-DEP', '有依赖')], plans: { 'BLD-DEP': plan({ docsHash: H2, perItem: DEP_PER_ITEM }) } });
   await h.enter();
   await h.detailAt('BLD-DEP', 'merge');
   const pane = mergePaneHtml(h.inner());
-  assert.match(pane, /发现 3 个未选祖先提交 · 影响 2 个所选条目/, '一行汇总（提交数 + 所选条目数，BUG-20260926-003 起不再统称「依赖」）');
-  assert.match(pane, /一键加入所有未选祖先提交/, '一键加入按钮渲染');
-  assert.ok(pane.includes('data-iso-add-deps'), '按钮带 data-iso-add-deps 行为标记');
-  assert.match(pane, /查看未选祖先明细/, '明细折叠入口');
-  assert.ok(pane.includes('9ab3cdef'), '明细含依赖提交短 hash');
+  assert.match(pane, /发现 3 个未选祖先提交 · 影响 2 个所选条目/, '一行汇总（提交数 + 所选条目数）');
+  // REQ-20260926-002：未选祖先不认定为必须加入的功能依赖——一键加入入口整体移除
+  assert.ok(!pane.includes('data-iso-add-deps') && !pane.includes('一键加入'), '一键加入按钮与行为标记移除');
+  assert.match(pane, /查看未选祖先明细/, '明细折叠入口保留（只读参考）');
+  assert.ok(pane.includes('9ab3cdef'), '明细含未选祖先提交短 hash');
   assert.match(pane, /为 REQ-20260921-013 的未选祖先/, '明细标注归属所选条目');
   // 红色长文移除：无 rel-form-err、无旧长句
   assert.ok(!pane.includes('rel-form-err'), '合并页不再输出红色 rel-form-err 长段');
@@ -419,19 +296,20 @@ t('F1 有依赖：一行汇总 + 一键加入按钮 + 明细 details；红色长
   assert.ok(pane.indexOf('隔离分析') < pane.indexOf('当前分支 dev · 目标主分支 main'), '隔离分析先于分支提示');
 });
 
-t('F2 混合提交：单行阻止反馈 + title 全文；点击主按钮仍有原因（不回退点击必反馈）', async () => {
-  const blockedText = '同一提交 abc123 关联多个条目（REQ-20260921-011、REQ-20260921-010）：混合提交无法安全拆分，请调整关联或先合并为一个条目';
-  const h = setup({ versions: [ver('BLD-MIX', '混合提交')], plans: { 'BLD-MIX': plan({ docsHash: H2, blocked: [blockedText] }) } });
+t('F2 共享提交：单行说明按 hash 去重只执行一次（不再阻断）；点击主按钮仍有原因（不回退点击必反馈）', async () => {
+  const shared = [{ commit: 'abc123'.padEnd(40, '0'), itemIds: ['REQ-20260921-010', 'REQ-20260921-011'] }];
+  const h = setup({ versions: [ver('BLD-MIX', '共享提交')], plans: { 'BLD-MIX': plan({ docsHash: H2, sharedList: shared }) } });
   await h.enter();
   await h.detailAt('BLD-MIX', 'merge');
   const pane = mergePaneHtml(h.inner());
-  assert.match(pane, /1 处混合提交无法安全拆分，合并将被阻止/, '混合提交单行反馈');
-  assert.ok(pane.includes('混合提交无法安全拆分，请调整关联'), 'title 含完整阻止原因');
+  assert.match(pane, /共享提交 1 处按提交 hash 去重，挑选合并只执行一次/, '共享提交单行说明（不阻断）');
+  assert.ok(pane.includes('abc123'), 'title 含提交明细');
+  assert.ok(pane.includes('REQ-20260921-010') && pane.includes('REQ-20260921-011'), 'title 含关联条目明细');
   assert.ok(!pane.includes('rel-form-err'), '不再输出红色长段');
-  assert.ok(!pane.includes('所选提交无未选祖先'), '有阻止信息时不渲染无依赖空态');
-  // 点击必反馈：openMergeConfirm toast 真实原因（mergeBlockReason 增补 blocked 档）
+  assert.ok(!pane.includes('混合提交') && !pane.includes('豁免'), '不再出现混合提交 / 豁免措辞（机制已移除）');
+  // 点击必反馈：门禁锁定（本夹具 merge 未锁）→ 不 toast、确认弹窗照常打开
   h.run(`window.ATBBuild.openMergeConfirm('BLD-MIX')`);
-  assert.ok(h.toasts.some(([m]) => m.includes('暂不可合并') && m.includes('混合提交')), `点击主按钮应 toast 阻止原因，实际：${JSON.stringify(h.toasts)}`);
+  assert.ok(h.toasts.length === 0, `可合并版本点击主按钮不误报原因，实际：${JSON.stringify(h.toasts)}`);
 });
 
 t('F3 无依赖：保持简洁空态，无一键加入入口', async () => {
@@ -440,7 +318,7 @@ t('F3 无依赖：保持简洁空态，无一键加入入口', async () => {
   await h.detailAt('BLD-CLEAN', 'merge');
   const pane = mergePaneHtml(h.inner());
   assert.match(pane, /所选提交无未选祖先：变更可独立进入主分支。/, '简洁空态保留');
-  assert.ok(!pane.includes('data-iso-add-deps'), '无依赖不渲染一键加入按钮');
+  assert.ok(!pane.includes('data-iso-add-deps'), '无一键加入行为标记');
   assert.ok(!pane.includes('查看依赖明细'), '无依赖不渲染明细入口');
 });
 
@@ -466,49 +344,29 @@ t('F4 阻止性信息单行化：门禁锁定 / 不在 dev / 合并失败均非�
   await h.detailAt('BLD-FAIL', 'merge');
   pane = mergePaneHtml(h.inner());
   assert.match(pane, /⚠ 合并失败：模拟合并失败（可重试，只补未合并条目）/, '合并失败文本保留');
-  assert.match(pane, /重试合并入 main/, '重试主按钮保留');
+  assert.match(pane, /重试挑选合并/, '重试主按钮保留');
   assert.ok(!pane.includes('rel-form-err'), '失败行不再是红色 rel-form-err');
   await h.detailAt('BLD-OK', 'merge');
   pane = mergePaneHtml(h.inner());
   assert.match(pane, /合并完成：主分支头/, '合并完成结果保留');
 });
 
-t('F5 一键加入交互：成功后发布范围与隔离分析联动刷新、跳过清单展示；失败可重试', async () => {
-  const added = [{ itemId: 'REQ-20260920-018', commit: '9ab3cdef'.padEnd(40, '0'), title: '依赖需求' }];
-  const skipped = [{ commit: '77d0e2ff'.padEnd(40, '0'), subject: 'docs: 发布文档 REQ-20260920-016', reason: '无法归属到看板条目（提交主题不含条目编号）' }];
-  let phase = 'ok';
+t('F5 一键加入交互已移除：合并页不再发起 add-dependencies 请求（REQ-20260926-002）', async () => {
   const h = setup({
     versions: [ver('BLD-ACT', '交互')],
-    plans: (id, n) => (n >= 2 ? plan({ docsHash: H2, perItem: [] }) : plan({ docsHash: H2, perItem: DEP_PER_ITEM })),
-    addDeps: () => (phase === 'ok'
-      ? { version: null, added, skipped }
-      : { __error: true, error: '条目 REQ-20260920-018 已纳入版本 BLD-20260921-099，不可重复纳入' }),
+    plans: { 'BLD-ACT': plan({ docsHash: H2, perItem: DEP_PER_ITEM }) },
   });
   await h.enter();
   await h.detailAt('BLD-ACT', 'merge');
-  assert.equal(h.calls.addDeps.length, 0, '前置：未发起一键加入');
-  await h.run('window.ATBBuild.addDependencies()');
-  await h.tick(5);
-  assert.equal(h.calls.addDeps.length, 1, '发起一次 add-dependencies 请求');
-  assert.equal(h.calls.addDeps[0].id, 'BLD-ACT', '请求体携带版本 id');
-  assert.ok(h.calls.state >= 2, '成功后刷新构建状态（发布范围列表更新）');
-  assert.ok(h.calls.plan >= 2, '成功后重求值隔离分析');
+  assert.equal(h.calls.addDeps.length, 0, '合并页不再发起一键加入请求');
+  // 界面无入口也无行为接缝：addDependencies 不再导出
+  assert.equal(h.run('typeof window.ATBBuild.addDependencies'), 'undefined', 'addDependencies 行为接缝已移除');
   const pane = mergePaneHtml(h.inner());
-  assert.match(pane, /所选提交无未选祖先：变更可独立进入主分支。/, '加入后隔离分析收敛为无未选祖先');
-  assert.ok(!pane.includes('data-iso-add-deps'), '按钮随无依赖消失');
-  assert.match(pane, /以下 1 个未选祖先提交未能纳入/, '跳过清单展示');
-  assert.match(pane, /无法归属到看板条目/, '跳过原因可见');
-  assert.match(pane, /77d0e2ff/, '跳过清单含短 hash');
-  assert.ok(h.toasts.some(([m]) => m.includes('已加入 1 个条目') && m.includes('跳过 1 个')), `部分成功 toast，实际：${JSON.stringify(h.toasts)}`);
-  // 失败：toast 错误、可重试
-  phase = 'err';
-  await h.run('window.ATBBuild.addDependencies()');
-  await h.tick(5);
-  assert.equal(h.calls.addDeps.length, 2, '失败后可再次发起（可重试）');
-  assert.ok(h.toasts.some(([m, e]) => e && m.includes('✕ 一键加入失败：') && m.includes('不可重复纳入')), `失败 toast 原因，实际：${JSON.stringify(h.toasts)}`);
+  assert.ok(!pane.includes('data-iso-add-deps'), '无一键加入行为标记');
+  assert.match(pane, /发现 3 个未选祖先提交 · 影响 2 个所选条目/, '未选祖先明细仍如实展示（只读）');
 });
 
-t('F6 锁定态按钮：merging / 已正式发布 aria-disabled + title 真实原因；守卫点击 toast 不发请求', async () => {
+t('F6 合并主按钮锁定态沿用：merging / 已正式发布 aria-disabled + title 真实原因（一键加入锁定态词条随入口移除）', async () => {
   const h = setup({
     versions: [
       ver('BLD-MRG', '合并中', 'merging'),
@@ -519,43 +377,47 @@ t('F6 锁定态按钮：merging / 已正式发布 aria-disabled + title 真实�
   await h.enter();
   await h.detailAt('BLD-MRG', 'merge');
   let pane = mergePaneHtml(h.inner());
-  assert.ok(/data-iso-add-deps[^>]*aria-disabled="true"/.test(pane), 'merging 态一键加入 aria-disabled');
-  assert.match(pane, /合并中，条目不可增删/, 'merging 态 title 原因');
-  await h.run('window.ATBBuild.addDependencies()');
-  assert.equal(h.calls.addDeps.length, 0, '守卫拦截：不发请求');
-  assert.ok(h.toasts.some(([m]) => m.includes('合并中，条目不可增删')), `守卫 toast，实际：${JSON.stringify(h.toasts)}`);
+  assert.match(pane, /data-ver-merge="BLD-MRG"[^>]*aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 态合并主按钮禁用并说明');
   await h.detailAt('BLD-PUSH', 'merge');
   pane = mergePaneHtml(h.inner());
-  assert.ok(/data-iso-add-deps[^>]*aria-disabled="true"/.test(pane), '已正式发布态一键加入 aria-disabled');
-  assert.match(pane, /已正式发布，条目已锁定/, '已正式发布态 title 原因');
+  assert.match(pane, /data-ver-merge="BLD-PUSH"[^>]*aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '已正式发布态合并主按钮禁用并说明');
+  assert.ok(!pane.includes('合并中，条目不可增删'), '一键加入锁定 title 词条随入口移除');
 });
 
-t('S1 静态契约：renderMergePane 仅读取失败态保留 rel-form-err；mergeBlockReason 增补 blocked 档；i18n 中英同步', async () => {
+t('S1 静态契约（REQ-20260926-002 修订）：renderMergePane 仅读取失败态保留 rel-form-err；混合阻断 / 一键加入源码清理；i18n 中英同步', async () => {
   const mergePane = buildJs.match(/function renderMergePane\(v\) \{[\s\S]*?\n  \}/);
   assert.ok(mergePane, '缺少 renderMergePane');
   assert.equal((mergePane[0].match(/rel-form-err/g) || []).length, 1, 'rel-form-err 仅保留读取失败态一处');
   assert.ok(!mergePane[0].includes('普通 merge 会一并带入 main'), '源码不再含逐条目重复长句');
+  assert.ok(!mergePane[0].includes('blocked') && !mergePane[0].includes('exempted'), '混合阻断 / 豁免渲染随流程移除');
+  assert.ok(!mergePane[0].includes('data-iso-add-deps'), '一键加入行为标记随流程移除');
+  assert.ok(mergePane[0].includes('an.shared'), '共享提交说明保留（按 hash 去重只执行一次）');
   const reasonFn = buildJs.match(/function mergeBlockReason\(v\) \{[\s\S]*?\n  \}/);
   assert.ok(reasonFn, '缺少 mergeBlockReason');
-  assert.match(reasonFn[0], /mergeAnalysis/, 'mergeBlockReason 增补 blocked 档（title/toast 同源）');
-  // i18n：新增词条中英同步（BUG-20260912-001 口径；BUG-20260926-003 起未选祖先不再统称「依赖」）
+  assert.ok(!reasonFn[0].includes('blocked'), 'mergeBlockReason 的 blocked 档随混合阻断移除');
+  // i18n：隔离分析只读措辞词条保留、一键纳入与混合阻断词条移除（BUG-20260912-001 口径）
   await import('../web/i18n.js');
   const { EN, EN_DYNAMIC } = globalThis.ATBI18N._dict;
-  for (const k of ['一键加入所有未选祖先提交', '加入中…', '查看未选祖先明细', '所选提交无未选祖先：变更可独立进入主分支。', '⚠ 未能加入任何未选祖先提交（原因见隔离分析清单）']) {
+  for (const k of ['查看未选祖先明细', '所选提交无未选祖先：变更可独立进入主分支。']) {
     assert.ok(k in EN, `EN 词典缺词条：${k}`);
   }
   for (const k of [
     '发现 ◇ 个未选祖先提交 · 影响 ◇ 个所选条目',
-    '⚠ ◇ 处混合提交无法安全拆分，合并将被阻止',
+    '共享提交 ◇ 处按提交 hash 去重，挑选合并只执行一次（各关联条目展示一致的合入结果）',
     '⚠ 暂不可合并：◇',
     '⚠ 合并失败：◇（可重试，只补未合并条目）',
-    '⚠ 以下 ◇ 个未选祖先提交未能纳入：',
     '为 ◇ 的未选祖先',
-    '✓ 已加入 ◇ 个条目：发布范围已变化，文档需重新核对 / 提交',
-    '✓ 已加入 ◇ 个条目，跳过 ◇ 个（原因见隔离分析清单）',
-    '✕ 一键加入失败：◇',
   ]) {
     assert.ok(k in EN_DYNAMIC, `EN_DYNAMIC 词典缺词条：${k}`);
+  }
+  for (const k of [
+    '一键加入所有未选祖先提交',
+    '⚠ ◇ 处混合提交无法安全拆分，合并将被阻止',
+    '已豁免 ◇ 处共享提交的混合判定（提交已在 ◇ 上，合并时幂等记成功）',
+    '⚠ 以下 ◇ 个未选祖先提交未能纳入：',
+    '✕ 一键加入失败：◇',
+  ]) {
+    assert.ok(!(k in EN) && !(k in EN_DYNAMIC), `一键纳入 / 混合阻断词条应移除：${k}`);
   }
 });
 
