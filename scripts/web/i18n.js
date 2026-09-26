@@ -1283,6 +1283,9 @@ const EN = {
   '版本：': 'Version: ',
   '暂无进行中的 AI 总结任务（空态）——到发布模块「文档编写」页点击「AI 总结」启动。': 'No AI summary task in progress (empty state) — start one from the "Docs writing" step in the release module.',
   '；发布范围已变化，审核已失效需重新审查': '; the release scope has changed, approvals are voided and need review again',
+  // BUG-20260926-004 审查对话框范围变化失效横幅：scopeStale 期间逐文件「通过审核」可恢复
+  //（审核时点晚于范围变化时点即生效），横幅提示重新逐文件核对后再提交（静态文案）
+  '发布范围已变化：请重新逐文件核对并「通过审核」后再提交': 'The release scope has changed: re-check each file and approve it again before committing',
   '（正在总结） · 独立锁 summary（与 AI 翻译 / AI 分析 / AI 开发互不占用）': '(summarizing) · independent lock summary (never conflicts with AI translation / analysis / development)',
   '· 独立锁 summary（与 AI 翻译 / AI 分析 / AI 开发互不占用）': 'independent lock summary (never conflicts with AI translation / analysis / development)',
   '✓ AI 总结提示词已复制：交给 AI Agent 逐文件执行，进度在本页与任务模块自动刷新': '✓ AI summary prompt copied: hand it to an AI Agent to run file by file; progress refreshes here and in the task module',

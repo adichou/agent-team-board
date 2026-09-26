@@ -3028,10 +3028,12 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   }
 
   // POST /api/build/docs/commit {id}：提交文档到 Git（pathspec 限定语言集内文档，不夹带业务
-  // 源码；无变化不空提交；成功返回 hash 并固化范围快照；失败保留内容可重试）。
+  // 源码；无变化不空提交——BUG-20260926-004 起范围过期恢复时在既有提交记录上重固化入账；
+  // 成功返回 hash 并固化范围快照；失败保留内容可重试）。
   // REQ-20260921-008 前置：① 语言集内全部文件「已审核」（BUG-20260926-002 起不再叠加
-  // 整体审查完结条件——全审即放行，门禁不放宽也不新增）；② 当前分支必须是 dev
-  //（assertOnDev，不在 dev 阻止并提示自行切换——沿用发布模块「不自动切分支」口径）。
+  // 整体审查完结条件；BUG-20260926-004 起「已审核」含审核基于当前范围的时点校验——本端点
+  // 以提交时点复算结果为准，审核过程中范围再变则拦截并如实提示重新核对）；② 当前分支必须
+  // 是 dev（assertOnDev，不在 dev 阻止并提示自行切换——沿用发布模块「不自动切分支」口径）。
   if (req.method === 'POST' && pathname === '/api/build/docs/commit') {
     return runPost(async (body) => {
       const board = requireBoard();
@@ -3046,7 +3048,12 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         const detail = flowEval.missing
           .map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`)
           .join('、');
-        throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交`);
+        // BUG-20260926-004：scopeStale 时如实附范围变化上下文——审核可恢复（重新逐文件通过
+        // 审核即生效），不再是「提示路径走不通」的死循环文案
+        const staleTail = flowEval.scopeStale
+          ? `；发布范围已变化（${v.docs?.staleReason || '条目或提交变化'}），既有审核已失效，请重新逐文件核对后再提交`
+          : '';
+        throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交${staleTail}`);
       }
       buildGit.assertOnDev(root);
       // REQ-20260921-010：提交范围按语言集展开（4 类 × N），pathspec 限定不夹带业务源码；
@@ -3056,7 +3063,22 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const docFiles = flow.publishDocFiles(langs, customDocs).map((f) => f.file);
       const r = buildGit.commitPublishDocs(root, { message: `docs: 发布文档 ${v.id}`, files: docFiles });
       if (r.noop) {
-        return sendJson(res, 200, { ok: true, noop: true, files: r.files, version: buildStore.readVersion(board, body.id) });
+        // BUG-20260926-004 范围过期恢复路径：文档内容与最近一次文档提交一致（无新 git 提交
+        // 可造）但发布范围已变化（scopeStale）时，「重新提交」语义为重确认——复用既有
+        // commitHash、按提交时点磁盘内容重固化文档记录（刷新 scopeFp / committedAt，清除
+        // scopeStale / staleReason / scopeChangedAt），不制造空提交；无既有文档记录时维持
+        // 原 noop 口径（无变化不入账）。
+        let version = buildStore.readVersion(board, body.id);
+        if (version.docs?.commitHash) {
+          const hashes = {};
+          for (const f of r.files) {
+            const text = docReadFile(f);
+            if (text != null) hashes[f] = crypto.createHash('sha256').update(text).digest('hex');
+          }
+          const scopeFp = flow.publishScopeFingerprint(version.items, docReadFile, langs, customDocs);
+          version = buildStore.recordDocsCommit(board, body.id, { commitHash: version.docs.commitHash, files: hashes, scopeFp });
+        }
+        return sendJson(res, 200, { ok: true, noop: true, files: r.files, version });
       }
       const scopeFp = flow.publishScopeFingerprint(v.items, docReadFile, langs, customDocs);
       const version = buildStore.recordDocsCommit(board, body.id, { commitHash: r.commitHash, files: r.hashes, scopeFp });

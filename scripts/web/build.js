@@ -3498,6 +3498,7 @@ ${langsField}
             <span>审查发布文档（${esc(v?.id || '')}）</span>
             <button type="button" class="btn small quiet" data-review-close aria-label="关闭对话框">✕ 关闭</button>
           </header>
+          ${flowEval.scopeStale ? `<p class="bld-review-stale muted small" role="note" data-review-stale-note>发布范围已变化：请重新逐文件核对并「通过审核」后再提交</p>` : ''}
           <nav class="rel-tabs bld-review-tabs" role="tablist" aria-label="文档类型页签">${tabsHtml}</nav>
           <div class="bld-review-cols"${pair.length ? ` style="grid-template-columns:repeat(${pair.length},minmax(0,1fr))"` : ''}>${colsHtml}</div>
           <footer class="bld-review-foot">
