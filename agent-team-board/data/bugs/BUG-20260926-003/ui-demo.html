@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260926-003 界面演示 — 隔离分析一键加入</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1f2430; --muted: #6b7280;
+    --line: #e2e5ea; --accent: #2563eb; --accent-ink: #ffffff;
+    --ok-bg: #ecfdf5; --ok-ink: #047857; --ok-line: #a7f3d0;
+    --warn-bg: #fffbeb; --warn-ink: #92400e; --warn-line: #fde68a;
+    --bad-bg: #fef2f2; --bad-ink: #b91c1c; --bad-line: #fecaca;
+    --code-bg: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --card: #1d2129; --ink: #e6e9ef; --muted: #9aa3b2;
+      --line: #2c3340; --accent: #4f83f1; --accent-ink: #0b1220;
+      --ok-bg: #10241b; --ok-ink: #6ee7b7; --ok-line: #1d4634;
+      --warn-bg: #2a2210; --warn-ink: #fcd34d; --warn-line: #4d3c12;
+      --bad-bg: #2a1414; --bad-ink: #fca5a5; --bad-line: #52201f;
+      --code-bg: #272d38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--ink);
+         font: 15px/1.65 -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; font-size: 13px; }
+  .controls fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 8px; margin: 0; }
+  .controls legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .controls label { margin-right: 10px; cursor: pointer; }
+  select { font: inherit; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .demo-note { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .iso-sum { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0; }
+  .iso-sum .small { font-size: 13px; }
+  .btn { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 6px 14px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn[aria-disabled="true"] { opacity: .55; }
+  details { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  summary { cursor: pointer; font-size: 13px; }
+  ul.rows { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.rows li { padding: 7px 2px; border-top: 1px dashed var(--line); font-size: 13px; }
+  ul.rows li:first-child { border-top: 0; }
+  code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .badge { display: inline-block; font-size: 11px; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); border: 1px solid var(--ok-line); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+  .note { border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 12px 0 0; }
+  .note.warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+  .note.bad { background: var(--bad-bg); color: var(--bad-ink); border: 1px solid var(--bad-line); }
+  .note.ok { background: var(--ok-bg); color: var(--ok-ink); border: 1px solid var(--ok-line); }
+  .note.plain { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+  .results ul.rows li .reason { color: var(--muted); display: block; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+           background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 16px;
+           font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; max-width: 86vw; }
+  .toast.show { opacity: 1; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>发布页「合并入 main」步 · 隔离分析一键加入 — 界面演示</h1>
+  <p class="sub">BUG-20260926-003 · 演示数据（81bec844 / 176c37c2 / 15b06de7 为用户报告中的真实示例提交，其余为示意）· 单文件无外部依赖</p>
+
+  <div class="card controls-card">
+    <div class="controls">
+      <fieldset>
+        <legend>对比模式</legend>
+        <label><input type="radio" name="mode" value="bug" checked> 缺陷现象（当前实现）</label>
+        <label><input type="radio" name="mode" value="fix"> 期望修复后</label>
+      </fieldset>
+      <fieldset>
+        <legend>场景</legend>
+        <select id="scene">
+          <option value="deps">有未选祖先（默认）</option>
+          <option value="empty">无未选祖先（空态）</option>
+          <option value="locked">已正式发布（锁定）</option>
+        </select>
+      </fieldset>
+      <label><input type="checkbox" id="fail"> 模拟接口失败</label>
+    </div>
+    <p class="demo-note" id="modeNote"></p>
+  </div>
+
+  <div class="card" id="pane"><!-- 隔离分析节由脚本渲染 --></div>
+
+  <div class="card">
+    <h2>对照要点</h2>
+    <ul class="small" style="margin:0;padding-left:18px;">
+      <li><b>缺陷现象</b>：标题引用型提交被误报「混合提交…无法安全归因」，20 个依赖全部跳过，无法分辨哪些可安全纳入。</li>
+      <li><b>期望修复后</b>：标题引用型按账本 / 主题末尾归属 / 变更路径核验真实归属后纳入（新增条目或补入既有条目）；仅真实混合、未完成门禁、条目已不存在被跳过且原因如实。</li>
+      <li>真实混合提交反例（99aa88bb）在两种模式下均被阻断，「无法安全拆分」保护不回退；done 门禁、锁定与发布范围变化标记均保留。</li>
+    </ul>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* 演示数据：owner = 该依赖隶属的所选条目（明细展示用）；
+   bug = 缺陷模式跳过原因（标题引用被判混合）；fix = 修复模式核验结果。 */
+const DEPS = [
+  { h:"81bec844", s:"doc: 讨论REQ-20260921-012「默认语言泛化为语言集首语言」（正文引用 REQ-20260921-010）", owner:"REQ-20260921-012", real:true,  bug:{t:"mixed", other:"REQ-20260921-010"}, fix:{t:"append", item:"REQ-20260921-012"} },
+  { h:"176c37c2", s:"fix: BUG-20260920-006 的问题还是没有修复 BUG-20260921-003", owner:"REQ-20260921-012", real:true,  bug:{t:"mixed", other:"BUG-20260920-006"}, fix:{t:"append", item:"BUG-20260921-003"} },
+  { h:"4d5e6f7",  s:"doc: 发布文档两阶段推进讨论 REQ-20260921-012（引用 REQ-20260921-001）", owner:"REQ-20260921-012", bug:{t:"mixed", other:"REQ-20260921-001"}, fix:{t:"append", item:"REQ-20260921-012"} },
+  { h:"8d9eafb",  s:"doc: ui-demo 语言集驱动 REQ-20260921-012（引用 REQ-20260921-010）", owner:"REQ-20260921-012", bug:{t:"mixed", other:"REQ-20260921-010"}, fix:{t:"append", item:"REQ-20260921-012"} },
+  { h:"d3fe040",  s:"doc: 版本计划关联提交讨论 REQ-20260921-012（引用 REQ-20260921-008）", owner:"REQ-20260921-012", bug:{t:"mixed", other:"REQ-20260921-008"}, fix:{t:"add", item:"REQ-20260921-008"} },
+  { h:"5a6b7c8",  s:"doc: 看板快捷键需求草案 REQ-20260921-015（引用 REQ-20260911-010）", owner:"REQ-20260921-015", bug:{t:"mixed", other:"REQ-20260911-010"}, fix:{t:"add", item:"REQ-20260911-010"} },
+  { h:"6b7c8d9",  s:"fix: 一键加入按钮防重复触发 REQ-20260921-015（关联 BUG-20260920-006）", owner:"REQ-20260921-015", bug:{t:"mixed", other:"BUG-20260920-006"}, fix:{t:"append", item:"REQ-20260921-015"} },
+  { h:"b1fc2e7",  s:"doc: 合并页单行状态条重构讨论 REQ-20260921-015（引用 REQ-20260920-003）", owner:"REQ-20260921-015", bug:{t:"mixed", other:"REQ-20260920-003"}, fix:{t:"add", item:"REQ-20260920-003"} },
+  { h:"9eaf0c5",  s:"doc: 隔离分析豁免提示说明 REQ-20260921-018（引用 BUG-20260920-005）", owner:"REQ-20260921-018", bug:{t:"mixed", other:"BUG-20260920-005"}, fix:{t:"append", item:"REQ-20260921-018"} },
+  { h:"c2fd3f8",  s:"doc: licenses.md 维护口径 REQ-20260909-015（引用 REQ-20260921-009）", owner:"REQ-20260921-018", bug:{t:"mixed", other:"REQ-20260921-009"}, fix:{t:"add", item:"REQ-20260909-015"} },
+  { h:"e4f115a",  s:"doc: 状态守卫拦截口径 REQ-20260901-003（引用 REQ-20260917-002）", owner:"REQ-20260923-001", bug:{t:"mixed", other:"REQ-20260917-002"}, fix:{t:"add", item:"REQ-20260901-003"} },
+  { h:"f6a227b",  s:"doc: 根文档豁免清单补充 REQ-20260923-001（引用 REQ-20260918-002）", owner:"REQ-20260923-001", bug:{t:"mixed", other:"REQ-20260918-002"}, fix:{t:"append", item:"REQ-20260923-001"} },
+  { h:"15b06de7", s:"doc: 需求和 bug 电子流和 Github Issue 同步管理 REQ-20260921-009", owner:"REQ-20260921-012", real:true, bug:{t:"status", item:"REQ-20260921-009", st:"submitted"}, fix:{t:"status", item:"REQ-20260921-009", st:"submitted"} },
+  { h:"e5a226b",  s:"doc: 看板快捷键补充讨论 REQ-20260921-020", owner:"REQ-20260921-015", bug:{t:"status", item:"REQ-20260921-020", st:"submitted"}, fix:{t:"status", item:"REQ-20260921-020", st:"submitted"} },
+  { h:"f6b337c",  s:"doc: 隔离分析措辞调整草案 REQ-20260921-021", owner:"REQ-20260921-018", bug:{t:"status", item:"REQ-20260921-021", st:"submitted"}, fix:{t:"status", item:"REQ-20260921-021", st:"submitted"} },
+  { h:"0a6b373",  s:"refactor: 清理旧发布脚本 REQ-20260910-001", owner:"REQ-20260921-012", bug:{t:"gone", item:"REQ-20260910-001"}, fix:{t:"gone", item:"REQ-20260910-001"} },
+  { h:"1b7c484",  s:"doc: 早期发布方案讨论 REQ-20260908-002", owner:"REQ-20260921-015", bug:{t:"gone", item:"REQ-20260908-002"}, fix:{t:"gone", item:"REQ-20260908-002"} },
+  { h:"2c8d595",  s:"fix: 临时修复版本页报错 BUG-20260910-003", owner:"REQ-20260921-018", bug:{t:"gone", item:"BUG-20260910-003"}, fix:{t:"gone", item:"BUG-20260910-003"} },
+  { h:"3d9e606",  s:"doc: 数据目录迁移说明 REQ-20260912-004", owner:"REQ-20260923-001", bug:{t:"gone", item:"REQ-20260912-004"}, fix:{t:"gone", item:"REQ-20260912-004"} },
+  { h:"4ea7170",  s:"chore: 移除废弃文档 REQ-20260909-005", owner:"REQ-20260923-002", bug:{t:"gone", item:"REQ-20260909-005"}, fix:{t:"gone", item:"REQ-20260909-005"} }
+];
+const REAL_MIXED = { h:"99aa88bb", s:"fix: 双条目联动调整 REQ-20260921-012 与 REQ-20260921-015（变更同时触及两条目目录）", items:"REQ-20260921-012、REQ-20260921-015" };
+const TITLE_NOTE = {
+  bug:  "缺陷现象：归因只看提交主题里出现过的所有单号，正文引用也算关联 → 标题引用型被误判「混合提交」，20 个依赖全部跳过。",
+  fix:  "期望修复后：归因优先核验提交账本 → 主题末尾归属单号 → 实际变更路径；标题引用不再误判，真实混合仍保护。"
+};
+
+const $ = (q) => document.querySelector(q);
+const pane = $("#pane");
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._tm);
+  toast._tm = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function reasonOf(d, mode) {
+  const r = mode === "fix" ? d.fix : d.bug;
+  if (r.t === "mixed")  return { ok:false, text:"混合提交（关联 " + d.owner + "、" + r.other + "），无法安全归因" };
+  if (r.t === "status") return { ok:false, text:"条目 " + r.item + " 尚未完成（当前状态：" + r.st + "）：仅已完成（done）条目可纳入" };
+  if (r.t === "gone")   return { ok:false, text:"条目 " + r.item + " 不在本看板中" };
+  if (r.t === "append") return { ok:true,  text:"核验为 " + r.item + " 的真实归属：补入既有条目 " + r.item + " 的提交集合" };
+  if (r.t === "add")    return { ok:true,  text:"核验为 " + r.item + " 的真实归属：作为新条目纳入发布范围" };
+  return { ok:false, text:"未知" };
+}
+
+function resultSummary(mode) {
+  const out = DEPS.map((d) => ({ d, r: reasonOf(d, mode) }));
+  const added = out.filter((x) => x.r.ok && x.d.fix.t === "add");
+  const appended = out.filter((x) => x.r.ok && x.d.fix.t === "append");
+  const skipped = out.filter((x) => !x.r.ok);
+  const newItems = [...new Set(added.map((x) => x.d.fix.item))];
+  let html = "";
+  if (mode === "fix" && (added.length || appended.length)) {
+    html += '<p class="note ok">✓ 已纳入 ' + (added.length + appended.length) + ' 个依赖提交：新条目 ' + newItems.length +
+            " 个（" + esc(newItems.join("、")) + "），向既有条目补入 " + appended.length + " 个提交（" +
+            esc(appended.map((x) => x.d.h).join("、")) + "）。发布范围已变化，文档需重新核对 / 提交。</p>";
+  } else if (mode === "bug") {
+    html += '<p class="note warn">⚠ 本次未纳入任何依赖提交（0 个成功）。</p>';
+  }
+  if (skipped.length) {
+    html += '<p class="note warn">⚠ 以下 ' + skipped.length + ' 个依赖未能纳入：</p><div class="results"><ul class="rows">' +
+      skipped.map((x) => '<li><code>' + esc(x.d.h) + "</code> " + esc(x.d.s) +
+        '<span class="reason">' + esc(x.r.text) + "</span></li>").join("") + "</ul></div>";
+  }
+  if (mode === "fix") {
+    html += '<p class="legend">跳过原因如实描述门禁与条目状态，不再以「依赖」措辞暗示纯讨论 / 删除文档是必须发布的功能依赖。</p>';
+  }
+  return html;
+}
+
+function render() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const scene = $("#scene").value;
+  $("#modeNote").textContent = TITLE_NOTE[mode];
+
+  if (scene === "empty") {
+    pane.innerHTML = '<h2>合并入 main · 隔离分析</h2>' +
+      '<p class="note plain">所选提交无未选祖先：变更可独立进入主分支。</p>' +
+      '<p class="legend">空态：无「一键加入所有依赖提交」按钮，无依赖明细。</p>';
+    return;
+  }
+
+  const locked = scene === "locked";
+  const depBtn = '<button type="button" class="btn primary" id="addBtn"' +
+    (locked ? ' aria-disabled="true" title="已正式发布，条目已锁定"' : "") + '>一键加入所有依赖提交</button>';
+
+  pane.innerHTML = '<h2>合并入 main · 隔离分析</h2>' +
+    '<p class="iso-sum"><span class="small">发现 ' + DEPS.length + ' 个未选祖先（依赖）提交 · 影响 63 个所选条目</span>' + depBtn + "</p>" +
+    '<details><summary>查看依赖明细</summary><ul class="rows">' +
+    DEPS.map((d) => '<li><code>' + esc(d.h) + "</code> " + esc(d.s) + (d.real ? '<span class="badge ok">真实示例</span>' : "") +
+      '<br><span class="muted small">为 ' + esc(d.owner) + " 的依赖</span></li>").join("") +
+    "</ul>" +
+    '<p class="legend">反例行：<code>' + esc(REAL_MIXED.h) + "</code> " + esc(REAL_MIXED.s) +
+    " —— 真实混合提交，两种模式下均正确阻断（保护不回退）。</p>" +
+    '<p class="legend">一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。</p></details>' +
+    '<p class="note warn" id="blockedLine" title="同一提交 ' + esc(REAL_MIXED.h) + " 关联多个条目（" + esc(REAL_MIXED.items) +
+    '）：混合提交无法安全拆分，请调整关联或先合并为一个条目">⚠ 1 处混合提交无法安全拆分，合并将被阻止</p>' +
+    '<div id="resultArea"></div>';
+
+  const btn = $("#addBtn");
+  btn.addEventListener("click", () => {
+    if (btn.getAttribute("aria-disabled") === "true") { toast(btn.title + "（锁定原因三通道可达：title / 点击 toast / 状态条）"); return; }
+    if (btn.disabled) return;
+    const area = $("#resultArea");
+    btn.disabled = true;
+    btn.textContent = "加入中…";
+    area.innerHTML = '<p class="note plain" role="status">正在执行一键加入，请稍候…</p>';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = "一键加入所有依赖提交";
+      if ($("#fail").checked) {
+        area.innerHTML = '<p class="note bad" role="alert">✕ 一键加入失败：模拟接口失败（演示）。已纳入与跳过均不静默丢失——失败后可重试，重试幂等续传。</p>' +
+          '<p><button type="button" class="btn" id="retryBtn">重试</button></p>';
+        $("#retryBtn").addEventListener("click", () => { $("#fail").checked = false; btn.click(); });
+        return;
+      }
+      area.innerHTML = resultSummary(mode);
+    }, 700);
+  });
+}
+
+document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", render));
+$("#scene").addEventListener("change", render);
+render();
+</script>
+</body>
+</html>
