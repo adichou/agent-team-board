@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260926-002 界面演示 · 去除文档编写「整体审查完结」阶段</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1f2328; --muted: #656d76;
+    --border: #d0d7de; --primary: #1f6feb; --primary-text: #ffffff;
+    --ok-bg: #dafbe1; --ok-fg: #1a7f37; --run-bg: #ddf4ff; --run-fg: #0969da;
+    --mute-bg: #eff1f3; --mute-fg: #6e7781; --err-bg: #ffebe9; --err-fg: #cf222e;
+    --toast-bg: #ffffff; --mask: rgba(31,35,40,.5); --stage-fin: #8250df;
+  }
+  body.dark {
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --primary: #388bfd; --primary-text: #ffffff;
+    --ok-bg: #0f2f1c; --ok-fg: #3fb950; --run-bg: #0c2d6b; --run-fg: #79c0ff;
+    --mute-bg: #21262d; --mute-fg: #8b949e; --err-bg: #3c1618; --err-fg: #f85149;
+    --toast-bg: #1c2128; --mask: rgba(1,4,9,.65); --stage-fin: #ab7df8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 20px 16px 90px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+
+  /* 演示控制台 */
+  .console {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 16px;
+  }
+  .console .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .console .lbl { color: var(--muted); font-size: 12.5px; }
+  button { font: inherit; cursor: pointer; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--text); padding: 5px 12px; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .seg button:not(.on):hover { background: var(--mute-bg); }
+
+  /* 通用按钮（模拟状态板 .btn.small） */
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 4px 12px; font-size: 13px; white-space: nowrap;
+  }
+  .btn:hover:not([disabled]):not(.ad) { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .btn.primary:hover:not([disabled]):not(.ad) { filter: brightness(1.1); color: var(--primary-text); }
+  .btn.quiet { border-color: transparent; background: transparent; }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .btn.ad { opacity: .55; cursor: not-allowed; }
+
+  /* 模拟「文档编写」面板 */
+  .pane { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px 16px; }
+  .bld-docs-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .field-inline { color: var(--muted); font-size: 13px; }
+  .langset-input {
+    border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text);
+    padding: 3px 8px; font-size: 13px; width: 90px;
+  }
+  .bld-docs-actions, .bld-docs-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+
+  /* 阶段条 */
+  .bld-docs-stages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .bld-stage {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: var(--panel);
+  }
+  button.bld-stage { cursor: pointer; }
+  button.bld-stage:hover:not(.ad) { border-color: var(--stage-fin); color: var(--stage-fin); }
+  button.bld-stage.ad { opacity: .55; }
+  .st { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 0 8px; font-size: 12px; }
+  .st-ok { background: var(--ok-bg); color: var(--ok-fg); }
+  .st-run { background: var(--run-bg); color: var(--run-fg); }
+  .st-mute { background: var(--mute-bg); color: var(--mute-fg); }
+
+  /* 文件列表 */
+  .files-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+  .lang-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .lang-tab { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); padding: 2px 12px; font-size: 13px; }
+  .lang-tab.on { background: var(--primary); border-color: var(--primary); color: var(--primary-text); font-weight: 600; }
+  .file-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-bottom: 1px dashed var(--border); }
+  .file-row:last-child { border-bottom: 0; }
+  .file-row code { font-size: 12.5px; }
+  .file-row .st { margin-left: auto; }
+
+  /* 门禁条与终态 */
+  .bld-docs-gate { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 13px; background: var(--mute-bg); }
+  .bld-docs-gate.ok { background: var(--ok-bg); border-color: var(--ok-fg); color: var(--ok-fg); }
+  .finalized-note { margin: 8px 0 0; color: var(--ok-fg); font-size: 12.5px; }
+
+  /* 加载 / 失败态 */
+  .state-block { padding: 26px 0 20px; text-align: center; }
+
+  /* 完结核对对话框（仅「修复前」存在） */
+  .modal-wrap { position: fixed; inset: 0; background: var(--mask); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 560px; max-width: 100%; max-height: 86vh; overflow: auto; padding: 14px 16px; box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 10px; }
+  .checklist { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+  .checklist li { display: flex; gap: 8px; align-items: flex-start; }
+  .checklist .body { flex: 1; }
+  .checklist .subtext { color: var(--muted); font-size: 12.5px; }
+  .checklist ul { margin: 4px 0 0; padding-left: 18px; color: var(--err-fg); font-size: 12.5px; }
+  .fin-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+  .fin-hint { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+  .modal-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+
+  /* Toast */
+  #toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; display: grid; gap: 8px; z-index: 80; width: min(620px, calc(100vw - 32px)); }
+  .toast { background: var(--toast-bg); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: 8px 12px; font-size: 13px; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+  .toast.err { border-left-color: var(--err-fg); }
+  .toast.ok { border-left-color: var(--ok-fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260926-002 界面演示 · 去除文档编写「整体审查完结」阶段</h1>
+  <p class="sub">发布模块「文档编写」页签的简化交互模拟：对比「修复前（缺陷：三阶段 + 完结提交门禁 + 完结对核对话框）」与「修复后（期望：两阶段 + 全部文件已审核即可提交）」。数据与动作为模拟，仅供文档评审。</p>
+
+  <div class="console">
+    <div class="grp"><span class="lbl">方案对比</span>
+      <span class="seg" id="segMode"></span>
+    </div>
+    <div class="grp"><span class="lbl">流程进度</span>
+      <span class="seg" id="segProgress"></span>
+    </div>
+    <div class="grp"><span class="lbl">数据状态</span>
+      <span class="seg" id="segData">
+        <button data-v="ok" class="on">正常</button>
+        <button data-v="loading">加载中</button>
+        <button data-v="error">数据失败</button>
+      </span>
+    </div>
+    <div class="grp"><span class="lbl">主题</span>
+      <span class="seg" id="segTheme">
+        <button data-v="light" class="on">浅色</button>
+        <button data-v="dark">深色</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="pane" id="pane"></div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(function () {
+  'use strict';
+  var state = {
+    mode: 'legacy',        // legacy=修复前(缺陷) fixed=修复后(期望)
+    progress: 'partial',   // partial=未全审 reviewed=已全审 finalized=已完结(仅 legacy) committed=已提交
+    data: 'ok',            // ok loading error
+    lang: 'zh',            // 文件列表当前语言页签
+    finalized: false,
+    committed: false,
+    checks: null,          // 完结对核对话框自动检查结果（模拟）
+    chk: null,             // AI 校对结果（模拟）
+    dialog: false,
+    busy: false
+  };
+  var FILES = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS'];
+  var finTime = '09:58';
+
+  /* ---------- 控制台 ---------- */
+  var MODES = [
+    { v: 'legacy', t: '修复前（缺陷）' },
+    { v: 'fixed', t: '修复后（期望）' }
+  ];
+  function progressOpts() {
+    if (state.mode === 'legacy') {
+      return [
+        { v: 'partial', t: '未全审' },
+        { v: 'reviewed', t: '已全审未完结' },
+        { v: 'finalized', t: '已完结' },
+        { v: 'committed', t: '已提交' }
+      ];
+    }
+    return [
+      { v: 'partial', t: '未全审' },
+      { v: 'reviewed', t: '已全审' },
+      { v: 'committed', t: '已提交' }
+    ];
+  }
+  function buildSeg(el, opts, cur, onPick) {
+    el.innerHTML = '';
+    opts.forEach(function (o) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = o.t;
+      if (o.v === cur) b.className = 'on';
+      b.addEventListener('click', function () { onPick(o.v); });
+      el.appendChild(b);
+    });
+  }
+  function renderConsole() {
+    buildSeg(document.getElementById('segMode'), MODES, state.mode, function (v) {
+      state.mode = v;
+      state.progress = v === 'fixed' && state.progress === 'finalized' ? 'reviewed' : state.progress;
+      state.finalized = false; state.committed = false; state.dialog = false;
+      state.checks = null; state.chk = null;
+      if (state.progress === 'finalized') { state.finalized = true; }
+      if (state.progress === 'committed') { state.committed = true; }
+      renderConsole(); renderPane();
+    });
+    buildSeg(document.getElementById('segProgress'), progressOpts(), state.progress, function (v) {
+      state.progress = v;
+      state.finalized = v === 'finalized';
+      state.committed = v === 'committed';
+      state.checks = null; state.chk = null; state.dialog = false;
+      renderConsole(); renderPane();
+    });
+  }
+  document.getElementById('segData').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    state.data = b.dataset.v;
+    [].forEach.call(this.querySelectorAll('button'), function (x) { x.className = x === b ? 'on' : ''; });
+    renderPane();
+  });
+  document.getElementById('segTheme').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    document.body.classList.toggle('dark', b.dataset.v === 'dark');
+    [].forEach.call(this.querySelectorAll('button'), function (x) { x.className = x === b ? 'on' : ''; });
+  });
+
+  /* ---------- 派生态 ---------- */
+  function reviewed() { return state.progress !== 'partial'; }
+  function counts() {
+    return reviewed()
+      ? { d: '4/4', r: '4/4', total: '8/8' }
+      : { d: '4/4', r: '0/4', total: '4/8' };
+  }
+
+  /* ---------- Toast ---------- */
+  function toast(msg, kind) {
+    var box = document.getElementById('toasts');
+    var t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = msg;
+    box.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3400);
+  }
+  function later(fn, ms) { state.busy = true; renderPane(); setTimeout(function () { state.busy = false; fn(); }, ms); }
+
+  /* ---------- 渲染 ---------- */
+  function chip(done, active, doneTxt) {
+    if (done) return '<span class="st st-ok"><i>✔</i>' + (doneTxt || '已完成') + '</span>';
+    if (active) return '<span class="st st-run"><i>●</i>进行中</span>';
+    return '<span class="st st-mute"><i>○</i>未解锁</span>';
+  }
+  function stageBar() {
+    var c = counts();
+    var defDone = c.d === '4/4';
+    var restDone = c.r === '4/4';
+    var html = '<div class="bld-docs-stages" role="note" aria-label="文档编写阶段推进">' +
+      '<span class="muted small">阶段：</span>' +
+      '<span class="bld-stage">① 默认语言先行 ' + chip(defDone, true) + '</span><span class="muted small" aria-hidden="true">──</span>' +
+      '<span class="bld-stage">② AI 翻译与审查 ' + chip(restDone, defDone && !restDone) + '</span>';
+    if (state.mode === 'legacy') {
+      var canFin = reviewed();
+      var title = canFin
+        ? (state.finalized
+          ? '整体审查已完结；点击可重新核对新再次确认（更新完结时间）'
+          : '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁')
+        : '整体审查未解锁：尚缺 4 个文件审核（README_en.md（未审核）、CHANGELOG_en.md（未审核）、FEATURES_en.md（未审核）、AGENTS_en.md（未审核））';
+      html += '<span class="muted small" aria-hidden="true">──</span>' +
+        '<button type="button" class="bld-stage' + (canFin ? '' : ' ad') + '" id="btnFin" aria-disabled="' + (canFin ? 'false' : 'true') + '" title="' + title + '" data-ad="' + (canFin ? '0' : '1') + '">③ 整体审查完结 ' + chip(state.finalized, canFin && !state.finalized) + '</button>';
+    }
+    return html + '</div>';
+  }
+  function fileRows() {
+    var c = counts();
+    var isZh = state.lang === 'zh';
+    var reviewedRow = isZh || reviewed();
+    var rows = FILES.map(function (f) {
+      var file = isZh ? f + '.md' : f + '_en.md';
+      return '<div class="file-row"><code>' + file + '</code>' +
+        '<span class="st ' + (reviewedRow ? 'st-ok' : 'st-mute') + '"><i>' + (reviewedRow ? '✔' : '○') + '</i>' + (reviewedRow ? '已审核' : '未审核') + '</span></div>';
+    }).join('');
+    return '<div class="files-head"><span class="small">文件（8 · 默认语言 ' + c.d + ' 已审核 · 剩余语言 ' + c.r + ' 已审核）</span></div>' +
+      '<div class="lang-tabs">' +
+      '<button type="button" class="lang-tab' + (isZh ? ' on' : '') + '" data-lang="zh">中文（默认）</button>' +
+      '<button type="button" class="lang-tab' + (!isZh ? ' on' : '') + '" data-lang="en">English</button>' +
+      '</div>' + rows;
+  }
+  function gateBar() {
+    var c = counts();
+    if (state.committed) {
+      return '<div class="bld-docs-gate ok" role="note">已提交到本地 dev 分支（hash a1b2c3d，仅语言集内文档 pathspec）：满足「合并入 main」前置。</div>';
+    }
+    if (state.mode === 'legacy') {
+      if (!reviewed()) {
+        return '<div class="bld-docs-gate" role="note">提交门禁：默认语言 ' + c.d + ' · 剩余语言 ' + c.r + ' 已审核 —— 提交禁用，尚缺：README_en.md（未审核）、CHANGELOG_en.md（未审核）、FEATURES_en.md（未审核）、AGENTS_en.md（未审核）。</div>';
+      }
+      if (!state.finalized) {
+        return '<div class="bld-docs-gate" role="note">提交门禁：默认语言 ' + c.d + ' · 剩余语言 ' + c.r + ' 已审核 —— 整体审查未完结（确认完结后可提交）。</div>';
+      }
+      return '<div class="bld-docs-gate ok" role="note">提交门禁：' + c.total + ' 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。</div>';
+    }
+    // fixed：门禁只看「全部已审核」，文案不含整体审查
+    if (!reviewed()) {
+      return '<div class="bld-docs-gate" role="note">提交门禁：默认语言 ' + c.d + ' · 剩余语言 ' + c.r + ' 已审核 —— 提交禁用，尚缺：README_en.md（未审核）、CHANGELOG_en.md（未审核）、FEATURES_en.md（未审核）、AGENTS_en.md（未审核）。</div>';
+    }
+    return '<div class="bld-docs-gate ok" role="note">提交门禁：' + c.total + ' 已审核 —— 可提交到本地 dev 分支。</div>';
+  }
+  function finalizedNote() {
+    if (state.mode !== 'legacy' || !state.finalized) return '';
+    return '<p class="finalized-note" role="status">整体审查已完结 ✓（时间 ' + finTime + '；提交已解锁）</p>';
+  }
+  function subBar() {
+    return '<div class="bld-docs-sub">' +
+      '<span class="field-inline" for="demoLangs">语言集</span>' +
+      '<input id="demoLangs" class="langset-input" type="text" value="zh,en" disabled title="演示固定语言集">' +
+      '<span class="bld-docs-actions">' +
+      '<button type="button" class="btn small" id="btnRefresh"' + (state.busy ? ' disabled' : '') + '>刷新</button>' +
+      '<button type="button" class="btn small" id="btnReview">审查</button>' +
+      '</span>' +
+      '<nav class="bld-docs-steps" role="group" aria-label="文档编写五步操作">' +
+      '<span class="muted small">五步：</span>' +
+      '<button type="button" class="btn small" id="btnSummary">① AI 总结</button>' +
+      '<button type="button" class="btn small" id="btnEdit">② 二次编辑</button>' +
+      '<button type="button" class="btn small" id="btnProof">③ AI 校对</button>' +
+      '<button type="button" class="btn small" id="btnTranslate">④ AI 翻译</button>' +
+      '<button type="button" class="btn small primary" id="btnCommit"' + commitDisabled() + '>' + (state.busy && state._busyKind === 'commit' ? '⑤ 提交中…' : '⑤ 提交') + '</button>' +
+      '</nav></div>';
+  }
+  function commitDisabled() {
+    if (state.committed) return ' aria-disabled="true" title="已提交到本地 dev 分支（a1b2c3d）"';
+    if (state.busy && state._busyKind === 'commit') return ' disabled';
+    var ok = reviewed() && (state.mode === 'fixed' || state.finalized);
+    if (ok) return '';
+    if (!reviewed()) {
+      return ' aria-disabled="true" title="还需 4 个文件通过审查：README_en.md（未审核）、CHANGELOG_en.md（未审核）、FEATURES_en.md（未审核）、AGENTS_en.md（未审核）"';
+    }
+    return ' aria-disabled="true" title="整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交"';
+  }
+  function renderPane() {
+    var pane = document.getElementById('pane');
+    if (state.data === 'loading') {
+      pane.innerHTML = subBar() + '<div class="state-block muted" role="status">正在加载发布流程数据…</div>';
+      bindCommon(); return;
+    }
+    if (state.data === 'error') {
+      pane.innerHTML = subBar() +
+        '<div class="state-block"><p class="rel-form-err" role="alert" style="color:var(--err-fg)">发布流程数据读取失败：模拟网络错误（演示）</p>' +
+        '<button type="button" class="btn small" id="btnRetry">重试</button></div>';
+      bindCommon(); return;
+    }
+    pane.innerHTML = subBar() + stageBar() + fileRows() + gateBar() + finalizedNote();
+    bindCommon();
+  }
+
+  /* ---------- 完结对核对话框（仅修复前） ---------- */
+  function checkItem(no, text, st, sub, details) {
+    var cls = st === 'ok' ? 'st-ok' : st === 'fail' ? 'st-fail' : 'st-run';
+    var ico = st === 'ok' ? '✔' : st === 'fail' ? '✕' : '◐';
+    var stLabel = st === 'ok' ? '' : st === 'fail' ? '' : '';
+    return '<li><span class="st ' + cls + '"><i>' + ico + '</i>' + stLabel + '</span>' +
+      '<div class="body">' + text + '<div class="subtext">' + sub + '</div>' + (details || '') + '</div></li>';
+  }
+  function dialogHtml() {
+    if (!state.dialog) return '';
+    var cs = state.checks, ck = state.chk;
+    var langSub = cs ? (cs.lang ? '通过 4/4' : '不通过') : (cs === 'busy' ? '检查中…' : '语言一致自动检查未运行：点击「运行自动检查」');
+    var linkSub = cs ? (cs.links ? '通过 8/8' : '存在死链') : (cs === 'busy' ? '检查中…' : '链接可达性自动检查未运行：点击「运行自动检查」');
+    var chkSub = ck ? (ck === 'busy' ? '校对进行中…' : '通过 4/4') : 'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执';
+    return '<div class="modal-wrap" id="finWrap" role="dialog" aria-modal="true" aria-label="整体审查完结">' +
+      '<div class="modal">' +
+      '<div class="modal-head"><span>整体审查完结（BLD-DEMO-001）</span>' +
+      '<button type="button" class="btn small quiet" id="btnFinClose" aria-label="关闭对话框">✕ 关闭</button></div>' +
+      '<ul class="checklist">' +
+      checkItem('①', '各语言内容语义一致（以已审核默认语言为基准）', cs === 'busy' ? 'run' : (cs && cs.lang ? 'ok' : 'run'), langSub) +
+      checkItem('②', '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）', cs === 'busy' ? 'run' : (cs && cs.links ? 'ok' : 'run'), linkSub) +
+      checkItem('③', '默认语言错别字与行文规范（AI 校对自动上报）', ck === 'busy' ? 'run' : (ck ? 'ok' : 'run'), chkSub) +
+      '</ul>' +
+      '<div class="fin-actions">' +
+      '<button type="button" class="btn small" id="btnChecks"' + (cs === 'busy' ? ' disabled' : '') + '>' + (cs === 'busy' ? '检查中…' : '运行自动检查') + '</button>' +
+      '<button type="button" class="btn small" id="btnProofDlg"' + (ck === 'busy' ? ' disabled' : '') + '>' + (ck === 'busy' ? '校对中…' : 'AI 校对') + '</button>' +
+      '</div>' +
+      '<p class="fin-hint">提示：完结前请逐项核对；完结后范围变化会使完结失效回退。</p>' +
+      '<div class="modal-foot"><span class="muted small">完结是人工确认动作：请逐项核对后再确认。</span>' +
+      '<span><button type="button" class="btn small" id="btnFinCancel">取消</button>' +
+      '<button type="button" class="btn small primary" id="btnFinConfirm"' + (state.busy && state._busyKind === 'fin' ? ' disabled' : '') + '>' + (state.busy && state._busyKind === 'fin' ? '完结中…' : '确认完结') + '</button></span></div>' +
+      '</div></div>';
+  }
+  function mountDialog() {
+    var old = document.getElementById('finWrap');
+    if (old) old.remove();
+    if (state.mode !== 'legacy') return;
+    var html = dialogHtml();
+    if (!html) return;
+    document.body.insertAdjacentHTML('beforeend', html);
+    var q = function (id) { return document.getElementById(id); };
+    if (q('btnFinClose')) q('btnFinClose').addEventListener('click', function () { state.dialog = false; mountDialog(); });
+    if (q('btnFinCancel')) q('btnFinCancel').addEventListener('click', function () { state.dialog = false; mountDialog(); });
+    if (q('btnChecks')) q('btnChecks').addEventListener('click', function () {
+      state.checks = 'busy'; mountDialog();
+      setTimeout(function () { state.checks = { lang: true, links: true }; mountDialog(); toast('自动检查完成：语言一致性通过 4/4 · 链接可达性通过 8/8（模拟）', 'ok'); }, 800);
+    });
+    if (q('btnProofDlg')) q('btnProofDlg').addEventListener('click', function () {
+      state.chk = 'busy'; mountDialog();
+      setTimeout(function () { state.chk = { ok: true }; mountDialog(); toast('AI 校对完成：默认语言错别字与行文规范通过 4/4（模拟）', 'ok'); }, 900);
+    });
+    if (q('btnFinConfirm')) q('btnFinConfirm').addEventListener('click', function () {
+      state._busyKind = 'fin'; state.busy = true; mountDialog();
+      setTimeout(function () {
+        state.busy = false; state._busyKind = ''; state.dialog = false; state.finalized = true;
+        finTime = new Date().toTimeString().slice(0, 5);
+        if (state.progress !== 'committed') { state.progress = 'finalized'; }
+        mountDialog(); renderConsole(); renderPane();
+        toast('✓ 整体审查已完结：文档编写三阶段完成，「提交」已解锁', 'ok');
+      }, 800);
+    });
+  }
+
+  /* ---------- 事件 ---------- */
+  function bindCommon() {
+    var pane = document.getElementById('pane');
+    var q = function (id) { return pane.querySelector('#' + id); };
+    if (q('btnRefresh')) q('btnRefresh').addEventListener('click', function () {
+      later(function () { toast('已刷新（模拟）：内容与状态无变化', 'ok'); }, 600);
+    });
+    if (q('btnReview')) q('btnReview').addEventListener('click', function () {
+      toast('演示：审查对话框略——逐文件通过审核能力保留，不随本单变化');
+    });
+    if (q('btnSummary')) q('btnSummary').addEventListener('click', function () {
+      toast('演示：AI 总结流程与本单无关（复制提示词派发 Agent）');
+    });
+    if (q('btnEdit')) q('btnEdit').addEventListener('click', function () {
+      toast('演示：二次编辑弹窗略——编辑能力保留，不随本单变化');
+    });
+    if (q('btnProof')) q('btnProof').addEventListener('click', function () {
+      toast('演示：五步「③ AI 校对」与右侧建议栏能力保留，不随本单变化');
+    });
+    if (q('btnTranslate')) q('btnTranslate').addEventListener('click', function () {
+      toast('演示：AI 翻译流程与本单无关（默认语言全审后解锁的既有门禁不变）');
+    });
+    if (q('btnCommit')) q('btnCommit').addEventListener('click', function () {
+      if (state.committed) return;
+      if (!reviewed()) {
+        toast('还需 4 个文件通过审查：README_en.md（未审核）、CHANGELOG_en.md（未审核）、FEATURES_en.md（未审核）、AGENTS_en.md（未审核）', 'err');
+        return;
+      }
+      if (state.mode === 'legacy' && !state.finalized) {
+        toast('尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）', 'err');
+        return;
+      }
+      state._busyKind = 'commit';
+      later(function () {
+        state.committed = true; state.progress = 'committed';
+        renderConsole(); renderPane();
+        toast('✓ 已提交到本地 dev 分支（hash a1b2c3d，仅语言集内文档 pathspec）', 'ok');
+      }, 800);
+    });
+    var fin = q('btnFin');
+    if (fin) fin.addEventListener('click', function () {
+      if (fin.dataset.ad === '1') {
+        toast('整体审查未解锁：尚缺 4 个文件审核（README_en.md（未审核）、CHANGELOG_en.md（未审核）、FEATURES_en.md（未审核）、AGENTS_en.md（未审核））', 'err');
+        return;
+      }
+      state.dialog = true; mountDialog();
+    });
+    pane.querySelectorAll('.lang-tab').forEach(function (b) {
+      b.addEventListener('click', function () { state.lang = b.dataset.lang; renderPane(); });
+    });
+    if (q('btnRetry')) q('btnRetry').addEventListener('click', function () {
+      state.data = 'ok';
+      [].forEach.call(document.getElementById('segData').querySelectorAll('button'), function (x) { x.className = x.dataset.v === 'ok' ? 'on' : ''; });
+      renderPane();
+    });
+  }
+
+  renderConsole();
+  renderPane();
+})();
+</script>
+</body>
+</html>
