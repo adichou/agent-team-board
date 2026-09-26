@@ -1290,11 +1290,11 @@ const EN = {
   '已总结': 'Summarized',
   'AI 总结：发布文档流水线「总结 → 审查 → 提交」的第一段——对当前版本发布文档（README / CHANGELOG / FEATURES / AGENTS × 语言集，默认中英）逐文件总结，完成后进入人工审查。使用独立锁（summary.lock），与 AI 分析、AI 开发互不占用，三者可同时进行。': 'AI summary — the first stage of the release-docs pipeline (summarize → review → commit): summarize the release docs of the current version (README / CHANGELOG / FEATURES / AGENTS × language set, zh & en by default) file by file, then hand over to manual review. Uses an independent lock (summary.lock) that never conflicts with AI analysis or AI development — all three can run at the same time.',
   '进度由执行子代理经 atb summary file 逐文件回执，本面板随轮询自动刷新；完成后到发布模块「文档编写」页人工审查并提交。': 'The executing subagent reports per-file progress via atb summary file; this panel refreshes automatically with polling. When it finishes, review and commit in the "Docs writing" step of the release module.',
-  // ---------- REQ-20260921-012 文档编写三阶段（默认语言先行 → AI 翻译与审查 → 整体审查完结） ----------
-  // 七态文案 / 阶段条 / AI 翻译按钮与提示词 / 整体审查完结对核对话框 / 基准变更提示 /
-  // 门禁条新口径（计数词条见 EN_DYNAMIC）。文件名与语言代码是标识，沿用 data-i18n-skip 豁免。
+  // ---------- REQ-20260921-012 文档编写两阶段（默认语言先行 → AI 翻译与审查；
+  // BUG-20260926-002：整体审查完结阶段与对核对话框词条已随界面移除） ----------
+  // 七态文案 / 阶段条 / AI 翻译按钮与提示词 / 基准变更提示 / 门禁条口径
+  //（计数词条见 EN_DYNAMIC）。文件名与语言代码是标识，沿用 data-i18n-skip 豁免。
   'AI 翻译': 'AI translation',
-  '整体审查完结': 'Final review completion',
   '未翻译': 'Not translated',
   '正在翻译': 'Translating',
   '已翻译待审核': 'Translated, awaiting review',
@@ -1305,7 +1305,6 @@ const EN = {
   '阶段：': 'Stages: ',
   '① 默认语言先行': '① default language first',
   '② AI 翻译与审查': '② AI translation & review',
-  '③ 整体审查完结': '③ final review completion',
   // BUG-20260921-013 文件区域语言页签：默认语言标记 / 页签行 aria-label / 运行角标 title
   //（组头词条「默认语言（◇，文件不带后缀）」「剩余语言（◇ · AI 翻译）」随分组标题行
   // 删除，已在 EN_DYNAMIC 清理）
@@ -1315,48 +1314,21 @@ const EN = {
   'AI 翻译进行中：当前文件在该语言页签': 'AI translation in progress: the current file is in this language tab',
   '进行中': 'In progress',
   '未解锁': 'Locked',
-  '文档编写三阶段推进': 'Docs-writing three-stage progress',
+  '文档编写阶段推进': 'Docs-writing stage progress',
   'AI 翻译提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb translate 逐文件回执，本页自动刷新）': 'AI translation prompt (copied to the clipboard — hand it to an AI Agent; progress is reported per file via atb translate and this page refreshes automatically)',
   'AI 翻译已完成：待翻译文件均进入「已翻译待审核」，等待人工审查。': 'AI translation finished: translated files are now "translated, awaiting review".',
   '复制 AI 翻译提示词到剪贴板：以已审核的默认语言文档为唯一基准，交给 AI Agent 逐文件翻译剩余语言文档（默认语言全部审核后解锁）': 'Copy the AI translation prompt: the approved default-language docs are the sole baseline — hand it to an AI Agent to translate the remaining-language docs file by file (unlocked once the default language is fully approved)',
   'AI 翻译进行中：提示词已交给 AI Agent，进度经 atb translate 逐文件回执，本页与任务模块自动刷新': 'AI translation in progress: the prompt has been handed to an AI Agent; progress is reported per file via atb translate and refreshes here and in the task module',
   '（正在翻译） · 独立锁 translate（与 AI 总结 / AI 分析 / AI 开发互不占用）': '(translating) · independent lock translate (never conflicts with AI summary / analysis / development)',
   '· 独立锁 translate（与 AI 总结 / AI 分析 / AI 开发互不占用）': 'independent lock translate (never conflicts with AI summary / analysis / development)',
-  '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁': 'Open the final-review checklist: semantics consistent across languages, README cross-links per language, content matching this release scope; confirming completion unlocks "Commit"',
-  '整体审查已完结；点击可重新核对新再次确认（更新完结时间）': 'Final review completed; click to re-check and confirm again (updates the completion time)',
-  '整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交': 'Final review not completed: after all files are approved, confirm completion via "③ Final review completion" in the stage bar before committing',
-  '尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）': 'Cannot commit yet: final review not completed (after all files are approved, confirm completion via "③ Final review completion" in the stage bar first)',
-  '各语言内容语义一致（以已审核默认语言为基准）': 'Semantics consistent across languages (baseline: the approved default language)',
-  'README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）': 'README cross-links per language are real and reachable (same-language CHANGELOG and FEATURES, links must actually work)',
-  // REQ-20260924-003 弹窗清单精简：「文档内容与本版发布范围一致（未纳入本版的功能不得写成已发布）」
-  // 随静态占位行移除，旧提示「提示：完结后「提交」方可使用；默认语言文档更新或发布范围变化会使
-  // 完结失效回退。」收敛为新提示（⑥⑦ 人工口径不再单占检查行）
-  '提示：完结前请逐项核对；完结后范围变化会使完结失效回退。': 'Note: verify every item before confirming completion; any scope change afterwards voids the completion and reverts it.',
-  '确认完结': 'Confirm completion',
-  '完结中…': 'Completing…',
-  '完结是人工确认动作：请逐项核对后再确认。': 'Completion is a manual confirmation: verify each item before confirming.',
-  '✓ 整体审查已完结：文档编写三阶段完成，「提交」已解锁': '✓ Final review completed: all three docs-writing stages done, "Commit" unlocked',
   '锁：translate（独立锁，与 AI 总结 / AI 分析 / AI 开发隔离，互不占用）': 'Lock: translate (independent lock, isolated from AI summary / analysis / development)',
   '锁已释放（translate）。': 'Lock released (translate).',
   '进度由执行子代理经 atb translate file 逐文件回执，本面板随轮询自动刷新；完成后到发布模块「文档编写」页人工审查。': 'The executing subagent reports per-file progress via atb translate file; this panel refreshes automatically with polling. When it finishes, review manually in the "Docs writing" step of the release module.',
   'AI 翻译：文档编写三阶段的第二段——默认语言四文件全部人工审核后，以已审核的默认语言文档为唯一翻译基准，逐文件产出剩余语言文档，完成后进入人工审查。使用独立锁（translate.lock），与 AI 总结、AI 分析、AI 开发互不占用，可同时进行。': 'AI translation — the second stage of docs writing: after the four default-language files are all manually approved, produce the remaining-language docs file by file with the approved default-language docs as the sole translation baseline, then hand over to manual review. Uses an independent lock (translate.lock) that never conflicts with AI summary, analysis or development — all can run at the same time.',
   '暂无进行中的 AI 翻译任务（空态）——到发布模块「文档编写」页默认语言审核完毕后点击「AI 翻译」启动。': 'No AI translation task in progress (empty state) — start one from the "Docs writing" step in the release module after the default language is fully approved.',
-  '下一步：发布模块「文档编写」页「审查」→「整体审查」→「提交」。': 'Next: "Review" → "Final review" → "Commit" in the "Docs writing" step of the release module.',
-  // ---------- REQ-20260924-001 整体审查自动检查（语言一致性 / 链接可达性脚本检查 +
-  // AI 校对提示词派发核查）----------
-  '运行自动检查': 'Run auto checks',
-  '检查中…': 'Running checks…',
+  // ---------- REQ-20260924-001 AI 校对提示词派发核查（BUG-20260926-002：完结对核对话框
+  // 与「运行自动检查」词条已随宿主移除，仅保留五步 ③ 校对入口相关词条）----------
   'AI 校对': 'AI proofread',
-  '校对中…': 'Proofreading…',
-  '自动检查各语言内容语言一致性与全部文档内链接可达性（只读，不设门禁，结果即时呈现）': 'Auto-check language identity across languages and reachability of every link in all docs (read-only, no gating, results shown instantly)',
-  '生成 AI 校对提示词并复制：派发 Agent 核查默认语言文档错别字与行文规范，结果自动回执': 'Generate and copy the AI proofread prompt: dispatch an Agent to check the default-language docs for typos and writing conformity; results are reported back automatically',
-  '默认语言错别字与行文规范（AI 校对自动上报）': 'Default-language typos & writing conformity (AI proofread, auto-reported)',
-  '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）': 'All links in every doc are reachable (README cross-links per language: same-language CHANGELOG and FEATURES, links must really resolve)',
-  '语言一致自动检查未运行：点击「运行自动检查」': 'Language-identity auto check not run yet: click "Run auto checks"',
-  '链接可达性自动检查未运行：点击「运行自动检查」': 'Link-reachability auto check not run yet: click "Run auto checks"',
-  'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执': 'AI proofread not run yet: click "AI proofread" to dispatch an Agent; results are reported back automatically',
-  '✓ 自动检查通过：语言一致与链接可达均无问题': '✓ Auto checks passed: language identity and link reachability are both clean',
-  '自动检查发现问题：详见整体审查对话框逐项红叉与明细': 'Auto checks found issues: see the red-cross items and details in the final-review dialog',
   '✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（错别字与行文规范），结果自动回执': '✓ AI proofread prompt copied: hand it to the AI Agent to check the default-language docs file by file (typos & writing conformity); results are reported back automatically',
   '已核查': 'Checked',
   // REQ-20260924-001 命令模块注册表（cli-registry docscheck 组：分组名 / 说明 / 参数标签 /
@@ -1596,7 +1568,7 @@ const EN_CLI = {
   '二次编辑（默认语言）': 'Second edit (default language)',
   '处理未保存修改': 'Handle unsaved changes',
   '默认语言文档内容（编辑）': 'Default-language document content (editing)',
-  '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行整体审查与提交）': 'The language set has a single language: no translation targets — translation can be skipped (proceed to final review and commit)',
+  '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行提交）': 'The language set has a single language: no translation targets — translation can be skipped (proceed straight to commit)',
   '发布流程数据未就绪：请先刷新或重试后再编辑': 'Publish flow data not ready: refresh or retry before editing',
   '当前版本没有默认语言文档可编辑': 'No default-language documents to edit for this version',
 };
@@ -1614,7 +1586,8 @@ const EN_DYNAMIC = {
   // REQ-20260921-008 文档编写页（总结 → 审查 → 提交流水线）：进度 / 门禁 / 审查对话框 /
   // AI 总结任务面板与全局行（动态拼接）
   '总结中 ◇/◇': 'Summarizing $1/$2',
-  // REQ-20260921-012 文档编写三阶段（AI 翻译进度 / 阶段计数 / 完结与基准变更动态句）
+  // REQ-20260921-012 文档编写两阶段（AI 翻译进度 / 阶段计数 / 基准变更动态句；
+  // BUG-20260926-002：完结与自动检查动态句已随界面移除）
   '翻译中 ◇/◇': 'Translating $1/$2',
   'AI 翻译进行中：◇/◇ · 当前：': 'AI translation in progress: $1/$2 · current: ',
   'AI 翻译进行中：◇/◇ · 独立锁 translate（与 AI 总结 / AI 分析 / AI 开发互不占用）': 'AI translation in progress: $1/$2 · independent lock translate (never conflicts with AI summary / analysis / development)',
@@ -1622,26 +1595,16 @@ const EN_DYNAMIC = {
   'AI 翻译中断：◇——文件状态不悬挂「正在翻译」，可再次点击「AI 翻译」续跑（已翻译完成的文件保留待审核状态）。': 'AI translation interrupted: $1 — file states are not stuck on "translating"; click "AI translation" again to resume (translated files keep their awaiting-review status).',
   'AI 翻译中断：◇——文件状态不悬挂在「正在翻译」，可到发布模块「文档编写」页再次点击「AI 翻译」续跑（已翻译完成的文件保留待审核状态）。': 'AI translation interrupted: $1 — file states are not stuck on "translating"; click "AI translation" again in the "Docs writing" step of the release module to resume (translated files keep their awaiting-review status).',
   'AI 翻译已完成：◇/◇ 个文件已翻译（未翻译的文件可在审查中直接处理），全部进入「已翻译待审核」，等待人工审查。': 'AI translation finished: $1/$2 files translated (untranslated ones can be handled directly in review), all now "translated, awaiting review".',
-  '提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。': 'Commit gate: $1/$2 reviewed · final review completed — ready to commit to the local dev branch.',
+  '提交门禁：◇/◇ 已审核 —— 可提交到本地 dev 分支。': 'Commit gate: $1/$2 reviewed — ready to commit to the local dev branch.',
   '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 提交禁用，尚缺：◇。': 'Commit gate: default language $1/$2 · remaining languages $3/$4 reviewed — commit disabled, still missing: $5.',
-  '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 整体审查未完结（确认完结后可提交）。': 'Commit gate: default language $1/$2 · remaining languages $3/$4 reviewed — final review not completed (commit after confirming completion).',
   '默认语言文档已更新：◇ 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）': 'Default-language docs updated: $1 translated doc(s) need re-translation via AI (baseline changed; related approvals reverted)',
   '尚不可提交：默认语言文档已更新（基准变更），◇ 个翻译文档需重新 AI 翻译并审核': 'Cannot commit yet: default-language docs updated (baseline changed); $1 translated doc(s) need re-translation and review',
   '文件（◇ · 默认语言 ◇/◇ 已审核 · 剩余语言 ◇/◇ 已审核）': 'Files ($1 · default language $2/$3 approved · remaining languages $4/$5 approved)',
-  '整体审查完结（◇）': 'Final review completion ($1)',
-  // REQ-20260924-003 弹窗清单精简：「默认语言文件已全部审核（◇/◇）」「剩余语言文件已全部审核
-  //（◇/◇）」两条随门禁行移除（门禁呈现仍在阶段条 / 步骤区计数词条），动态键已清理
-  '整体审查已完结 ✓（时间 ◇；提交已解锁）': 'Final review completed ✓ (at $1; commit unlocked)',
   'AI 翻译未解锁：默认语言尚缺 ◇ 个文件审核（◇）': 'AI translation locked: $1 default-language file(s) still unapproved ($2)',
-  '整体审查未解锁：尚缺 ◇ 个文件审核（◇）': 'Final review locked: $1 file(s) still unapproved ($2)',
-  // REQ-20260924-001 整体审查自动检查（动态结果句：计数 / 文件清单插值）
-  '✕ 自动检查失败：◇': '✕ Auto checks failed: $1',
+  // REQ-20260924-001 AI 校对动态结果句（BUG-20260926-002：自动检查对话框结果句已随宿主移除）
   '✕ AI 校对启动失败：◇': '✕ AI proofread failed to start: $1',
   '校对进行中：◇/◇': 'Proofreading $1/$2',
   'AI 校对中断：◇': 'AI proofread interrupted: $1',
-  '通过 ◇/◇': 'Passed $1/$2',
-  '不通过 ◇/◇：◇': 'Failed $1/$2: $3',
-  '死链 ◇ 个': '$1 dead link(s)',
   // REQ-20260924-004 AI 校对逐条「✎ 修改」按钮 title 摘要（◇ = 文件名 / 行号，均为数据）
   '◇ · 第 ◇ 行': '$1 · line $2',
   // REQ-20260924-006 文档编写五步流程（动态句：步骤进度 / 建议计数 / 弹窗标题 / 接受拒绝反馈）
@@ -1664,7 +1627,6 @@ const EN_DYNAMIC = {
   '基准已更新：◇ 个翻译文档将按最新基准重新翻译': 'Baseline updated: $1 translated doc(s) will be re-translated against the latest baseline',
   'AI 翻译 · ◇ · 执行 ◇ · 创建 ◇': 'AI translation · $1 · run $2 · created $3',
   '中断时间 ◇ · 执行会话 ◇ · 锁已释放（translate）。': 'Interrupted at $1 · executing session $2 · lock released (translate).',
-  '完成时间 ◇ · 下一步：发布模块「文档编写」页「审查」→「整体审查」→「提交」。': 'Finished at $1 · next: "Review" → "Final review" → "Commit" in the "Docs writing" step of the release module.',
   '锁：translate（独立锁，与 AI 总结 / AI 分析 / AI 开发隔离，互不占用） · 执行会话 ◇': 'Lock: translate (independent lock, isolated from AI summary / analysis / development) · executing session $1',
   '· AI 总结 ◇/◇': '· AI summary $1/$2',
   '文件（◇）': 'Files ($1)',

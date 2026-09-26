@@ -32,7 +32,7 @@ import * as manualCloseout from './lib/manual-closeout.mjs';
 import * as docsSummary from './lib/docs-summary-store.mjs';
 // REQ-20260921-012：发布文档 AI 翻译执行账本（独立锁 translate.lock，与总结/分析/开发互斥隔离）。
 import * as docsTranslate from './lib/docs-translate-store.mjs';
-// REQ-20260924-001：发布文档 AI 校对执行账本（独立锁 docscheck.lock，整体审查自动检查——
+// REQ-20260924-001：发布文档 AI 校对执行账本（独立锁 docscheck.lock，默认语言文档错别字与
 // 默认语言文档错别字与行文规范核查，校对只读不改文档，核查结果经本账本自动上报看板）。
 import * as docsCheck from './lib/docs-check-store.mjs';
 import * as buildStore from './lib/build-store.mjs';
@@ -175,8 +175,8 @@ Oncall 咨询看板（REQ-20260907-001；咨询单独立 ASK 序列，不进 REQ
   atb translate fail <RUN-ID> --reason <短句>   中断回执（残留「正在翻译」回退，不悬挂）
   atb translate show [RUN-ID]                   进度视图（x/N、当前文件、锁占用；缺省最新 run）
 
-发布文档 AI 校对（REQ-20260924-001；整体审查自动检查——默认语言文档错别字与语言习惯行文规范
-核查，校对只读不改文档；独立锁 docscheck.lock，与总结/翻译/分析/开发互不占用）：
+发布文档 AI 校对（REQ-20260924-001；默认语言文档错别字与语言习惯行文规范核查，
+校对只读不改文档；独立锁 docscheck.lock，与总结/翻译/分析/开发互不占用）：
   atb docscheck start --id <BLD-ID> [--by 会话] 启动一轮 AI 校对（默认语言文件 pending；返回 runId + 提示词）
   atb docscheck file <RUN-ID> --file <文件名> --state <checking|pass|fail> [--issues <问题清单>]
                                               逐文件结果回执（fail 必带 issues：行号/原文片段与修改建议）
@@ -1248,9 +1248,9 @@ const SUMMARY_USAGE = `用法：
   atb summary fail <RUN-ID> --reason <短句>     中断回执（残留「正在总结」回退，不悬挂）
   atb summary show [RUN-ID]                     进度视图（x/4、当前文件、锁占用；缺省最新 run）
 
-口径：文档编写三阶段（REQ-20260921-012）的阶段一「默认语言先行」——只总结默认语言
-（语言集首语言）四个发布文档；剩余语言文档由阶段二「AI 翻译」（atb translate）产出；
-人工审查、整体审查完结与 Git 提交在看板「文档编写」页执行。`;
+口径：文档编写两阶段（REQ-20260921-012；BUG-20260926-002 起第三阶段去除）的阶段一
+「默认语言先行」——只总结默认语言（语言集首语言）四个发布文档；剩余语言文档由阶段二
+「AI 翻译」（atb translate）产出；人工审查与 Git 提交在看板「文档编写」页执行。`;
 
 async function summaryCmd(rest) {
   const [sub, ...subRest] = rest;
@@ -1345,9 +1345,9 @@ const TRANSLATE_USAGE = `用法：
   atb translate fail <RUN-ID> --reason <短句>   中断回执（残留「正在翻译」回退，不悬挂）
   atb translate show [RUN-ID]                   进度视图（x/N、当前文件、锁占用；缺省最新 run）
 
-口径：文档编写三阶段（REQ-20260921-012）的阶段二「AI 翻译与审查」——以已审核的默认语言文档
-为唯一翻译基准，逐文件产出剩余语言（语言集其余语言）文档；人工审查、整体审查完结与 Git 提交
-在看板「文档编写」页执行。`;
+口径：文档编写两阶段（REQ-20260921-012；BUG-20260926-002 起第三阶段去除）的阶段二
+「AI 翻译与审查」——以已审核的默认语言文档为唯一翻译基准，逐文件产出剩余语言（语言集其余
+语言）文档；人工审查与 Git 提交在看板「文档编写」页执行。`;
 
 async function translateCmd(rest) {
   const [sub, ...subRest] = rest;
@@ -1452,7 +1452,7 @@ async function translateCmd(rest) {
 
 // ---------- 发布文档 AI 校对（REQ-20260924-001）：docscheck 子命令 ----------
 // 供「AI 校对」提示词派发的校对子代理逐文件回执核查结果（独立锁 docscheck.lock，与 AI 总结 /
-// AI 翻译 / AI 分析 / AI 开发互不占用）；看板轮询同一账本自动展示结果（整体审查对话框 / 文档
+// AI 翻译 / AI 分析 / AI 开发互不占用）；看板轮询同一账本自动展示结果（文档编写页校对建议栏 / 文档
 // 编写页 / 任务模块 / 全局任务面板）。只读口径：校对不修改文档，只回执 pass / fail + issues。
 
 const DOCS_CHECK_USAGE = `用法：
@@ -1463,8 +1463,9 @@ const DOCS_CHECK_USAGE = `用法：
   atb docscheck fail <RUN-ID> --reason <短句>    中断回执（残留「核查中」回落，不悬挂）
   atb docscheck show [RUN-ID]                    结果视图（pass/fail/pending、问题清单；缺省最新 run）
 
-口径：整体审查步骤的自动检查之一（REQ-20260924-001）——默认语言（语言集首语言）发布文档的
-错别字与语言习惯行文规范核查；校对只读不改文档，问题清单供人工在整体审查时复核；剩余语言
+口径：文档编写自动核对之一（REQ-20260924-001；BUG-20260926-002 起随第三阶段去除重新挂靠）
+——默认语言（语言集首语言）发布文档的错别字与语言习惯行文规范核查；校对只读不改文档，
+问题清单供人工在校对建议栏逐条复核；剩余语言
 文档由 AI 翻译产出、人工审查，人工审核 / 完结 / Git 提交仍在看板「文档编写」页执行。`;
 
 async function docsCheckCmd(rest) {
@@ -1518,7 +1519,7 @@ async function docsCheckCmd(rest) {
       : docsCheck.finishCheckRun(dataDir, runId, { result: 'failed', reason: opts.reason || '' });
     if (jsonOut) { console.log(JSON.stringify(docsCheck.checkRunView(run))); return; }
     console.log(sub === 'done'
-      ? `✓ AI 校对完成（${run.runId}）：核查结果已自动上报，整体审查对话框可查看 pass / fail 与问题清单`
+      ? `✓ AI 校对完成（${run.runId}）：核查结果已自动上报，文档编写页校对建议栏可查看 pass / fail 与问题清单`
       : `✓ AI 校对中断（${run.runId}）：${run.reason}；文件状态不悬挂「核查中」，可重新启动续跑`);
     return;
   }
@@ -1528,7 +1529,7 @@ async function docsCheckCmd(rest) {
     const run = pos[0] ? docsCheck.getCheckRun(dataDir, pos[0]) : docsCheck.latestCheckRun(dataDir);
     if (!run) {
       if (jsonOut) { console.log(JSON.stringify({ run: null })); return; }
-      console.log('（暂无 AI 校对执行：看板「整体审查」对话框点击 AI 校对，或 atb docscheck start --id <BLD-ID>）');
+      console.log('（暂无 AI 校对执行：看板「文档编写」页点击 ③ AI 校对，或 atb docscheck start --id <BLD-ID>）');
       return;
     }
     const view = docsCheck.checkRunView(run);
