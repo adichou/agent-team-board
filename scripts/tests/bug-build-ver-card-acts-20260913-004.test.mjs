@@ -128,10 +128,10 @@ t('B1 版本卡片不再有行内合并 / 发布键（REQ-20260921-016 精简，
   assert.match(detail, />AI 完善<\/button>/, '按钮文案为「AI 完善」');
   assert.doesNotMatch(inner, /提示词与回答回填/, '旧文案不再出现');
   // 合并入 main 入口仍在详情合并步（主按钮，文案保留）
-  assert.match(await mergePaneAt(h, 'BLD-A'), />合并入 main$/, '合并步主按钮文案');
+  assert.match(await mergePaneAt(h, 'BLD-A'), />挑选合并到 main$/, '合并步主按钮文案（REQ-20260926-002 更名挑选合并）');
 });
 
-t('B2 状态口径继承（REQ-20260921-016 起在详情合并步主按钮核验）：merging 禁用；merged 未推送可用（BUG-20260920-005 基准后移）；推送完成后禁用并说明已正式发布；failed 显「重试合并入 main」；AI 完善锁定口径随入口迁入概况描述头保持', async () => {
+t('B2 状态口径继承（REQ-20260921-016 起在详情合并步主按钮核验）：merging 禁用；merged 未推送可用（BUG-20260920-005 基准后移）；推送完成后禁用并说明已正式发布；failed 显「重试挑选合并」；AI 完善锁定口径随入口迁入概况描述头保持', async () => {
   const h = await setup({ versions: [
     ver('BLD-DRAFT', 'd1', 'draft'),
     ver('BLD-MERGING', 'd2', 'merging'),
@@ -148,7 +148,7 @@ t('B2 状态口径继承（REQ-20260921-016 起在详情合并步主按钮核验
   // BUG-20260920-005：推送完成（正式发布）后禁用，title 说明已正式发布
   // BUG-20260920-006：禁用从 HTML disabled 改 aria-disabled（点击可捕获反馈），title 升为完整归因
   assert.match(await btn('BLD-PUSHED'), /aria-disabled="true" title="已正式发布，不可再合并（如需调整请新建版本）"/, '推送完成后的合并主按钮禁用且 title 说明');
-  assert.match(await btn('BLD-FAILED'), />重试合并入 main$/, 'failed 的合并主按钮文案为「重试合并入 main」');
+  assert.match(await btn('BLD-FAILED'), />重试挑选合并$/, 'failed 的合并主按钮文案为「重试挑选合并」（REQ-20260926-002）');
   // AI 完善锁定口径迁入详情概况描述头后逐态核验（口径不变，位置变）
   assert.match(detailAt(h, 'BLD-DRAFT'), /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 的 AI 完善可用（无 disabled）');
   assert.match(detailAt(h, 'BLD-MERGING'), /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging 的 AI 完善禁用并提示');

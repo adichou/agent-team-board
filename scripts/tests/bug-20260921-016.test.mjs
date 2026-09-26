@@ -185,7 +185,7 @@ t('T5 信息完整性：详情头部仍完整显示计划号、版本号、更�
   await h.enter(); // 选中 BLD-20260921-016
   const detail = detailPart(h.inner());
   assert.match(detail, /BLD-20260921-016 · 版本号 20260921-016 · 更新 /, '头部元信息完整（计划号 / 版本号 / 更新时间）');
-  for (const label of ['概况', '关联条目与提交', '文档编写', '合并入 main', '正式发布']) {
+  for (const label of ['选择条目与提交', '挑选合并', '文档与翻译', '文档合并', '发布']) {
     assert.ok(detail.includes(label), `五步导航含「${label}」`);
   }
 });

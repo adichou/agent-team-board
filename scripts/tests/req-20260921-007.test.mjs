@@ -22,7 +22,7 @@ const t = (name, fn) => cases.push([name, fn]);
 t('L1-1 正式发布步第二步标题更名「官网 AI 总结」，build.js / i18n.js 无「AI 写作」键残留', () => {
   const build = readWeb('build.js');
   const i18n = readWeb('i18n.js');
-  assert.ok(build.includes('第二步 · 官网 AI 总结'), '正式发布步第二步标题为「第二步 · 官网 AI 总结」');
+  assert.ok(build.includes('动作二 · 官网资料更新'), '发布步第二动作标题为「动作二 · 官网资料更新」（REQ-20260926-002 发布步两动作重排）');
   assert.ok(!build.includes('AI 写作'), 'build.js 无「AI 写作」残留（含注释）');
   // i18n 历史注释保留更名记录（REQ-20260921-008 注明旧称），断言精确到键字面量
   assert.ok(!/'[^'\n]*AI 写作[^'\n]*'\s*:/.test(i18n), 'i18n.js 无「AI 写作」键残留');
@@ -34,17 +34,20 @@ t('L1-2 i18n 新键中英齐备、旧键清理、值无「AI writing」', () => 
   const I = globalThis.ATBI18N;
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN } = I._dict;
-  assert.equal(EN['官网 AI 总结'], 'Website AI summary', '「官网 AI 总结」词条');
-  assert.equal(EN['第二步 · 官网 AI 总结'], 'Step 2 · Website AI summary', '「第二步 · 官网 AI 总结」词条');
+  assert.equal(EN['官网 AI 总结'], 'Website AI summary', '「官网 AI 总结」词条（提示词语境沿用）');
+  // REQ-20260926-002：发布步改两动作布局，「第二步 · 官网 AI 总结」节标题词条随界面移除，
+  // 「动作二 · 官网资料更新」接替；旧「官网 AI 写作」键保持清理
+  assert.equal(EN['动作二 · 官网资料更新'], 'Action 2 · Update website content', '「动作二 · 官网资料更新」词条');
+  assert.ok(!('第二步 · 官网 AI 总结' in EN), '节标题旧键随两动作重排清理');
   assert.ok(!('官网 AI 写作' in EN), '旧键「官网 AI 写作」已清理');
   assert.ok(!('第二步 · 官网 AI 写作' in EN), '旧键「第二步 · 官网 AI 写作」已清理');
   const stale = Object.entries(EN).filter(([, v]) => String(v).includes('AI writing'));
   assert.deepEqual(stale.map(([k]) => k), [], '词典值无「AI writing」残留');
   // 往返不变形
   I.setLang('en');
-  assert.equal(I.t('第二步 · 官网 AI 总结'), 'Step 2 · Website AI summary');
+  assert.equal(I.t('动作二 · 官网资料更新'), 'Action 2 · Update website content');
   I.setLang('zh');
-  assert.equal(I.t('第二步 · 官网 AI 总结'), '第二步 · 官网 AI 总结');
+  assert.equal(I.t('动作二 · 官网资料更新'), '动作二 · 官网资料更新');
 });
 
 /* ---------- 2 提示词预览默认折叠 ---------- */

@@ -81,30 +81,31 @@ t('D2 合并锁基准后移：merged 未推送可重开合并（增量只补未�
   assert.throws(() => buildStore.beginMerge(dataDir, v.id, { baseBranch: 'dev' }), conflict(/正式发布/), '推送后不可再合并');
 });
 
-t('D3 五步门禁基准后移：merged 未推送 link/docs/merge 放开；推送完成后 link/docs 锁定并说明已正式发布；merging / draft 不回归', () => {
+t('D3 五步门禁基准后移（REQ-20260926-002 五步重排）：merged 未推送 docs/merge 放开；推送完成后 docs/docmerge 锁定并说明已正式发布；merging / draft 不回归', () => {
   const items = [{ itemId: 'REQ-20260920-005', commit: H1 }];
   const mk = (over = {}) => ({ status: 'draft', items, docs: null, ...over });
   const by = (steps, k) => steps.find((s) => s.key === k);
-  // merged 未推送：文档已提交时四步全放开（待确认 2 默认：docs 锁定随后移）
+  // merged 未推送：文档已提交时各步放开（待确认 2 默认：docs 锁定随后移）
   let steps = flow.publishStepsState(mk({ status: 'merged' }), { overall: 'committed' });
-  assert.ok(!by(steps, 'link').locked, 'merged 未推送可进入「关联条目与提交」');
-  assert.ok(!by(steps, 'docs').locked, 'merged 未推送可进入「文档编写」');
-  assert.ok(!by(steps, 'merge').locked, 'merged 未推送可重开合并（文档已提交）');
-  assert.ok(!by(steps, 'release').locked, 'release 维持 merged 可进入');
-  // merged 未推送 + 范围变化（scopeStale）→ merge 被文档门禁拦（不放宽门禁）
+  assert.ok(!by(steps, 'plan').locked, 'plan 恒可进入');
+  assert.ok(!by(steps, 'docs').locked, 'merged 未推送可进入「文档与翻译」');
+  assert.ok(!by(steps, 'docmerge').locked, 'merged 未推送文档已提交可进入「文档合并」');
+  assert.ok(!by(steps, 'merge').locked, 'merged 未推送可重开合并（增量）');
+  assert.ok(!by(steps, 'release').locked || /文档合并/.test(by(steps, 'release').reason), 'release 以文档合并落账为门禁');
+  // merged 未推送 + 范围变化（scopeStale）→ docmerge 被文档门禁拦（不放宽门禁）
   steps = flow.publishStepsState(mk({ status: 'merged' }), { overall: 'needs-rewrite' });
-  assert.ok(by(steps, 'merge').locked && /重新/.test(by(steps, 'merge').reason), '范围过期仍锁合并');
-  assert.ok(!by(steps, 'link').locked, '文档过期不回锁 link');
-  // 推送完成（正式发布）→ link / docs / merge 锁定并说明
+  assert.ok(by(steps, 'docmerge').locked && /重新/.test(by(steps, 'docmerge').reason), '范围过期仍锁文档合并');
+  assert.ok(!by(steps, 'plan').locked, '文档过期不回锁 plan');
+  // 推送完成（正式发布）→ docs / docmerge / merge 锁定并说明
   steps = flow.publishStepsState(mk({ status: 'merged', release: { pushedAt: '2026-09-20T10:00:00.000Z', pushedSha: H1 } }), { overall: 'committed' });
-  assert.ok(by(steps, 'link').locked && /正式发布/.test(by(steps, 'link').reason), 'link 锁定说明已正式发布');
   assert.ok(by(steps, 'docs').locked && /正式发布/.test(by(steps, 'docs').reason), 'docs 锁定说明已正式发布');
+  assert.ok(by(steps, 'docmerge').locked && /正式发布/.test(by(steps, 'docmerge').reason), 'docmerge 锁定说明已正式发布');
   assert.ok(by(steps, 'merge').locked && /正式发布/.test(by(steps, 'merge').reason), 'merge 锁定说明已正式发布');
   assert.ok(!by(steps, 'release').locked, '推送后 release 步仍可进入（查看推送与官网状态）');
-  // merging 回归：link / docs / merge 锁定
+  // merging 回归：docs / docmerge / merge 锁定
   steps = flow.publishStepsState(mk({ status: 'merging' }), { overall: 'committed' });
-  assert.ok(by(steps, 'link').locked && /合并执行中/.test(by(steps, 'link').reason), 'merging 锁 link 不回归');
-  assert.ok(by(steps, 'docs').locked, 'merging 锁 docs 不回归');
+  assert.ok(by(steps, 'docs').locked && /合并执行中/.test(by(steps, 'docs').reason), 'merging 锁 docs 不回归');
+  assert.ok(by(steps, 'docmerge').locked && /合并执行中/.test(by(steps, 'docmerge').reason), 'merging 锁 docmerge 不回归');
   assert.ok(by(steps, 'merge').locked && /合并执行中/.test(by(steps, 'merge').reason), 'merging 锁 merge 不回归');
   // draft 回归：无条目锁 merge
   steps = flow.publishStepsState(mk({ items: [] }), { overall: 'none' });
@@ -203,7 +204,7 @@ t('U1 合并步主按钮 + 概况描述头 AI 完善（REQ-20260921-013 迁入�
   assert.match(detailAt('BLD-MERGING'), /data-ver-answer="BLD-MERGING" disabled title="合并中，请稍候……"/, 'merging AI 完善口径不回归');
   assert.match(await mergeBtnAt('BLD-MERGING'), /aria-disabled="true" title="合并中，请勿重复触发"/, 'merging 合并主按钮口径不回归');
   assert.match(detailAt('BLD-DRAFT'), /data-ver-answer="BLD-DRAFT" aria-label/, 'draft 零回归');
-  assert.match(await mergeBtnAt('BLD-FAILED'), />重试合并入 main$/, 'failed 零回归（重试合并入 main）');
+  assert.match(await mergeBtnAt('BLD-FAILED'), />重试挑选合并$/, 'failed 零回归（重试挑选合并）');
 });
 
 t('U2 AI 完善弹窗防御路径：推送完成后直调 / 无参回落均不弹窗；merged 未推送可完整打开', async () => {
@@ -218,10 +219,10 @@ t('U2 AI 完善弹窗防御路径：推送完成后直调 / 无参回落均不�
   assert.doesNotMatch(h.inner(), /AI 完善（BLD-PUSHED）/, '推送完成后无参回落不弹窗（防御路径同口径）');
 });
 
-t('U3 详情「关联条目与提交」步：merged 未推送增删 / 换 commit 可用；推送完成后禁用并说明已正式发布', async () => {
+t('U3 详情「选择条目与提交」步（REQ-20260926-002 起 link 并入 plan）：merged 未推送增删 / 换 commit 可用；推送完成后禁用并说明已正式发布', async () => {
   const h = await setup();
   await h.enter(); // 选中 BLD-MERGED
-  h.run(`window.ATBBuild.setStep('link')`);
+  h.run(`window.ATBBuild.setStep('plan')`);
   let inner = h.inner();
   assert.match(inner, /id="bldAddItem"\s*>＋ 添加条目/, 'merged 未推送「＋ 添加条目」可用');
   assert.doesNotMatch(inner, /id="bldAddItem" disabled/, 'merged 未推送添加条目不再禁用');
@@ -229,7 +230,7 @@ t('U3 详情「关联条目与提交」步：merged 未推送增删 / 换 commit
   // BUG-20260921-015：条目行改为展示全部提交（chips，title 说明），锁定态经 title 说明体现
   assert.match(inner, /title="该条目关联的全部提交"/, 'merged 未推送提交清单可用（无锁定说明）');
   h.run(`window.ATBBuild.selectVersion('BLD-PUSHED')`);
-  h.run(`window.ATBBuild.setStep('link')`);
+  h.run(`window.ATBBuild.setStep('plan')`);
   inner = h.inner();
   assert.match(inner, /id="bldAddItem" disabled title="已正式发布，条目已锁定"/, '推送完成后添加条目禁用并说明');
   assert.match(inner, /data-remove-item="REQ-20260920-005" disabled title="已正式发布，条目已锁定"/, '推送完成后移出禁用并说明');

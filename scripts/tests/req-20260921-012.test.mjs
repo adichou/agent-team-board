@@ -708,7 +708,7 @@ t('L6-1 i18n：新增文案中英词条齐备；门禁动态键随口径迁移�
   assert.equal(I.t('AI 翻译'), 'AI 翻译');
 });
 
-t('L6-2 回归：evaluateDocsState / publishStepsState 零改动（合并门禁不受影响）', () => {
+t('L6-2 回归（REQ-20260926-002 重排后）：evaluateDocsState 口径不变；挑选合并不再锁文档，门禁移至文档合并步', () => {
   assert.equal(flow.evaluateDocsState({}, readsOf({})).overall, 'none');
   assert.equal(flow.evaluateDocsState({}, readsOf({ 'README.md': '# r' })).overall, 'uncommitted');
   const all = {};
@@ -717,7 +717,8 @@ t('L6-2 回归：evaluateDocsState / publishStepsState 零改动（合并门禁�
   for (const f of flow.publishDocFiles()) rec.files[f.file] = sha256(all[f.file]);
   assert.equal(flow.evaluateDocsState({ docs: rec }, readsOf(all)).overall, 'committed');
   const steps = flow.publishStepsState({ items: [{ itemId: 'X', commit: 'a' }], status: 'draft' }, { overall: 'none' });
-  assert.equal(steps.find((s) => s.key === 'merge').locked, true, '文档未提交仍锁合并');
+  assert.equal(steps.find((s) => s.key === 'merge').locked, false, '挑选合并不再被文档门禁锁定');
+  assert.equal(steps.find((s) => s.key === 'docmerge').locked, true, '文档未提交锁文档合并');
 });
 
 /* ---------- 执行 ---------- */

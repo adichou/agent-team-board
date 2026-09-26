@@ -22,17 +22,32 @@ const EN = {
   '添加所选条目': 'Add selected items',
   '合并入 main': 'Merge into main',
   '重试合并入 main': 'Retry merge into main',
-  // REQ-20260921-015 合并页简洁隔离分析 + 一键加入（BUG-20260926-003 起未选祖先不再统称「依赖」；
-  // 静态文案；插值句见 EN_DYNAMIC）
-  '一键加入所有未选祖先提交': 'Add all unselected ancestor commits',
-  '加入中…': 'Adding dependencies…',
-  '正在执行一键加入，请稍候': 'Adding dependencies — please wait',
+  // REQ-20260926-002 五步重定义（选择条目与提交 → 挑选合并 → 文档与翻译 → 文档合并 → 发布）
+  // 与文档合并 / 发布两动作词条；「一键加入所有未选祖先提交」随一键纳入引导移除清理，
+  // 隔离分析只读措辞（未选祖先明细）保留；插值句见 EN_DYNAMIC。
+  '选择条目与提交': 'Select items & commits',
+  '挑选合并': 'Cherry-pick merge',
+  '文档与翻译': 'Docs & translation',
+  '文档合并': 'Docs merge',
+  '发布': 'Release',
+  '挑选合并到 main': 'Cherry-pick merge into main',
+  '重试挑选合并': 'Retry cherry-pick merge',
+  '文档合并入 main': 'Merge docs into main',
+  '重新执行文档合并（幂等）': 'Re-run docs merge (idempotent)',
+  '合并中…': 'Merging…',
   '查看未选祖先明细': 'View unselected ancestor details',
-  '所选提交无未选祖先：变更可独立进入主分支。': 'Selected commits have no unselected ancestors: the changes can enter the main branch independently.',
   '正在加载合并分析…': 'Loading merge analysis…',
-  '一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。': 'After adding, the scope change is flagged by the existing mechanism (docs need re-review / re-commit).',
-  '把未选祖先提交经归因核验后确属所选条目的条目与提交纳入本版本发布范围；加入后发布范围变化，文档需重新核对 / 提交': 'Bring the items and commits behind unselected ancestor commits that pass attribution checks into this version\u2019s release scope; the scope changes once added — docs need re-review / re-commit',
-  '⚠ 未能加入任何未选祖先提交（原因见隔离分析清单）': '⚠ No unselected ancestor commits could be added (see the list in the isolation analysis)',
+  '所选提交无未选祖先：变更可独立进入主分支。': 'Selected commits have no unselected ancestors: the changes can enter the main branch independently.',
+  '未选祖先不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。': 'Unselected ancestors do not enter main via the isolated merge; if the selected changes depend on them, the merge stops with a conflict and explains the reason.',
+  '把审核通过的发布文档提交 cherry-pick 重放进 main：文档单独提交、直接关联版本计划 ': 'Cherry-pick the approved release-docs commit back into main: docs are committed separately, linked directly to version plan ',
+  '，合入结果落账到本版本计划（重放证据可追溯）。': ', and the merge result is recorded on this version plan (replay evidence is traceable).',
+  '文档提交 ': 'Docs commit ',
+  '（已提交且基于当前范围）': ' (committed and based on the current scope)',
+  '（有未提交修改或发布范围已变化，请回「文档与翻译」重新提交后再合并）': ' (uncommitted changes or the release scope changed — go back to "Docs & translation", commit again, then merge)',
+  '尚未提交发布文档：请先在「文档与翻译」步完成编写、翻译、审核并提交。': 'Release docs not committed yet: finish writing, translation and review in "Docs & translation", then commit.',
+  '已合并入 main：重放提交 ': 'Merged into main: replayed commit ',
+  ' · main 头 ': ' · main head ',
+  '尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。': 'Not pushed to the remote yet (the push completion time will start the website-update detection window).',
   // BUG-20260921-015 条目多提交：关联列表展示全部提交（chips）与移出提示
   '该条目关联的全部提交': 'All commits linked to this item',
   '移出该条目（连同全部 commit 关联）': 'Remove this item (with all its commit associations)',
@@ -1125,9 +1140,10 @@ const EN = {
   '已检测到官网同步': 'Website sync detected',
   '未命中（可继续检测）': 'No match yet (you can keep checking)',
   '读取失败': 'Read failed',
-  '第一步 · 推送主分支': 'Step 1 · Push the main branch',
-  '第二步 · 官网 AI 总结': 'Step 2 · Website AI summary',
-  '第三步 · 官网同步检测': 'Step 3 · Website sync detection',
+  // REQ-20260926-002：发布步改两动作布局（推送远端 + 官网资料更新），旧「第一步 / 第二步 /
+  // 第三步」三节标题词条随界面移除清理
+  '动作一 · 推送远端': 'Action 1 · Push to remote',
+  '动作二 · 官网资料更新': 'Action 2 · Update website content',
   '隔离分析': 'Isolation analysis',
   '目标远端': 'Target remote',
   '（空文档）': '(empty document)',
@@ -1716,26 +1732,19 @@ const EN_DYNAMIC = {
   '匹配 ◇ / 共 ◇ 条': '$1 of $2 matched',
   '第 ◇ / ◇ 页': 'Page $1 of $2',
   '没有匹配的关联条目（关键词：◇）': 'No matching linked items (keyword: $1)',
-  // REQ-20260921-015 合并页简洁隔离分析 + 一键加入（BUG-20260926-003 起未选祖先不再统称「依赖」；
-  // 汇总行 / 单行阻止反馈 / 明细归属 / 跳过清单 / toast 与读取失败，动态拼接）
+  // REQ-20260926-002 合并页简洁隔离分析（汇总行 / 明细归属 / 共享提交单行说明，动态拼接）；
+  // 一键加入 toast 词条随「一键加入所有依赖提交」下线一并清理（端点 404、前端无入口）
   '发现 ◇ 个未选祖先提交 · 影响 ◇ 个所选条目': 'Found $1 unselected ancestor commit(s) · affecting $2 selected items',
   '（其余 ◇ 个略）': '(another $1 omitted)',
   '为 ◇ 的未选祖先': 'unselected ancestor of $1',
-  '⚠ ◇ 处混合提交无法安全拆分，合并将被阻止': '⚠ $1 mixed commit(s) cannot be split safely — merge will be blocked',
-  // BUG-20260921-018 已在目标分支上的共享提交豁免混合判定：单行豁免提示（动态拼接，
-  // 计数与目标分支名双插值；title 明细为标识不进翻译管线）
-  '已豁免 ◇ 处共享提交的混合判定（提交已在 ◇ 上，合并时幂等记成功）': 'Mixed-commit verdict exempted for $1 shared commit(s) (already on $2 — merge records idempotent success)',
+  '共享提交 ◇ 处按提交 hash 去重，挑选合并只执行一次（各关联条目展示一致的合入结果）': '$1 shared commit(s) are deduplicated by commit hash and cherry-picked exactly once (all linked items show the same merge result)',
   '⚠ 暂不可合并：◇': '⚠ Cannot merge yet: $1',
   '⚠ 合并失败：◇（可重试，只补未合并条目）': '⚠ Merge failed: $1 (retryable; only unmerged items are retried)',
-  '⚠ 以下 ◇ 个未选祖先提交未能纳入：': '⚠ The following $1 unselected ancestor commit(s) could not be added:',
-  '✓ 已加入 ◇ 个条目：发布范围已变化，文档需重新核对 / 提交': '✓ Added $1 items: the release scope has changed — docs need re-review / re-commit',
-  '✓ 已加入 ◇ 个条目，跳过 ◇ 个（原因见隔离分析清单）': '✓ Added $1 items, skipped $2 (see the list in the isolation analysis)',
-  // BUG-20260921-015 一键加入按提交补入：新入条目 + 既有条目补入的混合反馈（动态拼接）
-  '✓ 已加入 ◇ 个条目、补入 ◇ 个未选祖先提交，跳过 ◇ 个（原因见隔离分析清单）': '✓ Added $1 items and appended $2 unselected ancestor commits, skipped $3 (see the list in the isolation analysis)',
-  '✓ 已加入 ◇ 个条目、补入 ◇ 个未选祖先提交：发布范围已变化，文档需重新核对 / 提交': '✓ Added $1 items and appended $2 unselected ancestor commits: the release scope has changed — docs need re-review / re-commit',
-  '✓ 已补入 ◇ 个未选祖先提交，跳过 ◇ 个（原因见隔离分析清单）': '✓ Appended $1 unselected ancestor commits, skipped $2 (see the list in the isolation analysis)',
-  '✓ 已补入 ◇ 个未选祖先提交：发布范围已变化，文档需重新核对 / 提交': '✓ Appended $1 unselected ancestor commits: the release scope has changed — docs need re-review / re-commit',
-  '✕ 一键加入失败：◇': '✕ Failed to add dependencies: $1',
+  // REQ-20260926-002 文档合并步（重放证据 / 幂等反馈，动态拼接）
+  '（合并时间 ◇）': '(merged at $1)',
+  '✓ 文档已合并入 main（◇）': '✓ Docs merged into main ($1)',
+  '✓ 文档已合并入 main（重试幂等，不重复执行；◇）': '✓ Docs merged into main (idempotent retry — nothing re-executed; $1)',
+  '✕ 文档合并失败：◇': '✕ Docs merge failed: $1',
   '合并分析读取失败：◇': 'Failed to load the merge analysis: $1',
   // BUG-20260915-014 构建模块版本详情发布页签：读取失败 / 详情失败 / 创建与动作反馈（动态拼接）
   '发布记录读取失败：◇': 'Failed to load release records: $1',

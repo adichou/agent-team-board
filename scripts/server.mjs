@@ -2285,11 +2285,10 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 //   POST /api/build/version/save      编辑版本名称与描述（merging 锁定）
 //   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删；
 //                                    add 同受 BUG-20260913-001 / BUG-20260914-004 口径约束）
-//   POST /api/build/version/add-dependencies  REQ-20260921-015 一键加入所有依赖提交（服务端现算隔离分析、
-//                                    BUG-20260926-003 归因证据链反查归属（账本→主题归属→变更路径）、
-//                                    沿用 addItems 校验与 scopeStale 联动；
-//                                    不可纳入项进 skipped 清单；merging / 已正式发布 409）
-//   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
+//   （POST /api/build/version/add-dependencies 已随 REQ-20260926-002 下线：不再引导一键纳入
+//    全部未选祖先，未知接口统一 404）
+//   POST /api/build/version/merge     挑选合并到 main（REQ-20260926-002：无文档门禁、共享提交
+//                                    按 hash 去重只执行一次；临时工作树 cherry-pick 重放，不触碰当前工作区）
 //   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
 //                                    merging 409 拒绝；整目录移除，前端删除后统一刷新）
 //   POST /api/build/sync             与远端同步（BUG-20260914-011：fetch --all --prune 后推送
@@ -2459,119 +2458,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       throw new core.AtbError('action 必须是 add / remove / commit');
     });
   }
-  // REQ-20260921-015 一键加入所有依赖提交：服务端现算隔离分析（执行时点新鲜数据，不信前端传值），
-  // 把未选祖先提交按归因证据链（BUG-20260926-003：提交账本 → 主题归属单号 → 实际变更路径；
-  // 仅真实多条目归属才判混合，标题正文引用单号不再误判）反查归属条目，按「添加条目」同口径
-  // 校验后一次性纳入；无法纳入的祖先提交逐条进 skipped 清单（含原因），不静默丢失。
-  // 纳入沿用 addItems：成功后 markDocsScopeStale 联动（文档需重新核对 / 提交）；
-  // merging / 已正式发布锁定（BuildConflictError → 409，与 addItems 同文案）。
-  // BUG-20260921-015：按提交 hash 去重（不按条目去重）——归属条目已在本版本时，把该条目
-  // 其余符合纳入条件的祖先提交补入其提交集合（appendItemCommits，保留原有关联）；同一新
-  // 条目有多个祖先提交时全部保留（不再只取「最新」一个）。响应 added = 新入条目
-  //（含 commits 全量），appended = 既有条目补入清单。
-  if (req.method === 'POST' && pathname === '/api/build/version/add-dependencies') {
-    return runPost(async (body) => {
-      const board = requireBoard();
-      const v = buildStore.readVersion(board, body.id); // 不存在 → AtbError 400
-      // 锁定态前置（与 addItems.assertItemsEditable 同口径）：无依赖的幂等空响应同样先过锁
-      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，条目不可增删');
-      if (buildStore.isPushed(v)) throw new buildStore.BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
-      const analysis = buildGit.analyzePublishIsolation(root, v.items);
-      // 依赖集：跨所选条目按提交 hash 去重（hash → { subject, date, owner }；owner = 该依赖隶属的所选条目）
-      const deps = new Map();
-      for (const per of analysis.perItem || []) {
-        for (const dep of per.intermediates || []) {
-          const h = String(dep.hash || '').toLowerCase();
-          if (!h || deps.has(h)) continue;
-          deps.set(h, { subject: dep.subject || '', date: dep.date || '', owner: per.itemId });
-        }
-      }
-      if (!deps.size) {
-        return sendJson(res, 200, { version: v, added: [], appended: [], skipped: [], note: '所选提交无未选祖先提交，无需加入' });
-      }
-      // 归因证据链（BUG-20260926-003）：（a）提交账本（committedItemIndex：report 收口等
-      // 经核验归属）→（b）主题归属单号（提交规范「类型: 描述 单号」，取括号外最后一个单号，
-      // 标题正文引用的单号不算归属）→（c）提交实际变更路径（仅触及单一条目目录时兜底）。
-      // 仅真实多条目归属（账本多单号，或变更同时触及多个条目目录）才判混合提交保护；
-      // 不再用 itemCommitStatusIndex 的「主题含单号即关联」宽口径反查——那是 12 个标题引用型
-      // 提交被误判混合的直接原因。归属不明的仍以「无法归属」跳过，不静默。
-      const ledgerOwnersByCommit = new Map();
-      for (const rec of gitFlow.committedItemIndex(board).values()) {
-        for (const h of rec.commits || []) {
-          const k = String(h || '').toLowerCase();
-          if (!k) continue;
-          if (!ledgerOwnersByCommit.has(k)) ledgerOwnersByCommit.set(k, new Set());
-          ledgerOwnersByCommit.get(k).add(rec.itemId);
-        }
-      }
-      const itemsAll = new Map(core.listItems(board).map((it) => [it.id, it]));
-      const titles = new Map(core.listItems(board).map((it) => [it.id, it.title]));
-      const inVersion = new Map(v.items.map((x) => [x.itemId, x]));
-      const occupied = buildStore.occupiedItemMap(board, { excludeVersionId: v.id });
-      const skipped = [];
-      const appendPick = new Map(); // itemId（已在本版本）→ hash[]（收集后统一补入）
-      const newPick = new Map(); // itemId（新条目）→ hash[]（全部保留，不再只取最新）
-      for (const [hash, meta] of deps) {
-        // （c）变更路径证据先行：变更同时触及多个条目目录 = 真实混合提交，保护不回退
-        //（账本 / 主题归属单号说得再多也不放行，防「无法安全拆分」的提交被单条目版本夹带）。
-        const pathOwners = gitFlow.commitPathItemOwners(root, hash);
-        if (pathOwners.size > 1) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `混合提交（变更同时触及 ${[...pathOwners].sort().join('、')} 的条目目录），无法安全归因` });
-          continue;
-        }
-        // （a）提交账本：经核验归属，最权威——存在即按账本定归属（1 条 → 唯一归属；多条 → 真实混合）
-        const ledgerOwners = ledgerOwnersByCommit.get(hash);
-        if (ledgerOwners && ledgerOwners.size > 1) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `混合提交（关联 ${[...ledgerOwners].sort().join('、')}），无法安全归因` });
-          continue;
-        }
-        // （b）主题归属单号（账本缺失时）→（c）变更路径单一条目目录兜底（账本 / 主题均缺时）
-        let itemId = ledgerOwners && ledgerOwners.size === 1 ? [...ledgerOwners][0] : null;
-        if (!itemId) itemId = gitFlow.subjectAttributionItemId(meta.subject);
-        if (!itemId && pathOwners.size === 1) itemId = [...pathOwners][0];
-        if (!itemId) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: '无法归属到看板条目（提交账本、主题归属单号与变更路径均无归属证据）' });
-          continue;
-        }
-        if (inVersion.has(itemId)) {
-          // BUG-20260921-015：条目已在本版本 → 补入该条目的其余依赖提交（保留原有关联），
-          // 不再因「当前关联另一提交」跳过；hash 已在条目提交集合中时（防御）忽略。
-          const have = new Set(buildStore.commitsOf(inVersion.get(itemId)));
-          if (!have.has(hash)) {
-            if (!appendPick.has(itemId)) appendPick.set(itemId, []);
-            appendPick.get(itemId).push(hash);
-          }
-          continue;
-        }
-        const boardItem = itemsAll.get(itemId);
-        if (!boardItem) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 不在本看板中` });
-          continue;
-        }
-        if (boardItem.status !== 'done') {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 尚未完成（当前状态：${boardItem.status}）：仅已完成（done）条目可纳入` });
-          continue;
-        }
-        if (occupied.has(itemId)) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `条目 ${itemId} 已纳入版本 ${occupied.get(itemId)}，不可重复纳入` });
-          continue;
-        }
-        if (!newPick.has(itemId)) newPick.set(itemId, []);
-        newPick.get(itemId).push(hash);
-      }
-      // 依赖按 git log 新→旧收集；反转成 旧→新（与提交时间顺序一致，主提交取最早一个）
-      const oldestFirst = (hs) => [...hs].reverse();
-      const added = [...newPick.entries()].map(([itemId, hs]) => {
-        const commits = oldestFirst(hs);
-        return { itemId, commit: commits[0], commits, title: titles.get(itemId) || '' };
-      });
-      const appended = [...appendPick.entries()].map(([itemId, hs]) => ({ itemId, commits: oldestFirst(hs) }));
-      let version = v;
-      if (added.length) version = buildStore.addItems(board, v.id, added, { by: 'board' });
-      if (appended.length) version = buildStore.appendItemCommits(board, v.id, appended, { by: 'board' });
-      return sendJson(res, 200, { version, added, appended, skipped });
-    });
-  }
+  // REQ-20260926-002：「一键加入所有依赖提交」随流程简化下线——不将未选祖先自动认定为
+  // 必须加入的功能依赖，移除该引导；端点不再注册（请求落入未知接口统一 404），前端
+  // 一键加入入口一并移除（见 web/build.js）。
   if (req.method === 'POST' && pathname === '/api/build/version/merge') {
     return runPost((body) => {
       const board = requireBoard();
@@ -2587,18 +2476,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       // REQ-20260920-003 发布前置：工作目录必须在 dev（main / 其他分支 / detached 一律阻止，
       // 提示自行切回 dev；不自动切分支，也不经隔离执行绕过）
       buildGit.assertOnDev(root);
-      // REQ-20260920-003 文档门禁：无条目 / 文档未完成（未提交、外部修改未提交、范围过期）
-      // 不得合并；旧已提交标识不为新范围放行
-      buildStore.assertMergeDocsGate(board, v.id, (f) => {
-        try { return fs.readFileSync(path.join(root, f), 'utf8'); } catch { return null; }
-      });
+      // REQ-20260926-002 流程重排：挑选合并不再要求先完成发布文档（先合入功能，再依据实际
+      // 合入内容编写文档）；条目与提交是多对多关系，共享提交不再判混合阻断（按 hash 去重
+      // 只执行一次），原 assertMergeDocsGate 与 analysis.blocked 前置随流程移除。
       // 与发布模块互斥（design.md 落定）：release 有活动 git 目标运行时拒绝合并（读侧校验，不改发布状态）
       releaseStore.assertTargetFree(board, 'git', {});
-      // 影响分析：混合提交（同一 commit 关联多条目）无法安全拆分，明确阻止并列出原因
+      // 影响分析：未选祖先提示与共享提交说明（不再阻断；notes 随响应透出供前端展示）
       const analysis = buildGit.analyzePublishIsolation(root, v.items);
-      if (analysis.blocked.length) {
-        throw new buildStore.BuildConflictError(analysis.blocked.join('；'));
-      }
       // 前置校验（只读，不改版本状态：主分支缺失 / 提交缺失在此明确报 400）
       buildGit.precheckMerge(root, v.items);
       buildStore.beginMerge(board, v.id, { baseBranch: buildGit.listBranches(root).current });
@@ -2729,9 +2613,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
         : null,
       siteRepoRoot: config.homepageRepoRoot || null,
-      // BUG-20260921-018：exempted（已在目标分支上的共享提交豁免明细）透传，前端合并页
-      // 据此展示单行豁免说明（与 notes 同口径，不静默）。
-      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, blocked: mergeAnalysis.blocked, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared, exempted: mergeAnalysis.exempted } : null,
+      // REQ-20260926-002：隔离分析不再有 blocked / exempted（混合提交阻断移除）；shared
+      // 如实透传（共享提交按 hash 去重只执行一次），perItem 保留未选祖先明细（只读参考，
+      // 不再渲染为必须纳入的依赖）。
+      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared } : null,
       analysisError,
       currentBranch: branches.current,
       mainBranch: branches.mainBranch,
@@ -3086,6 +2971,51 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
+  // REQ-20260926-002 POST /api/build/docs/merge {id}：文档合并（第四步）——审核通过的发布
+  // 文档提交（dev 上 docs: 提交，直接关联 BLD 计划号）cherry-pick 重放合入 main，证据经
+  // build-store.recordDocsMerge 落账到 v.docsMerge（提交 / 重放提交 / main 头 / 重放明细，
+  // history 累积、replays 按 original 去重）。前置：文档已提交且基于当前范围（evaluateDocsState
+  // overall=committed）；重试幂等——既有重放证据显示该文档提交已在 main 时 alreadyIncluded
+  // 直接返回，不重复执行；合并失败保留已完成结果可重试。
+  if (req.method === 'POST' && pathname === '/api/build/docs/merge') {
+    return runPost((body) => {
+      const board = requireBoard();
+      const v = buildStore.readVersion(board, body.id);
+      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可合并文档');
+      if (buildStore.isPushed(v)) throw new buildStore.BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+      if (!v.docs || !v.docs.commitHash) throw new core.AtbError('发布文档尚未提交：请先完成「文档与翻译」并提交文档，再执行文档合并');
+      const docsEval = flow.evaluateDocsState(v, docReadFile);
+      if (docsEval.overall !== 'committed') {
+        throw new core.AtbError(`文档未就绪，暂不可合并：${docsEval.reasons[0] || '请先提交最新文档'}`);
+      }
+      // 与发布模块互斥（同合并入 main 口径）：release 有活动 git 目标运行时拒绝文档合并
+      releaseStore.assertTargetFree(board, 'git', {});
+      const r = buildGit.mergeDocsCommitIntoMain(root, {
+        versionId: v.id,
+        commitHash: v.docs.commitHash,
+        replays: (v.docsMerge && v.docsMerge.replays) || [],
+        // 文档白名单（语言集 + 自定义文档展开）：兜底重放按其从文档提交树中检出内容，
+        // 防止把 dev 上的业务文件带进 main
+        docFiles: flow.publishDocFiles(flow.docLangsOf(v), flow.customDocsOf(v)).map((f) => f.file),
+      });
+      if (r.alreadyIncluded) {
+        // 幂等：该文档提交（或其重放提交）已在 main——补一次落账容错（历史记录缺失时回填）
+        let version = v;
+        if (!v.docsMerge || !v.docsMerge.commitHash) {
+          version = buildStore.recordDocsMerge(board, v.id, { commitHash: r.commitHash, replayedHash: r.replayedHash, replays: r.replays });
+        }
+        return sendJson(res, 200, { ok: true, alreadyIncluded: true, version });
+      }
+      const version = buildStore.recordDocsMerge(board, v.id, {
+        commitHash: r.commitHash,
+        replayedHash: r.replayedHash,
+        mainSha: r.mainSha,
+        replays: r.replays,
+      });
+      return sendJson(res, 200, { ok: true, version });
+    });
+  }
+
   // REQ-20260924-001 AI 校对启动（默认语言错别字与行文规范核查，提示词
   // 派发 Agent 核查、结果经 docscheck 账本自动上报）：门禁 = 非 merging + 默认语言非单文件
   // 文件全部已审核（与 AI 翻译解锁同口径，缺口 400 明细）；创建 run 返回 runId + 提示词，
@@ -3176,13 +3106,18 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
-  // POST /api/build/release/push {id, remote}：正式发布第一步——推送主分支（只推 main/master
-  // 解析结果，不推 dev、不强推）；成功持久保存推送完成时间（官网检测时间窗口起点）。
+  // POST /api/build/release/push {id, remote}：发布（最后一步）动作一——推送主分支（只推
+  // main/master 解析结果，不推 dev、不强推）；成功持久保存推送完成时间（官网检测时间窗口起点）。
+  // REQ-20260926-002 发布门禁：文档未合并入 main（v.docsMerge 无落账）前推送被拦——
+  // 区分本地 main 已合入 / 远端已推送 / 官网资料已更新，不把本地合入等同于远端发布。
   if (req.method === 'POST' && pathname === '/api/build/release/push') {
     return runPost((body) => {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
-      if (v.status !== 'merged') throw new core.AtbError('请先完成「合并入 main」，再推送主分支');
+      if (v.status !== 'merged') throw new core.AtbError('请先完成「挑选合并」，再推送主分支');
+      if (!v.docsMerge || !v.docsMerge.commitHash) {
+        throw new core.AtbError('发布文档尚未合并入 main：请先完成「文档合并」步骤，再推送主分支（文档合并以 docsMerge 落账为准）');
+      }
       // 推送前重新检查 dev 前置（与合并同一口径，不自动切分支）
       buildGit.assertOnDev(root);
       const r = buildGit.pushMainBranch(root, { remote: body.remote });

@@ -250,7 +250,7 @@ function req(port, method, pathname, body) {
   });
 }
 
-t('H1 复现场景修复：已关联条目的其余依赖提交被补入（不再「已在本版本」跳过）；隔离分析收敛；幂等重复执行', async () => {
+t('H1 补入提交数据路径（REQ-20260926-002 起经条目编辑补入，一键加入端点已下线）：appendItemCommits 补齐其余提交（原关联保留）；隔离分析收敛；补入幂等', async () => {
   const h = await setupServer((c) => {
     const A = c.mkItem('requirement', '需求A（doc+feat+test）');
     c.markDone(A.id);
@@ -269,34 +269,23 @@ t('H1 复现场景修复：已关联条目的其余依赖提交被补入（不�
     assert.ok((plan.json.mergeAnalysis.perItem || []).some((x) => (x.intermediates || []).length >= 2), '前置：应存在未选祖先');
     // 预置文档提交记录（验证 scopeStale 联动）
     buildStore.recordDocsCommit(h.dataDir, vid, { commitHash: 'e'.repeat(40), files: { 'README.md': 'f'.repeat(64) }, scopeFp: 'x' });
-    // 一键加入：doc / feat 补入条目 A（修复核心断言——不再因条目已存在而跳过）
-    const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r.status, 200, `一键加入应成功：${r.text}`);
-    assert.deepEqual(r.json.added || [], [], '无新条目（A 已在本版本）');
-    assert.deepEqual(r.json.appended || [], [{ itemId: h.A.id, commits: [h.cDoc, h.cFeat] }], '其余依赖提交补入既有条目（原关联保留）');
-    assert.deepEqual(r.json.skipped || [], [], '不再出现「已在本版本（当前关联另一提交）」跳过');
-    // 版本数据：条目 A 保留原关联并补齐全部提交
-    const ver1 = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
-    assert.equal(ver1.items.length, 1, '不新增重复条目行');
-    assert.ok(sameSet(commitsOf(ver1.items[0]), [h.cDoc, h.cFeat, h.cTest]), `条目关联全部提交：${JSON.stringify(ver1.items[0])}`);
-    assert.equal(ver1.items[0].commit, h.cTest, '条目原有关联保留（不替换）');
-    assert.equal(ver1.docs.scopeStale, true, '补入提交 → 发布范围变化（文档需重新核对 / 提交）');
+    // 补入：doc / feat 经数据层 appendItemCommits 补入条目 A（保留原有关联；端点下线后由条目编辑承接）
+    const appendedV = buildStore.appendItemCommits(h.dataDir, vid, [{ itemId: h.A.id, commits: [h.cDoc, h.cFeat] }]);
+    assert.ok(sameSet(commitsOf(appendedV.items[0]), [h.cDoc, h.cFeat, h.cTest]), `条目关联全部提交：${JSON.stringify(appendedV.items[0])}`);
+    assert.equal(appendedV.items[0].commit, h.cTest, '条目原有关联保留（不替换）');
+    assert.equal(appendedV.docs.scopeStale, true, '补入提交 → 发布范围变化（文档需重新核对 / 提交）');
     // 隔离分析收敛：无未选祖先
     plan = await req(h.port, 'GET', `/api/build/publish-plan${h.P}&id=${encodeURIComponent(vid)}`);
-    assert.ok((plan.json.mergeAnalysis.perItem || []).every((x) => (x.intermediates || []).length === 0), `加入后应无未选祖先：${JSON.stringify(plan.json.mergeAnalysis)}`);
-    // 幂等：重复执行不再添加、不重复
-    const r2 = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r2.status, 200);
-    assert.deepEqual(r2.json.added || [], []);
-    assert.deepEqual(r2.json.appended || [], []);
-    const ver2 = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
-    assert.ok(sameSet(commitsOf(ver2.items[0]), [h.cDoc, h.cFeat, h.cTest]), '重复执行不重复添加');
+    assert.ok((plan.json.mergeAnalysis.perItem || []).every((x) => (x.intermediates || []).length === 0), `补入后应无未选祖先：${JSON.stringify(plan.json.mergeAnalysis)}`);
+    // 幂等：重复补入不再重复添加
+    const v2 = buildStore.appendItemCommits(h.dataDir, vid, [{ itemId: h.A.id, commits: [h.cDoc, h.cFeat] }]);
+    assert.ok(sameSet(commitsOf(v2.items[0]), [h.cDoc, h.cFeat, h.cTest]), '重复补入不重复添加');
   } finally {
     await h.close();
   }
 });
 
-t('H2 数据路径验收：新条目多个依赖提交全部保留；一键加入后合并入 main，主分支包含实现 / 测试 / 文档内容；包含性校验一致通过', async () => {
+t('H2 数据路径验收（REQ-20260926-002 起经条目关联多提交，一键加入端点已下线）：新条目多提交全部保留，挑选合并入 main，主分支包含实现 / 测试 / 文档内容；包含性校验一致通过', async () => {
   const h = await setupServer((c) => {
     const A = c.mkItem('requirement', '所选需求A');
     const B = c.mkItem('requirement', '新依赖需求B（两提交）');
@@ -310,19 +299,13 @@ t('H2 数据路径验收：新条目多个依赖提交全部保留；一键加�
     return { A, B, cB1, cB2, cADoc, cAFeat, cATest };
   });
   try {
-    // A 只关联最新（test）提交 → 依赖 = B1、B2（新条目，多提交）+ A doc / feat（既有条目补入）
     const created = await req(h.port, 'POST', `/api/build/version${h.P}`, { items: [{ itemId: h.A.id, commit: h.cATest }] });
     assert.equal(created.status, 201, `创建版本应成功：${created.text}`);
     const vid = created.json.version.id;
-    const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r.status, 200, `一键加入应成功：${r.text}`);
-    // 新条目 B 的两个依赖提交全部保留（不再只取「最新」一个）
-    const bAdded = (r.json.added || []).find((x) => x.itemId === h.B.id);
-    assert.ok(bAdded, '新依赖条目按条目纳入');
-    assert.ok(sameSet(commitsOf(bAdded), [h.cB1, h.cB2]), `同一条目多个依赖提交全部保留：${JSON.stringify(bAdded)}`);
-    assert.deepEqual(r.json.appended || [], [{ itemId: h.A.id, commits: [h.cADoc, h.cAFeat] }], '既有条目补齐其余提交');
-    assert.deepEqual(r.json.skipped || [], []);
-    // 合并入 main（数据层直连，真实临时 Git 仓库）
+    // 条目关联多提交：A 补入 doc / feat，B 以两个提交纳入（数据层直连；同条目多提交全保留）
+    buildStore.appendItemCommits(h.dataDir, vid, [{ itemId: h.A.id, commits: [h.cADoc, h.cAFeat] }]);
+    buildStore.addItems(h.dataDir, vid, [{ itemId: h.B.id, commit: h.cB1, commits: [h.cB1, h.cB2] }]);
+    // 挑选合并入 main（数据层直连，真实临时 Git 仓库）
     let v = buildStore.readVersion(h.dataDir, vid);
     buildStore.beginMerge(h.dataDir, vid);
     const pending = v.items.filter((x) => !x.mergedAt);
@@ -347,45 +330,28 @@ t('H2 数据路径验收：新条目多个依赖提交全部保留；一键加�
   }
 });
 
-t('H3 真正无法纳入的仍逐条说明原因（无归属 / 未完成 / 跨版本占用 / 混合归属）；已有校验不弱化', async () => {
+t('H3 一键加入端点下线（REQ-20260926-002）：无法纳入场景不再经端点反馈——请求 404、版本范围不变；done 门禁与占用校验在条目纳入路径保留', async () => {
   const h = await setupServer((c) => {
     const A = c.mkItem('requirement', '所选需求A');
-    const C = c.mkItem('requirement', '未完成依赖C');
     const D = c.mkItem('requirement', '被占用依赖D');
-    const E = c.mkItem('requirement', '混合归属E');
-    const F = c.mkItem('requirement', '混合归属F');
-    for (const it of [A, D, E, F]) c.markDone(it.id); // C 保持未完成
-    const cU = c.commit('u.txt', 'u', 'chore: 无单号提交', '2026-09-21T05:00:00 +0000');
-    const cC = c.commit('c.txt', 'c', `feat: C ${C.id}`, '2026-09-21T05:01:00 +0000');
+    c.markDone(A.id);
+    c.markDone(D.id);
     const cD = c.commit('d.txt', 'd', `feat: D ${D.id}`, '2026-09-21T05:02:00 +0000');
-    // BUG-20260926-003：真实混合提交 = 变更同时触及 E、F 两个条目目录（主题双单号 + 路径多目录），
-    // 保护不回退；仅主题引用单号（路径单一条目目录）则按末尾归属单号归属，不判混合
-    const cEF = c.commitFiles(
-      ['ef.txt', `agent-team-board/data/requirements/${E.id}/mixed.md`, `agent-team-board/data/requirements/${F.id}/mixed.md`],
-      `feat: E+F ${E.id} ${F.id}`, '2026-09-21T05:03:00 +0000');
     const cA = c.commit('a.txt', 'a', `feat: A ${A.id}`, '2026-09-21T05:04:00 +0000');
     const occ = c.createVersion([{ itemId: D.id, commit: cD }], '占用版本');
-    return { A, C, D, E, F, cU, cC, cEF, cA, occId: occ.id };
+    return { A, D, cD, cA, occId: occ.id };
   });
   try {
     const created = await req(h.port, 'POST', `/api/build/version${h.P}`, { items: [{ itemId: h.A.id, commit: h.cA }] });
     assert.equal(created.status, 201, `创建版本应成功：${created.text}`);
     const vid = created.json.version.id;
+    // 端点下线：请求 404，版本范围不变
     const r = await req(h.port, 'POST', `/api/build/version/add-dependencies${h.P}`, { id: vid });
-    assert.equal(r.status, 200, `一键加入应成功：${r.text}`);
-    assert.deepEqual(r.json.added || [], [], '全部依赖不可纳入 → 无新增');
-    assert.deepEqual(r.json.appended || [], []);
-    const skipped = r.json.skipped || [];
-    const byReason = (re) => skipped.filter((s) => re.test(s.reason || ''));
-    assert.equal(byReason(/无法归属/).length, 1, '无单号提交以「无法归属」跳过');
-    assert.equal(byReason(/尚未完成/).length, 1, '未 done 条目以「尚未完成」跳过');
-    assert.ok(byReason(/尚未完成/)[0].reason.includes(h.C.id), '跳过原因含条目号');
-    assert.equal(byReason(/已纳入版本/).length, 1, '跨版本占用以「已纳入版本」跳过');
-    assert.ok(byReason(/已纳入版本/)[0].reason.includes(h.occId), '跳过原因含占用版本号');
-    assert.equal(byReason(/混合/).length, 1, '一提交关联多条目以「混合」跳过');
-    assert.equal(byReason(/已在本版本/).length, 0, '不存在「已在本版本」类跳过（按提交补入，不按条目拒绝）');
+    assert.equal(r.status, 404, `一键加入端点应已下线（404）：${r.text}`);
     const version = (await req(h.port, 'GET', `/api/build/state${h.P}`)).json.versions.find((x) => x.id === vid);
     assert.equal(version.items.length, 1, '版本范围不变');
+    // 既有校验不弱化（数据层口径）：跨版本占用条目不可纳入其他版本
+    assert.throws(() => buildStore.addItems(h.dataDir, vid, [{ itemId: h.D.id, commit: h.cD }]), /已纳入版本/, '跨版本占用校验保留');
   } finally {
     await h.close();
   }

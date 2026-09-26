@@ -171,7 +171,7 @@ t('T3 详情概况操作行（BUG-20260921-016 布局调整后）：顶部一行
   assert.equal((acts.match(/<button/g) || []).length, 2, '操作行仅两键（AI 完善 / 编辑）');
   assert.match(detail, /data-ver-answer="BLD-DRAFT"/, 'AI 完善绑定当前选中版本');
   // 切至其他步骤入口隐藏（操作行属概况步）；切回恢复
-  for (const step of ['link', 'docs', 'merge', 'release']) {
+  for (const step of ['merge', 'docs', 'docmerge', 'release']) {
     h.select('BLD-DRAFT', step);
     assert.ok(!detailPart(h.inner()).includes('data-ver-answer'), `切至 ${step} 步后概况入口隐藏`);
   }

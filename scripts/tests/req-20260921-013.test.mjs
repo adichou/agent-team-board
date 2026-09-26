@@ -101,16 +101,16 @@ function listPart(inner) {
   return inner.slice(a, b);
 }
 
-t('T1 页签改名：首个页签显示「概况」，其余四步名称与顺序不变、data-step="plan" 标识保留；外层模块导航「版本计划 / 分支浏览」不受影响', async () => {
+t('T1 页签更名（REQ-20260926-002 五步重定义）：五步名称与顺序、data-step="plan" 标识保留；外层模块导航「版本计划 / 分支浏览」不受影响', async () => {
   const h = setup();
   await h.enter(); // 自动选中首个 BLD-DRAFT，默认 plan 步
   const inner = h.inner();
-  assert.match(inner, /data-step="plan"[^>]*aria-selected="true"[^>]*>概况</, '首个页签显示名改为「概况」且默认选中');
-  assert.match(inner, /data-step="link"[^>]*>关联条目与提交</, '第二步名称不变');
-  assert.match(inner, /data-step="docs"[^>]*>文档编写</, '第三步名称不变');
-  assert.match(inner, /data-step="merge"[^>]*>合并入 main</, '第四步名称不变');
-  assert.match(inner, /data-step="release"[^>]*>正式发布</, '第五步名称不变');
-  const order = ['plan', 'link', 'docs', 'merge', 'release'].map((k) => inner.indexOf(`data-step="${k}"`));
+  assert.match(inner, /data-step="plan"[^>]*aria-selected="true"[^>]*>选择条目与提交</, '首个页签显示名按新五步定义且默认选中');
+  assert.match(inner, /data-step="merge"[^>]*>挑选合并</, '第二步名称（挑选合并）');
+  assert.match(inner, /data-step="docs"[^>]*>文档与翻译</, '第三步名称（文档与翻译）');
+  assert.match(inner, /data-step="docmerge"[^>]*>文档合并</, '第四步名称（文档合并）');
+  assert.match(inner, /data-step="release"[^>]*>发布</, '第五步名称（发布）');
+  const order = ['plan', 'merge', 'docs', 'docmerge', 'release'].map((k) => inner.indexOf(`data-step="${k}"`));
   assert.ok(order.every((x, i) => i === 0 || x > order[i - 1]), '五步顺序保持');
   // 外层模块子页签（TABS）保留「版本计划 / 分支浏览」
   assert.match(inner, /data-bld-tab="versions"[^>]*>版本计划</, '外层「版本计划」导航保留');
@@ -143,8 +143,8 @@ t('T3 概况入口：概况顶部操作行有唯一「AI 完善」按钮（BUG-2
   // 入口在概况顶部操作行内，且先于「编辑」键（紧邻其左）
   const iActs = detail.indexOf('bld-plan-acts');
   assert.ok(iActs !== -1 && detail.indexOf('data-ver-answer="BLD-DRAFT"', iActs) < detail.indexOf('id="bldEditInfo"'), 'AI 完善位于编辑左边');
-  // 切至其他步骤：入口不显示（对四个步骤逐一验证）
-  for (const step of ['link', 'docs', 'merge', 'release']) {
+  // 切至其他步骤：入口不显示（对四个步骤逐一验证；REQ-20260926-002：link 步并入 plan，步骤键变更）
+  for (const step of ['merge', 'docs', 'docmerge', 'release']) {
     h.run(`window.ATBBuild.setStep(${JSON.stringify(step)})`);
     detail = detailPart(h.inner());
     assert.ok(!detail.includes('data-ver-answer'), `切至 ${step} 步后概况入口隐藏`);

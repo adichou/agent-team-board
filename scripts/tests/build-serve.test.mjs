@@ -350,6 +350,14 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.ok(replays1.length === 1 && replays1[0].original === commit1, '记录重放证据（original → replayed）');
     assert.match(git(projA, ['branch', '--contains', replays1[0].replayed]), /main/, 'main 应包含重放提交（REQ-20260920-003 隔离合并：只重放所选提交自身变更）');
     assert.ok(!git(projA, ['branch', '--contains', commit1]).includes('main'), '原始提交非 main 祖先（重放语义）');
+    // REQ-20260926-002 文档合并（发布门禁前置）：审核通过的文档提交 cherry-pick 合入 main，
+    // 落账 docsMerge；重试幂等不重复执行
+    r = await req(port, 'POST', `/api/build/docs/merge${P}`, { id: vid });
+    assert.equal(r.status, 200, `文档合并：${r.text}`);
+    assert.ok(r.json.version.docsMerge && r.json.version.docsMerge.replayedHash, 'docsMerge 落账（文档提交 / 重放提交）');
+    r = await req(port, 'POST', `/api/build/docs/merge${P}`, { id: vid });
+    assert.equal(r.status, 200, `文档合并重试：${r.text}`);
+    assert.equal(r.json.alreadyIncluded, true, '文档合并重试幂等');
     // BUG-20260920-005：merged（已合并未推送）三类操作放开——重开合并幂等 200（无未合并条目
     // 直接回 merged）；补关联 / 移出全链路可用（补入后即移出还原范围，不占用后续用例的 reqB）
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
