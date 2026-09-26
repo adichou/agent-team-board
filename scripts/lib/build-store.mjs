@@ -457,18 +457,26 @@ export function recordDocsCommit(dataDir, id, { commitHash, files, scopeFp } = {
     scopeFp: String(scopeFp || ''),
     scopeStale: false,
     staleReason: null,
+    // BUG-20260926-004：重新提交（含 noop 重确认路径）即基于当前范围重新入账，重置
+    // 范围变化时点（求值侧新鲜度基准随之清零——scopeStale / staleReason 一并清除）
+    scopeChangedAt: null,
     committedAt: nowIso(),
   };
   v.by = 'board';
   return writeVersion(dataDir, v);
 }
 
-// 范围变化（增删条目 / 换 commit）后失效旧提交标识：标记 scopeStale 并说明来源；
-// 保留已写内容与提交记录（不得拿旧已提交标识为新范围放行合并）。始终落盘（调用方返回 v）。
+// 范围变化（增删条目 / 换 commit）后失效旧提交标识：标记 scopeStale 并说明来源；保留已写
+// 内容与提交记录（不得拿旧已提交标识为新范围放行合并）。始终落盘（调用方返回 v）。
+// BUG-20260926-004：落盘本次范围变化时点 scopeChangedAt（重复触发刷新为最近一次，以落盘
+// 时点为准）——求值侧据此判定审核记录是否基于当前范围（审核时点晚于该时点即视为重新核对
+// 生效），把「范围变化后需重新核对」从「重新核对动作无效」的死锁（本单缺陷）收敛为可恢复
+// 的过程性校验；scopeStale 标记与 staleReason 溯源语义不变。
 function markDocsScopeStale(dataDir, v, reason) {
   if (v.docs?.commitHash) {
     v.docs.scopeStale = true;
     v.docs.staleReason = String(reason || '发布范围已变化').slice(0, 200);
+    v.docs.scopeChangedAt = nowIso();
   }
   return writeVersion(dataDir, v);
 }
@@ -476,8 +484,9 @@ function markDocsScopeStale(dataDir, v, reason) {
 // REQ-20260921-008 人工通过审核（审查对话框「通过审核」）：在版本记录顶层 v.review 固化
 // 审核时点磁盘内容 sha256——与 v.docs（提交记录语义）隔离，避免未提交版本被误判 uncommitted。
 // 求值侧（publish-flow.evaluateDocsFlow）：内容再变（内部编辑 / 外部 IDE 修改）hash 不一致即
-// 自动回退「已总结待审核」；scopeStale 时整体失效。hash 缺省按 readFile（缺省读项目根磁盘）
-// 现算当前内容。
+// 自动回退「已总结待审核」；发布范围变化（scopeStale）后既有审核按 scopeChangedAt 时点失效，
+// BUG-20260926-004 起重新「通过审核」（本函数写入的时点晚于范围变化时点）即恢复——不再死锁。
+// hash 缺省按 readFile（缺省读项目根磁盘）现算当前内容。
 export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
   const v = readVersion(dataDir, id);
   if (!flow.isPublishDocFile(file, flow.docLangsOf(v), flow.customDocsOf(v))) throw new AtbError(`非发布文档文件：${file || '（空）'}（仅语言集内文档可审核）`);

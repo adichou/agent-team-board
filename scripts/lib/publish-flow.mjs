@@ -574,19 +574,41 @@ export function detectBaselineShift(langs, statFile, customDocs = []) {
 //   - marks = { summarizing, summarized, translating, translated }：AI 总结 / AI 翻译账本
 //     聚合标记（docs-summary-store.summaryMarksForVer / docs-translate-store.translateMarksForVer）；
 //   - opts.statFile(file) → mtimeMs | null：基准变更检测注入（缺省不做检测）。
-// 判定优先级（默认语言）：正在总结 > 已审核（hash 一致且未 scopeStale）> 已总结待审核 > 未总结；
+// 判定优先级（默认语言）：正在总结 > 已审核（hash 一致且审核基于当前范围）> 已总结待审核 > 未总结；
 // 判定优先级（剩余语言）：基准变更回退未翻译 > 正在翻译 > 已审核 > 已翻译待审核 > 未翻译；
 // 判定优先级（单文件类，REQ-20260922-002）：已审核 > 待审核（在盘或曾有审核记录）> 未编写。
-// scopeStale 口径沿用：发布范围变化时审核一并失效（回退待审核），不弱化门禁。
+// scopeStale 口径（BUG-20260926-004 修订）：发布范围变化使既有审核失效（回退待审核），
+// 但失效不再是「重新核对动作无效」的死锁——逐文件重新「通过审核」即恢复：审核记录时点
+//（review.files[file].at）晚于最近一次范围变化时点（docs.scopeChangedAt，markDocsScopeStale
+// 落盘；存量数据无该字段时以最近一次文档提交时点 docs.committedAt 兜底——scopeStale 只会
+// 在文档提交之后被标记）即视为基于当前范围的重新核对；时点无法定位时安全侧倾斜（审核一律
+// 视为旧范围）。审核过程中范围再变（scopeChangedAt 刷新到审核时点之后）→ 再次失效。
 // 输出：files（4 类 × 语言集语言数 + 单文件类）、defaultFiles / restFiles（single 归
 // defaultFiles 计入默认语言组展示与计数）、reviewedCount（合计）与分组计数、canTranslate
 //（默认语言 4 类已审核且存在剩余语言——A1 口径下单文件类不锁 AI 翻译；translateMissing 为
-// 默认语言 4 类缺口明细）、baselineShift、canCommit（REQ-20260921-008 原「全部已审核」门禁；
-// BUG-20260926-002 起不再叠加整体审查完结条件——scopeStale / 基准变更天然使文件回退非
-// reviewed 态，全部已审核即含无失效源）、missing（未审核文件 + 状态）。
+// 默认语言 4 类缺口明细）、baselineShift、canCommit（REQ-20260921-008「全部已审核」门禁；
+// BUG-20260926-002 起不叠加整体审查完结条件；BUG-20260926-004 起「已审核」隐含「审核基于
+// 当前范围」——时点校验并入逐文件判定，提交端点以提交时点复算结果为准）、missing（未审核
+// 文件 + 状态）。
 export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const scopeStale = !!(v?.docs && v.docs.scopeStale);
+  // BUG-20260926-004 范围变化时点：scopeChangedAt 优先，存量数据回退 committedAt；
+  // 解析失败 / 均缺失 → null（安全侧：审核视为旧范围）。
+  const staleSinceMs = (() => {
+    if (!scopeStale) return null;
+    for (const iso of [v?.docs?.scopeChangedAt, v?.docs?.committedAt]) {
+      const ms = Date.parse(String(iso ?? ''));
+      if (Number.isFinite(ms)) return ms;
+    }
+    return null;
+  })();
+  const reviewFresh = (rec) => {
+    if (!scopeStale) return true; // 范围未变化：hash 一致即有效（既有口径）
+    if (staleSinceMs == null) return false; // 无法定位范围变化时点：安全侧倾斜
+    const atMs = Date.parse(String(rec?.at ?? ''));
+    return Number.isFinite(atMs) && atMs > staleSinceMs; // 严格晚于：以落盘时点为准
+  };
   const reviewFiles = (v?.review && v.review.files) || {};
   const summarizing = new Set(marks.summarizing || []);
   const summarizedMarks = new Set(marks.summarized || []);
@@ -602,7 +624,9 @@ export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
     try { text = read(f.file); } catch { text = null; }
     const diskHash = text == null ? null : hashOf(text);
     const rec = reviewFiles[f.file] || null;
-    const approved = !scopeStale && !!rec && diskHash != null && rec.hash === diskHash;
+    // BUG-20260926-004：approved = hash 一致 + 审核基于当前范围（scopeStale 期间以时点校验
+    // 判定新鲜度），不再以 !scopeStale 一票否决——范围变化后重新「通过审核」可恢复
+    const approved = !!rec && diskHash != null && rec.hash === diskHash && reviewFresh(rec);
     let state;
     if (f.single && !f.custom) {
       // 单文件类（LICENSE）：不经 AI 总结 / 翻译，人工编写 → 待审核 → 已审核（编辑 / 删盘回退待审核）
@@ -641,8 +665,9 @@ export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
     .map((f) => ({ file: f.file, state: f.state }));
   const canTranslate = langDefaultFiles.length > 0 && langDefaultReviewed === langDefaultFiles.length && restFiles.length > 0;
   // 提交门禁（BUG-20260926-002 回归 REQ-20260921-008 原口径）：语言集内全部文件已审核即可
-  // 提交——不再叠加整体审查完结条件；scopeStale / 基准变更使文件回退非 reviewed 态，
-  // 全部已审核天然隐含无失效源，门禁不放宽也不新增。
+  // 提交——不再叠加整体审查完结条件。BUG-20260926-004：「已审核」判定含审核新鲜度时点校验
+  //（hash 一致 + 基于当前范围），全部已审核天然隐含「审核记录之后发布范围未再变化」；
+  // scopeStale 期间重新逐文件审核即可恢复（提交端点以提交时点复算结果为准，不放宽）。
   const missing = files
     .filter((f) => f.state !== 'reviewed')
     .map((f) => ({ file: f.file, state: f.state }));
