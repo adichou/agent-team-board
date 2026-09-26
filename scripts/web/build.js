@@ -1951,7 +1951,7 @@ const ATBBuild = (() => {
       const gap = (flowEval.translateMissing || []).map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、');
       // REQ-20260924-006 单语言版本：默认语言全审且无剩余语言 → 无翻译目标，明确可跳过
       if (!gap && !(flowEval.restFiles || []).length) {
-        toast('语言集只有一个语言：无翻译目标，可跳过翻译（直接进行整体审查与提交）');
+        toast('语言集只有一个语言：无翻译目标，可跳过翻译（直接进行提交）');
         return;
       }
       toast(`AI 翻译未解锁：默认语言尚缺 ${(flowEval.translateMissing || []).length} 个文件审核（${gap || '无文件'}）`, true);
@@ -1983,91 +1983,10 @@ const ATBBuild = (() => {
     }
   }
 
-  // REQ-20260921-012「整体审查」：打开完结核对对话框（全部文件已审核前点击给缺口反馈）
-  function openFinalize() {
-    const v = selVersion();
-    const pf = v ? pfOf(v) : null;
-    if (!pf || pf.phase !== 'ready' || !pf.plan) {
-      toast('发布流程数据未就绪：请先刷新或重试后再整体审查', true);
-      return;
-    }
-    const flowEval = normalizeFlowEval(pf.plan);
-    if (flowEval.canFinalize !== true) {
-      const missing = flowEval.missing || [];
-      toast(`整体审查未解锁：尚缺 ${missing.length} 个文件审核（${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`, true);
-      return;
-    }
-    pf.finalize = { open: true, busy: false };
-    render();
-  }
-
-  function closeFinalize() {
-    const pf = state.pf;
-    if (!pf?.finalize) return;
-    if (pf.finalize.busy) return; // 确认请求进行中不误关
-    pf.finalize = null;
-    render();
-  }
-
-  // 「确认完结」：服务端门禁（全部已审核 / 无 scopeStale / 无基准变更）通过后落完结记录；
-  // 成功后完结终态呈现、「提交」解锁
-  async function confirmFinalize() {
-    const v = selVersion();
-    const pf = v ? pfOf(v) : null;
-    if (!pf?.finalize?.open || pf.finalize.busy || !state.project) return;
-    pf.finalize.busy = true;
-    render();
-    try {
-      const r = await fetch(`/api/build/docs/finalize?project=${encodeURIComponent(state.project)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: v.id }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `完结失败（${r.status}）`);
-      pf.finalize = null;
-      if (data.docsFlow) pf.plan = { ...(pf.plan || {}), docsFlow: data.docsFlow };
-      toast('✓ 整体审查已完结：文档编写三阶段完成，「提交」已解锁');
-      await ensurePublishPlan(true);
-    } catch (e) {
-      if (pf.finalize) pf.finalize.busy = false;
-      toast(`✕ 整体审查完结失败：${e.message}`, true);
-      if (state.pf === pf) render();
-    }
-  }
-
-  /* ---------- REQ-20260924-001 整体审查自动检查：运行自动检查 / AI 校对 ---------- */
-
-  // 「运行自动检查」：① 各语言内容语言一致性 + ② 全部文档内链接可达性（服务端只读检查）。
-  // 结果存 pf.checks（对话框重开保留），✓/✗ + 逐文件明细随 render 呈现；不设门禁、不改盘。
-  async function runReviewChecks() {
-    const v = selVersion();
-    const pf = v ? pfOf(v) : null;
-    if (!pf?.finalize?.open || pf.checks?.busy || !state.project) return;
-    pf.checks = { busy: true, error: null, lang: null, links: null };
-    render();
-    try {
-      const r = await fetch(`/api/build/docs/review-checks?project=${encodeURIComponent(state.project)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: v.id }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `检查失败（${r.status}）`);
-      pf.checks = { busy: false, error: null, lang: data.lang || null, links: data.links || null };
-      const allOk = (data.lang ? data.lang.ok === true : true) && (data.links ? data.links.ok === true : true);
-      toast(allOk
-        ? '✓ 自动检查通过：语言一致与链接可达均无问题'
-        : '自动检查发现问题：详见整体审查对话框逐项红叉与明细', !allOk);
-    } catch (e) {
-      pf.checks = { busy: false, error: e.message, lang: null, links: null };
-      toast(`✕ 自动检查失败：${e.message}`, true);
-    }
-    if (state.pf === pf) render();
-  }
-
   // 「AI 校对」：启动默认语言文档核查（提示词覆盖链接有效性 / 错别字 / 语法与行文规范）；
   // 成功复制提示词，交给 AI Agent 执行，结果经 docscheck 账本轮询自动回显（文档编写页
-  // 右侧建议栏 + 整体审查对话框）。REQ-20260924-006：③ 步入口直接可用，不再要求先打开
-  // 整体审查对话框（该入口照常保留）；提示词新增「无法验证的链接标待确认」口径。
+  // 右侧建议栏）。REQ-20260924-006：③ 步入口直接可用；BUG-20260926-002：整体审查阶段与
+  // 完结对核对话框去除后，本入口与右侧建议栏是校对结果的唯一呈现位。
   async function startProofread() {
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
@@ -2187,22 +2106,6 @@ const ATBBuild = (() => {
       pf.docBusy = false;
       if (state.pf === pf) render();
     }
-  }
-
-  // REQ-20260924-004：AI 校对问题行「✎ 修改」——先关闭整体审查完结对话框（一次一层：确认
-  // 完结请求进行中不放行让位），再打开「② 二次编辑」弹窗并定位该行（BUG-20260925-006：
-  // 原跳审查对话框编辑态的路径随审查去编辑化移除——openSecondaryEdit 已支持 { file, line }
-  // 定位，且 AI 校对只覆盖默认语言文件，与该弹窗范围一致）；AI 校对结果不因修改清除或失效，
-  // 重新「AI 校对」后按最新磁盘内容覆盖（docscheck 既有口径）；不改 ①② 检查与 canFinalize /
-  // canCommit 门禁。
-  function editFromProofread(file, line) {
-    const pf = state.pf;
-    if (!pf || pf.phase !== 'ready' || !file) return;
-    if (pf.finalize) {
-      if (pf.finalize.busy) return;
-      pf.finalize = null;
-    }
-    openSecondaryEdit({ file, line });
   }
 
   /* ---------- REQ-20260921-008 审查对话框（中英双栏同步滚动；010 起 N 栏） ---------- */
@@ -2343,8 +2246,6 @@ const ATBBuild = (() => {
         toast(`尚不可提交：还需 ${missing.length} 个文件通过审查（${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`, true);
       } else if ((flowEval.baselineShift || []).length) {
         toast(`尚不可提交：默认语言文档已更新（基准变更），${flowEval.baselineShift.length} 个翻译文档需重新 AI 翻译并审核`, true);
-      } else {
-        toast('尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）', true);
       }
       return;
     }
@@ -2386,7 +2287,7 @@ const ATBBuild = (() => {
     state.summaryTimer = setInterval(() => { summaryPoll(); }, SUMMARY_POLL_MS);
   }
 
-  // 轻量轮询：只取当前版本 AI 总结 / AI 翻译 run + 三阶段求值（不动 git 分析），驱动列表 /
+  // 轻量轮询：只取当前版本 AI 总结 / AI 翻译 run + 阶段求值（不动 git 分析），驱动列表 /
   // 按钮进度 / 阶段门禁 / 基准变更刷新（REQ-20260921-012：响应带 translate，单次轮询同吸两 run）
   async function summaryPoll() {
     const v = selVersion();
@@ -2408,7 +2309,7 @@ const ATBBuild = (() => {
         || JSON.stringify(prevChk) !== JSON.stringify(nextChk)
         || JSON.stringify(pf.plan?.docsFlow || null) !== JSON.stringify(data.docsFlow || null);
       if (!changed) return;
-      // REQ-20260924-001：docsCheck（AI 校对 run）随单次轮询同吸——整体审查对话框结果自动刷新
+      // REQ-20260924-001：docsCheck（AI 校对 run）随单次轮询同吸——校对建议栏结果自动刷新
       pf.plan = { ...(pf.plan || {}), summary: next, translate: nextTr, ...(data.docsFlow ? { docsFlow: data.docsFlow } : {}), docsCheck: nextChk };
       seedChkDecisions(pf); // BUG-20260925-002：docsCheck 替换后决断重播种（服务端账本 + 本会话同 run 覆盖）
       render();
@@ -3106,16 +3007,15 @@ const ATBBuild = (() => {
         </nav>`;
   }
 
-  // REQ-20260921-012 文档编写步三阶段视图：阶段条（① 默认语言先行 → ② AI 翻译与审查 →
-  // ③ 整体审查完结）+ 一行操作条（BUG-20260926-001：语言集 + 刷新 / 审查 + 五步
-  // ① AI 总结 / ② 二次编辑 / ③ AI 校对 / ④ AI 翻译 / ⑤ 提交 同一水平行；「整体审查」独立
-  // 按钮移除，完结入口落阶段条 ③）+ 按语言页签的文件七态列表（BUG-20260921-013：每语言一个
-  // 页签，替代平铺单列分组标题行）+ 门禁条（编辑收敛进审查对话框）。在 REQ-20260921-008
-  // 三段布局与 REQ-20260921-010 语言集动态清单（4 类 × N）之上落位。
+  // REQ-20260921-012 文档编写步两阶段视图（BUG-20260926-002：整体审查阶段去除）：阶段条
+  //（① 默认语言先行 → ② AI 翻译与审查，纯展示）+ 一行操作条（BUG-20260926-001：语言集 +
+  // 刷新 / 审查 + 五步 ① AI 总结 / ② 二次编辑 / ③ AI 校对 / ④ AI 翻译 / ⑤ 提交 同一水平行）
+  // + 按语言页签的文件七态列表（BUG-20260921-013：每语言一个页签，替代平铺单列分组标题行）
+  // + 门禁条（编辑收敛进审查对话框）。在 REQ-20260921-008 三段布局与 REQ-20260921-010
+  // 语言集动态清单（4 类 × N）之上落位。
   // - 刷新 / 审查按钮恒可用（数据加载失败给错误反馈而非隐藏按钮）；
   // - AI 翻译在默认语言 4/4 已审核前禁用（aria-disabled + title 列默认语言缺口，模式同
-  //   BUG-20260920-006）；整体审查完结入口在语言集内全部文件已审核前禁用；提交需「全部已审核 +
-  //   整体审查已完结」（在原「全部已审核」门禁之上叠加完结条件，不弱化）；
+  //   BUG-20260920-006）；提交回归「全部已审核」门禁（BUG-20260926-002，不叠加完结条件）；
   // - 文件名是标识不是文案：一律 data-i18n-skip（BUG-20260921-004 口径，防反向词典误译）。
   function renderDocsPane(v) {
     const pf = pfOf(v);
@@ -3132,10 +3032,9 @@ const ATBBuild = (() => {
               ${pf.langsBusy ? '<span class="muted small" role="status">保存中…</span>' : ''}
               ${pf.langsErr ? `<p class="rel-form-err small bld-docs-langset-err" role="alert">${esc(pf.langsErr)}</p>` : ''}
             </div>`;
-    // 辅助动作恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。BUG-20260926-001：
-    // 「整体审查」独立按钮移除——完结核对对话框入口落阶段条「③ 整体审查完结」（见
-    // docsStageBar），本行保留辅助动作 刷新 / 审查；REQ-20260924-006 边界第 1 条对整体审查
-    // 按钮的保留要求由本单取代，其门禁与对话框能力不变。
+    // 辅助动作恒渲染（加载 / 失败态不隐藏按钮；失败给错误横幅与重试）。BUG-20260926-001
+    // 单行操作条收敛、「整体审查」独立按钮移除；BUG-20260926-002 完结对核对话框随之去除，
+    // 本行保留辅助动作 刷新 / 审查。
     const actionsHtml = `
           <div class="bld-docs-actions">
             <button type="button" class="btn small" data-pf-refresh${pf.refreshing ? ' disabled' : ''} title="重新从磁盘读取全部文件内容与状态（外部 IDE 修改后取回最新内容，并做基准变更检测）">${pf.refreshing ? '正在读取…' : '刷新'}</button>
@@ -3178,7 +3077,7 @@ ${langsField}
     const p = pf.plan;
     const docs = p.docs || { files: [], overall: 'none', reasons: [] };
     const flowEval = normalizeFlowEval(p);
-    // 阶段条：三阶段推进（各阶段解锁条件与缺口一目了然）
+    // 阶段条：两阶段推进（各阶段解锁条件与缺口一目了然）
     const stagesHtml = docsStageBar(flowEval);
     // 文件列表（4 类 × 语言集语言数，按语言成组；AI 总结 / AI 翻译运行中附带当前文件标注；
     // 图标独立元素保证状态文字整节点可翻译）
@@ -3233,7 +3132,8 @@ ${langsField}
       return `<button type="button" class="rel-tab${activeDocLang === l ? ' active' : ''}" data-doc-lang="${esc(l)}" role="tab" aria-selected="${activeDocLang === l}" id="bldDocTab_${esc(l)}" aria-controls="bldDocPanel_${esc(l)}"><span data-i18n-skip>${esc(l)} · ${esc(langNameOf(l))}</span>${i === 0 ? '<span>（默认）</span>' : ''}<span class="bld-doc-tab-count${files.length && reviewed === files.length ? ' ok' : ''}">${reviewed}/${files.length}</span>${runBadgeOf(l)}</button>`;
     }).join('');
     const langPanelsHtml = langs.map((l, i) => `<ul class="bld-docs-list" role="tabpanel" id="bldDocPanel_${esc(l)}" aria-labelledby="bldDocTab_${esc(l)}"${activeDocLang === l ? '' : ' hidden'}>${filesOfLang(l, i).map(rowOf).join('')}</ul>`).join('');
-    // 门禁条：已提交终态 > 全部可提交 > 缺口明细（默认语言 / 剩余语言分组计数 + 完结缺口）
+    // 门禁条：已提交终态 > 全部可提交 > 缺口明细（默认语言 / 剩余语言分组计数；
+    // BUG-20260926-002：完结缺口口径随完结阶段去除，全审即可提交）
     const total = flowEval.files.length;
     const defTotal = flowEval.defaultFiles.length;
     const restTotal = flowEval.restFiles.length;
@@ -3242,20 +3142,16 @@ ${langsField}
     const gateBar = committed
       ? `<div class="bld-docs-gate ok" role="note">已提交到本地 dev 分支（hash ${esc(short(docs.commitHash))}，仅语言集内文档 pathspec）：满足「合并入 main」前置。</div>`
       : flowEval.canCommit
-        ? `<div class="bld-docs-gate ok" role="note">提交门禁：${total}/${total} 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。</div>`
-        : `<div class="bld-docs-gate" role="note">提交门禁：默认语言 ${flowEval.defaultReviewedCount}/${defTotal} · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核 —— ${flowEval.missing.length ? `提交禁用，尚缺：${missingList}` : '整体审查未完结（确认完结后可提交）'}${flowEval.scopeStale ? '；发布范围已变化，审核已失效需重新审查' : ''}。</div>`;
+        ? `<div class="bld-docs-gate ok" role="note">提交门禁：${total}/${total} 已审核 —— 可提交到本地 dev 分支。</div>`
+        : `<div class="bld-docs-gate" role="note">提交门禁：默认语言 ${flowEval.defaultReviewedCount}/${defTotal} · 剩余语言 ${flowEval.restReviewedCount}/${restTotal} 已审核 —— 提交禁用，尚缺：${missingList}${flowEval.scopeStale ? '；发布范围已变化，审核已失效需重新审查' : ''}。</div>`;
     // 基准变更提示（mtime 对比命中：默认语言文档更新，受影响翻译文档已回退未翻译）
     const baselineNote = (flowEval.baselineShift || []).length
-      ? `<p class="rel-form-err" role="alert">默认语言文档已更新：${flowEval.baselineShift.length} 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）：<code data-i18n-skip>${esc(flowEval.baselineShift.join('、'))}</code>；若整体审查已完结则已失效回退。</p>`
+      ? `<p class="rel-form-err" role="alert">默认语言文档已更新：${flowEval.baselineShift.length} 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）：<code data-i18n-skip>${esc(flowEval.baselineShift.join('、'))}</code></p>`
       : '';
     // BUG-20260925-004 后台静默同步失败轻量横幅：保留现有内容（不进整页 error 态），
     // 仅提示 + 重试入口；成功同步 / 常规刷新后随 syncErr 清空消失。
     const syncErrNote = pf.syncErr
       ? `<div class="bld-docs-sync-err" role="alert"><span>后台同步失败：${esc(pf.syncErr)}——当前内容保持不变，可重试或点「刷新」全量更新</span><button type="button" class="btn small" data-pf-sync-retry>重试同步</button></div>`
-      : '';
-    // 完结终态标识（整体审查确认完结后呈现，与门禁条同屏）
-    const finalizedNote = flowEval.finalized
-      ? `<p class="small" role="status">整体审查已完结 ✓（时间 ${fmtTime(flowEval.finalized.at)}；提交已解锁）</p>`
       : '';
     // AI 总结提示词预览（点击「AI 总结」后展示；已复制口径。REQ-20260921-007 默认折叠：
     // 摘要行已说明已复制与回执口径，需要查看全文再展开，避免长提示词常驻占据大块空间）
@@ -3324,7 +3220,7 @@ ${langsField}
       if (!chkRun) return '<p class="muted small" role="status">尚未校对：点击「③ AI 校对」复制提示词并交给 AI Agent 核查，结果自动回显到本栏（链接 / 错别字 / 语法 / 行文规范）。</p>';
       const c = chkRun.counts || {};
       if (chkRun.phase === 'running') {
-        return `<p class="small" role="status">校对进行中：${(c.pass || 0) + (c.fail || 0)}/${c.total || 0}${chkRun.currentFile ? ` · 当前：<code data-i18n-skip>${esc(chkRun.currentFile)}</code>（正在核查）` : ''}——本栏与整体审查对话框随回执自动刷新。</p>`;
+        return `<p class="small" role="status">校对进行中：${(c.pass || 0) + (c.fail || 0)}/${c.total || 0}${chkRun.currentFile ? ` · 当前：<code data-i18n-skip>${esc(chkRun.currentFile)}</code>（正在核查）` : ''}——本栏随回执自动刷新。</p>`;
       }
       if (chkRun.phase === 'failed') {
         return `<p class="rel-form-err small" role="alert">AI 校对中断：${esc(chkRun.reason || '未知原因')}——已回执结论保留，可重试续查。</p>
@@ -3413,7 +3309,6 @@ ${langsField}
         ${chkPanelHtml}
         </div>
         ${gateBar}
-        ${finalizedNote}
         ${pf.commitMsg ? `<p class="small" role="status">${esc(pf.commitMsg)}</p>` : ''}
         ${docs.overall !== 'committed' && (docs.reasons || []).length && !flowEval.canCommit ? `<p class="muted small">${docs.reasons.map((x) => esc(x)).join('；')}</p>` : ''}
       </div>`;
@@ -3445,44 +3340,30 @@ ${langsField}
       translateMissing: base.translateMissing != null ? base.translateMissing : missingOf(defaultFiles),
       canTranslate: base.canTranslate != null ? base.canTranslate === true : defaultFiles.length > 0 && defaultReviewedCount === defaultFiles.length && restFiles.length > 0,
       baselineShift: base.baselineShift || [],
-      canFinalize: base.canFinalize === true,
-      finalized: base.finalized || null,
       canCommit: base.canCommit === true,
       scopeStale: !!base.scopeStale,
     };
   }
 
-  // 阶段条（三阶段推进视图）：① 默认语言先行（默认语言 4/4 已审核完成）→ ② AI 翻译与审查
-  //（剩余语言全部已审核完成；无剩余语言视为完成）→ ③ 整体审查完结（人工确认完结完成）。
-  // 各阶段 ✔ 已完成 / ● 进行中 / ○ 未解锁（chip 三重区分）。
-  // BUG-20260926-001 完结入口落阶段条：③ 整体审查完结 为可点击按钮（替代第一行独立
-  // 「整体审查」按钮）——保留 data-pf-finalize 既有绑定与 openFinalize 守卫（未就绪 /
-  // 未解锁点击 toast 缺口，不静默）；未解锁 aria-disabled + title 列缺口明细（模式同
-  // BUG-20260920-006）；解锁 title 为完结核对说明；完结后 title 为重新核对再确认（更新
-  // 完结时间，能力不回退）。① ② 阶段保持纯展示。
+  // 阶段条（两阶段推进视图，BUG-20260926-002 回归两阶段）：① 默认语言先行（默认语言 4/4
+  // 已审核完成）→ ② AI 翻译与审查（剩余语言全部已审核完成；无剩余语言视为完成）。
+  // 各阶段 ✔ 已完成 / ● 进行中 / ○ 未解锁（chip 三重区分）；两段均为纯展示（完结入口随
+  // 整体审查阶段去除，提交门禁回归「全部已审核」）。
   function docsStageBar(flowEval) {
     const defTotal = flowEval.defaultFiles.length;
     const restTotal = flowEval.restFiles.length;
     const defDone = defTotal > 0 && flowEval.defaultReviewedCount === defTotal;
     const restDone = restTotal === 0 || flowEval.restReviewedCount === restTotal;
-    const finDone = !!flowEval.finalized;
-    const finCan = flowEval.canFinalize === true;
-    const finReason = finCan
-      ? (finDone
-        ? '整体审查已完结；点击可重新核对新再次确认（更新完结时间）'
-        : '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁')
-      : `整体审查未解锁：尚缺 ${(flowEval.missing || []).length} 个文件审核（${(flowEval.missing || []).map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`;
     const mark = (done, active) => (done
       ? '<span class="st st-ok"><i class="st-ico" aria-hidden="true">✔</i>已完成</span>'
       : active
         ? '<span class="st st-run"><i class="st-ico" aria-hidden="true">●</i>进行中</span>'
         : '<span class="st st-mute"><i class="st-ico" aria-hidden="true">○</i>未解锁</span>');
     return `
-        <div class="bld-docs-stages" role="note" aria-label="文档编写三阶段推进">
+        <div class="bld-docs-stages" role="note" aria-label="文档编写阶段推进">
           <span class="muted small">阶段：</span>
           <span class="bld-stage">① 默认语言先行 ${mark(defDone, true)}</span><span class="muted small" aria-hidden="true">──</span>
-          <span class="bld-stage">② AI 翻译与审查 ${mark(restDone, defDone && !restDone)}</span><span class="muted small" aria-hidden="true">──</span>
-          <button type="button" class="bld-stage bld-stage-fin" data-pf-finalize${finCan ? '' : ' aria-disabled="true"'} title="${esc(finReason)}">③ 整体审查完结 ${mark(finDone, defDone && restDone && !finDone)}</button>
+          <span class="bld-stage">② AI 翻译与审查 ${mark(restDone, defDone && !restDone)}</span>
         </div>`;
   }
 
@@ -3519,17 +3400,16 @@ ${langsField}
     } else if (can) {
       reason = '复制 AI 翻译提示词到剪贴板：以已审核的默认语言文档为唯一基准，交给 AI Agent 逐文件翻译剩余语言文档（默认语言全部审核后解锁）';
     } else if (!gap.length && !(flowEval.restFiles || []).length) {
-      reason = '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行整体审查与提交）';
+      reason = '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行提交）';
     } else {
       reason = `AI 翻译未解锁：默认语言尚缺 ${gap.length} 个文件审核（${gap.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}）`;
     }
     return `<button type="button" class="btn small" data-pf-translate${can ? '' : ' aria-disabled="true"'} title="${esc(reason)}">④ ${translateBtnText(pf)}</button>`;
   }
 
-  // 提交按钮（⑤ 步）：需「全部文件已审核 + 整体审查已完结」（canCommit 含完结条件，在原门禁
-  // 之上叠加、不弱化；aria-disabled：HTML disabled 不派发 click，点击由 commitDocs 守卫 toast
-  // 真实缺口）；已提交 / 提交中 / 可提交三态文案；数据未就绪（加载 / 失败态）给明确 title。
-  // BUG-20260926-001：完结缺口文案指向阶段条新入口（「整体审查」独立按钮已移除）。
+  // 提交按钮（⑤ 步）：需「全部文件已审核」（BUG-20260926-002：canCommit 不再叠加完结条件；
+  // aria-disabled：HTML disabled 不派发 click，点击由 commitDocs 守卫 toast 真实缺口）；
+  // 已提交 / 提交中 / 可提交三态文案；数据未就绪（加载 / 失败态）给明确 title。
   function commitBtnHtml(pf) {
     if (!pf?.plan) return '<button type="button" class="btn small primary" data-pf-commit aria-disabled="true" title="发布流程数据未就绪：请先刷新或重试">⑤ 提交</button>';
     const flowEval = normalizeFlowEval(pf.plan);
@@ -3540,9 +3420,7 @@ ${langsField}
     const missing = flowEval.missing || [];
     const reason = ok
       ? '把语言集内文档与 LICENSE.md 提交到本地 dev 分支（pathspec 限定，不夹带业务源码）'
-      : missing.length
-        ? `还需 ${missing.length} 个文件通过审查：${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}`
-        : '整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交';
+      : `还需 ${missing.length} 个文件通过审查：${missing.map((m) => `${m.file}（${DOCS_FLOW_LABEL[m.state] || m.state}）`).join('、')}`;
     return `<button type="button" class="btn small primary" data-pf-commit${ok ? '' : ' aria-disabled="true"'} title="${esc(reason)}">⑤ 提交</button>`;
   }
 
@@ -4121,136 +3999,6 @@ ${langsField}
             <span>
               <button type="button" class="btn small" data-edit-save${ed.busy || ed.content == null ? ' disabled' : ''}>保存</button>
               <button type="button" class="btn small" data-edit-close${ed.busy ? ' disabled' : ''}>关闭</button>
-            </span>
-          </footer>
-        </div>
-      </div>`;
-  }
-
-  // REQ-20260921-012 整体审查完结对核对话框：语言集内全部文件已审核后由「整体审查」按钮
-  // 打开。REQ-20260924-001 起三类自动检查驱动核对项 ✓/✗：① 各语言内容语言一致性（脚本，
-  // 中文是中文内容、英文是英文内容……）；② 全部文档内链接可达性（脚本，死链红叉带明细）；
-  // ③ 默认语言错别字与行文规范（「AI 校对」提示词派发 Agent 核查，结果经 docscheck 账本
-  // 自动上报）。①②由「运行自动检查」按钮触发（只读、不设门禁）。REQ-20260924-003 起清单
-  // 精简为仅上述 3 条实际检查项：默认 / 剩余语言「已全部审核」门禁两条（打开弹窗即必然
-  // 完成）与 LICENSE 口径、本版发布范围两条静态说明行不再单占检查行（口径收敛进底部提示）；
-  // 「确认完结」仍是人工动作，完结有效性仍由 evaluateDocsFlow 求值判定。
-  function renderFinalizeModal(v) {
-    const pf = v ? pfOf(v) : null;
-    const fin = pf?.finalize;
-    if (!fin?.open) return '';
-    const checks = pf?.checks || null;
-    const chkRun = pf?.plan?.docsCheck || null;
-    const stOf = (state) => `st ${state === 'ok' ? 'st-ok' : state === 'fail' ? 'st-fail' : 'st-run'}`;
-    const icoOf = (state) => (state === 'ok' ? '✔' : state === 'fail' ? '✕' : '◐');
-    const item = (state, text, sub = '', details = '') => `<li><span class="${stOf(state)}"><i class="st-ico" aria-hidden="true">${icoOf(state)}</i></span> ${text}${sub ? `<div class="bld-finalize-sub muted small">${sub}</div>` : ''}${details ? `<ul class="bld-finalize-details">${details}</ul>` : ''}</li>`;
-    // ① 语言一致性：pf.checks.lang（null = 未运行）
-    const langR = checks?.lang || null;
-    let langState = 'run';
-    let langSub = '语言一致自动检查未运行：点击「运行自动检查」';
-    let langDetails = '';
-    if (checks?.error) {
-      langState = 'fail';
-      langSub = esc(checks.error);
-    } else if (langR) {
-      const pass = langR.files.filter((f) => f.ok).length;
-      const total = langR.files.length;
-      if (langR.ok) {
-        langState = 'ok';
-        langSub = `通过 ${pass}/${total}`;
-      } else {
-        langState = 'fail';
-        const bad = langR.files.filter((f) => !f.ok);
-        langSub = `不通过 ${pass}/${total}：${bad.map((f) => f.file).join('、')}`;
-        langDetails = bad.map((f) => `<li><code data-i18n-skip>${esc(f.file)}</code> <span data-i18n-skip>${esc(f.detail || '')}</span></li>`).join('');
-      }
-    }
-    // ② 链接可达性：pf.checks.links（死链逐条明细：文件 / 行号 / 目标 / 原因）
-    const linksR = checks?.links || null;
-    let linkState = 'run';
-    let linkSub = '链接可达性自动检查未运行：点击「运行自动检查」';
-    let linkDetails = '';
-    if (checks?.error) {
-      linkState = 'fail';
-      linkSub = esc(checks.error);
-    } else if (linksR) {
-      const totalLinks = linksR.files.reduce((n, f) => n + (f.total || 0), 0);
-      if (linksR.ok) {
-        linkState = 'ok';
-        linkSub = `通过 ${totalLinks}/${totalLinks}`;
-      } else {
-        linkState = 'fail';
-        linkSub = `死链 ${linksR.deadTotal} 个`;
-        linkDetails = linksR.files
-          .flatMap((f) => (f.dead || []).map((d) => ({ file: f.file, ...d })))
-          .map((d) => `<li><code data-i18n-skip>${esc(d.file)}</code> <span data-i18n-skip>第${d.line || '?'}行 ${esc(d.href)} —— ${esc(d.reason || '')}</span></li>`)
-          .join('');
-      }
-    }
-    // ③ AI 校对：pf.plan.docsCheck（最新 docscheck run 视图，轮询自动吸收进度与结果）
-    let chkState = 'run';
-    let chkSub = 'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执';
-    let chkDetails = '';
-    if (chkRun) {
-      const c = chkRun.counts || {};
-      const total = c.total || 0;
-      if (chkRun.phase === 'running') {
-        chkSub = `校对进行中 ${(c.pass || 0) + (c.fail || 0)}/${total}`;
-        chkDetails = chkRun.currentFile ? `<li><code data-i18n-skip>${esc(chkRun.currentFile)}</code></li>` : '';
-      } else if (chkRun.phase === 'failed') {
-        chkState = 'fail';
-        chkSub = `AI 校对中断：${chkRun.reason || ''}`;
-      } else if (chkRun.phase === 'done') {
-        const pass = c.pass || 0;
-        const fail = c.fail || 0;
-        if (fail === 0 && pass === total) {
-          chkState = 'ok';
-          chkSub = `通过 ${pass}/${total}`;
-        } else {
-          chkState = 'fail';
-          const failedFiles = Object.entries(chkRun.files || {}).filter(([, s]) => s === 'fail').map(([f]) => f);
-          chkSub = `不通过 ${pass}/${total}：${failedFiles.join('、')}`;
-          // REQ-20260924-004：fail 文件按文件分组、问题逐条渲染（splitProofreadIssues 按行
-          // 拆分；整段作一条不丢内容），每条独立一行带「✎ 修改」按钮——editFromProofread
-          // 关闭本对话框并打开「② 二次编辑」弹窗定位该行（BUG-20260925-006 起落点，原审查
-          // 对话框编辑态路径已移除）；行号解析不到的条目按钮按文件级跳转（无 data-proof-line）。
-          // 回执原文 data-i18n-skip（AI 回执内容不进界面词典）；序号 ①②…（超 20 条退数字）
-          // 仅为可辨性，不参与翻译。
-          chkDetails = failedFiles.map((f) => {
-            const items = splitProofreadIssues((chkRun.issues || {})[f] || '');
-            const rows = (items.length ? items : ['']).map((text, i) => {
-              const no = i < 20 ? String.fromCodePoint(0x2460 + i) : `${i + 1}.`;
-              const line = parseIssueLineNo(text);
-              const title = line ? `${f} · 第 ${line} 行` : f;
-              return `<li class="bld-finalize-issue"><span class="bld-finalize-issue-no" aria-hidden="true">${no}</span><span class="bld-finalize-issue-text" data-i18n-skip>${esc(text)}</span><button type="button" class="btn small" data-proof-edit="${esc(f)}"${line ? ` data-proof-line="${line}"` : ''} title="${esc(title)}">✎ 修改</button></li>`;
-            }).join('');
-            return `<li class="bld-finalize-file"><code data-i18n-skip>${esc(f)}</code><ul class="bld-finalize-issues">${rows}</ul></li>`;
-          }).join('');
-        }
-      }
-    }
-    return `
-      <div class="rel-modal-wrap bld-finalize-wrap" id="bldFinalizeWrap" role="dialog" aria-modal="true" aria-label="整体审查完结">
-        <div class="rel-modal bld-finalize-modal">
-          <header class="bld-review-head">
-            <span>整体审查完结（${esc(v?.id || '')}）</span>
-            <button type="button" class="btn small quiet" data-pf-finalize-close aria-label="关闭对话框">✕ 关闭</button>
-          </header>
-          <ul class="bld-finalize-checklist">
-            ${item(langState, '各语言内容语义一致（以已审核默认语言为基准）', langSub, langDetails)}
-            ${item(linkState, '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）', linkSub, linkDetails)}
-            ${item(chkState, '默认语言错别字与行文规范（AI 校对自动上报）', chkSub, chkDetails)}
-          </ul>
-          <div class="bld-finalize-actions">
-            <button type="button" class="btn small" data-pf-checks${checks?.busy ? ' disabled' : ''} title="自动检查各语言内容语言一致性与全部文档内链接可达性（只读，不设门禁，结果即时呈现）">${checks?.busy ? '检查中…' : '运行自动检查'}</button>
-            <button type="button" class="btn small" data-pf-proofread${pf?.proofBusy ? ' disabled' : ''} title="生成 AI 校对提示词并复制：派发 Agent 核查默认语言文档错别字与行文规范，结果自动回执">${pf?.proofBusy ? '校对中…' : 'AI 校对'}</button>
-          </div>
-          <p class="muted small">提示：完结前请逐项核对；完结后范围变化会使完结失效回退。</p>
-          <footer class="bld-review-foot">
-            <span class="muted small">完结是人工确认动作：请逐项核对后再确认。</span>
-            <span>
-              <button type="button" class="btn small" data-pf-finalize-cancel${fin.busy ? ' disabled' : ''}>取消</button>
-              <button type="button" class="btn small primary" data-pf-finalize-confirm${fin.busy ? ' disabled' : ''}>${fin.busy ? '完结中…' : '确认完结'}</button>
             </span>
           </footer>
         </div>
@@ -4923,7 +4671,6 @@ ${langsField}
       ${renderReleaseConfirm()}
       ${renderRelPlanModal()}
       ${renderReviewModal(selVersion())}
-      ${renderFinalizeModal(selVersion())}
       ${renderLicenseModal(selVersion())}
       ${renderSecondaryEditModal(selVersion())}`;
     bindCommon(view);
@@ -5192,7 +4939,7 @@ ${langsField}
       el.addEventListener('click', () => addDependencies());
     }
     // REQ-20260921-008 文档编写页按钮：刷新 / AI 总结 / 审查 / 提交；
-    // REQ-20260921-012 新增 AI 翻译（默认语言全审后解锁）与整体审查（全部已审核后解锁）
+    // REQ-20260921-012 新增 AI 翻译（默认语言全审后解锁）；整体审查绑定随阶段去除（BUG-20260926-002）
     // BUG-20260921-013 语言页签切换：激活语言记忆于 pf.docLang（重渲染保持；语言集变化后
     // 不在新集合内由渲染端回落默认语言）；键盘可达沿用既有页签口径（原生 button）
     for (const el of view.querySelectorAll('[data-doc-lang]')) {
@@ -5208,10 +4955,8 @@ ${langsField}
     q('[data-pf-summary]')?.addEventListener('click', startSummary);
     q('[data-pf-translate]')?.addEventListener('click', startTranslation);
     q('[data-pf-review]')?.addEventListener('click', () => openReview()); // REQ-20260924-004：无参调用保持现状（防事件对象被误作跳转目标）
-    q('[data-pf-finalize]')?.addEventListener('click', openFinalize);
     q('[data-pf-commit]')?.addEventListener('click', commitDocs);
-    // REQ-20260924-006 五步条新增入口：② 二次编辑（默认语言单语言弹窗）与 ③ AI 校对
-    //（直接启动，不要求先开整体审查对话框；与该对话框内既有 data-pf-proofread 入口并存）
+    // REQ-20260924-006 五步条新增入口：② 二次编辑（默认语言单语言弹窗）与 ③ AI 校对（直接启动）
     q('[data-pf-edit]')?.addEventListener('click', () => openSecondaryEdit());
     q('[data-pf-proofstep]')?.addEventListener('click', startProofread);
     // REQ-20260924-006 ③ 校对建议侧栏：文件切换 / 接受 / 拒绝 / 重试 / 跳二次编辑定位
@@ -5272,20 +5017,6 @@ ${langsField}
         window.ATBMdRich?.enhance(el, { imgBase: state.project ? (raw) => `/api/fs/raw?path=${encodeURIComponent(raw)}&project=${encodeURIComponent(state.project)}` : null });
       }
     }
-    q('[data-pf-finalize-close]')?.addEventListener('click', closeFinalize);
-    q('[data-pf-finalize-cancel]')?.addEventListener('click', closeFinalize);
-    q('[data-pf-finalize-confirm]')?.addEventListener('click', confirmFinalize);
-    // REQ-20260924-001：整体审查自动检查（语言一致 + 链接可达）与 AI 校对（提示词派发核查）
-    q('[data-pf-checks]')?.addEventListener('click', runReviewChecks);
-    q('[data-pf-proofread]')?.addEventListener('click', startProofread);
-    // REQ-20260924-004：AI 校对逐条问题「✎ 修改」——关闭整体审查对话框并跳转审查编辑定位
-    for (const el of view.querySelectorAll('[data-proof-edit]')) {
-      el.addEventListener('click', () => editFromProofread(el.dataset.proofEdit, el.dataset.proofLine));
-    }
-    const finalizeWrap = q('#bldFinalizeWrap');
-    finalizeWrap?.addEventListener('click', (e) => {
-      if (e.target?.id === 'bldFinalizeWrap' && !state.pf?.finalize?.busy) closeFinalize();
-    });
     // REQ-20260921-010 语言集输入框：输入草稿回写（重渲染不丢字）；回车触发失焦统一走应用；
     // 失焦应用（校验镜像 + 保存 + 联动刷新）
     const langsBox = q('[data-pf-langs]');
@@ -5403,7 +5134,6 @@ ${langsField}
     if (e.key !== 'Escape') return;
     if (state.rel?.planModal) { closeRelPlan(); return; } // BUG-20260915-014：发布计划确认弹窗（取消不发请求）
     if (state.pf?.license?.open) { closeLicensePicker(); return; } // REQ-20260922-005：选择开源协议弹框 Esc 关闭（不启动总结）
-    if (state.pf?.finalize?.open) { closeFinalize(); return; } // REQ-20260921-012：整体审查完结对话框 Esc 关闭
     if (state.pf?.edit?.open) { // REQ-20260924-006：二次编辑弹窗 Esc——挂起态先撤提示，未保存走关闭保护
       if (state.pf.edit.pending) { state.pf.edit.pending = null; render(); }
       else requestEditClose();
@@ -5454,11 +5184,8 @@ ${langsField}
     openRelPlan, confirmRelStart, refreshReleasePane, openPublishDirectory,
     // REQ-20260920-003：发布流程接缝（推送 / 官网检测）；
     // REQ-20260921-008：文档编写页流水线接缝（刷新 / AI 总结 / 审查对话框 / 提交）；
-    // REQ-20260921-012：AI 翻译与整体审查完结接缝
+    // REQ-20260921-012：AI 翻译接缝（BUG-20260926-002：整体审查完结接缝随阶段去除）
     ensurePublishPlan, refreshDocsPane, startSummary, startTranslation, openReview, closeReview,
-    // REQ-20260924-004：AI 校对问题「修改」跳转（关闭整体审查 → 二次编辑定位——BUG-20260925-006
-    // 起落点为②二次编辑弹窗，审查对话框已只读）行为接缝
-    editFromProofread,
     // REQ-20260924-006：② 二次编辑弹窗（打开 / 未保存保护 / 保存）与 ③ 建议接受 / 拒绝、
     // 校对建议解析与应用纯函数（测试与交互共用）
     openSecondaryEdit, requestEditSwitch, requestEditRefresh, requestEditClose, resolveEditPending,
@@ -5466,7 +5193,6 @@ ${langsField}
     parseChkSuggestion, classifyChkIssue, applyChkSuggestion, chkPendingCount,
     // BUG-20260925-002：决断播种与已应用识别纯函数（测试与交互共用）
     seedChkDecisions, alreadyAppliedChk,
-    openFinalize, closeFinalize, confirmFinalize,
     // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
     confirmLicensePick, skipLicensePick, closeLicensePicker,
     loadReviewPair, approveReviewFile, commitDocs, pushMain, siteScan, summaryPoll,

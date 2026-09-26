@@ -21,9 +21,9 @@
 //   - 官网检测：仅提交者时间不早于推送成功时间（含等于边界）的提交参与匹配；起点缺失 →
 //     waiting（缺少推送完成时间，待核对），不做全历史扫描；预算未读完窗口 → scanning
 //     （本轮检测未完成，不当未命中）；窗口读完无命中 → missed；命中 → hit 带证据；
-//   - 文档状态机（三阶段七态 + 基准变更检测 + 整体完结门禁，REQ-20260921-012）：见
-//     evaluateDocsFlow 注释；提交口径状态机 / 五步门禁：见 evaluateDocsState /
-//     publishStepsState 注释。
+//   - 文档状态机（两阶段七态 + 基准变更检测 + 全审提交门禁，REQ-20260921-012 /
+//     BUG-20260926-002 去除整体审查阶段）：见 evaluateDocsFlow 注释；提交口径状态机 /
+//     五步门禁：见 evaluateDocsState / publishStepsState 注释。
 
 import crypto from 'node:crypto';
 
@@ -49,7 +49,7 @@ export const DEFAULT_DOC_LANGS = ['cn', 'en'];
 // REQ-20260922-003 自定义发布文档（文档编写页添加，可多份）。BUG-20260922-002 起随语言集
 // 自动展开（与标准 4 类同构）：默认语言 <KEY>.md + 其余语言 <KEY>_<lang>.md，添加一次即全
 // 语种就位；其余语言文件进 AI 翻译（基准 = 默认语言 <KEY>.md）；默认语言份进 AI 总结；七态
-// 状态机、「通过审核」hash、整体完结 / 提交门禁、pathspec、范围指纹与基准变更检测全参与。
+// 状态机、「通过审核」hash、全审提交门禁、pathspec、范围指纹与基准变更检测全参与。
 // 命名与上限口径（design.md 落定）：字母开头 + 字母 / 数字 / 连字符 / 下划线，≤40 字符，
 // .md 后缀可省略自动补全，大写归一；保留名 = 标准 4 类 / LICENSE 及其 _lang(2–3 字母)
 // 后缀形态（防语言集变化后撞名）；上限 20 份；不支持子目录。
@@ -419,7 +419,7 @@ export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, lan
     // 重定向 / 登录态判定策略待定，先要求如实标注，不猜测）。
     '- 链接核查：逐一核查文档内可见超链接的有效性；网络不可达或需要登录才能验证的链接一律标注「待确认」，不得判为有效或确定失效（无法验证时如实标注，不猜测）。',
     '- 不编造问题：每条问题必须给出可定位的行号或原文片段与修改建议；拿不准的不报。',
-    '- 不评价技术内容正确性（范围一致性由人工整体审查负责），只做语言文字层面核查。',
+    '- 不评价技术内容正确性（范围一致性由人工逐文件审查负责），只做语言文字层面核查。',
     '- 完成后以短回执汇报（哪些文件 pass / fail、共几处问题），不粘贴全文。',
   ];
   const params = [
@@ -522,7 +522,7 @@ export function scanSiteCommitsForPlan(commits, { planId, sinceIso, budget = 200
 //   未翻译 ──(AI 翻译执行中)──▶ 正在翻译 ──(该文件翻译完成)──▶ 已翻译待审核 ──(人工通过审核)──▶ 已审核
 //      │                                                            ▲ │
 //      └──(基准变更检测：默认语言同类型文档 mtime 更新)──────────────┘  └─(再次编辑修改)──▶ 回到已翻译待审核
-// 阶段三：4×N + 单文件全部已审核 → 人工「整体审查完结」（recordDocsFinalize）→ 提交解锁。
+// 阶段收口（BUG-20260926-002）：4×N + 单文件全部已审核 → 提交解锁（无整体审查阶段）。
 // REQ-20260922-002 单文件类三态（不进 AI，仅人工编写审查）：
 //   未编写 ──(审查对话框人工编写保存)──▶ 待审核 ──(人工通过审核)──▶ 已审核
 //     │                                                        │
@@ -543,7 +543,7 @@ export const DOCS_FLOW_LABEL = {
 
 // 基准变更检测（REQ-20260921-012 本轮落定：磁盘 mtime 对比，纯函数）：
 // 同类型文件两两对比（README.md ↔ README_<lang>.md，依次类推），默认语言文档 mtime
-// **严格晚于**剩余语言文档 → 该剩余语言文档置回「未翻译」（未审核）、整体完结失效回退。
+// **严格晚于**剩余语言文档 → 该剩余语言文档置回「未翻译」（未审核）。
 // BUG-20260922-002：自定义文档同口径参与（MIGRATION.md ↔ MIGRATION_<lang>.md）。
 // statFile(file) → mtimeMs | null（注入解耦 fs）；mtime 缺失 / 相同不回退（mtime 为弱信号，
 // 内容 hash 复核豁免按 README 待确认口径暂不做）。检测在每次求值读盘时发生，不依赖审查
@@ -568,9 +568,8 @@ export function detectBaselineShift(langs, statFile, customDocs = []) {
 
 // 阶段状态求值（纯函数；发布文档流水线的唯一状态事实源，前端复用同口径渲染）：
 //   - v.review.files[file].hash：人工「通过审核」时点的磁盘内容 sha256（build-store.recordDocsReview）；
-//   - v.review.finalized：人工「整体审查完结」记录（build-store.recordDocsFinalize：
-//     { at, langsKey, files }）；有效性实时求值——语言集未变（langsKey 匹配）且当前全部
-//     已审核、无 scopeStale、无基准变更才算有效，任何变化即时失效回退（不固化放行）；
+//     历史遗留的 v.review.finalized 完结快照（BUG-20260926-002 起完结阶段已去除）不再参与
+//     求值，读取侧忽略、不改写历史记录；
 //   - readFile(file)：当前磁盘内容（注入解耦 fs）；
 //   - marks = { summarizing, summarized, translating, translated }：AI 总结 / AI 翻译账本
 //     聚合标记（docs-summary-store.summaryMarksForVer / docs-translate-store.translateMarksForVer）；
@@ -578,18 +577,17 @@ export function detectBaselineShift(langs, statFile, customDocs = []) {
 // 判定优先级（默认语言）：正在总结 > 已审核（hash 一致且未 scopeStale）> 已总结待审核 > 未总结；
 // 判定优先级（剩余语言）：基准变更回退未翻译 > 正在翻译 > 已审核 > 已翻译待审核 > 未翻译；
 // 判定优先级（单文件类，REQ-20260922-002）：已审核 > 待审核（在盘或曾有审核记录）> 未编写。
-// scopeStale 口径沿用：发布范围变化时审核与整体完结一并失效（回退待审核），不弱化门禁。
+// scopeStale 口径沿用：发布范围变化时审核一并失效（回退待审核），不弱化门禁。
 // 输出：files（4 类 × 语言集语言数 + 单文件类）、defaultFiles / restFiles（single 归
 // defaultFiles 计入默认语言组展示与计数）、reviewedCount（合计）与分组计数、canTranslate
 //（默认语言 4 类已审核且存在剩余语言——A1 口径下单文件类不锁 AI 翻译；translateMissing 为
-// 默认语言 4 类缺口明细）、baselineShift、canFinalize（全量已审核且无失效源）、finalized
-//（有效时 { at }）、canCommit（canFinalize && 完结有效——在「全部已审核」门禁之上叠加完结
-// 条件，不弱化）、missing（未审核文件 + 状态）。
+// 默认语言 4 类缺口明细）、baselineShift、canCommit（REQ-20260921-008 原「全部已审核」门禁；
+// BUG-20260926-002 起不再叠加整体审查完结条件——scopeStale / 基准变更天然使文件回退非
+// reviewed 态，全部已审核即含无失效源）、missing（未审核文件 + 状态）。
 export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
   const read = typeof readFile === 'function' ? readFile : () => null;
   const scopeStale = !!(v?.docs && v.docs.scopeStale);
   const reviewFiles = (v?.review && v.review.files) || {};
-  const finalRec = (v?.review && v.review.finalized) || null;
   const summarizing = new Set(marks.summarizing || []);
   const summarizedMarks = new Set(marks.summarized || []);
   const translating = new Set(marks.translating || []);
@@ -642,13 +640,9 @@ export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
     .filter((f) => f.state !== 'reviewed')
     .map((f) => ({ file: f.file, state: f.state }));
   const canTranslate = langDefaultFiles.length > 0 && langDefaultReviewed === langDefaultFiles.length && restFiles.length > 0;
-  // 整体完结可用：全量（4×N + 单文件 + 自定义全语种）已审核，且无 scopeStale / 基准变更失效源
-  const canFinalize = allReviewed && !scopeStale && baselineShift.size === 0;
-  // 完结记录有效：存在人工完结记录，且语言集与自定义清单均未变、当前全部已审核、无失效源
-  //（BUG-20260922-002：finalized.customDocsKey 参与比对——自定义清单增删后旧完结失效需重新
-  // 完结；存量记录无该字段按 '' 处理，无自定义时不回归）
-  const finalizedOk = canFinalize && !!finalRec && finalRec.langsKey === langs.join(',')
-    && (finalRec.customDocsKey ?? '') === customDocs.join(',');
+  // 提交门禁（BUG-20260926-002 回归 REQ-20260921-008 原口径）：语言集内全部文件已审核即可
+  // 提交——不再叠加整体审查完结条件；scopeStale / 基准变更使文件回退非 reviewed 态，
+  // 全部已审核天然隐含无失效源，门禁不放宽也不新增。
   const missing = files
     .filter((f) => f.state !== 'reviewed')
     .map((f) => ({ file: f.file, state: f.state }));
@@ -662,9 +656,7 @@ export function evaluateDocsFlow(v, readFile, marks = {}, opts = {}) {
     canTranslate,
     translateMissing,
     baselineShift: [...baselineShift],
-    canFinalize,
-    finalized: finalizedOk ? { at: finalRec.at } : null,
-    canCommit: finalizedOk, // 全部已审核 + 整体审查已完结（叠加门禁，不弱化原「全部已审核」）
+    canCommit: allReviewed,
     missing,
     scopeStale,
   };

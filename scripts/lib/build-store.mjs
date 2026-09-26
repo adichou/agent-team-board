@@ -496,33 +496,6 @@ export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
   return writeVersion(dataDir, v);
 }
 
-// REQ-20260921-012 整体审查完结（文档编写第三阶段的最终收口动作）：在版本记录
-// v.review.finalized 固化人工完结时点快照——langsKey（语言集）+ 语言集全文件内容
-// sha256。与 v.review.files（逐文件审核记录）同域、与 v.docs（提交记录语义）隔离。
-// 有效性由求值侧（publish-flow.evaluateDocsFlow.finalized）实时判定：语言集变化、任一
-// 文件回退待审核、scopeStale、基准变更（默认语言文档 mtime 更新）都会使完结失效回退，
-// 不在完结时点固化放行。前置门禁（全部已审核等）由调用方（server）按 evaluateDocsFlow
-// 校验后再调用；merging 拒绝。
-export function recordDocsFinalize(dataDir, id, { langs, customDocs, readFile } = {}) {
-  const v = readVersion(dataDir, id);
-  if (v.status === 'merging') throw new BuildConflictError('版本合并中，不可整体审查完结');
-  const ls = flow.docLangsOf({ langs });
-  // REQ-20260922-003：完结快照按含自定义文档的清单（缺省读版本记录 v.customDocs）
-  const cs = customDocs != null ? flow.customDocsOf({ customDocs }) : flow.customDocsOf(v);
-  const read = typeof readFile === 'function'
-    ? readFile
-    : (f) => { try { return fs.readFileSync(path.join(projectRootGuess(dataDir), f), 'utf8'); } catch { return null; } };
-  const files = {};
-  for (const f of flow.publishDocFiles(ls, cs)) {
-    const text = read(f.file);
-    if (text == null) throw new AtbError(`${f.file} 不存在或不可读：整体审查完结要求语言集内全部文档在盘`);
-    files[f.file] = crypto.createHash('sha256').update(text).digest('hex');
-  }
-  v.review = { files: { ...((v.review && v.review.files) || {}) }, finalized: { at: nowIso(), langsKey: ls.join(','), customDocsKey: cs.join(','), files } };
-  v.by = 'board';
-  return writeVersion(dataDir, v);
-}
-
 // REQ-20260921-010 文档语言集：保存到版本记录顶层 v.langs（发布计划级持久化，重新进入
 // 文档编写步回显）；merging / 已正式发布（pushed）锁定不可改（与五步门禁 docs 步锁定口径
 // 一致）；非法语言集报错不改盘。语言集是文档清单的唯一事实源（求值 / 审核白名单 / 提交
@@ -569,7 +542,8 @@ export function addCustomDoc(dataDir, id, { name, by = 'board' } = {}) {
 //      复活「已审核」）；
 //   ② 删除项目根磁盘上该 KEY 按当前语言集展开的全部文件（不残留退出 pathspec 的孤儿未跟踪
 //      文件；projectRoot 缺省按 dataDir 推断，删除失败不阻塞清单移除）。
-// 整体完结记录（v.review.finalized）保留，有效性由求值侧按 customDocsKey 实时比对失效。
+// 整体完结记录（v.review.finalized）随完结阶段去除（BUG-20260926-002）不再产生：历史版本
+// 记录中残留的旧快照不被读取（求值侧忽略口径），后续人工审核重写 v.review 时自然收敛。
 export function removeCustomDoc(dataDir, id, { key, by = 'board', projectRoot = null } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');

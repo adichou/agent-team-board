@@ -5985,7 +5985,7 @@ const GLOBAL_KIND_FILTERS = [
   { key: 'refine', label: 'AI 分析' },
   { key: 'summary', label: 'AI 总结' },
   { key: 'translate', label: 'AI 翻译' },
-  // REQ-20260924-001：AI 校对（整体审查自动检查——默认语言文档错别字与行文规范核查）
+  // REQ-20260924-001：AI 校对（默认语言文档错别字与行文规范核查；BUG-20260926-002 起随第三阶段去除重新挂靠）
   { key: 'docscheck', label: 'AI 校对' },
 ];
 const GLOBAL_KIND_LABEL = { develop: 'AI 开发', refine: 'AI 分析', summary: 'AI 总结', translate: 'AI 翻译', docscheck: 'AI 校对' };
@@ -7645,7 +7645,7 @@ function renderTranslatePanel() {
         ${head}
         <div class="notice ok">AI 翻译已完成：${n}/${total} 个文件已翻译（未翻译的文件可在审查中直接处理），全部进入「已翻译待审核」，等待人工审查。</div>
         ${run.summary ? `<p class="small"><span class="muted small">要点：</span> ${esc(run.summary)}</p>` : ''}
-        <p class="muted small">完成时间 ${fmtTime(run.finishedAt || run.updatedAt)} · 下一步：发布模块「文档编写」页「审查」→「整体审查」→「提交」。</p>
+        <p class="muted small">完成时间 ${fmtTime(run.finishedAt || run.updatedAt)} · 下一步：发布模块「文档编写」页「审查」→「提交」。</p>
       </section>`;
 }
 

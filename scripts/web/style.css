@@ -3920,23 +3920,15 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-docs-prompt-box { border: 1px dashed var(--border); border-radius: 10px; padding: 8px 12px; }
 .bld-docs-prompt-box summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 
-/* ---------- REQ-20260921-012 文档编写三阶段：阶段条 / 语言分组 / 整体审查完结对话框 ---------- */
-/* 阶段条：① 默认语言先行 ── ② AI 翻译与审查 ── ③ 整体审查完结（各阶段状态 chip；窄屏换行） */
+/* ---------- REQ-20260921-012 文档编写阶段条 / 语言分组（BUG-20260926-002：整体审查
+   阶段与完结对核对话框样式随界面移除） ---------- */
+/* 阶段条：① 默认语言先行 ── ② AI 翻译与审查（各阶段状态 chip；窄屏换行） */
 .bld-docs-stages {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 6px 12px; border: 1px solid var(--border); border-radius: 10px;
 }
 .bld-docs-stages .bld-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .bld-docs-stages .st { font-size: 12px; }
-/* BUG-20260926-001 完结入口落阶段条：③ 整体审查完结 为可点击按钮（「整体审查」独立按钮
-   已移除）——按钮样式重置为阶段文字观感，未解锁（aria-disabled）不显手型，解锁态 hover
-   下划线提示可点 */
-.bld-docs-stages .bld-stage-fin {
-  background: none; border: none; padding: 0; margin: 0;
-  font: inherit; color: inherit; cursor: pointer;
-}
-.bld-docs-stages .bld-stage-fin[aria-disabled="true"] { cursor: default; }
-.bld-docs-stages .bld-stage-fin:not([aria-disabled="true"]):hover { text-decoration: underline; }
 /* BUG-20260921-013 文件区域语言页签：每语言一个页签（复用 .rel-tabs/.rel-tab，含窄屏
    flex-wrap 换行不横向溢出）；审核计数角标弱化呈现（全审绿色强调），运行中 ◐ 角标提示
    非激活页签的 AI 当前文件（不自动切换页签） */
@@ -3945,35 +3937,6 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-doc-tab-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bld-doc-tab-count.ok { color: var(--ok, #16a34a); }
 .bld-doc-lang-tabs .st-run .st-ico { margin-right: 0; }
-/* 整体审查完结对核对话框（沿用审查对话框布局骨架） */
-.bld-finalize-wrap { z-index: 60; }
-.bld-finalize-modal { max-width: 640px; }
-.bld-finalize-checklist { list-style: none; margin: 10px 0 0; padding: 0; }
-.bld-finalize-checklist li {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5;
-}
-.bld-finalize-checklist li:last-child { border-bottom: none; }
-/* REQ-20260924-001 自动检查结果：逐项结论副行 + 红叉明细（文件 / 行号 / 死链原因 / 校对问题）
-   + 「运行自动检查」「AI 校对」按钮行 */
-.bld-finalize-checklist li { flex-wrap: wrap; }
-.bld-finalize-sub { flex-basis: 100%; margin: 2px 0 0 24px; word-break: break-all; }
-.bld-finalize-details {
-  flex-basis: 100%; margin: 4px 0 0 24px; padding: 4px 8px; list-style: none;
-  border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 3px;
-  font-size: 12px; color: var(--danger, #dc2626); word-break: break-all;
-}
-.bld-finalize-actions { display: flex; gap: 8px; margin-top: 10px; }
-.bld-finalize-modal .bld-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-/* REQ-20260924-004 AI 校对问题逐条渲染：fail 文件分组（组头文件名）+ 每条问题一行
-  （序号 + 回执原文 + 「✎ 修改」按钮），按钮不随长文本挤压 */
-.bld-finalize-details li.bld-finalize-file { display: block; word-break: break-all; }
-.bld-finalize-file > code { font-size: 12px; }
-.bld-finalize-issues { list-style: none; margin: 3px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.bld-finalize-issue { display: flex; align-items: flex-start; gap: 6px; }
-.bld-finalize-issue-no { flex: none; min-width: 1.2em; text-align: center; }
-.bld-finalize-issue-text { flex: 1 1 auto; min-width: 0; word-break: break-word; }
-.bld-finalize-issue .btn { flex: none; }
 /* 编辑器定位落点短暂描边（BUG-20260925-005 二次编辑弹窗 focusEditIssue 使用，2 秒后移除；
    BUG-20260925-006 审查对话框只读化后 .bld-review-editor 已移除，仅剩编辑弹窗选择器） */
 .bld-edit-editor.bld-review-focus-flash { animation: bldReviewFocusFlash 0.6s ease-in-out 3; }

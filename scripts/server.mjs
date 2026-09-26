@@ -38,9 +38,8 @@ import * as refine from './lib/refine-store.mjs';
 import * as docsSummary from './lib/docs-summary-store.mjs';
 // REQ-20260921-012：发布文档 AI 翻译执行账本（独立锁 translate.lock，与总结/分析/开发互斥隔离）。
 import * as docsTranslate from './lib/docs-translate-store.mjs';
-// REQ-20260924-001：发布文档 AI 校对执行账本（独立锁 docscheck.lock）与整体审查自动检查纯函数。
+// REQ-20260924-001：发布文档 AI 校对执行账本（独立锁 docscheck.lock）。
 import * as docsCheck from './lib/docs-check-store.mjs';
-import * as docsReviewChecks from './lib/docs-review-checks.mjs';
 // REQ-20260922-005：主流开源协议目录（弹框「选择开源协议」静态数据源，含 SPDX 标准文本）。
 import * as licenseCatalog from './lib/license-catalog.mjs';
 // REQ-20260911-010：commit-store（提交规范内核/已提交索引）不再被服务端直接引用——
@@ -2653,9 +2652,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   const docStatFile = (f) => {
     try { return fs.statSync(path.join(root, f)).mtimeMs; } catch { return null; }
   };
-  // REQ-20260921-012 统一装配：三阶段七态求值（AI 总结 + AI 翻译账本标记 + mtime 基准检测）。
-  // 所有文档编写步求值入口（publish-plan / docs / langs / review / save / commit / finalize /
-  // 轮询）共用同一口径，检测随每次求值读盘发生，不依赖审查界面保存按钮。
+  // REQ-20260921-012 统一装配：两阶段七态求值（AI 总结 + AI 翻译账本标记 + mtime 基准检测）。
+  // 所有文档编写步求值入口（publish-plan / docs / langs / review / save / commit / 轮询）
+  // 共用同一口径，检测随每次求值读盘发生，不依赖审查界面保存按钮。
   const docsFlowOf = (board, v) => flow.evaluateDocsFlow(
     v,
     docReadFile,
@@ -2705,7 +2704,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       summary: docsSummary.summaryRunView(docsSummary.latestSummaryRun(dataDir, v.id)),
       // REQ-20260921-012：AI 翻译 run 视图（阶段二进度，文档编写页 / 任务模块）
       translate: docsTranslate.translateRunView(docsTranslate.latestTranslateRun(dataDir, v.id)),
-      // REQ-20260924-001：AI 校对 run 视图（整体审查自动检查之错别字与行文规范核查结果）；
+      // REQ-20260924-001：AI 校对 run 视图（默认语言错别字与行文规范核查结果，BUG-20260926-002）；
       // BUG-20260925-002：decisions（决断账本）与 supersededDecided（上一轮决断数）随视图透出
       docsCheck: docsCheckView(dataDir, v.id),
       sitePrompt: config.homepageRepoRoot
@@ -2838,7 +2837,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   // REQ-20260921-008 AI 总结进度：最新 run 视图 + 该版本求值（文档编写页 15s 轮询一次
   // 更新进度与文件状态；任务模块只消费 run）；可选 id= 过滤指定版本，缺省取项目内最新（任意版本）。
   // REQ-20260921-012：响应增加 translate（该版本最新 AI 翻译 run 视图）——文档编写页单次
-  // 轮询同时吸收总结 / 翻译进度与三阶段求值（阶段门禁 / 基准变更自动刷新）。
+  // 轮询同时吸收总结 / 翻译进度与阶段求值（阶段门禁 / 基准变更自动刷新）。
   if (req.method === 'GET' && pathname === '/api/build/docs-summary/current') {
     const board = requireBoard();
     const idParam = u.searchParams.get('id');
@@ -2853,7 +2852,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         translate = docsTranslate.translateRunView(docsTranslate.latestTranslateRun(board, verId));
       } catch { /* 版本读取失败不阻塞进度展示 */ }
     }
-    // REQ-20260924-001：单次轮询同吸总结 / 翻译 / 校对进度与三阶段求值；
+    // REQ-20260924-001：单次轮询同吸总结 / 翻译 / 校对进度与阶段求值；
     // BUG-20260925-002：docsCheck 视图带决断字段（decisions / supersededDecided）
     const docsCheckRun = verId ? docsCheckView(board, verId) : null;
     return sendJson(res, 200, { run: docsSummary.summaryRunView(latest), translate, docsCheck: docsCheckRun, docsFlow });
@@ -2905,7 +2904,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
-  // REQ-20260924-002 AI 翻译进度：最新 run 视图 + 该版本三阶段求值（任务模块「AI 翻译」页签
+  // REQ-20260924-002 AI 翻译进度：最新 run 视图 + 该版本阶段求值（任务模块「AI 翻译」页签
   // 随轮询刷新；可选 id= 过滤指定版本，缺省取项目内最新）。
   if (req.method === 'GET' && pathname === '/api/build/docs-translate/current') {
     const board = requireBoard();
@@ -3012,10 +3011,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
 
   // POST /api/build/docs/commit {id}：提交文档到 Git（pathspec 限定语言集内文档，不夹带业务
   // 源码；无变化不空提交；成功返回 hash 并固化范围快照；失败保留内容可重试）。
-  // REQ-20260921-008 前置：① 语言集内全部文件「已审核」；② 当前分支必须是 dev
+  // REQ-20260921-008 前置：① 语言集内全部文件「已审核」（BUG-20260926-002 起不再叠加
+  // 整体审查完结条件——全审即放行，门禁不放宽也不新增）；② 当前分支必须是 dev
   //（assertOnDev，不在 dev 阻止并提示自行切换——沿用发布模块「不自动切分支」口径）。
-  // REQ-20260921-012 追加前置 ③：整体审查已完结（evaluateDocsFlow.canCommit 在「全部已
-  // 审核」之上叠加完结条件，不弱化原门禁）——全审未完结给完结缺口错误。
   if (req.method === 'POST' && pathname === '/api/build/docs/commit') {
     return runPost(async (body) => {
       const board = requireBoard();
@@ -3024,16 +3022,13 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       if (!v.items.length) throw new core.AtbError('版本暂无关联条目：请先关联条目再编写并提交文档');
       const flowEval = docsFlowOf(board, v);
       if (!flowEval.canCommit) {
-        if (flowEval.missing.length) {
-          const detail = flowEval.missing
-            .map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`)
-            .join('、');
-          throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交`);
-        }
         if (flowEval.baselineShift.length) {
           throw new core.AtbError(`默认语言文档已更新（基准变更）：${flowEval.baselineShift.join('、')} 需重新 AI 翻译并审核后再提交`);
         }
-        throw new core.AtbError(`整体审查未完结（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：请先在「整体审查」中人工确认完结后再提交`);
+        const detail = flowEval.missing
+          .map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`)
+          .join('、');
+        throw new core.AtbError(`文档未全部通过审查（${flowEval.reviewedCount}/${flowEval.files.length} 已审核）：${detail || '无文件'}；请在「审查」中逐文件通过审核后再提交`);
       }
       buildGit.assertOnDev(root);
       // REQ-20260921-010：提交范围按语言集展开（4 类 × N），pathspec 限定不夹带业务源码；
@@ -3051,55 +3046,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
-  // REQ-20260921-012 整体审查完结（文档编写第三阶段收口）：语言集内全部文件已审核后方可
-  // 人工确认完结；scopeStale / 基准变更（默认语言文档 mtime 更新）时不可完结。落
-  // v.review.finalized 快照；有效性由求值实时判定（语言集变化、文件回退待审核、范围变化、
-  // 基准变更都会使完结失效回退并重新锁上「提交」）。完结是「提交」解锁的必要条件。
-  if (req.method === 'POST' && pathname === '/api/build/docs/finalize') {
-    return runPost((body) => {
-      const board = requireBoard();
-      const v = buildStore.readVersion(board, body.id);
-      if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可整体审查完结');
-      const flowEval = docsFlowOf(board, v);
-      if (!flowEval.canFinalize) {
-        if (flowEval.scopeStale) throw new core.AtbError('发布范围已变化，逐文件审核已整体失效：请重新审查后再整体完结');
-        if (flowEval.baselineShift.length) {
-          throw new core.AtbError(`默认语言文档已更新（基准变更）：${flowEval.baselineShift.join('、')} 需重新 AI 翻译并审核后再整体完结`);
-        }
-        const detail = flowEval.missing
-          .map((m) => `${m.file}（${flow.DOCS_FLOW_LABEL[m.state] || m.state}）`)
-          .join('、');
-        throw new core.AtbError(`整体审查完结需语言集内全部文件已审核（${flowEval.reviewedCount}/${flowEval.files.length}）：尚缺 ${detail || '无文件'}`);
-      }
-      const version = buildStore.recordDocsFinalize(board, body.id, { langs: flow.docLangsOf(v), readFile: docReadFile });
-      return sendJson(res, 200, {
-        ok: true,
-        finalized: version.review.finalized,
-        docsFlow: docsFlowOf(board, buildStore.readVersion(board, body.id)),
-      });
-    });
-  }
-
-  // REQ-20260924-001 整体审查自动检查（只读，不改盘、不设门禁）：① 各语言内容语言一致性
-  //（中文是中文内容、英文是英文内容……启发式文字体系判定）；② 文档内链接可达性（本地相对
-  // 链接按项目根判存在；http/https 远程链接 HEAD→GET 回退请求判可达，超时 / 网络错误 /
-  // HTTP≥400 记死链带原因）。前端「整体审查」对话框「运行自动检查」按钮触发，结果即时渲染
-  //（✓/✗ + 逐文件明细），供人工完结前核对；完结门禁求值不受影响（仍由 evaluateDocsFlow 判定）。
-  if (req.method === 'POST' && pathname === '/api/build/docs/review-checks') {
-    return runPost(async (body) => {
-      const board = requireBoard();
-      const v = buildStore.readVersion(board, body.id);
-      const docFiles = flow.publishDocFiles(flow.docLangsOf(v), flow.customDocsOf(v));
-      const lang = docsReviewChecks.checkDocLangs(docFiles, docReadFile);
-      const links = await docsReviewChecks.checkDocLinks(docFiles, docReadFile, {
-        existsFile: (f) => fs.existsSync(path.join(root, f)),
-        fetchFn: (...a) => globalThis.fetch(...a),
-      });
-      return sendJson(res, 200, { ok: true, lang, links });
-    });
-  }
-
-  // REQ-20260924-001 AI 校对启动（整体审查自动检查之三——默认语言错别字与行文规范，提示词
+  // REQ-20260924-001 AI 校对启动（默认语言错别字与行文规范核查，提示词
   // 派发 Agent 核查、结果经 docscheck 账本自动上报）：门禁 = 非 merging + 默认语言非单文件
   // 文件全部已审核（与 AI 翻译解锁同口径，缺口 400 明细）；创建 run 返回 runId + 提示词，
   // 前端复制给 AI Agent 执行；独立锁 docscheck.lock 与 AI 总结 / 翻译 / 分析 / 开发互不占用。
@@ -3133,8 +3080,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
 
-  // REQ-20260924-001 AI 校对进度：最新 run 视图（结果 pass / fail + issues）+ 该版本三阶段
-  // 求值（整体审查对话框 / 文档编写页轮询；可选 id= 过滤指定版本，缺省取项目内最新）。
+  // REQ-20260924-001 AI 校对进度：最新 run 视图（结果 pass / fail + issues）+ 该版本阶段
+  // 求值（文档编写页轮询；可选 id= 过滤指定版本，缺省取项目内最新）。
   if (req.method === 'GET' && pathname === '/api/build/docs-proofread/current') {
     const board = requireBoard();
     const idParam = u.searchParams.get('id');
