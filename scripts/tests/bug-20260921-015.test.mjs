@@ -66,7 +66,9 @@ function mkRepo(dir) {
 }
 function commitFile(dir, file, content, subject, at) {
   fs.writeFileSync(path.join(dir, file), `${content}\n`);
-  git(dir, ['add', '-A']);
+  // BUG-20260926-003：定向 add——只提交场景文件本身；看板条目目录不卷入场景提交，
+  // 变更路径归属证据按真实 diff 判定（条目目录基线留在工作区不影响归因）
+  git(dir, ['add', '--', file]);
   gitAt(dir, ['commit', '-m', subject], at);
   return git(dir, ['rev-parse', 'HEAD']);
 }
@@ -182,6 +184,13 @@ async function setupServer(prepare) {
     mkItem: (type, title) => core.createItem(dataDir, { type, title, by: 'test' }),
     markDone: (id) => { for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDir, id, s, { by: 'test' }); },
     commit: (file, content, subject, at) => commitFile(proj, file, content, subject, at),
+    // 多文件定向提交（BUG-20260926-003：真实混合提交 = 变更同时触及多个条目目录，需多文件落盘）
+    commitFiles: (files, subject, at) => {
+      for (const f of files) fs.writeFileSync(path.join(proj, f), `${subject}\n`);
+      git(proj, ['add', '--', ...files]);
+      gitAt(proj, ['commit', '-m', subject], at);
+      return git(proj, ['rev-parse', 'HEAD']);
+    },
     createVersion: (items, name = '测试版本') => buildStore.createVersion(dataDir, { name, items }),
   };
   const ids = prepare ? (await prepare(ctx)) : {};
@@ -349,7 +358,11 @@ t('H3 真正无法纳入的仍逐条说明原因（无归属 / 未完成 / 跨�
     const cU = c.commit('u.txt', 'u', 'chore: 无单号提交', '2026-09-21T05:00:00 +0000');
     const cC = c.commit('c.txt', 'c', `feat: C ${C.id}`, '2026-09-21T05:01:00 +0000');
     const cD = c.commit('d.txt', 'd', `feat: D ${D.id}`, '2026-09-21T05:02:00 +0000');
-    const cEF = c.commit('ef.txt', 'ef', `feat: E+F ${E.id} ${F.id}`, '2026-09-21T05:03:00 +0000'); // 一提交关联两条目 → 混合
+    // BUG-20260926-003：真实混合提交 = 变更同时触及 E、F 两个条目目录（主题双单号 + 路径多目录），
+    // 保护不回退；仅主题引用单号（路径单一条目目录）则按末尾归属单号归属，不判混合
+    const cEF = c.commitFiles(
+      ['ef.txt', `agent-team-board/data/requirements/${E.id}/mixed.md`, `agent-team-board/data/requirements/${F.id}/mixed.md`],
+      `feat: E+F ${E.id} ${F.id}`, '2026-09-21T05:03:00 +0000');
     const cA = c.commit('a.txt', 'a', `feat: A ${A.id}`, '2026-09-21T05:04:00 +0000');
     const occ = c.createVersion([{ itemId: D.id, commit: cD }], '占用版本');
     return { A, C, D, E, F, cU, cC, cEF, cA, occId: occ.id };

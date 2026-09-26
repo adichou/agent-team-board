@@ -80,7 +80,9 @@ async function setupServer(prepare) {
     markDone: (id) => { for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDir, id, s, { by: 'test' }); },
     commit: (file, subject) => {
       fs.writeFileSync(path.join(proj, file), `${subject}\n`);
-      git(proj, ['add', '-A']);
+      // BUG-20260926-003：定向 add——只提交场景文件本身；条目目录（core.createItem 落盘）
+      // 不提交、不卷入场景提交的变更路径证据（路径归属证据按真实 diff 判定）
+      git(proj, ['add', '--', file]);
       git(proj, ['commit', '-m', subject]);
       return git(proj, ['rev-parse', 'HEAD']);
     },
@@ -402,12 +404,12 @@ t('F1 有依赖：一行汇总 + 一键加入按钮 + 明细 details；红色长
   await h.enter();
   await h.detailAt('BLD-DEP', 'merge');
   const pane = mergePaneHtml(h.inner());
-  assert.match(pane, /发现 3 个未选祖先（依赖）提交 · 影响 2 个所选条目/, '一行汇总（提交数 + 所选条目数）');
-  assert.match(pane, /一键加入所有依赖提交/, '一键加入按钮渲染');
+  assert.match(pane, /发现 3 个未选祖先提交 · 影响 2 个所选条目/, '一行汇总（提交数 + 所选条目数，BUG-20260926-003 起不再统称「依赖」）');
+  assert.match(pane, /一键加入所有未选祖先提交/, '一键加入按钮渲染');
   assert.ok(pane.includes('data-iso-add-deps'), '按钮带 data-iso-add-deps 行为标记');
-  assert.match(pane, /查看依赖明细/, '明细折叠入口');
+  assert.match(pane, /查看未选祖先明细/, '明细折叠入口');
   assert.ok(pane.includes('9ab3cdef'), '明细含依赖提交短 hash');
-  assert.match(pane, /为 REQ-20260921-013 的依赖/, '明细标注归属所选条目');
+  assert.match(pane, /为 REQ-20260921-013 的未选祖先/, '明细标注归属所选条目');
   // 红色长文移除：无 rel-form-err、无旧长句
   assert.ok(!pane.includes('rel-form-err'), '合并页不再输出红色 rel-form-err 长段');
   assert.ok(!pane.includes('普通 merge 会一并带入 main'), '逐条目重复长句不再渲染');
@@ -494,10 +496,10 @@ t('F5 一键加入交互：成功后发布范围与隔离分析联动刷新、�
   const pane = mergePaneHtml(h.inner());
   assert.match(pane, /所选提交无未选祖先：变更可独立进入主分支。/, '加入后隔离分析收敛为无未选祖先');
   assert.ok(!pane.includes('data-iso-add-deps'), '按钮随无依赖消失');
-  assert.match(pane, /以下 1 个依赖未能纳入/, '跳过清单展示');
+  assert.match(pane, /以下 1 个未选祖先提交未能纳入/, '跳过清单展示');
   assert.match(pane, /无法归属到看板条目/, '跳过原因可见');
   assert.match(pane, /77d0e2ff/, '跳过清单含短 hash');
-  assert.ok(h.toasts.some(([m]) => m.includes('已加入 1 个依赖条目') && m.includes('跳过 1 个')), `部分成功 toast，实际：${JSON.stringify(h.toasts)}`);
+  assert.ok(h.toasts.some(([m]) => m.includes('已加入 1 个条目') && m.includes('跳过 1 个')), `部分成功 toast，实际：${JSON.stringify(h.toasts)}`);
   // 失败：toast 错误、可重试
   phase = 'err';
   await h.run('window.ATBBuild.addDependencies()');
@@ -536,21 +538,21 @@ t('S1 静态契约：renderMergePane 仅读取失败态保留 rel-form-err；mer
   const reasonFn = buildJs.match(/function mergeBlockReason\(v\) \{[\s\S]*?\n  \}/);
   assert.ok(reasonFn, '缺少 mergeBlockReason');
   assert.match(reasonFn[0], /mergeAnalysis/, 'mergeBlockReason 增补 blocked 档（title/toast 同源）');
-  // i18n：新增词条中英同步（BUG-20260912-001 口径）
+  // i18n：新增词条中英同步（BUG-20260912-001 口径；BUG-20260926-003 起未选祖先不再统称「依赖」）
   await import('../web/i18n.js');
   const { EN, EN_DYNAMIC } = globalThis.ATBI18N._dict;
-  for (const k of ['一键加入所有依赖提交', '加入中…', '查看依赖明细', '所选提交无未选祖先：变更可独立进入主分支。', '⚠ 未能加入任何依赖提交（原因见隔离分析清单）']) {
+  for (const k of ['一键加入所有未选祖先提交', '加入中…', '查看未选祖先明细', '所选提交无未选祖先：变更可独立进入主分支。', '⚠ 未能加入任何未选祖先提交（原因见隔离分析清单）']) {
     assert.ok(k in EN, `EN 词典缺词条：${k}`);
   }
   for (const k of [
-    '发现 ◇ 个未选祖先（依赖）提交 · 影响 ◇ 个所选条目',
+    '发现 ◇ 个未选祖先提交 · 影响 ◇ 个所选条目',
     '⚠ ◇ 处混合提交无法安全拆分，合并将被阻止',
     '⚠ 暂不可合并：◇',
     '⚠ 合并失败：◇（可重试，只补未合并条目）',
-    '⚠ 以下 ◇ 个依赖未能纳入：',
-    '为 ◇ 的依赖',
-    '✓ 已加入 ◇ 个依赖条目：发布范围已变化，文档需重新核对 / 提交',
-    '✓ 已加入 ◇ 个依赖条目，跳过 ◇ 个（原因见隔离分析清单）',
+    '⚠ 以下 ◇ 个未选祖先提交未能纳入：',
+    '为 ◇ 的未选祖先',
+    '✓ 已加入 ◇ 个条目：发布范围已变化，文档需重新核对 / 提交',
+    '✓ 已加入 ◇ 个条目，跳过 ◇ 个（原因见隔离分析清单）',
     '✕ 一键加入失败：◇',
   ]) {
     assert.ok(k in EN_DYNAMIC, `EN_DYNAMIC 词典缺词条：${k}`);
