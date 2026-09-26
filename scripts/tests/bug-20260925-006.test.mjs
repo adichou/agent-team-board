@@ -4,8 +4,9 @@
 //    无 textarea；栏内容恒为预览态：读取中 / 空文档占位 / Markdown 富文本；类型页签、
 //    状态徽标、页脚计数、同步滚动说明保留；已审核按钮禁用提示不再宣传「编辑保存」）；
 // L4 行为：openReview 恒 README 页签全栏预览（无 modes / pendingFocus）；approveReviewFile
-//    直接以磁盘为审核基准（无「先保存草稿再审核」过渡）；editFromProofread 改跳「② 二次
-//    编辑」弹窗定位该行（先关整体审查对话框，一次一层）；closeReview 不再回同步草稿；
+//    直接以磁盘为审核基准（无「先保存草稿再审核」过渡）；editFromProofread 随完结对核
+//    对话框去除（BUG-20260926-002）——校对「✎ 修改」改由建议栏 data-chk-edit 直跳二次编辑；
+//    closeReview 不再回同步草稿；
 //    编辑专属死代码路径（syncReviewDrafts / saveReviewFile / focusReviewIssue）全量移除；
 // L5 文案：审查按钮 title 去掉「编辑 / 保存」表述；i18n 中英同步。
 // 用法：node scripts/tests/bug-20260925-006.test.mjs
@@ -204,58 +205,12 @@ t('L4-2 approveReviewFile：直接以磁盘内容为审核基准（无「先保�
   assert.deepEqual(fetches, [], '对话框未开不动作');
 });
 
-t('L4-3 editFromProofread：关闭整体审查对话框后改跳「② 二次编辑」弹窗并定位该行（不再开审查对话框编辑态）；busy 不让位；未就绪 / 无文件不动作', async () => {
+t('L4-3 editFromProofread 随完结对核对话框移除（BUG-20260926-002）：函数 / 钩子不再存在，校对「✎ 修改」由建议栏 data-chk-edit 直跳「② 二次编辑」', () => {
   const source = SOURCE();
-  const fn = extractFn(source, 'editFromProofread');
-  const mk = () => {
-    const v = { id: 'V', pf: null };
-    const calls = { secondary: [], review: 0 };
-    const ctx = {
-      state: { pf: null }, selVersion: () => v, pfOf: (x) => (x === v ? v.pf : null),
-      openSecondaryEdit: (target) => calls.secondary.push(target),
-      openReview: () => { calls.review += 1; }, toast: () => {}, render: () => {},
-      docFilesOf: FLOW_STUB.docFilesOf, DEFAULT_DOC_LANGS: FLOW_STUB.DEFAULT_DOC_LANGS, esc: ESC,
-      ...FLOW_STUB,
-    };
-    v.pf = { verId: 'V', phase: 'ready', plan: { langs: ['cn', 'en'] }, review: null, finalize: null };
-    ctx.state.pf = v.pf;
-    return { ctx, v, calls };
-  };
-  // 正常态：先关整体审查（一次一层）再开二次编辑定位
-  {
-    const { ctx, v, calls } = mk();
-    v.pf.finalize = { open: true, busy: false };
-    await vmRun(fn, ctx, 'editFromProofread("CHANGELOG.md", "12")');
-    assert.equal(v.pf.finalize, null, '整体审查对话框已关闭（让位）');
-    assert.equal(calls.secondary.length, 1, '改跳②二次编辑一次');
-    assert.equal(calls.secondary[0].file, 'CHANGELOG.md', '跳转目标文件');
-    assert.equal(calls.secondary[0].line, '12', '带行号定位');
-    assert.equal(calls.review, 0, '不再打开审查对话框');
-    assert.equal(v.pf.review, null, '审查状态未触碰');
-  }
-  // busy：确认完结请求进行中不让位
-  {
-    const { ctx, v, calls } = mk();
-    v.pf.finalize = { open: true, busy: true };
-    await vmRun(fn, ctx, 'editFromProofread("CHANGELOG.md", "12")');
-    assert.deepEqual(v.pf.finalize, { open: true, busy: true }, 'busy 不关闭');
-    assert.deepEqual(calls.secondary, [], 'busy 不打开二次编辑');
-  }
-  // 未就绪：不动作
-  {
-    const { ctx, v, calls } = mk();
-    v.pf.phase = 'loading';
-    v.pf.finalize = { open: true, busy: false };
-    await vmRun(fn, ctx, 'editFromProofread("CHANGELOG.md", "12")');
-    assert.deepEqual(v.pf.finalize, { open: true, busy: false }, '未就绪不动 finalize');
-    assert.deepEqual(calls.secondary, [], '未就绪不打开');
-  }
-  // 无文件参数：不动作
-  {
-    const { ctx, v, calls } = mk();
-    await vmRun(fn, ctx, 'editFromProofread("", "12")');
-    assert.deepEqual(calls.secondary, [], '无文件不动作');
-  }
+  assert.ok(!/function editFromProofread\(/.test(source), 'editFromProofread 函数随完结对话框移除');
+  assert.ok(!source.includes('data-proof-edit'), '完结对话框专用 data-proof-edit 钩子移除');
+  assert.ok(source.includes("data-chk-edit="), '建议栏「✎ 修改」保留 data-chk-edit 钩子');
+  assert.match(source, /openSecondaryEdit\(\{ file: el\.dataset\.chkEdit, line: el\.dataset\.chkLine \}\)/, '「✎ 修改」直接跳二次编辑定位（无中转函数）');
 });
 
 t('L4-4 closeReview：关闭为轻量本地操作（摘元素 + 静默同步），不再回同步编辑草稿', () => {

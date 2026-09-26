@@ -153,14 +153,14 @@ t('L1-5 分组与门禁：LICENSE 归默认语言组计数；canTranslate 不被
   assert.equal(r.defaultReviewedCount, 4, '默认语言计数 = 4/5（分母含 LICENSE）');
   assert.equal(r.canTranslate, true, 'A1 口径：默认 4 类全审即解锁 AI 翻译，LICENSE 不锁（README 验收「若 A2」）');
   assert.deepEqual(r.translateMissing, [], 'translateMissing 不含 LICENSE');
-  assert.equal(r.canFinalize, false, 'LICENSE 未审不可整体完结（必选口径）');
+  assert.ok(!('canFinalize' in r), 'BUG-20260926-002：canFinalize 字段随完结阶段移除');
+  assert.equal(r.canCommit, false, 'LICENSE 未审不可提交（必选口径，全参与）');
   assert.ok(r.missing.some((m) => m.file === 'LICENSE.md' && m.state === 'pending'), 'missing 含 LICENSE 缺口');
 
-  // 全审（含 LICENSE）+ 完结 → canCommit
+  // 全审（含 LICENSE）→ canCommit（完结快照字段被忽略）
   const finalized = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', files: {} };
   r = flow.evaluateDocsFlow({ review: { files, finalized } }, readsOf(contents), {});
-  assert.equal(r.canFinalize, true, '4×N + LICENSE 全审可完结');
-  assert.equal(r.canCommit, true, '全审 + 已完结可提交');
+  assert.equal(r.canCommit, true, '4×N + LICENSE 全审即可提交');
 });
 
 t('L1-6 提交口径与指纹：evaluateDocsState 含 LICENSE；publishScopeFingerprint 含 LICENSE 内容', () => {
@@ -230,22 +230,16 @@ t('L2-2 AI 账本（口径 B）：summary / translate 账本均不含 LICENSE.md
   translateStore.finishTranslateRun(dataDir, tr.runId, { result: 'done', summary: '完成' });
 });
 
-t('L2-3 recordDocsFinalize 快照覆盖 4×N+1 文件；LICENSE 不在盘时完结报错', () => {
-  const { proj, dataDir } = mkData(tmpdir('atb-002-l23-'));
-  const v = mkVersion(dataDir, proj);
+t('L2-3 recordDocsFinalize 随完结阶段移除（BUG-20260926-002）；LICENSE 缺盘仍卡提交门禁（求值层）', () => {
+  assert.ok(!('recordDocsFinalize' in buildStore), '完结固化接口已删除');
   const contents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'])) contents[f.file] = `# ${f.key}\n`;
-  const out = buildStore.recordDocsFinalize(dataDir, v.id, { langs: ['cn', 'en'], readFile: readsOf(contents) });
-  assert.equal(Object.keys(out.review.finalized.files).length, 9, '完结快照含 LICENSE');
-  assert.equal(out.review.finalized.files['LICENSE.md'], sha256(contents['LICENSE.md']));
-
+  const files = {};
+  for (const f of flow.publishDocFiles(['cn', 'en'])) files[f.file] = { hash: sha256(contents[f.file]), at: 't' };
   const noLic = { ...contents };
   delete noLic['LICENSE.md'];
-  assert.throws(
-    () => buildStore.recordDocsFinalize(dataDir, v.id, { langs: ['cn', 'en'], readFile: readsOf(noLic) }),
-    /LICENSE\.md 不存在或不可读/,
-    'LICENSE 缺盘不可完结（必选口径）',
-  );
+  const r = flow.evaluateDocsFlow({ review: { files } }, readsOf(noLic), {});
+  assert.equal(r.canCommit, false, 'LICENSE 缺盘不可提交（必选口径）');
 });
 
 /* ---------- L3 服务接口 ---------- */
@@ -371,18 +365,14 @@ t('L3 服务接口：清单 / 白名单 / 门禁 / pathspec / AI 翻译解锁', 
       const rr = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
       assert.equal(rr.status, 200, `review ${f.file}：${rr.text}`);
     }
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 400, 'LICENSE 未审不可完结');
-    assert.match(r.json.error || '', /LICENSE\.md（待审核）/, '缺口明细含 LICENSE 与状态');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 400, 'LICENSE 未审不可提交');
-    assert.match(r.json.error || '', /LICENSE\.md/);
+    assert.match(r.json.error || '', /LICENSE\.md（待审核）/, '缺口明细含 LICENSE 与状态');
 
-    // 补审 LICENSE → 完结 → 提交；pathspec 含 LICENSE.md 且不夹带手工 LICENSE（无扩展名）/ evil.txt
+    // 补审 LICENSE → 提交（BUG-20260926-002：全审即放行，无完结步）；
+    // pathspec 含 LICENSE.md 且不夹带手工 LICENSE（无扩展名）/ evil.txt
     r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'LICENSE.md' });
     assert.equal(r.status, 200, '补审 LICENSE');
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `finalize：${r.text}`);
     fs.writeFileSync(path.join(proj, 'LICENSE'), '无扩展名 LICENSE 不应被夹带');
     fs.writeFileSync(path.join(proj, 'evil.txt'), '不应被夹带');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
@@ -492,15 +482,15 @@ t('L4-2 renderReviewModal：LICENSE 页签（x/1）单栏；栏头标注不分�
   assert.ok(html.includes('待审核'), 'pending 状态文案');
 });
 
-t('L4-3 renderFinalizeModal：REQ-20260924-003 清单精简后 LICENSE 口径行与默认语言计数行不再渲染（计数含 LICENSE 仍在文档面板 / 门禁条呈现）', () => {
+t('L4-3 renderFinalizeModal 随整体审查阶段移除（BUG-20260926-002）；LICENSE 计数仍在文档面板 / 门禁条呈现', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const html = vmRun([extractFn(source, 'renderFinalizeModal'), extractFn(source, 'renderDocsPane')].join('\n'), L4_CTX, `renderFinalizeModal({ id: 'V', pf: {
-    finalize: { open: true, busy: false },
-    plan: { langs: ['cn', 'en'], docsFlow: { files: ${JSON.stringify(filesStub({}))}, defaultReviewedCount: 5, restReviewedCount: 4, missing: [] } } } })`);
-  assert.ok(!html.includes('LICENSE 文件与项目实际开源口径一致'), 'D 口径人工核对项随 REQ-20260924-003 移除');
-  assert.ok(!html.includes('默认语言文件已全部审核'), '默认语言计数门禁行随 REQ-20260924-003 移除');
-  // 3 条实际检查项仍在（清单精简不裁自动检查）
-  assert.ok(html.includes('各语言内容语义一致'), '语言一致项保留');
+  assert.ok(!/function renderFinalizeModal\(/.test(source), '完结对核对话框函数已删除');
+  const html = vmRun([extractFn(source, 'renderDocsPane')].join('\n'), L4_CTX, `renderDocsPane({ id: 'V', pf: { phase: 'ready', plan: {
+    langs: ['cn', 'en'],
+    docsFlow: { files: ${JSON.stringify(filesStub({}))}, defaultReviewedCount: 5, restReviewedCount: 4, missing: [], canCommit: false } } } })`);
+  assert.ok(html.includes('LICENSE.md'), 'LICENSE 计数仍在文档面板呈现（默认语言组）');
+  assert.ok(!html.includes('LICENSE 文件与项目实际开源口径一致'), '完结人工核对项不残留');
+  assert.ok(!html.includes('默认语言文件已全部审核'), '完结门禁行不残留');
 });
 
 /* ---------- L6 i18n ---------- */

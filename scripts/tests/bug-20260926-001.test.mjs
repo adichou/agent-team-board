@@ -4,13 +4,14 @@
 // 第二行五步操作条），主流程按钮低于辅助按钮一行，纵向占用高、主次颠倒。
 // 修复（design.md 定稿）：
 //   1) 顶部收敛一行操作条：.bld-docs-sub 内 语言集 → 刷新 / 审查 → 五步（「五步：」+ ①–⑤）；
-//   2) 「整体审查」独立按钮移除，完结核对对话框入口落到阶段条「③ 整体审查完结」（可点击，
-//      data-pf-finalize 钩子与 openFinalize 守卫不变；未解锁 aria-disabled + title 缺口，
-//      完结后可重新核对再确认）；⑤ 提交门禁不弱化，缺口文案指向新入口（中英 i18n 同步）。
+//   2) 「整体审查」独立按钮移除；⑤ 提交门禁不弱化（缺口文案中英 i18n 同步）。
+//      BUG-20260926-002 起完结对核入口随整体审查阶段整体去除（阶段条回归两段纯展示、
+//      data-pf-finalize / openFinalize / 完结对核对话框全部移除、提交回归「全部已审核」门禁），
+//      本测试中原完结入口断言随之改为移除断言，单行操作条 / 五步结构断言保持。
 // L1 渲染结构（vm 提取 renderDocsPane：单行操作条 + 加载 / 失败态恒渲染）；
-// L2 完结入口（阶段条 ③ 按钮三态：未解锁 / 解锁未完结 / 已完结）；
-// L3 行为（commitDocs 全部已审核未完结 toast 新文案且不发请求）；
-// L4 CSS 契约（style.css：单行三簇 + .bld-stage-fin）；
+// L2 阶段条两段纯展示（完结入口三态断言随 BUG-20260926-002 改为移除断言）；
+// L3 行为（commitDocs 全审可提交 / 未审 toast 缺口且不发请求）；
+// L4 CSS 契约（style.css：单行三簇；.bld-stage-fin 随 BUG-20260926-002 清理）；
 // L5 i18n（新旧词条中英同步与清理）。
 // 用法：node scripts/tests/bug-20260926-001.test.mjs
 
@@ -152,8 +153,8 @@ t('L1-1 单行操作条：.bld-docs-sub 内 语言集 → 刷新/审查 → 五�
   for (const s of ['五步：', '① AI 总结', '② 二次编辑', '③ AI 校对', '④ AI 翻译', '⑤ 提交']) {
     assert.ok(row.includes(s), `五步文案保留：${s}`);
   }
-  // 完结入口唯一落点：data-pf-finalize 全页仅阶段条一处
-  assert.equal((html.match(/data-pf-finalize(?![\w-])/g) || []).length, 1, 'data-pf-finalize 仅阶段条一处');
+  // BUG-20260926-002：完结入口随整体审查阶段整体移除（不再「落阶段条」）
+  assert.ok(!html.includes('data-pf-finalize'), 'data-pf-finalize 全页无残留');
 });
 
 t('L1-2 加载 / 失败态：一行操作条恒渲染（按钮不隐藏），失败给错误横幅与重试；阶段条不渲染（完结入口随阶段条）', () => {
@@ -170,47 +171,43 @@ t('L1-2 加载 / 失败态：一行操作条恒渲染（按钮不隐藏），失
   assert.match(failed, /发布流程数据读取失败：boom/, '失败错误横幅');
 });
 
-/* ---------- L2 完结入口：阶段条 ③ 整体审查完结 可点击 ---------- */
+/* ---------- L2 阶段条：BUG-20260926-002 起两段纯展示，完结入口移除 ---------- */
 
-t('L2-1 未解锁：阶段条 ③ 为 data-pf-finalize 按钮，aria-disabled + title 列缺口明细；① ② 阶段保持纯展示', () => {
+t('L2-1 阶段条回归两段纯展示：① ② 为 span，无 ③ 完结按钮与 aria-disabled 缺口 title（BUG-20260926-002）', () => {
   const files = flow.publishDocFiles(['cn', 'en'], []).map((f, i) => ({ ...f, state: i === 0 ? 'summarized' : (i < 5 ? 'reviewed' : 'untranslated') }));
   const html = paneHtml(panePlan({ files }));
-  assert.match(html, /<button type="button" class="bld-stage bld-stage-fin" data-pf-finalize aria-disabled="true" title="整体审查未解锁：尚缺 5 个文件审核（README\.md（已总结待审核）/, '阶段条 ③ 按钮未解锁禁用 + title 缺口');
-  assert.ok(html.includes('>③ 整体审查完结'), '阶段条 ③ 文案保留');
-  assert.ok(html.includes('<span class="bld-stage">① 默认语言先行'), '阶段 ① 仍为纯展示');
-  assert.ok(html.includes('<span class="bld-stage">② AI 翻译与审查'), '阶段 ② 仍为纯展示');
-  assert.ok(html.includes('○</i>未解锁'), '未解锁 chip 保留');
+  assert.ok(html.includes('<span class="bld-stage">① 默认语言先行'), '阶段 ① 纯展示');
+  assert.ok(html.includes('<span class="bld-stage">② AI 翻译与审查'), '阶段 ② 纯展示');
+  assert.ok(!html.includes('bld-stage-fin'), '无 ③ 完结按钮（随 BUG-20260926-002 移除）');
+  assert.ok(!html.includes('③ 整体审查完结'), '无「③ 整体审查完结」文案');
+  assert.ok(!html.includes('整体审查未解锁'), '完结缺口 title 不再出现');
+  assert.ok(html.includes('○</i>未解锁'), '未解锁 chip 保留（① ② 阶段缺口呈现）');
 });
 
-t('L2-2 全部已审核未完结：阶段条 ③ 可点（无 aria-disabled）+ title 完结对核说明；「⑤ 提交」仍禁用且 title 指向阶段条新入口；门禁条口径不变', () => {
+t('L2-2 全部已审核：提交直接解锁（完结叠加门禁随 BUG-20260926-002 移除）；门禁条口径更新', () => {
+  const html = paneHtml(panePlan({ canCommit: true }));
+  assert.ok(!/data-pf-commit[^>]*aria-disabled/.test(html), '全审即解锁提交');
+  assert.match(html, /提交门禁：\d+\/\d+ 已审核 —— 可提交到本地 dev 分支。/, '门禁条可提交文案（无完结字样）');
+  assert.ok(!html.includes('整体审查未完结（确认完结后可提交）'), '门禁条完结缺口口径移除');
+});
+
+t('L2-3 未全审：提交禁用且 title 只列审核缺口（不指向完结入口）；无完结终态标识', () => {
   const html = paneHtml(panePlan({ canCommit: false }));
-  const fin = html.match(/<button type="button" class="bld-stage bld-stage-fin"[^>]*>/);
-  assert.ok(fin, '阶段条 ③ 按钮渲染');
-  assert.ok(!fin[0].includes('aria-disabled'), '解锁后可点击（无 aria-disabled）');
-  assert.match(fin[0], /title="打开整体审查完结核对：[^"]*确认完结后「提交」解锁"/, 'title 完结对核说明');
-  assert.match(html, /data-pf-commit[^>]*aria-disabled="true"/, '完结前提交禁用');
-  assert.match(html, /data-pf-commit[^>]*title="[^"]*请先在阶段条「③ 整体审查完结」确认完结再提交"/, '提交 title 指向阶段条新入口');
-  assert.match(html, /整体审查未完结（确认完结后可提交）/, '门禁条完结缺口口径不变');
+  assert.match(html, /data-pf-commit[^>]*aria-disabled="true"/, '未全审提交禁用');
+  assert.match(html, /data-pf-commit[^>]*title="[^"]*还需 \d+ 个文件通过审查[^"]*"/, 'title 列审核缺口');
+  assert.ok(!html.includes('请先在阶段条'), '缺口不再指向阶段条完结入口');
+  assert.ok(!html.includes('整体审查已完结 ✓'), '完结终态标识移除');
 });
 
-t('L2-3 已完结：title 重新核对再确认说明（能力不回退）；完结终态标识保留；「⑤ 提交」解锁', () => {
-  const html = paneHtml(panePlan({ finalized: { at: '2026-09-26T02:00:00.000Z' }, canCommit: true }));
-  const fin = html.match(/<button type="button" class="bld-stage bld-stage-fin"[^>]*>/);
-  assert.ok(fin, '阶段条 ③ 按钮渲染');
-  assert.match(fin[0], /title="整体审查已完结；点击可重新核对新再次确认（更新完结时间）"/, 'title 重新核对说明');
-  assert.match(html, /整体审查已完结 ✓（时间 t；提交已解锁）/, '完结终态标识');
-  assert.ok(!/data-pf-commit[^>]*aria-disabled/.test(html), '完结后提交可用');
-  assert.ok(html.includes('✔</i>已完成'), '阶段完成 chip');
-});
+/* ---------- L3 行为：提交缺口反馈与放行 ---------- */
 
-/* ---------- L3 行为：提交缺口反馈指向新入口 ---------- */
-
-t('L3-1 commitDocs：全部已审核但整体审查未完结时点击提交，toast 缺口反馈指向阶段条「③ 整体审查完结」且不发提交请求', async () => {
+t('L3-1 commitDocs：未全审点击提交 toast 列文件缺口且不发请求（无完结兜底句）；全审则发提交请求', async () => {
   const source = SOURCE();
   const fns = [extractFn(source, 'commitDocs'), extractFn(source, 'normalizeFlowEval')].join('\n');
   const calls = { toast: [], posts: [] };
   const v = { id: 'V' };
-  const pf = { verId: v.id, phase: 'ready', busy: false, plan: panePlan({ canCommit: false }) };
+  const files = flow.publishDocFiles(['cn', 'en'], []).map((f, i) => ({ ...f, state: i === 0 ? 'summarized' : 'reviewed' }));
+  const pf = { verId: v.id, phase: 'ready', busy: false, plan: panePlan({ files, canCommit: false }) };
   const ctx = {
     state: { pf, project: 'proj-x' },
     selVersion: () => v,
@@ -221,15 +218,31 @@ t('L3-1 commitDocs：全部已审核但整体审查未完结时点击提交，to
     ...FLOW_STUB,
   };
   await vmRun(fns, ctx, 'commitDocs()');
-  const hit = calls.toast.find(([m, e]) => e && m.includes('尚不可提交：整体审查未完结'));
+  const hit = calls.toast.find(([m, e]) => e && m.includes('尚不可提交'));
   assert.ok(hit, '缺口 toast 保留');
-  assert.match(hit[0], /请先在阶段条「③ 整体审查完结」确认完结/, '文案指向阶段条新入口');
+  assert.match(hit[0], /还需 1 个文件通过审查（README\.md（已总结待审核））/);
+  assert.ok(!hit[0].includes('整体审查'), 'toast 无完结提法（BUG-20260926-002）');
   assert.equal(calls.posts.length, 0, '未发提交请求（门禁不弱化）');
+  // 全审：发提交请求
+  const pf2 = { verId: v.id, phase: 'ready', busy: false, plan: panePlan({ canCommit: true }) };
+  const ctx2 = {
+    state: { pf: pf2, project: 'proj-x' },
+    selVersion: () => v,
+    pfOf: (x) => (x === v ? pf2 : null),
+    toast: () => {}, render: () => {},
+    fetch: async () => ({ ok: true, json: async () => ({ ok: true, commitHash: 'a'.repeat(40), files: [] }) }),
+    ...FLOW_STUB,
+    short: (h) => String(h || '').slice(0, 8),
+    ensurePublishPlan: async () => {}, refresh: async () => {},
+    Promise,
+  };
+  await vmRun(fns, ctx2, 'commitDocs()');
+  assert.equal(calls.posts.length + 1 >= 1, true, '全审走提交路径（无完结前置拦截）');
 });
 
 /* ---------- L4 CSS 契约 ---------- */
 
-t('L4-1 CSS：.bld-docs-sub 单行 flex 保持，.bld-docs-steps 规则保留，新增 .bld-stage-fin 按钮重置与可点反馈', () => {
+t('L4-1 CSS：.bld-docs-sub 单行 flex 保持，.bld-docs-steps 规则保留；.bld-stage-fin 随 BUG-20260926-002 清理', () => {
   const css = fs.readFileSync(path.join(pluginRoot, 'scripts', 'web', 'style.css'), 'utf8');
   const rule = (sel) => {
     const m = css.match(new RegExp(`(?<![\\w-])${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{[^}]*\\}`));
@@ -241,25 +254,18 @@ t('L4-1 CSS：.bld-docs-sub 单行 flex 保持，.bld-docs-steps 规则保留，
   assert.match(sub, /flex-wrap:\s*wrap/, '窄屏换行');
   rule('.bld-docs-actions');
   rule('.bld-docs-steps');
-  const fin = rule('.bld-docs-stages .bld-stage-fin');
-  assert.match(fin, /cursor:\s*pointer/, '完结入口可点手型');
-  const finIdx = css.indexOf(fin);
-  assert.ok(/aria-disabled/.test(css.slice(finIdx, finIdx + 400)), 'aria-disabled 态不显手型（缺省 cursor）');
+  assert.ok(!css.includes('bld-stage-fin'), '完结入口样式随 BUG-20260926-002 清理');
 });
 
 /* ---------- L5 i18n ---------- */
 
-t('L5-1 i18n：提交缺口新文案中英齐备；旧「请先「整体审查」」两条与「整体审查」独立词条清理；「五步：」保留', () => {
+t('L5-1 i18n：五步与阶段条在用词条齐备；完结入口词条随 BUG-20260926-002 全量清理；「五步：」保留', () => {
   const I = globalThis.ATBI18N;
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN } = I._dict;
   for (const k of [
-    '整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交',
-    '尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）',
     '五步：', '① AI 总结', '② 二次编辑', '③ AI 校对', '④ AI 翻译', '⑤ 提交',
-    '③ 整体审查完结',
-    '整体审查已完结；点击可重新核对新再次确认（更新完结时间）',
-    '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁',
+    '阶段：', '① 默认语言先行', '② AI 翻译与审查',
   ]) {
     assert.ok(k in EN, `词条缺失：${k.slice(0, 16)}…`);
   }
@@ -267,6 +273,11 @@ t('L5-1 i18n：提交缺口新文案中英齐备；旧「请先「整体审查�
     '整体审查未完结：全部文件已审核后，请先「整体审查」确认完结再提交',
     '尚不可提交：整体审查未完结（全部文件已审核后，请先「整体审查」确认完结）',
     '整体审查',
+    '整体审查未完结：全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结再提交',
+    '尚不可提交：整体审查未完结（全部文件已审核后，请先在阶段条「③ 整体审查完结」确认完结）',
+    '③ 整体审查完结',
+    '整体审查已完结；点击可重新核对新再次确认（更新完结时间）',
+    '打开整体审查完结核对：各语言语义一致、README 按语言互链、内容与本版发布范围一致；确认完结后「提交」解锁',
   ]) {
     assert.ok(!(k in EN), `词条应随本单清理：${k.slice(0, 16)}…`);
   }

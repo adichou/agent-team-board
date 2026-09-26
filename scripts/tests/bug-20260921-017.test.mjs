@@ -127,7 +127,7 @@ t('L2-4 六按钮数据钩子与刷新反馈保留', () => {
   assert.match(refreshing, /data-pf-refresh[^>]* disabled/, '刷新运行中禁用');
   assert.ok(refreshing.includes('正在读取…'), '刷新运行中文字反馈');
   const { html } = renderWith({});
-  for (const hook of ['data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-finalize', 'data-pf-commit']) {
+  for (const hook of ['data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-commit']) { // data-pf-finalize 随 BUG-20260926-002 完结阶段移除
     assert.ok(html.includes(hook), `按钮钩子保留：${hook}`);
   }
 });

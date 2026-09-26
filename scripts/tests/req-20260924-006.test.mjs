@@ -261,11 +261,12 @@ t('L4-5 renderDocsPane 五步操作条：①–⑤ 顺序入口（data-pf-summar
   for (const s of ['① AI 总结', '② 二次编辑', '③ AI 校对', '④ AI 翻译', '⑤ 提交']) {
     assert.ok(html.includes(s), `步骤文案：${s}`);
   }
-  // 辅助动作与既有结构保留（BUG-20260926-001：「整体审查」独立按钮移除，data-pf-finalize
-  // 完结入口落阶段条「③ 整体审查完结」；刷新 / 审查等既有入口与门禁不回退）
-  for (const k of ['data-pf-refresh', 'data-pf-review', 'data-pf-finalize']) {
+  // 辅助动作与既有结构保留（BUG-20260926-001：「整体审查」独立按钮移除；BUG-20260926-002：
+  // data-pf-finalize 完结入口随整体审查阶段整体移除；刷新 / 审查等既有入口与门禁不回退）
+  for (const k of ['data-pf-refresh', 'data-pf-review']) {
     assert.ok(html.includes(k), `入口保留：${k}`);
   }
+  assert.ok(!html.includes('data-pf-finalize'), '完结入口随 BUG-20260926-002 移除');
   assert.ok(html.includes('① 默认语言先行'), '三阶段条保留');
   assert.ok(html.includes('bld-docs-stages'), '阶段条容器保留');
   // 校对建议侧栏容器（空态：尚未校对）
@@ -719,7 +720,7 @@ t('L6-1 i18n：五步条 / 二次编辑弹窗 / 校对建议卡片与状态 / �
     '保存并继续', '放弃修改并继续', '留在本文件', '保存中…', '重试读取',
     '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）',
     '默认语言初稿编辑（其余语言由「④ AI 翻译」产出）',
-    '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行整体审查与提交）',
+    '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行提交）', // BUG-20260926-002：口径去完结
     '发布流程数据未就绪：请先刷新或重试后再编辑',
     '当前版本没有默认语言文档可编辑',
     '已拒绝该条建议：原文保持不变',

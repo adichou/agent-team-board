@@ -143,10 +143,10 @@ t('L1-6 evaluateDocsState / evaluateDocsFlow：行数 = 4×N，计数与文案�
   const fv = flow.evaluateDocsFlow({ langs, review: { files: reviewFiles } }, readsOf(contents), {});
   assert.equal(fv.files.length, 13, '4 × 3 语言 + LICENSE');
   assert.equal(fv.reviewedCount, 13);
-  assert.equal(fv.canFinalize, true, '13/13 已审核可整体审查完结');
-  assert.equal(fv.canCommit, false, 'REQ-20260921-012：整体审查未完结前不可提交');
+  assert.ok(!('canFinalize' in fv), 'BUG-20260926-002：canFinalize 字段随完结阶段移除');
+  assert.equal(fv.canCommit, true, '13/13 已审核即可提交（BUG-20260926-002 回归全审门禁）');
   const fv0 = flow.evaluateDocsFlow({ langs, review: { files: reviewFiles, finalized: { at: '2026-09-21T02:00:00Z', langsKey: 'cn,en,fr', files: {} } } }, readsOf(contents), {});
-  assert.equal(fv0.canCommit, true, '13/13 已审核 + 整体完结可提交');
+  assert.equal(fv0.canCommit, true, '13/13 已审核 + 历史完结快照被忽略仍可提交');
 
   // 求值从 v.langs 取语言集：新增语言文件缺失 → 缺口
   const fv2 = flow.evaluateDocsFlow({ langs: ['cn', 'en', 'fr', 'jp'], review: { files: reviewFiles } }, readsOf(contents), {});
@@ -361,11 +361,7 @@ t('L3 服务接口：langs 保存 / publish-plan 回显 / save / review / commit
       const rr = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
       assert.equal(rr.status, 200, `review ${f.file}：${rr.text}`);
     }
-    // REQ-20260921-012：全部已审核后先「整体审查完结」，提交才解锁
-    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
-    assert.equal(r.status, 400, '整体审查未完结提交被阻止');
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `finalize：${r.text}`);
+    // BUG-20260926-002：全部已审核即提交解锁（无完结步）
     fs.writeFileSync(path.join(proj, 'evil.txt'), '不应被夹带');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
@@ -396,7 +392,7 @@ t('L4-1/L4-2/L4-3 renderDocsPane / renderReviewModal / validateLangSetInput：�
     assert.ok(m, `build.js 中应存在 ${name} 函数`);
     return m[0];
   };
-  // REQ-20260921-012：renderDocsPane 新增依赖（阶段条 / AI 翻译 / 整体审查 / 分组求值兜底）
+  // REQ-20260921-012：renderDocsPane 新增依赖（阶段条 / AI 翻译 / 分组求值兜底）
   const ctx = {
     pfOf: (v) => v.pf,
     esc: (s) => String(s),
@@ -470,10 +466,12 @@ t('L6-1 i18n：语言集新词条中英同步；固定「8」旧词条随界面�
   for (const k of mustHave) {
     assert.ok(k in EN || k in EN_DYNAMIC, `缺少词条：${k}`);
   }
-  // REQ-20260921-012：门禁词条随三阶段口径迁移（旧「全部文件已通过审查」两条键清理）
-  for (const k of ['提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。', '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 提交禁用，尚缺：◇。']) {
+  // REQ-20260921-012 / BUG-20260926-002：门禁词条随两阶段口径迁移（旧「全部文件已通过审查」两条键清理；
+  // 完结口径动态键随完结阶段移除，新「全审可提交」键落位）
+  for (const k of ['提交门禁：◇/◇ 已审核 —— 可提交到本地 dev 分支。', '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 提交禁用，尚缺：◇。']) {
     assert.ok(k in EN_DYNAMIC, `动态门禁新口径词条：${k}`);
   }
+  assert.ok(!('提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。' in EN_DYNAMIC), '完结口径动态键应清理');
   for (const k of ['提交门禁：◇/◇ 已审核 —— 全部文件已通过审查，可提交到本地 dev 分支。', '提交门禁：◇/◇ 已审核 —— 提交按钮禁用，尚缺：◇']) {
     assert.ok(!(k in EN_DYNAMIC), `旧门禁键应清理：${k.slice(0, 18)}…`);
   }

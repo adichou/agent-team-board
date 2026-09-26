@@ -323,10 +323,10 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.equal(r.status, 400);
     assert.match(r.json.error || '', /git|仓库/);
 
-    // REQ-20260920-003：合并前置 = 文档已完成且最新变化已提交——先写八个文档并提交
-    //（REQ-20260921-008 起提交门禁：八文件需先全部通过人工审查；REQ-20260921-010 起默认
-    // 语言集 cn,en、英文文件为下划线命名 KEY_en.md；REQ-20260921-012 起提交前还需
-    //「整体审查完结」人工确认；REQ-20260922-002 起清单含 LICENSE.md 单文件）
+    // REQ-20260920-003：合并前置 = 文档已完成且最新变化已提交——先写九个文档并提交
+    //（REQ-20260921-008 起提交门禁：文件需先全部通过人工审查；REQ-20260921-010 起默认
+    // 语言集 cn,en、英文文件为下划线命名 KEY_en.md；BUG-20260926-002 起全审即放行、
+    // 不再叠加「整体审查完结」确认；REQ-20260922-002 起清单含 LICENSE.md 单文件）
     const DOCS = ['README.md', 'README_en.md', 'CHANGELOG.md', 'CHANGELOG_en.md', 'FEATURES.md', 'FEATURES_en.md', 'AGENTS.md', 'AGENTS_en.md', 'LICENSE.md'];
     const commitDocsFor = async (id) => {
       for (const file of DOCS) {
@@ -335,8 +335,6 @@ t('S1~S10 /api/build* 全链路', async () => {
         const rv = await req(port, 'POST', `/api/build/docs/review${P}`, { id, file });
         if (rv.status !== 200) throw new Error(`docs review ${file}: ${rv.text}`);
       }
-      const rf = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id });
-      if (rf.status !== 200) throw new Error(`docs finalize: ${rf.text}`);
       const r1 = await req(port, 'POST', `/api/build/docs/commit${P}`, { id });
       if (r1.status !== 200 || !r1.json.commitHash) throw new Error(`docs commit: ${r1.text}`);
       return r1.json.commitHash;
