@@ -2286,7 +2286,8 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 //   POST /api/build/version/items     条目增删与换选 commit（add / remove / commit；merging/merged 锁增删；
 //                                    add 同受 BUG-20260913-001 / BUG-20260914-004 口径约束）
 //   POST /api/build/version/add-dependencies  REQ-20260921-015 一键加入所有依赖提交（服务端现算隔离分析、
-//                                    itemCommitStatusIndex 反查归属、沿用 addItems 校验与 scopeStale 联动；
+//                                    BUG-20260926-003 归因证据链反查归属（账本→主题归属→变更路径）、
+//                                    沿用 addItems 校验与 scopeStale 联动；
 //                                    不可纳入项进 skipped 清单；merging / 已正式发布 409）
 //   POST /api/build/version/merge     合并入 main（显式确认后调用；临时工作树逐条 --no-ff，不触碰当前工作区）
 //   POST /api/build/version/delete    删除版本（REQ-20260913-004 显式确认后调用；draft/failed/merged 可删，
@@ -2459,13 +2460,14 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     });
   }
   // REQ-20260921-015 一键加入所有依赖提交：服务端现算隔离分析（执行时点新鲜数据，不信前端传值），
-  // 把未选祖先（依赖）提交经 itemCommitStatusIndex（commit 台账 ∪ 主题单号）反查归属条目，
-  // 按「添加条目」同口径校验后一次性纳入；无法纳入的依赖逐条进 skipped 清单（含原因），不静默
-  // 丢失。纳入沿用 addItems：成功后 markDocsScopeStale 联动（文档需重新核对 / 提交）；
+  // 把未选祖先提交按归因证据链（BUG-20260926-003：提交账本 → 主题归属单号 → 实际变更路径；
+  // 仅真实多条目归属才判混合，标题正文引用单号不再误判）反查归属条目，按「添加条目」同口径
+  // 校验后一次性纳入；无法纳入的祖先提交逐条进 skipped 清单（含原因），不静默丢失。
+  // 纳入沿用 addItems：成功后 markDocsScopeStale 联动（文档需重新核对 / 提交）；
   // merging / 已正式发布锁定（BuildConflictError → 409，与 addItems 同文案）。
   // BUG-20260921-015：按提交 hash 去重（不按条目去重）——归属条目已在本版本时，把该条目
-  // 其余符合纳入条件的依赖提交补入其提交集合（appendItemCommits，保留原有关联）；同一新
-  // 依赖条目有多个依赖提交时全部保留（不再只取「最新」一个）。响应 added = 新入条目
+  // 其余符合纳入条件的祖先提交补入其提交集合（appendItemCommits，保留原有关联）；同一新
+  // 条目有多个祖先提交时全部保留（不再只取「最新」一个）。响应 added = 新入条目
   //（含 commits 全量），appended = 既有条目补入清单。
   if (req.method === 'POST' && pathname === '/api/build/version/add-dependencies') {
     return runPost(async (body) => {
@@ -2487,14 +2489,19 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       if (!deps.size) {
         return sendJson(res, 200, { version: v, added: [], appended: [], skipped: [], note: '所选提交无未选祖先提交，无需加入' });
       }
-      // 归因反查：itemCommitStatusIndex（itemId → commits）翻转为 commit → 归属条目集合
-      const ownersByCommit = new Map();
-      for (const rec of gitFlow.itemCommitStatusIndex(board, root).values()) {
+      // 归因证据链（BUG-20260926-003）：（a）提交账本（committedItemIndex：report 收口等
+      // 经核验归属）→（b）主题归属单号（提交规范「类型: 描述 单号」，取括号外最后一个单号，
+      // 标题正文引用的单号不算归属）→（c）提交实际变更路径（仅触及单一条目目录时兜底）。
+      // 仅真实多条目归属（账本多单号，或变更同时触及多个条目目录）才判混合提交保护；
+      // 不再用 itemCommitStatusIndex 的「主题含单号即关联」宽口径反查——那是 12 个标题引用型
+      // 提交被误判混合的直接原因。归属不明的仍以「无法归属」跳过，不静默。
+      const ledgerOwnersByCommit = new Map();
+      for (const rec of gitFlow.committedItemIndex(board).values()) {
         for (const h of rec.commits || []) {
           const k = String(h || '').toLowerCase();
           if (!k) continue;
-          if (!ownersByCommit.has(k)) ownersByCommit.set(k, new Set());
-          ownersByCommit.get(k).add(rec.itemId);
+          if (!ledgerOwnersByCommit.has(k)) ledgerOwnersByCommit.set(k, new Set());
+          ledgerOwnersByCommit.get(k).add(rec.itemId);
         }
       }
       const itemsAll = new Map(core.listItems(board).map((it) => [it.id, it]));
@@ -2505,16 +2512,27 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const appendPick = new Map(); // itemId（已在本版本）→ hash[]（收集后统一补入）
       const newPick = new Map(); // itemId（新条目）→ hash[]（全部保留，不再只取最新）
       for (const [hash, meta] of deps) {
-        const owners = ownersByCommit.get(hash);
-        if (!owners || !owners.size) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: '无法归属到看板条目（提交主题不含条目编号）' });
+        // （c）变更路径证据先行：变更同时触及多个条目目录 = 真实混合提交，保护不回退
+        //（账本 / 主题归属单号说得再多也不放行，防「无法安全拆分」的提交被单条目版本夹带）。
+        const pathOwners = gitFlow.commitPathItemOwners(root, hash);
+        if (pathOwners.size > 1) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `混合提交（变更同时触及 ${[...pathOwners].sort().join('、')} 的条目目录），无法安全归因` });
           continue;
         }
-        if (owners.size > 1) {
-          skipped.push({ commit: hash, subject: meta.subject, reason: `混合提交（关联 ${[...owners].join('、')}），无法安全归因` });
+        // （a）提交账本：经核验归属，最权威——存在即按账本定归属（1 条 → 唯一归属；多条 → 真实混合）
+        const ledgerOwners = ledgerOwnersByCommit.get(hash);
+        if (ledgerOwners && ledgerOwners.size > 1) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: `混合提交（关联 ${[...ledgerOwners].sort().join('、')}），无法安全归因` });
           continue;
         }
-        const itemId = [...owners][0];
+        // （b）主题归属单号（账本缺失时）→（c）变更路径单一条目目录兜底（账本 / 主题均缺时）
+        let itemId = ledgerOwners && ledgerOwners.size === 1 ? [...ledgerOwners][0] : null;
+        if (!itemId) itemId = gitFlow.subjectAttributionItemId(meta.subject);
+        if (!itemId && pathOwners.size === 1) itemId = [...pathOwners][0];
+        if (!itemId) {
+          skipped.push({ commit: hash, subject: meta.subject, reason: '无法归属到看板条目（提交账本、主题归属单号与变更路径均无归属证据）' });
+          continue;
+        }
         if (inVersion.has(itemId)) {
           // BUG-20260921-015：条目已在本版本 → 补入该条目的其余依赖提交（保留原有关联），
           // 不再因「当前关联另一提交」跳过；hash 已在条目提交集合中时（防御）忽略。

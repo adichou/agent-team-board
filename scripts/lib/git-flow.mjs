@@ -23,6 +23,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   AtbError,
+  DATA_REL_DIR,
   writeJsonAtomic,
   resolveItemDir,
   readStatus,
@@ -36,6 +37,10 @@ import {
   itemCommittedInGit,
   committedItemIndex,
 } from './commit-store.mjs';
+
+// 复导出：发布隔离一键加入（BUG-20260926-003 归因证据 a）经 gitFlow 命名空间取提交账本索引
+//（commit-store 不被服务端直接引用，REQ-20260911-010 分层口径不变）。
+export { committedItemIndex };
 
 export const DEV_BRANCH = 'dev';
 export const MAIN_BRANCH = 'main';
@@ -59,6 +64,7 @@ const nowIso = () => new Date().toISOString();
 const GIT_READONLY_SUBCOMMANDS = new Set([
   'status', 'diff', 'log', 'show', 'ls-files', 'rev-parse', 'rev-list',
   'symbolic-ref', 'for-each-ref', 'describe', 'merge-base', 'cat-file', 'remote',
+  'diff-tree',
 ]);
 
 function gitRaw(root, args) {
@@ -972,4 +978,38 @@ export function itemCommitStatusIndex(dataDir, projectRoot) {
     }
   }
   return byItem;
+}
+
+// 主题归属单号提取（BUG-20260926-003 归因证据 b）：提交规范「类型: 描述 单号」把归属单号
+// 放在主题末尾，正文（含括号补充说明）里的单号多为引用而非归属。取「括号外最后一个单号」
+// 作为归属候选：既覆盖规范主题（末尾单号），也兼容条目标题自带括号引用的收口提交
+// （「doc: 标题 REQ-A（引用 REQ-B）」归属 REQ-A 而非 REQ-B）。无候选返回 null。
+// 注意：与 itemCommitStatusIndex 的宽口径「主题含单号即关联」（看板徽标 / 候选发现用）不同，
+// 本函数是归因证据，供发布隔离一键加入判定真实归属。
+export function subjectAttributionItemId(subject) {
+  const outside = String(subject || '').replace(/（[^（）]*）|\([^()]*\)/g, ' ');
+  const ids = outside.match(/(?:REQ|BUG)-\d{8}-\d{3,}/g) || [];
+  return ids.length ? ids[ids.length - 1] : null;
+}
+
+// 提交变更路径的条目归属（BUG-20260926-003 归因证据 c）：diff-tree 列出该提交变更文件，
+// 统计命中看板条目目录（<板根>/data/requirements|bugs/<单号>/…，兼容旧布局前缀）的单号集合。
+// 变更同时触及多个条目目录 = 真实混合提交（安全保护依据，优先于账本 / 主题证据）；
+// 仅触及单一条目目录时作为账本 / 主题证据缺失时的兜底归属。非 git / 非法 hash / 异常返回
+// 空集合，不阻塞归因链其余证据；合并提交 diff-tree 缺省无路径输出（组合差异为空）→ 视为无路径证据。
+export function commitPathItemOwners(projectRoot, hash) {
+  const owners = new Set();
+  const h = String(hash || '').trim().toLowerCase();
+  if (!isGitRepo(projectRoot) || !/^[0-9a-f]{4,40}$/.test(h)) return owners;
+  const r = gitRaw(projectRoot, ['diff-tree', '--no-commit-id', '--name-only', '-r', h]);
+  if (r.status !== 0) return owners;
+  const base = String(DATA_REL_DIR || 'agent-team-board').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?:^|/)${base}/data/(?:requirements|bugs)/((?:REQ|BUG)-\\d{8}-\\d{3,})(?:/|$)`);
+  for (const line of String(r.stdout || '').split('\n')) {
+    const p = line.trim();
+    if (!p) continue;
+    const m = re.exec(p);
+    if (m) owners.add(m[1]);
+  }
+  return owners;
 }

@@ -1402,13 +1402,13 @@ const ATBBuild = (() => {
       // 新入条目（added）分别计数，反馈覆盖混合场景；无补入时保持既有文案不变。
       const appendedN = (data.appended || []).reduce((n, a) => n + (Array.isArray(a.commits) ? a.commits.length : 0), 0);
       pf.depSkip = skipped.length ? skipped : null;
-      if (added.length && appendedN && skipped.length) toast(`✓ 已加入 ${added.length} 个依赖条目、补入 ${appendedN} 个依赖提交，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
-      else if (added.length && appendedN) toast(`✓ 已加入 ${added.length} 个依赖条目、补入 ${appendedN} 个依赖提交：发布范围已变化，文档需重新核对 / 提交`);
-      else if (appendedN && skipped.length) toast(`✓ 已补入 ${appendedN} 个依赖提交，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
-      else if (appendedN) toast(`✓ 已补入 ${appendedN} 个依赖提交：发布范围已变化，文档需重新核对 / 提交`);
-      else if (added.length && skipped.length) toast(`✓ 已加入 ${added.length} 个依赖条目，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
-      else if (added.length) toast(`✓ 已加入 ${added.length} 个依赖条目：发布范围已变化，文档需重新核对 / 提交`);
-      else if (skipped.length) toast('⚠ 未能加入任何依赖提交（原因见隔离分析清单）', true);
+      if (added.length && appendedN && skipped.length) toast(`✓ 已加入 ${added.length} 个条目、补入 ${appendedN} 个未选祖先提交，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      else if (added.length && appendedN) toast(`✓ 已加入 ${added.length} 个条目、补入 ${appendedN} 个未选祖先提交：发布范围已变化，文档需重新核对 / 提交`);
+      else if (appendedN && skipped.length) toast(`✓ 已补入 ${appendedN} 个未选祖先提交，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      else if (appendedN) toast(`✓ 已补入 ${appendedN} 个未选祖先提交：发布范围已变化，文档需重新核对 / 提交`);
+      else if (added.length && skipped.length) toast(`✓ 已加入 ${added.length} 个条目，跳过 ${skipped.length} 个（原因见隔离分析清单）`);
+      else if (added.length) toast(`✓ 已加入 ${added.length} 个条目：发布范围已变化，文档需重新核对 / 提交`);
+      else if (skipped.length) toast('⚠ 未能加入任何未选祖先提交（原因见隔离分析清单）', true);
       await refresh(); // 发布范围列表（关联条目）更新
       await ensurePublishPlan(true); // 隔离分析重求值：依赖收敛、门禁随 scopeStale 联动
     } catch (e) {
@@ -4086,23 +4086,23 @@ ${langsField}
     // 一键加入按钮：有依赖才渲染；merging / 已正式发布锁定（aria-disabled + title 真实原因，
     // 点击守卫 toast 不静默）；执行中 disabled 防重复触发
     const depLock = v.status === 'merging' ? '合并中，条目不可增删' : pushedOf(v) ? '已正式发布，条目已锁定' : '';
-    const depBtnTitle = pf.depBusy ? '正在执行一键加入，请稍候' : (depLock || '把全部依赖提交对应的条目与提交纳入本版本发布范围；加入后发布范围变化，文档需重新核对 / 提交');
+    const depBtnTitle = pf.depBusy ? '正在执行一键加入，请稍候' : (depLock || '把未选祖先提交经归因核验后确属所选条目的条目与提交纳入本版本发布范围；加入后发布范围变化，文档需重新核对 / 提交');
     const depBtn = depN
-      ? `<button type="button" class="btn small primary" data-iso-add-deps="${esc(v.id)}"${pf.depBusy ? ' disabled' : (depLock ? ' aria-disabled="true"' : '')} title="${esc(depBtnTitle)}">${pf.depBusy ? '加入中…' : '一键加入所有依赖提交'}</button>`
+      ? `<button type="button" class="btn small primary" data-iso-add-deps="${esc(v.id)}"${pf.depBusy ? ' disabled' : (depLock ? ' aria-disabled="true"' : '')} title="${esc(depBtnTitle)}">${pf.depBusy ? '加入中…' : '一键加入所有未选祖先提交'}</button>`
       : '';
     // 明细折叠：每条 短 hash + 提交主题 + 归属所选条目；上限 50 防超长（超出注明）
     const ISO_MAX = 50;
     const depRows = [...depCommits.values()];
     const depDetails = depN
-      ? `<details class="bld-iso-deps"><summary>查看依赖明细</summary>
-          <ul>${depRows.slice(0, ISO_MAX).map((i) => `<li><code data-i18n-skip>${esc(short(i.hash))}</code> <span data-i18n-skip>${esc(i.subject || '')}</span><br><span class="muted small">为 ${esc(i.owner)} 的依赖</span></li>`).join('')}</ul>
+      ? `<details class="bld-iso-deps"><summary>查看未选祖先明细</summary>
+          <ul>${depRows.slice(0, ISO_MAX).map((i) => `<li><code data-i18n-skip>${esc(short(i.hash))}</code> <span data-i18n-skip>${esc(i.subject || '')}</span><br><span class="muted small">为 ${esc(i.owner)} 的未选祖先</span></li>`).join('')}</ul>
           ${depN > ISO_MAX ? `<p class="muted small">（其余 ${depN - ISO_MAX} 个略）</p>` : ''}
           <p class="muted small">一键加入后按既有机制标记发布范围变化（文档需重新核对 / 提交）。</p>
         </details>`
       : '';
     // 一键加入后的跳过清单：逐条短 hash + 原因，不静默丢失（含依赖已收敛为无的场合）
     const skipList = (pf.depSkip || []).length
-      ? `<p class="bld-iso-note">⚠ 以下 ${pf.depSkip.length} 个依赖未能纳入：</p>
+      ? `<p class="bld-iso-note">⚠ 以下 ${pf.depSkip.length} 个未选祖先提交未能纳入：</p>
         <ul class="bld-iso-skip">${pf.depSkip.map((s) => `<li><code data-i18n-skip>${esc(short(s.commit))}</code> <span data-i18n-skip>${esc(s.subject || '')}</span><br><span class="muted small">${esc(s.reason || '')}</span></li>`).join('')}</ul>`
       : '';
     // 混合提交：单行 + title 全文（服务端合并仍确定性阻止）
@@ -4116,7 +4116,7 @@ ${langsField}
       : '';
     let isoBody;
     if (depN) {
-      isoBody = `<p class="bld-iso-sum"><span class="small">发现 ${depN} 个未选祖先（依赖）提交 · 影响 ${depItems.length} 个所选条目</span>${depBtn}</p>
+      isoBody = `<p class="bld-iso-sum"><span class="small">发现 ${depN} 个未选祖先提交 · 影响 ${depItems.length} 个所选条目</span>${depBtn}</p>
         ${depDetails}
         ${skipList}
         ${blockedLine}
