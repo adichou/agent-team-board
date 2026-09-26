@@ -513,11 +513,8 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
       assert.equal(r.status, 200, `审核 ${f.file}：${r.text}`);
     }
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canFinalize, true, '8/8 已审核可整体审查完结');
-    assert.equal(r.json.docsFlow.canCommit, false, 'REQ-20260921-012：整体审查未完结前提交不放行');
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `整体审查完结：${r.text}`);
-    assert.ok(r.json.docsFlow.finalized.at, '完结标识与时间');
+    assert.ok(!('canFinalize' in r.json.docsFlow), 'BUG-20260926-002：canFinalize 字段随完结阶段移除');
+    assert.equal(r.json.docsFlow.canCommit, true, '8/8 已审核即可提交（BUG-20260926-002 不叠加完结门禁）');
 
     // 无变化不空提交：先对未变更文件集合提交（此刻 8 文件均为新文件，有变化）
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
@@ -539,7 +536,6 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.json.docsFlow.files.find((f) => f.file === 'FEATURES.md').state, 'summarized', '编辑后回退待审核');
     assert.deepEqual(r.json.docsFlow.baselineShift, ['FEATURES_en.md'], 'REQ-20260921-012：mtime 基准变更检测命中');
     assert.equal(r.json.docsFlow.files.find((f) => f.file === 'FEATURES_en.md').state, 'untranslated', '受影响翻译文档回退未翻译');
-    assert.equal(r.json.docsFlow.finalized, null, '整体完结失效回退');
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
     assert.equal(r.status, 409);
     assert.match(r.json.error || '', /未提交/);
@@ -547,12 +543,10 @@ t('L4 服务接口：文档流程 / 合并门禁与隔离 / 推送 / 官网检�
     assert.equal(r.status, 400, '回退待审核后提交被门禁拦截');
     r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'FEATURES.md' });
     assert.equal(r.status, 200, `重新审核 FEATURES.md：${r.text}`);
-    // 重新 AI 翻译（重写 FEATURES_en.md，mtime 晚于新基准）→ 重审 → 重新整体完结
+    // 重新 AI 翻译（重写 FEATURES_en.md，mtime 晚于新基准）→ 重审（BUG-20260926-002：全审即放行，无完结步）
     fs.writeFileSync(path.join(proj, 'FEATURES_en.md'), '# FEATURES 改动 EN\n');
     r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'FEATURES_en.md' });
     assert.equal(r.status, 200, `重新审核 FEATURES_en.md：${r.text}`);
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `重新整体审查完结：${r.text}`);
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.ok(r.json.commitHash, '重新提交成功');
 

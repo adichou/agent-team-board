@@ -193,25 +193,25 @@ t('L1-7 门禁参与：自定义默认语言未审锁 AI 翻译（translateMissi
   r = flow.evaluateDocsFlow(v(defAll), readsOf(contents), {});
   assert.equal(r.canTranslate, true, '默认语言全审（含自定义）解锁翻译');
 
-  // 全审（含 MIGRATION_en.md）+ 完结（customDocsKey 匹配）→ canCommit
+  // 全审（含 MIGRATION_en.md）即 canCommit（BUG-20260926-002：完结门禁移除，快照仅作历史字段被忽略）
   const finalizedOkRec = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', customDocsKey: 'MIGRATION', files: {} };
   r = flow.evaluateDocsFlow(v(hashOf, finalizedOkRec), readsOf(contents), {});
-  assert.equal(r.canFinalize, true);
-  assert.equal(r.canCommit, true, '全审 + customDocsKey 匹配的完结 → 可提交');
+  assert.ok(!('canFinalize' in r), 'BUG-20260926-002：canFinalize 字段随完结阶段移除');
+  assert.equal(r.canCommit, true, '全审即可提交（完结快照被忽略）');
 
-  // customDocsKey 不匹配（自定义清单变化后的旧完结记录）→ 失效
+  // customDocsKey 不匹配的历史完结记录同样被忽略：门禁只看全审
   const finalizedOld = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', customDocsKey: 'MIGRATION,OTHER', files: {} };
   r = flow.evaluateDocsFlow(v(hashOf, finalizedOld), readsOf(contents), {});
-  assert.equal(r.canCommit, false, '自定义清单变化后旧完结失效（customDocsKey 不匹配）');
+  assert.equal(r.canCommit, true, '旧完结记录不影响新门禁（全审即放行）');
 
-  // 存量兼容：无 customDocsKey 字段的旧完结记录，在无自定义文档时仍有效
+  // 存量兼容：无 customDocsKey 字段的旧完结记录被忽略，全审即放行
   const finalizedLegacy = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', files: {} };
   const plainHash = {};
   for (const f of flow.publishDocFiles(['cn', 'en'])) plainHash[f.file] = { hash: sha256(`# ${f.key}\n`), at: 't' };
   const plainContents = {};
   for (const f of flow.publishDocFiles(['cn', 'en'])) plainContents[f.file] = `# ${f.key}\n`;
   r = flow.evaluateDocsFlow({ review: { files: plainHash, finalized: finalizedLegacy } }, readsOf(plainContents), {});
-  assert.equal(r.canCommit, true, '存量完结记录（无 customDocsKey、无自定义）不回归');
+  assert.equal(r.canCommit, true, '存量完结记录（无 customDocsKey、无自定义）不影响提交');
 });
 
 t('L1-8 提交口径 / 指纹：evaluateDocsState 计数含展开文件；指纹随其余语言内容变化', () => {
@@ -292,17 +292,13 @@ t('L2-2 removeCustomDoc：整份移除全部语种（清单退出 + 审核留痕
   assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'MIGRATION' }), buildStore.BuildConflictError, 'pushed 锁定');
 });
 
-t('L2-3 recordDocsFinalize 快照记 customDocsKey；白名单放行展开文件', () => {
+t('L2-3 recordDocsFinalize 随完结阶段移除；审核白名单仍放行展开文件', () => {
   const { proj, dataDir } = mkData(tmpdir('atb-002-l23-'));
   const v = mkVersion(dataDir, proj);
   buildStore.addCustomDoc(dataDir, v.id, { name: 'MIGRATION' });
   assert.doesNotThrow(() => buildStore.recordDocsReview(dataDir, v.id, { file: 'MIGRATION_en.md', hash: sha256('x') }), '展开文件进入审核白名单');
 
-  const contents = {};
-  for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) contents[f.file] = `# ${f.key}\n`;
-  const out = buildStore.recordDocsFinalize(dataDir, v.id, { langs: ['cn', 'en'], readFile: readsOf(contents) });
-  assert.equal(out.review.finalized.customDocsKey, 'MIGRATION', '完结快照固化自定义清单键');
-  assert.equal(Object.keys(out.review.finalized.files).length, 11, '快照 = 4 × 2 + LICENSE + 自定义 × 2');
+  assert.ok(!('recordDocsFinalize' in buildStore), 'BUG-20260926-002：完结固化接口随完结阶段移除');
 });
 
 t('L2-4 账本：总结账本只装默认语言份；翻译账本装其余语言份且可回执', () => {
@@ -416,9 +412,7 @@ t('L3 服务接口：添加一次全语种展开 → 全审 → AI 翻译含自�
     assert.equal(r.json.run.counts.total, 5, '翻译账本 total = 4 + 1 自定义');
     translateStore.finishTranslateRun(dataDir, r.json.runId, { result: 'done', summary: '完成' });
 
-    // 提交 pathspec 含自定义全部语种
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `finalize：${r.text}`);
+    // 提交 pathspec 含自定义全部语种（BUG-20260926-002：全审即放行，无完结步）
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
     assert.ok(r.json.files.includes('MIGRATION.md') && r.json.files.includes('MIGRATION_en.md'), 'pathspec 含自定义全部语种');
@@ -514,7 +508,7 @@ t('L4-2 renderDocsPane：自定义行出现在每个语言页签；en 行走翻�
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({ 'MIGRATION.md': 'summarized', 'MIGRATION_en.md': 'translated' }))},
         reviewedCount: 0, defaultReviewedCount: 0, restReviewedCount: 0,
-        canTranslate: false, translateMissing: [], canFinalize: false, finalized: null, canCommit: false,
+        canTranslate: false, translateMissing: [], canCommit: false,
         baselineShift: [], missing: [] },
       summary: null, translate: null, docs: { overall: 'none' } } } })`);
   assert.match(html, /id="bldDocPanel_cn"[^>]*>[\s\S]*?MIGRATION\.md/, '默认语言面板含 MIGRATION.md');

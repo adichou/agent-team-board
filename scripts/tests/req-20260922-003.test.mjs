@@ -190,20 +190,19 @@ t('L1-7 门禁参与：分组计数 / canFinalize / canCommit / missing 含自�
   assert.equal(r.defaultFiles.length, 6, '默认语言组分母 = 4 类 + LICENSE + 自定义默认语言份');
   assert.equal(r.canTranslate, false, 'BUG-20260922-002：自定义默认语言未审锁 AI 翻译（与标准 4 类同口径）');
   assert.ok(r.translateMissing.some((m) => m.file === 'MIGRATION.md'), 'translateMissing 含自定义默认语言份');
-  assert.equal(r.canFinalize, false, '自定义未审不可整体完结（全参与）');
+  assert.equal(r.canCommit, false, '自定义未审不可提交（全参与，BUG-20260926-002 门禁只看全审）');
   assert.ok(r.missing.some((m) => m.file === 'MIGRATION.md' && m.state === 'unsummarized'), '缺口明细含自定义与状态');
 
-  // 全审（含自定义全部语种）+ 完结（customDocsKey 匹配）→ canCommit
+  // 全审（含自定义全部语种）→ canCommit（完结快照被忽略）
   const finalized = { at: '2026-09-22T01:00:00Z', langsKey: 'cn,en', customDocsKey: 'MIGRATION', files: {} };
   r = flow.evaluateDocsFlow({ review: { files, finalized }, customDocs: ['MIGRATION'] }, readsOf(contents), {});
-  assert.equal(r.canFinalize, true, '全审（含自定义）可完结');
-  assert.equal(r.canCommit, true, '全审 + 已完结可提交');
+  assert.equal(r.canCommit, true, '全审（含自定义）即可提交');
 
-  // 自定义文件未在盘：缺口（缺盘不可完结）
+  // 自定义文件未在盘：缺口（缺盘不放行）
   const noMig = { ...contents };
   delete noMig['MIGRATION.md'];
   r = flow.evaluateDocsFlow({ review: { files, finalized }, customDocs: ['MIGRATION'] }, readsOf(noMig), {});
-  assert.equal(r.canFinalize, false, '自定义缺盘不可完结');
+  assert.equal(r.canCommit, false, '自定义缺盘不可提交');
 });
 
 t('L1-8 提交口径与指纹：evaluateDocsState 含自定义（合并门禁联动）；指纹随自定义内容变化；基准检测含自定义', () => {
@@ -274,7 +273,7 @@ t('L2-1 build-store：addCustomDoc / removeCustomDoc 持久化、校验、上限
   assert.throws(() => buildStore.addCustomDoc(dataDir, v.id, { name: 'AFTERPUSH' }), buildStore.BuildConflictError, 'pushed 锁定');
 });
 
-t('L2-2 白名单与完结快照：recordDocsReview / recordDocsCommit 放行清单内自定义（含展开文件）；recordDocsFinalize 快照含自定义', () => {
+t('L2-2 白名单：recordDocsReview / recordDocsCommit 放行清单内自定义（含展开文件）；recordDocsFinalize 随完结阶段移除（BUG-20260926-002）', () => {
   const { proj, dataDir } = mkData(tmpdir('atb-003-l22-'));
   const v = mkVersion(dataDir, proj);
   const withCus = buildStore.addCustomDoc(dataDir, v.id, { name: 'MIGRATION.md' });
@@ -282,15 +281,7 @@ t('L2-2 白名单与完结快照：recordDocsReview / recordDocsCommit 放行清
   assert.doesNotThrow(() => buildStore.recordDocsReview(dataDir, withCus.id, { file: 'MIGRATION_en.md', hash: sha256('x') }), 'BUG-20260922-002：展开文件进入审核白名单');
   assert.doesNotThrow(() => buildStore.recordDocsCommit(dataDir, withCus.id, { commitHash: 'a'.repeat(40), files: { 'MIGRATION.md': 'b'.repeat(64) }, scopeFp: 'f' }), '提交记录白名单含自定义');
 
-  const contents = {};
-  for (const f of flow.publishDocFiles(['cn', 'en'], ['MIGRATION'])) contents[f.file] = `# ${f.key}\n`;
-  const out = buildStore.recordDocsFinalize(dataDir, withCus.id, { langs: ['cn', 'en'], customDocs: ['MIGRATION'], readFile: readsOf(contents) });
-  assert.equal(Object.keys(out.review.finalized.files).length, 11, '完结快照 = 4 × 2 + LICENSE + 自定义 × 2');
-  assert.equal(out.review.finalized.files['MIGRATION.md'], sha256(contents['MIGRATION.md']));
-  assert.equal(out.review.finalized.customDocsKey, 'MIGRATION', 'BUG-20260922-002：完结快照记 customDocsKey');
-  const noMig = { ...contents };
-  delete noMig['MIGRATION.md'];
-  assert.throws(() => buildStore.recordDocsFinalize(dataDir, withCus.id, { langs: ['cn', 'en'], customDocs: ['MIGRATION'], readFile: readsOf(noMig) }), /MIGRATION\.md 不存在或不可读/, '自定义缺盘不可完结');
+  assert.ok(!('recordDocsFinalize' in buildStore), 'BUG-20260926-002：完结固化接口随完结阶段移除');
 });
 
 t('L2-3 AI 总结账本：createSummaryRun 含自定义（pending 起步）；markSummaryFile 自定义回执被接受；聚合标记', () => {
@@ -434,7 +425,7 @@ t('L3 服务接口：添加 / 移除 / 回显 / AI 总结提示词与账本 / �
     r = await req(port, 'POST', `/api/build/docs/save${P}`, { id: vid, file: 'NOTIN.md', content: 'x' });
     assert.equal(r.status, 400, '清单外保存拒绝');
 
-    // 全审（标准 4×2 + LICENSE + 自定义全部语种）→ 完结 → 提交（pathspec 含自定义、不夹带业务文件）
+    // 全审（标准 4×2 + LICENSE + 自定义全部语种）→ 提交（BUG-20260926-002 无完结步；pathspec 含自定义、不夹带业务文件）
     // 顺序：先默认语言组（含 MIGRATION.md / LICENSE.md）后剩余语言（含 MIGRATION_en.md），
     // 保证 mtime 不触发基准回退。BUG-20260922-002：移除→再添加会删除磁盘文件，全部文件统一写盘。
     const all = flow.publishDocFiles(['cn', 'en'], ['MIGRATION']);
@@ -445,8 +436,6 @@ t('L3 服务接口：添加 / 移除 / 回显 / AI 总结提示词与账本 / �
       const rr = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: f.file });
       assert.equal(rr.status, 200, `review ${f.file}：${rr.text}`);
     }
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `finalize：${r.text}`);
     fs.writeFileSync(path.join(proj, 'evil.txt'), '不应被夹带');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
@@ -526,7 +515,7 @@ t('L4-1 renderDocsPane：＋添加文档按钮 + 内联添加行；自定义行�
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({ 'README.md': 'reviewed', 'CHANGELOG.md': 'reviewed', 'FEATURES.md': 'reviewed', 'AGENTS.md': 'reviewed' }))},
         reviewedCount: 4, defaultReviewedCount: 4, restReviewedCount: 0,
-        canTranslate: false, translateMissing: [{ file: 'MIGRATION.md', state: 'unsummarized' }], canFinalize: false, finalized: null, canCommit: false,
+        canTranslate: false, translateMissing: [{ file: 'MIGRATION.md', state: 'unsummarized' }], canCommit: false,
         baselineShift: [], missing: [{ file: 'README_en.md', state: 'untranslated' }, { file: 'CHANGELOG_en.md', state: 'untranslated' }, { file: 'FEATURES_en.md', state: 'untranslated' }, { file: 'AGENTS_en.md', state: 'untranslated' }, { file: 'LICENSE.md', state: 'unwritten' }, { file: 'MIGRATION.md', state: 'unsummarized' }, { file: 'MIGRATION_en.md', state: 'untranslated' }] },
       summary: null, translate: null, docs: { overall: 'none' } } } })`);
   // 添加入口与内联添加行
@@ -559,7 +548,7 @@ t('L4-2 renderDocsPane：AI 总结运行中移除禁用（title 提示）；总�
     plan: { langs: ['cn', 'en'], customDocs: ['MIGRATION'],
       docsFlow: { files: ${JSON.stringify(filesStub({ 'MIGRATION.md': 'summarizing' }))},
         reviewedCount: 0, defaultReviewedCount: 0, restReviewedCount: 0,
-        canTranslate: false, translateMissing: [], canFinalize: false, finalized: null, canCommit: false,
+        canTranslate: false, translateMissing: [], canCommit: false,
         baselineShift: [], missing: [{ file: 'MIGRATION.md', state: 'summarizing' }] },
       summary: { phase: 'running', counts: { summarized: 0, total: 5 }, currentFile: 'MIGRATION.md' },
       translate: null, docs: { overall: 'none' } } } })`);

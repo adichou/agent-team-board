@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// REQ-20260924-001 文档编写整体审查步骤优化 —— 分层测试。
-// L1 纯逻辑（docs-review-checks：语言一致性 / 链接解析与可达性；publish-flow：AI 校对提示词）；
+// REQ-20260924-001 文档编写整体审查步骤优化 —— 分层测试（BUG-20260926-002 起整体审查
+// 阶段与完结对核对话框移除：docs-review-checks 库 / review-checks 端点 / 对话框契约转为
+// 移除断言，AI 校对（docscheck）能力保留并由五步 ③ 与右侧建议栏承载）。
+// L1 纯逻辑（publish-flow：AI 校对提示词）；
 // L2 数据层（docs-check-store 校对账本与独立锁；atb docscheck CLI 全链路）；
-// L3 服务接口（review-checks 自动检查 / docs-proofread start+current 门禁 / publish-plan docsCheck /
-//    全局简报 kind=docscheck）；
-// L4 前端静态契约（整体审查对话框自动检查项 ✓/✗ + 明细 + 「运行自动检查」「AI 校对」按钮）；
-// L6 i18n（新增文案中英同步）。
+// L3 服务接口（docs-proofread start+current 门禁 / publish-plan docsCheck / 全局简报
+//    kind=docscheck；review-checks 路由移除）；
+// L4 前端静态契约（完结对话框移除；校对入口与建议栏保留）；
+// L6 i18n（对话框词条清理；校对词条中英同步）。
 // 用法：node scripts/tests/req-20260924-001.test.mjs
 
 import assert from 'node:assert/strict';
@@ -20,7 +22,6 @@ import * as core from '../lib/core.mjs';
 import * as flow from '../lib/publish-flow.mjs';
 import * as buildStore from '../lib/build-store.mjs';
 import * as checkStore from '../lib/docs-check-store.mjs';
-import * as checks from '../lib/docs-review-checks.mjs';
 import '../web/i18n.js';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -48,159 +49,7 @@ const readsOf = (contents) => (f) => (Object.prototype.hasOwnProperty.call(conte
 const cases = [];
 const t = (name, fn) => cases.push([name, fn]);
 
-/* ---------- L1 纯逻辑（docs-review-checks.mjs） ---------- */
-
-t('L1-1 语言一致性：cn 中文 ✓；en 文件残留中文 ✗；en 英文 ✓；ja 缺假名 ✗ / 含假名 ✓；ko、ru 判定；代码块剥离；过短文本不通过', () => {
-  const cn = '# 项目简介\n\n这是一个中文发布文档，介绍本版本的主要变化与使用方式，用于语言一致性自动检查。\n';
-  const en = '# About this project\n\nThis release note describes the main changes and usage of the current version in English.\n';
-  const jp = '# プロジェクト紹介\n\nこれは日本語のリリースドキュメントであり、本次版本の主な変更を説明します。\n';
-  const ko = '# 프로젝트 소개\n\n이 문서는 한국어 릴리스 문서이며, 이번 버전의 주요 변경 사항을 설명합니다.\n';
-  const ru = '# Описание проекта\n\nЭтот документ описывает основные изменения текущей версии на русском языке.\n';
-  const docFiles = [
-    { key: 'README', lang: 'cn', file: 'README.md' },
-    { key: 'README', lang: 'en', file: 'README_en.md' },
-    { key: 'README', lang: 'jp', file: 'README_jp.md' },
-    { key: 'README', lang: 'ko', file: 'README_ko.md' },
-    { key: 'README', lang: 'ru', file: 'README_ru.md' },
-  ];
-  // 全部语言内容正确 → 每个文件 ✓
-  let r = checks.checkDocLangs(docFiles, readsOf({
-    'README.md': cn, 'README_en.md': en, 'README_jp.md': jp, 'README_ko.md': ko, 'README_ru.md': ru,
-  }));
-  assert.equal(r.ok, true);
-  for (const f of r.files) assert.equal(f.ok, true, `${f.file} 应判定为对应语言：${f.detail}`);
-
-  // en 文件残留中文内容（未翻译）→ ✗ 且带文件名与说明
-  r = checks.checkDocLangs(docFiles, readsOf({
-    'README.md': cn, 'README_en.md': cn, 'README_jp.md': jp, 'README_ko.md': ko, 'README_ru.md': ru,
-  }));
-  assert.equal(r.ok, false);
-  const enFile = r.files.find((f) => f.file === 'README_en.md');
-  assert.equal(enFile.ok, false, '英文文件放中文内容应不通过');
-  assert.ok(enFile.detail && enFile.detail.length > 0, '不通过须带说明');
-
-  // ja 文件放纯中文（无假名）→ ✗（假名是日语的判定性文字体系）
-  r = checks.checkDocLangs([{ key: 'README', lang: 'jp', file: 'README_jp.md' }], readsOf({ 'README_jp.md': cn }));
-  assert.equal(r.files[0].ok, false, '日语文件无假名应不通过');
-
-  // 围栏代码块（英文代码）不影响中文判定
-  const withCode = `${cn}\n\`\`\`bash\nnpm install something-english --save\nconsole.log("hello world");\n\`\`\`\n`;
-  r = checks.checkDocLangs([{ key: 'README', lang: 'cn', file: 'README.md' }], readsOf({ 'README.md': withCode }));
-  assert.equal(r.files[0].ok, true, '代码块不应把中文文档误判成英文');
-
-  // 过短文本：无法判定 → 不通过并说明
-  r = checks.checkDocLangs([{ key: 'README', lang: 'en', file: 'README_en.md' }], readsOf({ 'README_en.md': '# T\n' }));
-  assert.equal(r.files[0].ok, false);
-  assert.match(r.files[0].detail, /过短|无法判定/);
-});
-
-t('L1-2 链接解析：行内链接与图片、行号；围栏 / 行内代码中的链接跳过；纯锚点与 mailto 跳过；尖括号目标', () => {
-  const text = [
-    '# 标题',
-    '',
-    '[更新日志](CHANGELOG.md)',
-    '![徽标](./image/logo.png)',
-    '[章节](#section) 与 [邮件](mailto:a@b.co) 不检查',
-    '`[行内代码不检查](x.md)`',
-    '',
-    '```md',
-    '[代码块内不检查](y.md)',
-    '```',
-    '',
-    '带尖括号 [目标](<a b.md>) 与普通 [末尾](z.md)',
-  ].join('\n');
-  const links = checks.extractMarkdownLinks(text);
-  const hrefs = links.map((l) => l.href);
-  assert.ok(hrefs.includes('CHANGELOG.md'), '行内链接');
-  assert.ok(hrefs.includes('./image/logo.png'), '图片目标');
-  assert.ok(hrefs.includes('a b.md'), '尖括号目标去尖括号');
-  assert.ok(hrefs.includes('z.md'), '普通链接');
-  assert.ok(!hrefs.includes('x.md') && !hrefs.includes('y.md'), '行内代码 / 围栏代码内的链接不检查');
-  assert.ok(!hrefs.some((h) => h.startsWith('#') || h.startsWith('mailto:')), '纯锚点与 mailto 跳过');
-  const changelog = links.find((l) => l.href === 'CHANGELOG.md');
-  assert.equal(changelog.line, 3, '记录行号（1 起）');
-});
-
-t('L1-3 链接检查：本地存在 / 缺失死链、锚点剥离、远程 HEAD ✓、405 回退 GET、HTTP 404 与网络错误死链带原因', async () => {
-  const text = [
-    '# 文档',
-    '[更新日志](CHANGELOG.md#v1)',
-    '[功能](FEATURES.md)',
-    '[缺失页](MISSING.md)',
-    '[官网](https://example.com/)',
-  ].join('\n');
-  const docFiles = [{ key: 'README', lang: 'cn', file: 'README.md' }];
-  const exists = (f) => f === 'CHANGELOG.md' || f === 'FEATURES.md';
-  const calls = [];
-  const fetchFn = async (url, opts = {}) => {
-    calls.push({ url, method: opts.method || 'GET' });
-    if (url === 'https://example.com/' && (opts.method || 'GET') === 'GET' && calls.filter((c) => c.url === url).length >= 3) {
-      return { ok: false, status: 405, statusText: 'Method Not Allowed' };
-    }
-    return { ok: true, status: 200, statusText: 'OK' };
-  };
-  const r = await checks.checkDocLinks(docFiles, readsOf({ 'README.md': text }), { existsFile: exists, fetchFn });
-  assert.equal(r.ok, false, '存在死链整体不通过');
-  const f = r.files[0];
-  assert.equal(f.file, 'README.md');
-  assert.equal(f.total, 4, '四个可检查链接（锚点已剥离计入本地目标）');
-  assert.equal(r.deadTotal, 1, '本地缺失一条死链（远程可达不计）');
-  const missing = f.dead.find((d) => d.href === 'MISSING.md');
-  assert.ok(missing, '缺失本地链接入死链');
-  assert.ok(/不存在|缺失/.test(missing.reason), '死链带原因');
-  assert.equal(missing.line, 4, '死链带行号');
-  assert.ok(!f.dead.some((d) => d.href.startsWith('CHANGELOG.md')), '存在的本地链接不误报（含 # 锚点剥离）');
-
-  // 远程：HEAD 200 → ✓；HEAD 405 回退 GET → ✓
-  const okRun = await checks.checkDocLinks(
-    docFiles,
-    readsOf({ 'README.md': '[官网](https://example.com/)' }),
-    { existsFile: exists, fetchFn: async () => ({ ok: true, status: 200, statusText: 'OK' }) },
-  );
-  assert.equal(okRun.ok, true, '远程可达整体通过');
-  const fallbackCalls = [];
-  const fbRun = await checks.checkDocLinks(
-    docFiles,
-    readsOf({ 'README.md': '[官网](https://example.com/)' }),
-    {
-      existsFile: exists,
-      fetchFn: async (url, opts = {}) => {
-        fallbackCalls.push(opts.method || 'GET');
-        if ((opts.method || 'GET') === 'HEAD') return { ok: false, status: 405, statusText: 'Method Not Allowed' };
-        return { ok: true, status: 200, statusText: 'OK' };
-      },
-    },
-  );
-  assert.equal(fbRun.ok, true, 'HEAD 405 回退 GET 判可达');
-  assert.deepEqual(fallbackCalls, ['HEAD', 'GET'], '先 HEAD 后 GET');
-
-  // HTTP 404 → 死链；网络错误 → 死链带原因
-  const badRun = await checks.checkDocLinks(
-    docFiles,
-    readsOf({ 'README.md': '[a](https://a.co/) [b](https://b.co/)' }),
-    {
-      existsFile: exists,
-      fetchFn: async (url) => {
-        if (String(url).startsWith('https://a.co/')) return { ok: false, status: 404, statusText: 'Not Found' };
-        throw new Error('getaddrinfo ENOTFOUND');
-      },
-    },
-  );
-  assert.equal(badRun.ok, false);
-  const dead = badRun.files[0].dead;
-  assert.equal(dead.length, 2);
-  assert.match(dead.find((d) => d.href === 'https://a.co/').reason, /404/);
-  assert.match(dead.find((d) => d.href === 'https://b.co/').reason, /ENOTFOUND|网络|失败/);
-
-  // 多文件聚合：无链接文件平凡通过
-  const multi = await checks.checkDocLinks(
-    [{ key: 'A', lang: 'cn', file: 'A.md' }, { key: 'B', lang: 'cn', file: 'B.md' }],
-    readsOf({ 'A.md': '# A', 'B.md': '[x](x.md)' }),
-    { existsFile: () => true, fetchFn: async () => ({ ok: true, status: 200 }) },
-  );
-  assert.equal(multi.ok, true);
-  assert.equal(multi.files.find((x) => x.file === 'A.md').total, 0);
-});
+/* ---------- L1 纯逻辑（publish-flow：AI 校对提示词；docs-review-checks 纯函数随 BUG-20260926-002 移除） ---------- */
 
 t('L1-4 AI 校对提示词：默认语言文件清单（不含剩余语言与 LICENSE）/ runId / docscheck 四步回执 / 只读不改与不编造约束', () => {
   const p = flow.buildDocProofreadPrompt({
@@ -366,7 +215,7 @@ function req(port, method, pathname, body) {
   });
 }
 
-t('L3 服务接口：review-checks 自动检查 / docs-proofread 门禁与 current / publish-plan docsCheck / 全局简报', async () => {
+t('L3 服务接口：docs-proofread 门禁与 current / publish-plan docsCheck / 全局简报（review-checks 随 BUG-20260926-002 移除）', async () => {
   const tmp = tmpdir('atb-024-serve-');
   const proj = mkRepo(path.join(tmp, 'proj'));
   fs.writeFileSync(path.join(proj, 'base.txt'), 'base');
@@ -404,33 +253,15 @@ t('L3 服务接口：review-checks 自动检查 / docs-proofread 门禁与 curre
     assert.equal(r.status, 201, `创建版本：${r.text}`);
     const vid = r.json.version.id;
 
-    // review-checks：en 文件残留中文（语言一致 ✗）+ 本地死链（详细提示）→ 两检查结果齐备
-    fs.writeFileSync(path.join(proj, 'README.md'), '# 项目\n\n这是中文发布文档，介绍本版本的主要变化与使用方式说明。\n\n[更新日志](CHANGELOG.md)\n[缺失页](MISSING.md)\n');
-    fs.writeFileSync(path.join(proj, 'CHANGELOG.md'), '# 更新日志\n\n本版本修复了若干问题，并优化了安装体验与文档结构。\n');
-    fs.writeFileSync(path.join(proj, 'README_en.md'), '# 项目\n\n这是中文发布文档，介绍本版本的主要变化与使用方式说明。\n');
+    // review-checks 路由随完结对核对话框移除（BUG-20260926-002）：404 不残留死接口
     r = await req(port, 'POST', `/api/build/docs/review-checks${P}`, { id: vid });
-    assert.equal(r.status, 200, `review-checks：${r.text}`);
-    assert.ok(r.json.lang, '返回语言一致性检查');
-    const langEn = r.json.lang.files.find((f) => f.file === 'README_en.md');
-    assert.equal(langEn.ok, false, 'en 文件残留中文内容判定不通过');
-    const langCn = r.json.lang.files.find((f) => f.file === 'README.md');
-    assert.equal(langCn.ok, true, 'cn 文件中文内容通过');
-    assert.ok(r.json.links, '返回链接可达性检查');
-    assert.equal(r.json.links.ok, false, '存在死链整体不通过');
-    const readmeLinks = r.json.links.files.find((f) => f.file === 'README.md');
-    const deadMissing = readmeLinks.dead.find((d) => d.href === 'MISSING.md');
-    assert.ok(deadMissing && deadMissing.reason, '死链 MISSIING.md 带详细原因');
-    assert.ok(deadMissing.line >= 5, '死链带行号');
-
-    // review-checks：版本不存在 4xx（AtbError「找不到版本计划」→ 外层统一 400）
-    r = await req(port, 'POST', `/api/build/docs/review-checks${P}`, { id: 'BLD-20260101-999' });
-    assert.equal(r.status, 400, '版本不存在 400');
+    assert.equal(r.status, 404, 'review-checks 路由已移除');
 
     // AI 校对门禁：默认语言未全审 400 带缺口
     for (const f of ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md']) {
       if (!fs.existsSync(path.join(proj, f))) fs.writeFileSync(path.join(proj, f), `# ${f}\n\n这是中文发布文档的占位内容，介绍本版本的主要变化与使用方式说明。\n`);
     }
-    fs.writeFileSync(path.join(proj, 'FEATURES.md'), '# 功能\n\n本版本提供看板、批量执行与发布文档三阶段流程等功能说明。\n');
+    fs.writeFileSync(path.join(proj, 'FEATURES.md'), '# 功能\n\n本版本提供看板、批量执行与发布文档两阶段流程等功能说明。\n');
     fs.writeFileSync(path.join(proj, 'AGENTS.md'), '# 协作规则\n\n本文件描述开发本产品的协作规则与收口要求。\n');
     r = await req(port, 'POST', `/api/build/docs-proofread/start${P}`, { id: vid });
     assert.equal(r.status, 400, '默认语言未全审不可启动 AI 校对');
@@ -514,109 +345,17 @@ const L4_CTX = {
   ...FLOW_STUB,
 };
 
-function finalizeModalFns(source) {
-  // 显式带 normalizeFlowEval（不依赖其他用例先运行对沙箱的注入）；
-  // REQ-20260924-004 起 ③ 项明细经 splitProofreadIssues / parseIssueLineNo 逐条渲染，一并注入
-  return [
-    extractFn(source, 'normalizeFlowEval'),
-    extractFn(source, 'splitProofreadIssues'),
-    extractFn(source, 'parseIssueLineNo'),
-    extractFn(source, 'renderFinalizeModal'),
-  ].join('\n');
-}
-
-const READY_FLOW = { files: [], defaultReviewedCount: 4, restReviewedCount: 4, canFinalize: true, finalized: null };
-
-t('L4-1 整体审查对话框：未运行态（◐ 提示）+「运行自动检查」「AI 校对」按钮 + 三条实际检查项（REQ-20260924-003 精简后无静态人工项）', () => {
+t('L4-1 完结对核对话框随整体审查阶段移除（BUG-20260926-002）：函数 / 钩子 / 检查项不残留；校对入口由五步 ③ 与建议栏承载', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const html = vmRun(finalizeModalFns(source), L4_CTX, `renderFinalizeModal({ id: 'BLD-20260924-001', pf: {
-    finalize: { open: true, busy: false },
-    plan: { langs: ['cn', 'en'], docsFlow: ${JSON.stringify(READY_FLOW)} } } })`);
-  assert.match(html, /整体审查完结（BLD-20260924-001）/, '对话框标题');
-  // 自动检查按钮
-  assert.ok(html.includes('data-pf-checks'), '「运行自动检查」按钮');
-  assert.ok(html.includes('运行自动检查'), '按钮文案');
-  assert.ok(html.includes('data-pf-proofread'), '「AI 校对」按钮');
-  assert.ok(html.includes('AI 校对'), '按钮文案');
-  // 三类检查项存在
-  assert.ok(html.includes('各语言内容语义一致（以已审核默认语言为基准）'), '语言一致项保留');
-  assert.ok(html.includes('README 按语言互链'), '链接项保留（扩展为全文档链接）');
-  assert.ok(html.includes('默认语言错别字与行文规范'), 'AI 校对项');
-  // 未运行提示
-  assert.ok(html.includes('未运行'), '自动检查未运行提示');
-  // REQ-20260924-003：静态人工项（本版范围一致 / LICENSE 口径）与门禁计数行不再渲染
-  assert.ok(!html.includes('与本版发布范围一致'), '本版范围一致静态行随 REQ-20260924-003 移除');
-  assert.ok(!html.includes('LICENSE 文件与项目实际开源口径一致'), 'LICENSE 口径静态行随 REQ-20260924-003 移除');
-  assert.ok(html.includes('data-pf-finalize-cancel') && html.includes('data-pf-finalize-confirm'), '取消 / 确认完结按钮');
-});
-
-t('L4-2 整体审查对话框：自动检查结果 ✓/✗ 与死链 / 校对 fail 明细红叉', () => {
-  const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const pfBase = {
-    finalize: { open: true, busy: false },
-    plan: { langs: ['cn', 'en'], docsFlow: READY_FLOW },
-  };
-  // 语言一致 ✓ + 死链 ✗ 明细
-  const pf1 = {
-    ...pfBase,
-    checks: {
-      busy: false, error: null,
-      lang: { ok: true, files: [{ file: 'README.md', lang: 'cn', ok: true, detail: '' }, { file: 'README_en.md', lang: 'en', ok: true, detail: '' }] },
-      links: {
-        ok: false, deadTotal: 1,
-        files: [{ file: 'README.md', total: 3, dead: [{ href: 'MISSING.md', line: 6, reason: '本地文件不存在：MISSING.md' }] }],
-      },
-    },
-  };
-  const html1 = vmRun(finalizeModalFns(source), L4_CTX, `renderFinalizeModal({ id: 'V', pf: ${JSON.stringify(pf1)} })`);
-  assert.ok(html1.includes('MISSING.md'), '死链目标展示');
-  assert.ok(html1.includes('本地文件不存在'), '死链原因展示');
-  assert.match(html1, /st-fail/, '存在红叉状态');
-  assert.match(html1, /st-ok/, '存在通过状态');
-
-  // AI 校对结果：done + 1 fail（issues 明细）
-  const pf2 = {
-    ...pfBase,
-    plan: { ...pfBase.plan, docsCheck: {
-      runId: 'chk-20260924-101010-ab01', phase: 'done',
-      files: { 'README.md': 'pass', 'CHANGELOG.md': 'fail', 'FEATURES.md': 'pass', 'AGENTS.md': 'pass' },
-      issues: { 'CHANGELOG.md': '第 3 行：错别字「测式」应为「测试」' },
-      counts: { pass: 3, fail: 1, pending: 0, total: 4 },
-    } },
-  };
-  const html2 = vmRun(finalizeModalFns(source), L4_CTX, `renderFinalizeModal({ id: 'V', pf: ${JSON.stringify(pf2)} })`);
-  assert.ok(html2.includes('第 3 行：错别字'), '校对 issues 明细展示');
-  assert.ok(html2.includes('CHANGELOG.md'), 'fail 文件名展示');
-
-  // AI 校对进行中：进度
-  const pf3 = {
-    ...pfBase,
-    plan: { ...pfBase.plan, docsCheck: {
-      runId: 'chk-20260924-101010-ab02', phase: 'running',
-      files: { 'README.md': 'pass', 'CHANGELOG.md': 'checking', 'FEATURES.md': 'pending', 'AGENTS.md': 'pending' },
-      issues: {}, counts: { pass: 1, fail: 0, pending: 2, total: 4 }, currentFile: 'CHANGELOG.md',
-    } },
-  };
-  const html3 = vmRun(finalizeModalFns(source), L4_CTX, `renderFinalizeModal({ id: 'V', pf: ${JSON.stringify(pf3)} })`);
-  assert.ok(html3.includes('校对进行中') || html3.includes('进行中'), '校对运行中提示');
-
-  // 全部通过：语言一致 + 链接 + 校对全 ✓
-  const pf4 = {
-    ...pfBase,
-    checks: {
-      busy: false, error: null,
-      lang: { ok: true, files: [{ file: 'README.md', lang: 'cn', ok: true, detail: '' }] },
-      links: { ok: true, deadTotal: 0, files: [{ file: 'README.md', total: 2, dead: [] }] },
-    },
-    plan: { ...pfBase.plan, docsCheck: {
-      runId: 'chk-20260924-101010-ab03', phase: 'done',
-      files: { 'README.md': 'pass', 'CHANGELOG.md': 'pass', 'FEATURES.md': 'pass', 'AGENTS.md': 'pass' },
-      issues: {}, counts: { pass: 4, fail: 0, pending: 0, total: 4 },
-    } },
-  };
-  const html4 = vmRun(finalizeModalFns(source), L4_CTX, `renderFinalizeModal({ id: 'V', pf: ${JSON.stringify(pf4)} })`);
-  assert.ok(!html4.includes('未运行'), '全检查后无未运行提示');
-  assert.ok(html4.includes('data-pf-finalize-confirm'), '确认完结按钮仍在（完结仍为人工动作）');
+  assert.ok(!/function renderFinalizeModal\(/.test(source), 'renderFinalizeModal 函数已删除');
+  for (const gone of ['data-pf-finalize', 'data-pf-checks', 'data-pf-proofread', '运行自动检查', '确认完结',
+    '各语言内容语义一致（以已审核默认语言为基准）',
+    '默认语言错别字与行文规范（AI 校对自动上报）']) {
+    assert.ok(!source.includes(gone), `完结对话框残留清理：${gone.slice(0, 16)}…`);
+  }
+  for (const kept of ['data-pf-proofstep', 'bld-docs-chk', 'data-chk-accept', 'data-chk-reject', 'AI 校对']) {
+    assert.ok(source.includes(kept), `校对能力保留：${kept}`);
+  }
 });
 
 /* ---------- L6 i18n ---------- */
@@ -625,8 +364,10 @@ t('L6-1 i18n：新增文案中英词条齐备；动态键编译；往返不变�
   const I = globalThis.ATBI18N;
   assert.ok(I, 'i18n.js 应在 globalThis.ATBI18N 暴露接口');
   const { EN, EN_DYNAMIC } = I._dict;
-  const statics = [
-    '运行自动检查', 'AI 校对', '检查中…', '校对中…', '已核查',
+  // BUG-20260926-002：完结对核对话框词条（自动检查按钮 / 未运行提示 / 结果句 / 检查项）清理；
+  // 校对在用词条（五步 ③ 与建议栏）保留
+  for (const gone of [
+    '运行自动检查', '检查中…', '校对中…',
     '默认语言错别字与行文规范（AI 校对自动上报）',
     '所有文档内链接真实可达（README 按语言互链：同语言 CHANGELOG 与 FEATURES，链接必须真实可达）',
     '语言一致自动检查未运行：点击「运行自动检查」',
@@ -634,23 +375,22 @@ t('L6-1 i18n：新增文案中英词条齐备；动态键编译；往返不变�
     'AI 校对未运行：点击「AI 校对」派发 Agent 核查，结果自动回执',
     '✓ 自动检查通过：语言一致与链接可达均无问题',
     '自动检查发现问题：详见整体审查对话框逐项红叉与明细',
-    '✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（错别字与行文规范），结果自动回执',
     '自动检查各语言内容语言一致性与全部文档内链接可达性（只读，不设门禁，结果即时呈现）',
     '生成 AI 校对提示词并复制：派发 Agent 核查默认语言文档错别字与行文规范，结果自动回执',
+  ]) {
+    assert.ok(!(gone in EN), `词条应随完结对话框清理：${gone.slice(0, 12)}…`);
+  }
+  const statics = [
+    'AI 校对', '已核查',
+    '✓ AI 校对提示词已复制：交给 AI Agent 逐文件核查默认语言文档（错别字与行文规范），结果自动回执',
   ];
-  for (const k of statics) assert.ok(typeof EN[k] === 'string' && EN[k], `静态词条缺失：${k}`);
-  const dynamics = [
-    '✕ 自动检查失败：◇',
-    '✕ AI 校对启动失败：◇',
-    '校对进行中：◇/◇',
-    'AI 校对中断：◇',
-    '通过 ◇/◇',
-    '不通过 ◇/◇：◇',
-    '死链 ◇ 个',
-  ];
-  for (const k of dynamics) assert.ok(k in EN_DYNAMIC, `动态词条缺失：${k}`);
+  for (const k of statics) assert.ok(typeof EN[k] === 'string' && EN[k], `校对在用静态词条缺失：${k}`);
+  for (const gone of ['✕ 自动检查失败：◇', '通过 ◇/◇', '不通过 ◇/◇：◇', '死链 ◇ 个']) {
+    assert.ok(!(gone in EN_DYNAMIC), `动态键应随完结对话框清理：${gone}`);
+  }
+  const dynamics = ['✕ AI 校对启动失败：◇', '校对进行中：◇/◇', 'AI 校对中断：◇'];
+  for (const k of dynamics) assert.ok(k in EN_DYNAMIC, `校对在用动态词条缺失：${k}`);
   I.setLang('en');
-  assert.equal(I.t('运行自动检查'), 'Run auto checks');
   assert.equal(I.t('AI 校对'), 'AI proofread');
   assert.equal(I.t('校对进行中：2/4'), 'Proofreading 2/4');
   I.setLang('zh');

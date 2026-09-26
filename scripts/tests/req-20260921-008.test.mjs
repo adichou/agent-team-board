@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // REQ-20260921-008 发布模块的文档编写页面优化 —— 分层测试。
 // L1 纯逻辑（publish-flow：四态状态机求值 evaluateDocsFlow / AI 总结提示词 buildDocSummaryPrompt；
-// REQ-20260921-012 起总结范围收窄为默认语言 4 文件、剩余语言初始「未翻译」，提交叠加整体完结门禁，本测试随之调整）；
+// REQ-20260921-012 起总结范围收窄为默认语言 4 文件、剩余语言初始「未翻译」；
+// BUG-20260926-002 起提交回归「全部已审核」门禁，本测试随之调整）；
 // L2 数据层（docs-summary-store 账本与独立锁；build-store 审核记录 recordDocsReview）；
 // L3 服务接口（docs-summary start/current、docs/review、docs/commit 门禁与 dev 前置、publish-plan docsFlow）；
 // L4 前端静态契约（renderDocsPane 三段布局 / 审查对话框双栏同步滚动 / 文案更名）；
@@ -129,11 +130,11 @@ t('L1-5 提交门禁求值：canCommit 仅 8/8 reviewed；missing 列出缺口�
   assert.equal(r.missing.find((m) => m.file === 'LICENSE.md').state, 'pending', 'LICENSE 缺口为待审核');
 
   r = flow.evaluateDocsFlow({ review: { files } }, readsOf(contents), {});
-  assert.equal(r.canFinalize, true, '9/9 reviewed 可整体审查完结');
-  assert.equal(r.canCommit, false, '整体审查未完结前不可提交（REQ-20260921-012 叠加门禁）');
+  assert.ok(!('canFinalize' in r), 'BUG-20260926-002：canFinalize 字段随完结阶段移除');
+  assert.equal(r.canCommit, true, '9/9 reviewed 即可提交（BUG-20260926-002 回归全审门禁，不叠加完结）');
   assert.deepEqual(r.missing, []);
   r = flow.evaluateDocsFlow({ review: { files, finalized: { at: '2026-09-21T02:00:00Z', langsKey: 'cn,en', files: {} } } }, readsOf(contents), {});
-  assert.equal(r.canCommit, true, '9/9 reviewed + 整体完结可提交');
+  assert.equal(r.canCommit, true, '9/9 reviewed + 历史完结快照被忽略仍可提交');
 });
 
 t('L1-6 AI 总结提示词：计划号/版本号/项目路径/八文档/逐文件进度回执 CLI 指令/写作约束', () => {
@@ -349,8 +350,8 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
     assert.equal(r.status, 400, '未全审核不可提交');
     assert.match(r.json.error || '', /已审核|未总结/, '带缺口说明');
 
-    // 全部审核 → 整体审查完结 → 提交成功（当前在 dev）。REQ-20260921-012：提交叠加完结门禁；
-    // 写盘顺序默认语言先行（README.md 先于 README_en.md），避免 mtime 基准变更误报
+    // 全部审核 → 提交成功（当前在 dev）。BUG-20260926-002：回归「全部已审核」门禁，
+    // 不再叠加完结确认；写盘顺序默认语言先行（README.md 先于 README_en.md），避免 mtime 基准变更误报
     const contents = {};
     contents['README.md'] = '# README\n[更新日志](CHANGELOG.md) [功能](FEATURES.md)\n';
     contents['README_en.md'] = '# README\n[Changelog](CHANGELOG_en.md) [Features](FEATURES_en.md)\n';
@@ -363,15 +364,8 @@ t('L3 服务接口：AI 总结流水线 / 审查 / 提交门禁与 dev 前置 / 
       assert.equal(r.status, 200, `review ${f.file}：${r.text}`);
     }
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canFinalize, true, '9/9 已审核可整体完结（含 LICENSE）');
-    assert.equal(r.json.docsFlow.canCommit, false, '完结前提交不放行');
-    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
-    assert.equal(r.status, 400, '整体审查未完结提交被阻止');
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `finalize：${r.text}`);
-    assert.ok(r.json.docsFlow.finalized && r.json.docsFlow.finalized.at, '完结标识与时间');
-    r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canCommit, true, '9/9 已审核 + 已完结');
+    assert.ok(!('canFinalize' in r.json.docsFlow), 'BUG-20260926-002：canFinalize 字段随完结阶段移除');
+    assert.equal(r.json.docsFlow.canCommit, true, '9/9 已审核（含 LICENSE）即解锁提交，无完结步');
 
     // 不在 dev：提交被阻止（不自动切分支）
     git(proj, ['switch', 'main']);
@@ -468,9 +462,9 @@ t('L4-1 renderDocsPane：副标题 + 六按钮 + 八文件行七态 chip + 门�
       },
     },
   })`);
-  // 副标题与六按钮（REQ-20260921-012 新增 AI 翻译 / 整体审查）
+  // 副标题与五步按钮（REQ-20260921-012 新增 AI 翻译；完结按钮随 BUG-20260926-002 去除）
   assert.match(html, /AI 总结/, '副标题阐述 AI 总结工作流');
-  for (const btn of ['data-pf-refresh', 'data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-finalize', 'data-pf-commit']) {
+  for (const btn of ['data-pf-refresh', 'data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-commit']) {
     assert.ok(html.includes(btn), `按钮之一 ${btn} 存在`);
   }
   // 八文件行 + 七态 chip（文字 + 图标，不只靠颜色）
@@ -480,10 +474,11 @@ t('L4-1 renderDocsPane：副标题 + 六按钮 + 八文件行七态 chip + 门�
   for (const label of ['未总结', '正在总结', '已总结待审核', '未翻译', '已翻译待审核', '已审核']) {
     assert.ok(html.includes(label), `状态文字 ${label}`);
   }
-  // 阶段条三阶段
-  for (const st of ['① 默认语言先行', '② AI 翻译与审查', '③ 整体审查完结']) {
+  // 阶段条两阶段（BUG-20260926-002）
+  for (const st of ['① 默认语言先行', '② AI 翻译与审查']) {
     assert.ok(html.includes(st), `阶段 ${st}`);
   }
+  assert.ok(!html.includes('③ 整体审查完结'), '完结阶段随 BUG-20260926-002 去除');
   // 门禁条：默认语言 / 剩余语言分组计数 + 缺口
   assert.match(html, /默认语言 0\/4/, '门禁条默认语言计数（本例默认语言未审）');
   assert.match(html, /剩余语言 1\/4/, '门禁条剩余语言计数');

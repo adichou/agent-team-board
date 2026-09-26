@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// REQ-20260921-012 发布模块文档编写三阶段流程 —— 分层测试。
+// REQ-20260921-012 发布模块文档编写阶段流程 —— 分层测试（BUG-20260926-002：整体审查
+// 完结阶段去除，完结相关断言随两阶段口径更新）。
 // L1 纯逻辑（publish-flow：七态状态机 / AI 总结范围收窄 / AI 翻译提示词 / 基准变更检测 /
-//    canTranslate / canFinalize / finalized / canCommit 叠加完结门禁）；
-// L2 数据层（docs-translate-store 账本与独立锁；build-store 完结记录；summary 账本收窄）；
-// L3 服务接口（translate start/current 门禁、docs/finalize、commit 完结前置、publish-plan
-//    阶段字段、全局简报 kind=translate）；
-// L4 前端静态契约（renderDocsPane 阶段条 + 六按钮 + 语言分组 + 门禁条；完结对核对话框；
-//    禁用态 title 缺口）；
+//    canTranslate / canCommit 全审门禁；canFinalize / finalized 字段随完结阶段移除）；
+// L2 数据层（docs-translate-store 账本与独立锁；build-store 完结记录接口移除；summary 账本收窄）；
+// L3 服务接口（translate start/current 门禁、commit 全审前置、publish-plan 阶段字段、
+//    全局简报 kind=translate；docs/finalize 路由移除）；
+// L4 前端静态契约（renderDocsPane 阶段条 + 五步按钮 + 语言分组 + 门禁条；完结对核对话框
+//    移除；禁用态 title 缺口）；
 // L5 任务模块与全局面板（AI 翻译页签、kind=translate 标签 / 筛选 / 前缀兜底 / 计数口径）；
 // L6 i18n（新增文案中英同步；旧门禁动态键随口径迁移）。
 // 用法：node scripts/tests/req-20260921-012.test.mjs
@@ -174,9 +175,7 @@ t('L1-5 基准变更检测（mtime）：默认语言文档更新 → 剩余语�
   assert.equal(r.files.find((f) => f.file === 'README_en.md').state, 'untranslated', '受影响翻译文档回退未翻译');
   assert.equal(r.files.find((f) => f.file === 'CHANGELOG_en.md').state, 'reviewed', '未受影响文件保持已审核');
   assert.deepEqual(r.baselineShift, ['README_en.md']);
-  assert.equal(r.canFinalize, false, '基准变更使整体完结失效');
-  assert.equal(r.finalized, null, '完结标识失效回退');
-  assert.equal(r.canCommit, false, '提交门禁不放行');
+  assert.equal(r.canCommit, false, '基准变更未重审前提交门禁不放行（文件回退未翻译）');
 
   // 相同 mtime / stat 缺失：不回退（弱信号，严格大于才命中）
   stats['README.md'] = 100;
@@ -187,7 +186,7 @@ t('L1-5 基准变更检测（mtime）：默认语言文档更新 → 剩余语�
   assert.equal(r.files.find((f) => f.file === 'README_en.md').state, 'reviewed', 'stat 缺失不回退');
 });
 
-t('L1-6 canFinalize / finalized / canCommit：全审方可完结；完结前提交不放行；scopeStale / 语言集变化失效', () => {
+t('L1-6 canCommit 全审门禁（BUG-20260926-002）：全审即放行，完结快照被忽略；scopeStale / 语言集变化 / 部分审核不放行', () => {
   const contents = {};
   for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.key}\n`;
   const files = {};
@@ -195,30 +194,27 @@ t('L1-6 canFinalize / finalized / canCommit：全审方可完结；完结前提�
   const finalized = { at: '2026-09-21T01:00:00Z', langsKey: 'cn,en', files: {} };
 
   let r = flow.evaluateDocsFlow({ review: { files } }, readsOf(contents), {});
-  assert.equal(r.canFinalize, true, '全部已审核可整体完结');
-  assert.equal(r.finalized, null, '未有人工完结动作');
-  assert.equal(r.canCommit, false, '整体审查未完结前提交不放行（叠加门禁）');
+  assert.ok(!('canFinalize' in r), 'canFinalize 字段随完结阶段移除');
+  assert.ok(!('finalized' in r), 'finalized 字段随完结阶段移除');
+  assert.equal(r.canCommit, true, '全部已审核即提交解锁（不叠加完结门禁）');
 
   r = flow.evaluateDocsFlow({ review: { files, finalized } }, readsOf(contents), {});
-  assert.deepEqual(r.finalized, { at: finalized.at }, '完结记录有效');
-  assert.equal(r.canCommit, true, '全审 + 已完结可提交');
+  assert.equal(r.canCommit, true, '全审 + 历史完结快照（被忽略）仍可提交');
 
-  // scopeStale：审核与完结一并失效
+  // scopeStale：审核整体失效
   r = flow.evaluateDocsFlow({ review: { files, finalized }, docs: { scopeStale: true } }, readsOf(contents), {});
-  assert.equal(r.finalized, null);
-  assert.equal(r.canFinalize, false);
   assert.equal(r.canCommit, false);
+  assert.equal(r.scopeStale, true);
 
-  // 语言集变化（新增语言）：文件集变化，完结失效
+  // 语言集变化（新增语言）：文件集变化，缺新语言文件不放行
   const fr = { ...contents, 'README_fr.md': '# fr', 'CHANGELOG_fr.md': '# fr', 'FEATURES_fr.md': '# fr', 'AGENTS_fr.md': '# fr' };
   r = flow.evaluateDocsFlow({ langs: 'cn,en,fr', review: { files, finalized } }, readsOf(fr), {});
   assert.equal(r.files.length, 13, '4 × 3 + LICENSE');
-  assert.equal(r.finalized, null, '语言集变化完结失效回退');
+  assert.equal(r.canCommit, false, '语言集新增文件未审不放行');
 
-  // 部分审核：不可完结
+  // 部分审核：不放行
   const partial = { 'README.md': files['README.md'] };
   r = flow.evaluateDocsFlow({ review: { files: partial, finalized } }, readsOf(contents), {});
-  assert.equal(r.canFinalize, false);
   assert.equal(r.canCommit, false);
 });
 
@@ -289,21 +285,8 @@ t('L2-2 markTranslateFile / finishTranslateRun / marks 聚合：进度流转、�
   assert.equal(brief.counts.total, 4);
 });
 
-t('L2-3 recordDocsFinalize：落 v.review.finalized（langsKey + 文件 hash），不动 v.docs', () => {
-  const { proj, dataDir } = mkData(tmpdir('atb-012-l23-'));
-  const commitA = git(proj, ['rev-parse', 'HEAD']);
-  const reqA = core.createItem(dataDir, { type: 'requirement', title: 'A', by: 'test' });
-  for (const s of ['accepted', 'in-progress', 'done']) core.setStatus(dataDir, reqA.id, s, { by: 'test' });
-  const v = buildStore.createVersion(dataDir, { items: [{ itemId: reqA.id, commit: commitA }] });
-
-  const contents = {};
-  for (const f of flow.publishDocFiles()) contents[f.file] = `# ${f.key}\n`;
-  const out = buildStore.recordDocsFinalize(dataDir, v.id, { langs: ['cn', 'en'], readFile: readsOf(contents) });
-  assert.equal(out.review.finalized.langsKey, 'cn,en');
-  assert.equal(Object.keys(out.review.finalized.files).length, 9, '完结快照覆盖语言集全文件（含 LICENSE）');
-  assert.equal(out.review.finalized.files['README_en.md'], sha256(contents['README_en.md']));
-  assert.ok(out.review.finalized.at);
-  assert.equal(out.docs, undefined, '不写 v.docs（提交记录语义隔离）');
+t('L2-3 recordDocsFinalize 随完结阶段移除（BUG-20260926-002）', () => {
+  assert.ok(!('recordDocsFinalize' in buildStore), '完结固化接口已删除；历史 v.review.finalized 由求值侧忽略');
 });
 
 t('L2-4 AI 总结账本随范围收窄：createSummaryRun 仅默认语言 4 文件', () => {
@@ -345,7 +328,7 @@ function req(port, method, pathname, body) {
   });
 }
 
-t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 / 全局简报', async () => {
+t('L3 服务接口：阶段门禁 / AI 翻译 / 提交前置（全审即放行） / 全局简报', async () => {
   const tmp = tmpdir('atb-012-serve-');
   const proj = mkRepo(path.join(tmp, 'proj'));
   fs.writeFileSync(path.join(proj, 'base.txt'), 'base');
@@ -392,8 +375,7 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     assert.equal(fe.restReviewedCount, 0);
     assert.ok(fe.restFiles.every((f) => f.state === 'untranslated'), '剩余语言初始未翻译');
     assert.equal(fe.canTranslate, false);
-    assert.equal(fe.canFinalize, false);
-    assert.equal(fe.finalized, null);
+    assert.ok(!('canFinalize' in fe), 'canFinalize 字段随完结阶段移除');
     assert.equal(r.json.translate, null, 'translate 视图字段存在（无 run 为 null）');
 
     // AI 总结启动：提示词与账本收窄为默认语言 4 文件
@@ -462,28 +444,19 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     row = (r.json.projects || []).find((p) => p.root === proj);
     assert.ok(!((row.tasks || []).some((x) => x.kind === 'translate')), '收尾后全局面板移出');
 
-    // LICENSE 未编写：整体完结被阻止（缺口含 LICENSE.md 未编写）
-    r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 400, 'LICENSE 未审不可完结');
+    // LICENSE 未编写：提交被阻止（缺口含 LICENSE.md 未编写）
+    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
+    assert.equal(r.status, 400, 'LICENSE 未审不可提交');
     assert.match(r.json.error || '', /LICENSE\.md（未编写）/);
     fs.writeFileSync(path.join(proj, 'LICENSE.md'), '# MIT License\n');
     r = await req(port, 'POST', `/api/build/docs/review${P}`, { id: vid, file: 'LICENSE.md' });
     assert.equal(r.status, 200, 'review LICENSE.md');
 
-    // 全部已审核：可完结；完结前提交被阻止
+    // 全部已审核：提交解锁（BUG-20260926-002：无完结步，docs/finalize 路由随移除）
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
-    assert.equal(r.json.docsFlow.canFinalize, true, '4×N + LICENSE 全部已审核可整体完结');
-    assert.equal(r.json.docsFlow.finalized, null);
-    assert.equal(r.json.docsFlow.canCommit, false, '完结前提交不放行');
-    r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
-    assert.equal(r.status, 400, '整体审查未完结不可提交');
-    assert.match(r.json.error || '', /整体审查|完结/);
-
-    // 整体审查完结：200 落记录；提交解锁
+    assert.equal(r.json.docsFlow.canCommit, true, '4×N + LICENSE 全部已审核即可提交');
     r = await req(port, 'POST', `/api/build/docs/finalize${P}`, { id: vid });
-    assert.equal(r.status, 200, `finalize：${r.text}`);
-    assert.ok(r.json.docsFlow.finalized && r.json.docsFlow.finalized.at, '完结标识与时间');
-    assert.equal(r.json.docsFlow.canCommit, true, '完结后提交解锁');
+    assert.equal(r.status, 404, 'finalize 路由已随完结阶段移除');
     r = await req(port, 'POST', `/api/build/docs/commit${P}`, { id: vid });
     assert.equal(r.status, 200, `commit：${r.text}`);
     assert.ok(/^[0-9a-f]{40}$/.test(r.json.commitHash));
@@ -496,8 +469,7 @@ t('L3 服务接口：三阶段门禁 / AI 翻译 / 整体完结 / 提交前置 /
     r = await req(port, 'GET', `/api/build/publish-plan${P}&id=${vid}`);
     assert.deepEqual(r.json.docsFlow.baselineShift, ['README_en.md'], '基准变更检测命中（不依赖界面保存按钮）');
     assert.equal(r.json.docsFlow.files.find((f) => f.file === 'README_en.md').state, 'untranslated', '受影响翻译文档回退未翻译');
-    assert.equal(r.json.docsFlow.finalized, null, '完结失效回退');
-    assert.equal(r.json.docsFlow.canCommit, false, '提交重新锁上');
+    assert.equal(r.json.docsFlow.canCommit, false, '提交重新锁上（回退文件未审）');
   } finally {
     server.kill('SIGTERM');
   }
@@ -551,11 +523,11 @@ function docsPaneFns(source) {
     extractFn(source, 'normalizeFlowEval'),
     extractFn(source, 'translateBtnHtml'),
     extractFn(source, 'commitBtnHtml'), extractFn(source, 'docsStageBar'),
-    extractFn(source, 'renderDocsPane'), extractFn(source, 'renderFinalizeModal'),
+    extractFn(source, 'renderDocsPane'), // renderFinalizeModal 随 BUG-20260926-002 删除
   ].join('\n');
 }
 
-t('L4-1 renderDocsPane：阶段条三阶段 + 六按钮 + 语言成组文件列表 + 剩余语言「未翻译」+ 门禁条分组计数', () => {
+t('L4-1 renderDocsPane：阶段条两阶段 + 五步按钮 + 语言成组文件列表 + 剩余语言「未翻译」+ 门禁条分组计数', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const html = vmRun(docsPaneFns(source), L4_CTX, `renderDocsPane({
     id: 'BLD-20260921-012',
@@ -573,19 +545,20 @@ t('L4-1 renderDocsPane：阶段条三阶段 + 六按钮 + 语言成组文件列�
           { key: 'AGENTS', lang: 'en', file: 'AGENTS_en.md', state: 'untranslated', isDefault: false },
         ],
         reviewedCount: 4, defaultReviewedCount: 4, restReviewedCount: 0,
-        canTranslate: true, translateMissing: [], canFinalize: false, finalized: null,
+        canTranslate: true, translateMissing: [],
         canCommit: false, baselineShift: [],
         missing: [{ file: 'README_en.md', state: 'translated' }, { file: 'CHANGELOG_en.md', state: 'translating' }, { file: 'FEATURES_en.md', state: 'untranslated' }, { file: 'AGENTS_en.md', state: 'untranslated' }],
       },
       summary: null, translate: { phase: 'running', counts: { translated: 1, total: 4 }, currentFile: 'CHANGELOG_en.md' },
       docs: { overall: 'none' },
     } } })`);
-  // 阶段条三阶段
-  for (const s of ['① 默认语言先行', '② AI 翻译与审查', '③ 整体审查完结']) {
+  // 阶段条两阶段（BUG-20260926-002：完结段随整体审查阶段去除）
+  for (const s of ['① 默认语言先行', '② AI 翻译与审查']) {
     assert.ok(html.includes(s), `阶段 ${s}`);
   }
-  // 六按钮
-  for (const btn of ['data-pf-refresh', 'data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-finalize', 'data-pf-commit']) {
+  assert.ok(!html.includes('③ 整体审查完结') && !html.includes('data-pf-finalize'), '完结段与入口随 BUG-20260926-002 移除');
+  // 五步按钮 + 辅助动作
+  for (const btn of ['data-pf-refresh', 'data-pf-summary', 'data-pf-translate', 'data-pf-review', 'data-pf-commit']) {
     assert.ok(html.includes(btn), `按钮 ${btn} 存在`);
   }
   // 语言分组（BUG-20260921-013 起由语言页签承载，替代平铺组头行）：每语言一个页签、
@@ -609,76 +582,37 @@ t('L4-1 renderDocsPane：阶段条三阶段 + 六按钮 + 语言成组文件列�
   assert.ok(!html.includes('文档编写 · 三阶段'), '标题文本已随 BUG-20260921-017 删除');
 });
 
-t('L4-2 禁用态：AI 翻译 / 整体审查 / 提交的 aria-disabled + title 缺口；整体审查完结前提交禁用', () => {
+t('L4-2 禁用态：AI 翻译 / 提交的 aria-disabled + title 缺口；未全审提交禁用、全审提交解锁（BUG-20260926-002 无完结步）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const fns = docsPaneFns(source);
-  // 默认语言未全审：AI 翻译禁用 + title 缺口（默认语言文件）
+  // AI 翻译未解锁：aria-disabled + title 缺口
   const html = vmRun(fns, L4_CTX, `renderDocsPane({ id: 'V', pf: { phase: 'ready', plan: {
     langs: ['cn', 'en'],
-    docsFlow: { files: [
-      { key: 'README', lang: 'cn', file: 'README.md', state: 'summarized', isDefault: true },
-      { key: 'README', lang: 'en', file: 'README_en.md', state: 'untranslated', isDefault: false },
-      { key: 'CHANGELOG', lang: 'cn', file: 'CHANGELOG.md', state: 'reviewed', isDefault: true },
-      { key: 'CHANGELOG', lang: 'en', file: 'CHANGELOG_en.md', state: 'untranslated', isDefault: false },
-      { key: 'FEATURES', lang: 'cn', file: 'FEATURES.md', state: 'reviewed', isDefault: true },
-      { key: 'FEATURES', lang: 'en', file: 'FEATURES_en.md', state: 'untranslated', isDefault: false },
-      { key: 'AGENTS', lang: 'cn', file: 'AGENTS.md', state: 'reviewed', isDefault: true },
-      { key: 'AGENTS', lang: 'en', file: 'AGENTS_en.md', state: 'untranslated', isDefault: false },
-    ], reviewedCount: 3, defaultReviewedCount: 3, restReviewedCount: 0, canTranslate: false,
-    translateMissing: [{ file: 'README.md', state: 'summarized' }], canFinalize: false, finalized: null,
-    canCommit: false, baselineShift: [], missing: [{ file: 'README.md', state: 'summarized' }] },
-    docs: {} } } })`);
+    docsFlow: { files: [], reviewedCount: 3, defaultReviewedCount: 3, restReviewedCount: 0,
+    canTranslate: false, canCommit: false,
+    translateMissing: [{ file: 'README.md', state: 'summarized' }],
+    baselineShift: [], missing: [] }, docs: {} } } })`);
   assert.match(html, /data-pf-translate[^>]*aria-disabled="true"/, 'AI 翻译未解锁禁用');
-  assert.match(html, /data-pf-translate[^>]*title="[^"]*README\.md/, 'AI 翻译 title 列默认语言缺口');
-  assert.match(html, /data-pf-finalize[^>]*aria-disabled="true"/, '整体审查未解锁禁用');
 
-  // 全部已审核未完结：整体审查可用、提交仍禁用（完结条件叠加）
+  // 未全审：提交禁用 + title 列缺口
+  assert.match(html, /data-pf-commit[^>]*aria-disabled="true"/, '未全审提交禁用');
+
+  // 全部已审核：提交解锁（完结叠加门禁已移除）
   const html2 = vmRun(fns, L4_CTX, `renderDocsPane({ id: 'V', pf: { phase: 'ready', plan: {
     langs: ['cn', 'en'],
-    docsFlow: { files: [
-      { key: 'README', lang: 'cn', file: 'README.md', state: 'reviewed', isDefault: true },
-      { key: 'README', lang: 'en', file: 'README_en.md', state: 'reviewed', isDefault: false },
-      { key: 'CHANGELOG', lang: 'cn', file: 'CHANGELOG.md', state: 'reviewed', isDefault: true },
-      { key: 'CHANGELOG', lang: 'en', file: 'CHANGELOG_en.md', state: 'reviewed', isDefault: false },
-      { key: 'FEATURES', lang: 'cn', file: 'FEATURES.md', state: 'reviewed', isDefault: true },
-      { key: 'FEATURES', lang: 'en', file: 'FEATURES_en.md', state: 'reviewed', isDefault: false },
-      { key: 'AGENTS', lang: 'cn', file: 'AGENTS.md', state: 'reviewed', isDefault: true },
-      { key: 'AGENTS', lang: 'en', file: 'AGENTS_en.md', state: 'reviewed', isDefault: false },
-    ], reviewedCount: 8, defaultReviewedCount: 4, restReviewedCount: 4, canTranslate: true,
-    translateMissing: [], canFinalize: true, finalized: null, canCommit: false,
+    docsFlow: { files: [], reviewedCount: 8, defaultReviewedCount: 4, restReviewedCount: 4, canTranslate: true,
+    translateMissing: [], canCommit: true,
     baselineShift: [], missing: [] }, docs: {} } } })`);
-  assert.doesNotMatch(html2, /data-pf-finalize[^>]*aria-disabled/, '全部已审核整体审查可用');
-  assert.match(html2, /data-pf-commit[^>]*aria-disabled="true"/, '完结前提交禁用');
-  assert.match(html2, /整体审查未完结/, '提交禁用原因说明完结缺口');
-  assert.match(html2, /门禁|完结/, '门禁条呈现完结状态');
-
-  // 已完结：提交可用 + 完结标识
-  const html3 = vmRun(fns, L4_CTX, `renderDocsPane({ id: 'V', pf: { phase: 'ready', plan: {
-    langs: ['cn', 'en'],
-    docsFlow: { files: [], reviewedCount: 8, defaultReviewedCount: 4, restReviewedCount: 4,
-    canTranslate: true, translateMissing: [], canFinalize: true,
-    finalized: { at: '2026-09-21T02:00:00.000Z' }, canCommit: true, baselineShift: [], missing: [] },
-    docs: {} } } })`);
-  assert.ok(!/data-pf-commit[^>]*aria-disabled/.test(html3), '完结后提交可用');
-  assert.match(html3, /整体审查已完结/, '完结终态标识');
+  assert.ok(!/data-pf-commit[^>]*aria-disabled/.test(html2), '全审提交解锁（无完结前置）');
+  assert.ok(!html2.includes('整体审查'), '完结相关文案不再出现');
 });
 
-t('L4-3 完结对核对话框：核对清单 + 确认完结 / 取消', () => {
+t('L4-3 完结对核对话框随整体审查阶段移除（BUG-20260926-002）', () => {
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
-  const fns = [extractFn(source, 'renderFinalizeModal'), extractFn(source, 'renderDocsPane')].join('\n');
-  const html = vmRun(fns, L4_CTX, `renderFinalizeModal({ id: 'BLD-20260921-012', pf: {
-    finalize: { open: true, busy: false },
-    plan: { langs: ['cn', 'en'], docsFlow: { files: [], defaultReviewedCount: 4, restReviewedCount: 4 } } } })`);
-  assert.match(html, /整体审查完结（BLD-20260921-012）/, '对话框标题');
-  // REQ-20260924-003：清单精简为 3 条实际检查项（门禁两条与静态两条不再渲染）
-  for (const item of ['各语言内容语义一致', 'README 按语言互链', '默认语言错别字与行文规范']) {
-    assert.ok(html.includes(item), `核对项 ${item}`);
+  assert.ok(!/function renderFinalizeModal\(/.test(source), 'renderFinalizeModal 函数已删除');
+  for (const gone of ['data-pf-finalize', '确认完结', '运行自动检查', 'bld-finalize']) {
+    assert.ok(!source.includes(gone), `完结对话框残留清理：${gone}`);
   }
-  for (const gone of ['默认语言文件已全部审核', '剩余语言文件已全部审核', 'LICENSE 文件与项目实际开源口径一致', '与本版发布范围一致']) {
-    assert.ok(!html.includes(gone), `精简后不应出现：${gone}`);
-  }
-  assert.ok(html.includes('data-pf-finalize-cancel') && html.includes('data-pf-finalize-confirm'), '取消 / 确认完结按钮');
-  assert.match(html, /完结前请逐项核对/, '完结提示');
 });
 
 t('L4-4 审查对话框七态沿用 + 轮询吸收翻译进度', () => {
@@ -719,16 +653,11 @@ t('L6-1 i18n：新增文案中英词条齐备；门禁动态键随口径迁移�
   const { EN, EN_DYNAMIC } = I._dict;
   const statics = [
     'AI 翻译', '未翻译', '正在翻译', '已翻译待审核', // '整体审查' 词条随 BUG-20260926-001 独立按钮移除清理
-    '① 默认语言先行', '② AI 翻译与审查', '③ 整体审查完结', '已完成', '进行中', '未解锁', '阶段：',
-    '确认完结', '取消',
-    '各语言内容语义一致（以已审核默认语言为基准）',
-    'README 按语言互链真实可达（同语言 CHANGELOG 与 FEATURES，链接必须真实可达）',
-    // REQ-20260924-003：随静态占位行移除的「文档内容与本版发布范围一致（…）」词条不再要求，
-    // 旧提示收敛为新提示
-    '提示：完结前请逐项核对；完结后范围变化会使完结失效回退。',
+    '① 默认语言先行', '② AI 翻译与审查', '已完成', '进行中', '未解锁', '阶段：',
+    '取消',
     'AI 翻译已完成：待翻译文件均进入「已翻译待审核」，等待人工审查。',
     '✓ AI 翻译提示词已复制：交给 AI Agent 以已审核默认语言文档为基准逐文件翻译，进度在本页与任务模块自动刷新',
-    '✓ 整体审查已完结：文档编写三阶段完成，「提交」已解锁',
+    // BUG-20260926-002：完结对核对话框与「整体审查已完结」词条随界面移除，不再要求
   ];
   for (const k of statics) assert.ok(typeof EN[k] === 'string' && EN[k], `静态词条缺失：${k}`);
   // BUG-20260921-017：副标题说明句随标题 / 副标题删除清理（词条不再渲染）
@@ -737,19 +666,23 @@ t('L6-1 i18n：新增文案中英词条齐备；门禁动态键随口径迁移�
     '翻译中 ◇/◇', 'AI 翻译进行中：◇/◇ · 当前：',
     'AI 翻译中断：◇——文件状态不悬挂「正在翻译」，可再次点击「AI 翻译」续跑（已翻译完成的文件保留待审核状态）。',
     '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 提交禁用，尚缺：◇。',
-    '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 整体审查未完结（确认完结后可提交）。',
-    '提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。',
+    '提交门禁：◇/◇ 已审核 —— 可提交到本地 dev 分支。',
     '默认语言文档已更新：◇ 个翻译文档需重新 AI 翻译（基准变更，相关审核已回退）',
     '文件（◇ · 默认语言 ◇/◇ 已审核 · 剩余语言 ◇/◇ 已审核）',
-    // BUG-20260921-013：组头两条随分组标题行删除清理（语言分组改由页签承载）；
-    // REQ-20260924-003：弹窗清单精简，「默认语言文件已全部审核（◇/◇）」「剩余语言文件
-    // 已全部审核（◇/◇）」两条随门禁行移除（已在 EN_DYNAMIC 清理），标题动态键保留
-    '整体审查完结（◇）',
     'AI 翻译未解锁：默认语言尚缺 ◇ 个文件审核（◇）',
-    '整体审查未解锁：尚缺 ◇ 个文件审核（◇）',
-    '整体审查已完结 ✓（时间 ◇；提交已解锁）',
+    // BUG-20260926-002：完结口径动态键（整体审查完结标题 / 终态标识 / 未解锁缺口 /
+    // 完结门禁）随完结阶段移除，改为移除断言（见下）
   ];
   for (const k of dynamics) assert.ok(k in EN_DYNAMIC, `动态词条缺失：${k}`);
+  for (const k of [
+    '提交门禁：默认语言 ◇/◇ · 剩余语言 ◇/◇ 已审核 —— 整体审查未完结（确认完结后可提交）。',
+    '提交门禁：◇/◇ 已审核 · 整体审查已完结 —— 可提交到本地 dev 分支。',
+    '整体审查完结（◇）',
+    '整体审查未解锁：尚缺 ◇ 个文件审核（◇）',
+    '整体审查已完结 ✓（时间 ◇；提交已解锁）',
+  ]) {
+    assert.ok(!(k in EN_DYNAMIC), `完结口径动态键应随 BUG-20260926-002 清理：${k.slice(0, 12)}…`);
+  }
   // REQ-20260924-003：弹窗门禁两条动态键随清单精简清理
   for (const k of ['默认语言文件已全部审核（◇/◇）', '剩余语言文件已全部审核（◇/◇）']) {
     assert.ok(!(k in EN_DYNAMIC), `弹窗门禁动态键应清理：${k.slice(0, 12)}…`);
