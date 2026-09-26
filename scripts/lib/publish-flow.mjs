@@ -771,53 +771,63 @@ export function publishScopeFingerprint(items, readFile, langs = DEFAULT_DOC_LAN
 
 // ---------- 五步门禁 ----------
 
+// REQ-20260926-002 五步重定义：选择条目与提交 → 挑选合并 → 文档与翻译 → 文档合并 → 发布。
+// 与旧流程（版本计划 / 关联条目与提交 / 文档编写 / 合并入 main / 正式发布）的关键差异：
+//   - 「关联条目与提交」并入第一步「选择条目与提交」（link 键移除，前端快照恢复归一 link → plan）；
+//   - 挑选合并不再要求先完成发布文档（先合入功能，再依据实际合入内容编写文档）；
+//   - 文档编写（含翻译与审核）在挑选合并完成后进行（旧计划已有文档提交记录的兼容解锁）；
+//   - 新增「文档合并」步：审核通过的文档单独提交、合入 main 并记录到版本计划（直接关联 BLD）；
+//   - 最后一步「发布」= 推送到远端 + 官网资料更新（两动作分别展示结果）。
 export const PUBLISH_STEPS = [
-  { key: 'plan', label: '版本计划' },
-  { key: 'link', label: '关联条目与提交' },
-  { key: 'docs', label: '文档编写' },
-  { key: 'merge', label: '合并入 main' },
-  { key: 'release', label: '正式发布' },
+  { key: 'plan', label: '选择条目与提交' },
+  { key: 'merge', label: '挑选合并' },
+  { key: 'docs', label: '文档与翻译' },
+  { key: 'docmerge', label: '文档合并' },
+  { key: 'release', label: '发布' },
 ];
 
 const DOCS_GATE_TEXT = {
-  none: '文档尚未编写提交（合并前置：所需文档已完成且最新变化已提交）',
+  none: '文档尚未编写提交（文档合并前置：所需文档已审核并最新提交）',
   uncommitted: '文档有未提交修改，不得合并（请先提交文档）',
   'needs-rewrite': '发布范围已变化，文档需重新核对 / 编写并重新提交',
 };
 
-// 五步导航门禁（只读求值）：plan 恒可用；link / docs 在 merging / 推送完成（正式发布，
-// BUG-20260920-005 基准后移：merged 未推送放开，供补关联后重新提交文档、重开合并）锁定；
-// merge 需「有条目 + 文档 overall=committed + 状态可合并（draft/failed/merged 未推送）」；
-// release 需 merged。locked 附 reason。
+// 五步导航门禁（只读求值，REQ-20260926-002 口径）：
+//   - plan 恒可用；merge 需有条目且状态可合并（draft/failed/merged，merging 防重复、推送后锁定）——
+//     不再要求文档已提交；
+//   - docs 在挑选合并完成后解锁（status=merged 或已有条目合入 / 旧计划已有文档提交记录——
+//     不要求重新执行已完成操作）；merging / 推送后锁定；
+//   - docmerge 需文档 overall=committed（已提交且基于当前范围）；merging / 推送后锁定；
+//   - release 需已合并（merged）且文档已合并入 main（v.docsMerge 落账）；已推送放开供查看结果。
 export function publishStepsState(v, docsEval) {
   const items = Array.isArray(v?.items) ? v.items : [];
   const status = v?.status || 'draft';
   const pushed = !!(v?.release && v?.release.pushedAt);
-  const lockedScope = status === 'merging' || pushed;
-  const canMerge = ['draft', 'failed', 'merged'].includes(status) && !pushed;
-  const mergeReason = () => {
-    if (status === 'merging') return '合并执行中';
-    if (pushed) return '已正式发布，不可再合并（如需调整请新建版本）';
-    if (!items.length) return '暂无关联条目：请先在「关联条目与提交」步骤关联';
-    if (docsEval && docsEval.overall !== 'committed') return DOCS_GATE_TEXT[docsEval.overall] || '文档未就绪';
-    return '';
-  };
-  const releaseReason = () => {
-    if (status !== 'merged') return '合并入 main 完成后才能正式发布';
-    return '';
-  };
+  const docsMerged = !!(v?.docsMerge && v?.docsMerge.commitHash);
+  const legacyDocs = !!(v?.docs && v?.docs.commitHash); // 旧流程（先文档后合并）已有提交记录
+  const anyMerged = status === 'merged' || items.some((x) => x.mergedAt);
+  const scopeLocked = () => (status === 'merging' ? '合并执行中' : '已正式发布，范围锁定（如需调整请新建版本）');
   return PUBLISH_STEPS.map((s) => {
     let locked = false;
     let reason = '';
-    if (s.key === 'link' || s.key === 'docs') {
-      locked = lockedScope;
-      reason = locked ? (status === 'merging' ? '合并执行中' : '已正式发布，范围锁定（如需调整请新建版本）') : '';
-    } else if (s.key === 'merge') {
-      locked = !canMerge || !items.length || !docsEval || docsEval.overall !== 'committed';
-      reason = mergeReason();
+    if (s.key === 'merge') {
+      if (status === 'merging') { locked = true; reason = '合并执行中'; }
+      else if (pushed) { locked = true; reason = '已正式发布，不可再合并（如需调整请新建版本）'; }
+      else if (!items.length) { locked = true; reason = '暂无关联条目：请先在「选择条目与提交」步骤关联'; }
+    } else if (s.key === 'docs') {
+      if (status === 'merging' || pushed) { locked = true; reason = scopeLocked(); }
+      else if (!anyMerged && !legacyDocs) { locked = true; reason = '挑选合并完成后，依据本版实际合入内容编写文档'; }
+    } else if (s.key === 'docmerge') {
+      if (status === 'merging' || pushed) { locked = true; reason = scopeLocked(); }
+      else if (!docsEval || docsEval.overall !== 'committed') {
+        locked = true;
+        reason = (docsEval && DOCS_GATE_TEXT[docsEval.overall]) || '文档尚未编写提交';
+      }
     } else if (s.key === 'release') {
-      locked = status !== 'merged';
-      reason = releaseReason();
+      if (!pushed) {
+        if (status !== 'merged') { locked = true; reason = '挑选合并完成后才能发布'; }
+        else if (!docsMerged) { locked = true; reason = '发布文档合并入 main 完成后才能发布（先完成「文档合并」）'; }
+      }
     }
     return { ...s, locked, reason };
   });
