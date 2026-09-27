@@ -85,6 +85,9 @@ const CLAIM_LOCK_STALE_MS = 24 * 60 * 60 * 1000;
 // 类，保留名不可能进 customDocs）与不在清单内的文件不豁免。文件名大小写敏感（customDocsOf
 // 归一为大写 KEY，publishDocFiles 恒输出大写文件名；小写变体不匹配不豁免，与既有 README
 // 口径一致）。
+// BUG-20260927-001：豁免发布文档正文引用的仓库内本地图片与文档同为纯资源——写入侧无锁
+// 可改（realpathAncestralHitsPluginRoot 内按「被引用图片集合」判定）、提交侧可随文档一并
+// 入库（pathspecIsReferencedRootDocImage），集合按文档正文静态解析，不入源码 / 看板目录。
 let exemptRootDocsCache = null;
 function exemptRootDocNames() {
   if (exemptRootDocsCache) return exemptRootDocsCache;
@@ -110,7 +113,10 @@ function isExemptRootDocName(name) {
   return typeof name === 'string' && exemptRootDocNames().has(name);
 }
 
-function realpathAncestralHitsPluginRoot(absPath) {
+// 归一路径为「插件根内相对 posix 路径」：目标已存在直接 realpath；目标不存在（新建文件 /
+// 写新图）取最近存在祖先 realpath 再拼接剩余段（BUG-20260908-001 同口径，BUG-20260927-001
+// 抽取为写入侧与提交侧共用实现）。返回 null = 插件根之外或解析失败；返回 '' = 目标即插件根。
+function pluginRootRelPosixOf(absPath) {
   let abs = path.resolve(absPath);
   const suffix = [];
   for (;;) {
@@ -118,47 +124,112 @@ function realpathAncestralHitsPluginRoot(absPath) {
       try {
         const real = fs.realpathSync(abs);
         const rel = path.relative(PLUGIN_ROOT, real);
-        if (rel.startsWith('..') || path.isAbsolute(rel)) return false; // 插件根之外
-        if (rel === '') {
-          // 祖先即插件根：剩余段决定落点——docs/ 与 agent-team-board/ 整目录豁免；
-          // 发布文档豁免精确到第一层单文件（suffix 恰一段且在豁免清单内）。
-          if (suffix.length === 0) return false;
-          if (suffix[0] === 'docs' || suffix[0] === 'agent-team-board') return false;
-          return !(suffix.length === 1 && isExemptRootDocName(suffix[0]));
-        }
-        return !isExemptRootDocName(rel) // 插件根第一层豁免发布文档（REQ-20260918-002 / REQ-20260923-001）
-          && !rel.startsWith(`docs${path.sep}`) && !rel.startsWith(`agent-team-board${path.sep}`); // 看板数据目录豁免（docs/ 历史前缀 + agent-team-board/ 板根，REQ-20260916-007）
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return null; // 插件根之外
+        const relPosix = rel.split(path.sep).join('/');
+        if (suffix.length === 0) return relPosix; // 目标本身存在
+        // 祖先即插件根：剩余段即相对路径；祖先在根内：祖先相对路径 + 剩余段
+        return relPosix === '' ? suffix.join('/') : `${relPosix}/${suffix.join('/')}`;
       } catch {
-        return false;
+        return null;
       }
     }
     const parent = path.dirname(abs);
-    if (parent === abs) return false;
+    if (parent === abs) return null;
     suffix.unshift(path.basename(abs));
     abs = parent;
   }
 }
 
-// REQ-20260918-002 / REQ-20260923-001：判定路径归一（realpath，兼容软链别名与目标不存在时
-// 的祖先回溯）后是否恰好是插件根第一层的豁免发布文档——提交豁免的范围口径，精确到单文件。
-function isPluginRootExemptDoc(absPath) {
-  let abs = path.resolve(absPath);
-  const suffix = [];
-  for (;;) {
-    if (fs.existsSync(abs)) {
-      try {
-        const real = fs.realpathSync(abs);
-        if (suffix.length === 0) return isExemptRootDocName(path.relative(PLUGIN_ROOT, real));
-        return real === PLUGIN_ROOT && suffix.length === 1 && isExemptRootDocName(suffix[0]);
-      } catch {
-        return false;
-      }
-    }
-    const parent = path.dirname(abs);
-    if (parent === abs) return false;
-    suffix.unshift(path.basename(abs));
-    abs = parent;
+function realpathAncestralHitsPluginRoot(absPath) {
+  const relPosix = pluginRootRelPosixOf(absPath);
+  if (!relPosix) return false; // 插件根之外 / 解析失败 / 祖先即插件根（剩余段见下）
+  // 看板数据目录豁免（docs/ 历史前缀 + agent-team-board/ 板根，REQ-20260916-007）
+  if (relPosix === 'docs' || relPosix.startsWith('docs/')
+    || relPosix === 'agent-team-board' || relPosix.startsWith('agent-team-board/')) return false;
+  // 插件根第一层豁免发布文档（REQ-20260918-002 / REQ-20260923-001），豁免精确到单文件
+  if (relPosix.split('/').length === 1 && isExemptRootDocName(relPosix)) return false;
+  // BUG-20260927-001：发布文档正文引用的本地图片与文档同为纯资源，无锁写入放行
+  return !isReferencedRootDocImageRel(relPosix);
+}
+
+// ---------- BUG-20260927-001：发布文档引用的本地图片 ----------
+// 豁免发布文档正文可引用仓库内本地图片作插图，但既有豁免口径精确到文档单文件，图片既不能
+// 随文档提交（pathspec 混入图片整条拒绝）也不能无锁写入。本节把「被引用图片」解析为插件根
+// 内相对 posix 路径集合，提交侧（pathspec 逐个判定）与写入侧（无锁改写豁免）共用。仅认相对
+// 引用（scheme://、协议相对 //、绝对路径、锚点一律不算），解析须落在插件根内、扩展名在图片
+// 白名单内，且不入受保护源码目录与看板目录 agent-team-board/——源码 / 应用数据不能借
+// 「文档引用」进入图片通道。
+
+const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|svg|avif|ico|bmp|apng)$/i;
+
+// 提取文档正文里的本地引用候选：Markdown 图片 ![alt](src "title")（src 可 <尖括号> 包裹）
+// 与 HTML <img src=…>。
+function localImageRefsOf(text) {
+  const refs = [];
+  const srcOf = (raw) => {
+    const s = String(raw || '').trim();
+    return s.startsWith('<') && s.endsWith('>') ? s.slice(1, -1) : s;
+  };
+  for (const m of String(text || '').matchAll(/!\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g)) {
+    refs.push(srcOf(m[1]));
   }
+  for (const m of String(text || '').matchAll(/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
+    refs.push(m[1] || m[2] || m[3]);
+  }
+  return refs.filter(Boolean);
+}
+
+// 引用 → 插件根内相对 posix 路径；不是本地图片引用（带 scheme、//、/、# 开头、逃逸插件根、
+// 非图片扩展名、落点在受保护源码目录 / 看板目录）返回 null。
+function localImageRefRel(rawRef) {
+  let ref = String(rawRef || '').trim();
+  if (!ref) return null;
+  try { ref = decodeURIComponent(ref); } catch { /* 含非法 % 序列按原文判定 */ }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(ref)) return null; // https: / data: / mailto: 等带 scheme
+  if (ref.startsWith('//') || ref.startsWith('/') || ref.startsWith('#')) return null;
+  const relPosix = path.relative(PLUGIN_ROOT, path.resolve(PLUGIN_ROOT, ref)).split(path.sep).join('/');
+  if (!relPosix || relPosix === '..' || relPosix.startsWith('../')) return null; // 逃逸插件根
+  if (!IMAGE_EXT_RE.test(relPosix)) return null; // 仅图片扩展名
+  const top = relPosix.split('/')[0];
+  if (PROTECTED_DIRS.includes(top) || top === 'agent-team-board') return null; // 源码 / 看板数据不入集合
+  return relPosix;
+}
+
+let referencedImagesCache = null;
+function referencedImageRelSet() {
+  if (referencedImagesCache) return referencedImagesCache;
+  const rels = new Set();
+  for (const name of exemptRootDocNames()) {
+    let text = '';
+    try {
+      if (!fs.statSync(path.join(PLUGIN_ROOT, name)).isFile()) continue;
+      text = fs.readFileSync(path.join(PLUGIN_ROOT, name), 'utf8');
+    } catch { continue; } // 单个文档缺失 / 损坏不影响其余
+    for (const raw of localImageRefsOf(text)) {
+      const rel = localImageRefRel(raw);
+      if (rel) rels.add(rel);
+    }
+  }
+  referencedImagesCache = rels;
+  return rels;
+}
+
+function isReferencedRootDocImageRel(relPosix) {
+  return referencedImageRelSet().has(String(relPosix || ''));
+}
+
+// 写入侧（realpathAncestralHitsPluginRoot）与提交侧 pathspec 判定共用：路径归一
+// （含目标不存在时的祖先回溯）后是否被引用图片集合成员。
+function isReferencedRootDocImage(absPath) {
+  const relPosix = pluginRootRelPosixOf(absPath);
+  return relPosix !== null && isReferencedRootDocImageRel(relPosix);
+}
+
+// REQ-20260918-002 / REQ-20260923-001：判定路径归一后是否恰好是插件根第一层的豁免发布
+// 文档——提交豁免的范围口径，精确到单文件。
+function isPluginRootExemptDoc(absPath) {
+  const relPosix = pluginRootRelPosixOf(absPath);
+  return relPosix !== null && relPosix.split('/').length === 1 && isExemptRootDocName(relPosix);
 }
 
 // 从 cwd 向上找看板板根（REQ-20260916-007 新布局），检查 runtime/.locks/ 下是否有未过期认领锁
@@ -655,11 +726,24 @@ function pathspecInItemScope(spec, baseDir, boardRoot) {
 // REQ-20260918-002 / REQ-20260923-001：pathspec 归一后是否恰好是插件根第一层的豁免发布
 // 文档（提交豁免范围）。静态口径与 pathspecInItemScope 同源（magic 前缀 / glob 元字符
 // 不展开直接拦）。
-function pathspecIsExemptRootDoc(spec, baseDir) {
+// BUG-20260927-001：扩展一条「被引用本地图片」判定——pathspec 归一后是豁免发布文档正文
+// 引用的本地图片（插件根内相对路径、图片扩展名、不入源码 / 看板目录）同样在提交豁免范围，
+// 文档与其插图可一并入库，文档已提交时图片亦可配套授权提交。两种判定共用静态预检。
+function pathspecPassesStaticChecks(spec) {
   const s = String(spec);
-  if (!s || s === '-' || s.startsWith(':') || s.startsWith('^')) return false;
-  if (/[*?[\]]/.test(s)) return false;
-  return isPluginRootExemptDoc(path.resolve(baseDir, s));
+  return Boolean(s) && s !== '-' && !s.startsWith(':') && !s.startsWith('^') && !/[*?[\]]/.test(s);
+}
+
+function pathspecIsExemptRootDoc(spec, baseDir) {
+  if (!pathspecPassesStaticChecks(spec)) return false;
+  return isPluginRootExemptDoc(path.resolve(baseDir, spec));
+}
+
+// BUG-20260927-001：pathspec 归一后是否为发布文档引用的本地图片（与 pathspecIsExemptRootDoc
+// 同一静态口径：magic 前缀 / glob 元字符不展开直接拦）。
+function pathspecIsReferencedRootDocImage(spec, baseDir) {
+  if (!pathspecPassesStaticChecks(spec)) return false;
+  return isReferencedRootDocImage(path.resolve(baseDir, spec));
 }
 
 // 环境变量赋值前缀 token（VAR=…）
@@ -806,8 +890,9 @@ const COMMIT_SCOPE_HINT =
   '看板项目内 Agent 提交通道：①AI 开发到待测试由系统自动提交（run receipt 核验通过后执行，不经 Agent）；' +
   '②文档讨论轮可提交条目目录用户数据（agent-team-board/data/{requirements,bugs}/<条目ID>/ 内，' +
   '命令带 pathspec 且提交主题含条目编号 REQ-/BUG-）；③插件根第一层发布文档可提交（README/CHANGELOG/' +
-  'FEATURES/AGENTS 与 v.customDocs 清单内自定义文档，pathspec 全为豁免文档，主题须符合「类型: 描述 单号」' +
-  '提交规范，REQ-20260918-002 / REQ-20260923-001）；④其余场景请人工在终端执行 git commit。' +
+  'FEATURES/AGENTS 与 v.customDocs 清单内自定义文档，及发布文档正文引用的本地图片——BUG-20260927-001，' +
+  'pathspec 全为豁免文档或被引用图片，主题须符合「类型: 描述 单号」提交规范，REQ-20260918-002 / ' +
+  'REQ-20260923-001）；④其余场景请人工在终端执行 git commit。' +
   '源码、runtime 应用数据、status.json、无 pathspec 裸提交与 --amend 等不可静态核验形态不在此列。';
 
 // 从 cwd 向上找看板板根（agent-team-board/，REQ-20260916-007 新布局）；无看板 = 非看板项目，不管辖
@@ -977,10 +1062,12 @@ if (mode === 'bash') {
             && args.messages.length > 0
             && ITEM_ID_RE.test(args.messages.join('\n'))
             && args.pathspecs.every((spec) => pathspecInItemScope(spec, base, boardDir));
-          // 通道 ②（REQ-20260918-002 → REQ-20260923-001 扩展）：pathspec 全为插件根第一层
-          // 豁免发布文档（README/CHANGELOG/FEATURES/AGENTS + v.customDocs 清单内自定义文档）+
-          // 主题行符合提交规范「类型: 描述 单号」（复用 lib/commit-store.mjs validateCommitSubject：
-          // 五类前缀 / 描述非空 ≤120 字 / 含单号——单号取主题行首个条目编号）。
+          // 通道 ②（REQ-20260918-002 → REQ-20260923-001 扩展 → BUG-20260927-001 图片随文档）：
+          // pathspec 全为插件根第一层豁免发布文档（README/CHANGELOG/FEATURES/AGENTS +
+          // v.customDocs 清单内自定义文档）或其正文引用的本地图片 + 主题行符合提交规范
+          // 「类型: 描述 单号」（复用 lib/commit-store.mjs validateCommitSubject：五类前缀 /
+          // 描述非空 ≤120 字 / 含单号——单号取主题行首个条目编号）。图片落点限「被引用图片
+          // 集合」（按文档正文静态解析），源码 / 看板数据不入该集合。
           // pathspec 限定提交（git --only 语义）只提交指定路径的改动，预先 git add 的
           // 其他文件不进入该提交，无源码夹带通道（E1 端到端核验）。
           const subjectLine = args.messages.length > 0 ? args.messages.join('\n').split('\n')[0].trim() : '';
@@ -989,7 +1076,8 @@ if (mode === 'bash') {
             && args.pathspecs.length > 0
             && subjectId !== null
             && validateCommitSubject(subjectLine, subjectId[0]) === null
-            && args.pathspecs.every((spec) => pathspecIsExemptRootDoc(spec, base));
+            && args.pathspecs.every((spec) => pathspecIsExemptRootDoc(spec, base)
+              || pathspecIsReferencedRootDocImage(spec, base)); // BUG-20260927-001：文档引用的本地图片
           const allowed = itemDataOk || docCommitOk;
           if (!allowed) {
             deny(`流程外 git commit 已拦截（命令片段：${seg.trim()}）。${COMMIT_SCOPE_HINT}`);
