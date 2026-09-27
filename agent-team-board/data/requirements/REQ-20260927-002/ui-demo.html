@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260927-002 界面演示 · 选择条目和提交（自动关联全部提交）</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2434; --muted: #66748c; --border: #e2e7ef;
+    --primary: #2563eb; --warn: #dc2626; --ok-bg: #ecfdf5; --ok-text: #047857;
+    --info-bg: #eff6ff; --info-text: #1d4ed8; --chip: #eef2ff; --chip-text: #4338ca;
+    --fallback-bg: #fffbeb; --fallback-text: #b45309;
+    --shadow: 0 1px 3px rgba(20,30,50,.08), 0 4px 14px rgba(20,30,50,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+      --primary: #3b82f6; --warn: #f87171; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+      --info-bg: #0b1d3a; --info-text: #93c5fd; --chip: #1e1b4b; --chip-text: #a5b4fc;
+      --fallback-bg: #451a03; --fallback-text: #fcd34d;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --panel: #161d29; --text: #e5eaf3; --muted: #8b98ad; --border: #263041;
+    --primary: #3b82f6; --warn: #f87171; --ok-bg: #052e1c; --ok-text: #6ee7b7;
+    --info-bg: #0b1d3a; --info-text: #93c5fd; --chip: #1e1b4b; --chip-text: #a5b4fc;
+    --fallback-bg: #451a03; --fallback-text: #fcd34d;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  header.page { padding: 18px 20px 6px; }
+  header.page h1 { font-size: 17px; margin: 0 0 4px; }
+  header.page p { margin: 0; color: var(--muted); font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; padding: 12px 20px; align-items: flex-end; }
+  .ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+  .ctrl-group > .lab { font-size: 12px; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 6px 12px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; padding: 6px 0; }
+  .stage { padding: 6px 20px 10px; display: flex; justify-content: center; }
+  /* ---------- 侧滑面板（对应真实 rel-panel） ---------- */
+  .rel-panel { width: 680px; max-width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+  .rel-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .rel-panel-head h3 { margin: 0; font-size: 15px; }
+  .side-panel-scope { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .icon-btn { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 8px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
+  .rel-panel-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; max-height: 62vh; overflow: auto; }
+  .rel-panel-foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .field input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 14px; background: var(--bg); color: var(--text); }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .bld-pick-bar { display: flex; align-items: center; gap: 8px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .rel-form-err { margin: 0; padding: 8px 10px; border: 1px solid var(--warn); border-radius: 8px; color: var(--warn); font-size: 13px; display: flex; align-items: center; gap: 10px; }
+  /* ---------- 候选行 ---------- */
+  .bld-cand-list { display: flex; flex-direction: column; gap: 8px; }
+  .bld-cand { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg); }
+  .bld-cand.off { opacity: .55; }
+  .bld-cand-row { display: flex; align-items: center; gap: 10px; }
+  .bld-cand-row input[type="checkbox"] { width: 16px; height: 16px; flex: none; }
+  .bld-cand-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bld-cand-title code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--info-text); }
+  select.bld-commit-sel { border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; background: var(--panel); color: var(--text); font-size: 13px; }
+  /* 关联提交只读列表（新行为） */
+  .bld-auto-commits { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; }
+  .bld-auto-head { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .bld-commit-item { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 13px; }
+  .bld-commit-item code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--info-text); flex: none; }
+  .bld-commit-item .subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { flex: none; font-size: 11px; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .badge.ledger { background: var(--ok-bg); color: var(--ok-text); }
+  .badge.attrib { background: var(--chip); color: var(--chip-text); }
+  .badge.fallback { background: var(--fallback-bg); color: var(--fallback-text); }
+  .bld-broad { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .bld-broad-toggle { border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; padding: 2px 0; text-decoration: underline dotted; }
+  .bld-broad-list { margin: 4px 0 0; padding-left: 16px; }
+  .old-hint { padding: 8px 10px; border-radius: 8px; background: var(--fallback-bg); color: var(--fallback-text); font-size: 12px; }
+  .empty-tip { color: var(--muted); margin: 0; }
+  /* ---------- 结果回显 ---------- */
+  .result { margin: 0 20px 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 12px 14px; font-size: 13px; }
+  .result pre { margin: 8px 0 0; padding: 10px; background: var(--bg); border-radius: 8px; overflow: auto; font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  footer.note { padding: 0 20px 24px; color: var(--muted); font-size: 12px; }
+  footer.note code { font-family: ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>REQ-20260927-002 界面演示 —「选择条目和提交」：勾选条目即整组自动关联其全部应属提交</h1>
+  <p>对应需求 README「界面展示」节：界面布局 / 交互行为 / 状态反馈 / 旧行为对照。面板结构对应发布模块「新建版本计划」与「添加条目」两面板（共用第一步）。</p>
+</header>
+
+<div class="controls">
+  <div class="ctrl-group">
+    <span class="lab">数据状态（状态反馈）</span>
+    <div class="seg" id="segStatus">
+      <button data-st="ok" class="on">正常</button>
+      <button data-st="loading">加载中</button>
+      <button data-st="loaderror">加载失败</button>
+      <button data-st="empty">空·无完成条目</button>
+      <button data-st="occupied">空·均被占用</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <span class="lab">面板（两面板共用结构）</span>
+    <div class="seg" id="segPanel">
+      <button data-pn="create" class="on">新建版本</button>
+      <button data-pn="add">添加条目</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <span class="lab">行为对照</span>
+    <div class="seg" id="segMode">
+      <button data-md="new" class="on">新行为·整组自动关联</button>
+      <button data-md="old">旧行为·单选下拉</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <span class="lab">其他</span>
+    <div style="display:flex; gap:14px; align-items:center;">
+      <label class="chk"><input type="checkbox" id="failNext"> 下次保存失败（演示校验报错）</label>
+      <button class="btn" id="themeBtn">主题：自动</button>
+      <button class="btn" id="reopenBtn">打开面板</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage" id="stage"></div>
+<div class="result" id="result" hidden></div>
+
+<footer class="note">
+  <p>数据说明：<code>REQ-20260926-002</code>、<code>REQ-20260927-001</code> 及其提交（短 hash 与主题）为真实回归样本；标「（示意）」的条目单号、hash 与宽口径命中为演示用示意数据。徽标「自动·账本 / 自动·归属」按需求 README 回归样本口径标注；「回退·宽口径」为自动关联集为空时的兜底口径。保存 payload 中 commits 应为 40 位完整 hash，演示仅展示短 hash。</p>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 演示数据（真实回归样本 + 标注的示意数据） ---------- */
+  var ITEMS = [
+    {
+      id: 'REQ-20260926-002', demo: false,
+      title: '发布模块简化为条目与提交组版、挑选合并、文档翻译合并及官网更新流程',
+      auto: [
+        { h: '2f4e595', s: 'doc: 最后一步明确为发布（推送远端+官网资料更新）', src: 'attrib' },
+        { h: '1b9c0ed', s: 'doc: 发布模块简化为条目与提交组版、挑选合并、文档翻译合并及官网更新流程', src: 'ledger' },
+        { h: '7c36018', s: 'fix: 人工确认补交', src: 'ledger' },
+        { h: '7c29768', s: 'feat: 发布模块五步流程重定义（挑选合并去文档门禁、新增文档合并步、发布两动作）', src: 'attrib' }
+      ],
+      broad: [{ h: '12ab34d', s: 'chore: 例行同步与引用（含 REQ-20260926-002 引用）' }],
+      oldOrder: ['1b9c0ed', '7c36018', '2f4e595', '7c29768']
+    },
+    {
+      id: 'REQ-20260927-001', demo: false,
+      title: '只需需求或 bug 创建时同步提交到 git。',
+      auto: [
+        { h: 'd8dcd5b', s: 'doc: 只需需求或 bug 创建时同步提交到 git。', src: 'attrib' },
+        { h: 'bdb5c8b', s: 'test: 只需需求或 bug 创建时同步提交到 git。', src: 'attrib' },
+        { h: '7078383', s: 'feat: 只需需求或 bug 创建时同步提交到 git。', src: 'attrib' }
+      ],
+      broad: [],
+      oldOrder: ['d8dcd5b', 'bdb5c8b', '7078383']
+    },
+    {
+      id: 'REQ-20260900-000（示意）', demo: true,
+      title: '示例条目：自动关联集为空，回退宽口径命中中最新的 1 个提交',
+      auto: [],
+      broad: [
+        { h: 'feed001', s: 'chore: 调整构建脚本（引用 REQ-20260900-000）' },
+        { h: 'cafe002', s: 'fix: 修复清单渲染并顺带提及 REQ-20260900-000' }
+      ],
+      oldOrder: ['feed001', 'cafe002']
+    },
+    {
+      id: 'REQ-20260900-001（示意）', demo: true,
+      title: '示例条目：开发尚未提交',
+      auto: [], broad: [], oldOrder: []
+    }
+  ];
+  var SRC_LABEL = { ledger: '自动·账本', attrib: '自动·归属' };
+  var FALLBACK_LABEL = '回退·宽口径';
+
+  /* ---------- 状态 ---------- */
+  var st = {
+    status: 'ok',            // ok | loading | loaderror | empty | occupied
+    panel: 'create',         // create | add
+    mode: 'new',             // new | old
+    busy: false,
+    failNext: false,
+    picked: {},              // itemId -> true
+    broadOpen: {},           // itemId -> true（宽口径折叠行展开）
+    oldSel: {},              // itemId -> hash（旧行为下拉选中值）
+    panelOpen: true,
+    name: '', version: '0.1.1'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var stage = $('stage'), result = $('result');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function pickedIds() { return ITEMS.filter(function (it) { return st.picked[it.id]; }); }
+
+  /* 新行为下某条目实际关联的提交（自动关联集，空则回退宽口径最新 1 个） */
+  function assocOf(it) {
+    if (it.auto.length) return it.auto.map(function (c) { return { h: c.h, s: c.s, src: c.src }; });
+    if (it.broad.length) {
+      var last = it.broad[it.broad.length - 1];
+      return [{ h: last.h, s: last.s, src: 'fallback' }];
+    }
+    return [];
+  }
+  function broadRest(it) { return it.auto.length ? it.broad : it.broad.slice(0, it.broad.length - 1); }
+  function canPick(it) { return it.auto.length > 0 || it.broad.length > 0; }
+  function oldCommitsOf(it) {
+    var byH = {};
+    it.auto.concat(it.broad).forEach(function (c) { byH[c.h] = c; });
+    return it.oldOrder.map(function (h) { return byH[h]; }).filter(Boolean);
+  }
+
+  /* ---------- 渲染 ---------- */
+  function render() {
+    if (!st.panelOpen) { stage.innerHTML = '<p class="muted">面板已关闭（演示：点上方「打开面板」重新打开）。</p>'; syncControls(); return; }
+    var isCreate = st.panel === 'create';
+    var title = isCreate ? '新建版本计划' : '添加条目到 BLD-20260923-001（演示）';
+    var scope = isCreate
+      ? '从已完成（done）且未被其他版本占用的条目中勾选；勾选即整组自动关联该条目全部应属提交（只读，旧→新）'
+      : '向既有版本计划追加条目，勾选即整组自动关联该条目全部应属提交（只读，旧→新）';
+    var footLabel = (isCreate ? '创建版本计划' : '添加条目') + (st.busy ? '…' : '');
+
+    var body = '';
+    if (isCreate) {
+      body += '<label class="field">版本名称（留空自动命名「版本 YYYYMMDD-HHMM」）<input id="fName" value="' + esc(st.name) + '" placeholder="v1.0 / 2026-09 冲刺"></label>';
+      body += '<label class="field">版本号（x.y.z 语义化格式，留空自动分配）<input id="fVer" value="' + esc(st.version) + '" placeholder="0.1.0（自动递增，可修改）"></label>';
+    }
+
+    if (st.status === 'loading') {
+      body += '<p class="empty-tip">正在读取条目…</p>';
+    } else if (st.status === 'loaderror') {
+      body += '<p class="rel-form-err" role="alert">候选加载失败：服务暂不可用（演示）<button class="btn small" id="retryBtn">重试</button></p>';
+    } else if (st.status === 'empty') {
+      body += '<p class="empty-tip">暂无可纳入版本的条目</p>';
+    } else if (st.status === 'occupied') {
+      body += '<p class="empty-tip">已完成的条目均已纳入版本计划：可从「计划中 / 失败」版本移出条目，或删除版本后重新纳入</p>';
+    } else {
+      var picked = pickedIds();
+      var m = 0;
+      if (st.mode === 'new') picked.forEach(function (it) { m += assocOf(it).length; });
+      var cnt = st.mode === 'new'
+        ? '已选 ' + picked.length + ' 项 · ' + m + ' 个提交'
+        : '已选 ' + picked.length + ' 项';
+      body += '<div class="bld-pick-bar">'
+        + '<button class="btn" id="pickAll">全选</button>'
+        + '<button class="btn" id="pickNone">全不选</button>'
+        + '<span class="muted small" id="pickCount">' + cnt + '</span>'
+        + '</div>';
+      if (st.mode === 'old') {
+        body += '<p class="old-hint">旧行为对照（缺陷现象）：条目行内为单选下拉，默认选中 <code>commits[0]</code>——索引按账本 run 升序在前、git 历史追加在后，实际取到最早的收口提交，feat 主提交（如 7c29768）不会随挑选合并。</p>';
+      }
+      body += '<div class="bld-cand-list">' + ITEMS.map(function (it) { return rowHtml(it); }).join('') + '</div>';
+      body += '<p class="rel-form-err" id="saveErr" role="alert" hidden></p>';
+    }
+
+    stage.innerHTML =
+      '<aside class="rel-panel" role="dialog" aria-label="' + esc(title) + '">'
+      + '<header class="rel-panel-head"><div><h3>' + esc(title) + '</h3><p class="side-panel-scope">' + esc(scope) + '</p></div>'
+      + '<button class="icon-btn" id="pClose" aria-label="关闭面板">✕</button></header>'
+      + '<div class="rel-panel-body">' + body + '</div>'
+      + '<footer class="rel-panel-foot"><button class="btn primary" id="pSave"' + (st.busy ? ' disabled' : '') + '>' + esc(footLabel) + '</button></footer>'
+      + '</aside>';
+
+    bindPanel();
+    syncControls();
+  }
+
+  function rowHtml(it) {
+    var pickable = canPick(it);
+    var checked = st.picked[it.id] ? ' checked' : '';
+    var dis = pickable ? '' : ' disabled';
+    var demoTag = it.demo ? ' <span class="muted small">（示意数据）</span>' : '';
+    var row = '<div class="bld-cand' + (pickable ? '' : ' off') + '" data-item="' + esc(it.id) + '">';
+    row += '<div class="bld-cand-row"><input type="checkbox" data-pick="' + esc(it.id) + '"' + checked + dis + '>'
+      + '<span class="bld-cand-title" title="' + esc(it.title) + '"><code>' + esc(it.id) + '</code> ' + esc(it.title) + demoTag + '</span>';
+    if (st.mode === 'old') {
+      row += pickable ? oldSelHtml(it) : '<span class="muted small">暂无关联提交（先完成开发提交）</span>';
+    }
+    row += '</div>';
+    if (st.mode === 'new') {
+      if (!pickable) {
+        row += '<p class="muted small" style="margin:6px 0 0;">暂无关联提交（先完成开发提交）</p>';
+      } else if (st.picked[it.id]) {
+        row += autoListHtml(it);
+        var rest = broadRest(it);
+        if (rest.length) row += broadHtml(it, rest);
+      }
+    }
+    row += '</div>';
+    return row;
+  }
+
+  function autoListHtml(it) {
+    var list = assocOf(it);
+    var html = '<div class="bld-auto-commits"><div class="bld-auto-head">关联提交（自动关联 ' + list.length + ' 个 · 旧→新 · 只读，不可逐个增删）</div>';
+    html += list.map(function (c) {
+      var badge = c.src === 'fallback'
+        ? '<span class="badge fallback">' + FALLBACK_LABEL + '</span>'
+        : '<span class="badge ' + c.src + '">' + SRC_LABEL[c.src] + '</span>';
+      return '<div class="bld-commit-item"><code title="演示展示短 hash，实际 payload 为 40 位完整 hash">' + esc(c.h) + '</code>'
+        + '<span class="subj">' + esc(c.s) + '</span>' + badge + '</div>';
+    }).join('');
+    return html + '</div>';
+  }
+
+  function broadHtml(it, rest) {
+    var open = st.broadOpen[it.id];
+    var html = '<div class="bld-broad">⌄ <button class="bld-broad-toggle" data-broad="' + esc(it.id) + '">'
+      + '另有 ' + rest.length + ' 个宽口径命中未关联（只读提示' + (open ? '，收起' : '，展开查看') + '）</button>';
+    if (open) {
+      html += '<ul class="bld-broad-list">' + rest.map(function (c) {
+        return '<li class="bld-commit-item"><code>' + esc(c.h) + '</code><span class="subj">' + esc(c.s) + '</span><span class="badge attrib">宽口径·未关联</span></li>';
+      }).join('') + '</ul>';
+    }
+    return html + '</div>';
+  }
+
+  function oldSelHtml(it) {
+    var commits = oldCommitsOf(it);
+    var sel = st.oldSel[it.id] || commits[0].h; /* 旧行为缺陷：默认 commits[0]（最早收口提交） */
+    return '<select class="bld-commit-sel" data-oldsel="' + esc(it.id) + '"' + (st.picked[it.id] ? '' : ' disabled') + '>'
+      + commits.map(function (c) {
+        return '<option value="' + esc(c.h) + '"' + (sel === c.h ? ' selected' : '') + ' title="' + esc(c.s) + '">' + esc(c.h) + '</option>';
+      }).join('') + '</select>';
+  }
+
+  /* ---------- 事件 ---------- */
+  function bindPanel() {
+    $('pClose').addEventListener('click', function () { st.panelOpen = false; render(); });
+    var fName = $('fName'), fVer = $('fVer');
+    if (fName) fName.addEventListener('input', function () { st.name = fName.value; });
+    if (fVer) fVer.addEventListener('input', function () { st.version = fVer.value; });
+    var retry = $('retryBtn');
+    if (retry) retry.addEventListener('click', function () {
+      st.status = 'loading'; render();
+      setTimeout(function () { st.status = 'ok'; render(); }, 700);
+    });
+    var pa = $('pickAll'), pn = $('pickNone');
+    if (pa) pa.addEventListener('click', function () {
+      ITEMS.forEach(function (it) { if (canPick(it)) st.picked[it.id] = true; });
+      render();
+    });
+    if (pn) pn.addEventListener('click', function () {
+      ITEMS.forEach(function (it) { delete st.picked[it.id]; });
+      render();
+    });
+    stage.querySelectorAll('[data-pick]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        if (el.checked) st.picked[el.dataset.pick] = true; else delete st.picked[el.dataset.pick];
+        render();
+      });
+    });
+    stage.querySelectorAll('[data-broad]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        st.broadOpen[el.dataset.broad] = !st.broadOpen[el.dataset.broad];
+        render();
+      });
+    });
+    stage.querySelectorAll('[data-oldsel]').forEach(function (el) {
+      el.addEventListener('change', function () { st.oldSel[el.dataset.oldsel] = el.value; });
+    });
+    $('pSave').addEventListener('click', save);
+  }
+
+  function save() {
+    if (st.busy) return;
+    if (!pickedIds().length) { showSaveErr('演示约束：请先勾选至少一个条目再保存。'); return; }
+    st.busy = true; render();
+    setTimeout(function () {
+      st.busy = false;
+      if (st.failNext) {
+        render();
+        showSaveErr('保存失败：commits 数组每个元素须为 40 位 hash，空数组将被拒绝（演示报错，沿用既有校验文案口径；待确认：以服务端实际报错文案为准）。已选状态未清空，可修正后重试。');
+        return;
+      }
+      var payload = pickedIds().map(function (it) {
+        var commits = st.mode === 'new'
+          ? assocOf(it).map(function (c) { return c.h; })
+          : [st.oldSel[it.id] || oldCommitsOf(it)[0].h];
+        return { itemId: it.id, commits: commits };
+      });
+      result.hidden = false;
+      result.innerHTML = '<strong>' + (st.panel === 'create' ? '版本计划已创建' : '条目已添加') + '（演示）</strong>'
+        + ' —— payload.items（commits 为整组 40 位 hash 数组，此处展示短 hash）：'
+        + '<pre>' + esc(JSON.stringify(payload, null, 2)) + '</pre>';
+      st.panelOpen = false;
+      render();
+    }, 900);
+  }
+
+  function showSaveErr(msg) {
+    var box = $('saveErr');
+    if (!box) return;
+    box.textContent = msg;
+    box.hidden = false;
+  }
+
+  /* ---------- 控制条 ---------- */
+  function segBind(id, attr, fn) {
+    var seg = $(id);
+    seg.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-' + attr + ']');
+      if (!b) return;
+      seg.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      fn(b.dataset[attr]);
+    });
+  }
+  segBind('segStatus', 'st', function (v) { st.status = v; render(); });
+  segBind('segPanel', 'pn', function (v) { st.panel = v; render(); });
+  segBind('segMode', 'md', function (v) { st.mode = v; render(); });
+  $('failNext').addEventListener('change', function (e) { st.failNext = e.target.checked; });
+  $('reopenBtn').addEventListener('click', function () { st.panelOpen = true; render(); });
+
+  /* 主题：自动 → 浅色 → 深色 循环 */
+  var THEMES = ['auto', 'light', 'dark'];
+  var themeIdx = 0;
+  $('themeBtn').addEventListener('click', function () {
+    themeIdx = (themeIdx + 1) % THEMES.length;
+    var t = THEMES[themeIdx];
+    if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', t);
+    $('themeBtn').textContent = '主题：' + (t === 'auto' ? '自动' : t === 'light' ? '浅色' : '深色');
+  });
+
+  function syncControls() {
+    var rb = $('reopenBtn');
+    rb.textContent = '打开面板';
+    rb.disabled = !!st.panelOpen;
+    rb.title = st.panelOpen ? '面板已打开' : '重新打开侧滑面板';
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
