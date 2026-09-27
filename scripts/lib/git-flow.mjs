@@ -1048,6 +1048,73 @@ export function subjectAttributionItemId(subject) {
   return ids.length ? ids[ids.length - 1] : null;
 }
 
+// REQ-20260927-002 条目 → 提交三口径索引（版本计划「选择条目和提交」面板整组自动关联的
+// 数据源，纯只读）：单次 git log 扫描 + 收口账本（committedItemIndex）聚合，返回
+// Map<itemId, { auto: [{ hash, subject, source }], broad: [{ hash, subject }] }>：
+//   - auto（自动关联集）= 账本核验提交（source 'ledger'，强证据，同 hash 既有归属标注被
+//     升级为 ledger）∪ 主题末尾单号严格归属提交（subjectAttributionItemId 命中，source
+//     'attribution'）；
+//   - broad（宽口径命中）= 主题任意位置含单号、但未进自动集的提交（如大杂烩批量提交对
+//     中段单号只算宽口径关联，不自动归属——与 subjectAttributionItemId 归因口径一致）；
+//   - 排序：两类均按 git 历史位置旧→新；账本登记但历史缺失的 hash 稳定排末尾（主题留空）。
+// 与 itemCommitStatusIndex（看板「已提交」徽标宽口径同源）相互独立，不改动其既有语义。
+export function autoAssociationIndex(dataDir, projectRoot) {
+  const byItem = new Map();
+  const recOf = (itemId) => {
+    let r = byItem.get(itemId);
+    if (!r) { r = { auto: [], broad: [] }; byItem.set(itemId, r); }
+    return r;
+  };
+  // 1) git 历史：单次 log 拿全量（hash → 位置与主题），log 为新→旧，反转为旧→新
+  const gitCommits = [];
+  if (isGitRepo(projectRoot)) {
+    const r = gitRaw(projectRoot, ['log', '--format=%H%x09%s']);
+    if (r.status === 0) {
+      for (const line of String(r.stdout || '').split('\n')) {
+        const [hash, ...rest] = line.split('\t');
+        if (!hash) continue;
+        gitCommits.push({ hash, subject: rest.join('\t') });
+      }
+      gitCommits.reverse();
+    }
+  }
+  const pos = new Map(gitCommits.map((c, i) => [c.hash, i]));
+  const subjectOf = new Map(gitCommits.map((c) => [c.hash, c.subject]));
+  for (const c of gitCommits) {
+    const ids = c.subject.match(/(?:REQ|BUG)-\d{8}-\d{3,}/g) || [];
+    if (!ids.length) continue;
+    const attr = subjectAttributionItemId(c.subject);
+    for (const id of new Set(ids)) {
+      const r = recOf(id);
+      if (id === attr) {
+        if (!r.auto.some((x) => x.hash === c.hash)) r.auto.push({ hash: c.hash, subject: c.subject, source: 'attribution' });
+      } else if (!r.broad.some((x) => x.hash === c.hash)) {
+        r.broad.push({ hash: c.hash, subject: c.subject });
+      }
+    }
+  }
+  // 2) 收口账本 → 自动关联（账本核验为强证据：覆盖 attribution 标注；宽口径中的同 hash
+  //    移入自动集；历史缺失的 hash 先追加，排序步骤统一收口到末尾）
+  for (const lr of committedItemIndex(dataDir).values()) {
+    const r = recOf(lr.itemId);
+    for (const h of lr.commits || []) {
+      const hash = String(h || '').toLowerCase();
+      if (!hash) continue;
+      r.broad = r.broad.filter((x) => x.hash !== hash);
+      const hit = r.auto.find((x) => x.hash === hash);
+      if (hit) { hit.source = 'ledger'; continue; }
+      r.auto.push({ hash, subject: subjectOf.get(hash) || '', source: 'ledger' });
+    }
+  }
+  // 3) 排序：auto / broad 均按 git 历史位置旧→新（Array#sort 稳定）；无位置的提交排末尾
+  const orderKey = (x) => (pos.has(x.hash) ? pos.get(x.hash) : Number.MAX_SAFE_INTEGER);
+  for (const r of byItem.values()) {
+    r.auto.sort((a, b) => orderKey(a) - orderKey(b));
+    r.broad.sort((a, b) => orderKey(a) - orderKey(b));
+  }
+  return byItem;
+}
+
 // 提交变更路径的条目归属（BUG-20260926-003 归因证据 c）：diff-tree 列出该提交变更文件，
 // 统计命中看板条目目录（<板根>/data/requirements|bugs/<单号>/…，兼容旧布局前缀）的单号集合。
 // 变更同时触及多个条目目录 = 真实混合提交（安全保护依据，优先于账本 / 主题证据）；

@@ -11,7 +11,11 @@
 //     任一状态）的条目不再出现在新建 / 添加候选（后端已收窄，前端据 state.versions 再过滤一次
 //     防御旧缓存）；空态区分「无 done 条目」与「done 条目均已被版本占用」；服务端对跨版本重复
 //     纳入兜底拒绝；从 draft/failed 版本移出或删除版本后条目重新可选；
-//   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选（全选只纳入有 commit 候选的条目）；
+//   - 新建版本 / 添加条目走右侧侧拉面板：选单支持全选 / 全不选；REQ-20260927-002 起
+//     勾选条目即整组自动关联该条目全部自动口径提交（账本核验 ∪ 主题末尾单号严格归属，
+//     自动集为空时回退宽口径命中最新 1 个并标注回退来源），以只读清单展示（旧→新、
+//     来源徽标），不提供逐个提交的增删入口（调整走版本详情换选）；宽口径命中仅折叠
+//     展示「另有 N 个宽口径命中未关联」只读提示；
 //   - 「AI 完善」（原「提示词与回答回填」，BUG-20260913-004 更名）为同一弹窗两段式：上段复制提示词、
 //     下段粘贴回答解析回填，无需关闭再打开；解析成功后预览区为可编辑表单（REQ-20260913-006）——
 //     名称 / 描述预填解析值，可直接修改，「应用」保存编辑后的值（回答原文是唯一解析来源，
@@ -66,10 +70,12 @@ const ATBBuild = (() => {
     // REQ-20260921-014 概况页签显式编辑态 { id, name, description, error, busy }——按版本
     // id 归属（切换版本 / 步骤 / 项目即清空回展示态，不把未保存草稿静默写入）
     planEdit: null,
-    createPanel: null,   // { candidates, picked:Set, commits:{itemId:hash}, name, totalDone, busy, error }
-    addPanel: null,      // { verId, candidates, picked:Set, commits:{itemId:hash}, totalDone, busy, error }
+    createPanel: null,   // { candidates, picked:Set, broadOpen:Set, name, totalDone, busy, error, loadError }
+    addPanel: null,      // { verId, candidates, picked:Set, broadOpen:Set, totalDone, busy, error, loadError }
     //（totalDone：候选接口占用过滤前的 done 条目总数，用于空态区分「无 done 条目」与
-    // 「done 条目均已被版本占用」——BUG-20260914-004）
+    // 「done 条目均已被版本占用」——BUG-20260914-004。REQ-20260927-002：关联提交不再单选
+    // （commits 单值 map 移除），勾选条目即整组自动关联其全部自动口径提交（候选行
+    // commitMeta 直读）；broadOpen 为宽口径命中折叠行展开状态）
     // { verId, text, parsed, draft, error, busy, copied }  AI 完善弹窗（提示词与回答回填）
     // parsed: parseAnswer 成功结果；draft: { name, description } 回填编辑表单当前值（REQ-20260913-006，
     // 解析时以解析结果预填，编辑 / 后台重渲染前从输入框同步，应用保存该值而非解析原值）
@@ -168,15 +174,57 @@ const ATBBuild = (() => {
     return set;
   }
 
-  // 全选口径：只纳入有 commit 候选的条目（无提交条目自动跳过并提示）
+  // 全选口径：只纳入可自动关联提交的条目（自动集非空，含宽口径回退；两者皆空自动跳过并提示）。
+  // REQ-20260927-002：候选提交不再单选，条目可勾选 ⇔ 整组自动关联集非空。
   function selectableCandidates(items) {
-    return (items || []).filter((x) => Array.isArray(x.commits) && x.commits.length > 0);
+    return (items || []).filter((x) => autoAssociationOf(x).length > 0);
   }
 
   // BUG-20260921-015：版本条目多提交口径（纯函数）——条目关联的全部提交 = commits 数组
   //（服务端补齐），旧单提交形态兜底 [commit]；关联列表 / 搜索 / 合并确认清单均按此展开。
   function commitsOf(it) {
     return Array.isArray(it?.commits) && it.commits.length ? it.commits : (it?.commit ? [it.commit] : []);
+  }
+
+  // REQ-20260927-002（纯函数，渲染 / payload / 测试共用）：条目的整组自动关联提交集。
+  // 服务端 commitMeta（{ hash, subject, source }，source ∈ 'ledger' 账本核验 /
+  // 'attribution' 主题末尾单号严格归属，旧→新）直读；自动集为空时回退宽口径命中
+  //（broadCommits，旧→新）中最新的 1 个（source 'fallback'，标注回退来源，保证条目
+  // 仍可加入版本）；旧候选 payload（无元数据键，如部署间隙缓存 / 测试旧形态）防御回退为
+  // 已知全部 commits（无位置信息，不做「最新 1 个」裁剪避免丢提交）。恒返回
+  // [{ hash, subject, source }]，hash 小写 40 位。
+  function autoAssociationOf(it) {
+    const meta = (Array.isArray(it?.commitMeta) ? it.commitMeta : [])
+      .filter((m) => m && HASH_RE.test(String(m.hash || '')));
+    if (meta.length) {
+      return meta.map((m) => ({
+        hash: String(m.hash).toLowerCase(),
+        subject: String(m.subject || ''),
+        source: m.source === 'attribution' ? 'attribution' : 'ledger',
+      }));
+    }
+    const broad = (Array.isArray(it?.broadCommits) ? it.broadCommits : [])
+      .filter((m) => m && HASH_RE.test(String(m.hash || '')))
+      .map((m) => ({ hash: String(m.hash).toLowerCase(), subject: String(m.subject || '') }));
+    const legacy = broad.length
+      ? broad
+      : (Array.isArray(it?.commits) ? it.commits : [])
+        .filter((h) => HASH_RE.test(String(h || '')))
+        .map((h) => ({ hash: String(h).toLowerCase(), subject: '', source: 'fallback' }));
+    if (Array.isArray(it?.broadCommits)) {
+      // 正常链路：自动集为空且存在宽口径命中 → 回退关联最新 1 个（旧→新数组的末位）
+      const pick = legacy[legacy.length - 1];
+      return pick ? [{ ...pick, source: 'fallback' }] : [];
+    }
+    return legacy; // 旧形态防御：已知提交整组关联
+  }
+
+  // REQ-20260927-002（纯函数）：宽口径命中（未进自动关联集）——「另有 N 个宽口径命中未
+  // 关联」折叠行只读展示数据源，不参与自动关联与保存 payload。
+  function broadHitsOf(it) {
+    return (Array.isArray(it?.broadCommits) ? it.broadCommits : [])
+      .filter((m) => m && HASH_RE.test(String(m.hash || '')))
+      .map((m) => ({ hash: String(m.hash).toLowerCase(), subject: String(m.subject || '') }));
   }
 
   // REQ-20260915-003：关联条目联合行过滤（纯函数，渲染与测试共用）——一条关联单及其全部
@@ -838,7 +886,9 @@ const ATBBuild = (() => {
   }
 
   async function openCreatePanel() {
-    state.createPanel = { candidates: null, picked: new Set(), commits: {}, name: '', version: suggestNextVersion(), totalDone: null, busy: false, error: null, loadError: null };
+    // REQ-20260927-002：关联提交整组自动关联——勾选即关联该条目全部自动口径提交（候选行
+    // commitMeta 直读），无逐个提交默认选中逻辑（旧 commits[it.itemId] = it.commits[0] 移除）。
+    state.createPanel = { candidates: null, picked: new Set(), broadOpen: new Set(), name: '', version: suggestNextVersion(), totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
@@ -847,9 +897,6 @@ const ATBBuild = (() => {
       const occupied = occupiedItemIds(state.data?.versions); // BUG-20260914-004：已纳入任一版本的条目不进候选
       state.createPanel.candidates = doneCandidates(data.items || []).filter((x) => !occupied.has(x.itemId)); // BUG-20260913-001：仅 done 条目进候选
       state.createPanel.totalDone = Number.isInteger(data.totalDone) ? data.totalDone : null;
-      for (const it of selectableCandidates(state.createPanel.candidates)) {
-        state.createPanel.commits[it.itemId] = it.commits[0]; // 默认取最近一次关联提交
-      }
     } catch (e) {
       state.createPanel.loadError = e.message;
     }
@@ -863,9 +910,9 @@ const ATBBuild = (() => {
     render();
   }
 
-  // 全选 / 全不选：仅对「有 commit 候选」的条目生效；返回跳过的无提交条目数。
+  // 全选 / 全不选：仅对「可整组自动关联提交」的条目生效；返回跳过的无关联提交条目数。
   // BUG-20260914-002：与 pickItem 同口径在内部统一 render——点击后复选框 / 「已选 N 项」计数 /
-  // commit 下拉解禁态立即同步，避免内部 picked 集合与界面显示错位（跳过提示由调用方补充 toast）。
+  // 关联提交展开区立即同步，避免内部 picked 集合与界面显示错位（跳过提示由调用方补充 toast）。
   function pickAll(panelKey, on) {
     const p = state[panelKey];
     if (!p || !p.candidates) return 0;
@@ -877,16 +924,23 @@ const ATBBuild = (() => {
     return p.candidates.length - selectable.length;
   }
 
-  function setPanelCommit(panelKey, itemId, commit) {
+  // REQ-20260927-002：宽口径命中折叠行展开 / 收起（只读，不影响勾选集合与保存 payload）。
+  function toggleBroadHits(panelKey, itemId) {
     const p = state[panelKey];
-    if (p && HASH_RE.test(String(commit || ''))) p.commits[itemId] = commit;
+    if (!p) return;
+    if (p.broadOpen.has(itemId)) p.broadOpen.delete(itemId); else p.broadOpen.add(itemId);
     render();
   }
 
   async function submitCreate() {
     const p = state.createPanel;
     if (!p) return;
-    const items = [...p.picked].map((itemId) => ({ itemId, commit: p.commits[itemId] }));
+    // REQ-20260927-002：payload 条目 commits 为整组自动关联提交数组（每项 40 位 hash），
+    // 不再有单值 commit 选择；两面板（创建版本 / 添加条目）行为一致。
+    const items = [...p.picked].map((itemId) => ({
+      itemId,
+      commits: autoAssociationOf((p.candidates || []).find((x) => x.itemId === itemId)).map((m) => m.hash),
+    }));
     if (!items.length) {
       p.error = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）';
       render();
@@ -1032,7 +1086,8 @@ const ATBBuild = (() => {
   async function openAddPanel() {
     const v = selVersion();
     if (!v) return;
-    state.addPanel = { verId: v.id, candidates: null, picked: new Set(), commits: {}, totalDone: null, busy: false, error: null, loadError: null };
+    // REQ-20260927-002：与创建面板同口径——整组自动关联，无逐个提交默认选中逻辑。
+    state.addPanel = { verId: v.id, candidates: null, picked: new Set(), broadOpen: new Set(), totalDone: null, busy: false, error: null, loadError: null };
     render();
     try {
       const r = await api('/candidates');
@@ -1044,9 +1099,6 @@ const ATBBuild = (() => {
       // BUG-20260914-004：再排除已纳入任一版本（含本版本与其他版本）的条目
       state.addPanel.candidates = doneCandidates(data.items || []).filter((x) => !have.has(x.itemId) && !occupied.has(x.itemId));
       state.addPanel.totalDone = Number.isInteger(data.totalDone) ? data.totalDone : null;
-      for (const it of selectableCandidates(state.addPanel.candidates)) {
-        state.addPanel.commits[it.itemId] = it.commits[0];
-      }
     } catch (e) {
       state.addPanel.loadError = e.message;
     }
@@ -1056,7 +1108,11 @@ const ATBBuild = (() => {
   async function submitAdd() {
     const p = state.addPanel;
     if (!p) return;
-    const items = [...p.picked].map((itemId) => ({ itemId, commit: p.commits[itemId] }));
+    // REQ-20260927-002：与创建面板一致——payload 条目 commits 为整组自动关联提交数组。
+    const items = [...p.picked].map((itemId) => ({
+      itemId,
+      commits: autoAssociationOf((p.candidates || []).find((x) => x.itemId === itemId)).map((m) => m.hash),
+    }));
     if (!items.length) {
       p.error = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）';
       render();
@@ -2814,18 +2870,50 @@ const ATBBuild = (() => {
     }).join('');
   }
 
-  function renderCandidateRows(p, panelKey, disabledIds) {
+  // REQ-20260927-002：来源徽标（颜色 + 文字双重区分，不只靠颜色）——自动·账本（收口账本
+  // 核验命中）/ 自动·归属（主题末尾单号严格归属命中）/ 回退·宽口径（自动集为空时的兜底）。
+  const SOURCE_BADGE = { ledger: '自动·账本', attribution: '自动·归属', fallback: '回退·宽口径' };
+
+  // REQ-20260927-002：面板操作条计数——M = 已选条目整组自动关联提交数之和（回退提交计入；
+  // 宽口径命中不计入）。
+  function pickedCommitCount(p) {
+    let n = 0;
+    for (const id of p.picked) {
+      n += autoAssociationOf((p.candidates || []).find((x) => x.itemId === id)).length;
+    }
+    return n;
+  }
+
+  function renderCandidateRows(p, panelKey) {
     return (p.candidates || []).map((it) => {
-      const selectable = (it.commits || []).length > 0;
+      const assoc = autoAssociationOf(it);
+      const broad = broadHitsOf(it);
+      const selectable = assoc.length > 0;
       const checked = p.picked.has(it.itemId) ? ' checked' : '';
       const dis = selectable ? '' : ' disabled';
-      const commits = selectable
-        ? `<select class="bld-commit-sel" data-panel="${panelKey}" data-item="${esc(it.itemId)}"${p.picked.has(it.itemId) ? '' : ' disabled'}>${(it.commits || []).map((h) => `<option value="${esc(h)}"${p.commits[it.itemId] === h ? ' selected' : ''}>${esc(short(h))}</option>`).join('')}</select>`
-        : '<span class="muted small">暂无关联提交（先完成开发提交）</span>';
-      return `<label class="check bld-cand${disabledIds?.has(it.itemId) ? ' off' : ''}">
-        <input type="checkbox" data-pick="${panelKey}" data-item="${esc(it.itemId)}"${checked}${dis}>
-        <span class="bld-cand-title" title="${esc(it.title || '')}">${esc(it.itemId)} ${esc(it.title || '')}</span>${commits}
-      </label>`;
+      // REQ-20260927-002：勾选行内展开「关联提交（自动关联 N 个 · 旧→新 · 只读）」只读
+      // 区块——逐项短 hash + 提交主题（含类型前缀）+ 来源徽标；无逐个提交的增删控件
+      // （无下拉、无删除按钮；提交调整仍走版本详情条目行换选，REQ-20260915-003 口径）。
+      const assocBlock = !checked || !selectable ? '' : `
+        <div class="bld-assoc">
+          <div class="bld-assoc-head">${esc(`关联提交（自动关联 ${assoc.length} 个 · 旧→新 · 只读）`)}</div>
+          ${assoc.map((m) => `
+          <div class="bld-assoc-row"><code>${esc(short(m.hash))}</code><span class="bld-assoc-subject" title="${esc(m.subject)}">${esc(m.subject || '（无主题）')}</span><span class="st bld-src bld-src-${esc(m.source)}">${esc(SOURCE_BADGE[m.source] || m.source)}</span></div>`).join('')}
+        </div>`;
+      // 宽口径命中折叠行：只读提示可点开展开查看 hash + 主题，不可勾选、不计入 M。
+      const broadBlock = !broad.length ? '' : `
+        <div class="bld-broad">
+          <button type="button" class="btn small quiet bld-broad-toggle" data-broad-toggle="${panelKey}" data-item="${esc(it.itemId)}" aria-expanded="${p.broadOpen?.has(it.itemId) ? 'true' : 'false'}">${esc(`另有 ${broad.length} 个宽口径命中未关联`)}</button>
+          ${p.broadOpen?.has(it.itemId) ? broad.map((m) => `
+          <div class="bld-broad-row"><code>${esc(short(m.hash))}</code><span class="bld-broad-subject" title="${esc(m.subject)}">${esc(m.subject || '（无主题）')}</span></div>`).join('') : ''}
+        </div>`;
+      return `<div class="bld-cand${selectable ? '' : ' off'}">
+        <label class="check">
+          <input type="checkbox" data-pick="${panelKey}" data-item="${esc(it.itemId)}"${checked}${dis}>
+          <span class="bld-cand-title" title="${esc(it.title || '')}">${esc(it.itemId)} ${esc(it.title || '')}</span>
+          ${selectable ? '' : '<span class="muted small">暂无关联提交（先完成开发提交）</span>'}
+        </label>${assocBlock}${broadBlock}
+      </div>`;
     }).join('');
   }
 
@@ -2856,7 +2944,10 @@ const ATBBuild = (() => {
           <div class="bld-pick-bar">
             <button type="button" class="btn small" id="bldPickAll">全选</button>
             <button type="button" class="btn small" id="bldPickNone">全不选</button>
-            <span class="muted small">已选 ${p.picked.size} 项${skipped ? ` · ${skipped} 个条目暂无关联提交将被跳过` : ''}</span>
+            <!-- REQ-20260927-002：计数带整组自动关联提交数（M 为已选条目自动关联提交数之和，
+              回退提交计入）；跳过提示独立成句（便于动态词条插值） -->
+            <span class="muted small">${esc(`已选 ${p.picked.size} 项 · ${pickedCommitCount(p)} 个提交`)}</span>
+            ${skipped ? `<span class="muted small">${esc(`${skipped} 个条目暂无关联提交将被跳过`)}</span>` : ''}
           </div>
           ${renderCandidateRows(p, p === state.createPanel ? 'createPanel' : 'addPanel')}
           ${p.error ? `<p class="rel-form-err" role="alert">${esc(p.error)}</p>` : ''}`}
@@ -4672,8 +4763,8 @@ ${langsField}
     view.innerHTML = `
       <nav class="rel-tabs bld-tabs" aria-label="构建子页签">${tabs}<span class="bld-tabs-tools">${newBtn}</span></nav>
       ${body}
-      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；全选只纳入有 commit 候选的条目', 'bldCreateBtn', '创建版本计划') : ''}
-      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已纳入版本的条目不再出现）', 'bldAddSubmit', '添加所选条目') : ''}
+      ${d?.isRepo ? renderPanel(state.createPanel, '新建版本', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；勾选条目即整组自动关联其全部提交', 'bldCreateBtn', '创建版本计划') : ''}
+      ${d?.isRepo ? renderPanel(state.addPanel, '添加条目', '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已纳入版本的条目不再出现）；勾选条目即整组自动关联其全部提交', 'bldAddSubmit', '添加所选条目') : ''}
       ${renderAnswerModal()}
       ${renderMergeConfirm()}
       ${renderPushConfirm()}
@@ -4870,8 +4961,10 @@ ${langsField}
     for (const el of view.querySelectorAll('[data-pick]')) {
       el.addEventListener('change', () => pickItem(el.dataset.pick, el.dataset.item, el.checked));
     }
-    for (const el of view.querySelectorAll('[data-panel]')) {
-      el.addEventListener('change', () => setPanelCommit(el.dataset.panel, el.dataset.item, el.value));
+    // REQ-20260927-002：宽口径命中折叠行展开 / 收起（只读；关联提交不再有逐个选择控件，
+    // 旧 [data-panel] commit 下拉 change 绑定随之移除）
+    for (const el of view.querySelectorAll('[data-broad-toggle]')) {
+      el.addEventListener('click', () => toggleBroadHits(el.dataset.broadToggle, el.dataset.item));
     }
     const nameInput = q('#bldNewName');
     nameInput?.addEventListener('input', () => { if (state.createPanel) state.createPanel.name = nameInput.value; });
@@ -5174,6 +5267,8 @@ ${langsField}
     selectLogRow,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
+    // REQ-20260927-002：整组自动关联纯函数与宽口径折叠行接缝（测试与交互共用）
+    autoAssociationOf, broadHitsOf, pickedCommitCount, toggleBroadHits,
     // REQ-20260921-014：概况页签显式编辑（行为接缝 + 客户端校验纯函数，测试与交互共用）
     openPlanEdit, cancelPlanEdit, submitPlanEdit, validateVersionInfo,
     // REQ-20260915-003：关联条目联合列表搜索 / 分页纯函数与行为接缝（测试与交互）
