@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260927-002 界面演示 · 二次编辑弹窗底部「关闭」无响应</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #d8dde5; --text: #1c2430;
+    --muted: #67707d; --accent: #2563eb; --ok: #15803d; --err: #b91c1c; --warn: #b45309;
+  }
+  html[data-theme="dark"] {
+    --bg: #12161d; --panel: #1b212b; --border: #333c4a; --text: #e6e9ee;
+    --muted: #97a1af; --accent: #5b8dff; --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme]) { --bg: #12161d; --panel: #1b212b; --border: #333c4a; --text: #e6e9ee;
+      --muted: #97a1af; --accent: #5b8dff; --ok: #4ade80; --err: #f87171; --warn: #fbbf24; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 18px 18px 40px; }
+  h1 { font-size: 17px; margin: 0 0 6px; }
+  h2 { font-size: 14px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 14px; max-width: 900px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin: 0 auto 14px; max-width: 980px; }
+  .ctrl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 5px 0; }
+  .ctrl-label { min-width: 76px; color: var(--muted); font-size: 12.5px; }
+  .seg { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .btn { font: inherit; font-size: 13px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 7px;
+         background: var(--panel); color: var(--text); cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn.quiet:hover { color: var(--text); }
+  .btn.small { font-size: 12.5px; padding: 4px 10px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .seg-btn.on { border-color: var(--accent); color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent); }
+  .steps { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .theme-btn { position: fixed; top: 14px; right: 16px; z-index: 90; }
+
+  /* 观察区 */
+  #log { list-style: none; margin: 6px 0 0; padding: 0; max-height: 200px; overflow: auto; font-size: 12.5px; }
+  #log li { padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  #log li .t { color: var(--muted); font-family: ui-monospace, Menlo, monospace; margin-right: 8px; }
+  #log li.hot { color: var(--err); }
+  #log li.good { color: var(--ok); }
+
+  /* ===== 以下按 scripts/web/style.css 的 rel-modal / bld-edit-* 口径复刻 ===== */
+  .rel-modal-wrap { position: fixed; inset: 0; background: rgba(10, 16, 26, 0.45); z-index: 70;
+                    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .rel-modal-wrap[hidden] { display: none; }
+  .rel-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 0; }
+  .bld-edit-modal { width: min(860px, 96vw); max-height: calc(100vh - 64px); display: flex; flex-direction: column; overflow: hidden; }
+  .bld-review-head { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+                     padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  .bld-edit-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 16px 0; }
+  .bld-edit-bar select { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--border);
+                         border-radius: 6px; background: var(--panel); color: var(--text); max-width: 260px; }
+  .bld-doc-mode { display: inline-flex; gap: 0; }
+  .bld-doc-mode .btn { border-radius: 0; }
+  .bld-doc-mode .btn:first-child { border-radius: 7px 0 0 7px; }
+  .bld-doc-mode .btn:last-child { border-radius: 0 7px 7px 0; }
+  .bld-doc-mode .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .bld-edit-body { padding: 10px 16px; overflow-y: auto; min-height: 240px; }
+  .bld-edit-body textarea { width: 100%; font: 12.5px/1.65 ui-monospace, Menlo, Consolas, monospace;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 10px 12px; }
+  .bld-edit-body textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .bld-review-preview { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bld-edit-unsaved { margin: 0 16px 6px; color: var(--warn); }
+  .bld-edit-pending { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 16px 8px;
+    padding: 8px 10px; border: 1px dashed var(--warn); border-radius: 8px; }
+  .bld-review-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+  .bld-review-foot .foot-actions { display: inline-flex; gap: 8px; }
+  .rel-form-err { color: var(--err); margin: 0 0 8px; }
+
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 95;
+    background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--ok);
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); max-width: 80vw; }
+  .toast.err { border-left-color: var(--err); }
+</style>
+</head>
+<body>
+<button type="button" class="btn small theme-btn" id="themeToggle">深/浅色</button>
+
+<header>
+  <h1>BUG-20260927-002 · 「② 二次编辑」弹窗底部「关闭」无响应（可交互演示）</h1>
+  <p class="sub">对照演示<b>缺陷态</b>（底部「关闭」点击无任何响应）与<b>修复态</b>（底部「关闭」与头部「✕ 关闭」行为一致）。
+     弹窗结构、按钮文案与状态反馈按 <code>scripts/web/build.js</code> 的 <code>renderSecondaryEditModal</code> 复刻；
+     「演示观察区」在模拟界面之外，只记录点击与状态变化，模拟界面内部与真实缺陷保持一致（缺陷态无任何反馈）。</p>
+</header>
+
+<section class="card">
+  <h2>演示控制</h2>
+  <div class="ctrl-row">
+    <span class="ctrl-label">演示模式</span>
+    <div class="seg" role="group" aria-label="演示模式切换">
+      <button type="button" class="btn small seg-btn on" id="modeDefect">缺陷态（当前线上）</button>
+      <button type="button" class="btn small seg-btn" id="modeFixed">修复态（期望）</button>
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-label">内容状态</span>
+    <div class="seg" role="group" aria-label="内容状态切换">
+      <button type="button" class="btn small seg-btn on" data-docstate="normal">正常</button>
+      <button type="button" class="btn small seg-btn" data-docstate="loading">读取中</button>
+      <button type="button" class="btn small seg-btn" data-docstate="error">读取失败</button>
+      <button type="button" class="btn small seg-btn" data-docstate="empty">空文档</button>
+    </div>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-label">入口演示</span>
+    <nav class="steps" aria-label="文档编写五步操作（演示）">
+      <span class="muted small">五步：</span>
+      <button type="button" class="btn small">① AI 总结</button>
+      <button type="button" class="btn small primary" id="openFromStep" title="② 打开默认语言文档编辑弹窗：文件切换 / 刷新 / 编辑 / 预览 / 保存">② 二次编辑</button>
+      <button type="button" class="btn small">③ AI 校对</button>
+      <button type="button" class="btn small">④ AI 翻译</button>
+      <button type="button" class="btn small">⑤ 提交</button>
+    </nav>
+    <span class="muted small">点「② 二次编辑」打开弹窗（其余步骤仅示意，不可点）</span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>演示观察区</h2>
+  <p class="muted small">红色 = 缺陷现象（无响应），绿色 = 期望行为。可分别尝试：底部「关闭」、头部「✕ 关闭」、Esc、点击遮罩、编辑后关闭（未保存保护）、保存中点击关闭。</p>
+  <ul id="log" aria-live="polite"></ul>
+</section>
+
+<!-- 二次编辑弹窗（复刻） -->
+<div class="rel-modal-wrap" id="bldEditWrap" hidden role="dialog" aria-modal="true" aria-label="二次编辑（默认语言）">
+  <div class="rel-modal bld-edit-modal">
+    <header class="bld-review-head">
+      <span>二次编辑 · 默认语言（v-20260921-001）</span>
+      <button type="button" class="btn small quiet" id="headClose" aria-label="关闭对话框">✕ 关闭</button>
+    </header>
+    <div class="bld-edit-bar">
+      <label class="ctrl-label" for="bldEditFileSel" style="min-width:auto;">文件</label>
+      <select id="bldEditFileSel">
+        <option value="README.md">README.md</option>
+        <option value="CHANGELOG.md">CHANGELOG.md</option>
+        <option value="FEATURES.md">FEATURES.md</option>
+        <option value="AGENTS.md">AGENTS.md</option>
+      </select>
+      <button type="button" class="btn small" id="editRefresh" title="重新从磁盘读取该文件（外部修改后取回最新内容；有未保存修改时会先询问保存或放弃）">刷新</button>
+      <span class="bld-doc-mode" role="group" aria-label="编辑或预览">
+        <button type="button" class="btn small on" data-mode="edit">编辑</button>
+        <button type="button" class="btn small" data-mode="preview">预览</button>
+      </span>
+    </div>
+    <div class="bld-edit-body" id="editBody"></div>
+    <p class="small bld-edit-unsaved" id="unsavedHint" hidden>有未保存的修改：切换文件 / 刷新 / 关闭前会先询问保存或放弃。</p>
+    <div class="bld-edit-pending" id="pendingBar" hidden role="alertdialog" aria-label="处理未保存修改">
+      <span>有未保存的修改：</span>
+      <button type="button" class="btn small primary" id="pendKeep">保存并继续</button>
+      <button type="button" class="btn small" id="pendDiscard">放弃修改并继续</button>
+      <button type="button" class="btn small quiet" id="pendStay">留在本文件</button>
+    </div>
+    <footer class="bld-review-foot">
+      <span id="footNote" role="status">默认语言初稿编辑（其余语言由「④ AI 翻译」产出）</span>
+      <span class="foot-actions">
+        <button type="button" class="btn small" id="editSave">保存</button>
+        <button type="button" class="btn small" id="footClose">关闭</button>
+      </span>
+    </footer>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  var DOC_SAMPLE = '# v20260921-001 发布说明\n\n## 本版变化\n- 看板服务新增「文档与翻译」步：五步操作条（AI 总结 / 二次编辑 / AI 校对 / AI 翻译 / 提交）。\n- 审查对话框收敛为只读核对 + 逐文件通过审核，编辑一律走「② 二次编辑」弹窗。\n';
+  var state = {
+    open: false, demoMode: 'defect', docState: 'normal', mode: 'edit',
+    file: 'README.md', content: DOC_SAMPLE, disk: DOC_SAMPLE,
+    busy: false, savedNote: null, pending: null, loadToken: 0, footClicks: 0
+  };
+  function $(id) { return document.getElementById(id); }
+  var wrap = $('bldEditWrap'), body = $('editBody'), note = $('footNote');
+
+  /* ---------- 观察区 / toast ---------- */
+  function log(msg, cls) {
+    var li = document.createElement('li');
+    if (cls) li.className = cls;
+    var t = document.createElement('span'); t.className = 't';
+    t.textContent = new Date().toTimeString().slice(0, 8);
+    li.appendChild(t); li.appendChild(document.createTextNode(msg));
+    var ul = $('log'); ul.insertBefore(li, ul.firstChild);
+    while (ul.children.length > 40) ul.removeChild(ul.lastChild);
+  }
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var el = $('toast'); el.textContent = msg; el.className = isErr ? 'toast err' : 'toast';
+    el.hidden = false; clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.hidden = true; }, 2600);
+  }
+
+  /* ---------- 渲染 ---------- */
+  function unsaved() { return state.disk != null && state.content != null && state.content !== state.disk; }
+  function render() {
+    $('unsavedHint').hidden = !(unsaved() && !state.pending);
+    $('pendingBar').hidden = !state.pending;
+    var n = '默认语言初稿编辑（其余语言由「④ AI 翻译」产出）';
+    if (state.busy) n = '保存中…';
+    else if (state.savedNote) n = state.savedNote;
+    else if (state.docState === 'error') n = '读取失败：内容尚未加载（可重试读取）';
+    note.textContent = n;
+    var noContent = state.docState === 'loading' || state.docState === 'error';
+    if (state.docState === 'loading') {
+      body.innerHTML = '<p class="muted small" role="status">正在读取文档内容…</p>';
+    } else if (state.docState === 'error') {
+      body.innerHTML = '<p class="rel-form-err small" role="alert">读取失败：模拟磁盘读取错误（演示注入）</p>' +
+        '<p><button type="button" class="btn small" id="editRetry" title="重新读取该文件的磁盘内容">重试读取</button></p>';
+      $('editRetry').addEventListener('click', function () { log('点击「重试读取」：重新读取磁盘内容'); doLoad(state.file, 500); });
+    } else if (state.mode === 'edit') {
+      body.innerHTML = '';
+      var ta = document.createElement('textarea');
+      ta.rows = 12; ta.spellcheck = false; ta.setAttribute('aria-label', '默认语言文档内容（编辑）');
+      ta.value = state.content == null ? '' : state.content;
+      ta.addEventListener('input', function () { state.content = ta.value; render(); });
+      body.appendChild(ta);
+    } else {
+      var txt = String(state.content || '');
+      body.innerHTML = txt.trim()
+        ? '<div class="bld-review-preview md">' + escMd(txt) + '</div>'
+        : '<div class="bld-review-preview muted small">（空文档）</div>';
+    }
+    $('bldEditFileSel').disabled = state.busy;
+    $('editRefresh').disabled = state.busy || noContent;
+    $('editSave').disabled = state.busy || noContent;
+    $('footClose').disabled = state.busy;
+    $('pendKeep').disabled = state.busy;
+    $('pendDiscard').disabled = state.busy;
+  }
+  function escMd(s) {
+    var out = '';
+    s.split('\n').forEach(function (line) {
+      var e = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      if (e.indexOf('# ') === 0) out += '<h3>' + e.slice(2) + '</h3>';
+      else if (e.indexOf('- ') === 0) out += '<div>· ' + e.slice(2) + '</div>';
+      else if (!e.trim()) out += '<div style="height:6px"></div>';
+      else out += '<p style="margin:4px 0">' + e + '</p>';
+    });
+    return out;
+  }
+
+  /* ---------- 关闭流程（复刻 requestEditClose / closeEditDialog） ---------- */
+  function requestEditClose() {
+    if (!state.open || state.busy) { if (state.open) log('busy 守卫：保存中不响应关闭（头部 ✕ / 遮罩同口径）', 'good'); return; }
+    if (unsaved()) { state.pending = 'close'; render(); log('触发未保存保护：内联三动作（保存并继续 / 放弃修改并继续 / 留在本文件），不直接关闭', 'good'); return; }
+    closeDialog();
+  }
+  function closeDialog() {
+    state.open = false; state.pending = null; state.savedNote = null;
+    state.content = state.disk; /* 重置为演示初始口径，便于反复演练 */
+    wrap.hidden = true; render();
+    log('弹窗已关闭（真实实现：只摘弹窗元素 #bldEditWrap，不整块重建文档窗格）', 'good');
+  }
+  function performPending() {
+    var p = state.pending; state.pending = null;
+    if (p === 'close') closeDialog();
+    else if (p === 'refresh') doLoad(state.file, 500);
+    else if (p && p.indexOf('switch:') === 0) doSwitch(p.slice(7));
+  }
+
+  /* ---------- 读取 / 切换 / 刷新 / 保存 ---------- */
+  function doLoad(file, ms) {
+    var token = ++state.loadToken;
+    state.docState = 'loading'; state.savedNote = null; render();
+    setTimeout(function () {
+      if (token !== state.loadToken) return;
+      state.docState = 'normal'; state.file = file;
+      state.content = file === 'README.md' ? DOC_SAMPLE : '# ' + file + '（演示内容）\n\n（此处为演示占位文本。）\n';
+      state.disk = state.content; render();
+      log('读取完成：' + file);
+    }, ms || 600);
+  }
+  function doSwitch(file) {
+    if (state.busy || !file || file === state.file) return;
+    log('切换文件 → ' + file); doLoad(file, 450);
+  }
+  function doSave() {
+    if (!state.open || state.busy || state.docState === 'loading' || state.docState === 'error') return;
+    state.busy = true; state.savedNote = null; state.pending = null; render();
+    log('保存中…（保存 / 关闭 / 刷新 / 文件切换禁用）');
+    setTimeout(function () {
+      state.busy = false; state.disk = state.content;
+      state.savedNote = '已保存 ✓（未提交：需审核通过并「提交」后进入本地 dev；默认语言变化会使翻译基准失效）';
+      render(); toast('✓ 已保存 ' + state.file + '（未提交：需审核通过并「提交」后进入本地 dev）');
+    }, 900);
+  }
+
+  /* ---------- 事件绑定 ---------- */
+  $('openFromStep').addEventListener('click', function () {
+    if (state.open) { wrap.hidden = false; return; }
+    state.open = true; wrap.hidden = false;
+    state.pending = null; state.savedNote = null; state.docState = 'normal';
+    state.content = state.disk; render();
+    log('打开「② 二次编辑」弹窗（标题：二次编辑 · 默认语言（v-20260921-001））');
+  });
+  $('headClose').addEventListener('click', function () {
+    log('点击头部「✕ 关闭」：触发 requestEditClose'); requestEditClose();
+  });
+  $('footClose').addEventListener('click', function () {
+    if (state.demoMode === 'defect') {
+      state.footClicks += 1;
+      log('（缺陷态）点击底部「关闭」第 ' + state.footClicks + ' 次：无任何响应——该按钮未绑定监听（q() 只绑定了头部按钮），真实缺陷即此表现', 'hot');
+      return;
+    }
+    log('（修复态）点击底部「关闭」：触发 requestEditClose（与头部「✕ 关闭」一致）', 'good');
+    requestEditClose();
+  });
+  $('editSave').addEventListener('click', function () { doSave(); });
+  $('editRefresh').addEventListener('click', function () {
+    if (!state.open || state.busy) return;
+    if (unsaved()) { state.pending = 'refresh'; render(); log('刷新前触发未保存保护（三动作内联）', 'good'); return; }
+    log('刷新：重新读取磁盘内容'); doLoad(state.file, 500);
+  });
+  $('bldEditFileSel').addEventListener('change', function () {
+    var file = this.value;
+    if (!state.open || state.busy || file === state.file) return;
+    if (unsaved()) { state.pending = 'switch:' + file; render(); log('切换文件前触发未保存保护（三动作内联）', 'good'); return; }
+    doSwitch(file);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
+    b.addEventListener('click', function () {
+      state.mode = b.getAttribute('data-mode');
+      Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (x) {
+        x.className = 'btn small' + (x === b ? ' on' : '');
+      });
+      render();
+    });
+  });
+  $('pendKeep').addEventListener('click', function () {
+    log('未保存保护 → 「保存并继续」：先保存，成功后执行挂起动作', 'good');
+    var p = state.pending; state.pending = null; state.busy = true; render();
+    setTimeout(function () {
+      state.busy = false; state.disk = state.content; state.savedNote = null;
+      toast('✓ 已保存 ' + state.file);
+      state.pending = p; performPending(); render();
+    }, 700);
+  });
+  $('pendDiscard').addEventListener('click', function () {
+    log('未保存保护 → 「放弃修改并继续」：丢弃草稿并执行挂起动作', 'good');
+    state.content = state.disk; performPending(); render();
+  });
+  $('pendStay').addEventListener('click', function () {
+    log('未保存保护 → 「留在本文件」：撤保护条，不做任何变更');
+    state.pending = null; render();
+  });
+  wrap.addEventListener('click', function (e) {
+    if (e.target === wrap && !state.busy) { log('点击遮罩：触发关闭保护（requestEditClose）'); requestEditClose(); }
+    else if (e.target === wrap) { log('busy 守卫：保存中遮罩点击不关闭', 'good'); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !state.open) return;
+    if (state.pending) { state.pending = null; render(); log('Esc：未保存挂起态先撤保护条（再按才走关闭）', 'good'); }
+    else { log('Esc：触发 requestEditClose'); requestEditClose(); }
+  });
+
+  /* ---------- 演示控制 ---------- */
+  function setMode(m) {
+    state.demoMode = m;
+    $('modeDefect').className = 'btn small seg-btn' + (m === 'defect' ? ' on' : '');
+    $('modeFixed').className = 'btn small seg-btn' + (m === 'fixed' ? ' on' : '');
+    log(m === 'defect' ? '切换到【缺陷态】：底部「关闭」无监听（点击无响应），头部 ✕ / Esc / 遮罩正常'
+                       : '切换到【修复态】：底部「关闭」与头部「✕ 关闭」行为一致', m === 'defect' ? 'hot' : 'good');
+  }
+  $('modeDefect').addEventListener('click', function () { setMode('defect'); });
+  $('modeFixed').addEventListener('click', function () { setMode('fixed'); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-docstate]'), function (b) {
+    b.addEventListener('click', function () {
+      state.docState = b.getAttribute('data-docstate');
+      if (state.docState !== 'normal') { state.savedNote = null; state.pending = null; state.content = state.disk; }
+      Array.prototype.forEach.call(document.querySelectorAll('[data-docstate]'), function (x) {
+        x.className = 'btn small seg-btn' + (x === b ? ' on' : '');
+      });
+      if (state.open) render();
+      log('注入内容状态：' + b.textContent + (state.open ? '' : '（打开弹窗后生效）'));
+    });
+  });
+  $('themeToggle').addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var next = cur === 'dark' ? 'light' : (cur === 'light' ? 'dark' : (dark ? 'light' : 'dark'));
+    document.documentElement.setAttribute('data-theme', next);
+    log('切换配色：' + next);
+  });
+
+  render();
+  log('演示就绪：默认【缺陷态】。点上方「② 二次编辑」打开弹窗，先直接点底部「关闭」观察无响应，再切【修复态】对比。');
+})();
+</script>
+</body>
+</html>
