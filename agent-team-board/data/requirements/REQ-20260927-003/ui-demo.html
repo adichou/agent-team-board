@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REQ-20260927-003 交互演示 — 需求支持退回已计划</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1f2328; --muted: #6a737d;
+    --border: #d8dee4; --chip-bg: #eaeef2; --primary: #1f6feb; --warn: #b35900;
+    --warn-bg: #fff3e0; --warn-border: #f0c78a; --danger: #cf222e;
+    --ok: #1a7f37; --ok-bg: #e6f4ea; --shadow: 0 4px 16px rgba(0,0,0,.10);
+    --timeline-dot: #8b949e; --lane-active: #1f6feb;
+  }
+  html.dark {
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
+    --border: #30363d; --chip-bg: #21262d; --primary: #4493f8; --warn: #f0b232;
+    --warn-bg: #2d2305; --warn-border: #6e5312; --danger: #f85149;
+    --ok: #3fb950; --ok-bg: #12261e; --shadow: 0 4px 16px rgba(0,0,0,.5);
+    --timeline-dot: #6e7681; --lane-active: #4493f8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px; font-size: 14px; line-height: 1.55;
+    transition: background .2s, color .2s;
+  }
+  .demo-banner {
+    max-width: 860px; margin: 0 auto 14px; padding: 10px 14px; border-radius: 8px;
+    background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--text); font-size: 13px;
+  }
+  .demo-banner strong { color: var(--warn); }
+  .controls {
+    max-width: 860px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  }
+  .controls .label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+  .btn {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all .15s;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+  .btn.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.scenario.active { outline: 2px solid var(--lane-active); outline-offset: 1px; }
+  .btn.small { padding: 3px 8px; font-size: 12px; }
+  .layout { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+  /* 看板档位条 */
+  .lanes { padding: 14px 16px; }
+  .lanes h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
+  .lane-strip { display: flex; gap: 4px; flex-wrap: wrap; }
+  .lane {
+    flex: 1; min-width: 84px; text-align: center; padding: 8px 4px; border-radius: 6px;
+    background: var(--chip-bg); color: var(--muted); font-size: 12px; position: relative;
+  }
+  .lane.on { background: var(--lane-active); color: #fff; font-weight: 600; }
+  .lane .dot { display: block; font-size: 10px; margin-top: 2px; opacity: .85; }
+  /* 详情抽屉 */
+  .drawer { padding: 16px; }
+  .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .item-id { font-weight: 700; font-size: 15px; }
+  .item-title { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+    background: var(--chip-bg); color: var(--muted);
+  }
+  .chip.developing { background: var(--lane-active); color: #fff; }
+  .chip.planned { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+  .chip.done { background: var(--ok-bg); color: var(--ok); }
+  .meta { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12px; margin: 8px 0 12px; }
+  .notice {
+    padding: 9px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px;
+    background: var(--chip-bg); border: 1px solid var(--border);
+  }
+  .notice.info { border-left: 3px solid var(--lane-active); }
+  .notice.warn { border-left: 3px solid var(--warn); background: var(--warn-bg); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+  /* 时间线 */
+  .timeline-card { padding: 16px; }
+  .timeline-card h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
+  .timeline { list-style: none; }
+  .timeline li { position: relative; padding: 0 0 14px 20px; font-size: 13px; }
+  .timeline li::before {
+    content: ""; position: absolute; left: 4px; top: 6px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--timeline-dot);
+  }
+  .timeline li::after {
+    content: ""; position: absolute; left: 7.5px; top: 16px; bottom: -2px; width: 1px; background: var(--border);
+  }
+  .timeline li:last-child::after { display: none; }
+  .timeline .t { color: var(--muted); font-size: 12px; }
+  .timeline .edge { font-weight: 600; }
+  .timeline li.revert .edge { color: var(--warn); }
+  /* toast */
+  #toastWrap { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast {
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; box-shadow: var(--shadow);
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    animation: slideUp .2s ease-out; max-width: 80vw;
+  }
+  .toast.ok { border-left: 4px solid var(--ok); }
+  .toast.err { border-left: 4px solid var(--danger); }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; margin-right: 4px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="demo-banner">
+  <strong>交互演示（模拟数据）</strong> — REQ-20260927-003「开发中条目退回已计划」的详情页操作预览。
+  本页为纯前端模拟，不访问真实服务、不修改任何条目状态或文件。
+</div>
+
+<div class="controls">
+  <span class="label">场景切换：</span>
+  <button class="btn scenario active" data-scene="normal">正常开发中</button>
+  <button class="btn scenario" data-scene="hold">有活跃 hold（待人工决策）</button>
+  <button class="btn scenario" data-scene="fail">服务失败</button>
+  <span style="flex:1"></span>
+  <button class="btn small" id="themeBtn">🌗 深浅色</button>
+</div>
+
+<div class="layout">
+  <div class="card drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="item-id">REQ-20260927-003 <span class="chip" id="statusChip">开发中</span></div>
+        <div class="item-title">需求支持退回已计划</div>
+      </div>
+    </div>
+    <div class="meta">
+      <span>owner：zcode-0927-a1b2</span>
+      <span>认领锁：持有中</span>
+      <span>实施占用：zcode-0927-a1b2</span>
+    </div>
+    <div class="notice" id="notice"></div>
+    <div class="actions" id="actions"></div>
+    <div class="hint" id="hint">演示提示：点「↩ 退回已计划」观察档位、状态标签、时间线与 toast 的联动。</div>
+  </div>
+
+  <div class="card timeline-card">
+    <h3>状态时间线（模拟）</h3>
+    <ul class="timeline" id="timeline"></ul>
+  </div>
+</div>
+
+<div class="card lanes" style="max-width:860px;margin:14px auto 0;">
+  <h3>看板档位（该条目所在位置）</h3>
+  <div class="lane-strip" id="laneStrip"></div>
+</div>
+
+<div id="toastWrap"></div>
+
+<script>
+(function () {
+  "use strict";
+  var LANES = [
+    { key: "submitted", label: "待接受" }, { key: "accepted", label: "已接受" },
+    { key: "planned", label: "已计划" }, { key: "developing", label: "开发中" },
+    { key: "confirming", label: "待测试" }, { key: "done", label: "已完成" }
+  ];
+  var CHIP_LABEL = { submitted: "待接受", accepted: "已接受", planned: "已计划", developing: "开发中", confirming: "待测试", done: "已完成" };
+  var state = { status: "developing", hold: false, failMode: false, busy: false };
+  var now = function () {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, "0"); };
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  };
+  var timeline = [
+    { t: "16:02:11", edge: "accepted → developing", note: "认领（zcode-0927-a1b2）" }
+  ];
+
+  function toast(msg, isErr) {
+    var wrap = document.getElementById("toastWrap");
+    var el = document.createElement("div");
+    el.className = "toast " + (isErr ? "err" : "ok");
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(function () { el.remove(); }, 3600);
+  }
+
+  function renderLanes() {
+    var strip = document.getElementById("laneStrip");
+    strip.innerHTML = "";
+    LANES.forEach(function (l) {
+      var d = document.createElement("div");
+      d.className = "lane" + (state.status === l.key ? " on" : "");
+      d.innerHTML = l.label + (state.status === l.key ? '<span class="dot">● 本条目</span>' : "");
+      strip.appendChild(d);
+    });
+  }
+
+  function renderTimeline() {
+    var ul = document.getElementById("timeline");
+    ul.innerHTML = "";
+    timeline.forEach(function (e) {
+      var li = document.createElement("li");
+      if (e.revert) li.className = "revert";
+      li.innerHTML = '<span class="t">' + e.t + "</span><br><span class='edge'>" + e.edge + "</span> " + e.note;
+      ul.appendChild(li);
+    });
+  }
+
+  function render() {
+    var chip = document.getElementById("statusChip");
+    chip.textContent = CHIP_LABEL[state.status];
+    chip.className = "chip " + state.status;
+    document.getElementById("notice").className = "notice " + (state.status === "developing" ? "info" : "info");
+    var notice = document.getElementById("notice");
+    var actions = document.getElementById("actions");
+    var hint = document.getElementById("hint");
+    actions.innerHTML = "";
+    if (state.status === "developing") {
+      notice.className = "notice info";
+      notice.textContent = "Agent 开发中（未上报）。可确认完成；如需撤下重排，可「退回已计划」回到已计划队列（新能力）。";
+      var doneBtn = mkBtn("✓ 确认完成", "primary", function () {
+        toast("演示：确认完成走既有流程，本演示聚焦退回，不做模拟流转。", false);
+      });
+      var backBtn = mkBtn("↩ 退回已计划", "warn", doRevert);
+      if (state.hold) {
+        backBtn.disabled = true;
+        backBtn.title = "待人工决策中，请在「待人工确认」补齐决策后复工";
+        notice.className = "notice warn";
+        notice.textContent = "⚠ 待人工决策（1 项未答）：退回入口禁用，请到「待人工确认」聚合区补齐决策后复工（REQ-20260911-007 闭环不因新边绕过）。";
+      }
+      actions.appendChild(doneBtn);
+      actions.appendChild(backBtn);
+      hint.textContent = state.hold
+        ? "演示提示：有活跃 hold 时「↩ 退回已计划」禁用并给出引导；切回「正常开发中」场景再试。"
+        : "演示提示：点「↩ 退回已计划」观察档位、状态标签、时间线与 toast 的联动。";
+    } else if (state.status === "planned") {
+      notice.className = "notice info";
+      notice.textContent = "已排入开发计划，开发启动后最旧优先自动处理；未进入开发中前可「移出计划」退回已接受。";
+      actions.appendChild(mkBtn("↩ 移出计划", "warn", function () {
+        setStatus("accepted", "planned → accepted", "人工移出计划，退回已接受");
+        toast("✓ REQ-20260927-003 已移出计划（退回已接受）", false);
+      }));
+      actions.appendChild(mkBtn("▶ 重新取单（模拟 claim）", "", function () {
+        setStatus("developing", "planned → developing", "认领（zcode-0927-b3c4）——重新取单，闭环可追溯");
+        toast("✓ 已重新取单，回到开发中（模拟调度器按最旧优先取单）", false);
+      }));
+      hint.textContent = "演示提示：退回后单回到已计划队列；可「移出计划」继续回退，或模拟重新取单验证闭环。";
+    } else if (state.status === "accepted") {
+      notice.className = "notice info";
+      notice.textContent = "未入计划。可点「移入计划」排入开发计划。";
+      actions.appendChild(mkBtn("➤ 移入计划", "", function () {
+        setStatus("planned", "accepted → planned", "人工置为已计划");
+        toast("✓ REQ-20260927-003 已移入计划", false);
+      }));
+      hint.textContent = "演示提示：完整回退链路：开发中 → 已计划 → 已接受。";
+    } else {
+      notice.className = "notice info";
+      notice.textContent = "当前状态：" + CHIP_LABEL[state.status];
+      hint.textContent = "";
+    }
+    renderLanes();
+    renderTimeline();
+  }
+
+  function mkBtn(label, cls, onClick) {
+    var b = document.createElement("button");
+    b.className = "btn " + cls;
+    b.innerHTML = label;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function setStatus(to, edge, note, isRevert) {
+    var from = state.status;
+    state.status = to;
+    timeline.push({ t: now(), edge: from + " → " + to + "（" + edge + "）", note: note, revert: !!isRevert });
+    render();
+  }
+
+  function doRevert() {
+    if (state.busy || state.hold) return;
+    if (state.failMode) {
+      toast("退回失败：状态已变化（当前 developing），请刷新后重试（模拟服务错误）。", true);
+      return;
+    }
+    state.busy = true;
+    var btns = document.querySelectorAll("#actions .btn");
+    btns.forEach(function (b) { b.disabled = true; });
+    document.getElementById("hint").innerHTML = '<span class="spin"></span>提交中…';
+    setTimeout(function () {
+      state.busy = false;
+      setStatus("planned", "人工退回已计划", "owner 清空、认领锁删除、实施占用释放（模拟）", true);
+      toast("✓ REQ-20260927-003 已退回已计划", false);
+    }, 700);
+  }
+
+  // 场景切换
+  document.querySelectorAll(".scenario").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".scenario").forEach(function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      var scene = b.dataset.scene;
+      state.hold = scene === "hold";
+      state.failMode = scene === "fail";
+      if (state.status !== "developing") {
+        state.status = "developing";
+        timeline.push({ t: now(), edge: "… → developing", note: "切回「开发中」演示场景（模拟重置）" });
+      }
+      render();
+    });
+  });
+
+  // 深浅色
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    document.documentElement.classList.toggle("dark");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
