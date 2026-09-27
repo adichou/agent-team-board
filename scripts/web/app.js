@@ -2907,8 +2907,10 @@ async function attemptTransition(id, to, label) {
 
 /* ---------- 详情页免二次确认 + 撤销（REQ-20260906-014） ---------- */
 
-// 撤销映射：只走状态机合法回退边。core.mjs 人工回退边两条（REQ-20260903-001 驳回完成、
-// REQ-20260907-011 驳回接受），接受（→ accepted）因此也有撤销；映射边须与 TRANSITIONS 保持一致。
+// 撤销映射：只走状态机合法回退边。core.mjs 人工回退边（REQ-20260903-001 驳回完成、
+// REQ-20260907-011 驳回接受、REQ-20260908-010 移出计划）；接受（→ accepted）因此也有撤销；
+// 映射边须与 TRANSITIONS 保持一致。REQ-20260927-003：退回已计划（in-progress → planned）
+// 不入映射——撤销需重置回开发中并恢复占用，首版仅成功提示（drawerAction 显式跳过）。
 // REQ-20260910-011：补 submitted → accepted（撤销「驳回接受」= 重新接受），四个免确认流转
 // 的单条入口均有反向操作可回退。
 const ACTION_UNDO = {
@@ -2962,7 +2964,11 @@ async function drawerAction(id, to, label) {
     } else {
       await postTransition(id, to);
     }
-    toast(`✓ ${id} 已${label}`, false, undoActionFor(id, to));
+    // REQ-20260927-003：退回已计划（in-progress → planned）首版不附撤销——撤销需把单重新
+    // 置回开发中并恢复占用，语义复杂；「移入计划」（accepted → planned）的撤销口径不变。
+    const cur = (state.board?.items || []).find((x) => x.id === id) || state.drawer.item;
+    const undo = (to === 'planned' && cur && cur.status === 'in-progress') ? null : undoActionFor(id, to);
+    toast(`✓ ${id} 已${label}`, false, undo);
     await refreshAfterTransition();
   } catch (e) {
     toast(e.message, true);
@@ -4597,8 +4603,13 @@ function drawerActionsButtonHtml(it) {
     case 'planned':
       // REQ-20260908-010：移出计划退回已接受（免二次确认，可撤销=重新置计划）
       return `<button class="btn warn" data-act="accepted" data-label="移出计划（退回已接受）">↩ 移出计划</button>`;
-    case 'in-progress':
-      return `<button class="btn primary" data-act="done">✓ 确认完成</button>`;
+    case 'in-progress': {
+      // REQ-20260927-003：退回已计划（人工撤单重排）——免二次确认，对齐「↩ 移出计划」「↩ 驳回完成」；
+      // 活跃 hold（待人工决策未闭环）时禁用并引导补齐决策后复工（对齐 claim 防呆、确认完成防呆口径）
+      const holding = !!(it.hold && it.hold.state === 'holding');
+      return `<button class="btn primary" data-act="done">✓ 确认完成</button>
+        <button class="btn warn" data-act="planned" data-label="退回已计划"${holding ? ' disabled title="待人工决策中，请在『待人工确认』补齐决策后复工"' : ''}>↩ 退回已计划</button>`;
+    }
     case 'done':
       return `<button class="btn warn" data-act="in-progress" data-label="驳回完成（退回开发）">↩ 驳回完成</button>`;
     default:

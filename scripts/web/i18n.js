@@ -296,6 +296,10 @@ const EN = {
   '✎ 修改': '✎ Edit',
   '✓ 接受': '✓ Accept',
   '✓ 确认完成': '✓ Confirm done',
+  // REQ-20260927-003 退回已计划（详情页开发中条目回退按钮 + data-label + 禁用 tooltip）
+  '↩ 退回已计划': '↩ Back to planned',
+  '退回已计划': 'Back to planned',
+  '待人工决策中，请在『待人工确认』补齐决策后复工': 'Awaiting human decisions: answer them under "Pending human decisions" and resume',
   '✕ 关闭': '✕ Close',
   '➤ 移入计划': '➤ Add to plan',
   '「暂停后续领取」只阻止领取下一项（当前项继续）；立即停止正在运行的工具请到 Zcode 原生任务界面操作。': '"Pause next pickup" only stops claiming the next item (the current one continues); to stop running tools immediately, use the Zcode native task view.',
@@ -1923,6 +1927,8 @@ const EN_DYNAMIC = {
   // 未收录标签按「未命中保持原文」降级原则处理（该源码模板片段见 ALLOWLIST 豁免说明）。
   '✓ ◇ 已接受': '✓ $1 accepted',
   '✓ ◇ 已移出计划': '✓ $1 removed from plan',
+  // REQ-20260927-003 退回已计划成功 toast（in-progress → planned，drawerAction 免确认流转）
+  '✓ ◇ 已退回已计划': '✓ $1 reverted to planned',
   '✓ ◇ 已驳回完成（退回开发）': '✓ $1 rejected completion (back to development)',
   '✓ ◇ 已驳回接受（退回待接受）': '✓ $1 rejected acceptance (back to pending)',
   '✓ ◇ 标题与描述已更新': '✓ $1 title & description updated',

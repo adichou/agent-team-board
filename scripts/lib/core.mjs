@@ -56,13 +56,14 @@ export function projectRootOfBoard(boardRoot) {
 export const STATES = ['submitted', 'accepted', 'planned', 'pending-alignment', 'in-progress', 'done'];
 // 状态机（REQ-20260903-001 回退单阶段）：单向主干；人工回退边：
 // done → in-progress（驳回完成）、accepted → submitted（驳回接受，REQ-20260907-011）、
-// planned → accepted（移出计划，REQ-20260908-010）。
+// planned → accepted（移出计划，REQ-20260908-010）、
+// in-progress → planned（退回已计划/撤单重排，REQ-20260927-003）。
 export const TRANSITIONS = {
   submitted: ['accepted'],
   accepted: ['planned', 'in-progress', 'submitted'], // planned = 人工置计划（REQ-20260908-010）；submitted = 人工驳回接受
   planned: ['in-progress', 'accepted'], // in-progress = claim 认领即实施；accepted = 人工移出计划
   'pending-alignment': ['in-progress'], // 存量兼容：旧待对齐条目人工放行
-  'in-progress': ['done'],
+  'in-progress': ['done', 'planned'], // done = 人工确认完成；planned = 人工退回已计划（REQ-20260927-003）
   done: ['in-progress'],
 };
 // accepted / planned / done 仅限人工执行；Agent 侧由 hooks/state-guard.mjs 在 PreToolUse 确定性拦截。
@@ -859,7 +860,7 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
   if (!allowed.includes(to)) {
     throw new AtbError(
       `非法流转：${st.status} → ${to}。` +
-      `合法路径 submitted → accepted → planned → in-progress → done；人工可驳回：done → in-progress、accepted → submitted、planned → accepted（移出计划）。` +
+      `合法路径 submitted → accepted → planned → in-progress → done；人工可回退：done → in-progress、accepted → submitted、planned → accepted（移出计划）、in-progress → planned（退回已计划）。` +
       `其中 accepted / planned / done 只能由人工在 Status Board 或终端执行。`
     );
   }
@@ -890,6 +891,19 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
       };
       saveHoldRecord(dataDir, id, closed);
       renderDecisionsDoc(dataDir, id, st.title);
+    }
+  }
+  // REQ-20260927-003 退回已计划防呆：有活跃 hold（待人工决策未闭环）的开发中单不得借新边
+  // 绕过决策闭环——请在「待人工确认」补齐决策并复工（复工即回已计划），或作废声明后退回；
+  // 不提供 force 越过（复工语义即回已计划，退回无增益；默认口径）。
+  if (st.status === 'in-progress' && to === 'planned') {
+    const hold = activeHoldOf(dataDir, id);
+    if (hold) {
+      const n = unansweredCount(hold);
+      throw new AtbError(
+        `${id} 待人工决策中（${n} 项未答，${hold.declaredBy || 'worker'} 声明）：` +
+        '请先在 Status Board「待人工确认」补齐决策并复工（复工即回已计划），或作废声明后再退回；不得借退回绕过决策闭环'
+      );
     }
   }
   // REQ-20260908-020：完善中的已接受单不可驳回回待接受（CLI 与 UI 双侧同口径，防绕过）
@@ -923,6 +937,17 @@ export function setStatus(dataDir, id, to, { by, note = '', force = false } = {}
       cancelBlockedRunsWithItemDone(dataDir, id, { by: by || actor() });
     } catch { /* 账本留痕失败：读时口径兜底，不回滚状态流转 */ }
     note = note || '人工确认完成';
+  }
+  if (from === 'in-progress' && to === 'planned') {
+    // 人工退回已计划（REQ-20260927-003）：开发启动后撤单重排——清空认领、删除认领锁、
+    // 释放手工实施占用（与待人工决策复工、驳回完成同口径，幂等），单回已计划队列
+    // 参与最旧优先调度；agentCompletedAt 一并清除（对齐驳回完成重开口径，
+    // 避免「Agent 已上报完成」残留在已计划条目上）
+    st.owner = null;
+    st.agentCompletedAt = null;
+    releaseLock(path.join(dataDir, 'runtime', '.locks', `${id}.lock`));
+    releaseImplLockForManual(dataDir, id);
+    note = note || '人工退回已计划，撤单重排';
   }
   if (from === 'done' && to === 'in-progress') {
     // 人工驳回：清空认领与完成标记，删除认领锁，允许 Agent 重新 claim；
@@ -1040,8 +1065,8 @@ export function claim(dataDir, id, owner) {
 }
 
 // REQ-20260911-007 待人工决策复工专用通路：in-progress → planned。
-// 不进通用 TRANSITIONS（普通 setStatus / 网页状态接口不提供此边）——仅人工经
-// atb hold resume（终端）/ Status Board 复工按钮触发，hold-store 校验决策齐备后调用。
+// REQ-20260927-003 起该边同时进通用 TRANSITIONS 供人工退回已计划（撤单重排），但 setStatus
+// 对活跃 hold 一律拦截——本通路仍由 hold-store 校验决策齐备后调用，决策闭环口径不回归。
 // 与 done → in-progress 驳回同口径清理：owner 清空、认领锁删除、手工实施占用释放；history 留痕。
 export function resumeItemToPlanned(dataDir, id, { by, note = '' } = {}) {
   const { dir } = resolveItemDir(dataDir, id);

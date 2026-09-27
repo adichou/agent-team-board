@@ -611,13 +611,15 @@ async function handleFsApi(req, res, u, pathname, root) {
 }
 
 // 网页（人工）允许执行的流转（REQ-20260903-001 回退：认领即实施，网页不做对齐确认；
-// REQ-20260908-010：accepted ↔ planned 置计划/移出计划均为人工排期操作）
+// REQ-20260908-010：accepted ↔ planned 置计划/移出计划均为人工排期操作；
+// REQ-20260927-003：in-progress → planned 人工退回已计划——活跃 hold 由 core.setStatus 拦截）
 function boardTransitionAllowed(from, to) {
   if (from === 'submitted' && to === 'accepted') return true;
   if (from === 'accepted' && to === 'planned') return true; // 人工置计划（REQ-20260908-010）
   if (from === 'planned' && to === 'accepted') return true; // 人工移出计划（REQ-20260908-010）
   if (from === 'accepted' && to === 'submitted') return true; // 人工驳回接受（REQ-20260907-011）
   if (from === 'in-progress' && to === 'done') return true;
+  if (from === 'in-progress' && to === 'planned') return true; // 人工退回已计划（REQ-20260927-003）
   if (from === 'done' && to === 'in-progress') return true; // 人工驳回完成
   return false;
 }
