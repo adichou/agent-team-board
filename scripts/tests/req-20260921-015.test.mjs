@@ -281,7 +281,8 @@ t('F1 有依赖（REQ-20260926-002 重排）：一行汇总 + 只读明细 detai
   await h.enter();
   await h.detailAt('BLD-DEP', 'merge');
   const pane = mergePaneHtml(h.inner());
-  assert.match(pane, /发现 3 个未选祖先提交 · 影响 2 个所选条目/, '一行汇总（提交数 + 所选条目数）');
+  // REQ-20260927-004：汇总行合并为一句完整文案（X 只统计源码祖先，Y 为受影响所选条目数）
+  assert.match(pane, /发现 2 个所选条目的共 3 个未选祖先提交。/, '一行汇总（受影响条目数 + 提交数）');
   // REQ-20260926-002：未选祖先不认定为必须加入的功能依赖——一键加入入口整体移除
   assert.ok(!pane.includes('data-iso-add-deps') && !pane.includes('一键加入'), '一键加入按钮与行为标记移除');
   assert.match(pane, /查看未选祖先明细/, '明细折叠入口保留（只读参考）');
@@ -363,7 +364,7 @@ t('F5 一键加入交互已移除：合并页不再发起 add-dependencies 请�
   assert.equal(h.run('typeof window.ATBBuild.addDependencies'), 'undefined', 'addDependencies 行为接缝已移除');
   const pane = mergePaneHtml(h.inner());
   assert.ok(!pane.includes('data-iso-add-deps'), '无一键加入行为标记');
-  assert.match(pane, /发现 3 个未选祖先提交 · 影响 2 个所选条目/, '未选祖先明细仍如实展示（只读）');
+  assert.match(pane, /发现 2 个所选条目的共 3 个未选祖先提交。/, '未选祖先明细仍如实展示（只读；REQ-20260927-004 汇总句）');
 });
 
 t('F6 合并主按钮锁定态沿用：merging / 已正式发布 aria-disabled + title 真实原因（一键加入锁定态词条随入口移除）', async () => {
@@ -402,7 +403,7 @@ t('S1 静态契约（REQ-20260926-002 修订）：renderMergePane 仅读取失�
     assert.ok(k in EN, `EN 词典缺词条：${k}`);
   }
   for (const k of [
-    '发现 ◇ 个未选祖先提交 · 影响 ◇ 个所选条目',
+    '发现 ◇ 个所选条目的共 ◇ 个未选祖先提交。未选的祖先提交不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。',
     '共享提交 ◇ 处按提交 hash 去重，挑选合并只执行一次（各关联条目展示一致的合入结果）',
     '⚠ 暂不可合并：◇',
     '⚠ 合并失败：◇（可重试，只补未合并条目）',
