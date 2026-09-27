@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REQ-20260927-004 界面演示 · 挑选合并隔离分析（区分发布文档提交）</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --text:#1f2328; --muted:#656d76; --border:#d0d7de;
+    --accent:#0969da; --accent-weak:#ddf4ff; --badge-bg:#e7f0fb; --badge-fg:#0550ae; --badge-border:#0550ae;
+    --warn-bg:#fff8c5; --warn-fg:#7d4e00; --err:#cf222e; --code-bg:#eff2f5;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8b949e; --border:#30363d;
+      --accent:#58a6ff; --accent-weak:#12233c; --badge-bg:#12233c; --badge-fg:#79b8ff; --badge-border:#79b8ff;
+      --warn-bg:#2d2410; --warn-fg:#d4a72c; --err:#f85149; --code-bg:#21262d;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8b949e; --border:#30363d;
+    --accent:#58a6ff; --accent-weak:#12233c; --badge-bg:#12233c; --badge-fg:#79b8ff; --badge-border:#79b8ff;
+    --warn-bg:#2d2410; --warn-fg:#d4a72c; --err:#f85149; --code-bg:#21262d;
+    color-scheme:dark;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px 16px 64px; background:var(--bg); color:var(--text);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; }
+  .wrap{ max-width:860px; margin:0 auto; }
+  h1{ font-size:20px; margin:0 0 4px; }
+  .sub{ color:var(--muted); font-size:13px; margin:0 0 16px; }
+  .demo-bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 8px; }
+  .demo-bar .label{ font-size:13px; color:var(--muted); }
+  button.scn{ font:inherit; font-size:13px; padding:4px 10px; border-radius:6px; cursor:pointer;
+    border:1px solid var(--border); background:var(--card); color:var(--text); }
+  button.scn:hover{ border-color:var(--accent); }
+  button.scn[aria-pressed="true"]{ background:var(--accent-weak); border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .note{ font-size:13px; color:var(--muted); background:var(--card); border:1px dashed var(--border);
+    border-radius:8px; padding:8px 12px; margin:8px 0 16px; }
+  .pane{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+  .pane section{ margin:0 0 12px; }
+  .pane strong{ display:block; margin-bottom:6px; }
+  .sum{ margin:4px 0 8px; }
+  details{ border:1px solid var(--border); border-radius:8px; padding:6px 10px; margin:8px 0; background:var(--bg); }
+  summary{ cursor:pointer; font-size:14px; user-select:none; }
+  summary:hover{ color:var(--accent); }
+  details ul{ margin:8px 0; padding-left:20px; }
+  details li{ margin:6px 0; font-size:14px; }
+  code{ background:var(--code-bg); border-radius:4px; padding:1px 5px; font-size:13px; }
+  .muted{ color:var(--muted); }
+  .small{ font-size:13px; }
+  .badge{ display:inline-block; padding:0 8px; border-radius:999px; font-size:12px; line-height:20px;
+    background:var(--badge-bg); color:var(--badge-fg); border:1px solid var(--badge-border); vertical-align:1px; }
+  .iso-note{ font-size:13px; color:var(--warn-fg); background:var(--warn-bg); border-radius:6px; padding:6px 10px; }
+  .err{ color:var(--err); font-size:14px; margin:4px 0; }
+  .btn{ font:inherit; font-size:14px; padding:6px 14px; border-radius:6px; cursor:pointer;
+    border:1px solid var(--border); background:var(--card); color:var(--text); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover{ filter:brightness(1.08); }
+  .devbar{ font-size:13px; color:var(--muted); border-top:1px solid var(--border); padding-top:10px; margin-top:12px; }
+  footer{ font-size:12px; color:var(--muted); margin-top:20px; }
+  #toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%); background:var(--text); color:var(--bg);
+    padding:8px 16px; border-radius:8px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s; z-index:9; }
+  #toast.show{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>REQ-20260927-004 · 挑选合并「隔离分析」— 区分发布文档提交</h1>
+  <p class="sub">可交互线框演示：对合入 main 无影响的发布文档提交单独折叠告知；真实渲染见 scripts/web/build.js 合并步面板（renderMergePane）。</p>
+
+  <div class="demo-bar" role="group" aria-label="场景切换">
+    <span class="label">场景：</span>
+    <button type="button" class="scn" data-scn="normal" aria-pressed="true">正常（源码 + 发布文档）</button>
+    <button type="button" class="scn" data-scn="onlySource" aria-pressed="false">仅源码祖先（M=0）</button>
+    <button type="button" class="scn" data-scn="onlyDocs" aria-pressed="false">仅发布文档提交（X=0）</button>
+    <button type="button" class="scn" data-scn="empty" aria-pressed="false">空态（X=0、M=0）</button>
+    <button type="button" class="scn" data-scn="loading" aria-pressed="false">加载中</button>
+    <button type="button" class="scn" data-scn="error" aria-pressed="false">读取失败</button>
+    <button type="button" class="scn" id="themeBtn" aria-pressed="false">切换深浅色</button>
+  </div>
+  <p class="note" id="demoNote"></p>
+
+  <div class="pane" id="pane"></div>
+
+  <footer>
+    本页为条目完善阶段的可交互演示（单文件、内联 CSS/JS、无外网依赖），数据为示例，仅覆盖「隔离分析」展示；
+    分类判定为只读展示，不改变挑选合并的执行范围与冲突语义。
+  </footer>
+</div>
+<div id="toast" role="status"></div>
+<script>
+(function(){
+  'use strict';
+
+  var SCN_NOTES = {
+    normal: '观察：汇总行「发现 2 个所选条目的共 3 个未选祖先提交。未选的祖先提交不随隔离合并进入 main；…」合并计数与去向说明为一句，只计源码祖先（不含发布文档提交）；「另有 1 个发布文档提交」折叠行默认收起，展开可见 短 hash + 主题 + 徽标（颜色 + 文字双重区分）；两段明细独立折叠、互不影响。',
+    onlySource: 'M = 0：不出现发布文档提交折叠行，界面与现状一致。',
+    onlyDocs: 'X = 0 且 M > 0：呈现「所选提交无未选祖先」说明 + 发布文档提交折叠行，不再出现空的源码明细。',
+    empty: 'X = 0、M = 0：仅一句「可独立进入主分支」说明，无任何折叠行。',
+    loading: '加载中：合并分析尚未就绪时的状态提示（role=status）。',
+    error: '读取失败：给出原因与「重试」入口；点击重试先回到加载中，再恢复「正常」场景（模拟重取成功）。'
+  };
+
+  var SRC = [
+    { hash: 'a1b2c3d4', subject: 'feat: 看板列宽拖拽与记忆', owner: 'REQ-20260925-011' },
+    { hash: 'b2c3d4e5', subject: 'fix: 修复导出 CSV 乱码', owner: 'BUG-20260924-007' },
+    { hash: 'c3d4e5f6', subject: 'chore: 调整发布构建脚本', owner: 'REQ-20260925-011' }
+  ];
+  var DOCS_NORMAL = [
+    { hash: 'f1d15c79', subject: 'docs: 发布文档 BLD-20260923-001' }
+  ];
+  var DOCS_ONLY = [
+    { hash: 'f1d15c79', subject: 'docs: 发布文档 BLD-20260923-001' },
+    { hash: 'a9b8c7d6', subject: 'docs: 发布文档 BLD-20260921-001' }
+  ];
+
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  var toastTimer = null;
+  function toast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2400);
+  }
+
+  function docsDetails(list){
+    return '<details class="iso-docs"><summary><span class="badge">发布文档提交</span> 另有 '
+      + list.length + ' 个发布文档提交 · 随「文档合并」步处理，不随挑选合并</summary><ul>'
+      + list.map(function(d){
+        return '<li><code>' + esc(d.hash) + '</code> ' + esc(d.subject)
+          + ' <span class="badge">发布文档提交</span><br>'
+          + '<span class="muted small">仅根第一层发布文档 · 不随挑选合并进入 main，随「文档合并」步处理</span></li>';
+      }).join('')
+      + '</ul><p class="muted small">判定口径：变更文件全部落在根第一层发布文档集合内（README / CHANGELOG / FEATURES / AGENTS / DESIGN 及语言变体、版本自定义文档）；混合变更（根文档 + 其他文件）不分类，仍在源码祖先明细按现状展示。</p></details>';
+  }
+
+  function srcDetails(){
+    return '<details class="iso-deps"><summary>查看未选祖先明细</summary><ul>'
+      + SRC.map(function(i){
+        return '<li><code>' + esc(i.hash) + '</code> ' + esc(i.subject) + '<br>'
+          + '<span class="muted small">为 ' + esc(i.owner) + ' 的未选祖先</span></li>';
+      }).join('')
+      + '</ul></details>';
+  }
+
+  function render(scn){
+    setPressed(scn);
+    document.getElementById('demoNote').textContent = SCN_NOTES[scn] || '';
+    var pane = document.getElementById('pane');
+
+    if (scn === 'loading'){
+      pane.innerHTML = '<section><strong>隔离分析</strong>'
+        + '<p class="muted" role="status">正在加载合并分析…</p></section>';
+      return;
+    }
+    if (scn === 'error'){
+      pane.innerHTML = '<section><strong>隔离分析</strong>'
+        + '<p class="err" role="alert">合并分析读取失败：git 规划读取超时（示例原因）</p>'
+        + '<p><button type="button" class="btn" id="retryBtn">重试</button></p></section>';
+      document.getElementById('retryBtn').addEventListener('click', function(){
+        render('loading');
+        setTimeout(function(){ render('normal'); }, 900);
+      });
+      return;
+    }
+
+    var docs = scn === 'onlyDocs' ? DOCS_ONLY : (scn === 'normal' ? DOCS_NORMAL : []);
+    var showSrc = scn === 'normal' || scn === 'onlySource';
+
+    var html = '<section><strong>隔离分析</strong>';
+    if (showSrc){
+      html += '<p class="sum small">发现 2 个所选条目的共 ' + SRC.length + ' 个未选祖先提交。未选的祖先提交不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。</p>'
+        + srcDetails();
+      if (scn === 'normal'){
+        html += '<p class="iso-note" title="共享提交示例：c3d4e5f6（关联 REQ-20260925-011、BUG-20260924-007）">共享提交 1 处按提交 hash 去重，挑选合并只执行一次（各关联条目展示一致的合入结果）</p>';
+      }
+    } else {
+      html += '<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>';
+    }
+    if (docs.length) html += docsDetails(docs);
+    html += '</section>';
+
+    html += '<p class="devbar">当前分支 dev · 目标主分支 main（合并经临时工作树隔离执行，完成后工作目录仍在 dev）</p>';
+    html += '<p><button type="button" class="btn primary" id="mergeBtn">挑选合并到 main</button> '
+      + '<span class="muted small">把所选提交按 hash 去重、按拓扑顺序 cherry-pick 进 main；冲突会展示具体提交、文件和原因，已合入提交不重复执行。</span></p>';
+
+    pane.innerHTML = html;
+    var mb = document.getElementById('mergeBtn');
+    if (mb) mb.addEventListener('click', function(){
+      toast('演示页：合并执行不在本演示范围，仅覆盖隔离分析展示。');
+    });
+  }
+
+  function setPressed(scn){
+    var btns = document.querySelectorAll('button.scn[data-scn]');
+    Array.prototype.forEach.call(btns, function(b){
+      b.setAttribute('aria-pressed', b.getAttribute('data-scn') === scn ? 'true' : 'false');
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('button.scn[data-scn]'), function(b){
+    b.addEventListener('click', function(){ render(b.getAttribute('data-scn')); });
+  });
+
+  document.getElementById('themeBtn').addEventListener('click', function(){
+    var root = document.documentElement;
+    var cur = root.getAttribute('data-theme');
+    if (!cur){
+      cur = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    this.setAttribute('aria-pressed', 'true');
+    this.textContent = next === 'dark' ? '切换浅色' : '切换深色';
+  });
+
+  render('normal');
+})();
+</script>
+</body>
+</html>
