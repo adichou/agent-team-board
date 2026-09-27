@@ -3170,9 +3170,23 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 @media (max-width: 900px) { .bld-rel-split { grid-template-columns: minmax(0, 1fr); } }
 /* 面板内条目选择（全选 / 全不选） */
 .bld-pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.bld-cand { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+/* REQ-20260927-002：候选行改为「复选框行 + 勾选后行内展开只读关联提交区块」纵向结构
+   （旧单选下拉 .bld-commit-sel 随整组自动关联口径移除） */
+.bld-cand { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.bld-cand > label.check { display: flex; align-items: center; gap: 8px; }
 .bld-cand.off { opacity: 0.6; }
 .bld-cand-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-assoc { display: flex; flex-direction: column; gap: 4px; border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; }
+.bld-assoc-head { color: var(--muted); font-size: 12px; }
+.bld-assoc-row, .bld-broad-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.bld-assoc-row code, .bld-broad-row code { flex: none; font-size: 12px; color: var(--muted); }
+.bld-assoc-subject, .bld-broad-subject { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bld-src { flex: none; font-size: 11px; padding: 0 7px; }
+.bld-src-ledger { background: var(--ok-bg); color: var(--ok-text); }
+.bld-src-attribution { background: var(--info-bg); color: var(--info-text); }
+.bld-src-fallback { background: rgba(217, 119, 6, 0.12); color: var(--inprogress); }
+.bld-broad { display: flex; flex-direction: column; gap: 4px; }
+.bld-broad .bld-broad-toggle { align-self: flex-start; }
 /* 回填弹窗两段式 */
 .bld-prompt-box, .bld-answer-box { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
 .bld-prompt-box textarea, .bld-answer-box textarea {

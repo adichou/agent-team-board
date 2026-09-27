@@ -2266,7 +2266,10 @@ async function handleProductReleaseApi(req, res, u, pathname, root, dataDir) {
 //   GET  /api/build/candidates        条目 ↔ commit 候选（core.listItems ∪ itemCommitStatusIndex；
 //                                    BUG-20260913-001：仅已完成 done 条目进入候选；
 //                                    BUG-20260914-004：已纳入任一版本的条目一并收窄，
-//                                    totalDone=占用过滤前 done 总数供前端区分空态）
+//                                    totalDone=占用过滤前 done 总数供前端区分空态；
+//                                    REQ-20260927-002：每条附 commitMeta（账本核验 ∪ 主题
+//                                    末尾单号严格归属，自动关联集）与 broadCommits（宽口径
+//                                    命中），均按 git 历史旧→新排序，供前端整组自动关联）
 //   GET  /api/build/branches          分支列表：current / local[] / remote[]（origin/xxx 短名）
 //   GET  /api/build/branch-log        指定分支提交记录（BUG-20260914-009 分页：?limit= 默认 50 上限 500、
 //                                    ?offset= 偏移默认 0；返回 hash/short/subject/author/date + total 总数；
@@ -2346,6 +2349,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   if (req.method === 'GET' && pathname === '/api/build/candidates') {
     const board = requireBoard();
     const idx = gitFlow.itemCommitStatusIndex(board, root);
+    // REQ-20260927-002：提交三口径索引——账本核验 ∪ 主题末尾单号严格归属为自动关联集
+    //（commitMeta），其余宽口径命中单独下发（broadCommits），供前端勾选条目即整组自动
+    // 关联与「另有 N 个宽口径命中未关联」折叠展示；均按 git 历史旧→新排序。
+    const assoc = gitFlow.autoAssociationIndex(board, root);
     // BUG-20260913-001：仅已完成（done）条目可纳入版本；BUG-20260914-004：已纳入任一版本
     // （draft/merging/merged/failed 任一状态）的条目一并收窄，不再进入候选——「新建版本」与
     // 「添加条目」两面板共用本接口，口径保持一致。totalDone 为占用过滤前的 done 条目总数，
@@ -2356,6 +2363,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       .filter((it) => !occupied.has(it.id))
       .map((it) => {
         const rec = idx.get(it.id);
+        const a = assoc.get(it.id);
         return {
           itemId: it.id,
           title: it.title || '',
@@ -2363,6 +2371,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
           type: it.type,
           commits: rec ? [...rec.commits] : [],
           lastCommittedAt: rec ? rec.lastCommittedAt : null,
+          // REQ-20260927-002：自动关联集（hash/subject/source）与宽口径命中（hash/subject）
+          commitMeta: a ? a.auto.map((x) => ({ ...x })) : [],
+          broadCommits: a ? a.broad.map((x) => ({ ...x })) : [],
         };
       });
     return sendJson(res, 200, { items, totalDone: doneItems.length });

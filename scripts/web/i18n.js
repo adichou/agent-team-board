@@ -107,6 +107,14 @@ const EN = {
   // 词典缺口，英文界面悬停仍为中文）；toast 拼接句见 EN_DYNAMIC。
   // BUG-20260914-018：main 行「通过发布流程推送」徽标与 title 详释两条词条随界面删除一并清理。
   '同步仅推送 main 以外的本地分支；main 必须通过发布流程推送。': 'Sync pushes local branches other than main only; main must be pushed through the release process.',
+  // REQ-20260927-002 选择条目和提交面板整组自动关联：来源徽标（颜色+文字双重区分的文案
+  // 部分）与缺省主题占位（静态词条）；区块头 / 折叠行 / 计数等插值句见 EN_DYNAMIC。
+  '自动·账本': 'Auto · ledger',
+  '自动·归属': 'Auto · attribution',
+  '回退·宽口径': 'Fallback · broad-match',
+  '（无主题）': '(no subject)',
+  '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可纳入版本；勾选条目即整组自动关联其全部提交': 'Only completed (done) requirements / bugs not yet in any version can be included; checking an item auto-links all its commits as a group',
+  '仅已完成（done）且未纳入任何版本的需求单 / Bug 单可加入本版本（已纳入版本的条目不再出现）；勾选条目即整组自动关联其全部提交': 'Only completed (done) requirements / bugs not yet in any version can join this plan (items already in a version no longer appear); checking an item auto-links all its commits as a group',
   // REQ-20260923-004：删除同步提交反馈的兜底短句（server reason 缺省时前端兜底文案）
   '同步提交失败：请在终端人工补提交该删除差异': 'Sync commit failed: please commit the deletion manually in the terminal',
   '已跳过同步提交': 'sync commit skipped',
@@ -1777,6 +1785,13 @@ const EN_DYNAMIC = {
   '⚠ Mermaid 图表渲染失败（◇）：已回退为源码展示': '⚠ Mermaid diagram rendering failed ($1): fallen back to source below',
   // BUG-20260912-001：状态行改为按段翻译（见 EN 区注释），原整句动态键移除
   '已选 ◇ 项': '$1 selected',
+  // REQ-20260927-002 选择条目和提交面板整组自动关联：只读区块头（关联提交 ◇ 个 · 旧→新 ·
+  // 只读）、宽口径命中折叠行、操作条计数（M = 已选条目自动关联提交数之和）与全选跳过句。
+  '关联提交（自动关联 ◇ 个 · 旧→新 · 只读）': 'Linked commits ($1 auto-linked · old → new · read-only)',
+  '另有 ◇ 个宽口径命中未关联': 'Another $1 broad-match commit(s) not linked',
+  '已选 ◇ 项 · ◇ 个提交': '$1 selected · $2 commits',
+  '◇ 个条目暂无关联提交将被跳过': '$1 item(s) without linked commits will be skipped',
+  '已全选有 commit 候选的条目；◇ 个条目暂无关联提交已跳过': 'Selected all items with commit candidates; $1 item(s) without linked commits skipped',
   '接受 ◇': 'Accept $1',
   '/ 强度 ◇ · 来源 ◇ · 快照时间 ◇◇': '/ effort $1 · source $2 · snapshot $3$4',
   // REQ-20260911-007 待人工决策承接（hold）：聚合区 / 决策面板 / 复工 / 确认完成防呆
