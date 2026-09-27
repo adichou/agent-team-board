@@ -3,13 +3,14 @@
 // 引入来源：REQ-20260913-001（构建模块前端选单工具行实现时，#bldPickAll 在有跳过条目时只弹
 // toast 不重渲染，#bldPickNone 点击处理完全缺失 render()——内部 picked 集合已更新但界面保持旧值）。
 // 修复口径（README「期望行为 / 验收说明」）：
-//   - 「全选」点击后 DOM 立即同步：有 commit 候选的行复选框 checked、「已选 N 项」计数更新、
-//     行内 commit 下拉解禁；无提交条目保持禁用与标注；跳过 toast 与界面更新同时生效；
-//   - 「全不选」点击后 DOM 立即清空：复选框全不勾、计数归零、commit 下拉恢复禁用；
-//     任意候选构成下行为一致；
+//   - 「全选」点击后 DOM 立即同步：有提交候选的行复选框 checked、「已选 N 项」计数更新；
+//     无提交条目保持禁用与标注；跳过 toast 与界面更新同时生效；
+//   - 「全不选」点击后 DOM 立即清空：复选框全不勾、计数归零；任意候选构成下行为一致；
 //   - 新建版本 / 添加条目两个面板共用路径一并覆盖；
 //   - 界面与提交内容一致：全选后提交的 items 即界面所显示勾选；全不选后提交被拦截且界面无勾选残留；
 //   - 全部候选有提交的对照组不回归（全选仍正常、无跳过 toast）。
+// REQ-20260927-002 契约迁移：候选提交改为整组自动关联（只读清单），逐个提交下拉移除——
+// 原「commit 下拉禁用 / 解禁」断言随行为下线，payload 由单值 commit 变整组 commits 数组。
 // 用法：node scripts/tests/bug-build-pick-all-render-20260914-002.test.mjs
 
 import assert from 'node:assert/strict';
@@ -107,20 +108,20 @@ function setup({ state = null, candidates = mixedCandidates() } = {}) {
   return { sandbox, toasts, requests, inner, click, run: (code) => vm.runInContext(code, sandbox) };
 }
 
-t('F1 新建版本面板「全选」即时生效（存在无提交候选）：复选框勾选 / 计数 / commit 下拉解禁同步，跳过 toast 同时保留', async () => {
+t('F1 新建版本面板「全选」即时生效（存在无提交候选）：复选框勾选 / 计数同步，无提交行保持禁用并标注，跳过 toast 同时保留', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
-  // 初始：0 勾选、计数 0、有提交行 commit 下拉禁用、无提交行禁用并标注
+  // 初始：0 勾选、计数 0、无提交行禁用并标注（REQ-20260927-002 起无逐个提交下拉，
+  // 勾选条目即整组自动关联其提交，原「commit 下拉禁用 / 解禁」断言随行为移除）
   assert.match(h.inner(), /已选 0 项/, '初始计数 0');
   assert.doesNotMatch(h.inner(), new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '初始无勾选');
-  assert.match(h.inner(), new RegExp(`data-panel="createPanel" data-item="${R1}" disabled`), '初始 commit 下拉禁用');
+  assert.doesNotMatch(h.inner(), /bld-commit-sel/, '不再渲染逐个提交下拉（整组自动关联口径）');
   // 点「全选」→ DOM 立即同步
   h.click('#bldPickAll');
   const after = h.inner();
   assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '有提交行复选框立即勾选');
   assert.match(after, /已选 1 项/, '计数立即更新');
-  assert.doesNotMatch(after, new RegExp(`data-panel="createPanel" data-item="${R1}" disabled`), '勾选行 commit 下拉解禁');
   assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R2}" disabled`), '无提交行复选框仍禁用');
   assert.match(after, /暂无关联提交/, '无提交行保留标注');
   assert.doesNotMatch(after, new RegExp(R3), '非 done 条目不渲染');
@@ -128,7 +129,7 @@ t('F1 新建版本面板「全选」即时生效（存在无提交候选）：�
     `跳过提示与渲染同时生效：${JSON.stringify(h.toasts)}`);
 });
 
-t('F2 新建版本面板「全不选」即时生效：复选框清空 / 计数归零 / commit 下拉恢复禁用', async () => {
+t('F2 新建版本面板「全不选」即时生效：复选框清空 / 计数归零', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
@@ -139,7 +140,6 @@ t('F2 新建版本面板「全不选」即时生效：复选框清空 / 计数�
   const after = h.inner();
   assert.match(after, /已选 0 项/, '计数立即归零');
   assert.doesNotMatch(after, new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '复选框立即清空');
-  assert.match(after, new RegExp(`data-panel="createPanel" data-item="${R1}" disabled`), 'commit 下拉恢复禁用');
   assert.doesNotMatch(after, new RegExp(`data-pick="createPanel" data-item="${R2}" checked`), '无提交行从未被勾选');
 });
 
@@ -188,7 +188,9 @@ t('F5 界面与提交一致：全选后提交内容即界面所示；全不选�
   await new Promise((r) => setTimeout(r, 10));
   const created = h.requests.find((x) => x.url.includes('/api/build/version') && x.method === 'POST');
   assert.ok(created, '应发起创建版本请求');
-  assert.deepEqual(created.body.items, [{ itemId: R1, commit: H1 }], '提交内容与界面显示的勾选一致（含默认 commit）');
+  // REQ-20260927-002：payload 为整组 commits 数组——旧候选 payload（无 commitMeta 元数据）
+  // 防御回退为该条目已知全部提交，不再有单值 commit 默认选中
+  assert.deepEqual(created.body.items, [{ itemId: R1, commits: [H1, H2] }], '提交内容与界面显示的勾选一致（整组 commits）');
   assert.ok(h.toasts.some((x) => x.m === '✓ 版本计划已创建'), '创建成功 toast');
   // 重开面板：全选 → 全不选（界面归零）→ 提交被拦截且界面无勾选残留
   await h.run(`window.ATBBuild.openCreatePanel()`);
