@@ -5133,7 +5133,11 @@ ${langsField}
       });
     }
     q('[data-edit-save]')?.addEventListener('click', saveEditFile);
-    q('[data-edit-close]')?.addEventListener('click', requestEditClose);
+    // BUG-20260927-002：弹窗头部与底部各有一个 data-edit-close 按钮，必须循环绑定全部
+    // （q 只命中 DOM 顺序第一个，曾致底部「关闭」无监听点击无响应；与 data-review-close 同口径）
+    for (const el of view.querySelectorAll('[data-edit-close]')) {
+      el.addEventListener('click', requestEditClose);
+    }
     q('[data-edit-keep]')?.addEventListener('click', () => resolveEditPending('save'));
     q('[data-edit-discard]')?.addEventListener('click', () => resolveEditPending('discard'));
     q('[data-edit-stay]')?.addEventListener('click', () => resolveEditPending('cancel'));
