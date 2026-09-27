@@ -4262,7 +4262,15 @@ async function handleApi(req, res, u, pathname) {
       // 仅严格布尔 true 生效，缺省 / 非法值与旧客户端行为完全一致（落 submitted）
       accept: body.accept === true,
     });
-    return sendJson(res, 201, st);
+    // REQ-20260927-001：创建即留痕——同步提交新条目目录（与终端 atb new / 删除留痕同口径：
+    // 只 commit 不 push、路径限定不卷入其他改动；失败不阻断创建，201 照常返回，reason 随响应下发）
+    const gc = gitFlow.commitItemCreation({ projectRoot: root, itemId: st.id, itemDir: core.resolveItemDir(dataDir, st.id).dir });
+    return sendJson(res, 201, {
+      ...st,
+      gitCommit: gc.status === 'committed'
+        ? { status: gc.status, shortHash: gc.shortHash, subject: gc.commit.subject }
+        : { status: gc.status, reason: gc.reason },
+    });
   }
 
   // REQ-20260909-009：条目截图附件原始字节（README 内联展示用）。端点口径对齐讨论单附件

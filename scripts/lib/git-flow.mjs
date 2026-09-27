@@ -465,6 +465,62 @@ export function commitItemDeletion({ projectRoot, itemId, itemDir }) {
   }
 }
 
+// ---------- REQ-20260927-001 创建条目的同步提交 ----------
+// 「创建即留痕」：core.createItem 成功落盘后，由全部创建通道（终端 atb new、网页端
+// POST /api/new、值班批量登记 oncall.createItems、营销创建开发需求 marketing.linkActivityReq）
+// 在创建成功后调用，把新条目目录立即入库——消息含新单号（git 历史可检索），路径 --only
+// 限定绝不卷入工作区其他脏改动，只 commit、不 push、不切分支（与 autoCommitForRun /
+// commitItemDeletion 同收口内核 commitPaths + 消息规范核验）。
+// 永不抛错：提交失败不回滚创建（条目目录已落盘的事实保持），差异保留在工作区，reason
+// 携带人工补提交指引，不静默吞错。通道在 createItem 抛错（含 --accept 回滚）时不会调用
+// 本函数——结构上保证「创建失败不产生残留创建提交」。
+// 不写 commits 账本（committedItemIndex）：账本语义是「开发到待测试自动提交 / 人工批量
+// commit」，创建留痕不是收口；atb commit log <ID> 经 git 历史消息扫描仍可检索到本提交。
+// 提交主题不含标题（与删除留痕取舍一致）：恒过 validateCommitSubject（描述 ≤120 字），
+// 且 subject 形态确定，可被 isItemTraceCommitSubject 精确识别供 rebuild 排除。
+export function commitItemCreation({ projectRoot, itemId, itemDir }) {
+  try {
+    if (!isGitRepo(projectRoot)) {
+      return { status: 'skipped', commit: null, reason: '非 git 仓库，无法同步提交' };
+    }
+    if (!itemDir || !fs.existsSync(itemDir)) {
+      return { status: 'skipped', commit: null, reason: `条目目录不存在（创建可能已回滚），跳过创建提交：${itemId}` };
+    }
+    const repoTop = fs.realpathSync(gitOk(projectRoot, ['rev-parse', '--show-toplevel'], '定位仓库根').trim());
+    const itemRel = path.relative(repoTop, fs.realpathSync(itemDir)).split(path.sep).join('/');
+    if (!itemRel || itemRel === '..' || itemRel.startsWith('../')) {
+      return { status: 'skipped', commit: null, reason: '条目目录不在当前 git 仓库内，无法同步提交' };
+    }
+    // 无差异（如 data/ 被 .gitignore 忽略）→ 跳过，不产生空提交
+    const dirty = String(gitRaw(projectRoot, ['status', '--porcelain', '--', itemRel]).stdout || '');
+    if (!dirty.trim()) {
+      return { status: 'skipped', commit: null, reason: '条目目录无 git 差异（可能被 .gitignore 忽略），跳过创建提交' };
+    }
+    const subject = commitSubjectOf('doc', '创建条目', itemId);
+    const commit = commitPaths(projectRoot, [itemRel], subject);
+    const err = validateCommitSubject(commit.subject, itemId);
+    if (err) throw new AtbError(`创建提交消息不合规：${err}`);
+    return { status: 'committed', commit, shortHash: String(commit.hash).slice(0, 7), reason: null };
+  } catch (e) {
+    const msg = String(e && e.message ? e.message : e).slice(0, 120);
+    return {
+      status: 'failed',
+      commit: null,
+      reason: `同步提交失败：${msg}；请在终端人工补提交该条目目录（消息含单号 ${itemId}）`,
+    };
+  }
+}
+
+// 创建/删除留痕提交标记（REQ-20260927-001）：subject 精确形如
+// 「doc: 创建条目 <单号>」/「doc: 删除待接受条目 <单号>」。留痕提交只证明「创建/删除
+// 发生过」，不证明开发完成——rebuild 据此把留痕提交排除出 done 判定，避免「仅创建过」
+// 的条目被误判 done（其余形态如开发收口提交、正文含单号提交判定不变）。
+const ITEM_TRACE_SUBJECT_RE = /^doc: (?:创建条目|删除待接受条目) ((?:REQ|BUG)-\d{8}-\d{3,})$/;
+
+export function isItemTraceCommitSubject(subject) {
+  return ITEM_TRACE_SUBJECT_RE.test(String(subject || '').trim());
+}
+
 // 自动提交主入口（永不抛错：失败原样记录，改动保留在工作区，可 atb run autocommit 重试）。
 // run 需携带预留时的工作区快照（batch.nextItem 写入 run.treeSnapshot）。
 export function autoCommitForRun({ dataDir, projectRoot, run }) {

@@ -358,7 +358,13 @@ async function main() {
       console.log(`  目录：${core.resolveItemDir(dataDir, st.id).dir}`);
       console.log('  等待人工接受（Status Board「接受」或终端 atb status <ID> accepted）');
     }
-    if (jsonOut) console.log(JSON.stringify(st, null, 2));
+    // REQ-20260927-001：创建即留痕——同步提交新条目目录（对齐 REQ-20260923-004 删除留痕口径：
+    // 只 commit 不 push、不切分支、不卷入其他改动；失败不阻断创建，按 reason 指引人工补提交）
+    const gc = gitFlow.commitItemCreation({ projectRoot: cwd, itemId: st.id, itemDir: core.resolveItemDir(dataDir, st.id).dir });
+    if (gc.status === 'committed') console.log(`  ↳ 已同步提交 ${gc.shortHash}：${gc.commit.subject}`);
+    else if (gc.status === 'failed') console.log(`  ⚠ ${gc.reason}`);
+    else console.log(`  ↳ ${gc.reason}`);
+    if (jsonOut) console.log(JSON.stringify({ ...st, gitCommit: { status: gc.status, ...(gc.commit ? { shortHash: gc.shortHash, subject: gc.commit.subject } : { reason: gc.reason }) } }, null, 2));
     return;
   }
 

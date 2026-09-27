@@ -18,6 +18,8 @@ import {
   // REQ-20260916-007：提示词内命令需定位项目根（板根上一级）
   projectRootOfBoard,
 } from './core.mjs';
+// REQ-20260927-001：候选创建即留痕——同步提交新条目目录（内核与删除留痕同源）
+import * as gitFlow from './git-flow.mjs';
 
 export const ONCALL_STATUS = ['pending', 'answering', 'answered', 'failed'];
 export const STAFF_MAX_CHARS = 30; // 与 REQ-20260907-002 开发人员长度限制对齐
@@ -1283,9 +1285,19 @@ export function createItems(dataDir, id, { items, by = 'board' }) {
       const st2 = readStatus(resolveItemDir(dataDir, st.id).dir);
       st2.sourceDiscussion = { id: meta.id, title: meta.title };
       writeStatus(resolveItemDir(dataDir, st.id).dir, st2);
+      // REQ-20260927-001：创建即留痕——在文档补写（来源行 / 验收 / 复现）完成后再同步提交，
+      // 保证补写内容一并入库；提交结果随逐条结果回显，失败不阻断批量创建
+      const gc = gitFlow.commitItemCreation({
+        projectRoot: projectRootOfBoard(dataDir),
+        itemId: st.id,
+        itemDir: resolveItemDir(dataDir, st.id).dir,
+      });
+      const gitCommit = gc.status === 'committed'
+        ? { status: gc.status, shortHash: gc.shortHash, subject: gc.commit.subject }
+        : { status: gc.status, reason: gc.reason };
       meta.created[draftId] = { itemId: st.id, type, title, at: nowIso() };
       okCount++;
-      results.push({ draftId, ok: true, itemId: st.id });
+      results.push({ draftId, ok: true, itemId: st.id, gitCommit });
     } catch (e) {
       results.push({ draftId, ok: false, error: String(e.message || '创建失败') });
     }
