@@ -3791,6 +3791,13 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-iso-deps summary { cursor: pointer; color: var(--muted); }
 .bld-iso-deps ul, .bld-iso-skip { margin: 4px 0 0; padding-left: 18px; }
 .bld-iso-deps li, .bld-iso-skip li { margin: 2px 0; overflow-wrap: anywhere; }
+/* REQ-20260927-004 发布文档提交折叠行：默认收起，徽标以颜色 + 文字双重区分（随语言集
+   同源的 --info-* 变量，深浅色自适应；只读展示，不提供纳入 / 移出合并集合入口） */
+.bld-iso-docs { font-size: 12.5px; margin: 6px 0; }
+.bld-iso-docs summary { cursor: pointer; color: var(--info-text, #1d4ed8); }
+.bld-iso-docs ul { margin: 4px 0 0; padding-left: 18px; }
+.bld-iso-docs li { margin: 2px 0; overflow-wrap: anywhere; }
+.bld-iso-doc-tag { display: inline-block; padding: 0 6px; border-radius: 999px; background: var(--info-bg, #eff6ff); color: var(--info-text, #1d4ed8); font-size: 11px; white-space: nowrap; }
 /* 窄屏：五步导航横向滚动不折行（步名较长），各节纵向堆叠（不并排） */
 @media (max-width: 640px) {
   .bld-detail-tabs { flex-wrap: nowrap; overflow-x: auto; }

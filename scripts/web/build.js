@@ -4145,6 +4145,10 @@ ${langsField}
   // 参考，不再引导一键纳入）」；共享提交（多对多关联）单行说明按 hash 去重只执行一次；
   // 门禁锁定 / 不在 dev / 合并失败仍单行状态条（bld-iso-note），真实原因三通道可达：单行
   // title / 主按钮 title / 点击 toast（BUG-20260920-006「点击必反馈」不回退；服务端守卫不弱化）。
+  // REQ-20260927-004：未选祖先按变更文件静态分类——发布文档提交（变更文件全部为根第一层
+  // 发布文档）对合入 main 无影响（由「文档合并」步单独处理），从源码祖先明细拆出，单独
+  // 折叠行展示（默认收起，M 单独计数）；汇总行合并「影响条目数」与去向说明为一句完整文案
+  //（X 只统计源码祖先）。分类只读：折叠行不提供纳入 / 移出合并集合的任何入口。
   function renderMergePane(v) {
     const pf = pfOf(v);
     if (!pf || pf.phase === 'loading') return '<div class="bld-merge-pane"><p class="muted" role="status">正在加载合并分析…</p></div>';
@@ -4158,36 +4162,64 @@ ${langsField}
     const onDev = p.currentBranch === 'dev';
     // 未选祖先明细：有未选祖先的所选条目（去重提交；owner = 该祖先隶属的所选条目，明细标注用）
     // REQ-20260926-002：只读参考——不将未选祖先认定为必须加入的功能依赖，无一键纳入入口。
-    const depItems = (an.perItem || []).filter((x) => (x.intermediates || []).length);
-    const depCommits = new Map();
-    for (const x of depItems) {
+    const allInter = [];
+    for (const x of an.perItem || []) {
       for (const i of x.intermediates || []) {
         const h = String(i.hash || '').toLowerCase();
-        if (h && !depCommits.has(h)) depCommits.set(h, { ...i, owner: x.itemId });
+        if (h) allInter.push({ ...i, hash: h, owner: x.itemId });
       }
     }
-    const depN = depCommits.size;
-    // 明细折叠：每条 短 hash + 提交主题 + 归属所选条目；上限 50 防超长（超出注明）
+    // 源码祖先 = 未选祖先中非发布文档提交（docOnly=false）；发布文档提交优先读服务端
+    // docAncestors（按 hash 去重附归属），旧响应缺该字段时按 perItem 的 docOnly 行兜底。
+    const srcRows = allInter.filter((i) => !i.docOnly);
+    const docRows = (Array.isArray(an.docAncestors) && an.docAncestors.length
+      ? an.docAncestors.map((d) => ({ hash: String(d.hash || '').toLowerCase(), subject: d.subject, owner: (d.itemIds || [])[0] || '' }))
+      : allInter.filter((i) => i.docOnly)).filter((i) => i.hash);
+    const depCommits = new Map();
+    for (const i of srcRows) {
+      if (!depCommits.has(i.hash)) depCommits.set(i.hash, i);
+    }
+    const docCommits = new Map();
+    for (const i of docRows) {
+      if (!docCommits.has(i.hash)) docCommits.set(i.hash, i);
+    }
+    const depN = depCommits.size; // X：源码祖先数（不含发布文档提交）
+    const docN = docCommits.size; // M：发布文档提交数（单独计数，不混入 X）
+    const affectedN = new Set(srcRows.map((i) => i.owner)).size; // Y：受源码祖先影响的所选条目数
+    // 明细折叠：每条 短 hash + 提交主题 + 归属所选条目；上限 50 防超长（超出注明，两段分别生效）
     const ISO_MAX = 50;
     const depRows = [...depCommits.values()];
     const depDetails = depN
       ? `<details class="bld-iso-deps"><summary>查看未选祖先明细</summary>
           <ul>${depRows.slice(0, ISO_MAX).map((i) => `<li><code data-i18n-skip>${esc(short(i.hash))}</code> <span data-i18n-skip>${esc(i.subject || '')}</span><br><span class="muted small">为 ${esc(i.owner)} 的未选祖先</span></li>`).join('')}</ul>
           ${depN > ISO_MAX ? `<p class="muted small">（其余 ${depN - ISO_MAX} 个略）</p>` : ''}
-          <p class="muted small">未选祖先不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。</p>
+        </details>`
+      : '';
+    // 发布文档提交折叠行（REQ-20260927-004）：默认收起，一行汇总数量与去向；展开逐条
+    // 短 hash + 主题 + 徽标（颜色 + 文字）+ 去向说明；上限 50 同源码明细分别生效
+    const docDetails = docN
+      ? `<details class="bld-iso-docs"><summary>另有 ${docN} 个发布文档提交 · 随『文档合并』步处理，不随挑选合并</summary>
+          <ul>${docRows.slice(0, ISO_MAX).map((i) => `<li><code data-i18n-skip>${esc(short(i.hash))}</code> <span data-i18n-skip>${esc(i.subject || '')}</span><br><span class="bld-iso-doc-tag">发布文档提交</span> <span class="muted small">仅根第一层发布文档 · 不随挑选合并进入 main，随『文档合并』步处理</span></li>`).join('')}</ul>
+          ${docN > ISO_MAX ? `<p class="muted small">（其余 ${docN - ISO_MAX} 个略）</p>` : ''}
         </details>`
       : '';
     // 共享提交（同一提交关联多个条目）：单行说明按 hash 去重只执行一次（各关联条目结果一致）
     const sharedLine = (an.shared || []).length
       ? `<p class="bld-iso-note" title="${esc((an.shared || []).map((s) => `${short(s.commit)}（关联 ${(s.itemIds || []).join('、')}）`).join('；'))}">共享提交 ${(an.shared || []).length} 处按提交 hash 去重，挑选合并只执行一次（各关联条目展示一致的合入结果）</p>`
       : '';
+    // 汇总行（REQ-20260927-004 落定文案）：「影响 Y 个所选条目」与去向说明合并为一句完整文案
+    const sumLine = depN
+      ? `<p class="bld-iso-sum"><span class="small">发现 ${affectedN} 个所选条目的共 ${depN} 个未选祖先提交。未选的祖先提交不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。</span></p>`
+      : '';
     let isoBody;
     if (depN) {
-      isoBody = `<p class="bld-iso-sum"><span class="small">发现 ${depN} 个未选祖先提交 · 影响 ${depItems.length} 个所选条目</span></p>
+      isoBody = `${sumLine}
+        ${docDetails}
         ${depDetails}
         ${sharedLine}`;
     } else {
       isoBody = `<p class="small muted">所选提交无未选祖先：变更可独立进入主分支。</p>
+        ${docDetails}
         ${sharedLine}`;
     }
     const devBar = onDev

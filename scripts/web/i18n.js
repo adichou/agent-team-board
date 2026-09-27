@@ -38,7 +38,10 @@ const EN = {
   '查看未选祖先明细': 'View unselected ancestor details',
   '正在加载合并分析…': 'Loading merge analysis…',
   '所选提交无未选祖先：变更可独立进入主分支。': 'Selected commits have no unselected ancestors: the changes can enter the main branch independently.',
-  '未选祖先不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。': 'Unselected ancestors do not enter main via the isolated merge; if the selected changes depend on them, the merge stops with a conflict and explains the reason.',
+  // REQ-20260927-004 发布文档提交折叠行（徽标 + 逐条去向说明）；旧「明细尾部去向说明」词条
+  // 随文案并入汇总句移除（插值句见 EN_DYNAMIC）
+  '发布文档提交': 'Release-docs commit',
+  '仅根第一层发布文档 · 不随挑选合并进入 main，随『文档合并』步处理': 'Root first-level release docs only · not merged into main via cherry-pick; handled by the "Docs merge" step',
   '把审核通过的发布文档提交 cherry-pick 重放进 main：文档单独提交、直接关联版本计划 ': 'Cherry-pick the approved release-docs commit back into main: docs are committed separately, linked directly to version plan ',
   '，合入结果落账到本版本计划（重放证据可追溯）。': ', and the merge result is recorded on this version plan (replay evidence is traceable).',
   '文档提交 ': 'Docs commit ',
@@ -1745,8 +1748,12 @@ const EN_DYNAMIC = {
   '第 ◇ / ◇ 页': 'Page $1 of $2',
   '没有匹配的关联条目（关键词：◇）': 'No matching linked items (keyword: $1)',
   // REQ-20260926-002 合并页简洁隔离分析（汇总行 / 明细归属 / 共享提交单行说明，动态拼接）；
-  // 一键加入 toast 词条随「一键加入所有依赖提交」下线一并清理（端点 404、前端无入口）
-  '发现 ◇ 个未选祖先提交 · 影响 ◇ 个所选条目': 'Found $1 unselected ancestor commit(s) · affecting $2 selected items',
+  // 一键加入 toast 词条随「一键加入所有依赖提交」下线一并清理（端点 404、前端无入口）。
+  // REQ-20260927-004：旧「发现 X 个未选祖先提交 · 影响 Y 个所选条目」词条随汇总行合并为
+  // 一句完整文案移除（X 只统计源码祖先，Y 为受影响所选条目数）；新增发布文档提交折叠行
+  // 汇总词条（M 单独计数与去向说明）
+  '发现 ◇ 个所选条目的共 ◇ 个未选祖先提交。未选的祖先提交不随隔离合并进入 main；若所选改动依赖其内容，执行时将冲突阻止并说明原因。': 'Found $2 unselected ancestor commit(s) across $1 selected item(s). Unselected ancestors do not enter main via the isolated merge; if the selected changes depend on them, the merge stops with a conflict and explains the reason.',
+  '另有 ◇ 个发布文档提交 · 随『文档合并』步处理，不随挑选合并': 'Plus $1 release-docs commit(s) · handled by the "Docs merge" step, not part of the cherry-pick merge',
   '（其余 ◇ 个略）': '(another $1 omitted)',
   '为 ◇ 的未选祖先': 'unselected ancestor of $1',
   '共享提交 ◇ 处按提交 hash 去重，挑选合并只执行一次（各关联条目展示一致的合入结果）': '$1 shared commit(s) are deduplicated by commit hash and cherry-picked exactly once (all linked items show the same merge result)',

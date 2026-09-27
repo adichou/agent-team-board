@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AtbError } from './core.mjs';
 import { DEV_BRANCH, resolveMainBranch } from './git-flow.mjs';
+import { docLangsOf, customDocsOf } from './publish-flow.mjs';
 
 const GIT_TIMEOUT_MS = 120_000;
 // 临时工作树根：优先系统临时目录；不可用（或挂载不允许执行 git）时回退项目内 .git/atb-tmp
@@ -417,10 +418,18 @@ export function isAncestorOf(root, commit, ref) {
 // BUG-20260921-015：所选集合 = 全部条目的全部提交（一条目多提交按提交 hash 去重展开，
 // 不按条目去重）；perItem 按条目聚合其全部提交的未选祖先（hash 去重），commit 字段保留
 // 首个提交（展示兼容）。
-export function analyzePublishIsolation(root, items = []) {
+// REQ-20260927-004：未选祖先按变更文件静态分类——变更文件全部落在根第一层发布文档集合内
+//（README / CHANGELOG / FEATURES / AGENTS / DESIGN 及语言变体、版本 v.customDocs 清单内
+// 自定义文档随语言集展开）的提交判定为「发布文档提交」（intermediates 行附 docOnly=true，
+// 并单列 docAncestors（按 hash 去重、附归属所选条目）供前端折叠行单独展示「随『文档合并』
+// 步处理，不随挑选合并」）；混合变更不分类按现状展示。分类为只读展示：不改变合并执行集合、
+// 拓扑排序、共享提交去重与冲突阻止行为；合并提交 / diff-tree 读取失败均按不分类处理（不阻塞）。
+// langs / customDocs 由调用方传入版本记录字段（缺省语言集 cn,en、无自定义文档）。
+export function analyzePublishIsolation(root, items = [], { langs, customDocs } = {}) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库，无法分析发布范围');
   const targetBranch = resolveMainBranch(root) || 'main';
   const selected = new Set(items.flatMap((it) => commitsOf(it)));
+  const docNames = publishRootDocNames(langs, customDocs);
   const byCommit = new Map();
   for (const it of items) {
     for (const c of commitsOf(it)) {
@@ -437,6 +446,7 @@ export function analyzePublishIsolation(root, items = []) {
     for (const commit of commitsOf(it)) {
       try {
         // REQ-20260921-015：intermediates 附提交时间 %cI（date）；字段向后兼容（既有调用方不读）。
+        // REQ-20260927-004：每行附 docOnly（发布文档提交分类，静态判定）。
         const out = gitOk(root, ['log', `${targetBranch}..${commit}`, '--format=%H%x09%cI%x09%s'], '读取范围提交');
         for (const line of out.split('\n')) {
           if (!line.trim()) continue;
@@ -444,21 +454,57 @@ export function analyzePublishIsolation(root, items = []) {
           const h = String(hash || '').toLowerCase();
           if (selected.has(h) || seen.has(h)) continue;
           seen.add(h);
-          intermediates.push({ hash: h, date: date || '', subject: rest.join('\t') });
+          intermediates.push({ hash: h, date: date || '', subject: rest.join('\t'), docOnly: isReleaseDocCommit(root, h, docNames) });
         }
       } catch { /* 单条读取失败不阻塞整体分析（执行前 precheckMerge 兜底） */ }
     }
     return { itemId: it.itemId, commit: commitsOf(it)[0] || String(it.commit || '').toLowerCase(), intermediates, count: intermediates.length };
   });
+  // REQ-20260927-004：发布文档祖先单列（按 hash 去重、附归属所选条目），M 与源码祖先 X 分开计数
+  const docMap = new Map();
+  for (const it of perItem) {
+    for (const i of it.intermediates) {
+      if (!i.docOnly) continue;
+      if (!docMap.has(i.hash)) docMap.set(i.hash, { hash: i.hash, subject: i.subject, itemIds: [] });
+      const ids = docMap.get(i.hash).itemIds;
+      if (!ids.includes(it.itemId)) ids.push(it.itemId);
+    }
+  }
+  const docAncestors = [...docMap.values()];
   const notes = [];
   // REQ-20260926-002：共享提交不再阻断，notes 说明多对多关系下的执行语义（按 hash 去重、
   // 只执行一次、各关联条目结果一致），不静默。
   if (shared.length) {
     notes.push(`共享提交 ${shared.length} 处按提交 hash 去重，挑选合并只执行一次（${shared.map((s) => `${s.commit.slice(0, 12)} → ${s.itemIds.join('、')}`).join('；')}），各关联条目展示一致的合入结果`);
   }
-  const totalInter = perItem.reduce((n, x) => n + x.count, 0);
+  // REQ-20260927-004：notes 只统计源码祖先（X），发布文档提交（M）单独说明去向
+  const totalInter = perItem.reduce((n, x) => n + x.intermediates.filter((i) => !i.docOnly).length, 0);
   if (totalInter) notes.push(`所选提交存在 ${totalInter} 个未选祖先提交：普通 merge 会一并带入 main，隔离合并不带入；若所选改动依赖这些内容，执行时将冲突阻止并说明原因`);
-  return { targetBranch, perItem, shared, notes };
+  if (docAncestors.length) notes.push(`另有 ${docAncestors.length} 个发布文档提交（仅触及根第一层发布文档）：不随挑选合并进入 main，随「文档合并」步处理`);
+  return { targetBranch, perItem, shared, docAncestors, notes };
+}
+
+// REQ-20260927-004：根第一层发布文档文件名集合（发布文档提交分类依据）——
+// README / CHANGELOG / FEATURES / AGENTS / DESIGN 五类 × 语言集展开（首语言 <KEY>.md、
+// 其余 <KEY>_<lang>.md）+ v.customDocs 清单内自定义文档同构展开（归一复用 publish-flow）。
+const ISO_PUBLISH_DOC_KEYS = ['README', 'CHANGELOG', 'FEATURES', 'AGENTS', 'DESIGN'];
+function publishRootDocNames(langs, customDocs) {
+  const ls = docLangsOf({ langs });
+  const names = new Set();
+  for (const key of [...ISO_PUBLISH_DOC_KEYS, ...customDocsOf({ customDocs })]) {
+    ls.forEach((lang, i) => names.add(`${key}${i === 0 ? '' : `_${lang}`}.md`));
+  }
+  return names;
+}
+
+// REQ-20260927-004：发布文档提交静态判定（只读）——diff-tree -r 列出提交变更文件，全部为
+// 根第一层发布文档时为真（文件名精确匹配 = 只认根第一层，子目录同名不算）；无文件输出
+//（合并提交）或读取异常按不分类处理（不阻塞分析，按现状展示）。
+function isReleaseDocCommit(root, hash, docNames) {
+  const out = String(gitRaw(root, ['diff-tree', '--no-commit-id', '--name-only', '-r', hash]).stdout || '');
+  const files = out.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!files.length) return false;
+  return files.every((f) => docNames.has(f));
 }
 
 // 受限写（隔离合并）：把版本所选条目的 commit 逐条 cherry-pick 重放入主分支（-x 保留原始
