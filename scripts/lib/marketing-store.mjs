@@ -41,7 +41,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {
   AtbError, writeJsonAtomic, localDateStamp, createItem,
+  projectRootOfBoard, resolveItemDir,
 } from './core.mjs';
+// REQ-20260927-001：创建开发需求即留痕——同步提交新条目目录（内核与删除留痕同源）
+import * as gitFlow from './git-flow.mjs';
 
 export const MARKETING_SCHEMA_VERSION = 1;
 
@@ -1064,13 +1067,22 @@ export function linkActivityReq(dataDir, { id, key, title, description = '', by 
     description: desc ? `${desc}\n\n${source}` : source,
     by: 'board',
   });
+  // REQ-20260927-001：创建即留痕——同步提交新条目目录（失败不阻断创建与关联，reason 随返回下发）
+  const gc = gitFlow.commitItemCreation({
+    projectRoot: projectRootOfBoard(dataDir),
+    itemId: st.id,
+    itemDir: resolveItemDir(dataDir, st.id).dir,
+  });
+  const gitCommit = gc.status === 'committed'
+    ? { status: gc.status, shortHash: gc.shortHash, subject: gc.commit.subject }
+    : { status: gc.status, reason: gc.reason };
 
   const fresh = normalizeActivity(requireEntity(activityFile(dataDir, String(id || '')), '行动'));
   const link = (fresh.linkedReqs || []).find((l) => l && l.key === keyS);
   if (link) link.id = st.id;
   fresh.updatedAt = nowIso();
   writeJsonAtomic(activityFile(dataDir, fresh.id), fresh);
-  return { created: true, link: link || { id: st.id, key: keyS, title: titleS, createdAt: ts }, reqStatus: st, board: readBoard(dataDir) };
+  return { created: true, link: link || { id: st.id, key: keyS, title: titleS, createdAt: ts }, reqStatus: st, gitCommit, board: readBoard(dataDir) };
 }
 
 /* ================================================================

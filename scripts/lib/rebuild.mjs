@@ -2,10 +2,12 @@
 // 背景：runtime/ 整目录不进 git（ensureRuntimeIgnore 唯一忽略规则），新机器 clone 后
 // data/ 条目文档齐全而 runtime/status/ 为空，看板无法得知条目状态；本模块从 git 历史
 // 重建条目实时状态。
-// 判定口径（与 BUG-20260918-003 design.md 一致，用户拍板）：
-//   · git 提交历史消息含该单号（复用 commit-store 的 gitLogMessages + itemCommittedInGit
-//     只读口径，默认当前检出分支完整历史）→ done；
-//   · 无提交痕迹 → submitted；
+// 判定口径（与 BUG-20260918-003 design.md 一致，用户拍板；REQ-20260927-001 细化留痕排除）：
+//   · git 提交历史消息含该单号（默认当前检出分支完整历史）且依据提交**不是**创建/删除
+//     留痕提交（git-flow.isItemTraceCommitSubject：doc: 创建条目|删除待接受条目 <单号>）→ done；
+//     留痕提交只证明条目创建/删除发生过，不得单独构成 done 依据——否则「仅创建过」的
+//     条目会被创建留痕提交误判 done（REQ-20260927-001 创建即留痕引入的交互冲突）；
+//   · 无提交痕迹（或仅有留痕提交）→ submitted；
 //   · 不区分「已上报」与「已人工确认完成」，不为此新增进 git 的终态标记文件。
 // 安全边界与幂等：
 //   · 仅允许在 runtime 条目状态为空时重建（防误覆盖既有看板）：status/ 下已存在任何
@@ -20,7 +22,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { AtbError, writeJsonAtomic, projectRootOfBoard } from './core.mjs';
-import { gitLogMessages, itemCommittedInGit, isGitRepo } from './commit-store.mjs';
+import { isGitRepo } from './commit-store.mjs';
+// REQ-20260927-001：创建/删除留痕提交排除出 done 判定（判定标记真源在 git-flow）
+import { isItemTraceCommitSubject } from './git-flow.mjs';
 
 // history 留痕标记：重建产生的状态文件，其全部 history 条目 by 均为该值（幂等重跑识别依据）
 export const REBUILD_ACTOR = 'atb-rebuild';
@@ -93,7 +97,8 @@ function readItemMeta(item) {
 
 // 一次结构化扫描当前检出分支历史（与 gitLogMessages 同范围）：记录 = hash + 主题 + 完整消息
 // （%H 与消息以 \x1f 分隔、提交之间以 \x1e 分隔，多行消息不拆记录）。
-// 仅用于清单展示（依据提交的 hash 与主题）；done/submitted 判定本身复用 itemCommittedInGit。
+// done/submitted 判定与依据提交选择都基于本清单：含单号且主题非创建/删除留痕的提交
+// 才可作 done 依据（REQ-20260927-001 留痕排除）。
 function commitRecords(projectRoot) {
   const r = spawnSync('git', ['--no-optional-locks', 'log', '--format=%H%x1f%B%x1e'], {
     cwd: projectRoot, encoding: 'utf8', timeout: GIT_TIMEOUT_MS,
@@ -161,7 +166,6 @@ export function rebuildBoardStatus(dataDir) {
   const items = collectItems(dataDir);
   fs.mkdirSync(statusDir, { recursive: true }); // 不存在时自动创建骨架（幂等）
   const repo = isGitRepo(projectRoot);
-  const logText = repo ? gitLogMessages(projectRoot) : '';
   const records = repo ? commitRecords(projectRoot) : [];
 
   const now = new Date().toISOString();
@@ -171,18 +175,21 @@ export function rebuildBoardStatus(dataDir) {
   let written = 0;
   let kept = 0;
   for (const item of items) {
-    // 依据提交：完整历史消息含单号的最新一条（git log 新→旧，取首个命中）
-    const basis = records.find((c) => c.text.includes(item.id)) || null;
-    const basisText = basis ? `依据提交 ${basis.hash.slice(0, 10)} ${basis.subject}` : '无提交痕迹';
+    // 依据提交：完整历史消息含单号的最新一条**非留痕**提交（git log 新→旧，取首个命中；
+    // REQ-20260927-001：doc: 创建条目|删除待接受条目 <单号> 留痕提交不得单独构成 done 依据）
+    const basis = records.find((c) => c.text.includes(item.id) && !isItemTraceCommitSubject(c.subject)) || null;
+    const onlyTrace = !basis && records.some((c) => c.text.includes(item.id));
+    const basisText = basis
+      ? `依据提交 ${basis.hash.slice(0, 10)} ${basis.subject}`
+      : (onlyTrace ? '仅有创建/删除留痕提交，按未开发处理' : '无提交痕迹');
 
     let status;
     if (keptIds.has(item.id)) {
       status = keptIds.get(item.id); // 幂等：沿用已判定状态，不翻转、不追加 history
       kept++;
     } else {
-      // 判定复用 commit-store「历史消息含单号」只读口径（默认当前检出分支完整历史）
-      const committed = itemCommittedInGit(projectRoot, item.id, logText);
-      status = committed ? 'done' : 'submitted';
+      // 判定与依据提交同源：存在非留痕的含单号提交 → done，否则 submitted
+      status = basis ? 'done' : 'submitted';
       const meta = readItemMeta(item);
       const st = {
         id: item.id,
