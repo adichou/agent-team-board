@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUG-20260927-001 界面演示 — 发布文档插图提交链路对照</title>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --panel: #ffffff;
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #e7e5e4;
+    --ok: #15803d;
+    --ok-bg: #dcfce7;
+    --err: #b91c1c;
+    --err-bg: #fee2e2;
+    --warn: #92400e;
+    --warn-bg: #fef3c7;
+    --accent: #2563eb;
+    --accent-bg: #dbeafe;
+    --chip: #f5f5f4;
+    --imgbg: #e7e5e4;
+    --imgink: #57534e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0a09;
+      --panel: #1c1917;
+      --ink: #fafaf9;
+      --muted: #a8a29e;
+      --line: #292524;
+      --ok: #4ade80;
+      --ok-bg: #052e16;
+      --err: #f87171;
+      --err-bg: #450a0a;
+      --warn: #fbbf24;
+      --warn-bg: #451a03;
+      --accent: #60a5fa;
+      --accent-bg: #172554;
+      --chip: #292524;
+      --imgbg: #292524;
+      --imgink: #a8a29e;
+    }
+  }
+  html[data-theme="light"] {
+    --bg: #f5f5f4;
+    --panel: #ffffff;
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #e7e5e4;
+    --ok: #15803d;
+    --ok-bg: #dcfce7;
+    --err: #b91c1c;
+    --err-bg: #fee2e2;
+    --warn: #92400e;
+    --warn-bg: #fef3c7;
+    --accent: #2563eb;
+    --accent-bg: #dbeafe;
+    --chip: #f5f5f4;
+    --imgbg: #e7e5e4;
+    --imgink: #57534e;
+  }
+  html[data-theme="dark"] {
+    --bg: #0c0a09;
+    --panel: #1c1917;
+    --ink: #fafaf9;
+    --muted: #a8a29e;
+    --line: #292524;
+    --ok: #4ade80;
+    --ok-bg: #052e16;
+    --err: #f87171;
+    --err-bg: #450a0a;
+    --warn: #fbbf24;
+    --warn-bg: #451a03;
+    --accent: #60a5fa;
+    --accent-bg: #172554;
+    --chip: #292524;
+    --imgbg: #292524;
+    --imgink: #a8a29e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.6;
+    transition: background 0.2s, color 0.2s;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  header h1 { font-size: 20px; margin: 0 0 6px; }
+  header p.note { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .seg button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .theme-btn {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 860px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 4px; }
+  .panel .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .doc h4 {
+    margin: 12px 0 8px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+  }
+  .doc p { font-size: 13px; color: var(--ink); }
+  .doc code {
+    background: var(--chip);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12px;
+  }
+  .imgslot { margin: 8px 0; }
+  .img-broken {
+    border: 1px dashed var(--err);
+    background: var(--err-bg);
+    border-radius: 6px;
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--err);
+    font-size: 13px;
+  }
+  .img-broken .alt { font-family: Menlo, Consolas, monospace; font-size: 12px; display: block; margin-top: 4px; word-break: break-all; }
+  .img-ok {
+    border: 1px solid var(--line);
+    background: var(--imgbg);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .img-ok svg { display: block; width: 100%; height: auto; }
+  .img-ok .cap {
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--imgink);
+    border-top: 1px solid var(--line);
+    font-family: Menlo, Consolas, monospace;
+  }
+  .statebar {
+    margin-top: 14px;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    min-height: 42px;
+  }
+  .statebar.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  .statebar.err { background: var(--err-bg); color: var(--err); border-color: var(--err); }
+  .statebar.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .statebar.load { background: var(--chip); color: var(--muted); border-color: var(--line); }
+  .statebar.idle { background: var(--chip); color: var(--muted); border-color: var(--line); }
+  .fieldlabel {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 12px 0 6px;
+  }
+  .spec-seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .spec-seg button {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: Menlo, Consolas, monospace;
+  }
+  .spec-seg button.active {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 4px;
+    min-height: 30px;
+  }
+  .chip {
+    background: var(--chip);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: Menlo, Consolas, monospace;
+    color: var(--ink);
+  }
+  .chips .empty { color: var(--muted); font-size: 12px; padding: 4px 0; }
+  .subject {
+    font-family: Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: var(--chip);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+    display: block;
+    word-break: break-all;
+  }
+  .commit-btn {
+    appearance: none;
+    border: none;
+    background: var(--accent);
+    color: #ffffff;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .commit-btn:disabled { opacity: 0.6; cursor: default; }
+  footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  footer ul { margin: 6px 0 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BUG-20260927-001 · 发布文档插图提交链路对照演示</h1>
+    <p class="note">本 Bug 核心是发布文档提交链路（提交放行口径与写入保护口径），不是产品看板界面缺陷；「界面」体现为文档渲染视图中插图的破图/正常，以及提交通道的拦截/放行反馈。本页为单文件交互演示，无外网依赖。</p>
+    <div class="controls">
+      <div class="seg" id="fixToggle" role="group" aria-label="修复前后切换">
+        <button type="button" data-fix="before" class="active">修复前（现状）</button>
+        <button type="button" data-fix="after">修复后（期望）</button>
+      </div>
+      <button type="button" class="theme-btn" id="themeBtn">深浅色：跟随系统</button>
+    </div>
+  </header>
+
+  <div class="panels">
+    <section class="panel" id="renderPanel">
+      <h2>① 文档渲染视图</h2>
+      <p class="sub">模拟根 README.md「产品界面」一节（第 35–39 行）在 dev 分支检出后的渲染效果</p>
+      <div class="doc">
+        <h4>#### 产品界面</h4>
+        <div class="imgslot" id="imgSlot"></div>
+        <p>目前版本主要通过浏览器使用。在根目录下执行以下命令即可打开 <code>http://127.0.0.1:8888</code>。</p>
+      </div>
+      <div class="statebar idle" id="renderState">等待状态切换…</div>
+    </section>
+
+    <section class="panel" id="commitPanel">
+      <h2>② 提交通道视图</h2>
+      <p class="sub">模拟发布文档提交通道（scripts/state-guard.mjs 通道②）对「文档 + 图片」提交的判定反馈</p>
+      <div class="fieldlabel">pathspec 组合</div>
+      <div class="spec-seg" id="specToggle" role="group" aria-label="pathspec 组合选择">
+        <button type="button" data-spec="docimg" class="active">README.md + 图片</button>
+        <button type="button" data-spec="imgonly">仅图片</button>
+        <button type="button" data-spec="withsrc">夹带源码</button>
+        <button type="button" data-spec="bare">裸提交</button>
+      </div>
+      <div class="fieldlabel">待提交 pathspec</div>
+      <div class="chips" id="specChips"></div>
+      <div class="fieldlabel">提交主题（须通过 validateCommitSubject）</div>
+      <code class="subject" id="subjectLine">docs: 更新产品界面插图 BUG-20260927-001</code>
+      <button type="button" class="commit-btn" id="commitBtn">尝试提交</button>
+      <div class="statebar idle" id="commitState">选择 pathspec 组合后点击「尝试提交」</div>
+    </section>
+  </div>
+
+  <footer>
+    <div>口径说明（与 README.md 保持一致，不预设结论）：</div>
+    <ul>
+      <li>「夹带源码」「裸提交」在修复前后均拦截：回归既有静态核验约束（无 pathspec、范围含源码 / runtime、--amend 等形态依旧拦截）。</li>
+      <li>「文档 + 图片」是本 Bug 的行为目标：修复后放行，文档与其引用的本地图片一并入库。</li>
+      <li>「仅图片」的放行口径属方案取舍，待开发阶段在 design.md 定夺，此处标记「待确认」。</li>
+    </ul>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var state = { fix: "before", spec: "docimg" };
+
+  var SPEC_MAP = {
+    docimg: ["README.md", "image/README/1790092127929.png"],
+    imgonly: ["image/README/1790092127929.png"],
+    withsrc: ["README.md", "scripts/state-guard.mjs"],
+    bare: []
+  };
+
+  var fixToggle = document.getElementById("fixToggle");
+  var specToggle = document.getElementById("specToggle");
+  var specChips = document.getElementById("specChips");
+  var commitBtn = document.getElementById("commitBtn");
+  var commitState = document.getElementById("commitState");
+  var renderState = document.getElementById("renderState");
+  var imgSlot = document.getElementById("imgSlot");
+  var themeBtn = document.getElementById("themeBtn");
+
+  var THEMES = ["auto", "light", "dark"];
+  var THEME_LABEL = { auto: "深浅色：跟随系统", light: "深浅色：浅色", dark: "深浅色：深色" };
+  var themeIndex = 0;
+
+  function browserMockSvg() {
+    return '<svg viewBox="0 0 480 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="产品界面截图示意">' +
+      '<rect x="0" y="0" width="480" height="220" rx="6" fill="var(--panel)"/>' +
+      '<rect x="0" y="0" width="480" height="28" rx="6" fill="var(--imgbg)"/>' +
+      '<circle cx="16" cy="14" r="4" fill="var(--err)"/>' +
+      '<circle cx="32" cy="14" r="4" fill="var(--warn)"/>' +
+      '<circle cx="48" cy="14" r="4" fill="var(--ok)"/>' +
+      '<rect x="120" y="7" width="240" height="14" rx="7" fill="var(--panel)" stroke="var(--line)"/>' +
+      '<rect x="12" y="40" width="100" height="168" rx="4" fill="var(--imgbg)"/>' +
+      '<rect x="22" y="52" width="80" height="8" rx="4" fill="var(--imgink)" opacity="0.5"/>' +
+      '<rect x="22" y="68" width="64" height="8" rx="4" fill="var(--imgink)" opacity="0.35"/>' +
+      '<rect x="22" y="84" width="72" height="8" rx="4" fill="var(--imgink)" opacity="0.35"/>' +
+      '<rect x="124" y="40" width="344" height="34" rx="4" fill="var(--accent-bg)"/>' +
+      '<rect x="136" y="52" width="140" height="10" rx="5" fill="var(--accent)" opacity="0.7"/>' +
+      '<rect x="124" y="84" width="108" height="112" rx="4" fill="var(--imgbg)"/>' +
+      '<rect x="242" y="84" width="108" height="112" rx="4" fill="var(--imgbg)"/>' +
+      '<rect x="360" y="84" width="108" height="112" rx="4" fill="var(--imgbg)"/>' +
+      '<rect x="134" y="96" width="88" height="8" rx="4" fill="var(--imgink)" opacity="0.4"/>' +
+      '<rect x="252" y="96" width="88" height="8" rx="4" fill="var(--imgink)" opacity="0.4"/>' +
+      '<rect x="370" y="96" width="88" height="8" rx="4" fill="var(--imgink)" opacity="0.4"/>' +
+      '</svg>';
+  }
+
+  function renderImgSlot() {
+    if (state.fix === "before") {
+      imgSlot.innerHTML =
+        '<div class="img-broken">' +
+        '悬空引用：图片未被 git 跟踪、无法随文档入库，检出后渲染破图' +
+        '<span class="alt">alt: 1790092127929.png（image/README/1790092127929.png 不在版本库中）</span>' +
+        '</div>';
+    } else {
+      imgSlot.innerHTML =
+        '<div class="img-ok">' + browserMockSvg() +
+        '<div class="cap">image/README/1790092127929.png 已随文档入库（示意占位图）</div>' +
+        '</div>';
+    }
+    if (state.fix === "before") {
+      renderState.className = "statebar err";
+      renderState.textContent = "失败态：文档已提交但图片滞留工作区，dev 分支检出后「产品界面」插图破图（悬空引用）。";
+    } else {
+      renderState.className = "statebar ok";
+      renderState.textContent = "正常态：文档与其引用的本地图片一并进入提交，检出后插图正常渲染，无悬空引用。";
+    }
+  }
+
+  function renderChips() {
+    var specs = SPEC_MAP[state.spec];
+    if (!specs.length) {
+      specChips.innerHTML = '<div class="empty">（空）未提供 pathspec —— 裸提交形态</div>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < specs.length; i++) {
+      html += '<span class="chip">' + specs[i] + "</span>";
+    }
+    specChips.innerHTML = html;
+  }
+
+  function commitResult() {
+    var fix = state.fix;
+    var spec = state.spec;
+    if (spec === "withsrc") {
+      return { cls: "err", text: "拦截（回归约束，修复前后一致）：pathspec 含源码文件 scripts/state-guard.mjs，不属于发布文档豁免口径，通道②判定不通过。" };
+    }
+    if (spec === "bare") {
+      return { cls: "err", text: "拦截（回归约束，修复前后一致）：无 pathspec 裸提交不可静态核验，依旧拦截。" };
+    }
+    if (spec === "docimg") {
+      if (fix === "before") {
+        return { cls: "err", text: "拦截（缺陷现象）：pathspec 含非豁免文件 image/README/1790092127929.png，pathspecIsExemptRootDoc 判定不通过，整条提交被拒，图片无法随文档入库。" };
+      }
+      return { cls: "ok", text: "放行成功（期望行为）：文档与其引用的本地图片一并入库，提交主题「类型: 描述 单号」校验通过；检出后插图正常渲染。" };
+    }
+    if (spec === "imgonly") {
+      if (fix === "before") {
+        return { cls: "err", text: "拦截（缺陷现象）：pathspec 不全为豁免发布文档单文件，仅提交图片同样被拒。" };
+      }
+      return { cls: "warn", text: "待确认：仅提交图片（无文档同行）的放行口径属方案取舍，待开发阶段在 design.md 定夺，本演示不预设结论。" };
+    }
+    return { cls: "idle", text: "—" };
+  }
+
+  var commitTimer = null;
+
+  function runCommit() {
+    if (commitTimer) { return; }
+    commitBtn.disabled = true;
+    commitState.className = "statebar load";
+    commitState.textContent = "校验中…（静态核验 pathspec 豁免口径与提交主题）";
+    commitTimer = window.setTimeout(function () {
+      commitTimer = null;
+      commitBtn.disabled = false;
+      var r = commitResult();
+      commitState.className = "statebar " + r.cls;
+      commitState.textContent = r.text;
+    }, 600);
+  }
+
+  function bindSeg(container, key, onChange) {
+    container.addEventListener("click", function (ev) {
+      var btn = ev.target;
+      if (!btn || !btn.getAttribute) { return; }
+      var val = btn.getAttribute("data-" + key);
+      if (!val) { return; }
+      state[key] = val;
+      var buttons = container.querySelectorAll("button");
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].classList.toggle("active", buttons[i].getAttribute("data-" + key) === val);
+      }
+      onChange();
+    });
+  }
+
+  bindSeg(fixToggle, "fix", function () {
+    renderImgSlot();
+    commitState.className = "statebar idle";
+    commitState.textContent = "状态已切换，可重新点击「尝试提交」观察结果。";
+  });
+
+  bindSeg(specToggle, "spec", function () {
+    renderChips();
+    commitState.className = "statebar idle";
+    commitState.textContent = "pathspec 已切换，可重新点击「尝试提交」观察结果。";
+  });
+
+  commitBtn.addEventListener("click", runCommit);
+
+  themeBtn.addEventListener("click", function () {
+    themeIndex = (themeIndex + 1) % THEMES.length;
+    var t = THEMES[themeIndex];
+    themeBtn.textContent = THEME_LABEL[t];
+    if (t === "auto") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", t);
+    }
+  });
+
+  renderImgSlot();
+  renderChips();
+})();
+</script>
+</body>
+</html>
