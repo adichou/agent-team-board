@@ -2495,7 +2495,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       // 与发布模块互斥（design.md 落定）：release 有活动 git 目标运行时拒绝合并（读侧校验，不改发布状态）
       releaseStore.assertTargetFree(board, 'git', {});
       // 影响分析：未选祖先提示与共享提交说明（不再阻断；notes 随响应透出供前端展示）
-      const analysis = buildGit.analyzePublishIsolation(root, v.items);
+      // REQ-20260927-004：传入版本语言集与自定义文档清单，发布文档提交分类按版本口径判定
+      const analysis = buildGit.analyzePublishIsolation(root, v.items, { langs: v.langs, customDocs: v.customDocs });
       // 前置校验（只读，不改版本状态：主分支缺失 / 提交缺失在此明确报 400）
       buildGit.precheckMerge(root, v.items);
       buildStore.beginMerge(board, v.id, { baseBranch: buildGit.listBranches(root).current });
@@ -2602,7 +2603,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     const docsEval = flow.evaluateDocsState(v, docReadFile);
     let mergeAnalysis = null;
     let analysisError = null;
-    try { mergeAnalysis = buildGit.analyzePublishIsolation(root, v.items); } catch (e) { analysisError = String(e.message || e); }
+    // REQ-20260927-004：传入版本语言集与自定义文档清单，发布文档提交分类按版本口径判定
+    try { mergeAnalysis = buildGit.analyzePublishIsolation(root, v.items, { langs: v.langs, customDocs: v.customDocs }); } catch (e) { analysisError = String(e.message || e); }
     const branches = buildGit.listBranches(root);
     let config = {};
     try { config = buildPublishStore.readConfig(); } catch { /* 配置读取失败不阻塞总览 */ }
@@ -2628,8 +2630,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       siteRepoRoot: config.homepageRepoRoot || null,
       // REQ-20260926-002：隔离分析不再有 blocked / exempted（混合提交阻断移除）；shared
       // 如实透传（共享提交按 hash 去重只执行一次），perItem 保留未选祖先明细（只读参考，
-      // 不再渲染为必须纳入的依赖）。
-      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared } : null,
+      // 不再渲染为必须纳入的依赖）。REQ-20260927-004：docAncestors（发布文档祖先，按 hash
+      // 去重附归属条目）随响应透出，前端折叠行单独展示（随「文档合并」步处理，不随挑选合并）。
+      mergeAnalysis: mergeAnalysis ? { notes: mergeAnalysis.notes, perItem: mergeAnalysis.perItem, shared: mergeAnalysis.shared, docAncestors: mergeAnalysis.docAncestors } : null,
       analysisError,
       currentBranch: branches.current,
       mainBranch: branches.mainBranch,
