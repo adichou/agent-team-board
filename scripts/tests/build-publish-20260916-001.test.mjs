@@ -7,6 +7,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as store from '../lib/build-publish-store.mjs';
 import * as publish from '../lib/build-publish.mjs';
+import * as buildStore from '../lib/build-store.mjs';
+import { makeProject, makeVersion } from './lib/build-publish-fixture.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-publish-test-'));
 process.env.ATB_BUILD_PUBLISH_CONFIG = path.join(root, 'global.json');
 const git = (cwd, ...args) => execFileSync('git', args, {cwd, encoding:'utf8'}).trim();
@@ -43,12 +45,11 @@ test('新模块不导入旧发布 API、执行器或存储', () => {
 });
 
 test('真实临时 Git 双目标执行、计划确认、防重复、全局改动失效与成功目录快照', async () => {
- const project=path.join(root,'demo');fs.mkdirSync(project);
- git(project,'init','-b','main');
- fs.writeFileSync(path.join(project,'index.html'),'<html>1.0</html>');
- git(project,'add','.');git(project,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','web');
- git(project,'branch','dev');
- const remote=path.join(root,'remote.git');git(root,'init','--bare',remote);git(project,'remote','add','origin',remote);
+ // BUG-20260928-011：预检按「发布文档 + 挑选条目」口径核验——夹具构造文档已审核 / 已提交 /
+ // 已 cherry-pick 合并入 main 的版本计划（共享夹具），预检通过后全链路执行。
+ const fx=makeProject(root,'demo');
+ const project=fx.project;
+ const repo=path.join(root,'site');
  // REQ-20260916-004：官网侧为新架构（Vite + Vue）夹具——src/data/apps.js 注册、content 中英成对、
  // build 脚本产出模拟 dist（壳引用 base 前缀 assets，assets 内联 content 路径串与注册串）。
  fs.writeFileSync(path.join(repo,'package.json'),JSON.stringify({name:'site',private:true,scripts:{build:'node build.mjs'}}));
@@ -75,8 +76,9 @@ test('真实临时 Git 双目标执行、计划确认、防重复、全局改动
   "fs.writeFileSync('dist/favicon.svg','<svg xmlns=\\'http://www.w3.org/2000/svg\\'/>');",
  ].join('\n'));
  git(repo,'add','.');git(repo,'-c','user.name=Test','-c','user.email=test@example.com','commit','-m','site');
- const db=path.join(project, 'agent-team-board');const bld={id:'BLD-X',name:'test',status:'merged',items:[{itemId:'REQ-test',commit:git(project,'rev-parse','HEAD')}]};
- const run=await publish.create(db,project,bld,'1.0');
+ const db=fx.db;
+ const v=makeVersion(fx,{itemId:'REQ-20260916-001'});
+ const run=await publish.create(db,project,v,'1.0');
  await assert.rejects(()=>publish.start(db,project,run.id,'invented'),/预检/);
  const checked=await publish.precheck(db,project,run.id);assert.equal(checked.precheck.ok,true,JSON.stringify(checked.precheck.checks));
  const p=await publish.plan(db,project,run.id);
@@ -88,9 +90,9 @@ test('真实临时 Git 双目标执行、计划确认、防重复、全局改动
  const done=store.readRun(db,run.id);assert.equal(done.status,'succeeded',JSON.stringify(done));
  assert.equal(done.targets.webapp.status,'done');assert.equal(done.targets.site.status,'done');
  assert.equal(store.directoryInfo(done,'site').path,path.join(fs.realpathSync(repo),'dist'));
- assert.equal(git(remote,'rev-parse','main'),run.frozen.mainSha);
- await assert.rejects(()=>publish.create(db,project,bld,'1.0'),/已发布/);
- const next=await publish.create(db,project,bld,'1.1');await publish.precheck(db,project,next.id);
+ assert.equal(git(path.join(root,'remote-demo.git'),'rev-parse','main'),run.frozen.mainSha);
+ await assert.rejects(()=>publish.create(db,project,buildStore.readVersion(db,v.id),'1.0'),/已发布/);
+ const next=await publish.create(db,project,buildStore.readVersion(db,v.id),'1.1');await publish.precheck(db,project,next.id);
  const other=path.join(root,'site2');fs.mkdirSync(other);git(other,'init','-b','main');git(other,'-c','user.name=Test','-c','user.email=test@example.com','commit','--allow-empty','-m','site2');
  store.saveConfig(other);
  await assert.rejects(()=>publish.plan(db,project,next.id),/失效/);
