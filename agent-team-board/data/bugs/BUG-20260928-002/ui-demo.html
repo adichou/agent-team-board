@@ -248,8 +248,7 @@ function planModal(){
   if(S.mode==='fix'){
     return `<div class="mask" id="mask"><div class="modal" role="dialog" aria-modal="true" aria-label="发布二次确认">
       <h3>确认发布（VP-20260928-001 · 演示）</h3>
-      <p>即将发布版本 <strong>v1.2.0</strong>。确认后将自动创建发布草稿并完成预检，随后<strong>直接启动发布</strong>（Web App 与官网 / 用户文档）。</p>
-      <p class="muted small">二次确认即授权执行；预检不推送、不上传、不部署，预检阻塞时中止并就近提示原因。取消不发出任何执行请求。</p>
+      <p>即将发布版本 <strong>v1.2.0</strong>。</p>
       <div class="foot"><button type="button" id="planCancel">取消</button>
       <button type="button" class="pri" id="planGo"${S.planBusy?' disabled':''}>${S.planBusy?'启动中…':'确认发布'}</button></div>
     </div></div>`;
