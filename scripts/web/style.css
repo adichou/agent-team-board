@@ -3158,6 +3158,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
    详情页签行紧凑化）；发布区左运行列表 + 右运行详情分栏，窄屏纵向堆叠 */
 .bld-detail-tabs { margin: 8px 0 10px; padding-bottom: 6px; }
 .bld-rel-pane { display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+/* BUG-20260928-002：发布区收敛为唯一「发布」主按钮——按钮加大加粗保持醒目（唯一发布入口） */
+.bld-publish-actions { margin: 0; }
+.bld-publish-actions .bld-publish-btn { font-size: 15px; font-weight: 600; padding: 8px 22px; }
 .bld-rel-split { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 2fr); gap: 12px; align-items: start; }
 .bld-rel-list { display: flex; flex-direction: column; gap: 6px; }
 .bld-rel-detail { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
