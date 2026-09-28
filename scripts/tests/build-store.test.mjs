@@ -45,7 +45,7 @@ t('B2 校验：空条目 / 条目重复 / commit 缺失或非法 / 名称超长 
   const dataDir = core.dataDirFrom(mkData());
   assert.throws(() => buildStore.createVersion(dataDir, { items: [] }), core.AtbError);
   assert.throws(() => buildStore.createVersion(dataDir, { items: [itemOf('REQ-20260913-001', H1), itemOf('REQ-20260913-001', H2)] }), core.AtbError);
-  assert.throws(() => buildStore.createVersion(dataDir, { items: [{ itemId: 'REQ-20260913-001' }] }), core.AtbError);
+  assert.deepEqual(buildStore.createVersion(dataDir, { items: [{ itemId: 'REQ-20260913-099' }] }).items[0].commits, []);
   assert.throws(() => buildStore.createVersion(dataDir, { items: [itemOf('REQ-20260913-001', 'zzz')] }), core.AtbError);
   assert.throws(() => buildStore.createVersion(dataDir, { name: 'x'.repeat(81), items: [itemOf('REQ-20260913-001', H1)] }), core.AtbError);
 });

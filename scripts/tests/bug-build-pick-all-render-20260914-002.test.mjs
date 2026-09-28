@@ -46,7 +46,7 @@ function element() {
 const H1 = 'a'.repeat(40);
 const H2 = 'b'.repeat(40);
 const R1 = 'REQ-20260914-001'; // done + 有提交 → 可全选
-const R2 = 'REQ-20260914-002'; // done + 无提交 → 全选跳过、复选框禁用
+const R2 = 'REQ-20260914-002'; // done + 无提交 → 全选纳入
 const R3 = 'REQ-20260914-003'; // in-progress → 前端防御过滤不渲染
 
 function mixedCandidates() {
@@ -108,11 +108,11 @@ function setup({ state = null, candidates = mixedCandidates() } = {}) {
   return { sandbox, toasts, requests, inner, click, run: (code) => vm.runInContext(code, sandbox) };
 }
 
-t('F1 新建版本面板「全选」即时生效（存在无提交候选）：复选框勾选 / 计数同步，无提交行保持禁用并标注，跳过 toast 同时保留', async () => {
+t('F1 新建版本面板「全选」即时生效（存在无提交候选）：复选框勾选 / 计数同步，无提交行可勾选并标注，无跳过 toast', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
-  // 初始：0 勾选、计数 0、无提交行禁用并标注（REQ-20260927-002 起无逐个提交下拉，
+  // 初始：0 勾选、计数 0、无提交行可选并标注（REQ-20260927-002 起无逐个提交下拉，
   // 勾选条目即整组自动关联其提交，原「commit 下拉禁用 / 解禁」断言随行为移除）
   assert.match(h.inner(), /已选 0 项/, '初始计数 0');
   assert.doesNotMatch(h.inner(), new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '初始无勾选');
@@ -121,12 +121,12 @@ t('F1 新建版本面板「全选」即时生效（存在无提交候选）：�
   h.click('#bldPickAll');
   const after = h.inner();
   assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '有提交行复选框立即勾选');
-  assert.match(after, /已选 1 项/, '计数立即更新');
-  assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R2}" disabled`), '无提交行复选框仍禁用');
+  assert.match(after, /已选 2 项/, '计数立即更新');
+  assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R2}" checked`), '无提交行复选框已勾选');
   assert.match(after, /暂无关联提交/, '无提交行保留标注');
   assert.doesNotMatch(after, new RegExp(R3), '非 done 条目不渲染');
-  assert.ok(h.toasts.some((x) => x.m.includes('已全选有 commit 候选的条目') && x.m.includes('1 个条目暂无关联提交已跳过')),
-    `跳过提示与渲染同时生效：${JSON.stringify(h.toasts)}`);
+  assert.ok(!h.toasts.some((x) => x.m.includes('已跳过')),
+    `无跳过提示：${JSON.stringify(h.toasts)}`);
 });
 
 t('F2 新建版本面板「全不选」即时生效：复选框清空 / 计数归零', async () => {
@@ -134,13 +134,13 @@ t('F2 新建版本面板「全不选」即时生效：复选框清空 / 计数�
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
   h.click('#bldPickAll');
-  assert.match(h.inner(), /已选 1 项/, '前置：全选后计数 1');
+  assert.match(h.inner(), /已选 2 项/, '前置：全选后计数 2');
   // 点「全不选」→ DOM 立即清空（含无提交候选构成）
   h.click('#bldPickNone');
   const after = h.inner();
   assert.match(after, /已选 0 项/, '计数立即归零');
   assert.doesNotMatch(after, new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '复选框立即清空');
-  assert.doesNotMatch(after, new RegExp(`data-pick="createPanel" data-item="${R2}" checked`), '无提交行从未被勾选');
+  assert.doesNotMatch(after, new RegExp(`data-pick="createPanel" data-item="${R2}" checked`), '无提交行已清空勾选');
 });
 
 t('F3 对照组（全部候选有提交）不回归：全选正常且无跳过 toast；全不选同样生效', async () => {
@@ -169,7 +169,7 @@ t('F4 添加条目面板同口径：全选 / 全不选 DOM 同步（共用同一
   h.click('#bldPickAll');
   const after = h.inner();
   assert.match(after, new RegExp(`data-pick="addPanel" data-item="${R1}" checked`), '添加面板：有提交行立即勾选');
-  assert.match(after, /已选 1 项/, '添加面板：计数立即更新');
+  assert.match(after, /已选 2 项/, '添加面板：计数立即更新');
   assert.doesNotMatch(after, new RegExp(`data-pick="addPanel" data-item="${inVer}"`), '已在本版本的条目不出现');
   h.click('#bldPickNone');
   const cleared = h.inner();
@@ -190,7 +190,7 @@ t('F5 界面与提交一致：全选后提交内容即界面所示；全不选�
   assert.ok(created, '应发起创建版本请求');
   // REQ-20260927-002：payload 为整组 commits 数组——旧候选 payload（无 commitMeta 元数据）
   // 防御回退为该条目已知全部提交，不再有单值 commit 默认选中
-  assert.deepEqual(created.body.items, [{ itemId: R1, commits: [H1, H2] }], '提交内容与界面显示的勾选一致（整组 commits）');
+  assert.deepEqual(created.body.items, [{ itemId: R1, commits: [H1, H2] }, { itemId: R2, commits: [] }], '提交内容与界面显示的勾选一致（整组 commits）');
   assert.ok(h.toasts.some((x) => x.m === '✓ 版本计划已创建'), '创建成功 toast');
   // 重开面板：全选 → 全不选（界面归零）→ 提交被拦截且界面无勾选残留
   await h.run(`window.ATBBuild.openCreatePanel()`);
@@ -199,7 +199,7 @@ t('F5 界面与提交一致：全选后提交内容即界面所示；全不选�
   h.click('#bldCreateBtn');
   await new Promise((r) => setTimeout(r, 10));
   const blocked = h.inner();
-  assert.match(blocked, /请至少勾选一个条目（无关联 commit 的条目不可纳入版本）/, '零勾选提交被拦截');
+  assert.match(blocked, /请至少勾选一个条目/, '零勾选提交被拦截');
   assert.doesNotMatch(blocked, new RegExp(`data-pick="createPanel" data-item="${R1}" checked`), '拦截时界面无勾选残留（所见即所交）');
   const posts = h.requests.filter((x) => x.url.includes('/api/build/version') && x.method === 'POST');
   assert.equal(posts.length, 1, '拦截路径不再发起提交');

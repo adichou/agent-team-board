@@ -11,7 +11,7 @@
 //   - 服务端兜底：创建版本 / 添加条目对跨版本重复纳入明确拒绝，报错含占用版本编号；
 //   - 占用释放：从 draft/failed 版本移出、或删除版本后，条目重新回到候选；
 //   - 不回归：done-only 口径（BUG-20260913-001）、全选即时生效（BUG-20260914-002）、
-//     无提交条目禁用跳过、加载 / 失败重试状态不受影响。
+//     无提交条目正常纳入、加载 / 失败重试状态不受影响。
 // 用法：node scripts/tests/bug-build-candidate-occupied-20260914-004.test.mjs
 
 import assert from 'node:assert/strict';
@@ -451,13 +451,13 @@ t('F3 空态区分：done 条目均已被占用与无 done 条目两种文案', 
   assert.match(inner3, /暂无可纳入版本的条目/, '缺 totalDone 时回落既有文案');
 });
 
-t('F4 全选口径回归：候选内未占用 done 条目，全选仍只纳入有 commit 候选者', async () => {
+t('F4 全选口径回归：候选内未占用 done 条目，全选纳入含空提交的全部候选', async () => {
   const versions = [ver('BLD-20260914-001', [verItem('REQ-20260914-010', '已被版本占用需求')])];
   const h = setup({ versions });
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
   const selectable = h.run(`window.ATBBuild.selectableCandidates(window.ATBBuild.getCandidates())`);
-  assert.deepEqual(selectable.map((x) => x.itemId), ['BUG-20260914-011'], '全选口径=未占用 done 且有 commit');
+  assert.deepEqual(selectable.map((x) => x.itemId), ['BUG-20260914-011', 'REQ-20260914-012'], '全选口径=未占用 done');
 });
 
 let failed = 0;

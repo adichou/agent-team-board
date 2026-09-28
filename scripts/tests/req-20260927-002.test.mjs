@@ -309,10 +309,10 @@ t('S2 POST /api/build/version：commits 数组整组落盘；空数组与非 40 
     const ver = ok.json.version;
     assert.equal(ver.items[0].commits.length, 3, '版本条目行 commits 与自动关联整组一致');
     assert.deepEqual(ver.items[0].commits, h.hashes, '三个提交（含 feat 主提交）全部落盘');
-    // 空数组拒绝（沿用既有报错文案口径）
+    // 空数组允许，但既有条目仍受跨版本占用约束
     const empty = await req(h.port, 'POST', `/api/build/version${h.P}`, { name: 'x', items: [{ itemId: h.A.id, commits: [] }] });
-    assert.equal(empty.status, 400, '空 commits 数组被拒绝');
-    assert.match(empty.json.error || '', /缺少有效的关联 commit/, '沿用既有报错文案口径');
+    assert.equal(empty.status, 400, '已占用条目仍被拒绝');
+    assert.match(empty.json.error || '', /已纳入/, '同一条目跨版本重复仍被拒绝');
     // 非 40 位元素拒绝
     const bad = await req(h.port, 'POST', `/api/build/version${h.P}`, { name: 'y', items: [{ itemId: h.A.id, commits: ['zz'.repeat(20)] }] });
     assert.equal(bad.status, 400, '非 40 位元素被拒绝');
@@ -347,7 +347,7 @@ const HD = H('d');
 const R1 = 'REQ-20260927-101'; // 多提交自动关联（回归样本型）
 const R2 = 'REQ-20260927-102'; // 仅宽口径（回退）
 const R3 = 'REQ-20260927-103'; // 自动集 + 宽口径并存
-const R4 = 'REQ-20260927-104'; // 全空（禁用）
+const R4 = 'REQ-20260927-104'; // 全空（仍可纳入）
 
 // 新候选 payload 形态（服务端 REQ-20260927-002 后下发）
 function candidatesPayload() {
@@ -419,13 +419,14 @@ t('F1 创建面板整组自动关联：勾选即展开只读清单（hash+主题
   assert.match(after, /doc: 版本计划多对多组版/, '提交主题渲染');
   assert.match(after, /自动·归属/, '来源徽标（严格归属）');
   assert.doesNotMatch(after, /bld-commit-sel/, '不再渲染逐个提交下拉');
-  // 计数：R1(2) + R2(回退 1) + R3(1) = 4，R4 被跳过
-  assert.match(after, /已选 3 项 · 4 个提交/, '操作条计数 = 已选条目自动关联提交数之和（回退计入）');
+  // 计数：R1(2) + R2(回退 1) + R3(1) = 4，R4 计入条目但贡献 0 个提交
+  assert.match(after, /已选 4 项 · 4 个提交/, '操作条计数 = 已选条目自动关联提交数之和（回退计入）');
   // 提交 payload 整组
   h.click('#bldCreateBtn');
   await sleep(10);
   const created = h.requests.find((x) => x.url === '/api/build/version' && x.method === 'POST');
   assert.ok(created, '应发起创建请求');
+  assert.deepEqual(created.body.items.find((x) => x.itemId === R4), { itemId: R4, commits: [] }, '创建包含无提交条目');
   const r1 = created.body.items.find((x) => x.itemId === R1);
   assert.deepEqual(r1, { itemId: R1, commits: [HA, HB] }, 'payload 为整组 commits 数组（含 feat 主提交）');
   const r2 = created.body.items.find((x) => x.itemId === R2);
@@ -464,19 +465,19 @@ t('F3 宽口径折叠行：只读提示可展开，不可勾选、不计入 M', 
   const expanded = h.inner();
   assert.match(expanded, /chore: 提及/, '展开后查看 hash + 主题');
   // 宽口径提交不进入 M 计数（R3 的 M 只含自动集 1 条）
-  assert.match(expanded, /已选 3 项 · 4 个提交/, '宽口径命中不计入 M');
+  assert.match(expanded, /已选 4 项 · 4 个提交/, '宽口径命中不计入 M');
 });
 
-t('F4 全空条目禁用与全选跳过：无自动集且无宽口径的行不可勾选并标注', async () => {
+t('F4 全空条目正常勾选并标注：计入条目数，无跳过提示', async () => {
   const h = panelSetup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
   h.click('#bldPickAll');
   const after = h.inner();
-  assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R4}" disabled`), '全空条目复选框禁用');
+  assert.match(after, new RegExp(`data-pick="createPanel" data-item="${R4}" checked`), '全空条目复选框勾选');
   assert.match(after, /暂无关联提交/, '全空条目标注暂无关联提交');
-  assert.ok(h.toasts.some((x) => x.m.includes('1 个条目暂无关联提交已跳过')), '全选跳过提示（toast 反馈）');
-  assert.match(after, /已选 3 项 · 4 个提交/, '全空条目不计入已选与提交数');
+  assert.ok(!h.toasts.some((x) => x.m.includes('已跳过')), '全选无跳过提示');
+  assert.match(after, /已选 4 项 · 4 个提交/, '全空条目计入已选但不计提交数');
   h.click('#bldPickNone');
   assert.match(h.inner(), /已选 0 项 · 0 个提交/, '全不选计数归零');
 });
@@ -497,11 +498,12 @@ t('F5 两面板一致：添加条目面板同口径（整组 payload、回退与
   const after = h.inner();
   assert.match(after, new RegExp(`data-pick="addPanel" data-item="${R1}" checked`), '添加面板勾选');
   assert.match(after, /关联提交（自动关联 2 个 · 旧→新 · 只读）/, '添加面板行内展开只读区块');
-  assert.match(after, /已选 3 项 · 4 个提交/, '添加面板计数同口径');
+  assert.match(after, /已选 4 项 · 4 个提交/, '添加面板计数同口径');
   h.click('#bldAddSubmit');
   await sleep(10);
   const added = h.requests.find((x) => x.url === '/api/build/version/items' && x.method === 'POST');
   assert.ok(added, '应发起添加条目请求');
+  assert.deepEqual(added.body.items.find((x) => x.itemId === R4), { itemId: R4, commits: [] }, '追加包含无提交条目');
   const r1 = added.body.items.find((x) => x.itemId === R1);
   assert.deepEqual(r1, { itemId: R1, commits: [HA, HB] }, '添加面板 payload 同为整组 commits 数组');
 });
@@ -523,9 +525,11 @@ t('I1 i18n：新增文案 EN / EN_DYNAMIC 词条同步且动态键可编译', as
   assert.ok(EN_DYNAMIC['已选 ◇ 项 · ◇ 个提交'], '操作条计数动态词条');
   I.setLang('en');
   try {
+    assert.equal(I.t('暂无关联提交（仍可纳入版本）'), 'No linked commits (can still be included in this version)');
+    assert.equal(I.t('暂无关联提交'), 'No linked commits');
     assert.equal(I.t('自动·账本'), 'Auto · ledger', '静态查词命中');
     assert.equal(I.t('另有 2 个宽口径命中未关联'), 'Another 2 broad-match commit(s) not linked', '动态查词命中');
-    assert.equal(I.t('已选 3 项 · 4 个提交'), '3 selected · 4 commits', '计数动态查词命中（长键优先，不被「已选 ◇ 项」抢先）');
+    assert.equal(I.t('已选 4 项 · 4 个提交'), '4 selected · 4 commits', '计数动态查词命中（长键优先，不被「已选 ◇ 项」抢先）');
     assert.equal(I.t('关联提交（自动关联 2 个 · 旧→新 · 只读）'), 'Linked commits (2 auto-linked · old → new · read-only)', '区块头动态查词命中');
   } finally { I.setLang('zh'); }
 });

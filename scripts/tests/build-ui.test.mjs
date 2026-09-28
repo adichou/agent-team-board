@@ -175,7 +175,7 @@ t('N7a build.js 挂载与 state 渲染：版本列表 + 状态 chip + 空态 + �
   assert.doesNotMatch(inner3, /id="bldNewBtn"/, '非 git 不出现创建入口');
 });
 
-t('N7b 创建面板：候选仅 done 且未占用条目（BUG-20260913-001 / BUG-20260914-004）；全选只纳入有 commit 候选的条目；无 commit 条目标注且不可选', async () => {
+t('N7b 创建面板：候选仅 done 且未占用条目（BUG-20260913-001 / BUG-20260914-004）；全选纳入全部候选；无 commit 条目标注且可选', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
@@ -187,7 +187,7 @@ t('N7b 创建面板：候选仅 done 且未占用条目（BUG-20260913-001 / BUG
   assert.doesNotMatch(panel[0], /开发中需求/, '非 done 条目不渲染（前端防御过滤）');
   assert.doesNotMatch(panel[0], /REQ-20260913-001/, '已纳入版本的条目不渲染（前端防御过滤，BUG-20260914-004）');
   const selectable = h.run(`window.ATBBuild.selectableCandidates(window.ATBBuild.getCandidates())`);
-  assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-004'], '全选口径=未占用 done 且有 commit 候选的条目');
+  assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-002', 'REQ-20260913-004'], '全选口径=未占用 done 条目');
 });
 
 t('N7c 回填解析：标准回答解析出名称与描述；缺名称报错保留原文', () => {

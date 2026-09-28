@@ -313,12 +313,12 @@ t('F3 添加条目面板：同口径收窄——非 done 不出现，且已在�
   assert.match(panel[0], /无提交已完成需求/, 'done 且不在本版本的条目出现');
 });
 
-t('F4 全选口径回归：全选仍只纳入有 commit 候选的 done 条目，无提交条目跳过', async () => {
+t('F4 全选口径回归：全选纳入全部 done 条目，含无提交条目', async () => {
   const h = setup();
   await h.run(`window.ATBBuild.enter('/p/a')`);
   await h.run(`window.ATBBuild.openCreatePanel()`);
   const selectable = h.run(`window.ATBBuild.selectableCandidates(window.ATBBuild.getCandidates())`);
-  assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-010'], '全选口径=done 且有 commit');
+  assert.deepEqual(selectable.map((x) => x.itemId), ['REQ-20260913-010', 'REQ-20260913-011'], '全选口径=done');
 });
 
 let failed = 0;
