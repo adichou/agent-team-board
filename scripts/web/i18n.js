@@ -1159,6 +1159,10 @@ const EN = {
   '正式发布': 'Official release',
   '官网 AI 总结': 'Website AI summary',
   '复制官网提示词': 'Copy website prompt',
+  // BUG-20260928-004 官网提示词改折叠布局：摘要行（默认折叠、按需展开查看全文的复制口径说明）；
+  // 未配置官网仓库 fallback 文案随本块补齐 EN 词条（原仅中文展示，BUG-20260912-001 中英文同步）
+  '官网提示词（默认折叠，点击展开查看全文；复制后在官网仓库会话粘贴执行，提交消息须含完整计划号）': 'Website prompt (collapsed by default — click to expand the full text; after copying, paste and run it in a session of the website repository; the commit message must include the full plan id)',
+  '未配置官网仓库：先在设置中配置官网仓库根目录。': 'Website repository not configured: set the website repository root in Settings first.',
   '推送主分支': 'Push main branch',
   '推送中…': 'Pushing…',
   '立即检测': 'Check now',
