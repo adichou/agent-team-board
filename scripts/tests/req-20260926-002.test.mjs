@@ -79,8 +79,8 @@ t('L1-2 五步门禁：挑选合并不再要求文档已提交；文档编写在
   // 旧计划兼容：draft 但已有文档提交记录（旧流程先文档后合并）→ 文档步不锁
   steps = flow.publishStepsState(mk({ docs: { commitHash: 'c'.repeat(40) } }), { overall: 'committed' });
   assert.ok(!by(steps, 'docs').locked, '旧计划已有文档提交记录不锁文档步（不要求重新执行）');
-  // 已推送（正式发布）：合并锁定、发布可查看
-  steps = flow.publishStepsState(mk({ status: 'merged', release: { pushedAt: '2026-09-26T11:00:00.000Z' } }), { overall: 'committed' });
+  // 已发布（BUG-20260928-005：发布按钮二次确认落账 confirmedAt 才是正式发布——仅推送不锁）：合并锁定、发布可查看
+  steps = flow.publishStepsState(mk({ status: 'merged', release: { pushedAt: '2026-09-26T11:00:00.000Z', confirmedAt: '2026-09-26T12:00:00.000Z' } }), { overall: 'committed' });
   assert.ok(by(steps, 'merge').locked && /正式发布/.test(by(steps, 'merge').reason), '已正式发布锁定挑选合并');
   assert.ok(by(steps, 'docs').locked && /正式发布/.test(by(steps, 'docs').reason), '已正式发布锁定文档编写');
   assert.ok(by(steps, 'docmerge').locked && /正式发布/.test(by(steps, 'docmerge').reason), '已正式发布锁定文档合并');

@@ -210,7 +210,9 @@ t('S1/S2 服务层：/version 带版本号创建、非法与重复 400、缺省�
     const s2 = await reqJson(port, 'GET', `/api/build/state${P}`);
     const vs2 = Object.fromEntries(s2.json.versions.map((x) => [x.id, x]));
     assert.equal(vs2[planId].releasedAt, pushedAt, '存量（仅 release.pushedAt）应在 /state 回退透出 releasedAt');
-    assert.equal(vs2[planId].pushed, true);
+    // BUG-20260928-005：/state 改透出 released（正式发布 = 发布按钮二次确认落账）——存量
+    // 仅推送（pushedAt）未确认的计划 released=false（推送事实经 releasedAt 回退透出）。
+    assert.equal(vs2[planId].released, false, '存量仅推送未确认：released 应为 false（未正式发布）');
 
     // S2c publish-plan：新计划取 x.y.z；存量（无 version 字段）回退 YYYYMMDD-NNN 派生
     const pp1 = await reqJson(port, 'GET', `/api/build/publish-plan${P}&id=${planId}`);

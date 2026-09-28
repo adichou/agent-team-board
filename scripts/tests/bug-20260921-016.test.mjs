@@ -43,7 +43,7 @@ const H1 = 'a'.repeat(40);
 // 描述文本不用「描述」二字（避免与被删标签的断言串扰）
 function ver(id, name, status = 'draft', extra = {}) {
   return {
-    id, name, description: `版本说明 ${name}`, status, targetBranch: 'main', pushed: false,
+    id, name, description: `版本说明 ${name}`, status, targetBranch: 'main', released: false,
     items: [{ itemId: 'BUG-20260921-016', commit: H1, title: '演示条目', mergedAt: status === 'merged' ? '2026-09-21T03:00:00.000Z' : null, mergeError: null }],
     createdAt: '2026-09-21T01:00:00.000Z', updatedAt: '2026-09-21T02:00:00.000Z',
     merge: { startedAt: null, finishedAt: null, error: status === 'failed' ? '模拟合并失败' : null, baseBranch: 'dev' },
@@ -54,7 +54,7 @@ function ver(id, name, status = 'draft', extra = {}) {
 const DRAFT = ver('BLD-20260921-016', 'd1');
 const MERGING = ver('BLD-20260921-017', 'm1', 'merging');
 const MERGED = ver('BLD-20260921-018', 'm2', 'merged');
-const PUSHED = ver('BLD-20260921-019', 'p1', 'merged', { pushed: true });
+const PUSHED = ver('BLD-20260921-019', 'p1', 'merged', { released: true });
 const FAILED = ver('BLD-20260921-020', 'f1', 'failed');
 
 function setup({ versions = [DRAFT, MERGING, MERGED, PUSHED, FAILED] } = {}) {

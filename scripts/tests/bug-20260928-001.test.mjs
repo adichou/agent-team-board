@@ -57,7 +57,7 @@ const ver = (over = {}) => ({
   items: [{ itemId: 'REQ-20260901-001', commit: HASH, commits: [HASH], mergedAt: '2026-09-28T00:00:00.000Z', mergeError: null }],
   merge: { startedAt: '2026-09-28T00:00:00.000Z', finishedAt: '2026-09-28T00:10:00.000Z', error: null, mainSha: HASH },
   docsMerge: null,
-  release: null, pushed: false,
+  release: null, released: false,
   ...over,
 });
 

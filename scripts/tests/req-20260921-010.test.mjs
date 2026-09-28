@@ -209,7 +209,7 @@ t('L2-1 saveDocLangs：保存 / 回显；merging 与已推送锁定；非法语�
 
   const raw3 = JSON.parse(fs.readFileSync(path.join(dataDir, 'runtime', 'builds', 'versions', v2.id, 'version.json'), 'utf8'));
   raw3.status = 'merged';
-  raw3.release = { pushedAt: '2026-09-21T00:00:00Z', pushedSha: 'a'.repeat(40), pushRemote: 'origin' };
+  raw3.release = { pushedAt: '2026-09-21T00:00:00Z', pushedSha: 'a'.repeat(40), pushRemote: 'origin', confirmedAt: '2026-09-21T01:00:00Z', confirmedRunId: 'BPUB-test' };
   fs.writeFileSync(path.join(dataDir, 'runtime', 'builds', 'versions', v2.id, 'version.json'), JSON.stringify(raw3));
   assert.throws(() => buildStore.saveDocLangs(dataDir, v2.id, { langs: 'cn,en' }), /正式发布/);
 });

@@ -102,6 +102,7 @@ t('G1 数据模型：commits 数组建版 / 旧单提交数据读取迁移 / app
   assert.throws(() => buildStore.appendItemCommits(dir, v1.id, [{ itemId: 'REQ-20260921-015', commits: ['1'.repeat(40)] }]), /合并中/);
   buildStore.finishMerge(dir, v1.id, { results: [{ itemId: 'REQ-20260921-015', ok: true }] });
   buildStore.recordPushSuccess(dir, v1.id, { remote: 'origin', sha: 'a'.repeat(40) });
+  buildStore.recordReleaseConfirm(dir, v1.id, { runId: 'BPUB-test' });
   assert.throws(() => buildStore.appendItemCommits(dir, v1.id, [{ itemId: 'REQ-20260921-015', commits: ['2'.repeat(40)] }]), /已正式发布/);
   // 非法输入：条目不在版本 / hash 不合法
   const dir2 = tmpdir('atb-bug20260921-015-g1b-');

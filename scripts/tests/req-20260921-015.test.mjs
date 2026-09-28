@@ -182,7 +182,7 @@ const H2 = 'b'.repeat(40);
 function ver(id, name, status = 'draft', extra = {}) {
   const merged = status === 'merged';
   return {
-    id, name, description: `描述 ${name}`, status, targetBranch: 'main', pushed: false,
+    id, name, description: `描述 ${name}`, status, targetBranch: 'main', released: false,
     items: [{ itemId: 'REQ-20260921-013', commit: H1, title: '演示需求', mergedAt: merged ? '2026-09-21T03:00:00.000Z' : null, mergeError: status === 'failed' ? 'conflict' : null }],
     createdAt: '2026-09-21T01:00:00.000Z', updatedAt: '2026-09-21T02:00:00.000Z',
     merge: { startedAt: null, finishedAt: null, error: status === 'failed' ? '模拟合并失败' : null, baseBranch: 'dev', ...(merged ? { mainSha: H2, replays: [] } : {}) },
@@ -371,7 +371,7 @@ t('F6 合并主按钮锁定态沿用：merging / 已正式发布 aria-disabled +
   const h = setup({
     versions: [
       ver('BLD-MRG', '合并中', 'merging'),
-      ver('BLD-PUSH', '已推送', 'merged', { pushed: true, release: { pushedAt: '2026-09-21T09:00:00.000Z', pushRemote: 'origin', pushedSha: H2, site: { status: 'waiting' } } }),
+      ver('BLD-PUSH', '已推送', 'merged', { released: true, release: { pushedAt: '2026-09-21T09:00:00.000Z', pushRemote: 'origin', pushedSha: H2, site: { status: 'waiting' } } }),
     ],
     plans: { 'BLD-MRG': plan({ perItem: DEP_PER_ITEM }), 'BLD-PUSH': plan({ perItem: DEP_PER_ITEM }) },
   });
