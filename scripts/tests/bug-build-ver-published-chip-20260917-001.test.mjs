@@ -281,12 +281,14 @@ t('P3b 未发布成功版本不误显「已发布」：无运行（release null 
   await h.enter();
   const inner = h.inner();
   assert.doesNotMatch(cardOf(inner, 'BLD-B'), /已发布/, 'release=null 的 merged 版本不显示已发布');
-  assert.match(cardOf(inner, 'BLD-B'), />已合并<\/span>/, '保持「已合并」');
+  // BUG-20260928-001 口径后移：merged 且 docsMerge 无落账（夹具未落账）不再显示绿色「已合并」，
+  // 显示中间态「代码已并入 · 文档与翻译未合并」（st-wait）
+  assert.match(cardOf(inner, 'BLD-B'), />代码已并入 · 文档与翻译未合并<\/span>/, '中间态标签（docsMerge 未落账不显已合并）');
   assert.match(cardOf(inner, 'BLD-C'), />计划中<\/span>/, 'draft 保持「计划中」');
   assert.match(cardOf(inner, 'BLD-D'), />合并中<\/span>/, 'merging 保持「合并中」');
   assert.match(cardOf(inner, 'BLD-E'), />失败<\/span>/, 'failed 保持「失败」');
   assert.doesNotMatch(cardOf(inner, 'BLD-F'), /已发布/, 'published 非真值（防御旧数据）不显示已发布');
-  assert.match(cardOf(inner, 'BLD-F'), />已合并<\/span>/, '防御回落原标签');
+  assert.match(cardOf(inner, 'BLD-F'), />代码已并入 · 文档与翻译未合并<\/span>/, '防御回落中间态标签');
   assert.equal((inner.match(/已发布/g) || []).length, 0, '整页无「已发布」误显');
 });
 
@@ -296,9 +298,10 @@ t('P3c 详情「概况」名称行仍显示合并状态；右侧「发布」页�
   ] });
   await h.enter();
   const inner = h.inner();
-  // 详情概况区（右侧）名称行保留合并状态标签
+  // 详情概况区（右侧）名称行保留合并进度标签——BUG-20260928-001 口径后移：docsMerge 未落账
+  //（夹具未落账）显示中间态标签，不再显示「已合并」
   const detail = inner.slice(inner.indexOf('bld-name'));
-  assert.match(detail, />已合并<\/span>/, '详情概况名称行保留「已合并」');
+  assert.match(detail, />代码已并入 · 文档与翻译未合并<\/span>/, '详情概况名称行显示合并中间态');
   // 发布页签仍正常：打开后可见运行与已发布状态
   h.run(`window.ATBBuild.setStep('release')`);
   await h.tick(4);
