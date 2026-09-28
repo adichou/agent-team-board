@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260928-012 界面演示 — 删除草稿展示模块，发布直出结果</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1d2026; --panel2: #22262e; --line: #2e333d;
+    --fg: #e6e9ef; --muted: #9aa3b2; --dim: #6b7482;
+    --accent: #4c8dff; --ok: #3fb970; --warn: #d9a13e; --err: #e06c5f;
+    --chip-mute: #3a404c; --chip-run: #35507a; --chip-ok: #2e5c42; --chip-fail: #5c3330;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .demo-bar {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 16px; background: #101216; border-bottom: 1px solid var(--line);
+  }
+  .demo-bar .tag {
+    font-size: 12px; color: var(--warn); border: 1px solid var(--warn); border-radius: 4px;
+    padding: 2px 8px; white-space: nowrap;
+  }
+  .demo-bar button {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  .demo-bar button:hover { border-color: var(--accent); }
+  .demo-bar button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .switch { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .switch button { border: none; border-radius: 0; }
+  .switch button.on { background: var(--accent); color: #fff; }
+  .scene-group { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .scene-group[hidden] { display: none; }
+  main { max-width: 1080px; margin: 0 auto; padding: 18px 16px 48px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .pub-actions { display: flex; gap: 12px; align-items: center; padding: 10px 0; flex-wrap: wrap; }
+  .btn {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.small { padding: 3px 10px; font-size: 12px; }
+  .btn.quiet { color: var(--muted); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .err-text { color: var(--err); }
+  .note {
+    background: var(--panel); border: 1px dashed var(--line); border-radius: 8px;
+    padding: 10px 14px; margin: 14px 0; font-size: 12px; color: var(--muted);
+  }
+  .note b { color: var(--fg); }
+  /* —— 缺陷态：发布记录列表 / 运行详情 —— */
+  .rel-split { display: flex; gap: 14px; margin-top: 12px; }
+  .rel-list { flex: 0 0 340px; display: flex; flex-direction: column; gap: 8px; }
+  .rel-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+    cursor: pointer;
+  }
+  .rel-card:hover { border-color: var(--dim); }
+  .rel-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .rel-card .t { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .rel-card .t strong { font-size: 12px; overflow-wrap: anywhere; }
+  .rel-card .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .rel-card .meta.bad { color: var(--err); }
+  .rel-detail { flex: 1 1 auto; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .rel-detail h3 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; overflow-wrap: anywhere; }
+  .chip {
+    display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 12px; white-space: nowrap;
+    background: var(--chip-mute); color: var(--fg);
+  }
+  .chip.st-run { background: var(--chip-run); }
+  .chip.st-ok { background: var(--chip-ok); }
+  .chip.st-fail { background: var(--chip-fail); }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 10px; margin: 12px 0; }
+  .kv dt { color: var(--muted); font-size: 12px; }
+  .kv dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+  .targets { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+  .target { display: flex; gap: 8px; align-items: center; background: var(--panel2); border-radius: 6px; padding: 6px 10px; }
+  .dirs { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0; }
+  .dir { flex: 1 1 240px; min-width: 0; background: var(--panel2); border-radius: 6px; padding: 8px 10px; }
+  .dir p { margin: 4px 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; user-select: text; }
+  .acts { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+  .status-line { min-height: 20px; font-size: 12px; margin-top: 8px; }
+  .status-line.ok { color: var(--ok); }
+  .status-line.err { color: var(--err); }
+  .stage-list { margin: 10px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+  .stage-list li { margin: 2px 0; }
+  /* —— 期望态：执行结果面板 —— */
+  .res-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; margin-top: 12px; }
+  .res-panel .big { font-size: 16px; display: flex; gap: 10px; align-items: center; }
+  .res-ok .big { color: var(--ok); }
+  .res-fail .big { color: var(--err); }
+  .res-time { font-size: 22px; font-variant-numeric: tabular-nums; margin: 10px 0 2px; user-select: text; }
+  .check-list { list-style: none; margin: 10px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .check-list li { display: flex; gap: 8px; align-items: center; font-size: 13px; background: var(--panel2); border-radius: 6px; padding: 6px 10px; }
+  .ok-mark { color: var(--ok); font-weight: 600; }
+  .fail-mark { color: var(--err); font-weight: 600; }
+  .modal-wrap {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; width: 400px; max-width: 92vw; padding: 16px; }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .toast {
+    position: fixed; right: 18px; top: 60px; z-index: 60; background: var(--panel2);
+    border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; max-width: 340px; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+  }
+  .toast.err { border-left-color: var(--err); }
+  .toast.ok { border-left-color: var(--ok); }
+  label.ck { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); cursor: pointer; }
+  @media (max-width: 760px) { .rel-split { flex-direction: column; } .rel-list { flex: none; } }
+</style>
+</head>
+<body>
+  <div class="demo-bar" role="toolbar" aria-label="演示控制">
+    <span class="tag">演示控件（非产品界面）</span>
+    <span class="switch" role="group" aria-label="缺陷态 / 期望态切换">
+      <button id="modeBug" class="on" type="button">缺陷态（现状）</button>
+      <button id="modeFix" type="button">期望态（修复后）</button>
+    </span>
+    <span class="scene-group" id="sceneBugGroup" role="group" aria-label="缺陷态场景">
+      <button data-scene="draft" class="on" type="button">场景·草稿残留</button>
+      <button data-scene="running" type="button">场景·发布中</button>
+      <button data-scene="canceled" type="button">场景·已取消</button>
+      <button data-scene="empty" type="button">场景·空（无记录）</button>
+      <button data-scene="loading" type="button">场景·加载中</button>
+      <button data-scene="error" type="button">场景·读取失败</button>
+    </span>
+    <span class="scene-group" id="sceneFixGroup" role="group" aria-label="期望态场景" hidden>
+      <button data-fx="idle" class="on" type="button">场景·空闲（未发布）</button>
+      <button data-fx="success" type="button">场景·发布成功</button>
+      <button data-fx="failed" type="button">场景·发布失败</button>
+    </span>
+  </div>
+
+  <main>
+    <h1>构建 · 发布页签（BPUB 产品发布）— BUG-20260928-012</h1>
+    <p class="sub">顶部开关对照「缺陷态（现状）/ 期望态（修复后）」，场景按钮随模式切换。数据为演示数据（ID、时间对应登记截图）。</p>
+
+    <section class="pub-actions" aria-label="发布操作条">
+      <button class="btn primary" id="pubBtn" type="button">发布</button>
+      <span class="muted small" id="pubReason"></span>
+      <span class="muted small" style="margin-left:auto">版本计划：BLD-20260927-001 · 首个基线版本 · 已合并</span>
+    </section>
+    <p class="small err-text" id="pubError" role="alert" style="display:none;margin:4px 0 0"></p>
+
+    <div class="note" id="diffNote">
+      <b>缺陷态（现状）：</b>一键发布先创建草稿再预检，链路中止后草稿卡片残留在「发布记录」模块且无清理入口，摘要显示 <code>Web App [object Object]</code>。<br>
+      <b>期望态（修复后）：</b>整个草稿（发布记录）展示模块删除；点击「发布」→ 按检查规则提示 → 二次确认 → 执行 → 显示执行结果：成功显示发布时间（本地时间），失败显示错误信息与「重试」按钮。
+    </div>
+
+    <div id="stageHost"></div>
+  </main>
+
+  <div id="modalHost"></div>
+  <div id="toastHost"></div>
+
+<script>
+(function () {
+  'use strict';
+  var MODE = 'bug';                     // 'bug'=缺陷态 'fix'=期望态
+  // 缺陷态页面状态
+  var SCENE = 'draft';                  // draft|running|canceled|empty|loading|error
+  var selectedId = null;
+  var detailLoading = false;
+  var dirMsg = { webapp: '', site: '' };
+  var pubBusy = false;
+  // 期望态结果状态
+  var FX = 'idle';                      // idle|running|success|failed
+  var fxTime = null;
+  var fxError = '';
+  var fxTimer = null;
+
+  var STEP_LABEL = { pending: '待执行', running: '进行中', done: '已完成', failed: '失败', canceled: '已取消' };
+  var STATUS_LABEL = { draft: '草稿', prechecking: '预检', running: '进行中', 'waiting-manual': '等待人工', succeeded: '已发布', failed: '失败', canceled: '已取消' };
+  var CHIP_CLS = { draft: '', prechecking: 'st-run', running: 'st-run', succeeded: 'st-ok', failed: 'st-fail', canceled: '' };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtLocal(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+      pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function toast(msg, kind) {
+    var host = document.getElementById('toastHost');
+    var el = document.createElement('div');
+    el.className = 'toast ' + (kind || '');
+    el.textContent = msg;
+    host.appendChild(el);
+    setTimeout(function () { el.remove(); }, 2600);
+  }
+  function showPubError(msg) {
+    var el = document.getElementById('pubError');
+    if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.textContent = msg; el.style.display = '';
+  }
+  function clearFxTimer() { if (fxTimer) { clearTimeout(fxTimer); fxTimer = null; } }
+
+  /* ===================== 缺陷态：发布记录列表 + 运行详情 ===================== */
+
+  function mkRun(status, ts) {
+    return {
+      id: 'BPUB-711ea71f-31b9-4edf-a3fe-16ab9d7ff021',
+      status: status,
+      version: '1.0.0',
+      bldId: 'BLD-20260927-001', bldName: '首个基线版本',
+      updatedAt: ts || '2026-09-28 10:38',
+      targets: { webapp: { status: 'pending' }, site: { status: 'pending' } }
+    };
+  }
+  function runsOfScene() {
+    if (SCENE === 'draft') return [mkRun('draft')];
+    if (SCENE === 'running') return [mkRun('prechecking')];
+    if (SCENE === 'canceled') return [mkRun('canceled')];
+    return [];
+  }
+  // 现状代码路径：REL_STEP_LABEL[r.targets?.webapp] || r.targets?.webapp —— 对象被字符串化
+  function targetSummary(t) {
+    return (STEP_LABEL[t] || t || '未提供');
+  }
+  function chip(status) {
+    return '<span class="chip ' + (CHIP_CLS[status] || '') + '">' + esc(STATUS_LABEL[status] || status) + '</span>';
+  }
+  function stepChip(s) {
+    return '<span class="chip ' + (s === 'done' ? 'st-ok' : s === 'failed' ? 'st-fail' : s === 'running' ? 'st-run' : '') + '">' + esc(STEP_LABEL[s] || s || '未提供') + '</span>';
+  }
+  function setStatus(msg, kind) {
+    var line = document.getElementById('actStatus');
+    if (!line) return;
+    line.textContent = msg || '';
+    line.className = 'status-line ' + (kind || '');
+  }
+  function bindRetry() {
+    var b = document.getElementById('listRetry');
+    if (!b) return;
+    b.addEventListener('click', function () {
+      SCENE = 'loading'; renderAll(); setStatus('正在重新读取…');
+      setTimeout(function () { SCENE = 'draft'; selectedId = null; renderAll(); toast('已重新读取发布记录（演示）', 'ok'); }, 700);
+    });
+  }
+
+  function renderBugStage(host) {
+    host.innerHTML = '<div class="rel-split" id="relSplit">' +
+      '<div class="rel-list" id="relList" aria-label="发布记录"></div>' +
+      '<div class="rel-detail" id="relDetail"></div></div>';
+    renderList(); renderDetail();
+  }
+
+  function renderList() {
+    var host = document.getElementById('relList');
+    if (SCENE === 'loading') { host.innerHTML = '<p class="muted small" role="status">正在加载发布记录…</p>'; return; }
+    if (SCENE === 'error') { host.innerHTML = '<p class="err-text small" role="alert">发布记录读取失败：演示网络错误</p><button class="btn small" id="listRetry" type="button">重试</button>'; bindRetry(); return; }
+    var runs = runsOfScene();
+    if (!runs.length) {
+      host.innerHTML = '<p class="muted small">当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布。</p>';
+      return;
+    }
+    host.innerHTML = runs.map(function (r) {
+      var badSummary = /object Object/.test(String(targetSummary(r.targets.webapp)));
+      return '<div class="rel-card' + (r.id === selectedId ? ' sel' : '') + '" data-run="' + esc(r.id) + '" role="button" tabindex="0">' +
+        '<div class="t"><strong>' + esc(r.id) + '</strong> ' + chip(r.status) + '</div>' +
+        '<div class="meta' + (badSummary ? ' bad' : '') + '">v' + esc(r.version) + ' · Web App ' + esc(targetSummary(r.targets.webapp)) +
+        ' · 官网 ' + esc(targetSummary(r.targets.site)) + '</div>' +
+        (r.status === 'failed' ? '<div class="meta bad">失败阶段：预检（演示）</div>' : '') +
+        '</div>';
+    }).join('');
+    Array.prototype.forEach.call(host.querySelectorAll('.rel-card'), function (el) {
+      function pick() { selectRun(el.getAttribute('data-run')); }
+      el.addEventListener('click', pick);
+      el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    });
+  }
+
+  function selectRun(id) {
+    if (selectedId !== id) detailLoading = true;
+    selectedId = id; renderAll();
+    if (detailLoading) setTimeout(function () { detailLoading = false; renderAll(); }, 450);
+  }
+
+  function renderDetail() {
+    var host = document.getElementById('relDetail');
+    if (SCENE === 'loading') { host.innerHTML = '<p class="muted small" role="status">正在加载发布记录…</p>'; return; }
+    if (SCENE === 'error') { host.innerHTML = '<p class="err-text small" role="alert">详情读取失败：演示网络错误</p><button class="btn small" id="detRetry" type="button">重试</button>'; bindRetry(); return; }
+    if (!selectedId) { host.innerHTML = '<p class="muted small">点击左侧运行查看详情</p>'; return; }
+    if (detailLoading) { host.innerHTML = '<p class="muted small" role="status">加载运行详情…</p>'; return; }
+    var runs = runsOfScene();
+    var run = runs.filter(function (r) { return r.id === selectedId; })[0] || runs[0];
+    if (!run) { host.innerHTML = '<p class="muted small">点击左侧运行查看详情</p>'; return; }
+
+    var acts = [];
+    if (['draft', 'failed', 'canceled'].includes(run.status)) {
+      acts.push('<button class="btn small" data-act="precheck" type="button">预检</button>');
+      acts.push('<button class="btn small" data-act="refreeze" type="button" title="main 已前进时按当前 main 重新冻结">重新冻结</button>');
+      acts.push('<button class="btn small primary" data-act="plan" type="button" disabled title="请先预检（预检不推送 / 不部署）">预览发布计划</button>');
+    }
+    if (['prechecking', 'running'].includes(run.status)) {
+      acts.push('<button class="btn small" data-act="cancel-followup" type="button">取消后续阶段</button>');
+    }
+    acts.push('<button class="btn small quiet" data-act="refresh" type="button">刷新状态</button>');
+
+    host.innerHTML =
+      '<header><h3>' + esc(run.id) + ' ' + chip(run.status) + '</h3>' +
+      '<p class="muted small" style="margin:2px 0 0">来源 ' + esc(run.bldId) + ' · ' + esc(run.bldName) + ' · 更新 ' + esc(run.updatedAt) + '</p></header>' +
+      '<dl class="kv">' +
+      '<dt>运行 ID</dt><dd>' + esc(run.id) + '</dd>' +
+      '<dt>发行版本号</dt><dd>v' + esc(run.version) + '</dd>' +
+      '<dt>状态</dt><dd>' + chip(run.status) + '</dd>' +
+      '</dl>' +
+      '<div class="targets">' +
+      '<div class="target"><strong>Web App</strong> ' + stepChip(run.targets.webapp.status) + '</div>' +
+      '<div class="target"><strong>官网与文档</strong> ' + stepChip(run.targets.site.status) + '</div>' +
+      '</div>' +
+      '<div class="dirs">' +
+      '<div class="dir"><strong>构建物目录</strong><p>尚未生成（草稿未启动部署，演示）</p>' +
+      '<button class="btn small" data-dir="webapp" type="button" disabled>在 Finder 中打开</button>' +
+      '<p role="status">' + esc(dirMsg.webapp) + '</p></div>' +
+      '<div class="dir"><strong>官网目录</strong><p>尚未生成（官网未上线，演示）</p>' +
+      '<button class="btn small" data-dir="site" type="button" disabled>在 Finder 中打开</button>' +
+      '<p role="status">' + esc(dirMsg.site) + '</p></div>' +
+      '</div>' +
+      '<ul class="stage-list"><li>冻结 main / dev ' + stepChip(run.status === 'draft' ? 'pending' : 'running') + '</li>' +
+      '<li>源码双分支同步 ' + stepChip('pending') + '</li>' +
+      '<li>Web App 本机部署 ' + stepChip('pending') + '</li>' +
+      '<li>官网双语上线 ' + stepChip('pending') + '</li></ul>' +
+      '<footer class="acts">' + acts.join('') + '</footer>' +
+      '<p class="status-line" id="actStatus" role="status"></p>';
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-act]'), function (b) {
+      b.addEventListener('click', function () { onAct(b.getAttribute('data-act'), run); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dir]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-dir');
+        dirMsg[k] = '目录不可用（尚未生成，演示）';
+        renderDetail();
+      });
+    });
+  }
+
+  function onAct(act, run) {
+    if (act === 'cancel-followup') {
+      setStatus('正在请求取消…');
+      setTimeout(function () {
+        SCENE = 'canceled'; renderAll();
+        toast('已取消后续阶段（演示）', 'ok');
+      }, 500);
+      return;
+    }
+    if (act === 'precheck') {
+      setStatus('预检中…');
+      setTimeout(function () {
+        setStatus('预检完成（演示）：全部通过后「预览发布计划」可用', 'ok');
+        var plan = document.querySelector('[data-act="plan"]');
+        if (plan) { plan.disabled = false; plan.removeAttribute('title'); }
+      }, 800);
+      return;
+    }
+    if (act === 'refreeze') { setStatus('已按当前 main 重新冻结（演示）', 'ok'); return; }
+    if (act === 'refresh') { setStatus('状态已刷新（演示）'); return; }
+    if (act === 'plan') { setStatus('演示不展示完整发布计划弹窗'); }
+  }
+
+  // 缺陷态发布链路：确认 → 创建草稿 → 预检（可失败）→ 草稿残留
+  function openPublishConfirmBug() {
+    if (pubBusy) return;
+    var host = document.getElementById('modalHost');
+    host.innerHTML =
+      '<div class="modal-wrap" id="pubWrap" role="dialog" aria-label="发布二次确认（现状）">' +
+      '<div class="modal"><h3>发布二次确认（BLD-20260927-001）</h3>' +
+      '<p class="small">即将发布版本 v1.0.0。</p>' +
+      '<label class="ck"><input type="checkbox" id="failPre"> 模拟预检不通过（演示：链路中止、草稿残留）</label>' +
+      '<div class="modal-foot">' +
+      '<button class="btn" id="pubCancel" type="button">取消</button>' +
+      '<button class="btn primary" id="pubGo" type="button">确认发布</button>' +
+      '</div></div></div>';
+    function close() { host.innerHTML = ''; }
+    document.getElementById('pubCancel').addEventListener('click', close);
+    document.getElementById('pubWrap').addEventListener('click', function (e) { if (e.target.id === 'pubWrap') close(); });
+    document.getElementById('pubGo').addEventListener('click', function () {
+      var failPre = document.getElementById('failPre').checked;
+      close();
+      pubBusy = true; renderPubBar();
+      document.getElementById('pubBtn').textContent = '启动中…';
+      setTimeout(function () {
+        pubBusy = false; SCENE = 'draft'; selectedId = null; renderAll();
+        if (failPre) {
+          showPubError('发布中止：预检未通过：官网仓库不可访问（演示）。注意：草稿已创建并残留在列表中。');
+          toast('✕ 发布中止：预检未通过（演示）', 'err');
+        } else {
+          SCENE = 'running'; renderAll();
+          toast('✓ 发布已启动（演示）：执行进度见运行详情', 'ok');
+        }
+      }, 900);
+    });
+  }
+
+  /* ===================== 期望态：无草稿展示模块，发布直出结果 ===================== */
+
+  var CHECK_ITEMS = [
+    '版本计划状态：BLD-20260927-001 已合并',
+    '发布文档与条目合并必检：通过',
+    '已完成未挑选条目提醒：无未挑选条目',
+    '官网仓库已发布：通过'
+  ];
+
+  function renderFixStage(host) {
+    if (FX === 'idle') {
+      host.innerHTML =
+        '<div class="res-panel" aria-label="发布入口说明">' +
+        '<div class="big muted">尚未发布</div>' +
+        '<p class="muted small" style="margin:8px 0 0">点击「发布」：先按检查规则给出提示，全部通过并二次确认后才会执行；执行结果直接在本页显示（不再有草稿 / 发布记录展示模块）。</p>' +
+        '<ul class="check-list">' + CHECK_ITEMS.map(function (s) {
+          return '<li><span class="ok-mark">✓</span> ' + esc(s) + '</li>';
+        }).join('') + '</ul>' +
+        '</div>';
+      return;
+    }
+    // 执行期间不展示中间进度界面（人工口径），仅按钮显示「发布中…」，结束后直接出结果
+    if (FX === 'running') { host.innerHTML = ''; return; }
+    if (FX === 'success') {
+      var t = fxTime ? fmtLocal(fxTime) : '';
+      host.innerHTML =
+        '<div class="res-panel res-ok" aria-label="发布成功">' +
+        '<div class="big"><span class="ok-mark">✓</span> 发布成功</div>' +
+        '<p class="res-time">' + esc(t) + '</p>' +
+        '<p class="muted small" style="margin:2px 0 0">发布时间（本地时间）· 版本 v1.0.0 · BLD-20260927-001</p>' +
+        '</div>';
+      return;
+    }
+    // failed
+    host.innerHTML =
+      '<div class="res-panel res-fail" role="alert" aria-label="发布失败">' +
+      '<div class="big"><span class="fail-mark">✕</span> 发布失败</div>' +
+      '<p class="small" style="margin:8px 0 0">' + esc(fxError || '执行出错（演示）') + '</p>' +
+      '<footer class="acts" style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<button class="btn primary" id="fxRetry" type="button">重试</button>' +
+      '<label class="ck"><input type="checkbox" id="fxRetryFail"> 重试仍失败（演示）</label>' +
+      '</footer>' +
+      '</div>';
+    document.getElementById('fxRetry').addEventListener('click', function () {
+      startFx(document.getElementById('fxRetryFail').checked);
+    });
+  }
+
+  // 第一步：按检查规则提示
+  function openCheckModal() {
+    var host = document.getElementById('modalHost');
+    host.innerHTML =
+      '<div class="modal-wrap" id="ckWrap" role="dialog" aria-label="发布前检查">' +
+      '<div class="modal"><h3>发布前检查（按检查规则）</h3>' +
+      '<ul class="check-list">' + CHECK_ITEMS.map(function (s) {
+        return '<li><span class="ok-mark">✓</span> ' + esc(s) + '</li>';
+      }).join('') + '</ul>' +
+      '<label class="ck"><input type="checkbox" id="ckFail"> 模拟检查不通过（演示）</label>' +
+      '<div class="modal-foot">' +
+      '<button class="btn" id="ckCancel" type="button">取消</button>' +
+      '<button class="btn primary" id="ckNext" type="button">下一步</button>' +
+      '</div></div></div>';
+    function close() { host.innerHTML = ''; }
+    document.getElementById('ckCancel').addEventListener('click', close);
+    document.getElementById('ckWrap').addEventListener('click', function (e) { if (e.target.id === 'ckWrap') close(); });
+    document.getElementById('ckNext').addEventListener('click', function () {
+      if (document.getElementById('ckFail').checked) {
+        // 检查未通过：给出明确提示，不进入二次确认 / 不执行
+        host.innerHTML =
+          '<div class="modal-wrap" role="dialog" aria-label="检查未通过">' +
+          '<div class="modal"><h3>检查未通过</h3>' +
+          '<ul class="check-list">' +
+          '<li><span class="ok-mark">✓</span> 版本计划状态：BLD-20260927-001 已合并</li>' +
+          '<li><span class="fail-mark">✕</span> 官网仓库已发布：尚未发布（演示）</li>' +
+          '</ul>' +
+          '<p class="small err-text" style="margin:6px 0 0">存在不通过项，本次不进入发布；请处理后重新点击「发布」。</p>' +
+          '<div class="modal-foot"><button class="btn" id="ckBack" type="button">返回</button></div>' +
+          '</div></div>';
+        document.getElementById('ckBack').addEventListener('click', close);
+        showPubError('发布未开始：检查未通过——官网仓库尚未发布（演示）。处理后可重新点击「发布」。');
+        toast('✕ 检查未通过，未进入发布（演示）', 'err');
+        return;
+      }
+      close();
+      openConfirmModalFix();
+    });
+  }
+
+  // 第二步：二次确认
+  function openConfirmModalFix() {
+    var host = document.getElementById('modalHost');
+    host.innerHTML =
+      '<div class="modal-wrap" id="pubWrap" role="dialog" aria-label="发布二次确认">' +
+      '<div class="modal"><h3>发布二次确认（BLD-20260927-001）</h3>' +
+      '<p class="small">检查已全部通过。即将发布版本 v1.0.0：冻结 main / dev → 双目标构建 → 部署上线。</p>' +
+      '<label class="ck"><input type="checkbox" id="fxExecFail"> 模拟执行失败（演示：结果态显示错误与重试）</label>' +
+      '<div class="modal-foot">' +
+      '<button class="btn" id="pubCancel" type="button">取消</button>' +
+      '<button class="btn primary" id="pubGo" type="button">确认发布</button>' +
+      '</div></div></div>';
+    function close() { host.innerHTML = ''; }
+    document.getElementById('pubCancel').addEventListener('click', close);
+    document.getElementById('pubWrap').addEventListener('click', function (e) { if (e.target.id === 'pubWrap') close(); });
+    document.getElementById('pubGo').addEventListener('click', function () {
+      var fail = document.getElementById('fxExecFail').checked;
+      close();
+      startFx(fail);
+    });
+  }
+
+  // 第三步：执行 → 出结果
+  function startFx(fail) {
+    clearFxTimer();
+    showPubError('');
+    FX = 'running'; renderAll();
+    fxTimer = setTimeout(function () {
+      fxTimer = null;
+      if (fail) {
+        FX = 'failed';
+        fxError = '官网部署失败：仓库推送被拒绝（演示错误信息，实际为对应阶段的具体错误）';
+        toast('✕ 发布失败（演示）', 'err');
+      } else {
+        FX = 'success';
+        fxTime = new Date();
+        toast('✓ 发布成功（演示）：发布时间已按本地时间显示', 'ok');
+      }
+      renderAll();
+    }, 1600);
+  }
+
+  /* ===================== 公共渲染与控件绑定 ===================== */
+
+  function renderPubBar() {
+    var btn = document.getElementById('pubBtn');
+    var reason = document.getElementById('pubReason');
+    if (MODE === 'bug') {
+      var running = SCENE === 'running';
+      btn.textContent = running ? '发布中…' : '发布';
+      btn.disabled = pubBusy || running || SCENE === 'loading' || SCENE === 'error';
+      reason.textContent = running ? '发布中…' : '';
+      return;
+    }
+    var fxRunning = FX === 'running';
+    btn.textContent = fxRunning ? '发布中…' : '发布';
+    btn.disabled = fxRunning;
+    reason.textContent = '';
+  }
+
+  function renderStage() {
+    var host = document.getElementById('stageHost');
+    if (MODE === 'bug') renderBugStage(host);
+    else renderFixStage(host);
+  }
+  function renderAll() { renderPubBar(); renderStage(); }
+
+  function setMode(next) {
+    if (MODE === next) return;
+    MODE = next;
+    clearFxTimer();
+    selectedId = null; detailLoading = false; dirMsg = { webapp: '', site: '' }; pubBusy = false;
+    FX = 'idle'; fxTime = null; fxError = '';
+    showPubError('');
+    document.getElementById('sceneBugGroup').hidden = (next === 'fix');
+    document.getElementById('sceneFixGroup').hidden = (next === 'bug');
+    document.getElementById('modeBug').classList.toggle('on', next === 'bug');
+    document.getElementById('modeFix').classList.toggle('on', next === 'fix');
+    if (next === 'fix') {
+      Array.prototype.forEach.call(document.querySelectorAll('#sceneFixGroup [data-fx]'), function (b) {
+        b.classList.toggle('on', b.getAttribute('data-fx') === 'idle');
+      });
+      toast('已切换到期望态：草稿展示模块已删除，发布直出结果（演示）', 'ok');
+    } else {
+      Array.prototype.forEach.call(document.querySelectorAll('#sceneBugGroup [data-scene]'), function (b) {
+        b.classList.toggle('on', b.getAttribute('data-scene') === 'draft');
+      });
+      SCENE = 'draft';
+    }
+    renderAll();
+  }
+
+  document.getElementById('modeBug').addEventListener('click', function () { setMode('bug'); });
+  document.getElementById('modeFix').addEventListener('click', function () { setMode('fix'); });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-scene]'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-scene]'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      SCENE = b.getAttribute('data-scene');
+      selectedId = null; detailLoading = false; dirMsg = { webapp: '', site: '' };
+      showPubError('');
+      renderAll();
+      if (SCENE === 'loading') setTimeout(function () { if (MODE === 'bug' && SCENE === 'loading') { SCENE = 'draft'; renderAll(); } }, 1000);
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-fx]'), function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-fx]'), function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      clearFxTimer();
+      var v = b.getAttribute('data-fx');
+      if (v === 'success') { fxTime = new Date(); }
+      if (v === 'failed') { fxError = '官网部署失败：仓库推送被拒绝（演示错误信息）'; }
+      FX = v;
+      showPubError('');
+      renderAll();
+    });
+  });
+
+  document.getElementById('pubBtn').addEventListener('click', function () {
+    if (MODE === 'bug') { openPublishConfirmBug(); return; }
+    openCheckModal();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
