@@ -4356,6 +4356,9 @@ ${langsField}
   //   动作二 · 官网资料更新——依据本版本最终文档更新官网资料（提示词 + 同步检测作为更新结果）。
   // 区分本地 main 已合入（合并完成）、远端已推送（pushedAt）、官网资料已更新（site hit）；
   // 不把本地合入等同于远端发布或网站部署成功；两动作失败分别展示原因与重试入口。
+  // 官网提示词默认折叠（BUG-20260928-004）：与 REQ-20260921-007「AI 总结 / AI 翻译提示词」同口径的
+  // details 折叠盒，摘要行说明用途与复制口径，需要查看全文再展开；同步状态标签与「立即检测」
+  // 在折叠区外渲染，不再被常驻展开的长提示词推到折叠线以下（复制链路与提示词内容不变）。
   function renderReleaseFlowPane(v) {
     const pf = pfOf(v);
     if (!pf || pf.phase === 'loading') return '<div class="bld-release-pane"><p class="muted" role="status">正在加载发布状态…</p></div>';
@@ -4389,8 +4392,11 @@ ${langsField}
         </section>
         <section><strong>动作二 · 官网资料更新</strong>
           <p class="muted small">依据本版本最终发布文档更新官网资料：提示词在官网仓库执行，读取本项目已发布版本 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新；完成提交消息须含完整计划号。结果单独展示，与推送结果互不等同。</p>
-          ${p.sitePrompt ? `<textarea class="bld-site-prompt" rows="7" readonly>${esc(p.sitePrompt)}</textarea>
-          <p><button type="button" class="btn small primary" data-pf-copy-site>复制官网提示词</button></p>` : '<p class="small muted">未配置官网仓库：先在设置中配置官网仓库根目录。</p>'}
+          ${p.sitePrompt ? `<details class="bld-docs-prompt-box bld-site-prompt-box">
+          <summary>官网提示词（默认折叠，点击展开查看全文；复制后在官网仓库会话粘贴执行，提交消息须含完整计划号）</summary>
+          <textarea class="bld-site-prompt" rows="7" readonly>${esc(p.sitePrompt)}</textarea>
+          <p><button type="button" class="btn small primary" data-pf-copy-site>复制官网提示词</button></p>
+        </details>` : '<p class="small muted">未配置官网仓库：先在设置中配置官网仓库根目录。</p>'}
           <p><span class="st ${siteCls}">${esc(SITE_STATE_LABEL[site.status] || site.status)}</span>
             <button type="button" class="btn small" data-pf-scan${pf.siteBusy ? ' disabled' : ''}>${pf.siteBusy ? '检测中…' : '立即检测'}</button></p>
           ${evidence}${siteInfo}${times}
