@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260928-008 界面演示 — AI 翻译图片语种对齐引用</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --panel-2: #fafbfc;
+    --text: #1f2328;
+    --text-2: #57606a;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --accent-weak: #ddf4ff;
+    --danger: #cf222e;
+    --danger-weak: #ffebe9;
+    --ok: #1a7f37;
+    --ok-weak: #dafbe1;
+    --warn: #9a6700;
+    --warn-weak: #fff8c5;
+    --code-bg: #eff2f5;
+    --skeleton: #e4e7eb;
+    --shadow: 0 1px 3px rgba(31, 35, 40, .12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-2: #1c2129;
+      --text: #e6edf3;
+      --text-2: #8b949e;
+      --border: #30363d;
+      --accent: #4493f8;
+      --accent-weak: #121d2f;
+      --danger: #f85149;
+      --danger-weak: #3a1d20;
+      --ok: #3fb950;
+      --ok-weak: #12261e;
+      --warn: #d29922;
+      --warn-weak: #2a230f;
+      --code-bg: #21262d;
+      --skeleton: #21262d;
+      --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.65 -apple-system, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 20px 60px; }
+  header.page h1 { font-size: 18px; margin: 8px 0 4px; }
+  header.page p.sub { color: var(--text-2); margin: 0 0 16px; font-size: 13px; }
+  .pill {
+    display: inline-block; padding: 1px 10px; border-radius: 999px;
+    font-size: 12px; border: 1px solid var(--border); color: var(--text-2);
+  }
+
+  /* 工具栏 */
+  .toolbar {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center;
+    box-shadow: var(--shadow); position: sticky; top: 8px; z-index: 5;
+  }
+  .toolbar .group { display: flex; align-items: center; gap: 8px; }
+  .toolbar .label { font-size: 12px; color: var(--text-2); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    appearance: none; border: 0; background: var(--panel-2); color: var(--text);
+    padding: 5px 12px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  button.retranslate {
+    appearance: none; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    border-radius: 8px; padding: 5px 14px; font-size: 13px; cursor: pointer;
+  }
+  button.retranslate:disabled { opacity: .55; cursor: wait; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+  .switch input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+  /* 主体两栏 */
+  .main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+  @media (max-width: 860px) { .main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+  .card h2 {
+    font-size: 13px; margin: 0; padding: 9px 14px; border-bottom: 1px solid var(--border);
+    color: var(--text-2); font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .card .body { padding: 14px; }
+
+  /* 状态角标 */
+  .badge { font-size: 12px; border-radius: 6px; padding: 1px 8px; font-weight: 500; }
+  .badge.bad { background: var(--danger-weak); color: var(--danger); border: 1px solid var(--danger); }
+  .badge.good { background: var(--ok-weak); color: var(--ok); border: 1px solid var(--ok); }
+  .badge.warn { background: var(--warn-weak); color: var(--warn); border: 1px solid var(--warn); }
+  .badge.load { background: var(--accent-weak); color: var(--accent); border: 1px solid var(--accent); }
+
+  /* README 预览 */
+  .doc h1 { font-size: 20px; margin: 2px 0 10px; border: 0; }
+  .doc p { color: var(--text); margin: 8px 0; }
+  .doc p.muted { color: var(--text-2); font-size: 13px; }
+  figure.shot { margin: 14px 0 6px; }
+  figure.shot svg { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; display: block; background: var(--panel-2); }
+  figure.shot figcaption { font-size: 12px; color: var(--text-2); margin-top: 6px; word-break: break-all; }
+
+  /* 破图占位 */
+  .broken {
+    border: 1px dashed var(--danger); border-radius: 8px; background: var(--danger-weak);
+    padding: 18px 14px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .broken svg { flex: none; }
+  .broken .t1 { color: var(--danger); font-weight: 600; font-size: 13px; word-break: break-all; }
+  .broken .t2 { color: var(--text-2); font-size: 12px; margin-top: 4px; }
+
+  /* 骨架屏 */
+  .sk { border-radius: 6px; background: var(--skeleton); }
+  .sk.line { height: 12px; margin: 10px 0; }
+  .sk.shot-sk { height: 190px; margin: 14px 0 6px; position: relative; overflow: hidden; }
+  .sk.shot-sk::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(125, 125, 125, .18), transparent);
+    animation: sweep 1.1s infinite;
+  }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .loading-tip { color: var(--accent); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .spin {
+    width: 13px; height: 13px; border: 2px solid var(--accent); border-top-color: transparent;
+    border-radius: 50%; animation: rot .8s linear infinite; display: inline-block;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* 右栏 */
+  .refbox { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; margin: 0; }
+  .refbox .hl { color: var(--danger); font-weight: 700; }
+  .refbox .hl-ok { color: var(--ok); font-weight: 700; }
+  .filelist { list-style: none; margin: 0; padding: 0; font: 12px/1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .filelist li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding: 2px 0; }
+  .tag { font-size: 11px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--border); color: var(--text-2); font-family: inherit; white-space: nowrap; }
+  .tag.hit { color: var(--accent); border-color: var(--accent); }
+  .tag.miss { color: var(--danger); border-color: var(--danger); }
+  .tag.dim { color: var(--text-2); }
+  .tag.use { color: var(--ok); border-color: var(--ok); }
+  .note { font-size: 12px; color: var(--text-2); }
+  .wording { border-left: 3px solid var(--border); padding: 2px 10px; margin: 8px 0; font-size: 12px; }
+  .wording.old { border-color: var(--danger); }
+  .wording.new { border-color: var(--ok); }
+  .wording b { font-size: 12px; }
+  .statelist { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--text-2); }
+  .statelist li { padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .statelist li:last-child { border-bottom: 0; }
+  .statelist b { color: var(--text); }
+  footer.page { margin-top: 22px; color: var(--text-2); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <span class="pill">BUG-20260928-008</span>
+    <h1>AI 翻译图片语种对齐引用 — 缺陷现象与期望修复对照演示</h1>
+    <p class="sub">缺陷：英文 README 引用保持默认语言图（中文界面截图）。期望：目标语言文档一律引用 <code>_&lt;lang&gt;</code> 语种变体路径，图片缺失不阻塞、由用户自行检查补图。</p>
+  </header>
+
+  <div class="toolbar" role="group" aria-label="演示状态控制">
+    <div class="group">
+      <span class="label">翻译约束口径</span>
+      <div class="seg" id="segMode">
+        <button type="button" data-mode="before" aria-pressed="true">修复前（缺陷）</button>
+        <button type="button" data-mode="after" aria-pressed="false">修复后（期望）</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="label">image/README/ 下 <code>_en</code> 变体图</span>
+      <div class="seg" id="segEn">
+        <button type="button" data-en="missing" aria-pressed="true">缺失（当前仓库实际状态）</button>
+        <button type="button" data-en="exists" aria-pressed="false">已补图</button>
+      </div>
+    </div>
+    <label class="switch"><input type="checkbox" id="ckEmpty"> 清空图片引用（空状态）</label>
+    <button type="button" class="retranslate" id="btnGo">重新翻译</button>
+  </div>
+
+  <div class="main">
+    <!-- 左：README_en.md 预览 -->
+    <section class="card">
+      <h2>README_en.md 渲染预览 <span id="stateBadge" class="badge bad">缺陷现象</span></h2>
+      <div class="body doc" id="preview"></div>
+    </section>
+
+    <!-- 右：引用与文件对照 -->
+    <section class="card">
+      <h2>引用与文件对照</h2>
+      <div class="body">
+        <p class="note" style="margin-top:0">当前翻译产出的图片引用行：</p>
+        <pre class="refbox" id="refLine"></pre>
+        <p class="note" style="margin:12px 0 4px">项目 <code>image/README/</code> 磁盘文件：</p>
+        <ul class="filelist" id="fileList"></ul>
+        <p class="note" style="margin:14px 0 4px">翻译提示词约束措辞对照：</p>
+        <div class="wording old">
+          <b style="color:var(--danger)">旧（歧义，当前 publish-flow.mjs 翻译约束）</b><br>
+          「……改写前先确认对应语种图片文件是否存在，<b>存在才把引用改写为对应语种图片，不存在则保持基准原引用</b>……」——被直白读作「保持默认语言引用」，与规则本意相反。
+        </div>
+        <div class="wording new">
+          <b style="color:var(--ok)">新（本单期望口径）</b><br>
+          「目标语言文档的本地图片引用<b>一律改写为 &lt;name&gt;_&lt;lang&gt;.&lt;原扩展名&gt;</b>；图片文件是否存在不影响改写，不阻塞、不强求，界面显示不出图片由用户自行检查补图；不得虚构图片文件、不得指向不同基名的其他文件。」
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="page">
+    <div>状态反馈覆盖：正常 / 缺陷（英文文档配中文截图）/ 失败占位（变体图缺失）/ 加载（翻译中骨架屏）/ 空（无图片引用）。页面随系统深浅色自适应。</div>
+    <div style="margin-top:4px">本页为 BUG-20260928-008 条目文档配套演示，单文件、无外网依赖；截图为内联 SVG 示意，非真实截图。</div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = { mode: 'before', en: 'missing', empty: false, loading: false };
+
+  // 模拟「界面截图」：lang='zh' 为默认语言图内容，'en' 为语种变体图内容
+  function shotSVG(lang) {
+    var zh = lang === 'zh';
+    var title = 'Agent Team Board';
+    var cols = zh ? ['需求', '进行中', '已完成'] : ['Requirements', 'In Progress', 'Done'];
+    var cards = zh
+      ? [['REQ-20260921-001', '全功能基线版发布'], ['BUG-20260912-001', '中英文文案同步'], ['REQ-20260909-015', '开源选型白名单']]
+      : [['REQ-20260921-001', 'Full-feature baseline release'], ['BUG-20260912-001', 'Bilingual copy sync'], ['REQ-20260909-015', 'OSS license whitelist']];
+    var colsSvg = '';
+    for (var c = 0; c < 3; c++) {
+      var x = 16 + c * 166;
+      colsSvg += '<rect x="' + x + '" y="58" width="152" height="230" rx="6" fill="var(--panel)" stroke="var(--border)"/>' +
+        '<text x="' + (x + 10) + '" y="80" font-size="12" font-weight="600" fill="var(--text)">' + cols[c] + '</text>';
+      for (var k = 0; k < 3; k++) {
+        var y = 92 + k * 62;
+        colsSvg += '<rect x="' + (x + 8) + '" y="' + y + '" width="136" height="52" rx="5" fill="var(--panel-2)" stroke="var(--border)"/>' +
+          '<text x="' + (x + 16) + '" y="' + (y + 19) + '" font-size="9" fill="var(--accent)">' + cards[k][0] + '</text>' +
+          '<text x="' + (x + 16) + '" y="' + (y + 35) + '" font-size="8" fill="var(--text-2)">' + cards[k][1] + '</text>';
+      }
+    }
+    return '<svg viewBox="0 0 500 304" role="img" aria-label="' + (zh ? 'Chinese UI screenshot' : 'English UI screenshot') + '">' +
+      '<rect x="0" y="0" width="500" height="304" fill="var(--panel-2)"/>' +
+      '<rect x="0" y="0" width="500" height="34" fill="var(--accent)"/>' +
+      '<text x="14" y="22" font-size="13" font-weight="700" fill="#fff">' + title + '</text>' +
+      '<text x="486" y="22" font-size="10" fill="#fff" text-anchor="end">' + (zh ? '默认语言（zh）界面' : 'English (en) UI') + '</text>' +
+      colsSvg + '</svg>';
+  }
+
+  function brokenSVG() {
+    return '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.6" aria-hidden="true">' +
+      '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 18.5 10 12l3.5 4 2.5-3 3.5 5.5"/><path d="M3 3l18 18" stroke-width="2"/></svg>';
+  }
+
+  function refPathOf() {
+    return state.mode === 'before'
+      ? 'image/README/1790092127929.png'
+      : 'image/README/1790092127929_en.png';
+  }
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderBadge() {
+    var b = document.getElementById('stateBadge');
+    if (state.loading) { b.className = 'badge load'; b.textContent = '翻译中…'; return; }
+    if (state.empty) { b.className = 'badge warn'; b.textContent = '空（无本地图片引用）'; return; }
+    if (state.mode === 'before') { b.className = 'badge bad'; b.textContent = '缺陷现象：英文文档显示中文界面截图'; return; }
+    if (state.en === 'missing') { b.className = 'badge warn'; b.textContent = '期望行为：引用语种变体（图缺，待用户补图）'; return; }
+    b.className = 'badge good'; b.textContent = '期望行为：英文文档显示英文界面截图';
+  }
+
+  function renderPreview() {
+    var el = document.getElementById('preview');
+    if (state.loading) {
+      el.innerHTML =
+        '<div class="loading-tip"><span class="spin"></span>AI 翻译轮 tr-demo 运行中：按翻译约束处理本地图片引用……</div>' +
+        '<div class="sk line" style="width:38%"></div><div class="sk line" style="width:92%"></div>' +
+        '<div class="sk line" style="width:80%"></div><div class="sk shot-sk"></div>' +
+        '<div class="sk line" style="width:65%"></div>';
+      return;
+    }
+    var head =
+      '<h1>Agent Team Board</h1>' +
+      '<p>A kanban board for agent teams: requirements, bugs, plans, and TDD closure in one place.</p>' +
+      '<p class="muted">Below is the UI overview screenshot referenced in this README.</p>';
+    if (state.empty) {
+      el.innerHTML = head +
+        '<p class="muted" style="border:1px dashed var(--border);border-radius:8px;padding:14px;color:var(--text-2)">' +
+        '（空状态：本文档当前没有本地图片引用——翻译轮不会产出任何图片改写。）</p>';
+      return;
+    }
+    if (state.mode === 'before') {
+      el.innerHTML = head +
+        '<figure class="shot">' + shotSVG('zh') +
+        '<figcaption>引用：image/README/1790092127929.png（默认语言图，中文界面）— 英文文档却显示中文截图，即缺陷现象</figcaption></figure>';
+      return;
+    }
+    if (state.en === 'missing') {
+      el.innerHTML = head +
+        '<figure class="shot"><div class="broken">' + brokenSVG() +
+        '<div><div class="t1">image/README/1790092127929_en.png — 图片文件缺失</div>' +
+        '<div class="t2">期望行为：引用仍保持语种变体路径，不阻塞、不虚构图片文件；界面显示不出图片由用户自行检查补图（或改引用既有不同基名图片，须用户确认）。</div></div></div>' +
+        '<figcaption>引用：image/README/1790092127929_en.png（语种变体，文件待补）</figcaption></figure>';
+      return;
+    }
+    el.innerHTML = head +
+      '<figure class="shot">' + shotSVG('en') +
+      '<figcaption>引用：image/README/1790092127929_en.png（语种变体图，英文界面）— 期望修复后状态</figcaption></figure>';
+  }
+
+  function renderRefLine() {
+    var el = document.getElementById('refLine');
+    if (state.loading) { el.innerHTML = '<span style="color:var(--text-2)">（翻译产出中……）</span>'; return; }
+    if (state.empty) { el.innerHTML = '<span style="color:var(--text-2)">（无本地图片引用）</span>'; return; }
+    var p = refPathOf();
+    var hl = state.mode === 'before' ? 'hl' : 'hl-ok';
+    var mark = state.mode === 'before' ? '（保持默认语言引用 ← 缺陷）' : '（一律改写为语种变体 ← 期望）';
+    el.innerHTML = '![1790092127929](<span class="' + hl + '">' + esc(p) + '</span>) ' + esc(mark);
+  }
+
+  function renderFiles() {
+    var ul = document.getElementById('fileList');
+    var items = [
+      { name: '1790092127929.png', tag: '默认语言图 · 存在', cls: state.mode === 'before' && !state.empty ? 'use' : 'dim' },
+      { name: '1790092216439_en.png', tag: '不同基名 · 存在 · 不得指向', cls: 'dim' },
+      {
+        name: '1790092127929_en.png',
+        tag: state.en === 'exists' ? '语种变体 · 存在（已补图）' : '语种变体 · 缺失（当前仓库实际状态）',
+        cls: state.empty ? 'dim' : (state.mode === 'after' ? (state.en === 'exists' ? 'use' : 'miss') : 'hit')
+      }
+    ];
+    ul.innerHTML = items.map(function (it) {
+      return '<li><span class="tag ' + it.cls + '">' + esc(it.name) + '</span><span class="note">' + esc(it.tag) + '</span></li>';
+    }).join('');
+  }
+
+  function render() { renderBadge(); renderPreview(); renderRefLine(); renderFiles(); }
+
+  function bindSeg(id, key, attr) {
+    var seg = document.getElementById(id);
+    seg.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn || state.loading) return;
+      state[key] = btn.getAttribute(attr);
+      seg.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      render();
+    });
+  }
+
+  bindSeg('segMode', 'mode', 'data-mode');
+  bindSeg('segEn', 'en', 'data-en');
+
+  document.getElementById('ckEmpty').addEventListener('change', function (e) {
+    if (state.loading) { e.target.checked = state.empty; return; }
+    state.empty = e.target.checked;
+    render();
+  });
+
+  var btn = document.getElementById('btnGo');
+  btn.addEventListener('click', function () {
+    if (state.loading) return;
+    state.loading = true;
+    btn.disabled = true;
+    render();
+    setTimeout(function () {
+      state.loading = false;
+      btn.disabled = false;
+      render();
+    }, 1100);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
