@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260928-001 演示 — 版本计划「已合并」标签显示时机</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #d9dde3; --ink: #1f2430; --ink-2: #5b6472;
+    --ok-bg: #e2f5e8; --ok-ink: #187a3d; --run-bg: #e5eefb; --run-ink: #2456a8;
+    --fail-bg: #fdeaea; --fail-ink: #b3261e; --mute-bg: #eceff3; --mute-ink: #5b6472;
+    --warn-bg: #fdf3dc; --warn-ink: #8a6100; --accent: #2456a8; --note-bg: #f2f6fd;
+    --note-line: #b9cdf0; --modal-bg: rgba(20, 24, 32, .45);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16191f; --panel: #1f242c; --line: #39414d; --ink: #e6e9ee; --ink-2: #9aa4b2;
+      --ok-bg: #173425; --ok-ink: #6fd694; --run-bg: #1c2c47; --run-ink: #8db4ef;
+      --fail-bg: #3a1d1c; --fail-ink: #f08c85; --mute-bg: #2a303a; --mute-ink: #9aa4b2;
+      --warn-bg: #382c10; --warn-ink: #e3b34e; --accent: #8db4ef; --note-bg: #1c2740;
+      --note-line: #35507e; --modal-bg: rgba(0, 0, 0, .6);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 4px 0 2px; }
+  .sub { color: var(--ink-2); font-size: 12.5px; margin: 0 0 12px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: var(--panel); color: var(--ink-2); padding: 6px 14px;
+    cursor: pointer; font-size: 13px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .scenes { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .scenes button { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .scenes button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 12px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: var(--ink-2); font-weight: 600; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+    cursor: pointer; }
+  .card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .card .t { display: flex; align-items: center; gap: 8px; }
+  .card .t strong { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .meta { color: var(--ink-2); font-size: 12px; margin-top: 4px; }
+  .st { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px;
+    white-space: nowrap; vertical-align: middle; }
+  .st.ok   { background: var(--ok-bg);   color: var(--ok-ink); }
+  .st.run  { background: var(--run-bg);  color: var(--run-ink); }
+  .st.fail { background: var(--fail-bg); color: var(--fail-ink); }
+  .st.mute { background: var(--mute-bg); color: var(--mute-ink); }
+  .st.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.quiet { border-color: transparent; color: var(--ink-2); }
+  .btn.danger-quiet { border-color: transparent; color: var(--fail-ink); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .detail-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .detail-head h3 { margin: 0; font-size: 16px; }
+  .detail-head .muted { color: var(--ink-2); font-size: 12px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .steps button { border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 12.5px; }
+  .steps button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .steps button.locked { opacity: .5; }
+  .pane { border-top: 1px dashed var(--line); padding-top: 10px; }
+  .note { border: 1px solid var(--note-line); background: var(--note-bg); border-radius: 8px;
+    padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .note.bad { border-color: var(--fail-ink); }
+  .note.good { border-color: var(--ok-ink); }
+  .alert { background: var(--fail-bg); color: var(--fail-ink); border-radius: 8px;
+    padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .muted { color: var(--ink-2); }
+  .small { font-size: 12.5px; }
+  code { background: var(--mute-bg); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  .empty { color: var(--ink-2); text-align: center; padding: 28px 0; }
+  .modal-wrap { position: fixed; inset: 0; background: var(--modal-bg); display: none;
+    align-items: center; justify-content: center; z-index: 50; }
+  .modal-wrap.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; width: min(430px, 92vw); }
+  .modal h4 { margin: 0 0 10px; font-size: 15px; }
+  .modal .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 16px;
+    font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60;
+    max-width: 80vw; }
+  #toast.show { opacity: 1; }
+  .footnote { color: var(--ink-2); font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260928-001 演示 — 版本计划「已合并」标签显示时机</h1>
+  <p class="sub">复刻「发布」模块版本计划页签的关键界面。左侧切换版本，右侧五步流程内按钮可模拟推进状态；顶部开关对比「缺陷现状（修复前）」与「修复后口径」。</p>
+
+  <div class="toolbar">
+    <span class="seg" role="group" aria-label="对比模式">
+      <button id="modeDefect" class="on">缺陷现状（修复前）</button>
+      <button id="modeFixed">修复后口径</button>
+    </span>
+    <span class="scenes" role="group" aria-label="场景切换">
+      <button data-scene="main" class="on">主流程</button>
+      <button data-scene="empty">空列表</button>
+      <button data-scene="loading">加载中</button>
+      <button data-scene="failed">合并失败</button>
+    </span>
+    <button class="btn quiet" id="resetBtn">重置演示</button>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>版本计划 <button class="btn quiet small" id="newBtn" style="float:right">＋ 新建版本</button></h2>
+      <div id="verList"></div>
+    </div>
+    <div class="panel">
+      <div id="detail"></div>
+      <p class="footnote">说明：演示数据为虚构；「阶段」文案在缺陷现状下忠实复刻修复前实现（merged → 「正式发布」）；修复后口径与实际实现一致——中间态标签与阶段同文案「代码已并入 · 文档与翻译未合并」，docsMerge 落账后才显示「已合并」/「正式发布」。</p>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="modalWrap" role="dialog" aria-modal="true" aria-label="删除确认">
+  <div class="modal">
+    <h4>删除版本计划</h4>
+    <p id="modalBody"></p>
+    <div class="acts">
+      <button class="btn" id="modalCancel">取消</button>
+      <button class="btn" id="modalOk">删除（演示不执行）</button>
+    </div>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+  'use strict';
+  const DEMO_ID = 'BLD-20260928-001';
+  const INIT = [
+    { id: DEMO_ID, name: '示例版本 A（演示）', ver: '1.2.0', items: 3, updated: '2026-09-28 00:06',
+      status: 'draft', docsMerged: false, published: false, mergeError: null, pushedAt: null },
+    { id: 'BLD-20260927-003', name: '上一发布版本', ver: '1.1.0', items: 5, updated: '2026-09-27 18:40',
+      status: 'merged', docsMerged: true, published: true, mergeError: null, pushedAt: '2026-09-27 19:02' },
+    { id: 'BLD-20260926-002', name: '下一迭代候选', ver: '', items: 1, updated: '2026-09-26 10:12',
+      status: 'draft', docsMerged: false, published: false, mergeError: null, pushedAt: null },
+  ];
+  let versions, selectedId, step, mode, scene, dmBusy, mergeBusy;
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function reset() {
+    versions = JSON.parse(JSON.stringify(INIT));
+    if (scene === 'failed') versions[0].status = 'failed', versions[0].mergeError = '冲突：docs/release.md（演示数据）';
+    selectedId = DEMO_ID; step = 'plan'; dmBusy = false; mergeBusy = false;
+  }
+  mode = 'defect'; scene = 'main'; reset();
+
+  const sel = () => versions.find((v) => v.id === selectedId);
+  const isDemo = (v) => v.id === DEMO_ID;
+
+  function chipFor(v) {
+    if (v.published) return { text: '已发布', cls: 'ok', tip: '发布成功（演示数据）：已发布标签优先于合并状态' };
+    if (v.status === 'merging') return { text: '合并中', cls: 'run' };
+    if (v.status === 'failed') return { text: '失败', cls: 'fail' };
+    if (v.status === 'merged') {
+      if (mode === 'defect') return { text: '已合并', cls: 'ok', tip: '缺陷现状：挑选合并完成即显示，此时文档与翻译可能尚未合并入 main' };
+      return v.docsMerged
+        ? { text: '已合并', cls: 'ok', tip: '代码、发布文档与翻译均已合并入 main（docsMerge 落账）' }
+        : { text: '代码已并入 · 文档与翻译未合并', cls: 'warn', tip: '修复后口径：待「文档合并」完成（docsMerge 落账）后再显示「已合并」' };
+    }
+    return { text: '计划中', cls: 'mute' };
+  }
+  function chipHtml(v) {
+    const c = chipFor(v);
+    return `<span class="st ${c.cls}"${c.tip ? ` title="${esc(c.tip)}"` : ''}>${esc(c.text)}</span>`;
+  }
+  function stageOf(v) {
+    if (v.status === 'merged') {
+      if (mode === 'fixed' && !v.docsMerged) return '代码已并入 · 文档与翻译未合并';
+      return '正式发布'; // 缺陷现状忠实复刻；修复后 docsMerge 落账前与标签同文案（见 README 验收第 8 条）
+    }
+    return v.status === 'merging' ? '合并中' : v.status === 'failed' ? '失败（可重试）' : '计划中';
+  }
+
+  const STEPS = [
+    ['plan', '选择条目与提交'], ['merge', '挑选合并'], ['docs', '文档与翻译'],
+    ['docmerge', '文档合并'], ['release', '发布'],
+  ];
+  function lockOf(v, key) {
+    if (v.published || v.pushedAt) {
+      if (key === 'merge') return '已正式发布，不可再合并（如需调整请新建版本）';
+      if (key === 'docs' || key === 'docmerge') return '已正式发布，范围锁定（如需调整请新建版本）';
+    }
+    if (v.status === 'merging' && key !== 'plan') return '合并执行中';
+    if (key === 'merge') return v.items ? '' : '暂无关联条目：请先在「选择条目与提交」步骤关联';
+    if (key === 'docs') return (v.status === 'merged' || v.status === 'failed') ? '' : '挑选合并完成后，依据本版实际合入内容编写文档';
+    if (key === 'docmerge') return v.status === 'merged' ? '' : (v.status === 'failed' ? '挑选合并完成（含重试成功）后才能合并文档' : '文档尚未编写提交');
+    if (key === 'release') {
+      if (v.pushedAt) return '';
+      if (v.status !== 'merged') return '挑选合并完成后才能发布';
+      if (!v.docsMerged) return '发布文档合并入 main 完成后才能发布（先完成「文档合并」）';
+    }
+    return '';
+  }
+
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._h); toast._h = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  function renderList() {
+    const box = $('#verList');
+    if (scene === 'loading') { box.innerHTML = '<div class="empty" role="status">正在加载发布状态…</div>'; return; }
+    if (scene === 'empty') {
+      box.innerHTML = '<div class="empty">暂无版本计划：点右上「＋ 新建版本」从需求单 / Bug 单创建</div>';
+      return;
+    }
+    box.innerHTML = versions.map((v) => `
+      <div class="card${v.id === selectedId ? ' sel' : ''}" data-id="${v.id}" role="button" tabindex="0"
+           aria-pressed="${v.id === selectedId}">
+        <div class="t"><strong title="${esc(v.name)}">${esc(v.name)}</strong> ${chipHtml(v)}
+          <button class="btn danger-quiet small" data-del="${v.id}"
+            ${v.status === 'merging' ? 'disabled title="合并中，不可删除"' : `title="删除该版本计划（需确认，删除后不可恢复）"`}>删除</button>
+        </div>
+        <div class="meta">${esc(v.id)}${v.ver ? ` · 版本号 ${esc(v.ver)}` : ''} · 阶段 ${esc(stageOf(v))} · ${v.items} 个关联单 · 更新 ${esc(v.updated)}${v.pushedAt ? ` · 发布于 ${esc(v.pushedAt)}` : ''}</div>
+      </div>`).join('');
+  }
+
+  function modeNote(v) {
+    if (v.status === 'merged' && !v.docsMerged && !v.published) {
+      return mode === 'defect'
+        ? `<div class="note bad" role="alert">⚠ 本 Bug 现象：标签显示「已合并」，但文档与翻译尚未合并入 main——此刻尝试推送会被门禁拦截（见「发布」步），口径自相矛盾。</div>`
+        : `<div class="note good">✓ 修复后口径：文档与翻译合并入 main（docsMerge 落账）前不显示「已合并」，改显可区分的中间态标签。</div>`;
+    }
+    return '';
+  }
+
+  function paneFor(v) {
+    const lock = lockOf(v, step);
+    const head = (title, desc) => `<p><strong>${title}</strong> <span class="muted small">${desc}</span></p>`;
+    if (lock && step !== 'release') {
+      return `<div class="pane">${head('', '')}<div class="alert" role="alert">⚠ 暂不可操作：${esc(lock)}</div></div>`;
+    }
+    if (step === 'plan') {
+      return `<div class="pane">${head('概况 · 选择条目与提交', '编辑名称与描述、AI 完善、条目与 commit 关联（演示从简）')}
+        <p class="small muted">已关联 ${v.items} 个单，提交已去重并按拓扑排序。</p></div>`;
+    }
+    if (step === 'merge') {
+      const btn = v.status === 'failed' ? '重试挑选合并' : '挑选合并到 main';
+      const can = isDemo(v) && !v.published && !v.pushedAt && v.status !== 'merging' && !mergeBusy;
+      return `<div class="pane">${head('挑选合并', '把所选提交按 hash 去重、按拓扑顺序 cherry-pick 进 main。')}
+        ${v.status === 'failed' && v.mergeError ? `<div class="alert" role="alert">⚠ 合并失败：${esc(v.mergeError)}（可重试，只补未合并条目）</div>` : ''}
+        <p><button class="btn primary" data-act="merge" ${can ? '' : 'disabled'}>${mergeBusy ? '合并中…' : btn}</button></p></div>`;
+    }
+    if (step === 'docs') {
+      return `<div class="pane">${head('文档与翻译', '依据本版实际合入内容编写发布文档，完成翻译、审核并提交 docs: 提交（演示从简，视为已提交且基于当前范围）。')}
+        <p class="small muted">文档提交 <code>9f21c0a</code>（已提交且基于当前范围）。</p></div>`;
+    }
+    if (step === 'docmerge') {
+      const can = isDemo(v) && v.status === 'merged' && !v.docsMerged && !dmBusy && !v.published;
+      return `<div class="pane">${head('文档合并', '把审核通过的发布文档提交（含各语言翻译）cherry-pick 重放进 main，结果落账 docsMerge。')}
+        ${v.docsMerged
+          ? `<p class="small" role="status">已合并入 main：重放提交 <code>a1b2c3d</code> · main 头 <code>e4f5a6b</code>（合并时间 ${esc(v.pushedAt ? '推送前' : '刚刚')}）；重放证据 1 条。</p>`
+          : '<p class="small muted">尚未合并：文档与翻译仍只在 dev 的文档提交里，未进入 main。</p>'}
+        <p><button class="btn primary" data-act="docmerge" ${can ? '' : 'disabled'}>${dmBusy ? '合并中…' : (v.docsMerged ? '重新执行文档合并（幂等）' : '文档合并入 main')}</button></p></div>`;
+    }
+    // release
+    let pushState;
+    if (v.pushedAt) pushState = `<p class="small" role="status">已推送到远端 origin（完成时间 ${esc(v.pushedAt)}）；官网资料更新以该时间为检测起点。</p>`;
+    else pushState = '<p class="small muted">尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。</p>';
+    return `<div class="pane">${head('发布', '动作一推送主分支（以 docsMerge 落账为前置门禁）；动作二官网资料更新（演示从简）。')}
+      ${pushState}
+      ${!v.pushedAt && !v.published ? `<p><button class="btn primary" data-act="push">推送主分支</button></p>` : ''}
+      ${v.pushedAt && !v.published && isDemo(v) ? `<p><button class="btn" data-act="publish">模拟产品发布成功（演示「已发布」标签优先）</button></p>` : ''}
+      ${v.published ? '<p class="small" role="status">产品发布成功：列表卡片显示「已发布」（优先于合并状态标签）。</p>' : ''}</div>`;
+  }
+
+  function renderDetail() {
+    const box = $('#detail');
+    if (scene === 'loading') { box.innerHTML = '<div class="empty" role="status">正在加载发布状态…</div>'; return; }
+    if (scene === 'empty') { box.innerHTML = '<div class="empty">左侧暂无版本计划；新建并关联已完成单后，这里展示五步流程详情。</div>'; return; }
+    const v = sel();
+    if (!v) { box.innerHTML = '<div class="empty">请选择左侧版本</div>'; return; }
+    box.innerHTML = `
+      <div class="detail-head"><h3>${esc(v.name)}</h3> ${chipHtml(v)}</div>
+      <p class="muted small">${esc(v.id)}${v.ver ? ` · 版本号 ${esc(v.ver)}` : ''} · 更新 ${esc(v.updated)}</p>
+      ${modeNote(v)}
+      <div class="steps" role="tablist">${STEPS.map(([k, label]) => {
+        const lk = lockOf(v, k);
+        return `<button data-step="${k}" class="${step === k ? 'on' : ''}${lk ? ' locked' : ''}"
+          ${lk ? `title="${esc(lk)}"` : ''} role="tab" aria-selected="${step === k}">${label}${lk ? ' 🔒' : ''}</button>`;
+      }).join('')}</div>
+      ${paneFor(v)}`;
+  }
+
+  function render() { renderList(); renderDetail(); }
+
+  function simulate(v, act) {
+    if (act === 'merge') {
+      mergeBusy = true; v.status = 'merging'; render();
+      setTimeout(() => {
+        mergeBusy = false; v.status = 'merged'; v.mergeError = null;
+        step = 'docmerge';
+        toast('挑选合并完成：条目提交已全部并入 main（status=merged）——注意观察此刻标签');
+        render();
+      }, 900);
+    } else if (act === 'docmerge') {
+      dmBusy = true; render();
+      setTimeout(() => {
+        dmBusy = false; v.docsMerged = true; step = 'release';
+        toast('文档合并完成：发布文档与翻译已重放进 main（docsMerge 落账）');
+        render();
+      }, 900);
+    } else if (act === 'push') {
+      if (v.status !== 'merged') { toast('请先完成「挑选合并」，再推送主分支'); return; }
+      if (!v.docsMerged) {
+        toast('⛔ 发布文档尚未合并入 main：请先完成「文档合并」步骤，再推送主分支（文档合并以 docsMerge 落账为准）');
+        return;
+      }
+      v.pushedAt = '刚刚（演示）'; toast('✓ 已推送到远端 origin（演示）'); render();
+    } else if (act === 'publish') {
+      v.published = true; toast('✓ 产品发布成功：列表卡片显示「已发布」'); render();
+    }
+  }
+
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (card && !e.target.closest('[data-del]')) {
+      selectedId = card.dataset.id; step = 'plan'; render(); return;
+    }
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      const v = versions.find((x) => x.id === del.dataset.del);
+      $('#modalBody').innerHTML = `版本「<strong>${esc(v.name)}</strong>」当前状态：${chipHtml(v)}，共 ${v.items} 个关联单。<br><span class="muted small">仅删除看板版本记录，不影响已合并入 main 的提交与代码（演示不执行删除）。</span>`;
+      $('#modalWrap').classList.add('show'); return;
+    }
+    const stepBtn = e.target.closest('[data-step]');
+    if (stepBtn) { step = stepBtn.dataset.step; render(); return; }
+    const actBtn = e.target.closest('[data-act]');
+    if (actBtn) { simulate(sel(), actBtn.dataset.act); return; }
+    if (e.target.closest('#modalCancel') || e.target.id === 'modalWrap') { $('#modalWrap').classList.remove('show'); return; }
+    if (e.target.closest('#modalOk')) { $('#modalWrap').classList.remove('show'); toast('演示：不执行删除'); return; }
+    if (e.target.closest('#newBtn')) { toast('演示：请在真实界面「发布 → 版本计划 → ＋ 新建版本」操作'); return; }
+    if (e.target.closest('#resetBtn')) { reset(); render(); toast('已重置演示数据'); return; }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $('#modalWrap').classList.remove('show');
+    if (e.key === 'Enter' || e.key === ' ') {
+      const card = e.target.closest?.('.card');
+      if (card) { selectedId = card.dataset.id; step = 'plan'; render(); }
+    }
+  });
+
+  $('#modeDefect').addEventListener('click', () => {
+    mode = 'defect';
+    $('#modeDefect').classList.add('on'); $('#modeFixed').classList.remove('on'); render();
+  });
+  $('#modeFixed').addEventListener('click', () => {
+    mode = 'fixed';
+    $('#modeFixed').classList.add('on'); $('#modeDefect').classList.remove('on'); render();
+  });
+  document.querySelectorAll('[data-scene]').forEach((b) => b.addEventListener('click', () => {
+    scene = b.dataset.scene;
+    document.querySelectorAll('[data-scene]').forEach((x) => x.classList.toggle('on', x === b));
+    reset(); render();
+  }));
+
+  render();
+})();
+</script>
+</body>
+</html>
