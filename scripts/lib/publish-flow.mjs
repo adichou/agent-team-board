@@ -280,8 +280,10 @@ function docScopeLines(items = []) {
 // 项目路径、计划号/版本号、执行编号、CLI 入口、默认语言文档清单、关联范围清单收敛到尾部参数区。
 // 回执命令、CLI 参数与语义不变。REQ-20260922-003：静态段中的文档总数与构成说明随清单联动
 //（含自定义文档；无自定义时与既有提示词逐字节一致），文档清单本体仍在尾部参数区。
-export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs' } = {}) {
-  const version = versionNumberOf(planId) || planId;
+// BUG-20260928-007：版本号同源——优先取调用方传入的计划 x.y.z version（REQ-20260922-006），
+// 未传 / 存量计划（无 version 字段）沿用计划编号派生口径（YYYYMMDD-NNN，旧数据不迁移）。
+export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs', version = null } = {}) {
+  const ver = version || versionNumberOf(planId) || planId;
   const ls = docLangsOf({ langs });
   const docFiles = defaultDocFiles(ls, customDocs);
   // REQ-20260922-003：默认语言文档清单 = 标准 4 类 + 全部自定义文档；总数与构成说明随清单
@@ -313,7 +315,7 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
   const params = [
     '运行参数（随任务变化，命令占位符以本区实际值为准）：',
     `项目路径：${projectRoot || '（未提供）'}`,
-    `发布计划号：${planId}（版本号 ${version}）`,
+    `发布计划号：${planId}（版本号 ${ver}）`,
     `执行编号：${runId || '（未提供——进度回执命令需执行编号，请先经看板启动 AI 总结获取）'}`,
     `CLI 入口：${atbPath}`,
     `默认语言文档清单（语言集首语言 ${ls[0]}，共 ${docFiles.length} 个文档，${shapeText}）：`,
@@ -336,8 +338,10 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
 //（读自己名下基准 → 写自己名下目标 → 逐文件回执）。目标范围仍为剩余语言全部文件
 //（4 × (N−1)，含自定义文档其余语言份，单文件类 LICENSE 不进范围）；回执命令、账本、
 // translate.lock 与门禁行为不变；不得引入基准外信息、不得编造。
-export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs' } = {}) {
-  const version = versionNumberOf(planId) || planId;
+// BUG-20260928-007：版本号同源（口径同 buildDocSummaryPrompt）——优先取调用方传入的计划
+// x.y.z version（REQ-20260922-006），未传 / 存量计划沿用计划编号派生口径（YYYYMMDD-NNN）。
+export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs', version = null } = {}) {
+  const ver = version || versionNumberOf(planId) || planId;
   const ls = docLangsOf({ langs });
   // BUG-20260922-002：自定义文档随语言集展开后进入 AI 翻译——基准为其默认语言 <KEY>.md，
   // 目标为其剩余语言 <KEY>_<lang>.md（与标准 4 类同口径）。
@@ -347,10 +351,10 @@ export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, lan
     ? `${PUBLISH_DOC_KEYS.length} 类 + ${customTargetCount} 自定义 × ${ls.length - 1} 语言`
     : `${PUBLISH_DOC_KEYS.length} 类 × ${ls.length - 1} 语言`;
   const lines = [];
-  lines.push(`你是发布文档 AI 翻译任务的派发协调者，负责「${planId}」（版本号 ${version}）的翻译派发（阶段二：默认语言已全部人工审核）：对下列每个目标文件各派发一个子代理，全部并行（并行子代理数 = 目标文件数，不设上限），每个子代理只负责翻译自己名下的一个文件；派发与回执之外不展开代码修改。`);
+  lines.push(`你是发布文档 AI 翻译任务的派发协调者，负责「${planId}」（版本号 ${ver}）的翻译派发（阶段二：默认语言已全部人工审核）：对下列每个目标文件各派发一个子代理，全部并行（并行子代理数 = 目标文件数，不设上限），每个子代理只负责翻译自己名下的一个文件；派发与回执之外不展开代码修改。`);
   lines.push('');
   lines.push(`项目路径：${projectRoot || '（未提供）'}`);
-  lines.push(`发布计划号：${planId}（版本号 ${version}）`);
+  lines.push(`发布计划号：${planId}（版本号 ${ver}）`);
   if (runId) lines.push(`执行编号：${runId}`);
   lines.push('');
   lines.push(`翻译基准（唯一基准——已人工审核的默认语言 ${ls[0]} 文档，语义以基准文件为准，不得引入基准外信息，不得编造）：`);
@@ -395,8 +399,10 @@ export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, lan
 // 文档（不修改、不提交），结果经 atb docscheck CLI 逐文件回执（pass / fail + issues 问题
 // 清单），账本落盘供看板轮询展示——核查结果自动上报。提示词形态沿用「静态段在前 + 尾部
 // 运行参数区」缓存优化（REQ-20260921-006）：有无 runId 均恒定形态。
-export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs' } = {}) {
-  const version = versionNumberOf(planId) || planId;
+// BUG-20260928-007：版本号同源（口径同 buildDocSummaryPrompt）——优先取调用方传入的计划
+// x.y.z version（REQ-20260922-006），未传 / 存量计划沿用计划编号派生口径（YYYYMMDD-NNN）。
+export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, langs = DEFAULT_DOC_LANGS, customDocs = [], atbPath = 'node scripts/atb.mjs', version = null } = {}) {
+  const ver = version || versionNumberOf(planId) || planId;
   const ls = docLangsOf({ langs });
   const docFiles = publishDocFiles(ls, customDocs).filter((f) => f.lang === ls[0] && !f.single);
   const customCount = docFiles.filter((f) => f.custom).length;
@@ -435,7 +441,7 @@ export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, lan
   const params = [
     '运行参数（随任务变化，命令占位符以本区实际值为准）：',
     `项目路径：${projectRoot || '（未提供）'}`,
-    `发布计划号：${planId}（版本号 ${version}）`,
+    `发布计划号：${planId}（版本号 ${ver}）`,
     `执行编号：${runId || '（未提供——结果回执命令需执行编号，请先经看板启动 AI 校对获取）'}`,
     `CLI 入口：${atbPath}`,
     `默认语言校对清单（语言集首语言 ${ls[0]}，共 ${docFiles.length} 个文档，${shapeText}）：`,
