@@ -1,0 +1,446 @@
+#!/usr/bin/env node
+// BUG-20260928-002 「正式发布」步发布区收敛：删除圈注的堆叠区域（顶部操作条「创建并预检」
+// + 空态 / 列表重复「创建并预检」+ 分散原因文案），收敛为唯一「发布」主按钮——点击直接弹
+// 极简二次确认（仅「即将发布版本 vX.Y.Z。」），确认后由发布链路自动创建草稿并预检再启动
+//（预检阻塞即中止并就近反馈原因、不静默）；取消不发出任何执行请求；服务端链路与守卫不变。
+// 已发布态从简（只显示发布时间与发布成功说明）。假 DOM 口径同 build-ui.test.mjs。
+// 用法：node scripts/tests/bug-20260928-002.test.mjs
+
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
+const buildJs = fs.readFileSync(path.join(webRoot, 'build.js'), 'utf8');
+
+const cases = [];
+const t = (name, fn) => cases.push([name, fn]);
+
+/* ---------- vm 假 DOM（口径同 build-ui.test.mjs） ---------- */
+
+function element() {
+  const nodes = new Map();
+  const classes = new Set();
+  return {
+    nodes, dataset: {}, innerHTML: '', textContent: '', value: '', title: '', disabled: false, checked: false, hidden: false,
+    children: [], listeners: {},
+    classList: { add: (v) => classes.add(v), remove: (v) => classes.delete(v), contains: (v) => classes.has(v), toggle: (v, on) => on ? classes.add(v) : classes.delete(v) },
+    addEventListener(event, fn) { this.listeners[event] = fn; },
+    querySelector(sel) { if (!nodes.has(sel)) nodes.set(sel, element()); return nodes.get(sel); },
+    querySelectorAll() { return []; },
+    appendChild(c) { this.children.push(c); },
+    replaceChildren(...c) { this.children = c; },
+    setAttribute() {}, removeAttribute() {}, focus() {}, select() {}, remove() {},
+    closest() { return null; },
+  };
+}
+
+const H = (c) => c.repeat(40);
+
+function verItem(i = 1) {
+  return { itemId: `REQ-20260928-0${String(i).padStart(2, '0')}`, title: `条目 ${i}`, commit: H('a').slice(0, 39) + String(i % 10), mergedAt: null, mergeError: null };
+}
+
+function ver(id, name, status = 'merged', items = [verItem(1), verItem(2)], extra = {}) {
+  return {
+    id, name, description: `描述 ${name}`, status, version: '1.2.0',
+    items,
+    createdAt: '2026-09-28T01:00:00.000Z', updatedAt: '2026-09-28T02:00:00.000Z',
+    merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
+    ...extra,
+  };
+}
+
+// /api/build-publish 运行记录（summary 与详情共用形状；precheck 由用例按需附加）
+function relRun(o = {}) {
+  return {
+    id: 'BPUB-20260928-0001', productId: 'proj', bldId: 'BLD-A', bldName: 'v1.2',
+    version: '1.2.0', status: 'draft',
+    createdAt: '2026-09-28T08:00:00.000Z', updatedAt: '2026-09-28T08:30:00.000Z',
+    targets: { webapp: { status: 'pending' }, site: { status: 'pending' } },
+    stages: [], logs: [],
+    ...o,
+  };
+}
+
+function relDetail(run) {
+  return {
+    run: {
+      ...run,
+      frozen: { mainSha: H('c'), devSha: H('d'), remote: 'origin', homepage: { repoRoot: '/tmp/hp' } },
+      stages: run.stages || [],
+      precheck: run.precheck || null,
+    },
+    logs: run.logs || [],
+    directories: {},
+  };
+}
+
+function setup({ versions = [ver('BLD-A', 'v1.2', 'merged'), ver('BLD-B', 'v2.0', 'draft')], runs = [], config = { homepageRepoRoot: '/tmp/hp' }, precheckOk = true } = {}) {
+  const live = { versions: JSON.parse(JSON.stringify(versions)), runs: JSON.parse(JSON.stringify(runs)), config: JSON.parse(JSON.stringify(config)) };
+  const state = () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: live.versions });
+  const document = element();
+  document.createElement = element;
+  document.body = element();
+  document.nodes.set('#buildView', element());
+  document.addEventListener = () => {};
+  const calls = [];
+  const gates = {}; // path → 挂起放行函数
+  const mkRun = (body) => {
+    const id = `BPUB-NEW-${calls.filter((c) => c.path === '/api/build-publish/from-build').length}`;
+    const run = relRun({ id, version: body.version, status: 'draft' });
+    live.runs.push(JSON.parse(JSON.stringify(run)));
+    return run;
+  };
+  const sandbox = {
+    document, console, URLSearchParams,
+    setTimeout: () => 0, clearTimeout() {},
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    navigator: {},
+    CustomEvent: class { constructor(type, o) { this.type = type; this.detail = o && o.detail; } },
+    fetch: async (url, opts = {}) => {
+      const u = new URL(String(url), 'http://local');
+      const method = (opts.method || 'GET').toUpperCase();
+      calls.push({ path: u.pathname, method, body: opts.body ? JSON.parse(opts.body) : null });
+      if (gates[u.pathname]) await gates[u.pathname]();
+      if (u.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(state())) };
+      if (u.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
+      if (u.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: JSON.parse(JSON.stringify(live.runs)), config: JSON.parse(JSON.stringify(live.config)) }) };
+      if (u.pathname === '/api/build-publish/from-build') {
+        const run = mkRun(opts.body ? JSON.parse(opts.body) : { version: '9.9.9' });
+        return { ok: true, status: 201, json: async () => ({ run }) };
+      }
+      const m = u.pathname.match(/^\/api\/build-publish\/run\/([^/]+)\/?([a-z]*)$/);
+      if (m) {
+        const [, id, action] = m;
+        const cur = () => live.runs.find((r) => r.id === id) || relRun({ id });
+        if (action === 'plan') return { ok: true, json: async () => ({ plan: { token: 'fp-1', steps: ['步骤一（不应再走预览步骤）'] } }) };
+        if (action === 'precheck') {
+          const run = cur();
+          run.precheck = precheckOk === true
+            ? { ok: true, checks: [{ label: '冻结范围', ok: true }], fingerprint: 'fp-1' }
+            : (typeof precheckOk === 'object' ? precheckOk : { ok: false, checks: precheckOk || [{ label: '工作区', ok: false, detail: '源码工作区有未提交修改' }], fingerprint: null });
+          if (run.precheck.ok && run.status === 'failed') run.status = 'draft';
+          return { ok: true, json: async () => ({ run: JSON.parse(JSON.stringify(run)) }) };
+        }
+        if (action === 'start') {
+          const run = cur();
+          run.status = 'running';
+          return { ok: true, json: async () => ({ run: JSON.parse(JSON.stringify(run)) }) };
+        }
+        return { ok: true, json: async () => relDetail(cur()) };
+      }
+      return { ok: true, json: async () => ({}) };
+    },
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(buildJs, sandbox, { filename: 'build.js' });
+  const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
+  return {
+    sandbox, live, calls, gates, tick,
+    run: (code) => vm.runInContext(code, sandbox),
+    inner: () => vm.runInContext(`document.querySelector('#buildView').innerHTML`, sandbox),
+    el: (sel) => vm.runInContext(`document.querySelector('#buildView').querySelector(${JSON.stringify(sel)})`, sandbox),
+    enter: async () => { await vm.runInContext(`window.ATBBuild.enter('/p/proj')`, sandbox); },
+  };
+}
+
+// 进入项目并就地激活「正式发布」步（等发布记录读取完成）
+const harness = setup;
+
+async function openRel(hh, id = 'BLD-A') {
+  await hh.enter();
+  hh.run(`window.ATBBuild.openReleaseTab('${id}')`);
+  await hh.tick();
+}
+
+// 二次确认后执行一键发布链路
+async function publish(hh, id = 'BLD-A') {
+  hh.run(`window.ATBBuild.openPublishConfirm('${id}')`);
+  await hh.run(`window.ATBBuild.doOneClickPublish()`);
+  await hh.tick();
+}
+
+/* ---------- R1 收敛为唯一发布入口 ---------- */
+
+t('R1a 空态：堆叠区域删除，「发布」为唯一发布入口（唯一、可点击）；空态说明保留一键口径', async () => {
+  const hh = harness({ runs: [] });
+  await openRel(hh, 'BLD-A');
+  const inner = hh.inner();
+  assert.ok(!inner.includes('data-rel-create'), '空态不再有「创建并预检」入口（data-rel-create）');
+  assert.ok(!inner.includes('创建并预检'), '空态不再出现「创建并预检」文案');
+  assert.doesNotMatch(buildJs, />本版本发布</, '不再渲染「本版本发布」标题（随区域收敛移除）');
+  const pubBtns = inner.match(/data-rel-publish="[^"]*"/g) || [];
+  assert.equal(pubBtns.length, 1, '同屏「发布」按钮唯一');
+  assert.match(pubBtns[0], /data-rel-publish="BLD-A"/, '发布按钮绑定当前版本');
+  assert.ok(!/data-rel-publish="BLD-A"[^>]*disabled/.test(inner), '已合并 + 已配置时发布可点击（空态一键发布）');
+  assert.match(inner, /当前版本暂无发布记录/, '空态说明保留');
+  assert.match(inner, /点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布/, '一键发布口径说明');
+});
+
+t('R1b 有记录态：发布按钮置顶唯一；记录列表底部不再有创建按钮；运行详情动作区保留', async () => {
+  const hh = harness({ runs: [relRun({ id: 'BPUB-D', status: 'draft', precheck: null })] });
+  await openRel(hh, 'BLD-A');
+  await hh.tick();
+  const inner = hh.inner();
+  const pubBtns = inner.match(/data-rel-publish="[^"]*"/g) || [];
+  assert.equal(pubBtns.length, 1, '有记录态同屏「发布」按钮仍唯一');
+  assert.ok(!inner.includes('创建并预检'), '记录列表底部不再有「创建并预检」');
+  assert.match(inner, /data-rel-act="precheck"/, '运行详情动作区保留：预检');
+  assert.match(inner, /data-rel-act="refreeze"/, '运行详情动作区保留：重新冻结');
+  assert.match(inner, /data-rel-act="plan"/, '运行详情动作区保留：预览发布计划 / 重试失败阶段');
+  assert.match(inner, /data-rel-act="refresh"/, '运行详情动作区保留：刷新状态');
+  assert.match(inner, /aria-label="发布记录"/, '发布记录列表保留');
+  assert.match(inner, /aria-label="运行详情"/, '运行详情保留');
+});
+
+t('R1c 禁用口径：未合并 / 未配置 / 发布中 / 已发布分别禁用并就近显示原因；未配置保留「前往设置」', async () => {
+  // 未合并（BLD-B 为 draft 未合并）
+  let hh = harness({ runs: [] });
+  await openRel(hh, 'BLD-B');
+  let inner = hh.inner();
+  assert.match(inner, /data-rel-publish="BLD-B"[^>]*disabled/, '未合并版本发布禁用');
+  assert.match(inner, /请先完成合并入 main/, '未合并就近说明原因');
+  // 未配置官网仓库
+  hh = harness({ runs: [], config: {} });
+  await openRel(hh, 'BLD-A');
+  inner = hh.inner();
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '未配置官网仓库发布禁用');
+  assert.match(inner, /请先配置官网仓库/, '未配置就近说明原因');
+  assert.match(inner, /data-publish-settings>[^<]*前往设置/, '未配置保留「前往设置」入口');
+  // 发布中
+  hh = harness({ runs: [relRun({ id: 'BPUB-R', status: 'running' })] });
+  await openRel(hh, 'BLD-A');
+  await hh.tick();
+  inner = hh.inner();
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '发布中禁用');
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*>\s*发布中…\s*</, '发布中按钮文案');
+  // 已发布
+  hh = harness({ runs: [relRun({ id: 'BPUB-S', status: 'succeeded', updatedAt: '2026-09-28T09:41:00.000Z' })] });
+  await openRel(hh, 'BLD-A');
+  await hh.tick();
+  inner = hh.inner();
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '已发布禁用（不可再发布）');
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*>\s*已发布\s*</, '已发布按钮文案');
+});
+
+/* ---------- R2 二次确认与一键发布链路 ---------- */
+
+t('R2a 点击「发布」直接弹极简二次确认（仅「即将发布版本 vX.Y.Z。」）；取消关闭且不发出任何执行请求', async () => {
+  const hh = harness({ runs: [] });
+  await openRel(hh, 'BLD-A');
+  hh.run(`window.ATBBuild.openPublishConfirm('BLD-A')`);
+  let inner = hh.inner();
+  assert.match(inner, /发布二次确认（BLD-A）/, '二次确认弹窗标题（带版本计划号）');
+  assert.match(inner, /即将发布版本 v1\.2\.0。/, '极简文案：仅提示即将发布的版本号');
+  assert.match(inner, /id="bldRelGo"[^>]*>确认发布/, '确认发布按钮');
+  assert.match(inner, /id="bldRelCancel"[^>]*>取消/, '取消按钮');
+  assert.ok(!inner.includes('创建产品发布'), '不再出现旧创建弹层');
+  assert.ok(!inner.includes('发布计划确认'), '不再先走「预览发布计划」弹窗');
+  // 取消：不发任何执行请求
+  const posts0 = hh.calls.filter((c) => c.method === 'POST').length;
+  hh.el('#bldRelCancel').listeners.click();
+  inner = hh.inner();
+  assert.ok(!inner.includes('发布二次确认'), '取消后弹窗关闭');
+  assert.equal(hh.calls.filter((c) => c.method === 'POST').length, posts0, '取消不发出任何执行请求');
+});
+
+t('R2b 确认后一键链路：自动创建草稿 → 预检 → 启动（token = 预检指纹）；不再读取发布计划；成功后弹窗关闭并刷新', async () => {
+  const hh = harness({ runs: [] });
+  await openRel(hh, 'BLD-A');
+  await publish(hh, 'BLD-A');
+  const flow = hh.calls.filter((c) => /\/api\/build-publish/.test(c.path) && c.method === 'POST').map((c) => c.path);
+  assert.deepEqual(flow, ['/api/build-publish/from-build', '/api/build-publish/run/BPUB-NEW-1/precheck', '/api/build-publish/run/BPUB-NEW-1/start'], '链路顺序：创建草稿 → 预检 → 启动');
+  assert.equal(hh.calls.filter((c) => /\/plan$/.test(c.path)).length, 0, '不再先走「预览发布计划」读取步骤');
+  const start = hh.calls.find((c) => c.path.endsWith('/start'));
+  assert.deepEqual(start.body, { token: 'fp-1' }, 'start 携带预检指纹 token（服务端守卫口径不变）');
+  const create = hh.calls.find((c) => c.path === '/api/build-publish/from-build');
+  assert.equal(create.body.version, '1.2.0', '自动创建草稿按计划版本号');
+  const inner = hh.inner();
+  assert.ok(!inner.includes('发布二次确认'), '成功后弹窗关闭');
+  assert.match(inner, /data-rel-run="BPUB-NEW-1"/, '新运行出现在记录列表');
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '启动后按钮禁用');
+  assert.match(inner, /data-rel-publish="BLD-A"[^>]*>\s*发布中…\s*</, '启动后按钮文案为发布中');
+});
+
+t('R2c 复用口径：同发行版本号存在可续跑草稿（failed）时不再重复创建；版本号不匹配则新建', async () => {
+  const hh = harness({ runs: [relRun({ id: 'BPUB-F', status: 'failed', version: '1.2.0' })] });
+  await openRel(hh, 'BLD-A');
+  await publish(hh, 'BLD-A');
+  assert.equal(hh.calls.filter((c) => c.path === '/api/build-publish/from-build').length, 0, '同版本号可复用时不再创建新草稿');
+  const flow = hh.calls.filter((c) => c.method === 'POST' && /run/.test(c.path)).map((c) => c.path);
+  assert.deepEqual(flow, ['/api/build-publish/run/BPUB-F/precheck', '/api/build-publish/run/BPUB-F/start'], '直接对既有运行预检并启动');
+  // 版本号不匹配（存量 0.9.0 vs 计划 1.2.0）→ 新建草稿
+  const h2 = harness({ runs: [relRun({ id: 'BPUB-OLD', status: 'failed', version: '0.9.0' })] });
+  await openRel(h2, 'BLD-A');
+  await publish(h2, 'BLD-A');
+  assert.equal(h2.calls.filter((c) => c.path === '/api/build-publish/from-build').length, 1, '版本号不匹配时按确认版本新建草稿');
+  assert.equal(h2.calls.filter((c) => c.path.endsWith('/start')).length, 1, '新建后链路照常启动');
+});
+
+t('R2d 预检未通过：链路中止（不 start）、弹窗关闭、就近反馈原因（role=alert）、不静默', async () => {
+  const hh = harness({ runs: [], precheckOk: false });
+  await openRel(hh, 'BLD-A');
+  await publish(hh, 'BLD-A');
+  assert.equal(hh.calls.filter((c) => c.path.endsWith('/start')).length, 0, '预检阻塞时发布中止，不发出 start');
+  const inner = hh.inner();
+  assert.ok(!inner.includes('发布二次确认'), '中止后弹窗关闭（反馈转移到发布条就近位置）');
+  assert.match(inner, /发布中止：预检未通过：工作区：源码工作区有未提交修改/, '就近（发布条下方）反馈首个阻塞项');
+  assert.match(inner, /role="alert"/, '中止反馈可被发现（role=alert）');
+});
+
+t('R2e 创建失败（如已有活动发布）：链路中止并就近反馈服务端原因；不继续预检', async () => {
+  const hh = harness({ runs: [] });
+  await openRel(hh, 'BLD-A');
+  hh.sandbox.fetch = async (url, opts = {}) => {
+    const u = new URL(String(url), 'http://local');
+    const method = (opts.method || 'GET').toUpperCase();
+    hh.calls.push({ path: u.pathname, method, body: opts.body ? JSON.parse(opts.body) : null });
+    if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: hh.live.versions }) };
+    if (u.pathname === '/api/build-publish/from-build') return { ok: false, status: 409, json: async () => ({ error: '项目已有活动发布，请等待结束' }) };
+    return { ok: true, json: async () => ({}) };
+  };
+  hh.run(`window.ATBBuild.openPublishConfirm('BLD-A')`);
+  await hh.run(`window.ATBBuild.doOneClickPublish()`);
+  await hh.tick();
+  assert.equal(hh.calls.filter((c) => c.path.endsWith('/precheck')).length, 0, '创建失败后不继续预检');
+  assert.match(hh.inner(), /发布中止：项目已有活动发布，请等待结束/, '服务端原因就近反馈');
+});
+
+t('R2f 防重复：链路执行中重复确认不产生第二组请求；busy 中遮罩 / 取消不关闭确认弹窗', async () => {
+  const hh = harness({ runs: [] });
+  await openRel(hh, 'BLD-A');
+  let release;
+  hh.gates['/api/build-publish/from-build'] = () => new Promise((r) => { release = r; });
+  hh.run(`window.ATBBuild.openPublishConfirm('BLD-A')`);
+  const p = hh.run(`window.ATBBuild.doOneClickPublish()`);
+  await hh.tick();
+  // busy 中：遮罩与取消点击不关闭弹窗
+  hh.el('#bldPublishWrap').listeners.click({ target: { id: 'bldPublishWrap' } });
+  assert.match(hh.inner(), /发布二次确认（BLD-A）/, 'busy 中遮罩点击不关闭');
+  hh.el('#bldRelCancel').listeners.click();
+  assert.match(hh.inner(), /发布二次确认（BLD-A）/, 'busy 中取消不关闭');
+  // busy 中重复确认：不产生第二个 from-build
+  await hh.run(`window.ATBBuild.doOneClickPublish()`);
+  assert.equal(hh.calls.filter((c) => c.path === '/api/build-publish/from-build').length, 1, '执行中重复确认不发出第二个请求');
+  release();
+  await p;
+  await hh.tick();
+  assert.ok(!hh.inner().includes('发布二次确认'), '完成后弹窗关闭');
+});
+
+t('R2g 存量计划无 version 字段：弹窗内补填发行版本号；空值确认提示且不发请求；填写后按填入版本创建', async () => {
+  const hh = harness({ runs: [], versions: [ver('BLD-A', 'v1.2', 'merged', [verItem(1)], { version: undefined }), ver('BLD-B', 'v2.0', 'draft')] });
+  await openRel(hh, 'BLD-A');
+  hh.run(`window.ATBBuild.openPublishConfirm('BLD-A')`);
+  let inner = hh.inner();
+  assert.match(inner, /发行版本号（与版本显示名分开）/, '无版本号时弹窗提供补填输入');
+  assert.ok(!inner.includes('即将发布版本'), '不显示版本号文案（待补填）');
+  // 空值确认：提示且不发请求
+  const posts0 = hh.calls.filter((c) => c.method === 'POST').length;
+  hh.el('#bldRelVersion').value = '';
+  await hh.run(`window.ATBBuild.doOneClickPublish()`);
+  await hh.tick();
+  inner = hh.inner();
+  assert.match(inner, /请填写发行版本号（如 1\.2\.0）/, '空值提示');
+  assert.equal(hh.calls.filter((c) => c.method === 'POST').length, posts0, '空值不发任何执行请求');
+  assert.match(inner, /发布二次确认（BLD-A）/, '弹窗保留可补填');
+  // 填写后走链路
+  hh.el('#bldRelVersion').value = '3.0.0';
+  await hh.run(`window.ATBBuild.doOneClickPublish()`);
+  await hh.tick();
+  const create = hh.calls.find((c) => c.path === '/api/build-publish/from-build');
+  assert.equal(create.body.version, '3.0.0', '按补填版本号创建草稿');
+});
+
+/* ---------- R3 已发布态与状态反馈 ---------- */
+
+t('R3a 已发布态从简：只显示发布时间与发布成功说明（标签更新 + 锁定），不堆叠记录 / 详情', async () => {
+  const hh = harness({ runs: [relRun({ id: 'BPUB-S', status: 'succeeded', updatedAt: '2026-09-28T09:41:00.000Z' })] });
+  await openRel(hh, 'BLD-A');
+  await hh.tick();
+  const inner = hh.inner();
+  assert.match(inner, /发布时间：2026-09-28 09:41/, '显示发布时间');
+  assert.match(inner, /发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改/, '发布成功说明（标签 + 锁定）');
+  assert.match(inner, /如需调整请新建版本/, '锁定口径说明（不新增解锁路径）');
+  assert.ok(!inner.includes('aria-label="发布记录"'), '不再堆叠发布记录列表');
+  assert.ok(!inner.includes('aria-label="运行详情"'), '不再堆叠运行详情');
+  assert.ok(!inner.includes('data-rel-run="BPUB-S"'), '发布记录卡片不再渲染');
+});
+
+t('R3b 加载 / 读取失败布局正常：加载提示；失败显示原因与只读重试（重试只重新读取记录）', async () => {
+  // 加载中
+  let hh = harness({ runs: [relRun({ id: 'BPUB-X', bldId: 'BLD-B' })] });
+  await hh.enter();
+  let release;
+  hh.gates['/api/build-publish/state'] = () => new Promise((r) => { release = r; });
+  hh.run(`window.ATBBuild.openReleaseTab('BLD-A')`);
+  let inner = hh.inner();
+  assert.match(inner, /正在加载发布记录…/, '加载提示');
+  release();
+  await hh.tick();
+  // 读取失败 → 只读重试
+  hh = harness({ runs: [] });
+  await hh.enter();
+  hh.sandbox.fetch = async (url, opts = {}) => {
+    const u = new URL(String(url), 'http://local');
+    const method = (opts.method || 'GET').toUpperCase();
+    hh.calls.push({ path: u.pathname, method, body: null });
+    if (u.pathname === '/api/build/state') return { ok: true, json: async () => ({ initialized: true, isRepo: true, currentBranch: 'dev', versions: hh.live.versions }) };
+    if (u.pathname === '/api/build-publish/state') return { ok: false, status: 500, json: async () => ({ error: '数据库锁定' }) };
+    return { ok: true, json: async () => ({}) };
+  };
+  hh.run(`window.ATBBuild.openReleaseTab('BLD-A')`);
+  await hh.tick();
+  inner = hh.inner();
+  assert.match(inner, /发布记录读取失败：数据库锁定/, '失败显示原因');
+  assert.match(inner, /id="bldRelRetry"/, '只读重试入口');
+  const posts = hh.calls.filter((c) => c.method === 'POST').length;
+  assert.equal(posts, 0, '读取失败路径不发任何写请求');
+});
+
+/* ---------- R4 i18n（BUG-20260912-001 中英文同步） ---------- */
+
+t('R4a 新增静态文案入 EN、含插值句入 EN_DYNAMIC，值不含中文', async () => {
+  await import('../web/i18n.js');
+  const I = globalThis.ATBI18N;
+  const { EN, EN_DYNAMIC } = I._dict;
+  for (const k of ['发布二次确认', '确认发布', '启动中…', '发布中…', '请先配置官网仓库', '前往设置',
+    '请填写发行版本号（如 1.2.0）', '发行版本号（与版本显示名分开）', '1.2.0（实际对外发行号）',
+    '当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布。',
+    '当前版本未合并，请先完成合并入 main。',
+    '发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。',
+    '仅已合并（merged）的版本计划可发布：请先完成「合并入 main」', '请先配置官网仓库后再发布',
+    '预检未通过：请处理阻塞项后重试']) {
+    assert.ok(EN[k], `EN 应含「${k}」`);
+    assert.ok(!/[\u4e00-\u9fff]/.test(EN[k]), `EN 值不含中文：${k}`);
+  }
+  for (const k of ['发布二次确认（◇）', '即将发布版本 v◇。', '发布时间：◇', '发布中止：◇', '✕ 发布中止：◇',
+    '✓ 发布已启动（◇）：执行进度见下方运行详情', '预检未通过：◇：◇', '创建失败（◇）', '预检失败（◇）', '发布启动失败（◇）']) {
+    assert.ok(EN_DYNAMIC[k], `EN_DYNAMIC 应含「${k}」`);
+    assert.ok(!/[\u4e00-\u9fff]/.test(EN_DYNAMIC[k]), `EN_DYNAMIC 值不含中文：${k}`);
+  }
+});
+
+/* ---------- S 静态契约 ---------- */
+
+t('S1 静态契约：唯一发布入口绑定存在；重复「创建并预检」入口与旧堆叠模板整体移除；一键链路仍走独立 from-build', () => {
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-publish\]'\)/, 'bindCommon 绑定唯一「发布」入口');
+  assert.ok(!buildJs.includes('relCreateBtnHtml'), 'relCreateBtnHtml（重复创建入口模板）移除');
+  assert.ok(!buildJs.includes('data-rel-create'), 'data-rel-create 行为标记移除');
+  assert.ok(!buildJs.includes('data-ver-release'), 'data-ver-release（旧创建入口键）移除');
+  assert.ok(!buildJs.includes('请先创建并预检'), '「请先创建并预检」不再作为发布按钮前置原因');
+  assert.ok(!buildJs.includes('请重新预检并处理阻塞项'), '旧预检类原因文案移除（预检提示保留在运行详情动作区）');
+  assert.match(buildJs, /\/api\/build-publish\/from-build/, '一键链路自动创建草稿仍走独立 from-build 接口（服务端链路不变）');
+});
+
+let failed = 0;
+for (const [name, fn] of cases) {
+  try { await fn(); console.log(`✓ ${name}`); }
+  catch (e) { failed++; console.error(`✗ ${name}\n${e && e.stack ? e.stack : e}`); }
+}
+console.log(`\n${cases.length} 个用例，失败 ${failed}`);
+process.exitCode = failed ? 1 : 0;

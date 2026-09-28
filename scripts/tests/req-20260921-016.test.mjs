@@ -220,7 +220,7 @@ t('T5 切换版本不串单：详情两入口随选中版本换绑，AI 弹窗�
   assert.match(h.inner(), /删除版本（BLD-DRAFT）/, '删除确认按目标卡片版本打开（选中态不干扰）');
 });
 
-t('T6 合并 / 创建并预检 / 发布记录仍在详情对应步骤：合并步有主按钮；正式发布步有创建并预检与发布记录区；列表不再重复入口', async () => {
+t('T6 合并 / 发布 / 发布记录仍在详情对应步骤：合并步有主按钮；正式发布步有唯一「发布」入口与发布记录区（BUG-20260928-002 收敛口径）；列表不再重复入口', async () => {
   const h = setup();
   await h.enter(); // 选中 BLD-DRAFT
   h.select('BLD-DRAFT', 'merge');
@@ -230,10 +230,10 @@ t('T6 合并 / 创建并预检 / 发布记录仍在详情对应步骤：合并�
   h.select('BLD-MERGED', 'release');
   await h.flush();
   detail = detailPart(h.inner());
-  assert.match(detail, /data-ver-release="BLD-MERGED"/, '正式发布步创建并预检入口仍在（merged 可用）');
+  assert.match(detail, /data-rel-publish="BLD-MERGED"/, '正式发布步唯一「发布」入口仍在（merged 可用）');
   assert.match(detail, /aria-label="发布记录"|暂无发布记录/, '正式发布步发布记录区仍在（有记录列清单 / 无记录显空态）');
   assert.ok(!listPart(h.inner()).includes('data-ver-merge'), '列表无合并入口（详情独有）');
-  assert.ok(!listPart(h.inner()).includes('data-ver-release'), '列表无发布入口（详情独有）');
+  assert.ok(!listPart(h.inner()).includes('data-rel-publish'), '列表无发布入口（详情独有）');
 });
 
 t('T7 空态：无版本 / 搜索无匹配无悬空入口；未选择版本时详情显示选择提示且无 AI 完善 / 编辑 / 删除入口', async () => {
@@ -242,7 +242,7 @@ t('T7 空态：无版本 / 搜索无匹配无悬空入口；未选择版本时�
   const inner = h.inner();
   assert.match(inner, /暂无版本计划/, '无版本时列表空态引导保留');
   assert.match(inner, /点击左侧版本查看详情/, '详情区显示选择引导');
-  for (const k of ['data-ver-answer', 'id="bldEditInfo"', 'data-ver-delete', 'data-ver-merge', 'data-ver-release']) {
+  for (const k of ['data-ver-answer', 'id="bldEditInfo"', 'data-ver-delete', 'data-ver-merge', 'data-rel-publish']) {
     assert.ok(!inner.includes(k), `未确定版本无 ${k} 入口`);
   }
 });
@@ -258,13 +258,13 @@ t('T8 i18n 词条沿用：AI 完善 / 编辑 / 删除与禁用说明词条均已
 t('S1 静态契约：renderVersionList 不再产出合并 / 发布入口与 card-acts；data-ver-release-view 按钮与绑定移除；其余行为标记绑定保留；CSS 新增标题行删除与描述头操作组样式', () => {
   const listFn = buildJs.match(/function renderVersionList\(\) \{[\s\S]*?\n  \}/);
   assert.ok(listFn, '缺少 renderVersionList');
-  for (const k of ['data-ver-merge', 'data-ver-release', 'data-ver-release-view', 'class="card-acts"', 'data-ver-answer']) {
+  for (const k of ['data-ver-merge', 'data-rel-publish', 'data-ver-release-view', 'class="card-acts"', 'data-ver-answer']) {
     assert.ok(!listFn[0].includes(k), `renderVersionList 不再渲染 ${k}`);
   }
   assert.ok(listFn[0].includes('data-ver-delete'), 'renderVersionList 仍渲染删除键（标题行）');
   assert.ok(listFn[0].includes('state.mergeBusy'), 'mergeBusy 期间删除键一并禁用（全局口径保留）');
   assert.ok(!buildJs.includes('data-ver-release-view'), '查看发布记录按钮模板与绑定整体移除');
-  for (const k of ['data-ver-answer', 'data-ver-merge', 'data-ver-delete', 'data-ver-release']) {
+  for (const k of ['data-ver-answer', 'data-ver-merge', 'data-ver-delete', 'data-rel-publish']) {
     assert.match(buildJs, new RegExp(`view\\.querySelectorAll\\('\\[${k}\\]'\\)`), `bindCommon 循环绑定 ${k} 保留`);
   }
   // CSS：卡片标题行删除右端对齐；概况操作行样式（BUG-20260921-016 恢复 bld-plan-acts，
