@@ -34,15 +34,19 @@ function proofreadPrompt({ langs = ['cn', 'en'], customDocs = [] } = {}) {
   });
 }
 
-t('L1-1 翻译约束含图片引用语种对齐：<name>.png 与 <name>_<lang>.png 惯例；对应语种图片不存在时保持原引用（不阻塞、不强求）；不虚构图片', () => {
+t('L1-1 翻译约束含图片引用语种对齐：<name>.png 与 <name>_<lang>.png 惯例；一律改写为语种变体引用（BUG-20260928-008 口径：文件存在与否不影响改写、不阻塞、不强求）；不虚构图片', () => {
   const tp = translatePrompt();
   const idx = tp.indexOf('翻译约束：');
   assert.ok(idx >= 0, '存在「翻译约束：」节');
   const section = tp.slice(idx);
   assert.ok(section.includes('图片'), '翻译约束节应覆盖图片引用');
-  assert.ok(/_en\.png|_<lang>|语种图片/.test(section), '应给出 <name>.png 与 <name>_en.png 既有惯例（或等价表述）');
+  assert.ok(/_en\.png|_<lang>|语种图片|_<目标语言>/.test(section), '应给出 <name>.png 与 <name>_en.png 既有惯例（或等价表述）');
   assert.ok(section.includes('语种'), '图片引用按语种对齐的口径应点明');
-  assert.ok(/不存在.*保持|保持.*原引用|保持基准原引用/.test(section), '对应语种图片不存在时保持原引用');
+  // BUG-20260928-008：原「不存在则保持基准原引用」措辞歧义（被读作保持默认语言引用），
+  // 改为一律改写为 <name>_<lang> 语种变体；文件存在与否不影响引用改写。
+  assert.ok(/一律改写|一律.*改写为/.test(section), '本地图片引用一律改写为语种变体（不以文件存在为前提）');
+  assert.ok(/是否存在不影响引用改写|存在与否不影响引用改写/.test(section), '图片文件存在与否不影响引用改写');
+  assert.ok(!/不存在则保持|保持基准原引用/.test(section), '不再含「不存在则保持基准原引用」歧义句式');
   assert.ok(section.includes('不阻塞') || section.includes('不强求'), '不阻塞、不强求口径');
   assert.ok(section.includes('不') && section.includes('虚构'), '不得虚构图片文件');
 });
