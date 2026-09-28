@@ -118,10 +118,11 @@ t('D4 一键发布链路接线：build-publish.start 在运行置 running 时落
   assert.ok(iRunning >= 0, 'start 内应存在置 running 的落账');
   assert.ok(iConfirm > iRunning, '置 running 后应调用 recordReleaseConfirm（二次确认即正式发布口径）');
   assert.ok(iExecute > iConfirm, '确认落账先于发布执行');
-  // 服务端守卫与 state 装配换用 isReleased（不再用 isPushed 判定正式发布）
+  // 服务端守卫与 state 装配换用 isReleased（不再用 isPushed 判定正式发布）；
+  // BUG-20260928-015 起 isReleased 增传数据目录（读取侧兜底：确认运行失败 / 取消不判已发布）
   const serverSrc = fs.readFileSync(path.join(pluginRoot, 'scripts', 'server.mjs'), 'utf8');
   assert.ok(!/isPushed/.test(serverSrc), 'server 不再以 isPushed 判定正式发布');
-  assert.match(serverSrc, /isReleased\(v\)/, 'state 装配透出 released（isReleased）');
+  assert.match(serverSrc, /isReleased\(v,\s*dataDir\)/, 'state 装配透出 released（isReleased，BUG-20260928-015 起带兜底目录参）');
 });
 
 /* ---------- U1 前端 vm 行为 ---------- */
