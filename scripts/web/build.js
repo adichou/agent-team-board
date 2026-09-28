@@ -2822,6 +2822,30 @@ const ATBBuild = (() => {
     return `<span class="st ${STATUS_CLS[status] || 'st-mute'}">${esc(STATUS_LABEL[status] || status)}</span>`;
   }
 
+  // BUG-20260928-001：「已合并」标签显示口径后移——绿色「已合并」（st-ok）只在文档与翻译
+  // 提交合入 main（v.docsMerge 落账，重放提交 / main 头证据在账）后显示；仅挑选合并完成
+  //（status = merged 且 docsMerge 无落账）显示中间态「代码已合并 · 文档未合并」（st-wait），
+  // 与发布门禁（docsMerge 落账前推送被拦）口径一致。列表卡片 / 详情标题 / 删除确认弹窗
+  // 三处状态标签共用本纯函数；状态机与门禁不变（只收敛显示）。
+  const MERGE_PARTIAL_LABEL = '代码已并入 · 文档与翻译未合并';
+  const docsMergedOf = (v) => !!(v && v.docsMerge && v.docsMerge.commitHash);
+  function statusChipFor(v) {
+    if (v && v.status === 'merged' && !docsMergedOf(v)) {
+      return `<span class="st st-wait">${esc(MERGE_PARTIAL_LABEL)}</span>`;
+    }
+    return statusChip(v && v.status);
+  }
+
+  // 卡片 meta 行「阶段」与状态标签同口径（BUG-20260928-001）：merged 且 docsMerge 无落账
+  // 显示中间态文案（不再提前显示「正式发布」）；docsMerge 落账后维持既有「正式发布」。
+  function stageOf(v) {
+    const s = v && v.status;
+    if (s === 'merged') return docsMergedOf(v) ? '正式发布' : MERGE_PARTIAL_LABEL;
+    if (s === 'merging') return '合并中';
+    if (s === 'failed') return '失败（可重试）';
+    return '计划中';
+  }
+
   // BUG-20260920-005：锁定基准后移——「关联条目与提交 / 合并入 main / AI 完善」三类操作的
   // 锁定从 merged 后移到推送完成（正式发布）。/api/build/state 随版本附带 pushed
   //（五步流程「正式发布 → 推送主分支」成功，release.pushedAt 落盘）；merged（已合并
@@ -2838,7 +2862,9 @@ const ATBBuild = (() => {
       const tip = `发布成功：${v.release.runId || ''}${v.release.version ? `（v${v.release.version}）` : ''}`;
       return `<span class="st st-ok" title="${esc(tip)}">${esc(REL_STATUS_LABEL.succeeded)}</span>`;
     }
-    return statusChip(v.status);
+    // BUG-20260928-001：回退标签走 statusChipFor——merged 且 docsMerge 无落账显示中间态，
+    // 文档与翻译合入 main 后才显示绿色「已合并」。
+    return statusChipFor(v);
   }
 
   function renderVersionList() {
@@ -2861,7 +2887,7 @@ const ATBBuild = (() => {
       // 计划的 x.y.z 字段，存量计划（无 version）回退计划编号派生（YYYYMMDD-NNN）；
       // 已发布（releasedAt，推送远端 main 成功时间）追加「发布于」。
       const verNo = v.version || (/^BLD-\d{8}-\d{3}$/.test(v.id) ? v.id.replace(/^BLD-/, '') : '');
-      const stage = v.status === 'merged' ? '正式发布' : v.status === 'merging' ? '合并中' : v.status === 'failed' ? '失败（可重试）' : '计划中';
+      const stage = stageOf(v);
       return `
       <div class="rel-card${v.id === state.selVerId ? ' sel' : ''}" data-ver-id="${esc(v.id)}" role="button" tabindex="0">
         <div class="t"><span class="bld-card-title"><strong title="${esc(v.name || v.id)}">${esc(v.name || v.id)}</strong> ${versionChip(v)}</span>${delBtn}</div>
@@ -4354,7 +4380,7 @@ ${langsField}
     const editing = state.edit && state.edit.id === v.id ? state.edit : null;
     const nameCell = editing?.field === 'name'
       ? `<div class="bld-edit-row"><input class="bld-name-input" value="${esc(v.name)}"><button type="button" class="btn small primary" id="bldSaveName">保存</button><button type="button" class="btn small" id="bldCancelEdit">取消</button></div>`
-      : `<strong class="bld-name" title="点击编辑名称" role="button" tabindex="0">${esc(v.name || v.id)}</strong> ${statusChip(v.status)}`;
+      : `<strong class="bld-name" title="点击编辑名称" role="button" tabindex="0">${esc(v.name || v.id)}</strong> ${statusChipFor(v)}`;
     const descCell = editing?.field === 'desc'
       ? `<div class="bld-edit-row"><textarea class="bld-desc-input" rows="3">${esc(v.description)}</textarea><button type="button" class="btn small primary" id="bldSaveDesc">保存</button><button type="button" class="btn small" id="bldCancelEdit">取消</button></div>`
       : `<span class="bld-desc" title="点击编辑描述" role="button" tabindex="0">${v.description ? esc(v.description) : '<span class="muted">（无描述）</span>'}</span>`;
@@ -4562,7 +4588,7 @@ ${langsField}
         <div class="rel-modal">
           <h3>删除版本（${esc(v.id)}）</h3>
           <div class="rel-modal-body">
-            <p>版本「<strong>${esc(v.name || v.id)}</strong>」当前状态：${statusChip(v.status)}，共 ${v.items.length} 个关联单。</p>
+            <p>版本「<strong>${esc(v.name || v.id)}</strong>」当前状态：${statusChipFor(v)}，共 ${v.items.length} 个关联单。</p>
             <p class="muted small">${statusHint}</p>
             <p class="muted small">此操作不可撤销，请确认后再继续。</p>
           </div>
@@ -5303,6 +5329,8 @@ ${langsField}
     selectLogRow,
     // 纯函数接缝（测试与面板复用）
     doneCandidates, selectableCandidates, occupiedItemIds, parseAnswer, buildPrompt, logPagerHtml,
+    // BUG-20260928-001：状态标签 / 阶段文案纯函数接缝（三处标签与卡片 meta 共用口径）
+    statusChipFor, versionChip, stageOf,
     // REQ-20260927-002：整组自动关联纯函数与宽口径折叠行接缝（测试与交互共用）
     autoAssociationOf, broadHitsOf, pickedCommitCount, toggleBroadHits,
     // REQ-20260921-014：概况页签显式编辑（行为接缝 + 客户端校验纯函数，测试与交互共用）
