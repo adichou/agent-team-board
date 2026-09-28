@@ -390,14 +390,23 @@ t('S1~S10 /api/build* 全链路', async () => {
     assert.ok(r.json.remote.includes('origin/long'), 'sync 后远端分组出现 origin/long');
     assert.ok(!r.json.remote.includes('origin/main'), 'main 未被同步推送');
 
-    // BUG-20260920-005：推送完成（正式发布）后三类操作锁定——合并与条目增删 409 并说明已正式发布
+    // BUG-20260920-005（BUG-20260928-005 修订口径）：推送只是事实落账，不构成正式发布——
+    // 已推送未确认时合并 / 条目增删仍可用；发布确认（release.confirmedAt，发布按钮二次
+    // 确认后一键发布链路落账）后才锁定：合并与条目增删 409 并说明已正式发布
     r = await req(port, 'POST', `/api/build/release/push${P}`, { id: vid, remote: 'origin' });
     assert.equal(r.status, 200, `推送主分支应成功：${r.text}`);
     r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
-    assert.equal(r.status, 409, '已正式发布不可再合并');
+    assert.equal(r.status, 200, `已推送未确认仍可重开合并（幂等）：${r.text}`);
+    r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'add', items: [{ itemId: reqB.id, commit: commit1 }] });
+    assert.equal(r.status, 200, `已推送未确认仍可补关联条目：${r.text}`);
+    r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'remove', itemIds: [reqB.id] });
+    assert.equal(r.status, 200, `已推送未确认仍可移出条目（还原范围）：${r.text}`);
+    buildStore.recordReleaseConfirm(dataDirA, vid, { runId: 'BPUB-test' });
+    r = await req(port, 'POST', `/api/build/version/merge${P}`, { id: vid });
+    assert.equal(r.status, 409, '发布确认（正式发布）后不可再合并');
     assert.match(r.json.error || '', /正式发布/);
     r = await req(port, 'POST', `/api/build/version/items${P}`, { id: vid, action: 'add', items: [{ itemId: reqB.id, commit: commit1 }] });
-    assert.equal(r.status, 409, '已正式发布锁定条目增删');
+    assert.equal(r.status, 409, '发布确认（正式发布）后锁定条目增删');
     assert.match(r.json.error || '', /正式发布/);
 
     // S7 合并隔离：脏工作区不阻塞（合并在临时工作树执行、不触碰当前工作区），未提交改动保留；

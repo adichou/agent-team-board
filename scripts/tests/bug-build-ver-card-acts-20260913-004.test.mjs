@@ -43,7 +43,7 @@ const H2 = 'b'.repeat(40);
 
 function ver(id, name, status = 'draft', extra = {}) {
   return {
-    id, name, description: `描述 ${name}`, status, targetBranch: 'main', pushed: false,
+    id, name, description: `描述 ${name}`, status, targetBranch: 'main', released: false,
     items: [{ itemId: 'REQ-20260913-001', commit: H1, title: '演示需求', mergedAt: status === 'merged' ? '2026-09-13T03:00:00.000Z' : null, mergeError: status === 'failed' ? 'conflict' : null }],
     createdAt: '2026-09-13T01:00:00.000Z', updatedAt: '2026-09-13T02:00:00.000Z', merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
     ...extra,
@@ -136,7 +136,7 @@ t('B2 状态口径继承（REQ-20260921-016 起在详情合并步主按钮核验
     ver('BLD-DRAFT', 'd1', 'draft'),
     ver('BLD-MERGING', 'd2', 'merging'),
     ver('BLD-MERGED', 'd3', 'merged'),
-    ver('BLD-PUSHED', 'd5', 'merged', { pushed: true }),
+    ver('BLD-PUSHED', 'd5', 'merged', { released: true }),
     ver('BLD-FAILED', 'd4', 'failed'),
   ] });
   await h.enter();
@@ -200,7 +200,7 @@ t('B7 BUG-20260914-020 / BUG-20260920-005：推送完成（正式发布）后不
     ver('BLD-DRAFT', 'd1', 'draft'),
     ver('BLD-MERGING', 'd2', 'merging'),
     ver('BLD-MERGED', 'd3', 'merged'),
-    ver('BLD-PUSHED', 'd5', 'merged', { pushed: true }),
+    ver('BLD-PUSHED', 'd5', 'merged', { released: true }),
     ver('BLD-FAILED', 'd4', 'failed'),
   ] });
   await h.enter(); // selVerId 自动选中首个 BLD-DRAFT

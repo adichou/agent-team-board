@@ -265,12 +265,13 @@ t('L2-1 build-store：addCustomDoc / removeCustomDoc 持久化、校验、上限
   assert.ok(!cur.customDocs.includes('MIGRATION'), '移除');
   assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'NOPE' }), /不在/);
 
-  // 锁定：merging / 已正式发布（pushed）
+  // 锁定：merging / 已正式发布（BUG-20260928-005 起以发布确认为准，推送不锁定）
   buildStore.beginMerge(dataDir, v.id);
   assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'SECURITY' }), buildStore.BuildConflictError, 'merging 锁定');
   buildStore.finishMerge(dataDir, v.id, { results: [{ itemId: v.items[0].itemId, ok: true }] });
   buildStore.recordPushSuccess(dataDir, v.id, { remote: 'origin', sha: 'b'.repeat(40) });
-  assert.throws(() => buildStore.addCustomDoc(dataDir, v.id, { name: 'AFTERPUSH' }), buildStore.BuildConflictError, 'pushed 锁定');
+  buildStore.recordReleaseConfirm(dataDir, v.id, { runId: 'BPUB-test' });
+  assert.throws(() => buildStore.addCustomDoc(dataDir, v.id, { name: 'AFTERPUSH' }), buildStore.BuildConflictError, '发布确认后锁定');
 });
 
 t('L2-2 白名单：recordDocsReview / recordDocsCommit 放行清单内自定义（含展开文件）；recordDocsFinalize 随完结阶段移除（BUG-20260926-002）', () => {

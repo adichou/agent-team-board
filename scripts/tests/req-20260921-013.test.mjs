@@ -40,7 +40,7 @@ const H1 = 'a'.repeat(40);
 
 function ver(id, name, status = 'draft', extra = {}) {
   return {
-    id, name, description: `描述 ${name}`, status, targetBranch: 'main', pushed: false,
+    id, name, description: `描述 ${name}`, status, targetBranch: 'main', released: false,
     items: [{ itemId: 'REQ-20260921-013', commit: H1, title: '演示需求', mergedAt: status === 'merged' ? '2026-09-21T03:00:00.000Z' : null, mergeError: status === 'failed' ? 'conflict' : null }],
     createdAt: '2026-09-21T01:00:00.000Z', updatedAt: '2026-09-21T02:00:00.000Z',
     merge: { startedAt: null, finishedAt: null, error: status === 'failed' ? '模拟合并失败' : null, baseBranch: 'dev' },
@@ -48,7 +48,7 @@ function ver(id, name, status = 'draft', extra = {}) {
   };
 }
 
-function setup({ versions = [ver('BLD-DRAFT', 'd1'), ver('BLD-MERGING', 'm1', 'merging'), ver('BLD-MERGED', 'm2', 'merged'), ver('BLD-PUSHED', 'p1', 'merged', { pushed: true })] } = {}) {
+function setup({ versions = [ver('BLD-DRAFT', 'd1'), ver('BLD-MERGING', 'm1', 'merging'), ver('BLD-MERGED', 'm2', 'merged'), ver('BLD-PUSHED', 'p1', 'merged', { released: true })] } = {}) {
   const state = { initialized: true, isRepo: true, currentBranch: 'dev', versions };
   const document = element();
   document.createElement = element;

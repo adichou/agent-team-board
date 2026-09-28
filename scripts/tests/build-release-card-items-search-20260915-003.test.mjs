@@ -52,7 +52,7 @@ function manyItems(n = 12) {
 
 function ver(id, name, status = 'merged', items = manyItems(), extra = {}) {
   return {
-    id, name, description: `描述 ${name}`, status, targetBranch: 'main', pushed: false,
+    id, name, description: `描述 ${name}`, status, targetBranch: 'main', released: false,
     items,
     createdAt: '2026-09-15T01:00:00.000Z', updatedAt: '2026-09-15T02:00:00.000Z',
     merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
@@ -376,7 +376,7 @@ t('R8 过滤/翻页后移出与 commit 换选绑定真实条目 ID；merging/mer
   assert.match(inner, /title="该条目关联的全部提交"/, 'merged 未推送提交清单可用（无锁定说明）');
   assert.doesNotMatch(inner, /id="bldAddItem" disabled/, 'merged 未推送添加条目可用');
   // 推送完成（正式发布）后锁定（搜索与翻页不绕过锁定）
-  const hP = setup({ versions: [ver('BLD-PUSHED', 'p', 'merged', manyItems(12), { pushed: true })] });
+  const hP = setup({ versions: [ver('BLD-PUSHED', 'p', 'merged', manyItems(12), { released: true })] });
   await hP.enter();
   hP.run(`window.ATBBuild.setStep('link')`);
   const innerP = hP.inner();

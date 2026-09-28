@@ -284,12 +284,13 @@ t('L2-2 removeCustomDoc：整份移除全部语种（清单退出 + 审核留痕
   assert.equal(r.files.find((f) => f.file === 'MIGRATION.md').state, 'unsummarized', '再添加从未总结起步');
 
   assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'NOPE' }), /不在/);
-  // merging / pushed 锁定保持
+  // merging / 发布确认（正式发布）锁定保持（BUG-20260928-005 起推送不锁定）
   buildStore.beginMerge(dataDir, v.id);
   assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'MIGRATION' }), buildStore.BuildConflictError, 'merging 锁定');
   buildStore.finishMerge(dataDir, v.id, { results: [{ itemId: v.items[0].itemId, ok: true }] });
   buildStore.recordPushSuccess(dataDir, v.id, { remote: 'origin', sha: 'b'.repeat(40) });
-  assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'MIGRATION' }), buildStore.BuildConflictError, 'pushed 锁定');
+  buildStore.recordReleaseConfirm(dataDir, v.id, { runId: 'BPUB-test' });
+  assert.throws(() => buildStore.removeCustomDoc(dataDir, v.id, { key: 'MIGRATION' }), buildStore.BuildConflictError, '发布确认后锁定');
 });
 
 t('L2-3 recordDocsFinalize 随完结阶段移除；审核白名单仍放行展开文件', () => {

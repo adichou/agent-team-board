@@ -50,7 +50,7 @@ t('B2 校验：空条目 / 条目重复 / commit 缺失或非法 / 名称超长 
   assert.throws(() => buildStore.createVersion(dataDir, { name: 'x'.repeat(81), items: [itemOf('REQ-20260913-001', H1)] }), core.AtbError);
 });
 
-t('B3 条目增删：add 追加（重复拒绝）、remove 移除；merging 锁增删、推送完成后锁增删（BUG-20260920-005 基准后移）；其余条目 commit 不受影响', () => {
+t('B3 条目增删：add 追加（重复拒绝）、remove 移除；merging 锁增删、发布确认（正式发布）后锁增删（BUG-20260920-005 基准 + BUG-20260928-005 发布确认口径）；其余条目 commit 不受影响', () => {
   const dataDir = core.dataDirFrom(mkData());
   const v = buildStore.createVersion(dataDir, { items: [itemOf('REQ-20260913-001', H1), itemOf('BUG-20260913-002', H2)] });
   let out = buildStore.addItems(dataDir, v.id, [itemOf('REQ-20260913-003', 'c'.repeat(40))]);
@@ -60,7 +60,7 @@ t('B3 条目增删：add 追加（重复拒绝）、remove 移除；merging 锁�
   assert.equal(out.items.length, 2);
   assert.deepEqual(out.items.map((i) => i.itemId), ['REQ-20260913-001', 'REQ-20260913-003']);
   assert.equal(out.items.find((i) => i.itemId === 'REQ-20260913-001').commit, H1, '移出不破坏其余条目 commit');
-  // BUG-20260920-005：merged（已合并未推送）放开增删；推送完成（正式发布）后锁定
+  // BUG-20260920-005：merged（含已推送未确认，BUG-20260928-005）放开增删；发布确认（正式发布）后锁定
   buildStore.beginMerge(dataDir, v.id, { baseBranch: 'dev' });
   buildStore.finishMerge(dataDir, v.id, { results: out.items.map((i) => ({ itemId: i.itemId, ok: true })) });
   out = buildStore.addItems(dataDir, v.id, [itemOf('BUG-20260913-009', H2)]);
@@ -68,8 +68,13 @@ t('B3 条目增删：add 追加（重复拒绝）、remove 移除；merging 锁�
   out = buildStore.removeItems(dataDir, v.id, ['BUG-20260913-009']);
   assert.equal(out.items.length, 2, 'merged 未推送可移出');
   buildStore.recordPushSuccess(dataDir, v.id, { remote: 'origin', sha: 'd'.repeat(40) });
-  assert.throws(() => buildStore.addItems(dataDir, v.id, [itemOf('BUG-20260913-009', H2)]), core.AtbError, '推送完成后锁定增删');
-  assert.throws(() => buildStore.removeItems(dataDir, v.id, ['REQ-20260913-001']), core.AtbError, '推送完成后锁定移出');
+  out = buildStore.addItems(dataDir, v.id, [itemOf('BUG-20260913-009', H2)]);
+  assert.equal(out.items.length, 3, '已推送未确认仍可补关联（推送不锁定）');
+  out = buildStore.removeItems(dataDir, v.id, ['BUG-20260913-009']);
+  assert.equal(out.items.length, 2, '已推送未确认仍可移出（推送不锁定）');
+  buildStore.recordReleaseConfirm(dataDir, v.id, { runId: 'BPUB-test' });
+  assert.throws(() => buildStore.addItems(dataDir, v.id, [itemOf('BUG-20260913-009', H2)]), core.AtbError, '发布确认后锁定增删');
+  assert.throws(() => buildStore.removeItems(dataDir, v.id, ['REQ-20260913-001']), core.AtbError, '发布确认后锁定移出');
 });
 
 t('B4 名称描述编辑：draft/failed/merged 可改；merging 拒绝；编辑不破坏条目与 commit 关联', () => {
@@ -99,9 +104,13 @@ t('B5 合并状态机：draft→merging→merged/failed；failed→merging 重�
   m = buildStore.beginMerge(dataDir, v.id, { baseBranch: 'dev' });
   assert.equal(m.status, 'merging', 'merged 未推送可重开');
   buildStore.finishMerge(dataDir, v.id, { results: [{ itemId: 'REQ-20260913-001', ok: true }] });
-  // 推送完成（正式发布）后不可再合并
+  // 仅推送不锁，发布确认（正式发布）后不可再合并（BUG-20260928-005）
   buildStore.recordPushSuccess(dataDir, v.id, { remote: 'origin', sha: 'e'.repeat(40) });
-  assert.throws(() => buildStore.beginMerge(dataDir, v.id, { baseBranch: 'dev' }), core.AtbError, '推送完成后不可再 begin');
+  m = buildStore.beginMerge(dataDir, v.id, { baseBranch: 'dev' });
+  assert.equal(m.status, 'merging', '已推送未确认仍可重开合并');
+  buildStore.finishMerge(dataDir, v.id, { results: [{ itemId: 'REQ-20260913-001', ok: true }] });
+  buildStore.recordReleaseConfirm(dataDir, v.id, { runId: 'BPUB-test' });
+  assert.throws(() => buildStore.beginMerge(dataDir, v.id, { baseBranch: 'dev' }), core.AtbError, '发布确认后不可再 begin');
   // failed → merging → failed
   const v2 = buildStore.createVersion(dataDir, { items: [itemOf('BUG-20260913-002', H2)] });
   buildStore.beginMerge(dataDir, v2.id, { baseBranch: 'dev' });

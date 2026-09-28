@@ -45,7 +45,7 @@ const H1 = 'a'.repeat(40);
 
 function ver(id, name, status = 'draft', extra = {}) {
   return {
-    id, name, description: `描述 ${name}`, status, targetBranch: 'main', pushed: false,
+    id, name, description: `描述 ${name}`, status, targetBranch: 'main', released: false,
     items: [{ itemId: 'REQ-20260913-001', commit: H1, title: '演示需求', mergedAt: status === 'merged' ? '2026-09-13T03:00:00.000Z' : null, mergeError: status === 'failed' ? 'conflict' : null }],
     createdAt: '2026-09-13T01:00:00.000Z', updatedAt: '2026-09-13T02:00:00.000Z', merge: { startedAt: null, finishedAt: null, error: null, baseBranch: 'dev' },
     ...extra,
@@ -133,7 +133,7 @@ const baseVersions = () => [
   ver('BLD-NOITEMS', '暂无关联条目'),
   ver('BLD-MAIN', '不在 dev'),
   ver('BLD-MERGING', '合并中', 'merging'),
-  ver('BLD-PUSHED', '已发布', 'merged', { pushed: true }),
+  ver('BLD-PUSHED', '已发布', 'merged', { released: true }),
 ];
 
 const basePlans = () => ({
