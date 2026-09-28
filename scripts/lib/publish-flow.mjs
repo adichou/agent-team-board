@@ -227,6 +227,19 @@ export function readmeDocLinks(file) {
   return [`CHANGELOG${suffix}.md`, `FEATURES${suffix}.md`];
 }
 
+// BUG-20260928-009 语言切换行（引入来源 REQ-20260921-012：两阶段流水线提示词无切换行要求，
+// REQ-20260918-001 手工切换行随 AI 总结整体重写丢失）：同一 KEY 的语言集全互链行——
+//   [中文](./README.md) | [English](./README_en.md)
+// 首语言（默认语言）不带后缀、其余 <KEY>_<lang>.md；语言显示名复用 langNameOf（LANG_NAMES，
+// 未命中回退缩写），语言集扩展时随语言集动态生成。关键性质：同一 KEY 的所有语言变体中该行
+// 完全一致（各链接分别指向对应语言文件）——翻译轮直接镜像基准行，无需任何改写。
+// 三处提示词（总结 / 翻译 / 校对）共用本生成器产出示例行。
+export function docLangSwitchLine(key, langs = DEFAULT_DOC_LANGS) {
+  const k = String(key || '').trim().toUpperCase();
+  const ls = docLangsOf({ langs });
+  return ls.map((lang, i) => `[${langNameOf(lang)}](./${k}${i === 0 ? '' : `_${lang}`}.md)`).join(' | ');
+}
+
 // 默认语言 / 剩余语言清单（REQ-20260921-012 阶段划分依据）：默认语言 = 语言集首语言
 //（文件不带后缀）；剩余语言 = 其余语言（<KEY>_<lang>.md，AI 翻译产出范围）。
 // REQ-20260922-002 口径 B：单文件类（LICENSE）不进 AI 总结 / 翻译范围，两清单均排除
@@ -293,6 +306,12 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
     ? `${PUBLISH_DOC_KEYS.length} 类 + ${customCount} 自定义 × 1`
     : `${PUBLISH_DOC_KEYS.length} 类 × 1`;
   const readmePair = 'README.md → CHANGELOG.md / FEATURES.md';
+  // BUG-20260928-009：语言切换行进总结约束——默认语言产物在首行一级标题下生成切换行（语言集内
+  // 全互链），重写既有文档时保留（跨轮稳定）；翻译 / 校对轮对应镜像 / 核查（见各自提示词）。
+  // 静态前缀口径（REQ-20260921-006）：约束行不含语言集相关内容（语言名 / 变体文件名），具体
+  // 切换行随语言集在尾部运行参数区给出；无自定义文档时不出现「自定义」字样（REQ-20260922-003
+  // 字节稳定口径），自定义文档同口径仅在清单含自定义时点明。
+  const switchCustomNote = customCount > 0 ? '（自定义文档同口径）' : '';
   const common = [
     `你是技术写作人员，以子代理身份完成当前版本发布文档的 AI 总结任务（阶段一：默认语言先行）；主会话只派发本提示词并接收短回执，不在此展开代码修改。`,
     `本阶段只总结默认语言（语言集首语言，见运行参数）的 ${docFiles.length} 个文档（${shapeText}）；语言集的其余语言文档待默认语言全部人工审核后由「AI 翻译」产出，不在本轮总结范围（文档清单见运行参数）。`,
@@ -308,6 +327,7 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
     '写作约束：',
     '- 文字简练、通俗易懂：说明用户能做什么、使用方式与本次变化；不得编造已实现能力。',
     `- README 按语言链接同语言 CHANGELOG 与 FEATURES（${readmePair}），链接必须真实可达。`,
+    `- 语言切换行：每个文档在首行一级标题下加一行语言切换行，语言集内全互链且同一文档的各语言变体中该行完全一致${switchCustomNote}，行内容按运行参数「语言切换行」以本 KEY 对应语言文件名生成，链接必须真实可达；重写 / 总结既有文档时保留该行。`,
     '- AGENTS 只描述适用协作规则，不把营销说明写成执行规则。',
     '- 文档与当前版本范围一致：未纳入本版发布的功能不得写成已发布。',
     '- 完成后以短回执汇报（哪些文件已总结 / 关键结论），不粘贴全文。',
@@ -322,6 +342,9 @@ export function buildDocSummaryPrompt({ projectRoot, planId, items = [], runId =
     ...docFiles.map((f) => (f.custom
       ? `- ${f.file}（${langNameOf(ls[0])} / 自定义）`
       : `- ${f.file}（${langNameOf(f.lang)} / ${f.key}）`)),
+    // BUG-20260928-009：具体切换行随语言集在此给出（以 README 为例，各文档按本 KEY 对应语言
+    // 文件名同构）——置于运行参数区，保持静态前缀跨语言集逐字一致（REQ-20260921-006）。
+    `语言切换行（以 README 为例，各文档按本 KEY 对应语言文件名同构）：${docLangSwitchLine('README', ls)}`,
     '关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：',
     ...docScopeLines(items),
   ];
@@ -375,6 +398,10 @@ export function buildDocTranslatePrompt({ projectRoot, planId, runId = null, lan
   lines.push('- 以基准文档为唯一翻译基准：与默认语言语义一致，不增删信息，不得编造能力或范围。');
   lines.push('- 各剩余语言行文地道（README / CHANGELOG 面向用户，AGENTS 为协作规则），结构与基准对应。');
   lines.push(`- README 按语言链接同语言 CHANGELOG 与 FEATURES（${ls.slice(1).map((l) => `README_${l}.md → CHANGELOG_${l}.md / FEATURES_${l}.md`).join('；')}），链接必须真实可达。`);
+  // BUG-20260928-009：语言切换行镜像规则——切换行是「不增删信息」约束的显式例外（固定结构）；
+  // 该行本身已按语言变体互链（各语言变体中完全一致），翻译轮直接镜像、无需改写，
+  // 与下方「文内链接只改目标不改文本」口径（BUG-20260923-004）合并表述。
+  lines.push(`- 语言切换行：基准首行一级标题下的语言切换行属固定结构，不视为基准外新增信息——目标文档在同样位置保留与基准完全一致的该行（如 ${docLangSwitchLine('README', ls)}）；该行链接已按各语言变体互链，直接镜像基准行、不改写链接文本。`);
   // BUG-20260923-004：文内链接重定向只改目标、不改文本——「链接必须真实可达」曾诱导 AI 把
   // 同语言变体目标文件名连文本一起改写（[AGENTS.md](./AGENTS.md) → [AGENTS_en.md](./AGENTS_en.md)）；
   // 补约束：可见链接文本保持基准原文，不把带语言后缀的文件名写进链接文本。
@@ -436,6 +463,9 @@ export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, lan
     //（文件名不带语种后缀），引用了其他语种图片的必须在校对结果中显式提示（行号 + 引用
     // 路径 + 期望），交由用户确认处理；只读不改口径不变，图片文件是否存在不在判定范围。
     `- 图片语种核查：逐一核查文档内本地图片引用的语种一致性——默认语言（${langNameOf(ls[0])}）文档应引用默认语言图片（文件名不带语种后缀，如 foo.png）；引用了其他语种图片（如 foo_en.png）的必须按上述回执格式以问题形式显式提示（行号 + 引用路径 + 期望的默认语言图片），交由用户确认处理；图片文件是否存在不在判定范围，不强求改写。`,
+    // BUG-20260928-009：语言切换行存在性与链接正确性进校对范围——切换行缺失 / 语言集不全 /
+    // 链接目标不指向本 KEY 各语言变体文件的必须显式报问题（只读不改口径不变）。
+    `- 语言切换行核查：默认语言文档首行一级标题下应有语言切换行（语言集内全互链、各语言变体中该行完全一致，如 ${docLangSwitchLine('README', ls)}；链接目标为本 KEY 的各语言变体文件，如 CHANGELOG 文档对应 CHANGELOG.md / ${ls.slice(1).map((l) => `CHANGELOG_${l}.md`).join(' / ')}）；该行缺失、语言集不全或链接目标不正确的必须按上述回执格式以问题形式显式提示，交由用户确认处理。`,
     '- 不编造问题：每条问题必须给出可定位的行号或原文片段与修改建议；拿不准的不报。',
     '- 不评价技术内容正确性（范围一致性由人工逐文件审查负责），只做语言文字层面核查。',
     '- 完成后以短回执汇报（哪些文件 pass / fail、共几处问题），不粘贴全文。',
