@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { AtbError, writeJsonAtomic } from './core.mjs';
 import * as flow from './publish-flow.mjs';
+import { assertUnpublished } from './build-publish-store.mjs';
 
 const pad = (n, len) => String(n).padStart(len, '0');
 const nowIso = () => new Date().toISOString();
@@ -270,12 +271,14 @@ function publishRunFailedLike(dataDir, runId) {
 // 条目增删锁：合并中禁用增删；发布确认（正式发布）才锁定——merged（含已推送未确认）
 // 允许补关联条目 / 换 commit（随后重开合并只补未合并条目）。
 function assertItemsEditable(dataDir, v) {
+  assertUnpublished(dataDir, v.id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，条目不可增删');
   if (isReleased(v, dataDir)) throw new BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
 }
 
 export function saveInfo(dataDir, id, { name, description, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
+  assertUnpublished(dataDir, v.id);
   assertEditableStatus(v);
   const info = validateInfo({ name: name ?? v.name, description: description ?? v.description });
   if (!info.name) throw new AtbError('版本名称不能为空');
@@ -455,6 +458,7 @@ export function recoverMerging(dataDir) {
 // main，代码与 git 历史不动）；merging 禁删（合并执行中删除会破坏状态机，等合并结束再删）。
 // 对齐批次删除（deleteBatch）的整目录 fs.rmSync 口径。
 export function deleteVersion(dataDir, id) {
+  assertUnpublished(dataDir, id);
   const v = readVersion(dataDir, id); // 不存在 → AtbError「找不到版本计划：<id>」
   if (v.status === 'merging') {
     throw new BuildConflictError('版本合并中，不可删除，请等合并结束后再删');

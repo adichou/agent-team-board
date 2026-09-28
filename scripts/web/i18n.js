@@ -9,6 +9,7 @@
 
 // ---------- 英文词典（静态精确：键 = 中文原文全文） ----------
 const EN = {
+  '已发布，版本计划仅可查看；如需调整请新建版本': 'Published. This version plan is read-only; create a new version to make changes.',
   '智能体团队看板': 'Agent Team Board',
   // REQ-20260913-001 构建模块（顶栏页签 + 模块副标题 + 搜索 + 高频标签）
   '构建': 'Build',

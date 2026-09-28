@@ -990,6 +990,7 @@ const ATBBuild = (() => {
   }
 
   async function saveInfo(id, patch) {
+    if (blockPublished(findVersion(id))) return;
     try {
       const r = await post('/version/save', { id, ...patch });
       if (!r.ok) throw new Error(await errOf(r, '保存失败'));
@@ -1026,6 +1027,7 @@ const ATBBuild = (() => {
   //（入口按钮已禁用，此处为防御路径并 toast 原因）。与遗留行内编辑（state.edit 单字段）
   // 互斥：打开表单即收起行内编辑。
   function openPlanEdit() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     if (!v) return;
     if (v.status === 'merging') { toast('版本合并中，暂不可修改', true); return; }
@@ -1061,6 +1063,7 @@ const ATBBuild = (() => {
   // 聚焦出错字段）；保存中按钮禁用防重复提交；失败（网络 / 服务端错误含 merging 409）就地
   // 显示原因 + toast，表单内容保留可重试或取消
   async function submitPlanEdit() {
+    if (blockPublished(selVersion())) return;
     const pe = state.planEdit;
     if (!pe || pe.busy) return;
     syncPlanEditDraft();
@@ -1089,6 +1092,7 @@ const ATBBuild = (() => {
   }
 
   async function itemAction(action, payload) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     if (!v) return;
     try {
@@ -1102,6 +1106,7 @@ const ATBBuild = (() => {
   }
 
   async function openAddPanel() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     if (!v) return;
     // REQ-20260927-002：与创建面板同口径——整组自动关联，无逐个提交默认选中逻辑。
@@ -1124,6 +1129,7 @@ const ATBBuild = (() => {
   }
 
   async function submitAdd() {
+    if (blockPublished(selVersion())) return;
     const p = state.addPanel;
     if (!p) return;
     // REQ-20260927-002：与创建面板一致——payload 条目 commits 为整组自动关联提交数组。
@@ -1160,6 +1166,7 @@ const ATBBuild = (() => {
   //（卡片按钮已禁用），此处对带参直调与无参回落两条路径兜底校验（merging 同步收口），锁定态
   // 一律不弹窗；merged（含已推送未确认）放开，可完整走通复制 → 解析 → 应用回填。
   function openAnswerModal(verId) {
+    if (blockPublished(verId ? findVersion(verId) : selVersion())) return;
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
     if (v.status === 'merging' || releasedOf(v)) return;
@@ -1346,6 +1353,7 @@ const ATBBuild = (() => {
   // REQ-20260913-006：「应用」保存编辑后的名称与描述（未修改时即解析原值）；名称空由前端
   // 即时校验拦截不发请求，数据层 saveInfo「版本名称不能为空」校验兜底双保险
   async function applyParsed() {
+    if (blockPublished(findVersion(state.answer?.verId))) return;
     const a = state.answer;
     if (!a?.parsed || a.busy) return;
     syncAnswerDraft(); // 以编辑框当前值为准（含测试直调等未触发 input 事件的路径）
@@ -1448,6 +1456,7 @@ const ATBBuild = (() => {
   // 触发；merging / 已正式发布点击 toast 真实原因不静默；重试幂等（已合入的文档提交不重复
   // 执行，alreadyIncluded 如实反馈）；失败 toast 原因可重试，已完成结果保留。
   async function doDocsMerge(verId) {
+    if (blockPublished(selVersion())) return;
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) {
       toast('未找到该版本（可能已被删除）：请刷新页面后重试', true);
@@ -1486,6 +1495,7 @@ const ATBBuild = (() => {
   // 打开删除确认弹窗：按所在卡片版本定位（无参回落当前选中，向后兼容）；
   // 已有删除弹窗 / 删除执行中 / 合并执行中不再开新弹窗（弹窗打开期间列表不可再触发其他删除）。
   function openDeleteConfirm(verId) {
+    if (blockPublished(verId ? findVersion(verId) : selVersion())) return;
     const v = verId ? findVersion(verId) : selVersion();
     if (!v || state.deleteConfirm || state.deleteBusy || state.mergeBusy) return;
     state.deleteConfirm = { verId: v.id };
@@ -1496,6 +1506,7 @@ const ATBBuild = (() => {
   // （选中失效回落既有规则：取列表最新，空则显示空态）；失败关闭弹窗、toast 错误、
   // 数据保持原状（版本仍留在列表，可重新打开弹窗重试）。
   async function doDelete() {
+    if (blockPublished(findVersion(state.deleteConfirm?.verId))) return;
     const v = findVersion(state.deleteConfirm?.verId);
     if (!v || state.deleteBusy) return;
     state.deleteBusy = true;
@@ -1523,6 +1534,7 @@ const ATBBuild = (() => {
   // 不新增「取消草稿」清理入口。守卫沿用：仅 merged、须配置官网仓库、发布中不重复触发。
   // 存量计划无 version 字段时先弹「发行版本号」补填（REQ-20260922-006 预填口径保留）。
   function openPublishConfirm(verId) {
+    if (blockPublished(verId ? findVersion(verId) : selVersion())) return;
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
     if (v.status !== 'merged') {
@@ -1646,6 +1658,7 @@ const ATBBuild = (() => {
   // 有不通过项 → 「检查未通过」弹窗明确提示，不进入二次确认、不发 start；全部通过 → 进入
   // 二次确认弹窗（token = 预检指纹，确认后才执行）。
   async function doPublishCheck() {
+    if (blockPublished(findVersion(state.releaseFlow?.verId))) return;
     const flow = state.releaseFlow;
     if (!flow || flow.busy) return;
     const view = $('#buildView');
@@ -1715,6 +1728,7 @@ const ATBBuild = (() => {
   // 守卫与 BUG-20260928-005 正式发布确认落账口径不变）。执行期间无中间进度界面，仅「发布」
   // 按钮禁用显示「发布中…」；执行结束由 releasePoll 直接出结果面板。
   async function doPublishConfirm() {
+    if (blockPublished(findVersion(state.releaseFlow?.verId))) return;
     const flow = state.releaseFlow;
     if (!flow || flow.phase !== 'confirm' || flow.busy) return;
     const v = findVersion(flow.verId);
@@ -1895,6 +1909,7 @@ const ATBBuild = (() => {
   // 不发请求、界面保持上次有效状态），合法则保存到版本记录并强制刷新五步装配——文件列表、
   // 门禁、审查对话框列、AI 总结提示词全部按新语言集联动。
   async function applyDocLangs(raw) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.langsBusy || !state.project || pf.phase !== 'ready') return;
@@ -1942,6 +1957,7 @@ const ATBBuild = (() => {
   // 002 口径 B 下 LICENSE 不进 AI 总结，按「AI 总结」按钮时点拦截引导人工选择）——
   // 选中写入标准文本或暂不选择后再继续原启动；关闭（✕ / Esc / 遮罩）不启动。
   function startSummary() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.busy || !state.project || pf.phase !== 'ready') return;
@@ -1993,6 +2009,7 @@ const ATBBuild = (() => {
   //（002 口径：状态转「待审核」，人工在「审查」中通过审核；本单不新增写入口径）→
   // 关框后继续原 AI 总结启动。
   async function confirmLicensePick() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     const lic = pf?.license;
@@ -2022,6 +2039,7 @@ const ATBBuild = (() => {
 
   // 暂不选择：不写盘，关框后照常启动 AI 总结（LICENSE 本不在总结范围，不冲突）。
   function skipLicensePick() {
+    if (blockPublished(selVersion())) return;
     const pf = state.pf;
     if (!pf?.license || pf.license.busy) return;
     pf.license = null;
@@ -2068,6 +2086,7 @@ const ATBBuild = (() => {
   // 剪贴板；默认语言 4/4 已审核前服务端 400 明确提示（提示词仍可从预览复制）；启动前服务端
   // 已做基准变更检测——响应带 baselineShift 时提示「基准已更新，按最新基准翻译」。
   async function startTranslation() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.busy || !state.project || pf.phase !== 'ready') return;
@@ -2122,6 +2141,7 @@ const ATBBuild = (() => {
   // 右侧建议栏）。REQ-20260924-006：③ 步入口直接可用；BUG-20260926-002：整体审查阶段与
   // 完结对核对话框去除后，本入口与右侧建议栏是校对结果的唯一呈现位。
   async function startProofread() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.phase !== 'ready' || pf.proofBusy || !state.project) return;
@@ -2172,6 +2192,7 @@ const ATBBuild = (() => {
   // 持久化；成功后强制刷新五步装配——文件列表（每个语言页签各一行）、表头与页签计数、
   // 门禁条、AI 总结 / AI 翻译提示词预览全部按新清单联动（其余语言文件由「AI 翻译」产出）。
   async function submitAddDoc() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.addDoc?.open || pf.addDoc.busy || !state.project || pf.phase !== 'ready') return;
@@ -2211,6 +2232,7 @@ const ATBBuild = (() => {
   // 「移除」都按整份 KEY 生效——服务端同步删除该 KEY 全部语言文件（removedFiles 回传提示）
   // 并清理审核留痕，成功后联动刷新（清单 / 计数 / 提示词 / 门禁）。
   async function removeCustomDocFile(file) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.phase !== 'ready' || !state.project || pf.docBusy) return;
@@ -2308,6 +2330,7 @@ const ATBBuild = (() => {
   // 改动保存后回退待审核再重新通过审核）；此后内容再变自动回退待审核（服务端每次求值读盘
   // 比对，口径不变）。
   async function approveReviewFile(file) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.review?.open || pf.review.busy || !state.project) return;
@@ -2365,6 +2388,7 @@ const ATBBuild = (() => {
   /* ---------- REQ-20260921-008 提交（八文件全已审核门禁 + dev 前置） ---------- */
 
   async function commitDocs() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.busy || !state.project || pf.phase !== 'ready') return;
@@ -2463,6 +2487,7 @@ const ATBBuild = (() => {
   }
 
   async function siteScan(force) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || !state.project || pf.siteBusy) return;
@@ -2488,6 +2513,7 @@ const ATBBuild = (() => {
 
   // 正式发布第一步：推送主分支（只推 main/master 解析结果；成功记录推送完成时间）
   async function pushMain() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.busy || !state.project) return;
@@ -2797,6 +2823,7 @@ const ATBBuild = (() => {
   const MERGE_PARTIAL_LABEL = '代码已并入 · 文档与翻译未合并';
   const docsMergedOf = (v) => !!(v && v.docsMerge && v.docsMerge.commitHash);
   function statusChipFor(v) {
+    if (v?.release?.published) return publishedChip(v);
     if (v && v.status === 'merged' && !docsMergedOf(v)) {
       return `<span class="st st-wait">${esc(MERGE_PARTIAL_LABEL)}</span>`;
     }
@@ -2817,18 +2844,18 @@ const ATBBuild = (() => {
   // AI 完善」三类操作的锁定以「发布」按钮二次确认后一键发布链路启动为准
   //（/api/build/state 随版本附带 released，version.json release.confirmedAt 落盘）；
   // 仅推送（pushedAt）不锁定，merged（含已推送未确认）三类操作全部可用。
-  const releasedOf = (v) => !!(v && v.released);
+  const releasedOf = (v) => !!(v && (v.released || v.release?.published));
 
   // BUG-20260917-001：左侧版本卡片状态标签——该版本存在发布成功（succeeded）的运行时
   //（/api/build/state 附带的 release.published，任一成功运行即成立），以绿色「已发布」
   // 替换原合并状态标签（口径与发布运行状态标签一致，title 提示成功运行）；
   // 未发布成功（无运行 / 草稿 / 预检 / 进行中 / 失败 / 已取消）保持原四态标签与按钮规则不变，
   // 中间态不上卡片（在「发布」页签查看）。
+  function publishedChip(v) {
+    const tip = `发布成功：${v.release.runId || ''}${v.release.version ? `（v${v.release.version}）` : ''}`;
+    return `<span class="st st-ok" title="${esc(tip)}">${esc(REL_STATUS_LABEL.succeeded)}</span>`;
+  }
   function versionChip(v) {
-    if (v.release?.published) {
-      const tip = `发布成功：${v.release.runId || ''}${v.release.version ? `（v${v.release.version}）` : ''}`;
-      return `<span class="st st-ok" title="${esc(tip)}">${esc(REL_STATUS_LABEL.succeeded)}</span>`;
-    }
     // BUG-20260928-001：回退标签走 statusChipFor——merged 且 docsMerge 无落账显示中间态，
     // 文档与翻译合入 main 后才显示绿色「已合并」。
     return statusChipFor(v);
@@ -2848,8 +2875,8 @@ const ATBBuild = (() => {
     return versions.map((v) => {
       // REQ-20260913-004 删除键（REQ-20260921-016 迁至标题行右端）：quiet 危险弱化样式
       // （不抢主操作）；merging 卡片禁用（title 单列口径）；mergeBusy 为全局口径（一并禁用）。
-      const delDisabled = v.status === 'merging' || state.mergeBusy;
-      const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
+      const delDisabled = publishedOf(v) || v.status === 'merging' || state.mergeBusy;
+      const delBtn = `<button type="button" class="btn small quiet bld-ver-del" data-ver-delete="${esc(v.id)}"${delDisabled ? ` disabled title="${publishedOf(v) ? PUBLISHED_READ_ONLY : v.status === 'merging' ? '合并中，不可删除' : '合并中，请勿重复触发'}"` : ''} aria-label="删除 ${esc(v.id)}"${delDisabled ? '' : ' title="删除该版本计划（需确认，删除后不可恢复）"'}>删除</button>`;
       // REQ-20260920-003：列表展示计划号 + 版本号 + 阶段；REQ-20260922-006：版本号优先取
       // 计划的 x.y.z 字段，存量计划（无 version）回退计划编号派生（YYYYMMDD-NNN）；
       // 已发布（releasedAt，推送远端 main 成功时间）追加「发布于」。
@@ -3715,6 +3742,7 @@ ${langsField}
   // 语言文件、编辑态）。只列默认语言文件（4 类 + LICENSE + 自定义 KEY.md）——移除其他语种
   // 对照列；读取 / 保存沿用既有 docs 白名单通道。
   function openSecondaryEdit(target) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf || pf.phase !== 'ready') {
@@ -3865,6 +3893,7 @@ ${langsField}
   // 保存弹窗当前文件（沿用 /api/build/docs/save 白名单 + ≤2MiB 口径）；成功回写 disk 与
   // 成功反馈（已保存 ≠ 已提交），失败保留输入不误标（savedNote 不设置）。
   async function saveEditFile() {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     if (!pf?.edit?.open || pf.edit.busy || !state.project || pf.edit.content == null) return false;
@@ -3912,6 +3941,7 @@ ${langsField}
   //「此前已应用」（after 已在磁盘——BUG-20260925-002：决断丢失后重复接受不误报过期，标
   // accepted 计已处理）与「原文被人工改过」（仍标过期不覆盖人工修改）；决断逐条落库持久化。
   async function acceptChkSuggestion(file, idx) {
+    if (blockPublished(selVersion())) return;
     const v = selVersion();
     const pf = v ? pfOf(v) : null;
     const run = pf?.plan?.docsCheck;
@@ -3963,6 +3993,7 @@ ${langsField}
   // ③ 建议拒绝：仅记「已拒绝」，原文不动（与接受结果可区分；已决断幂等）；决断落库持久化
   //（BUG-20260925-002），刷新 / 切版本重进后不再回到待处理。
   async function rejectChkSuggestion(file, idx) {
+    if (blockPublished(selVersion())) return;
     const pf = state.pf;
     const run = pf?.plan?.docsCheck;
     if (!run || pf.chkBusy) return;
@@ -4426,7 +4457,7 @@ ${langsField}
     const planBody = `
         ${planActs}
         ${descBlock}
-        ${mergeState}`;
+        ${publishedOf(v) ? `<p class="muted small" role="status">${esc(PUBLISHED_READ_ONLY)}</p>` : ''}${mergeState}`;
     const linkBody = `
         <div class="bld-items">
           <div class="bld-items-head"><strong>关联条目与 commit</strong>
@@ -4810,6 +4841,7 @@ ${langsField}
       ${renderReviewModal(selVersion())}
       ${renderLicenseModal(selVersion())}
       ${renderSecondaryEditModal(selVersion())}`;
+    lockPublishedControls(view);
     bindCommon(view);
     // BUG-20260925-001：校对建议列表滚动位置恢复 / 刚操作条目锚定（轮询等被动重渲染不打断）
     applyChkScrollAfterRender(view, chkScrollSaved);
@@ -4830,6 +4862,56 @@ ${langsField}
       if (v0 && state.step === 'docs' && !state.summaryTimer) startSummaryTimer();
     }
     state.rendered = true;
+  }
+
+  const PUBLISHED_READ_ONLY = '已发布，版本计划仅可查看；如需调整请新建版本';
+  const publishedOf = (v) => !!v?.release?.published;
+  function blockPublished(v) {
+    if (!publishedOf(v)) return false;
+    toast(PUBLISHED_READ_ONLY, true);
+    return true;
+  }
+  // 修改入口集中列举；导航、搜索、复制、关闭与新建其他版本保持可用。
+  const VERSION_WRITE_CONTROLS = [
+    '.bld-edit-editor', '.bld-name-edit', '.bld-desc-edit', '.bld-name', '.bld-desc', '.bld-name-input', '.bld-desc-input', '.bld-plan-name', '.bld-plan-desc',
+    '#bldEditInfo', '#bldPlanSave', '#bldSaveName', '#bldSaveDesc', '#bldApplyBtn', '#bldAddItem', '#bldAddSubmit',
+    '[data-ver-answer]', '[data-ver-merge]', '[data-ver-delete]', '[data-remove-item]', '[data-commit-item]',
+    '#bldMergeGo', '#bldDeleteGo', '[data-docs-merge]', '[data-pf-edit]', '[data-pf-langs]',
+    '[data-pf-summary]', '[data-pf-translate]', '[data-pf-proofstep]', '[data-pf-commit]', '[data-pf-push]', '[data-pf-scan]',
+    '[data-doc-add-open]', '[data-doc-add-confirm]', '[data-doc-rm]', '[data-review-approve]',
+    '[data-chk-edit]', '[data-chk-accept]', '[data-chk-reject]', '[data-chk-retry]', '[data-edit-save]', '[data-edit-keep]',
+    '[data-edit-mode="edit"]', '[data-license-confirm]', '[data-license-skip]',
+    '[data-rel-publish]', '[data-rel-retry-publish]', '#bldRelGo',
+  ].join(',');
+  function controlVersion(el) {
+    const card = el.closest?.('[data-ver-id]');
+    if (card) return findVersion(card.dataset.verId);
+    if (el.closest?.('#bldDeleteWrap')) return findVersion(state.deleteConfirm?.verId);
+    if (el.closest?.('#bldMergeWrap')) return findVersion(state.mergeConfirm?.verId);
+    if (el.closest?.('#bldAnswerWrap')) return findVersion(state.answer?.verId);
+    if (el.closest?.('#bldPublishWrap')) return findVersion(state.releaseFlow?.verId);
+    return selVersion();
+  }
+  function stopPublishedEvent(e) {
+    const el = e.target?.closest?.(VERSION_WRITE_CONTROLS);
+    if (!el || !publishedOf(controlVersion(el))) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  function lockPublishedControls(view) {
+    for (const el of view.querySelectorAll(VERSION_WRITE_CONTROLS)) {
+      if (!publishedOf(controlVersion(el))) continue;
+      el.disabled = true;
+      el.setAttribute('aria-disabled', 'true');
+      el.setAttribute('title', PUBLISHED_READ_ONLY);
+      el.removeAttribute?.('contenteditable');
+      if (el.matches?.('.bld-name, .bld-desc')) { el.style.cursor = 'default'; el.tabIndex = -1; }
+    }
+    // 捕获阶段再读实时状态，阻止键盘及手动派发事件穿透禁用控件。
+    for (const type of ['click', 'keydown', 'change', 'input']) {
+      view.removeEventListener?.(type, stopPublishedEvent, true);
+      view.addEventListener(type, stopPublishedEvent, true);
+    }
   }
 
   function bindCommon(view) {

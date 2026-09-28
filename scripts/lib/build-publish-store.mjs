@@ -46,7 +46,7 @@ export function runDir(dataDir,id){if(!/^BPUB-[a-f0-9-]{36}$/.test(id))throw new
 export function readRun(dataDir,id){try{return JSON.parse(fs.readFileSync(path.join(runDir(dataDir,id),'run.json'),'utf8'));}catch(e){throw new AtbError(`构建发布运行读取失败：${e.message}`);}}
 export function listRuns(dataDir,bldId){
  if(!fs.existsSync(runsRoot(dataDir)))return [];
- return fs.readdirSync(runsRoot(dataDir)).filter(id=>/^BPUB-/.test(id)).map(id=>readRun(dataDir,id)).filter(r=>!bldId||r.bldId===bldId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+ return fs.readdirSync(runsRoot(dataDir)).filter(id=>/^BPUB-[a-f0-9-]{36}$/.test(id)).map(id=>readRun(dataDir,id)).filter(r=>!bldId||r.bldId===bldId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
 // BUG-20260917-001：按版本计划（bldId）汇总「已发布」——任一运行 succeeded 即视为已发布（成功
 // 不可逆，之后再建新发行版本的草稿 / 失败不撤下标识）；取最新一条成功运行（listRuns 已按
@@ -59,6 +59,11 @@ export function publishedByBld(dataDir){
   out.set(r.bldId,{published:true,version:r.version,runId:r.id});
  }
  return out;
+}
+// 发布成功为不可逆事实；后续失败或草稿不得重新开放版本写入。
+export const PUBLISHED_READ_ONLY = '已发布，版本计划仅可查看；如需调整请新建版本';
+export function assertUnpublished(dataDir, bldId) {
+ if (bldId && publishedByBld(dataDir).has(bldId)) throw new AtbError(PUBLISHED_READ_ONLY);
 }
 export const steps=[['sync-source','源码 main/dev 原子推送'],['webapp-build','冻结源码构建'],['webapp-verify','Web App 本机回验'],['site-deploy','官网构建与部署'],['site-verify','官网本机回验']];
 export function createRun(dataDir,input){

@@ -23,6 +23,7 @@ export async function buildPublishApi({method,pathname,body={},root,dataDir}){
  if(method==='GET'&&pathname==='/api/build-publish/state'){
   publish.recover(dataDir);return {runs:store.listRuns(dataDir),config:store.readConfig()};
  }
+ if(method==='POST'&&body.bldId)store.assertUnpublished(dataDir,body.bldId);
  if(method==='POST'&&pathname==='/api/build-publish/from-build')return {run:await publish.create(dataDir,root,readVersion(dataDir,body.bldId),body.version)};
  const match=pathname.match(/^\/api\/build-publish\/run\/(BPUB-[a-f0-9-]{36})(?:\/([a-z]+))?$/);
  if(!match)throw new AtbError('未知构建发布接口');
@@ -35,6 +36,7 @@ export async function buildPublishApi({method,pathname,body={},root,dataDir}){
  }
  if(method==='GET'&&action==='plan')return {plan:await publish.plan(dataDir,root,id)};
  if(method==='POST'){
+  if(action!=='open')store.assertUnpublished(dataDir,store.readRun(dataDir,id).bldId);
   if(action==='precheck')return {run:await publish.precheck(dataDir,root,id)};
   if(action==='refreeze')return {run:await publish.refreeze(dataDir,root,id)};
   if(action==='start'||action==='retry'){const {run}=await publish.start(dataDir,root,id,body.token);return {run};}

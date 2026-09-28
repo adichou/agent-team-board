@@ -2305,6 +2305,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   const runPost = async (fn) => {
     const body = JSON.parse((await readBody(req)) || '{}');
     try {
+      // 所有版本写接口共用成功发布校验，陈旧页面与已打开表单也不能绕过。
+      if (dataDir && body.id) buildPublishStore.assertUnpublished(dataDir, body.id);
       return await fn(body);
     } catch (e) {
       if (e instanceof buildStore.BuildConflictError || e instanceof releaseStore.ReleaseConflictError) {
@@ -2871,6 +2873,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return runPost((body) => {
       const board = requireBoard();
       const runId = runningDocsRunId(docsSummary.unfinishedSummaryRuns(board), body.runId, '总结');
+      buildPublishStore.assertUnpublished(board, docsSummary.getSummaryRun(board, runId).verId);
       const r = docsSummary.finishSummaryRun(board, runId, { result: 'failed', reason: DOCS_ABORT_REASON });
       return sendJson(res, 200, {
         ok: true,
@@ -2884,6 +2887,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return runPost((body) => {
       const board = requireBoard();
       const runId = runningDocsRunId(docsTranslate.unfinishedTranslateRuns(board), body.runId, '翻译');
+      buildPublishStore.assertUnpublished(board, docsTranslate.getTranslateRun(board, runId).verId);
       const r = docsTranslate.finishTranslateRun(board, runId, { result: 'failed', reason: DOCS_ABORT_REASON });
       return sendJson(res, 200, {
         ok: true,
