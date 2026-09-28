@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BUG-20260928-004 界面演示 · 发布步「动作二 · 官网资料更新」折叠布局</title>
+<style>
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2d3748; --txt:#e6edf3;
+    --muted:#8b949e; --pri:#2f6feb; --pri-dim:#24437a; --ok:#2ea043; --warn:#d29922;
+    --fail:#c93c37; --flag:#f85149; --sel:#20304d; --chipbg:#21262d;
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f8fa; --panel:#ffffff; --panel2:#f0f3f7; --line:#d5dbe1; --txt:#1f2328;
+    --muted:#656d76; --pri:#0969da; --pri-dim:#9cb8e8; --ok:#1a7f37; --warn:#9a6700;
+    --fail:#cf222e; --flag:#cf222e; --sel:#dbeafe; --chipbg:#eaeef2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:56px}
+  button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--txt);padding:5px 12px}
+  button:focus-visible{outline:2px solid var(--pri);outline-offset:1px}
+  button.pri{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:600}
+  button.sm{font-size:12.5px;padding:3px 10px}
+  button[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+    padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{font-size:16px;margin:0}
+  .sub{margin:2px 0 0;color:var(--muted);font-size:12px}
+  .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:transparent;padding:5px 12px}
+  .seg button.on{background:var(--pri);color:#fff;font-weight:600}
+  select{font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+  label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--muted);font-size:13px;cursor:pointer}
+  main{display:grid;grid-template-columns:250px 1fr;gap:16px;max-width:1100px;margin:18px auto;padding:0 16px}
+  @media (max-width:820px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .vcard strong{display:block;font-size:14px}
+  .vcard .meta{color:var(--muted);font-size:12px;margin-top:4px}
+  .steps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .steps span{border:1px solid var(--line);border-radius:999px;padding:3px 12px;color:var(--muted);font-size:12px;background:var(--panel)}
+  .steps span.on{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:600}
+  /* 发布步两动作区（复刻 .bld-release-pane section 布局） */
+  .pane{display:flex;flex-direction:column;gap:10px;font-size:13.5px}
+  .pane section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .pane section>strong{font-size:14px;display:block;margin-bottom:4px}
+  .pane p{margin:6px 0}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .muted{color:var(--muted)}
+  .small{font-size:12px}
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:12px}
+  textarea.prompt{width:100%;min-height:150px;resize:vertical;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  /* 期望态折叠框：对齐 REQ-20260921-007 .bld-docs-prompt-box 口径 */
+  details.prompt-box{border:1px dashed var(--line);border-radius:10px;padding:8px 12px;margin:6px 0}
+  details.prompt-box summary{cursor:pointer;font-size:13px;color:var(--muted);user-select:none}
+  details.prompt-box summary:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+  details.prompt-box textarea{margin-top:8px}
+  .st{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;border:1px solid transparent}
+  .st-ok{background:rgba(46,160,67,.15);color:var(--ok);border-color:var(--ok)}
+  .st-fail{background:rgba(201,60,55,.15);color:var(--fail);border-color:var(--fail)}
+  .st-run{background:rgba(210,153,34,.15);color:var(--warn);border-color:var(--warn)}
+  .st-mute{background:var(--chipbg);color:var(--muted);border-color:var(--line)}
+  .st.solid-fail{background:rgba(201,60,55,.12);border-style:solid}
+  .flag{display:inline-block;border:1px dashed var(--flag);color:var(--flag);border-radius:999px;
+    font-size:11px;padding:0 8px;margin-left:6px;user-select:none}
+  .note{margin-top:10px;padding:8px 10px;border-radius:8px;font-size:12px;border:1px dashed var(--line)}
+  .note.bug{border-color:var(--flag);color:var(--flag)}
+  .note.fix{border-color:var(--ok);color:var(--ok)}
+  #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:13px;display:none;z-index:60;
+    max-width:min(640px,90vw);box-shadow:0 4px 16px rgba(0,0,0,.35)}
+  footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+    color:var(--muted);font-size:12px;padding:8px 16px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>BUG-20260928-004 演示 · 「动作二 · 官网资料更新」折叠布局</h1>
+    <p class="sub">对照演示缺陷现象与期望折叠后状态 · 全部为内存演示数据，不调用真实接口、不执行真实推送 / 检测 / 复制</p>
+  </div>
+  <div class="ctl">
+    <span class="seg" role="group" aria-label="对照切换">
+      <button type="button" id="mBug">缺陷态（现状）</button>
+      <button type="button" id="mFix">期望态（折叠后）</button>
+    </span>
+    <label class="chk" for="stSel">状态</label>
+    <select id="stSel" aria-label="状态切换">
+      <option value="waiting">等待官网同步（未推送）</option>
+      <option value="missed">已推送 · 未命中（可继续检测）</option>
+      <option value="hit">已推送 · 已检测到官网同步</option>
+      <option value="failed">已推送 · 读取失败</option>
+      <option value="unconfig">未配置官网仓库</option>
+      <option value="loading">发布状态加载中</option>
+      <option value="error">发布状态读取失败</option>
+    </select>
+    <button type="button" id="themeBtn">浅色</button>
+  </div>
+</header>
+
+<main>
+  <aside class="card vcard" aria-label="版本卡片（演示）">
+    <strong>看板 v1.2 发布演练</strong>
+    <div class="meta">BLD-20260928-010 · <span class="st st-ok">已合并</span></div>
+    <div class="meta small">演示用版本卡；仅示意发布步入口上下文。</div>
+    <div class="meta small">官网路径：/Users/demo/site-repo（演示值）</div>
+  </aside>
+
+  <section aria-label="版本详情（发布步，演示）">
+    <nav class="steps" aria-label="五步导航">
+      <span>选择条目与提交</span><span>挑选合并</span><span>文档与翻译</span><span>文档合并</span><span class="on">发布</span>
+    </nav>
+    <div class="pane" id="pane" aria-live="polite"></div>
+  </section>
+</main>
+
+<div id="toast" role="status"></div>
+<footer>仅演示：数据为内存虚构值；「推送 / 立即检测 / 复制」均为模拟反馈，不访问文件系统、不推送代码、不写剪贴板。期望态折叠口径对齐 REQ-20260921-007（AI 总结 / AI 翻译提示词默认折叠），摘要行文案为演示示意，最终以开发定稿为准。</footer>
+
+<script>
+'use strict';
+/* ---------- 演示状态 ---------- */
+const S = { mode:'bug', st:'waiting', dark:true, pushed:false, pushBusy:false, scanBusy:false };
+/* 状态与推送联动：missed / hit / failed 均以已推送为前提（检测起点 = 推送成功时间） */
+const NEED_PUSH = new Set(['missed','hit','failed']);
+const SITE_LBL = { waiting:'等待官网同步', scanning:'扫描中', missed:'未命中（可继续检测）', hit:'已检测到官网同步', failed:'读取失败' };
+const SITE_CLS = { hit:'st-ok', failed:'st-fail', scanning:'st-run' };
+const DEMO_T = '2026-09-28 09:41（演示）';
+
+/* 官网提示词演示全文：结构按 scripts/lib/publish-flow.mjs buildSiteWritingPrompt 整理（值为虚构） */
+const SITE_PROMPT = [
+  '你是技术写作人员，在官网仓库（/Users/demo/site-repo）内完成「BLD-20260928-010」（版本号 1.2.0）的官网同步。',
+  '',
+  '项目仓库（已发布基准 a1b2c3d）：/Users/demo/agent-team-board',
+  '发布计划号：BLD-20260928-010（版本号 1.2.0）',
+  '',
+  '要求：',
+  '- 只读取项目仓库已发布版本（上述基准）中的 CHANGELOG 与 FEATURES 中英文材料，不要读取 dev 分支尚未发布的内容。',
+  '- 按官网仓库自身架构与目录组织更新相应内容；本提示词不假定官网技术栈、目录或构建命令。',
+  '- 完成后请在官网仓库提交，提交消息必须包含完整计划号「BLD-20260928-010」。',
+  '- 以短回执汇报（改动位置与提交号），不粘贴全文。'
+].join('\n');
+
+let toastTimer=null;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block';
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.style.display='none';},2600); }
+
+const esc = (s) => String(s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const configured = () => S.st !== 'unconfig';
+const siteStatus = () => NEED_PUSH.has(S.st) && !S.pushed ? 'waiting' : S.st;
+const chip = (k) => `<span class="st ${SITE_CLS[k]||'st-mute'}">${SITE_LBL[k]||k}</span>`;
+
+/* ---------- 动作一 · 推送远端（两态共用；演示模拟推送流转） ---------- */
+function action1(){
+  if (S.st==='loading' || S.st==='error') return '';
+  const state = S.pushed
+    ? `<p class="small" role="status">已推送到远端 origin（完成时间 ${DEMO_T}，基准 <code>a1b2c3d</code>）；官网资料更新以该时间为检测起点。</p>`
+    : '<p class="small muted">尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。</p>';
+  const btn = `<button type="button" class="pri act-push"${S.pushBusy?' disabled':''}>${S.pushBusy?'推送中…':'推送主分支'}</button>`;
+  return `<section><strong>动作一 · 推送远端</strong>
+    ${state}
+    <p class="row"><label class="small">目标远端 <select class="demo-noop" aria-label="目标远端（演示）"><option>origin</option></select></label>
+      ${btn}
+      <span class="muted small">以明确操作推送本地主分支（main）到远端：不推 dev、不强推；失败展示原因，可重试。</span></p>
+  </section>`;
+}
+
+/* ---------- 提示词区：缺陷态常驻展开 vs 期望态默认折叠（本演示焦点） ---------- */
+function promptArea(){
+  const copyBtn = '<button type="button" class="sm pri act-copy">复制官网提示词</button>';
+  if (S.mode==='bug') {
+    return `<textarea class="prompt" rows="7" readonly aria-label="官网提示词（演示全文）">${esc(SITE_PROMPT)}</textarea>
+      <p>${copyBtn}</p>
+      <div class="note bug">缺陷标注：官网提示词以 7 行只读文本框常驻展开、不可折叠，占据发布步大块纵向空间，把同步状态与「立即检测」推到下方；同型提示词（AI 总结 / AI 翻译）在「文档与翻译」步已是默认折叠（REQ-20260921-007），两处口径不一致。</div>`;
+  }
+  /* 期望态：details 默认不带 open → 默认折叠；摘要行文案为演示示意 */
+  return `<details class="prompt-box">
+      <summary>官网提示词（默认折叠；点击展开查看全文与复制按钮，复制后切换到官网仓库会话执行）</summary>
+      <textarea class="prompt" rows="7" readonly aria-label="官网提示词（演示全文）">${esc(SITE_PROMPT)}</textarea>
+      <p>${copyBtn}</p>
+    </details>
+    <div class="note fix">折叠后（演示示意）：提示词默认收起为一行摘要，查看全文改为可选（按需展开）；复制链路与回执口径不变；同步状态标签与「立即检测」不再被长提示词推挤，同屏可达。刷新 / 重进仍默认折叠。</div>`;
+}
+
+/* ---------- 动作二 · 官网资料更新 ---------- */
+function action2(){
+  if (S.st==='loading') return '';
+  if (S.st==='error') return '';
+  const k = siteStatus();
+  const evidence = (k==='hit')
+    ? `<p class="small">官网已同步：匹配提交 <code>e4f5a6b</code>（分支 main，检测时间 ${DEMO_T}）<br>主题：doc: 官网同步 BLD-20260928-010（演示）</p>` : '';
+  const reason = (k==='failed')
+    ? '<p class="small">读取失败原因（演示）：官网仓库本地分支读取异常，可稍后重试。</p>' : '';
+  const times = `<p class="muted small">官网路径：${configured()?'/Users/demo/site-repo（演示）':'未配置（设置中配置官网仓库根目录）'} · 实际分支：${configured()?'main':'—'} · 上次检测 ${configured()?DEMO_T:'—'}${configured()&&S.pushed?` · 扫描起点 ${DEMO_T}`:''}</p>`;
+  const promptHtml = configured() ? promptArea() : '<p class="small muted">未配置官网仓库：先在设置中配置官网仓库根目录。</p>';
+  return `<section><strong>动作二 · 官网资料更新</strong>
+    <p class="muted small">依据本版本最终发布文档更新官网资料：提示词在官网仓库执行，读取本项目已发布版本 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新；完成提交消息须含完整计划号。结果单独展示，与推送结果互不等同。</p>
+    ${promptHtml}
+    <p class="row">${chip(k)}
+      <button type="button" class="sm act-scan"${S.scanBusy?' disabled':''}>${S.scanBusy?'检测中…':'立即检测'}</button></p>
+    ${evidence}${reason}${times}
+    <p class="muted small" role="note">每分钟检查官网本地主分支；匹配仅表示本地提交已同步，不代表已推送或网站已部署</p>
+  </section>`;
+}
+
+/* ---------- 整块发布步：加载 / 失败 / 正常 ---------- */
+function paneHtml(){
+  if (S.st==='loading') return '<section><p class="muted" role="status">正在加载发布状态…</p></section>';
+  if (S.st==='error') return `<section><p class="st st-fail solid-fail" role="alert">发布状态读取失败：演示网络错误</p>
+    <p><button type="button" class="sm act-retry">重试</button></p></section>`;
+  return action1() + action2();
+}
+
+/* ---------- 渲染：期望态重渲染后 details 仍默认折叠（不带 open） ---------- */
+function render(){
+  document.getElementById('pane').innerHTML = paneHtml();
+  document.getElementById('mBug').classList.toggle('on', S.mode==='bug');
+  document.getElementById('mFix').classList.toggle('on', S.mode==='fix');
+}
+
+/* ---------- 交互 ---------- */
+function bind(){
+  const pane = document.getElementById('pane');
+  pane.addEventListener('click', async (e) => {
+    const el = e.target?.closest?.('button');
+    if (!el) return;
+    if (el.classList.contains('demo-noop')) { toast('演示：该控件为示意，不执行真实操作'); return; }
+    if (el.classList.contains('act-push')) {
+      if (S.pushBusy || S.pushed) { toast(S.pushed ? '演示：已推送过（幂等提示），不重复执行' : '演示：推送进行中'); return; }
+      S.pushBusy = true; render();
+      setTimeout(() => { S.pushBusy = false; S.pushed = true; render(); toast('演示：已推送到远端 origin（不执行真实推送）'); }, 1200);
+      return;
+    }
+    if (el.classList.contains('act-scan')) {
+      if (S.scanBusy) return;
+      if (!configured()) { toast('演示：未配置官网仓库，无可检测目标'); return; }
+      S.scanBusy = true; render();
+      setTimeout(() => {
+        S.scanBusy = false;
+        /* 演示口径：已推送 → 命中；未推送 → 保持等待（检测起点缺失） */
+        if (S.pushed) { S.st = 'hit'; toast('演示：已检测到官网同步（不执行真实检测）'); }
+        else { toast('演示：尚未推送，无检测起点（推送成功时间将作为检测起点）'); }
+        syncSel(); render();
+      }, 1200);
+      return;
+    }
+    if (el.classList.contains('act-copy')) {
+      toast('✓ 官网提示词已复制：请切换到官网仓库会话粘贴执行（提交消息须含完整计划号）——演示不写剪贴板');
+      return;
+    }
+    if (el.classList.contains('act-retry')) {
+      S.st = 'loading'; render();
+      setTimeout(() => { S.st = 'waiting'; S.pushed = false; syncSel(); render(); toast('演示：重试完成，回到正常态'); }, 900);
+      return;
+    }
+  });
+  document.getElementById('mBug').addEventListener('click', () => { S.mode='bug'; render(); });
+  document.getElementById('mFix').addEventListener('click', () => { S.mode='fix'; render(); });
+  const sel = document.getElementById('stSel');
+  sel.addEventListener('change', () => {
+    S.st = sel.value;
+    /* 按状态语义联动推送态：missed / hit / failed 前提是已推送；waiting / unconfig 演示为未推送 */
+    S.pushed = NEED_PUSH.has(S.st);
+    render();
+  });
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    S.dark = !S.dark;
+    document.documentElement.dataset.theme = S.dark ? 'dark' : 'light';
+    document.getElementById('themeBtn').textContent = S.dark ? '浅色' : '深色';
+  });
+}
+function syncSel(){ document.getElementById('stSel').value = S.st; }
+
+bind();
+render();
+</script>
+</body>
+</html>
