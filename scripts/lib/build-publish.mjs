@@ -177,7 +177,8 @@ export async function refreeze(dataDir,root,id){
 export async function plan(dataDir,root,id){
  const run=store.readRun(dataDir,id),current=await inputs(root,run);
  if(!run.precheck?.ok||run.precheck.fingerprint!==store.fingerprint(current))throw new AtbError('预检未通过或已失效，请重新预检');
- return {token:run.precheck.fingerprint,frozen:run.frozen,steps:[`切换源码 main，并原子推送 main ${current.mainSha} / dev ${current.devSha} 至 ${current.remote}`,`从冻结 main 构建 Web App ${run.version} 并本机回验`,`官网仓库 ${current.homepage.repoRoot} 执行 npm install 与 npm run build（产物 dist）并本机回验`],warning:run.frozen.extraCommits?.length?`冻结范围含额外提交：${run.frozen.extraCommits.join('；')}`:null};
+ // BUG-20260928-014：计划文案与执行口径一致——不切换源码分支，按显式 SHA 原子推送两分支。
+ return {token:run.precheck.fingerprint,frozen:run.frozen,steps:[`不切换工作区分支，原子推送 main ${current.mainSha} / dev ${current.devSha} 至 ${current.remote}`,`从冻结 main 构建 Web App ${run.version} 并本机回验`,`官网仓库 ${current.homepage.repoRoot} 执行 npm install 与 npm run build（产物 dist）并本机回验`],warning:run.frozen.extraCommits?.length?`冻结范围含额外提交：${run.frozen.extraCommits.join('；')}`:null};
 }
 function serve(root,base='/'){
  return new Promise((resolve,reject)=>{
@@ -234,8 +235,11 @@ async function execute(dataDir,root,id){
    save(r=>{r.stages.find(s=>s.key===stageKey).status='running';});log(`开始 ${stageKey}`);
    try{
     if(stageKey==='sync-source'){
-     await clean(root);await git(root,'checkout','main');
-     if(await git(root,'rev-parse','HEAD')!==run.frozen.mainSha)throw Error('main 与冻结源码不一致');
+     // BUG-20260928-014：发布全程不切换用户工作区分支——删除 checkout main，本地一致性
+     // 校验改为只读 ref 比对（rev-parse refs/heads/main === 冻结 mainSha，与原 HEAD 比对同
+     // 语义且不依赖当前分支）；推送用显式 SHA refspec，本就不要求本地检出该分支。
+     await clean(root);
+     if(await git(root,'rev-parse','refs/heads/main')!==run.frozen.mainSha)throw Error('main 与冻结源码不一致');
      await git(root,'push','--atomic',run.frozen.remote,`${run.frozen.mainSha}:refs/heads/main`,`${run.frozen.devSha}:refs/heads/dev`);
      const refs=await git(root,'ls-remote',run.frozen.remote,'refs/heads/main','refs/heads/dev');
      for(const branch of ['main','dev'])if(!refs.includes(`${run.frozen[branch+'Sha']}\trefs/heads/${branch}`))throw Error(`远端 ${branch} SHA 回验不匹配`);
