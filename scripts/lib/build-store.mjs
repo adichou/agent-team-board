@@ -73,7 +73,7 @@ function defaultName() {
 
 // 归一化 + 校验条目（itemId 格式 / commit 形态 / 去重）。title 可选（看板带入展示用）。
 // BUG-20260921-015：一条目可关联多个提交——入参支持 commit（单提交，向后兼容）或
-// commits（数组，至少一个）；落盘形态 commits 数组 + commit 别名（= 首个提交，旧读取方
+// commits（数组，允许为空）；落盘形态 commits 数组 + commit 别名（= 首个提交，旧读取方
 // 向后兼容）。同一条目内提交按 hash 去重。
 export function commitsOf(it) {
   const arr = Array.isArray(it?.commits) && it.commits.length
@@ -91,7 +91,9 @@ function normalizeItems(items, existingIds = new Set()) {
     const itemId = String(raw?.itemId || '').trim();
     if (!ITEM_ID_RE.test(itemId)) throw new AtbError(`条目编号不合法：${itemId || '（空）'}`);
     const commits = commitsOf(raw);
-    if (!commits.length || commits.some((c) => !HASH_RE.test(c))) {
+    const invalidShape = raw?.commits !== undefined && !Array.isArray(raw.commits);
+    const supplied = Array.isArray(raw?.commits) ? raw.commits : (raw?.commit !== undefined ? [raw.commit] : []);
+    if (invalidShape || supplied.some((c) => typeof c !== 'string' || !HASH_RE.test(c.trim().toLowerCase())) || commits.some((c) => !HASH_RE.test(c))) {
       throw new AtbError(`${itemId} 缺少有效的关联 commit（40 位提交号）`);
     }
     if (existingIds.has(itemId)) throw new AtbError(`${itemId} 已在本版本中，不可重复添加`);
@@ -418,7 +420,8 @@ export function finishMerge(dataDir, id, { results = [], mainSha = null, by = 'b
     byItem.set(key, { ok: (prev ? prev.ok : true) && r.ok === true, error: (prev && prev.error) || (r.ok === true ? null : String(r.error || '合并失败')) });
   }
   for (const it of v.items) {
-    const r = byItem.get(it.itemId);
+    // 空提交条目无重放动作，合并步骤直接完成。
+    const r = byItem.get(it.itemId) || (!commitsOf(it).length ? { ok: true } : null);
     if (!r) continue; // 未覆盖到的条目（如重试新增）保持原状
     if (r.ok) {
       it.mergedAt = it.mergedAt || nowIso();

@@ -189,10 +189,9 @@ const ATBBuild = (() => {
     return set;
   }
 
-  // 全选口径：只纳入可自动关联提交的条目（自动集非空，含宽口径回退；两者皆空自动跳过并提示）。
-  // REQ-20260927-002：候选提交不再单选，条目可勾选 ⇔ 整组自动关联集非空。
+  // REQ-20260929-001：全部已完成候选均可纳入版本，空提交不影响条目选择。
   function selectableCandidates(items) {
-    return (items || []).filter((x) => autoAssociationOf(x).length > 0);
+    return doneCandidates(items);
   }
 
   // BUG-20260921-015：版本条目多提交口径（纯函数）——条目关联的全部提交 = commits 数组
@@ -321,7 +320,7 @@ const ATBBuild = (() => {
     lines.push(`看板版本：${v.id}`);
     lines.push(`当前信息：名称「${v.name || '（空）'}」；描述「${v.description || '（空）'}」。`);
     lines.push('关联条目：');
-    for (const it of v.items || []) lines.push(`- ${it.itemId} ${it.title || ''}（commit ${commitsOf(it).map((h) => short(h)).join(' ')}）`);
+    for (const it of v.items || []) lines.push(`- ${it.itemId} ${it.title || ''}（${commitsOf(it).length ? `commit ${commitsOf(it).map((h) => short(h)).join(' ')}` : '暂无关联提交'}）`);
     return lines.join('\n');
   }
 
@@ -928,9 +927,9 @@ const ATBBuild = (() => {
     render();
   }
 
-  // 全选 / 全不选：仅对「可整组自动关联提交」的条目生效；返回跳过的无关联提交条目数。
+  // 全选 / 全不选：对全部已完成候选生效。
   // BUG-20260914-002：与 pickItem 同口径在内部统一 render——点击后复选框 / 「已选 N 项」计数 /
-  // 关联提交展开区立即同步，避免内部 picked 集合与界面显示错位（跳过提示由调用方补充 toast）。
+  // 关联提交展开区立即同步，避免内部 picked 集合与界面显示错位。
   function pickAll(panelKey, on) {
     const p = state[panelKey];
     if (!p || !p.candidates) return 0;
@@ -960,7 +959,7 @@ const ATBBuild = (() => {
       commits: autoAssociationOf((p.candidates || []).find((x) => x.itemId === itemId)).map((m) => m.hash),
     }));
     if (!items.length) {
-      p.error = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）';
+      p.error = '请至少勾选一个条目';
       render();
       return;
     }
@@ -1138,7 +1137,7 @@ const ATBBuild = (() => {
       commits: autoAssociationOf((p.candidates || []).find((x) => x.itemId === itemId)).map((m) => m.hash),
     }));
     if (!items.length) {
-      p.error = '请至少勾选一个条目（无关联 commit 的条目不可纳入版本）';
+      p.error = '请至少勾选一个条目';
       render();
       return;
     }
@@ -2908,13 +2907,13 @@ const ATBBuild = (() => {
     return (p.candidates || []).map((it) => {
       const assoc = autoAssociationOf(it);
       const broad = broadHitsOf(it);
-      const selectable = assoc.length > 0;
+      const selectable = it.status === 'done';
       const checked = p.picked.has(it.itemId) ? ' checked' : '';
       const dis = selectable ? '' : ' disabled';
       // REQ-20260927-002：勾选行内展开「关联提交（自动关联 N 个 · 旧→新 · 只读）」只读
       // 区块——逐项短 hash + 提交主题（含类型前缀）+ 来源徽标；无逐个提交的增删控件
       // （无下拉、无删除按钮；提交调整仍走版本详情条目行换选，REQ-20260915-003 口径）。
-      const assocBlock = !checked || !selectable ? '' : `
+      const assocBlock = !checked || !assoc.length ? '' : `
         <div class="bld-assoc">
           <div class="bld-assoc-head">${esc(`关联提交（自动关联 ${assoc.length} 个 · 旧→新 · 只读）`)}</div>
           ${assoc.map((m) => `
@@ -2931,7 +2930,7 @@ const ATBBuild = (() => {
         <label class="check">
           <input type="checkbox" data-pick="${panelKey}" data-item="${esc(it.itemId)}"${checked}${dis}>
           <span class="bld-cand-title" title="${esc(it.title || '')}">${esc(it.itemId)} ${esc(it.title || '')}</span>
-          ${selectable ? '' : '<span class="muted small">暂无关联提交（先完成开发提交）</span>'}
+          ${assoc.length ? '' : '<span class="muted small">暂无关联提交（仍可纳入版本）</span>'}
         </label>${assocBlock}${broadBlock}
       </div>`;
     }).join('');
@@ -2939,7 +2938,6 @@ const ATBBuild = (() => {
 
   function renderPanel(p, title, scope, footId, footLabel) {
     if (!p) return '';
-    const skipped = p.candidates ? p.candidates.length - selectableCandidates(p.candidates).length : 0;
     return `
       <div class="rel-panel-mask" id="bldPanelMask"></div>
       <aside class="rel-panel" role="dialog" aria-label="${esc(title)}">
@@ -2965,9 +2963,8 @@ const ATBBuild = (() => {
             <button type="button" class="btn small" id="bldPickAll">全选</button>
             <button type="button" class="btn small" id="bldPickNone">全不选</button>
             <!-- REQ-20260927-002：计数带整组自动关联提交数（M 为已选条目自动关联提交数之和，
-              回退提交计入）；跳过提示独立成句（便于动态词条插值） -->
+              回退提交计入），空提交条目只计入项数 -->
             <span class="muted small">${esc(`已选 ${p.picked.size} 项 · ${pickedCommitCount(p)} 个提交`)}</span>
-            ${skipped ? `<span class="muted small">${esc(`${skipped} 个条目暂无关联提交将被跳过`)}</span>` : ''}
           </div>
           ${renderCandidateRows(p, p === state.createPanel ? 'createPanel' : 'addPanel')}
           ${p.error ? `<p class="rel-form-err" role="alert">${esc(p.error)}</p>` : ''}`}
@@ -4402,7 +4399,7 @@ ${langsField}
       <div class="bld-item-row" data-row-item="${esc(it.itemId)}">
         <span class="bld-item-id">${esc(it.itemId)}</span>
         <span class="bld-item-title" title="${esc(it.title || '')}">${esc(it.title || '')}</span>
-        <span class="bld-item-commits" title="该条目关联的全部提交${lockItems ? `（${itemsLockTitle}）` : ''}">${commitsOf(it).map((h) => `<code class="bld-item-commit" data-i18n-skip>${esc(short(h))}</code>`).join('')}</span>
+        <span class="bld-item-commits" title="该条目关联的全部提交${lockItems ? `（${itemsLockTitle}）` : ''}">${commitsOf(it).map((h) => `<code class="bld-item-commit" data-i18n-skip>${esc(short(h))}</code>`).join('') || '暂无关联提交'}</span>
         ${it.mergedAt ? `<span class="st st-ok" title="已合并入 main">✓</span>` : it.mergeError ? `<span class="st st-fail" title="${esc(it.mergeError)}">✕</span>` : ''}
         <button type="button" class="btn small quiet bld-item-remove" data-remove-item="${esc(it.itemId)}" ${lockItems ? `disabled title="${itemsLockTitle}"` : 'title="移出该条目（连同全部 commit 关联）"'}>移出</button>
       </div>`).join('');
@@ -5067,12 +5064,10 @@ ${langsField}
     q('#bldPanelRetry')?.addEventListener('click', () => { if (state.createPanel) openCreatePanel(); else openAddPanel(); });
     q('#bldCreateBtn')?.addEventListener('click', submitCreate);
     q('#bldAddSubmit')?.addEventListener('click', submitAdd);
-    // BUG-20260914-002：pickAll 内部统一 render——「全选」的跳过提示与界面更新同时生效
-    //（提示不替代渲染）；「全不选」同样即时清空界面，两个面板共用该路径。
+    // BUG-20260914-002：pickAll 内部统一渲染，全选与全不选即时同步，两个面板共用。
     q('#bldPickAll')?.addEventListener('click', () => {
       const key = state.createPanel ? 'createPanel' : 'addPanel';
-      const skipped = pickAll(key, true);
-      if (skipped) toast(`已全选有 commit 候选的条目；${skipped} 个条目暂无关联提交已跳过`);
+      pickAll(key, true);
     });
     q('#bldPickNone')?.addEventListener('click', () => {
       const key = state.createPanel ? 'createPanel' : 'addPanel';
