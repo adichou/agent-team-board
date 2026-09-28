@@ -1139,13 +1139,13 @@ const ATBBuild = (() => {
 
   // REQ-20260921-013：入口位于详情概况页签操作行，按 verId 打开（对当前选中版本生效）；
   // 不带参时回落当前选中版本（向后兼容），带参但版本已不存在时不弹窗。
-  // BUG-20260920-005：锁定基准后移——推送完成（正式发布）后不允许再 AI 完善（卡片按钮已
-  // 禁用），此处对带参直调与无参回落两条路径兜底校验（merging 同步收口），锁定态一律不弹窗；
-  // merged（已合并未推送）放开，可完整走通复制 → 解析 → 应用回填。
+  // BUG-20260928-005：锁定基准 = 发布确认（正式发布）——发布按钮二次确认后不允许再 AI 完善
+  //（卡片按钮已禁用），此处对带参直调与无参回落两条路径兜底校验（merging 同步收口），锁定态
+  // 一律不弹窗；merged（含已推送未确认）放开，可完整走通复制 → 解析 → 应用回填。
   function openAnswerModal(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
-    if (v.status === 'merging' || pushedOf(v)) return;
+    if (v.status === 'merging' || releasedOf(v)) return;
     state.answer = { verId: v.id, text: '', parsed: null, draft: null, error: null, busy: false, copied: false };
     render();
     refreshWorkspaceApps(); // BUG-20260913-005：入口探测（fire-and-forget；loaded / 进行中 / 已失败不重探）
@@ -1352,8 +1352,8 @@ const ATBBuild = (() => {
   /* ---------- 合并入 main ---------- */
 
   // BUG-20260920-006：「合并入 main」不可合并真实原因（详情页主按钮与卡片行内按钮共用，
-  // 返回 '' 表示可合并）。优先级：全局合并执行中 > 版本 merging > 已正式发布（BUG-20260920-005
-  // 基准，merged 未推送可增量重开）> 五步门禁（暂无关联条目 / 文档未编写 / 未提交 / 范围过期，
+  // 返回 '' 表示可合并）。优先级：全局合并执行中 > 版本 merging > 已正式发布（BUG-20260928-005
+  // 基准，发布确认后锁定，merged 含已推送未确认可增量重开）> 五步门禁（暂无关联条目 / 文档未编写 / 未提交 / 范围过期，
   // 口径同 publishStepsState 与服务端守卫）> 不在 dev（含 detached HEAD）。
   // 门禁与分支仅当前选中版本已加载五步装配（pfOf(v).plan）时可知；未加载时不猜测，
   // 放行至确认后由后端守卫 409 + toast 给出真实原因（反馈链路完整，不误报）。
@@ -1362,7 +1362,7 @@ const ATBBuild = (() => {
   function mergeBlockReason(v) {
     if (!v) return '';
     if (state.mergeBusy || v.status === 'merging') return '合并中，请勿重复触发';
-    if (pushedOf(v)) return '已正式发布，不可再合并（如需调整请新建版本）';
+    if (releasedOf(v)) return '已正式发布，不可再合并（如需调整请新建版本）';
     const p = pfOf(v)?.plan || null;
     const gate = p ? (p.steps || []).find((s) => s.key === 'merge') : null;
     if (gate?.locked) return gate.reason || '前置条件未满足';
@@ -1442,7 +1442,7 @@ const ATBBuild = (() => {
       toast('合并中，请勿重复触发', true);
       return;
     }
-    if (pushedOf(v)) {
+    if (releasedOf(v)) {
       toast('已正式发布，范围锁定（如需调整请新建版本）', true);
       return;
     }
@@ -2896,11 +2896,11 @@ const ATBBuild = (() => {
     return '计划中';
   }
 
-  // BUG-20260920-005：锁定基准后移——「关联条目与提交 / 合并入 main / AI 完善」三类操作的
-  // 锁定从 merged 后移到推送完成（正式发布）。/api/build/state 随版本附带 pushed
-  //（五步流程「正式发布 → 推送主分支」成功，release.pushedAt 落盘）；merged（已合并
-  // 未推送）三类操作全部可用。
-  const pushedOf = (v) => !!(v && v.pushed);
+  // BUG-20260928-005：锁定基准 = 发布确认（正式发布）——「关联条目与提交 / 合并入 main /
+  // AI 完善」三类操作的锁定以「发布」按钮二次确认后一键发布链路启动为准
+  //（/api/build/state 随版本附带 released，version.json release.confirmedAt 落盘）；
+  // 仅推送（pushedAt）不锁定，merged（含已推送未确认）三类操作全部可用。
+  const releasedOf = (v) => !!(v && v.released);
 
   // BUG-20260917-001：左侧版本卡片状态标签——该版本存在发布成功（succeeded）的运行时
   //（/api/build/state 附带的 release.published，任一成功运行即成立），以绿色「已发布」
@@ -4375,6 +4375,11 @@ ${langsField}
     const pushState = rel.pushedAt
       ? `<p class="small" role="status">已推送到远端 ${esc(rel.pushRemote || '')}（完成时间 ${esc(fmtTime(rel.pushedAt))}，基准 <code data-i18n-skip>${esc(short(rel.pushedSha))}</code>）；官网资料更新以该时间为检测起点。</p>`
       : '<p class="small muted">尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。</p>';
+    // BUG-20260928-005：已推送但未经「发布」按钮二次确认——明确推送不等于正式发布，
+    // 范围操作未被锁定，补确认路径即「发布」按钮（一键发布链路）。
+    const pushNotReleaseNote = rel.pushedAt && !releasedOf(v)
+      ? '<p class="muted small" role="note">推送完成不等于正式发布：正式发布以「发布」按钮二次确认为准，确认后版本范围锁定。</p>'
+      : '';
     const site = rel.site || { status: 'waiting' };
     const siteCls = site.status === 'hit' ? 'st-ok' : site.status === 'failed' ? 'st-fail' : site.status === 'scanning' ? 'st-run' : 'st-mute';
     const evidence = site.status === 'hit' && site.evidence
@@ -4386,6 +4391,7 @@ ${langsField}
       <div class="bld-release-pane">
         <section><strong>动作一 · 推送远端</strong>
           ${pushState}
+          ${pushNotReleaseNote}
           <p><label class="small">目标远端 <select class="bld-push-main-remote">${remotes.map((r) => `<option>${esc(r)}</option>`).join('')}</select></label>
             <button type="button" class="btn primary" data-pf-push${pushLock ? ` aria-disabled="true" title="${esc(pushLock)}"` : (pf.busy ? ' disabled' : '')}>${pf.busy ? '推送中…' : '推送主分支'}</button>
             <span class="muted small">以明确操作推送本地主分支（${esc(p.mainBranch || 'main')}）到远端：不推 dev、不强推；失败展示原因，可重试。</span></p>
@@ -4429,9 +4435,9 @@ ${langsField}
 
   function renderDetail(v) {
     if (!v) return '<div class="rel-detail muted">点击左侧版本查看详情</div>';
-    // BUG-20260920-005：条目锁基准后移——merging 与推送完成（正式发布）锁定增删 / 换 commit，
-    // merged（已合并未推送）放开（补关联后重开合并只补未合并条目）。
-    const lockItems = v.status === 'merging' || pushedOf(v);
+    // BUG-20260928-005：条目锁基准——merging 与发布确认（正式发布）锁定增删 / 换 commit，
+    // merged（含已推送未确认）放开（补关联后重开合并只补未合并条目）。
+    const lockItems = v.status === 'merging' || releasedOf(v);
     const itemsLockTitle = v.status === 'merging' ? '合并中，条目不可增删' : '已正式发布，条目已锁定';
     const editing = state.edit && state.edit.id === v.id ? state.edit : null;
     const nameCell = editing?.field === 'name'
@@ -4491,8 +4497,8 @@ ${langsField}
     // REQ-20260921-014 编辑键 merging 禁用。data-ver-answer 行为标记与绑定循环保留，
     // openAnswerModal(verId) 仍按当前版本打开。
     const planEdit = planEditOf(v);
-    const answerLocked = v.status === 'merging' || pushedOf(v);
-    const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${pushedOf(v) ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
+    const answerLocked = v.status === 'merging' || releasedOf(v);
+    const answerBtn = `<button type="button" class="btn small bld-ver-answer" data-ver-answer="${esc(v.id)}"${answerLocked ? ` disabled title="${releasedOf(v) ? '已正式发布，不允许再 AI 完善' : '合并中，请稍候……'}"` : ''} aria-label="AI 完善 ${esc(v.id)}"${answerLocked ? '' : ` title="复制提示词给 Agent，回答直接粘贴回本弹窗自动解析"`}>AI 完善</button>`;
     const editBtn = v.status === 'merging'
       ? '<button type="button" class="btn small quiet" id="bldEditInfo" disabled title="版本合并中，暂不可修改">编辑</button>'
       : '<button type="button" class="btn small quiet" id="bldEditInfo" title="编辑版本名称与描述">编辑</button>';

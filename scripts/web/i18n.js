@@ -51,6 +51,9 @@ const EN = {
   '已合并入 main：重放提交 ': 'Merged into main: replayed commit ',
   ' · main 头 ': ' · main head ',
   '尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。': 'Not pushed to the remote yet (the push completion time will start the website-update detection window).',
+  // BUG-20260928-005：推送不等于正式发布——已推送未经「发布」按钮二次确认时的就近说明
+  //（补确认路径即「发布」按钮，确认后范围锁定）。
+  '推送完成不等于正式发布：正式发布以「发布」按钮二次确认为准，确认后版本范围锁定。': 'Pushing is not an official release: it takes the "Release" button plus a second confirmation, after which the version scope is locked.',
   // BUG-20260921-015 条目多提交：关联列表展示全部提交（chips）与移出提示
   '该条目关联的全部提交': 'All commits linked to this item',
   '移出该条目（连同全部 commit 关联）': 'Remove this item (with all its commit associations)',

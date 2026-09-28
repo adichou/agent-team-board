@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { AtbError } from './core.mjs';
 import * as store from './build-publish-store.mjs';
+import * as buildStore from './build-store.mjs';
 const exec=promisify(execFile);
 const active=new Map(), servers=new Map();
 const command=async(cwd,bin,args)=>{try{return (await exec(bin,args,{cwd,timeout:180000,maxBuffer:8*1024*1024})).stdout.trim();}catch(e){throw new AtbError(`${bin} ${args[0]} 失败：${String(e.stderr||e.message).slice(0,1000)}`);}};
@@ -251,6 +252,10 @@ export async function start(dataDir,root,id,token){
  // await 后重新抢占，防两个同时通过新鲜度检查的启动重复执行。
  assertIdle(dataDir,id);active.set(`${dataDir}:${id}`,true);
  store.updateRun(dataDir,id,r=>{r.status='running';r.cancelRequested=false;r.error=null;});
+ // BUG-20260928-005 正式发布确认落账：start 仅经「发布」按钮二次确认后的一键发布链路
+ //（或既有运行的重试）触发——此刻即正式发布时点（version.json release.confirmedAt，
+ // 幂等首认固化）；推送动作本身不落此账。版本记录缺失 / 写入失败不阻断发布执行。
+ if(run.bldId){try{buildStore.recordReleaseConfirm(dataDir,run.bldId,{runId:run.id});}catch{/* 确认落账失败不阻断发布 */}}
  const completion=execute(dataDir,root,id);completion.catch(e=>{store.updateRun(dataDir,id,r=>{r.status='failed';r.error={message:e.message};});});
  return {run:store.readRun(dataDir,id),completion};
 }
