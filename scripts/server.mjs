@@ -2333,15 +2333,17 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       initialized: true,
       isRepo: branches.isRepo,
       currentBranch: branches.current,
-      // BUG-20260920-005：随列表附带 pushed（五步流程「正式发布 → 推送主分支」成功，
-      // version.json release.pushedAt）——卡片行内键（AI 完善 / 合并入 main）与详情条目锁
-      // 的锁定基准从 merged 后移到该时点；release 字段仍为产品发布汇总（不改既有语义）。
+      // BUG-20260928-005：随列表附带 released（正式发布 = 发布按钮二次确认后一键发布链路
+      // start 落账 version.json release.confirmedAt）——卡片行内键（AI 完善 / 合并入 main）与
+      // 详情条目锁的锁定基准以该时点为准；仅推送（pushedAt）不锁定；release 字段仍为产品
+      // 发布汇总（不改既有语义）。
       versions: buildStore.listVersions(dataDir).map((v) => ({
         ...v,
-        pushed: buildStore.isPushed(v),
+        released: buildStore.isReleased(v),
         // REQ-20260922-006 发布时间：顶层 releasedAt（推送成功时写入）；存量已推送计划
         // 无该字段时按 release.pushedAt 回退（列表装配处统一计算，前端不再兜底）。注意
-        // release 键随后被产品发布汇总覆盖，推送事实只经 releasedAt / pushed 透出。
+        // release 键随后被产品发布汇总覆盖，推送事实只经 releasedAt 透出（pushed 键随
+        // BUG-20260928-005 改为 released——正式发布确认口径）。
         releasedAt: v.releasedAt || (v.release && v.release.pushedAt) || null,
         release: releaseMap.get(v.id) || null,
       })),
@@ -2481,9 +2483,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       if (v.status === 'merging') {
         throw new buildStore.BuildConflictError('版本正在合并中，请勿重复触发');
       }
-      // BUG-20260920-005：锁定基准后移——merged（已合并未推送）允许为补入条目重开合并
-      //（增量：只补未合并条目，已并入提交幂等记成功）；推送完成（正式发布）后拒绝。
-      if (buildStore.isPushed(v)) {
+      // BUG-20260928-005：锁定基准 = 发布确认（正式发布）——merged（含已推送未确认）允许
+      // 为补入条目重开合并（增量：只补未合并条目，已并入提交幂等记成功）；发布确认后拒绝。
+      if (buildStore.isReleased(v)) {
         throw new buildStore.BuildConflictError('版本已正式发布，不可再合并（如需调整请新建版本）');
       }
       // REQ-20260920-003 发布前置：工作目录必须在 dev（main / 其他分支 / detached 一律阻止，
@@ -2998,7 +3000,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可合并文档');
-      if (buildStore.isPushed(v)) throw new buildStore.BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+      if (buildStore.isReleased(v)) throw new buildStore.BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
       if (!v.docs || !v.docs.commitHash) throw new core.AtbError('发布文档尚未提交：请先完成「文档与翻译」并提交文档，再执行文档合并');
       const docsEval = flow.evaluateDocsState(v, docReadFile);
       if (docsEval.overall !== 'committed') {
@@ -3126,6 +3128,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
   // main/master 解析结果，不推 dev、不强推）；成功持久保存推送完成时间（官网检测时间窗口起点）。
   // REQ-20260926-002 发布门禁：文档未合并入 main（v.docsMerge 无落账）前推送被拦——
   // 区分本地 main 已合入 / 远端已推送 / 官网资料已更新，不把本地合入等同于远端发布。
+  // BUG-20260928-005：推送只是事实落账（pushedAt），不构成正式发布、不锁定版本范围——正式
+  // 发布以「发布」按钮二次确认（release.confirmedAt）为准。
   if (req.method === 'POST' && pathname === '/api/build/release/push') {
     return runPost((body) => {
       const board = requireBoard();

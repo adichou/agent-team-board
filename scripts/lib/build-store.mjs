@@ -239,18 +239,18 @@ function assertEditableStatus(v, { allowMergingInfo = false } = {}) {
   }
 }
 
-// BUG-20260920-005 正式发布判定（锁定基准后移）：以五步流程「正式发布 → 推送主分支」成功
-//（release.pushedAt 落盘）为锁定时点；产品发布（release.published）与官网命中不计入
-//（登记待确认第 1 条默认口径）。
-export function isPushed(v) {
-  return !!(v && v.release && v.release.pushedAt);
+// BUG-20260928-005 正式发布判定换基准：以「发布按钮 + 二次确认」发起的一键发布链路
+//（build-publish.start，release.confirmedAt 落盘）为锁定时点；推送（release.pushedAt，
+// 含动作一 push / 发布管线 sync-source 原子推送）只是推送事实，不构成正式发布、不锁定范围。
+export function isReleased(v) {
+  return !!(v && v.release && v.release.confirmedAt);
 }
 
-// 条目增删锁（BUG-20260920-005 口径后移）：合并中禁用增删；完成推送（正式发布）才锁定——
-// merged（已合并未推送）允许补关联条目 / 换 commit（随后重开合并只补未合并条目）。
+// 条目增删锁：合并中禁用增删；发布确认（正式发布）才锁定——merged（含已推送未确认）
+// 允许补关联条目 / 换 commit（随后重开合并只补未合并条目）。
 function assertItemsEditable(v) {
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，条目不可增删');
-  if (isPushed(v)) throw new BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
+  if (isReleased(v)) throw new BuildConflictError('版本已正式发布，条目已锁定（如需调整请新建版本）');
 }
 
 export function saveInfo(dataDir, id, { name, description, by = 'board' } = {}) {
@@ -359,12 +359,12 @@ export function appendItemCommits(dataDir, id, additions, { by = 'board' } = {})
 
 export function beginMerge(dataDir, id, { baseBranch = null, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
-  // BUG-20260920-005 口径后移：merged（已合并未推送）允许为补入条目重开合并（增量：只补
-  // 未合并条目，已并入提交幂等记成功）；merging 维持锁定；推送完成（正式发布）后锁定。
+  // merged（含已推送未确认）允许为补入条目重开合并（增量：只补未合并条目，已并入提交
+  // 幂等记成功）；merging 维持锁定；发布确认（正式发布）后锁定。
   if (v.status === 'merging') {
     throw new BuildConflictError(`当前状态（${VERSION_STATUS_LABEL[v.status] || v.status}）不可合并（合并进行中）`);
   }
-  if (isPushed(v)) {
+  if (isReleased(v)) {
     throw new BuildConflictError('版本已正式发布，不可再合并（如需调整请新建版本）');
   }
   if (!['draft', 'failed', 'merged'].includes(v.status)) {
@@ -517,9 +517,9 @@ export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
 }
 
 // REQ-20260921-010 文档语言集：保存到版本记录顶层 v.langs（发布计划级持久化，重新进入
-// 文档编写步回显）；merging / 已正式发布（pushed）锁定不可改（与五步门禁 docs 步锁定口径
-// 一致）；非法语言集报错不改盘。语言集是文档清单的唯一事实源（求值 / 审核白名单 / 提交
-// pathspec / AI 总结提示词均按其展开）。
+// 文档编写步回显）；merging / 发布确认（正式发布）锁定不可改（与五步门禁 docs 步锁定口径
+// 一致，BUG-20260928-005 起推送不再锁定）；非法语言集报错不改盘。语言集是文档清单的唯一
+// 事实源（求值 / 审核白名单 / 提交 pathspec / AI 总结提示词均按其展开）。
 // BUG-20260922-002：语言集变化会改变自定义文档的展开形态（MIGRATION → MIGRATION.md +
 // MIGRATION_<lang>.md），扩展语言集导致既有自定义 KEY 展开撞名时拒绝保存（如单语言集下
 // MIGRATION 与 MIGRATION_FR 合法共存，加入 fr 后 MIGRATION 的 MIGRATION_fr.md 与
@@ -527,7 +527,7 @@ export function recordDocsReview(dataDir, id, { file, hash, readFile } = {}) {
 export function saveDocLangs(dataDir, id, { langs, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改文档语言集');
-  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+  if (isReleased(v)) throw new BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
   const r = Array.isArray(langs) ? flow.normalizeLangsList(langs) : flow.normalizeDocLangs(langs);
   if (r.error) throw new AtbError(r.error);
   const conflict = flow.customDocsExpandConflict(flow.customDocsOf(v), r.langs);
@@ -547,7 +547,7 @@ export function saveDocLangs(dataDir, id, { langs, by = 'board' } = {}) {
 export function addCustomDoc(dataDir, id, { name, by = 'board' } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');
-  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定，如需调整请新建版本');
+  if (isReleased(v)) throw new BuildConflictError('已正式发布，范围锁定，如需调整请新建版本');
   const existing = flow.customDocsOf(v);
   const r = flow.normalizeCustomDocName(name, { existing, langs: flow.docLangsOf(v) });
   if (r.error) throw new AtbError(r.error);
@@ -567,7 +567,7 @@ export function addCustomDoc(dataDir, id, { name, by = 'board' } = {}) {
 export function removeCustomDoc(dataDir, id, { key, by = 'board', projectRoot = null } = {}) {
   const v = readVersion(dataDir, id);
   if (v.status === 'merging') throw new BuildConflictError('版本合并中，暂不可修改自定义文档清单');
-  if (isPushed(v)) throw new BuildConflictError('已正式发布，范围锁定，如需调整请新建版本');
+  if (isReleased(v)) throw new BuildConflictError('已正式发布，范围锁定，如需调整请新建版本');
   const k = String(key || '').trim().toUpperCase();
   const existing = flow.customDocsOf(v);
   if (!existing.includes(k)) throw new AtbError(`自定义文档不在清单中：${k || '（空）'}`);
@@ -644,6 +644,23 @@ export function recordPushSuccess(dataDir, id, { remote, sha } = {}) {
   // REQ-20260922-006 发布时间：作为版本计划一等属性随推送成功同步（与 release.pushedAt
   // 同刻同语义——同基准不重置、基准变化更新）；存量已推送计划无该字段，由读取侧回退。
   v.releasedAt = v.release.pushedAt;
+  v.by = 'board';
+  return writeVersion(dataDir, v);
+}
+
+// BUG-20260928-005 正式发布确认落账：用户点击「发布」并通过二次确认后，一键发布链路
+//（build-publish.start，BUG-20260928-002）在运行启动时调用——正式发布锁定以该时点为准
+//（isReleased），推送动作本身不锁定。幂等：首次确认时点固化（发布重试 / 取消后再发布
+// 不重置，与「成功不可逆」同向）；确认前已有的推送事实（pushedAt / site）原样保留。
+export function recordReleaseConfirm(dataDir, id, { runId = null } = {}) {
+  const v = readVersion(dataDir, id);
+  const prev = v.release || {};
+  if (prev.confirmedAt) return v;
+  v.release = {
+    ...prev,
+    confirmedAt: nowIso(),
+    confirmedRunId: runId,
+  };
   v.by = 'board';
   return writeVersion(dataDir, v);
 }
