@@ -28,7 +28,8 @@ function extractFn(source, name) {
 }
 
 function vmRun(fns, context, expr) {
-  const ctx = vm.createContext(context);
+  // 单函数沙箱补齐成功发布守卫依赖；本组夹具均为未发布版本。
+  const ctx = vm.createContext({ blockPublished: v => !!v?.release?.published, ...context });
   vm.runInContext(fns, ctx);
   return vm.runInContext(expr, ctx);
 }

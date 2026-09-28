@@ -27,7 +27,8 @@ function extractFn(source, name) {
 }
 
 function vmRun(fns, context, expr) {
-  const ctx = vm.createContext(context);
+  // 已发布守卫依赖；此组验证未发布版本的既有编辑流程。
+  const ctx = vm.createContext({ blockPublished: v => !!v?.release?.published, ...context });
   vm.runInContext(fns, ctx);
   return vm.runInContext(expr, ctx);
 }

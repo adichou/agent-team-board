@@ -292,16 +292,15 @@ t('P3b 未发布成功版本不误显「已发布」：无运行（release null 
   assert.equal((inner.match(/已发布/g) || []).length, 0, '整页无「已发布」误显');
 });
 
-t('P3c 详情「概况」名称行仍显示合并状态；右侧「发布」页签行为不受影响（仍可见运行记录与已发布状态）', async () => {
+t('P3c 详情「概况」名称行同步显示已发布；右侧「发布」页签行为不受影响（仍可见运行记录与已发布状态）', async () => {
   const h = setup({ versions: [
     ver('BLD-A', 'v1.0', 'merged', { published: true, version: '1.2.0', runId: 'BPUB-20260917-0a1' }),
   ] });
   await h.enter();
   const inner = h.inner();
-  // 详情概况区（右侧）名称行保留合并进度标签——BUG-20260928-001 口径后移：docsMerge 未落账
-  //（夹具未落账）显示中间态标签，不再显示「已合并」
+  // BUG-20260929-001：成功发布优先于合并状态，详情与列表统一。
   const detail = inner.slice(inner.indexOf('bld-name'));
-  assert.match(detail, />代码已并入 · 文档与翻译未合并<\/span>/, '详情概况名称行显示合并中间态');
+  assert.match(detail, />已发布<\/span>/, '详情概况名称行显示已发布');
   // 发布页签仍正常：已发布态从简（BUG-20260928-002）——发布时间 + 发布成功说明 + 已发布按钮
   h.run(`window.ATBBuild.setStep('release')`);
   await h.tick(4);

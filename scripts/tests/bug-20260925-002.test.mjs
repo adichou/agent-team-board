@@ -340,6 +340,7 @@ async function runAccept({ disk, issues = ISSUES_1, decisionOk = true, saveOk = 
     chkDecisions: null, chkBusy: null, chkAnchor: null,
   };
   const ctx = vm.createContext({
+    blockPublished: v => !!v?.release?.published, selVersion: () => null,
     selVersion: () => ({ id: pf.verId }),
     pfOf: () => pf,
     state: { project: 'proj-x', pf },
@@ -405,6 +406,7 @@ t('L4-4 rejectChkSuggestion：本地记 rejected + 落库；已决断幂等不�
     chkDecisions: null, chkBusy: null, chkAnchor: null,
   };
   const ctx = vm.createContext({
+    blockPublished: v => !!v?.release?.published, selVersion: () => null,
     state: { project: 'proj-x', pf },
     render: () => {},
     toast: () => {},
@@ -443,7 +445,7 @@ function renderPaneWith(pfOverrides) {
     fmtTime: () => 't',
     ...FLOW_STUB,
   };
-  const context = vm.createContext(ctx);
+  const context = vm.createContext({ blockPublished: v => !!v?.release?.published, selVersion: () => null, ...ctx });
   vm.runInContext([
     pick('summaryBtnText'), pick('translateBtnText'), pick('normalizeFlowEval'), pick('translateBtnHtml'),
     pick('commitBtnHtml'), pick('docsStageBar'), pick('renderDocsPane'),
