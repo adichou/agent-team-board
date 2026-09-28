@@ -1632,6 +1632,12 @@ const EN_CLI = {
   '语言集只有一个语言：无翻译目标，可跳过翻译（直接进行提交）': 'The language set has a single language: no translation targets — translation can be skipped (proceed straight to commit)',
   '发布流程数据未就绪：请先刷新或重试后再编辑': 'Publish flow data not ready: refresh or retry before editing',
   '当前版本没有默认语言文档可编辑': 'No default-language documents to edit for this version',
+  // BUG-20260928-011 预检口径重构：必选 2 项（发布文档 / 挑选条目）+ 提醒 1 项（advisory）；
+  // 阻塞详情与提醒句为服务端动态拼接，见 EN_DYNAMIC。
+  '发布文档': 'Release docs',
+  '挑选条目': 'Picked items',
+  '已完成未挑选条目': 'Done items not in any version plan',
+  '无法识别冻结源码的 Web App 构建方式（预检已不含构建识别项；请检查冻结 main 的 package.json / index.html）': 'Cannot detect a Web App build in the frozen source (build detection is no longer a precheck item; check package.json / index.html on the frozen main)',
 };
 
 // BUG-20260925-003：EN_CLI 组装并入 EN——运行时 t() 与反向词典 ZH_EXACT 同用并入后的
@@ -1805,6 +1811,14 @@ const EN_DYNAMIC = {
   '创建失败（◇）': 'Create failed ($1)',
   '预检失败（◇）': 'Precheck failed ($1)',
   '发布启动失败（◇）': 'Failed to start the release ($1)',
+  // BUG-20260928-011 预检新口径动态句：必选项①发布文档（审核缺口 / 未提交 / 未合并 main）、
+  // 必选项②挑选条目（复用 assertItemsIncluded 报错句）、提醒项（已完成未挑选条目）。
+  '发布文档未全部审核通过：缺 ◇ 个（◇）': 'Release docs not fully approved: $1 file(s) missing ($2)',
+  '发布文档未提交或已变化：◇': 'Release docs not committed or changed since the commit: $1',
+  '发布文档尚未合并到 main：请先完成「文档合并」步（文档提交 ◇ 不在 main 历史中）': 'Release docs not merged into main yet: finish the "Docs merge" step first (docs commit $1 is not in main history)',
+  '条目 ◇ 的提交（◇）未包含在主分支（含重放证据核对）': 'Item $1 commit ($2) is not contained in the main branch (replay evidence checked)',
+  '存在 ◇ 个已完成但未纳入任何版本计划的条目：◇（不阻塞本次发布，可考虑纳入后续版本）': '$1 done item(s) not included in any version plan: $2 (this does not block the release; consider a later version)',
+  '找不到版本计划：◇': 'Version plan not found: $1',
   '✓ 已提交发布操作（◇）：状态刷新后查看结果': '✓ Release action submitted ($1): check the result after the status refresh',
   '✕ 发布操作失败：◇': '✕ Release action failed: $1',
   '✕ 发布计划读取失败：◇': '✕ Failed to load the release plan: $1',

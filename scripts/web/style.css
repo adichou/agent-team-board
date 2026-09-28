@@ -3170,6 +3170,9 @@ button.link.oc-req { border: none; background: none; padding: 0; font: inherit; 
 .bld-rel-stages ul { margin: 4px 0 0; padding-left: 18px; }
 .bld-rel-stages li { margin: 2px 0; }
 .bld-rel-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+/* BUG-20260928-011 预检提醒项（advisory，不阻塞）：与必选项的通过 / 未通过区分，
+   取 inprogress 橙系淡 tint（同 .flag.warn 既有写法，深浅色随系统） */
+.rel-check-advisory { color: var(--inprogress); }
 @media (max-width: 900px) { .bld-rel-split { grid-template-columns: minmax(0, 1fr); } }
 /* 面板内条目选择（全选 / 全不选） */
 .bld-pick-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

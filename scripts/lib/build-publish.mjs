@@ -4,9 +4,12 @@ import path from 'node:path';
 import http from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { AtbError } from './core.mjs';
+import { AtbError, listItems } from './core.mjs';
 import * as store from './build-publish-store.mjs';
 import * as buildStore from './build-store.mjs';
+import * as flow from './publish-flow.mjs';
+import * as docsSummary from './docs-summary-store.mjs';
+import * as docsTranslate from './docs-translate-store.mjs';
 const exec=promisify(execFile);
 const active=new Map(), servers=new Map();
 const command=async(cwd,bin,args)=>{try{return (await exec(bin,args,{cwd,timeout:180000,maxBuffer:8*1024*1024})).stdout.trim();}catch(e){throw new AtbError(`${bin} ${args[0]} 失败：${String(e.stderr||e.message).slice(0,1000)}`);}};
@@ -71,14 +74,16 @@ export async function inputs(root,run){
 // BUG-20260921-015：一条目多提交——条目的全部提交逐一核验（旧单提交形态兜底 [commit]），
 // 与隔离分析 / 合并执行使用同一提交集合；任一提交缺失即报错。
 const itemCommitsAll=(items)=>(Array.isArray(items)?items:[]).flatMap((it)=>[...new Set((Array.isArray(it?.commits)&&it.commits.length?it.commits:[it?.commit]).map((h)=>String(h||'').toLowerCase()).filter(Boolean))]);
+async function isAncestor(root,commit,mainSha){
+ try{await git(root,'merge-base','--is-ancestor',commit,mainSha);return true;}catch{return false;}
+}
 export async function assertItemsIncluded(root, items, mainSha, replays = []) {
   const rs = (replays || []).map((r) => ({ ...r, original: String(r.original || '').toLowerCase() }));
   const included = async (commit) => {
-    try { await git(root, 'merge-base', '--is-ancestor', commit, mainSha); return true; } catch {}
+    if (await isAncestor(root, commit, mainSha)) return true;
     const r = rs.find((x) => x.original === String(commit).toLowerCase());
     if (!r) return false;
-    try { await git(root, 'merge-base', '--is-ancestor', r.replayed, mainSha); return true; } catch {}
-    return false;
+    return isAncestor(root, r.replayed, mainSha);
   };
   for (const item of items) {
     const commits = itemCommitsAll([item]);
@@ -105,6 +110,38 @@ async function clean(root){
  const dirty=await git(root,'status','--porcelain','--untracked-files=all');
  if(dirty.split('\n').filter(Boolean).some(l=>{const p=l.slice(3).split(' -> ').pop().trim();return !(p.startsWith('agent-team-board/')||p==='.gitignore')}))throw new AtbError('源码工作区有未提交修改，请先处理；不自动暂存或丢弃');
 }
+// BUG-20260928-011 预检口径重构：必选 2 项（①发布文档审核 / 提交 / 合并 main、②挑选条目
+// 合并 main——沿用 assertItemsIncluded 的重放证据口径）+ 可选提醒 1 项（已完成未挑选条目，
+// 不阻塞）。旧 7 检中的其余检查（冻结范围 / 工作区 / 官网全局配置 / 双语材料 / Web App
+// 构建识别 / 原子推送预演）全部移除：相应失败后移到执行阶段暴露（2026-09-28 人工定夺，
+// 不设预检兜底；官网物料旧口径不再阻塞发布）。冻结输入与构建识别仍照实计算，分别作为
+// 预检新鲜度指纹（plan 校验）与执行阶段数据，但不再构成检查项。
+const docReadFile=(root)=>(f)=>{try{return fs.readFileSync(path.join(root,f),'utf8');}catch{return null;}};
+const docStatFile=(root)=>(f)=>{try{return fs.statSync(path.join(root,f)).mtimeMs;}catch{return null;}};
+// 必选①：复用发布文档两阶段既有事实源（publish-flow 求值 + docs-summary / docs-translate
+// 账本标记 + 版本记录 docs / docsMerge 落账与重放证据），不重新发明判定。
+async function assertDocsReady(dataDir,root,run){
+ const v=buildStore.readVersion(dataDir,run.bldId); // 版本记录缺失 → 找不到版本计划，安全侧不通过
+ const read=docReadFile(root);
+ const marks={...docsSummary.summaryMarksForVer(dataDir,v.id),...docsTranslate.translateMarksForVer(dataDir,v.id)};
+ const flowEval=flow.evaluateDocsFlow(v,read,marks,{statFile:docStatFile(root)});
+ if(flowEval.missing.length)throw new AtbError(`发布文档未全部审核通过：缺 ${flowEval.missing.length} 个（${flowEval.missing.map((m)=>`${m.file}（${flow.DOCS_FLOW_LABEL[m.state]||m.state}）`).join('、')}）`);
+ const docsEval=flow.evaluateDocsState(v,read);
+ if(docsEval.overall!=='committed')throw new AtbError(`发布文档未提交或已变化：${docsEval.reasons[0]||'请先提交发布文档'}`);
+ // 已合并入 main：认可「文档提交在 main」或「记录的重放提交在 main」两种证据（与条目包含性同口径）
+ const docCommit=String(v.docs?.commitHash||'').toLowerCase();
+ const replay=(v.docsMerge?.replays||[]).find((r)=>String(r.original||'').toLowerCase()===docCommit)?.replayed;
+ const mainSha=await git(root,'rev-parse','refs/heads/main');
+ if(!(await isAncestor(root,String(replay||docCommit),mainSha)))throw new AtbError(`发布文档尚未合并到 main：请先完成「文档合并」步（文档提交 ${docCommit.slice(0,12)} 不在 main 历史中）`);
+}
+// 提醒项：当前项目已完成（done）但未纳入任何版本计划（任意状态均视为已挑选——含已发布
+// 版本，跨版本不重复提醒）的条目差集；读取失败不产生提醒（提醒不阻塞，宁可漏提不误拦）。
+function unpickedDoneItems(dataDir){
+ try{
+  const occupied=buildStore.occupiedItemMap(dataDir);
+  return listItems(dataDir).filter((i)=>i.status==='done'&&!occupied.has(i.id)).map((i)=>i.id);
+ }catch{return[];}
+}
 export async function precheck(dataDir,root,id){
  assertIdle(dataDir,id);
  let run=store.readRun(dataDir,id);
@@ -115,13 +152,17 @@ export async function precheck(dataDir,root,id){
  const check=async(label,fn)=>{try{await fn();checks.push({label,ok:true});}catch(e){checks.push({label,ok:false,detail:e.message});}};
  let current=null,detected=null;
  try{
-  await check('冻结范围',async()=>{current=await inputs(root,run);if(current.mainSha!==run.frozen.mainSha||current.devSha!==run.frozen.devSha)throw Error('分支已前进，请重新冻结');});
-  await check('工作区',()=>clean(root));
-  await check('官网全局配置',()=>store.validateRepo(store.readConfig().homepageRepoRoot));
-  await check('双语材料',()=>{if(!current?.materialFiles)throw Error(current?.materialError||'官网双语材料缺失');});
-  await check('条目包含性',()=>assertItemsIncluded(root,run.frozen.items,run.frozen.mainSha,run.frozen.replays));
-  await check('Web App 构建识别',async()=>{detected=await profile(root,run.frozen.mainSha);if(detected.version&&detected.version!==run.version)throw Error('冻结 package.json 版本与发行版本不一致');});
-  await check('原子推送预演',()=>git(root,'push','--dry-run','--atomic',run.frozen.remote,'refs/heads/main:refs/heads/main','refs/heads/dev:refs/heads/dev'));
+  // 冻结输入 / 构建识别：只算检查，不作为口径——失败不阻塞预检（plan / 执行阶段反馈）。
+  try{current=await inputs(root,run);}catch{/* 远端 / 官网配置问题交由 plan / 执行阶段反馈 */}
+  try{detected=await profile(root,run.frozen.mainSha);}catch{detected=null;}
+  await check('发布文档',()=>assertDocsReady(dataDir,root,run));
+  await check('挑选条目',async()=>{
+   let v=null;try{v=buildStore.readVersion(dataDir,run.bldId);}catch{}
+   // 按版本计划当前清单核验（运行冻结后补入的条目同样覆盖；版本记录缺失回退冻结快照）
+   await assertItemsIncluded(root,v?.items?.length?v.items:run.frozen.items,await git(root,'rev-parse','refs/heads/main'),v?.merge?.replays||run.frozen.replays||[]);
+  });
+  const remind=unpickedDoneItems(dataDir);
+  if(remind.length)checks.push({label:'已完成未挑选条目',ok:true,advisory:true,detail:`存在 ${remind.length} 个已完成但未纳入任何版本计划的条目：${remind.join('、')}（不阻塞本次发布，可考虑纳入后续版本）`});
   return store.updateRun(dataDir,id,r=>{
    r.status=run.status==='failed'?'failed':'draft';r.precheck={ok:checks.every(c=>c.ok),checks,inputs:current,fingerprint:store.fingerprint(current),profile:detected,at:new Date().toISOString()};
    // 官网设置允许补齐，但分支必须显式重新冻结。
@@ -209,6 +250,9 @@ async function execute(dataDir,root,id){
      if(!fs.existsSync(source))await git(root,'worktree','add','--detach',source,run.frozen.mainSha);
      if(await git(source,'rev-parse','HEAD')!==run.frozen.mainSha)throw Error('构建 worktree 不匹配冻结源码');
      const p=run.precheck.profile;
+     // BUG-20260928-011：构建识别不再作为预检检查项——识别失败后移执行阶段暴露（此处给出
+     // 明确错误，而非让执行以空引用崩溃）。
+     if(!p)throw Error('无法识别冻结源码的 Web App 构建方式（预检已不含构建识别项；请检查冻结 main 的 package.json / index.html）');
      if(p.kind==='package'){await command(source,p.manager,['install']);await command(source,p.manager,['run','build']);}
      const built=path.join(source,p.outputDir);
      if(!fs.existsSync(path.join(built,'index.html')))throw Error('构建产物缺少 index.html，无法静态部署');
