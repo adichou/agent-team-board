@@ -4,22 +4,37 @@
 
 ## 引入来源（源单）
 
-本 Bug 由哪个需求 / Bug 引入？登记时可暂空或写「未定位」，修复阶段必须归因（三选一，禁止编造）：
-
-- 引入来源：REQ-… / BUG-…（编号需经 `atb list` 核验真实存在）
-- 引入来源：未定位（排查过程：…）
-- （登记时暂空：尚未排查）
+- 引入来源：BUG-20260916-001（构建发布执行器：sync-source 阶段以 `git checkout main` + `rev-parse HEAD` 比对冻结源码并原子推送——切分支仅为本地 HEAD 校验服务，属实现选择而非必要条件）
 
 ## 根因分析
 
+`scripts/lib/build-publish.mjs` `execute()` 第一阶段 `sync-source`（dev 版 line 241-249）：
+
+```js
+await clean(root);await git(root,'checkout','main');
+if(await git(root,'rev-parse','HEAD')!==run.frozen.mainSha)throw Error('main 与冻结源码不一致');
+await git(root,'push','--atomic',…);
+```
+
+切到 main 只是为了「HEAD == 冻结 mainSha」这一个校验；推送用的是显式 SHA 的 refspec（`<sha>:refs/heads/main`），本就不要求本地检出该分支；远端回验用 `ls-remote` 也不依赖本地分支。而失败 / 成功收尾均无恢复动作，`finally` 只释放进程内锁——于是发布必把工作区留在 main，污染后续开发分支状态（BUG-20260928-013 登记时条目提交落错分支即其实害）。
+
 ## 方案
 
-**开源选型（REQ-20260909-015）**：动手自研前先评估是否有成熟、维护中的开源库，优先复用——以依赖方式引入
-（Node/Web 项目走 npm，Apple 平台走 SPM / CocoaPods），禁止复制开源库源码进项目仓库；仅当库无包分发渠道
-且确需使用时才允许 vendor（内嵌源码），须在 licenses.md 标注复制范围与原因。License 只用开源友好白名单：
-MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / ISC / 0BSD / Unlicense；GPL / LGPL / AGPL / SSPL 等
-强传染许可及 License 不明的库禁止引入。自研须写明理由（三选一）：引用了哪些库 / 无合适库的原因 /
-引入成本高于自研的原因。引入开源库须在条目目录维护 licenses.md（库名 / 版本 / 引入方式 / License / 仓库地址），
-未使用开源库的条目不创建该文件。
+`sync-source` 去掉 `git checkout main`，其余动作语义不变：
+
+1. 保留 `clean(root)` 工作区清洁检查。
+2. 本地校验改只读 ref 比对：`git rev-parse refs/heads/main` !== 冻结 `mainSha` 时报原错误「main 与冻结源码不一致」（比原先更强：直接断言本地 main ref 本身，而非检出后的 HEAD）。
+3. 原子推送与 `ls-remote` 远端 SHA 回验原样保留。
+
+技术依据：`git push <remote> <sha>:refs/heads/<branch>` 推送本地任意 commit 到远端 ref，不要求该分支被检出；执行器其余阶段（webapp-build 用 detach worktree、两个 verify 用本机 HTTP 服务）均不依赖当前分支。
+
+测试：`scripts/tests/` 中 build-publish 相关用例改为断言「执行全程未调用 checkout main / 工作区分支不变」+「本地 main 与冻结不一致仍拦截」+「推送 refspec 与远端回验不变」（TDD：先改用例跑红，再实现跑绿）。
+
+**开源选型（REQ-20260909-015）**：既有自研执行器的最小修正，仅调整 git 子命令序列，不引入新依赖，不适用开源选型。
 
 ## 风险与边界
+
+- 行为差异：原先 checkout 会因本地分支与冻结不一致直接暴露 HEAD 差异；改后同样拦截（rev-parse 比对），错误信息不变。
+- 若本地不存在 `refs/heads/main`（裸异常路径），`rev-parse` 失败按 AtbError 包装报出，与原 checkout 失败路径同为发布失败，语义一致。
+- 存量已失败的发布 run（如 BPUB-711ea71f）重试时 sync-source 已是 done 会被跳过，不受本改动影响；新 run 全程不再切分支。
+- 不改变推送内容与远端回验口径；不处理「发布后自动切回」这类补偿逻辑（不再需要）。
