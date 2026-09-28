@@ -53,7 +53,12 @@ const ATBRelease = (() => {
 
   const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const fmtTime = (iso) => (iso ? String(iso).replace('T', ' ').slice(0, 19) : '—');
+  const fmtTime = (iso) => {
+    const d = new Date(iso);
+    if (iso == null || iso === '' || Number.isNaN(d.getTime())) return '—';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
 
   function api(path, opts = {}) {
     const project = state.project ? `?project=${encodeURIComponent(state.project)}` : '';

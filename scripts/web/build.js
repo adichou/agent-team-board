@@ -142,15 +142,15 @@ const ATBBuild = (() => {
 
   const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const fmtTime = (iso) => (iso ? String(iso).replace('T', ' ').slice(0, 16) : '—');
-  // BUG-20260928-012：发布时间本地时区格式化（YYYY-MM-DD HH:mm:ss）——fmtTime 为 ISO 字符串
-  // 直截（UTC 原样），发布结果面板按用户本地时间展示（全局时间本地化另见 BUG-20260928-010）
-  const fmtTimeLocal = (iso) => {
+  // 按浏览器本地时区展示；发布时间保留秒，其余构建时间保留分钟。
+  const fmtTime = (iso, withSeconds = false) => {
     const d = new Date(iso);
-    if (iso == null || iso === '' || isNaN(d.getTime())) return iso || '—';
+    if (iso == null || iso === '' || Number.isNaN(d.getTime())) return '—';
     const p = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    const minute = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return withSeconds ? `${minute}:${p(d.getSeconds())}` : minute;
   };
+  const fmtTimeLocal = (iso) => fmtTime(iso, true);
   const short = (h) => String(h || '').slice(0, 8);
   // BUG-20260913-005：透传 isErr（错误 toast 与普通提示在任务面板口径下有样式差异）
   const toast = (m, isErr) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m, isErr); } catch { /* 测试环境无 toast */ } };
