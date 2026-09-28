@@ -1,171 +1,173 @@
 # Design Notes
 
+[中文](./DESIGN.md) | [English](./DESIGN_en.md)
+
 ## User Pain Points
 
-As large AI models grow ever more capable, more and more people build products with AI Agents. I am no exception — I use Codex and Zcode every day.
+As large AI models grow ever more capable, more and more people are building products with AI agents. I am no exception. My daily drivers are Codex and Zcode.
 
-But today's AI Agents all share a common flaw: the chaotic design of their chat session lists becomes painfully obvious the moment you have added more than ten sessions.
+But today's AI agents all share one common ailment: the mess of their chat session list design is a problem you immediately and deeply feel once you have more than 10 sessions.
 
-At their core, these Agents are more like chat tools than product development tools.
+At the end of the day, these agents are more like chat tools than product development tools.
 
-Since the vendors are not stepping up, I'll build it myself.
+Since the vendors aren't stepping up, I'll just do it myself.
 
-## Design Approach
+## Design Philosophy
 
-To standardize product development, the key is to manage three things well: "requirement management", "release management", and "quality management".
+Standardizing product development comes down to getting three disciplines right: "requirements management", "release management", and "quality management".
 
-Requirement management turns ideas into code that can actually land; release management turns code into products that can be distributed. Quality management is the safety net beneath it all.
+Requirements management turns ideas into shippable code, and release management turns code into a distributable product. Quality management is the safety net under everything.
 
-### Requirement Management
+### Requirements Management
 
-The market offers many mature requirement management tools, but they were built for old-school programming. In today's era of Vibe Coding, requirement management needs AI Agents to deliver a more efficient and more stable requirement development flow — especially for a "one-person company".
+There are plenty of mature requirements management tools on the market, but they were all built for old-school programming. In today's world of Vibe Coding, requirements management needs AI agents to deliver a more efficient, more stable requirements development workflow—especially for a "one-person company".
 
 #### Design Principles
 
-- **Human in the loop**: Humans own the decisions — accept, plan, and sign off on acceptance; AI Agents own the execution — analyze, develop, test, and report. The board is the single collaboration interface between the two; states move through the system, not through verbal agreements.
-- **Hard constraints over conventions**: The item state machine is managed by the system (the Agent's routine state operations are only claim and report), source code changes are protected by Agent hook guards, and development closures are committed automatically by the system based on the snapshot taken at claim time. Rules are not written into documents for humans or AI to follow — they are built into the tooling and enforced.
-- **Local-first**: One Node process plus one Git repository is all it takes to run — no external services, no account system. Data lives on your own machine, ready to back up, migrate, and audit at any time.
-- **Simplicity above all**: In the old-school programming era, multi-branch parallel development was a hard choice that invited complexity. In the "one-person company" era, two branches are enough: a dev branch handles sequential requirement development, and the main branch archives released versions.
-- **Lasting memory**: Every requirement and bug item is a document directory, every closure is a Git commit, and every release is grounded in commits. When something goes wrong, you can trace it layer by layer through items, commits, and release plans. As long as an item ID is given, an Agent can quickly recover its former "memory" — whether in a brand-new session or in multi-Agent collaboration.
+- **Human in the loop**: People handle the decisions—accepting, planning, and sign-off—while AI agents handle the execution—analysis, development, testing, and reporting. The board is the only collaboration interface between the two sides, and state transitions are made by the system, not by verbal agreement.
+- **Hard constraints over conventions**: The entry state machine is managed by the system (an agent's routine state operations are only claim and report), source code changes are protected by agent hook guards, and the development wrap-up is committed automatically by the system against the snapshot taken at claim time. Rules are not written into documents waiting for humans or AI to obey—they are written into the tooling and enforced.
+- **Local-first**: One Node process plus one Git repository is all it takes to run—no external services, no account system. Data stays on your own machine, ready to back up, migrate, or audit at any time.
+- **Simplicity above everything**: In the old-school programming era, parallel development across many branches was a hard choice that invited complexity. In the era of the one-person company, two branches are enough: a single dev branch develops requirements in order, and the main branch archives released versions.
+- **Persistent memory**: Every requirement and bug entry is a document directory, every wrap-up is a Git commit, and every version is grounded in its commits. When something goes wrong, you can trace back layer by layer through entries, commits, and version plans. Just name an entry ID, and an agent can quickly recover its "memory"—whether in a brand-new session or across multiple collaborating agents.
 
 #### Architecture
 
 ```mermaid
 flowchart TB
-    HUMAN["人"]
+    HUMAN["Human"]
     AGENT["Agent"]
-    CMD["协作规范<br/>commands · skills"]
+    CMD["Collaboration rules<br/>commands · skills"]
 
-    subgraph ENTRY["入口层"]
-        WEB["看板界面<br/>scripts/web"]
+    subgraph ENTRY["Entry layer"]
+        WEB["Board UI<br/>scripts/web"]
         CLI["CLI<br/>scripts/atb.mjs"]
     end
 
-    subgraph CORE["服务与业务层"]
-        SRV["本地服务 scripts/server.mjs<br/>HTTP API · 默认 8888"]
-        LIB["业务逻辑 scripts/lib<br/>状态机 · Git 收口 · 发布流水线"]
+    subgraph CORE["Service & business layer"]
+        SRV["Local service scripts/server.mjs<br/>HTTP API · default 8888"]
+        LIB["Business logic scripts/lib<br/>State machine · Git wrap-up · Release pipeline"]
     end
 
-    subgraph STORE["存储层"]
+    subgraph STORE["Storage layer"]
         direction LR
-        DATA[("agent-team-board/data<br/>条目 Markdown · 随 Git 管理")]
-        RT[("agent-team-board/runtime<br/>状态 · 锁 · 账本 · 仅本地")]
+        DATA[("agent-team-board/data<br/>Entry Markdown · managed in Git")]
+        RT[("agent-team-board/runtime<br/>State · locks · ledgers · local only")]
     end
 
-    GUARD["守卫<br/>hooks + scripts/state-guard.mjs<br/>拦截越权写入"]
+    GUARD["Guard<br/>hooks + scripts/state-guard.mjs<br/>Intercepts unauthorized writes"]
 
-    HUMAN -->|"接受 · 计划 · 验收"| WEB
-    AGENT -->|"认领 · 实现 · 上报"| CLI
-    CMD -.->|规范约束| AGENT
+    HUMAN -->|"Accept · Plan · Sign-off"| WEB
+    AGENT -->|"Claim · Implement · Report"| CLI
+    CMD -.->|"Rule constraints"| AGENT
     WEB --> SRV
     CLI --> LIB
     SRV --> LIB
     LIB --> DATA
     LIB --> RT
-    AGENT -.->|拦截越权写入| GUARD
+    AGENT -.->|"Intercepts unauthorized writes"| GUARD
 ```
 
-- **Entry layer**: The browser board (a native single-page application) and the CLI share the same services and data.
-- **Service layer**: `scripts/server.mjs` implements a zero-dependency local service with Node's built-in http module (default port 8888, adjustable via `ATB_PORT` / `ATB_HOST`), exposing a JSON API and static assets.
-- **Business layer**: `scripts/lib/` is split by domain — items and the state machine (core), claiming and automatic closure (commit-store), the release pipeline (publish-flow), document summarization and translation (docs-summary / docs-translate), hold decisions (hold-*), the command registry (cli-registry), and more.
-- **Storage layer**: Item documents live in `agent-team-board/data/` (managed by Git), while runtime state lives in `agent-team-board/runtime/` (local only). The former is the product of human–Agent collaboration; the latter is the state ledger of the running system.
-- **Cross-cutting guard**: Hooks route write operations from the Agent host to `scripts/state-guard.mjs`, which blocks unauthorized writes when there is no valid lock.
+- **Entry layer**: The browser board (a native single-page application) and the CLI share the same service and data.
+- **Service layer**: `scripts/server.mjs` implements a zero-dependency local service on Node's built-in http (default port 8888, adjustable via `ATB_PORT` / `ATB_HOST`), serving a JSON API and static assets.
+- **Business layer**: `scripts/lib/` is split by domain—entries and the state machine (core), claim and automatic wrap-up (commit-store), the release pipeline (publish-flow), document summarization and translation (docs-summary / docs-translate), blocked-decision handling (hold-*), the command registry (cli-registry), and more.
+- **Storage layer**: Entry documents live in `agent-team-board/data/` (managed in Git), while runtime state lives in `agent-team-board/runtime/` (local only). The former is the collaborative output of humans and agents; the latter is the state ledger the system runs on.
+- **Cross-cutting guard**: Hooks route the agent host's write operations into `scripts/state-guard.mjs`, which intercepts unauthorized writes when no valid lock is held.
 
 #### AI Collaboration Pipeline Design
 
-Two parallel queues, both dispatched by copying a prompt into an Agent session — the board does not run models directly; the prompt is the contract between the board and the Agent session:
+Two parallel queues, both dispatched by "copying a prompt into an agent session"—the board never runs models directly; the prompt is the contract between the board and the agent session:
 
-- **AI analysis**: For accepted items, it completes the description documents and acceptance criteria; when a UI is involved, it produces an interactive HTML demo. Once the results are confirmed, items can move into the plan automatically (configurable, manual by default).
-- **AI development**: For planned items, the main session dispatches subagents with prompts to process items one by one — claim → test first → implement → report — and the closure is committed automatically.
-- **Human intervention points** are unified as "pending human confirmation": hold declarations, doubtful attribution of automatic commits, and AI analysis confirmation all resume on the board once the decision is filled in.
-- The global task view aggregates active tasks across projects; the execution ledger is kept on the local machine only.
+- **AI analysis**: For accepted entries, it completes the description document and acceptance criteria; when a UI is involved, it produces an interactive HTML demo. Once the results are confirmed, the entry can move into planning automatically (configurable; manual by default).
+- **AI development**: For planned entries, the main session dispatches subagents per the prompt, each executing one entry through "claim → test-first → implement → report", with the wrap-up committed automatically.
+- **Human intervention points** are unified as "pending manual confirmation": blocked declarations, doubtful attribution of automatic commits, and AI analysis confirmations all resume once the decision is supplied on the board.
+- The global task view aggregates active tasks across projects; execution ledgers are kept on the local machine only.
 
-Choosing prompts — rather than an SDK or CLI — over running models directly in the board has several benefits:
+Using prompts instead of an SDK or CLI to run models directly inside the board is a trade-off with several benefits:
 
-1. It works with every Agent, since not all Agents provide a CLI or SDK.
-2. It does not violate the vendors' Coding Plan terms of use. Vendor agreements usually require Coding Plans to be used through the client, while SDK usage must go through metered API billing. The costs of the two are not in the same league.
-3. It does not waste the quota vendors give away. As is well known, using Zhipu models in the Zcode desktop client comes with an extra 50% quota. To promote their clients, vendors will always offer better deals than API billing — and quota is the best deal of all. Consider that Tibo is even called the god of resets: you can see that in this world, quota is king — that is simply a law of nature.
+1. It works with every agent, because not every agent offers a CLI or an SDK.
+2. It does not violate the vendors' Coding Plan terms. Vendor agreements usually require Coding Plans to be used through the client, while SDKs must go through pay-as-you-go API billing. The two cost models are not in the same order of magnitude.
+3. It does not waste the quota vendors give away. As everyone knows, using Zhipu models in the Zcode desktop client comes with an extra 50% quota. To promote their clients, vendors always offer better deals than API billing—and quota is the best deal of all. Just look at Tibo, known as the god of resets, and you will understand that in this world, "quota is king" is the law.
 
-So I chose prompts, at the cost of a bit of repetitive copy-paste work.
+So I chose prompts, at the cost of a little repetitive copy-paste work.
 
 #### Markdown + Git as the Storage Architecture
 
-This product stores task data as Markdown files managed by Git, without introducing a database:
+This product stores task data as Markdown files and manages them with Git, without introducing a database:
 
-- **Humans and Agents share the same medium**. Agents read and write plain text natively; Markdown needs no drivers, connection strings, or query layer. Humans can view and edit it directly in any editor, and AI sessions and the board see exactly the same data.
-- **Version history and auditing come for free**. Git naturally records who changed what and when; development closures are committed automatically per item, so the attribution of changes is clear, and release documents and release plans can be verified against real commits.
-- **Zero deployment, zero operations**. No service process to start, no schema to migrate, no separate backup strategy to maintain — `git clone` gives you all the data, and `atb rebuild` can even rebuild the runtime state from Git history.
-- **The diff is the review interface**. Every change to item documents is readable, reviewable, and revertible; both humans and Agents can complete confirmation by reading the diff directly.
-- **Data and code share a lifecycle**. Item descriptions, designs, and reports ship with the repository; new members get the full context on clone, with no dependency on a database instance on some particular machine.
+- **Humans and agents share one medium**. Agents natively read and write plain text; Markdown needs no drivers, connection strings, or query layers. Humans can view and edit it in any editor, and the AI session and the board see the very same data.
+- **Version history and audit come for free**. Git naturally records who changed what and when; development wrap-ups commit automatically per entry, change attribution stays clear, and release documents and version plans can be verified against real commits.
+- **Zero deployment, zero operations**. No service process to start, no schema to migrate, no separate backup strategy to maintain—`git clone` gets you all the data, and `atb rebuild` can even rebuild runtime state from Git history.
+- **The diff is the review interface**. Every change to an entry document is readable, reviewable, and revertible; humans and agents alike can complete confirmation by reading the diff directly.
+- **Data and code share one lifecycle**. Entry descriptions, designs, and reports ship with the repository; a new member gets the full context just by cloning it, with no dependence on a database instance living on some particular machine.
 
-This trade-off also draws the boundary: Markdown + Git does not aim at high-concurrency writes, complex queries, or massive data — a task board needs none of those. Runtime state that requires transactional guarantees (statuses, locks, settings, the execution ledger) is stored as JSON in `agent-team-board/runtime/`, kept local only and never committed to Git — "documents go into Git, runtime state stays local" is the core layering of this storage design.
+This trade-off also draws a boundary: Markdown + Git does not chase high-concurrency writes, complex queries, or massive data volumes—a task board does not need them. Runtime state that requires transactional guarantees (status, locks, settings, execution ledgers) is stored as JSON in `agent-team-board/runtime/`, kept local only and never committed to Git—"documents go into Git, runtime state stays local" is the core layering of this storage design.
 
 ## Release Management
 
-The core of a version release is to define the scope, write the documents, and lock the branches.
+The core of releasing a version is defining the scope, writing the documents, and locking the branch.
 
-1. Define the scope, and you know what to write in the documents.
-2. Write the documents, and users know how to use your product.
-3. Lock the branches, and the release stays stable.
+1. Define the scope, and you know what the documents should say.
+2. Write the documents well, and you know how users will use your product.
+3. Lock the branch, and the version stays stable.
 
-That is why the release board iterates on features in five steps: **release plan → link items and commits → document writing → merge into main → official release**.
+So on the release board, feature iteration follows five steps: **select entries and commits → selective merge → documents and translation → document merge → release**.
 
 ```mermaid
 flowchart LR
-    A["① 版本计划"] -->|"定版本"| B["② 关联条目与提交"]
-    B -->|"定范围"| C["③ 文档编写"]
-    C -->|"写文档"| D["④ 合并入 main"]
-    D -->|"锁分支"| E["⑤ 正式发布"]
+    A["① Select entries and commits"] -->|"Define the scope"| B["② Selective merge"]
+    B -->|"Merge into main"| C["③ Documents and translation"]
+    C -->|"Review passed"| D["④ Document merge"]
+    D -->|"Lock the content"| E["⑤ Release"]
 ```
 
-By design, the five steps form a pipeline of decreasing reversibility: the earlier the stage, the easier it is to change; the later, the more irreversible. Decisions converge in this order, and the order cannot be swapped.
+By design, the five steps form a pipeline of "decreasing reversibility": the earlier a step, the easier it is to change; the later a step, the more irreversible it is. Decisions converge along this order, and the order must not be flipped.
 
-**Scope is defined by commits, not by words**. What a version contains is determined by the linked closure commits, not by requirement descriptions or whatever happens to exist on the dev branch. After multiple items close in parallel, "which commits belong to this release" is the real challenge of releasing; attribution isolation analysis verifies commit by commit before merging: independent changes can ship alone, missing dependencies can be filled in with one click, and shared commits already in main are not misjudged as mixed commits.
+**Scope is defined by commits, not by words**. What a version contains is determined by the selected wrap-up commits, not by requirement descriptions or by whatever happens to exist on the dev branch. Checking an entry automatically links all commits that belong to it; entries and commits stand in a many-to-many relationship. The selected commits are deduplicated by hash, so a commit linked to multiple entries is merged in only once. Unselected ancestors are no longer treated as functional dependencies that must be filled in—they serve as read-only reference only; commits with no effect on what lands in main (such as release document commits from older versions) are explicitly marked so they create no noise.
 
-**Documents are written before the merge, based on the scope**. Document writing is placed before the merge and follows the confirmed commit scope — documents patched together after a release inevitably drift from the code. In the two-phase flow (AI summary → per-file human review → AI translation → per-file review), the division of labor is AI produces, humans gate: commits stay locked until every file has passed review, and unreviewed content never ships (as of BUG-20260926-002 there is no overall review-completion confirmation); capabilities that have been reverted or had their entry points hidden are documented according to their actual state, not according to plan.
+**Documents are written after the merge, grounded in what actually landed**. First the selective merge, then the documents, written from what actually landed in this version—documents describe the changes that are definitely going into main, not the planned ones. The default language is first summarized by AI and reviewed file by file by a human (optionally aided by AI proofreading); the other languages are translated by AI and then reviewed file by file; commits unlock only after every file passes review (since BUG-20260926-002 there is no longer an overall review-completion confirmation); when a default-language document is modified, its translations automatically go back to pending translation. Capabilities that were rolled back or whose entry points are hidden are written up as they actually are, not as planned.
 
-**Merges preserve history; releases do not disturb development**. Items are merged one by one with --no-ff: merge nodes make version boundaries visible in history; rebase is never used, so closure commit hashes and attribution chains stay stable; merges happen in an isolated worktree, so everyday development on dev is never interrupted by a release. Browsed with --first-parent, main always reads as a clean release line.
+**Merging replays the selection, and releasing never disturbs development**. The selected commits are cherry-picked onto main one by one in Git topological order (`-x` preserves tracing back to the original commits), and the before-and-after correspondence of the replay is recorded in the version plan; conflicts show the specific commits and files, execution can continue once they are resolved, and commits already applied successfully are not repeated. The merge happens in a temporary worktree, so daily development on dev is never interrupted by a release.
 
-**Pushing is the human's final gate**. Pushing main is irreversible, so it is triggered only by a human and never enters any automated flow; once the push completes, the baseline is locked and the release can no longer be merged into or refined — immutability is what makes "released" a certainty.
+**Pushing is the final human gate**. Pushing becomes possible only after the document merge has been recorded; pushing main cannot be undone, so it is triggered only by a human and never enters any automated flow. A release involves two manual actions—pushing to the remote and updating the website materials—each verified separately: merged locally does not mean published to the remote, nor does it mean the website has been updated. Once the push completes, the baseline is locked, and the version can no longer be merged into or refined—immutability is what guarantees the certainty of "released".
 
-#### Technical Approach
+#### Technical Design
 
-The release capability rests on three pieces: the release record `product-release-store` carries the five-step stage gates and is the single source of truth; document writing advances in phases through two independent stores, `docs-summary-store` and `docs-translate-store`, each with its own lock; and Git operations are consolidated into `product-release-git`, executed inside an isolated worktree.
+Release capabilities are carried by three components: the version record `product-release-store` carries the five-step stage gates and is the single source of truth; document writing is advanced in phases by two independent stores, `docs-summary-store` and `docs-translate-store`, each with its own lock; Git operations converge into `product-release-git` and `build-git`, executed inside a temporary worktree.
 
 ```mermaid
 flowchart TB
-    A["① 版本计划<br/>publish-flow · product-release-store"] --> B["② 关联条目与提交<br/>归属隔离分析"]
-    B --> C["③ 文档编写<br/>docs-summary → 人工审核<br/>docs-translate → 逐文件审查"]
-    C -->|"全部文件已审核 · 解锁提交"| D["④ 合并入 main<br/>product-release-git · 隔离工作树"]
-    D --> E["⑤ 正式发布<br/>人工推送 · 锁定基准"]
+    A["① Select entries and commits<br/>Version record · link snapshot"] --> B["② Selective merge<br/>cherry-pick onto main · hash dedup"]
+    B --> C["③ Documents and translation<br/>docs-summary → manual review<br/>docs-translate → per-file review"]
+    C -->|"All files reviewed · commits unlocked"| D["④ Document merge<br/>Document commits replayed into main · recorded"]
+    D --> E["⑤ Release<br/>Manual push · website materials update"]
 
-    DEV[("dev<br/>收口提交")] -.->|"提交范围"| B
-    MAIN[("main<br/>版本归档")] -.->|"合并落点"| D
+    DEV[("dev<br/>Wrap-up commits")] -.->|"Commit scope"| B
+    MAIN[("main<br/>Version archive")] -.->|"Replay target"| B
 ```
 
-- The release record advances as one: planning, linked commits, and document-phase progress all live in the same release record, so at any moment it can answer "how far along is this release".
-- A state machine for the document phases: summary, review, and translation unlock stage by stage, and document commits are only released once every file has passed review (as of BUG-20260926-002 there is no overall review-completion step).
+- Unified progress in the version record: the plan, the entry-and-commit link snapshot, merge results, document-phase progress, and document-merge evidence all live in the same version record, which can answer "which step is this version at" at any moment; merged facts are recorded at multiple layers, so plan edits cannot silently erase them.
+- A state machine for the document phase: summary, review, and translation unlock segment by segment, and document commits are allowed only after every file passes review (no overall review-completion step since BUG-20260926-002); documents are committed separately, then replayed into main and recorded by the "document merge" step; pushing is gated on the document merge being recorded.
 
-Branch and merge model: a release never touches the dev working directory, and main is advanced only within an isolated worktree.
+The branch and merge model: a release never touches dev's working directory, and main is advanced only inside a temporary worktree.
 
 ```mermaid
 flowchart LR
-    DEV[("dev<br/>日常工作目录 · 收口提交")] -->|"选定提交"| WT["隔离工作树<br/>逐条 --no-ff 合并"]
-    WT -->|"保留完整历史"| MAIN[("main<br/>版本归档 · --first-parent 观感")]
-    MAIN -->|"仅人工触发"| PUSH["推送远端<br/>版本锁定基准"]
+    DEV[("dev<br/>Daily working directory · wrap-up commits")] -->|"Selected commits · hash dedup"| WT["Temporary worktree<br/>cherry-pick in topological order"]
+    WT -->|"Replay correspondence into the version record"| MAIN[("main<br/>Version archive")]
+    MAIN -->|"Human-triggered only"| PUSH["Push to remote<br/>Version baseline locked"]
 ```
 
-- Item-by-item --no-ff merges: one merge node per item keeps version boundaries visible in history and makes each item's attribution directly traceable — there is no need to untangle mixed commits after the fact.
-- dev and main have closed responsibilities: dev takes in development but never releases; main releases but hosts no development; pushing main exists only through the single channel of the release flow.
+- Replay by selection: what enters the version is "the complete changes of the selected commits", decoupled from their position on dev; shared commits are replayed only once, the correspondence between original commits and their replays on main is traceable, and the attribution of any single commit can be followed directly.
+- dev and main keep closed responsibilities: dev only takes in development and never releases; main only releases and never develops; pushing main exists on exactly one channel—the release flow.
 
 ## Quality Management
 
-Quality management is not a pre-release checkpoint; it is a constraint embedded at the entrance of every flow. At its core is the TDD philosophy: tests first, test cases as the spec, and rules built into the tooling and enforced.
+Quality management is not an inspection performed right before a release; it is a constraint embedded at the entrance of every workflow. At its core is the TDD philosophy: tests first, test cases as the specification, and rules written into the tooling so they are enforced.
 
-- **Tests first**: Every item gets its tests written first and run to red before implementation, then to green afterwards; test files are named after the item ID (e.g. bug-20260922-001.test.mjs), so any requirement or defect can be traced straight back to its test cases.
-- **Regression baseline**: The full npm test suite must pass before delivery; existing behavior is pinned by test cases, and whether a change breaks historical capability is answered by the full suite.
-- **The state machine as the backstop**: Process correctness is itself quality. The Agent's routine state operations are only claim and report; accept, plan, and confirm-done are human-only, and an item is never done without acceptance.
-- **Guard interception**: PreToolUse hooks block direct writes to status files, block source code changes without a lock, and block non-compliant commits; the file-edit and Bash channels are held to the same standard — not relying on self-discipline, but on deterministic interception.
-- **Attributable commits**: Commit subjects must carry the item ID (validated by commit-store), closures attribute changes by the claim-time snapshot, and every change traces back to its item.
+- **Tests first**: Every entry gets its tests written first and failing red, then passing green after implementation; test files are named after the entry ID (for example, bug-20260922-001.test.mjs), so every requirement or defect traces directly to its test cases.
+- **Regression baseline**: Before delivery, the full npm test suite must pass; existing behavior is pinned down by test cases, and whether a change breaks past capabilities is answered by the full test run.
+- **State machine as the safety net**: A correct process is itself quality. An agent's routine state operations are only claim and report; accepting, planning, and confirming completion are human-only, and an entry does not count as done without acceptance.
+- **Guard interception**: PreToolUse hooks intercept direct writes to state files, source code changes without a lock, and non-compliant commits; the file-editing and Bash channels are held to the same standard—not self-discipline, but deterministic interception.
+- **Attributable commits**: Commit subjects must carry the entry ID (validated by commit-store), wrap-ups are attributed against the snapshot taken at claim time, and every change traces back to its entry.
 
-[返回 README](./README_en.md) · [更新日志](./CHANGELOG_en.md) · [功能说明](./FEATURES_en.md)
+[Back to README](./README_en.md) · [Changelog](./CHANGELOG_en.md) · [Features](./FEATURES_en.md)

@@ -1,5 +1,7 @@
 # Agent Team Board（智能体团队看板）
 
+[中文](./README.md) | [English](./README_en.md)
+
 ## 项目介绍
 
 Agent Team Board（ATB，智能体团队看板）把需求、Bug、AI 分析与开发、版本发布放进同一个本地看板：人负责规划和验收需求，并启动 AI 队列让 AI 自动取单进行分析、开发和提交进 Git。所有的需求文档均使用 Git 进行管理，全程留痕、可追溯。
@@ -10,11 +12,11 @@ Agent Team Board（ATB，智能体团队看板）把需求、Bug、AI 分析与�
 
 项目开源，欢迎提问、报告缺陷（Issues）、提交代码（Pull Request）和新功能建议。
 
-使用 Agent 开发本产品先读 [AGENTS.md](./AGENTS.md)；使用本产品管理其他项目，先读 [任务管理 skill](./skills/agent-team-board/SKILL.md)。
+使用 Agent 开发本产品，先读 [AGENTS.md](./AGENTS.md)；使用本产品管理其他项目，先读 [任务管理 skill](./skills/agent-team-board/SKILL.md)。
 
 ## 版本说明
 
-当前版本号 1.0.0，是首个全功能基线版本。
+当前版本号 1.0.0，是首个基线版本。
 
 ## 开始使用
 
@@ -70,9 +72,9 @@ flowchart TB
     end
 
     subgraph P5["⑤ 版本发布"]
-        L["人：创建版本计划<br/>关联已完成条目与提交"] --> M["文档编写：AI 总结 → 人工审核<br/>→ AI 翻译 → 逐文件审查"]
-        M --> N["提交归属隔离分析 · 合并入 main"]
-        N --> O["正式发布"]
+        L["人：创建版本计划<br/>选择已完成条目与本版提交"] --> M["挑选合并：所选提交合入 main"]
+        M --> N["文档编写：AI 总结 → 人工审核<br/>→ AI 翻译 → 逐文件审查"]
+        N --> O["文档合并入 main · 人工推送发布"]
     end
 
     A --> B
