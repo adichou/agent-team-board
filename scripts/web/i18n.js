@@ -162,8 +162,12 @@ const EN = {
   '关联条目分页': 'Linked items pagination',
   '创建发布': 'Create release',
   '查看发布记录': 'View release records',
-  '请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）': 'Merge into main first — only merged version plans can start a release',
-  '从本版本创建产品发布草稿（自动带入条目与冻结信息）': 'Create a product release draft from this version (items and frozen info included automatically)',
+  // BUG-20260928-002 发布区收敛为唯一「发布」入口：发布条禁用原因 / 前往设置 / 守卫 toast
+  '请先配置官网仓库': 'Configure the website repository first',
+  '前往设置': 'Go to settings',
+  '发布中…': 'Publishing…',
+  '仅已合并（merged）的版本计划可发布：请先完成「合并入 main」': 'Only merged version plans can be released: merge into main first',
+  '请先配置官网仓库后再发布': 'Configure the website repository before releasing',
   '暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单': 'No linked items yet: click "＋ Add items" to include requirement or bug items',
   // REQ-20260921-014 概况页签（详情第 1 步「版本计划」）显式编辑版本名称与描述：
   // 表单标签 / 校验 / 锁定 / 反馈文案；一并补齐所涉行内编辑欠账（悬停提示、空描述占位、
@@ -218,6 +222,18 @@ const EN = {
   '确认启动发布': 'Confirm & start release',
   '发布计划确认（产品发布）': 'Release plan confirmation (product release)',
   '用户启动即授权以上明确操作；预检不推送、不上传、不部署。取消不会发出任何执行请求。': 'Starting authorizes exactly the operations above; precheck pushes nothing, uploads nothing, deploys nothing. Cancel sends no execution request.',
+  // BUG-20260928-002 唯一「发布」入口：极简二次确认弹窗 / 一键链路版本号补填 / 空态一键口径 /
+  // 已发布态从简说明（插值句见 EN_DYNAMIC）
+  '发布二次确认': 'Publish confirmation',
+  '确认发布': 'Confirm release',
+  '启动中…': 'Starting…',
+  '请填写发行版本号（如 1.2.0）': 'Enter a release version number (e.g. 1.2.0)',
+  '发行版本号（与版本显示名分开）': 'Release version number (separate from the display name)',
+  '1.2.0（实际对外发行号）': '1.2.0 (the actual public version number)',
+  '当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布。': 'No release records for this version yet. Click "Release" for a quick confirmation; confirming creates the release draft and prechecks it automatically, then starts the release right away.',
+  '当前版本未合并，请先完成合并入 main。': 'This version is not merged yet — merge into main first.',
+  '预检未通过：请处理阻塞项后重试': 'Precheck failed: resolve the blockers and try again',
+  '发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。': 'Release succeeded: the version plan chip now reads "Published" and the plan is locked — no further edits (linked items & commits, merge into main, AI refine, docs merge, etc.). Create a new version plan for any changes.',
   // REQ-20260911-009 设置页「Git 工作流」分区（主操作后经 REQ-20260920-002 改为切换导向）
   'Git 工作流': 'Git workflow',
   '正在获取 Git 状态…': 'Loading Git status…',
@@ -1771,7 +1787,17 @@ const EN_DYNAMIC = {
   // BUG-20260915-014 构建模块版本详情发布页签：读取失败 / 详情失败 / 创建与动作反馈（动态拼接）
   '发布记录读取失败：◇': 'Failed to load release records: $1',
   '详情读取失败：◇': 'Failed to load run details: $1',
-  '✓ 已创建产品发布 ◇（草稿）：请在本页签预检并启动': '✓ Product release $1 created (draft): precheck and start it in this tab',
+  // BUG-20260928-002 发布区收敛为唯一「发布」入口：极简二次确认 + 一键发布链路反馈（动态拼接）
+  '发布二次确认（◇）': 'Publish confirmation ($1)',
+  '即将发布版本 v◇。': 'About to release version v$1.',
+  '发布时间：◇': 'Published at: $1',
+  '发布中止：◇': 'Publish aborted: $1',
+  '✕ 发布中止：◇': '✕ Publish aborted: $1',
+  '✓ 发布已启动（◇）：执行进度见下方运行详情': '✓ Release started ($1): follow progress in the run details below',
+  '预检未通过：◇：◇': 'Precheck failed: $1: $2',
+  '创建失败（◇）': 'Create failed ($1)',
+  '预检失败（◇）': 'Precheck failed ($1)',
+  '发布启动失败（◇）': 'Failed to start the release ($1)',
   '✓ 已提交发布操作（◇）：状态刷新后查看结果': '✓ Release action submitted ($1): check the result after the status refresh',
   '✕ 发布操作失败：◇': '✕ Release action failed: $1',
   '✕ 发布计划读取失败：◇': '✕ Failed to load the release plan: $1',
