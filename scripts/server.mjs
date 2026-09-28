@@ -2752,6 +2752,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         langs: flow.docLangsOf(v),
         customDocs: flow.customDocsOf(v),
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
+        version: v.version || null,
       });
       return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsSummary.summaryRunView(run) });
     });
@@ -2812,6 +2813,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         langs,
         customDocs,
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
+        version: v.version || null,
       });
       const baselineShift = flowEval.baselineShift;
       return sendJson(res, 200, {
@@ -3064,6 +3066,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         langs,
         customDocs,
         atbPath: `node ${JSON.stringify(ATB_CLI)}`,
+        version: v.version || null,
       });
       // BUG-20260925-002：回执 run 视图带 supersededDecided（新 run 旧决断失效提示依据）
       return sendJson(res, 200, { ok: true, runId: run.runId, prompt, run: docsCheckView(board, v.id) });

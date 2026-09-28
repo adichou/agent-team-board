@@ -1278,6 +1278,7 @@ async function summaryCmd(rest) {
       langs: publishFlow.docLangsOf(v),
       customDocs: publishFlow.customDocsOf(v),
       atbPath: 'node scripts/atb.mjs',
+      version: v.version || null,
     });
     const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt };
     if (jsonOut) { console.log(JSON.stringify(payload)); return; }
@@ -1395,6 +1396,7 @@ async function translateCmd(rest) {
       langs,
       customDocs,
       atbPath: 'node scripts/atb.mjs',
+      version: v.version || null,
     });
     const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt, baselineShift: flowEval.baselineShift };
     if (jsonOut) { console.log(JSON.stringify(payload)); return; }
@@ -1493,6 +1495,7 @@ async function docsCheckCmd(rest) {
       langs: publishFlow.docLangsOf(v),
       customDocs: publishFlow.customDocsOf(v),
       atbPath: 'node scripts/atb.mjs',
+      version: v.version || null,
     });
     const payload = { runId: run.runId, verId: v.id, owner: run.owner, phase: run.phase, prompt };
     if (jsonOut) { console.log(JSON.stringify(payload)); return; }
