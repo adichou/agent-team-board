@@ -127,6 +127,9 @@ const EN = {
   '计划中': 'Planning',
   '合并中': 'Merging',
   '已合并': 'Merged',
+  // BUG-20260928-001：「已合并」标签口径后移到文档与翻译合入 main（docsMerge 落账）后；
+  // 仅挑选合并完成的中间态标签（版本计划三处状态标签与卡片阶段共用文案）
+  '代码已并入 · 文档与翻译未合并': 'Code merged · docs & translation not merged',
   '关键词在版本列表内前端过滤（版本名 / 单号），不发请求': 'Keywords filter the version list client-side (name / item id); no request is made',
   // REQ-20260914-002 分支浏览提交记录搜索（搜索行静态文案；计数 / 空态 / 末页动态拼接见 EN_DYNAMIC）
   // REQ-20260921-002：搜索范围扩展 message / 分支名 / tag（忽略大小写）+ 双模式 radio；
