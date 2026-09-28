@@ -128,15 +128,17 @@ const node = (h, sel) => h.document.querySelector('#releaseView').querySelector(
 
 /* ---------- 静态契约 ---------- */
 
-t('H1 build.js：merged 版本详情提供「创建发布」入口（正式发布步）；发布记录就地展示；未合并禁用并说明前置条件', () => {
-  assert.ok(/创建发布/.test(buildJs), '存在「创建发布」入口');
+t('H1 build.js：merged 版本详情提供唯一「发布」入口（正式发布步，BUG-20260928-002 收敛）；发布记录就地展示；未合并禁用并说明前置条件', () => {
+  assert.ok(/data-rel-publish/.test(buildJs), '存在唯一「发布」入口（发布条主按钮）');
   // REQ-20260921-016：「查看发布记录」卡片按钮移除，发布记录直接展示在详情正式发布步
   assert.ok(/发布记录/.test(buildJs), '存在「发布记录」展示区（正式发布步就地渲染）');
-  // 未 merged 的禁用与前置条件说明（disabled + title 文案含「合并」；正式发布步创建入口模板）
-  const m = buildJs.match(/data-ver-release="[^"]*"[\s\S]{0,300}/g) || [];
-  assert.ok(m.some((x) => /disabled/.test(x) && /合并/.test(x)), '未合并版本禁用创建发布并说明前置条件');
-  // BUG-20260916-001：构建内创建发布改走独立 /api/build-publish/from-build（不再复用产品发布模块）
-  assert.ok(/\/api\/build-publish\/from-build/.test(buildJs), '创建发布调用独立 from-build 接口');
+  // 未 merged 的禁用与前置条件说明（disabled + 就近文案含「合并」；发布条模板）
+  const pubBarFn = buildJs.match(/function renderPublishActions\(v, rel\) \{[\s\S]*?\n  \}/);
+  assert.ok(pubBarFn, '缺少 renderPublishActions（发布条模板）');
+  assert.ok(/v\.status !== 'merged'/.test(pubBarFn[0]) && /请先完成合并入 main/.test(pubBarFn[0]), '未合并版本禁用发布并说明前置条件');
+  // BUG-20260916-001：构建内发布改走独立 /api/build-publish/from-build（不再复用产品发布模块；
+  // BUG-20260928-002 起由一键发布链路自动调用）
+  assert.ok(/\/api\/build-publish\/from-build/.test(buildJs), '一键发布链路调用独立 from-build 接口');
   assert.ok(!/\/api\/product-release/.test(buildJs), 'build.js 不再调用旧产品发布 API');
 });
 

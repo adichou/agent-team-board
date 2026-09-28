@@ -78,6 +78,7 @@ function setup({ versions = [ver('BLD-20260915-001', 'v1.0', 'merged'), ver('BLD
       const up = new URL(String(url), 'http://local');
       if (up.pathname === '/api/build/state') return { ok: true, json: async () => JSON.parse(JSON.stringify(state())) };
       if (up.pathname === '/api/build/candidates') return { ok: true, json: async () => ({ items: [] }) };
+      if (up.pathname === '/api/build-publish/state') return { ok: true, json: async () => ({ runs: [], config: { homepageRepoRoot: '/tmp/hp' } }) };
       return { ok: true, json: async () => ({}) };
     },
   };
@@ -113,7 +114,7 @@ t('R1 REQ-20260921-016 列表精简：版本卡片不再渲染「创建发布」
   assert.doesNotMatch(detail, /从已合并版本发起跨仓库产品发布/, '详情底部产品发布说明移除');
 });
 
-t('R2 状态口径 + 按版本绑定（REQ-20260921-016 起入口在正式发布步 relCreateBtnHtml）：非 merged 禁用（title 含「请先完成合并入 main」）；merged 可用；未合并直调不弹层、目标按传入版本；查看记录就地激活不跳模块', async () => {
+t('R2 状态口径 + 按版本绑定（BUG-20260928-002 起唯一入口为发布条「发布」按钮）：非 merged 禁用（就近说明「请先完成合并入 main」）；merged 可用；未合并直调不弹层、目标按传入版本；查看记录就地激活不跳模块', async () => {
   const h = setup({ versions: [
     ver('BLD-DRAFT', 'd', 'draft'),
     ver('BLD-MERGING', 'g', 'merging'),
@@ -121,21 +122,21 @@ t('R2 状态口径 + 按版本绑定（REQ-20260921-016 起入口在正式发布
     ver('BLD-FAILED', 'f', 'failed'),
   ] });
   await h.enter(); // 选中首个 BLD-DRAFT
-  // 状态口径经正式发布步创建入口模板核验（REQ-20260921-016 列表卡片入口移除后唯一入口；
-  // 口径与原卡片按钮一致：仅 merged 可用，其余禁用并说明前置条件）
-  const relCreateFn = buildJs.match(/function relCreateBtnHtml\(v\) \{[\s\S]*?\n  \}/);
-  assert.ok(relCreateFn, '缺少 relCreateBtnHtml（正式发布步创建入口）');
-  assert.match(relCreateFn[0], /v\.status !== 'merged'/, '非 merged 锁定（draft / merging / failed 一并禁用）');
-  assert.match(relCreateFn[0], /请先完成合并入 main（仅已合并 merged 的版本计划可创建发布）/, '禁用 title 说明「请先完成合并入 main」');
-  assert.match(relCreateFn[0], /data-rel-create data-ver-release=/, '入口带 data-ver-release 行为标记（openReleaseConfirm 同一弹层）');
+  // 状态口径经发布条模板核验（REQ-20260921-016 列表卡片入口移除后唯一入口；口径与原
+  // 创建入口一致：仅 merged 可用，其余禁用并就近说明前置条件）
+  const pubBarFn = buildJs.match(/function renderPublishActions\(v, rel\) \{[\s\S]*?\n  \}/);
+  assert.ok(pubBarFn, '缺少 renderPublishActions（发布条唯一入口）');
+  assert.match(pubBarFn[0], /v\.status !== 'merged'/, '非 merged 锁定（draft / merging / failed 一并禁用）');
+  assert.match(pubBarFn[0], /请先完成合并入 main/, '禁用就近说明「请先完成合并入 main」');
+  assert.match(pubBarFn[0], /data-rel-publish=/, '入口带 data-rel-publish 行为标记（openPublishConfirm 二次确认）');
   // 未合并直调兜底：不弹窗
-  h.run(`window.ATBBuild.openReleaseConfirm('BLD-DRAFT')`);
-  assert.doesNotMatch(h.inner(), /创建产品发布（/, '未合并版本不打开弹层（兜底口径保留）');
-  // openReleaseConfirm 目标按传入版本（不受右侧选中态影响）
-  h.run(`window.ATBBuild.openReleaseConfirm('BLD-MERGED')`);
+  h.run(`window.ATBBuild.openPublishConfirm('BLD-DRAFT')`);
+  assert.doesNotMatch(h.inner(), /发布二次确认（/, '未合并版本不打开二次确认（兜底口径保留）');
+  // openPublishConfirm 目标按传入版本（不受右侧选中态影响）
+  h.run(`window.ATBBuild.openPublishConfirm('BLD-MERGED')`);
   const rcInner = h.inner();
-  assert.match(rcInner, /创建产品发布（BLD-MERGED）/, 'merged 打开既有核对弹层（目标为传入版本）');
-  assert.doesNotMatch(rcInner, /创建产品发布（BLD-DRAFT）/, '不误用右侧选中版本');
+  assert.match(rcInner, /发布二次确认（BLD-MERGED）/, 'merged 打开发布二次确认（目标为传入版本）');
+  assert.doesNotMatch(rcInner, /发布二次确认（BLD-DRAFT）/, '不误用右侧选中版本');
   assert.match(rcInner, /rel-card sel" data-ver-id="BLD-DRAFT"/, '选中态保持不变');
   // BUG-20260915-014：查看发布记录不再派发 atb:goto-view（旧跳转命中 HIDDEN_VIEWS 回落，
   // 即缺陷根因）——改为就地激活所在卡片版本的详情发布页签（REQ-20260921-016 起按钮移除，
@@ -147,10 +148,11 @@ t('R2 状态口径 + 按版本绑定（REQ-20260921-016 起入口在正式发布
   assert.ok(!fired.some((e) => e.type === 'atb:goto-view'), '不再派发跨模块跳转事件');
   assert.match(relInner, /rel-card sel" data-ver-id="BLD-MERGED"/, '查看发布记录切换到所在卡片版本');
   assert.match(relInner, /data-step="release"[^>]*aria-selected="true"/, '就地激活「正式发布」步（REQ-20260920-003 五步）');
-  // 卡片按钮静态契约：bindCommon 循环绑定 data-ver-release（正式发布步入口）保留；
-  // data-ver-release-view 绑定随卡片按钮移除（REQ-20260921-016）
-  assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release\]'\)/, 'bindCommon 循环绑定 data-ver-release');
+  // 卡片按钮静态契约：bindCommon 循环绑定 data-rel-publish（正式发布步唯一入口）保留；
+  // 旧创建入口（data-rel-create / data-ver-release）与查看记录键随收敛 / 精简移除
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-publish\]'\)/, 'bindCommon 循环绑定 data-rel-publish');
   assert.ok(!buildJs.includes('data-ver-release-view'), 'data-ver-release-view 按钮与绑定移除（REQ-20260921-016）');
+  assert.ok(!buildJs.includes('data-rel-create'), 'data-rel-create（创建并预检入口）移除（BUG-20260928-002）');
 });
 
 /* ---------- R3 新建版本上移页签工具行 ---------- */
@@ -422,21 +424,22 @@ t('R9 i18n：新增静态文案入 EN、动态文案入 EN_DYNAMIC（值无中�
 
 /* ---------- R10 静态契约 ---------- */
 
-t('R10 静态契约：搜索/清空/分页绑定与样式类存在；发布按钮迁出详情（renderDetail 无 data-ver-release）', () => {
+t('R10 静态契约：搜索/清空/分页绑定与样式类存在；发布按钮迁出详情（renderDetail 无 data-rel-publish）', () => {
   assert.match(buildJs, /#bldItemsSearchInput/, 'bindCommon 绑定搜索输入框（草稿回写 + 回车提交）');
   assert.match(buildJs, /#bldItemsSearchGo/, 'bindCommon 绑定搜索按钮');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-items-search-clear\]'\)/, 'bindCommon 循环绑定清空入口');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-items-pg\]'\)/, 'bindCommon 循环绑定分页按钮');
   // REQ-20260921-016：发布入口自列表卡片迁至详情「正式发布」步（renderDetail 本身不拼模板，
-  // 由 renderReleasePane → relCreateBtnHtml 渲染）；renderVersionList 不再渲染发布按钮
+  // 由 renderReleasePane → renderPublishActions 渲染）；BUG-20260928-002 起收敛为唯一
+  //「发布」主按钮（data-rel-publish）；renderVersionList 不再渲染发布按钮
   const detailFn = buildJs.match(/function renderDetail\(v\) \{[\s\S]*?\n  \}/);
   assert.ok(detailFn, '缺少 renderDetail');
-  assert.doesNotMatch(detailFn[0], /data-ver-release/, 'renderDetail 不直接渲染发布按钮（经正式发布步子函数）');
+  assert.doesNotMatch(detailFn[0], /data-rel-publish/, 'renderDetail 不直接渲染发布按钮（经正式发布步子函数）');
   const listFn = buildJs.match(/function renderVersionList\(\) \{[\s\S]*?\n  \}/);
   assert.ok(listFn, '缺少 renderVersionList');
-  assert.doesNotMatch(listFn[0], /data-ver-release/, 'renderVersionList 不再渲染发布按钮（REQ-20260921-016 迁正式发布步）');
-  const relCreateFn2 = buildJs.match(/function relCreateBtnHtml\(v\) \{[\s\S]*?\n  \}/);
-  assert.ok(relCreateFn2 && /data-ver-release/.test(relCreateFn2[0]), '正式发布步创建入口（relCreateBtnHtml）渲染发布按钮');
+  assert.doesNotMatch(listFn[0], /data-rel-publish/, 'renderVersionList 不再渲染发布按钮（REQ-20260921-016 迁正式发布步）');
+  const pubBarFn = buildJs.match(/function renderPublishActions\(v, rel\) \{[\s\S]*?\n  \}/);
+  assert.ok(pubBarFn && /data-rel-publish/.test(pubBarFn[0]), '正式发布步发布条（renderPublishActions）渲染唯一「发布」按钮');
   assert.doesNotMatch(buildJs, /bld-toolbar/, '独立工具栏容器移除');
   const css = fs.readFileSync(path.join(webRoot, 'style.css'), 'utf8');
   assert.match(css, /\.bld-tabs-tools/, 'style.css 含页签行工具容器样式');

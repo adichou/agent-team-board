@@ -302,11 +302,12 @@ t('P3c 详情「概况」名称行仍显示合并状态；右侧「发布」页�
   //（夹具未落账）显示中间态标签，不再显示「已合并」
   const detail = inner.slice(inner.indexOf('bld-name'));
   assert.match(detail, />代码已并入 · 文档与翻译未合并<\/span>/, '详情概况名称行显示合并中间态');
-  // 发布页签仍正常：打开后可见运行与已发布状态
+  // 发布页签仍正常：已发布态从简（BUG-20260928-002）——发布时间 + 发布成功说明 + 已发布按钮
   h.run(`window.ATBBuild.setStep('release')`);
   await h.tick(4);
   const rel = h.inner();
-  assert.match(rel, /data-rel-run="BPUB-20260917-0a1"/, '发布页签运行记录不受影响');
+  assert.match(rel, /发布时间：/, '发布页签显示发布时间（已发布态从简）');
+  assert.match(rel, /发布成功：版本计划标签已更新为「已发布」/, '发布页签显示发布成功说明');
   assert.match(rel, /class="st st-ok"[^>]*>已发布<\/span>/, '发布页签运行状态仍为「已发布」');
 });
 
@@ -346,9 +347,10 @@ t('P5 静态契约：卡片标签经 versionChip（发布成功替换）；发�
   assert.match(paneFn[0], /refresh\(\)/, '刷新状态入口应一并刷新构建 state');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-act\]'\)/, '发布动作绑定不回归');
   // REQ-20260921-016：「查看发布记录」卡片按钮及其绑定移除（发布记录直接展示在正式发布步，
-  // openReleaseTab 仍为程序化激活入口）；「创建并预检」绑定随详情步入口保留
+  // openReleaseTab 仍为程序化激活入口）；BUG-20260928-002 起唯一「发布」入口（创建并预检
+  // 前置入口随区域收敛移除，data-rel-publish 绑定不回归）
   assert.ok(!buildJs.includes('data-ver-release-view'), '查看发布记录卡片按钮与绑定移除（REQ-20260921-016）');
-  assert.match(buildJs, /view\.querySelectorAll\('\[data-ver-release\]'\)/, '创建并预检（正式发布步）绑定不回归');
+  assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-publish\]'\)/, '唯一「发布」入口（正式发布步）绑定不回归');
 });
 
 let failed = 0;
