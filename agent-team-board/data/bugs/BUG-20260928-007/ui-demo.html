@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUG-20260928-007 演示 — 发布文档 AI 提示词版本号未同源 x.y.z</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --border: #d0d7de; --text: #1f2328; --muted: #656d76;
+    --accent: #0969da; --accent-soft: #ddf4ff; --err: #cf222e; --err-soft: #ffebe9;
+    --ok: #1a7f37; --ok-soft: #dafbe1; --warn: #9a6700; --warn-soft: #fff8c5;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --accent: #4493f8; --accent-soft: #121d2f; --err: #f85149; --err-soft: #25171c;
+      --ok: #3fb950; --ok-soft: #12261e; --warn: #d29922; --warn-soft: #211d0e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+         font: 14px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .banner { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px;
+            padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  /* 控制条 */
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+              background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+              padding: 12px 14px; margin-bottom: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 6px 14px;
+                cursor: pointer; font-size: 13px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .seg button[aria-pressed="true"].bad { background: var(--err); }
+  .seg button[aria-pressed="true"].good { background: var(--ok); }
+  .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer;
+            user-select: none; }
+  .switch input { width: 16px; height: 16px; accent-color: var(--accent); }
+  /* 页面片段卡片（模拟文档编写页） */
+  .page-frag { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+               padding: 16px 18px; }
+  .ver-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline;
+              padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .ver-head .id { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .ver-head .no { font-size: 15px; font-weight: 600; }
+  .ver-head .no mark { padding: 0 4px; border-radius: 4px; }
+  .ver-head .no mark.ok { background: var(--ok-soft); color: var(--ok); }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+  .steps .btn { border: 1px solid var(--border); background: var(--card); color: var(--text);
+                border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+  .steps .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .steps .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .steps .btn.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .steps-note { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  /* 一致性指示 */
+  .consistency { border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; font-size: 13px;
+                 border: 1px solid var(--border); }
+  .consistency.err { background: var(--err-soft); border-color: var(--err); color: var(--err); }
+  .consistency.ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+  .consistency.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  /* 提示词预览折叠盒（真实页面为 <details class="bld-docs-prompt-box"> 默认折叠） */
+  details.prompt-box { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; }
+  details.prompt-box > summary { cursor: pointer; padding: 8px 12px; font-size: 13px;
+                                  user-select: none; }
+  details.prompt-box[open] > summary { border-bottom: 1px solid var(--border); }
+  .prompt-area { margin: 10px 12px; padding: 10px 12px; border: 1px solid var(--border);
+                 border-radius: 6px; background: var(--bg); font-family: var(--mono);
+                 font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-all;
+                 max-height: 260px; overflow: auto; }
+  .prompt-area mark { padding: 0 3px; border-radius: 3px; }
+  .prompt-area mark.bad { background: var(--err-soft); color: var(--err); font-weight: 700;
+                          outline: 1px dashed var(--err); }
+  .prompt-area mark.good { background: var(--ok-soft); color: var(--ok); font-weight: 700; }
+  .prompt-actions { padding: 0 12px 10px; }
+  .prompt-actions .btn { border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+                         font-size: 12px; cursor: pointer; background: var(--card); color: var(--text); }
+  .chk-copy-only { color: var(--muted); font-size: 12px; padding: 8px 12px; }
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+           background: var(--card); color: var(--text); border: 1px solid var(--border);
+           border-radius: 8px; padding: 8px 16px; font-size: 13px; opacity: 0; pointer-events: none;
+           transition: opacity .2s, transform .2s; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+           max-width: 86vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { border-color: var(--err); color: var(--err); }
+  #toast.ok { border-color: var(--ok); color: var(--ok); }
+  .legend { margin-top: 14px; color: var(--muted); font-size: 12px; }
+  .legend code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUG-20260928-007 — 发布文档 AI 总结 / 翻译 / 校对提示词的版本号未同源 x.y.z</h1>
+  <p class="sub">可交互演示：对照缺陷现象与期望修复后状态（单文件演示页，非真实看板页面；数据为演示样例）。</p>
+
+  <div class="banner" role="note">
+    演示的是发布模块「文档编写」页相关片段：三个 AI 提示词（① AI 总结 / ③ AI 校对 / ④ AI 翻译）内的
+    「版本号」仍由计划编号派生（<code>BLD-20260927-001 → 20260927-001</code>），而同屏界面版本号已取计划
+    x.y.z 字段（REQ-20260922-006）。用下方开关切换「缺陷 / 修复后」，并对比提示词预览中的高亮版本号。
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="修复状态切换">
+      <button type="button" id="modeBad" class="bad" aria-pressed="true">缺陷（当前）</button>
+      <button type="button" id="modeGood" class="good" aria-pressed="false">修复后（期望）</button>
+    </div>
+    <label class="switch"><input type="checkbox" id="legacyPlan"> 存量计划（无 version 字段，回退派生口径）</label>
+  </div>
+
+  <div class="page-frag" aria-label="文档编写页片段">
+    <div class="ver-head">
+      <span class="id">BLD-20260927-001</span>
+      <span class="no">版本号 <mark id="uiVersion" class="ok">1.0.0</mark></span>
+      <span class="id">阶段 docs · 2 个关联单 · 语言集 cn,en</span>
+    </div>
+
+    <div class="steps">
+      <button type="button" class="btn primary" id="pickSummary">① AI 总结</button>
+      <button type="button" class="btn" disabled title="演示与本 Bug 无关">② 二次编辑</button>
+      <button type="button" class="btn" id="pickProofread">③ AI 校对</button>
+      <button type="button" class="btn" id="pickTranslate">④ AI 翻译</button>
+      <button type="button" class="btn" disabled title="演示与本 Bug 无关">⑤ 提交</button>
+    </div>
+    <p class="steps-note">点按钮切换查看对应提示词；真实页面中总结 / 翻译点击后提示词复制到剪贴板并在下方展开预览折叠盒，校对仅复制不落预览。</p>
+
+    <div class="consistency err" id="consistency" role="status"></div>
+
+    <details class="prompt-box" id="promptBox" open>
+      <summary id="promptTitle">AI 总结提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb summary 逐文件回执，本页自动刷新）</summary>
+      <div class="prompt-area" id="promptArea" tabindex="0" aria-readonly="true"></div>
+      <div class="prompt-actions">
+        <button type="button" class="btn" id="copyBtn">复制提示词</button>
+        <span class="chk-copy-only" id="copyOnlyNote" hidden>真实页面中 AI 校对提示词不落预览折叠盒，仅复制到剪贴板 + toast 回执；本演示为对照故以文本区展示。</span>
+      </div>
+    </details>
+
+    <p class="legend">
+      口径：<mark class="bad" style="background:var(--err-soft);color:var(--err)">红色高亮</mark>＝提示词内错误的派生版本号；
+      <mark class="good" style="background:var(--ok-soft);color:var(--ok)">绿色高亮</mark>＝同源 x.y.z / 预期回退值。
+      存量计划两态一致（界面与提示词均为派生值），属预期回退口径、不算缺陷。
+    </p>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  var PLAN_ID = 'BLD-20260927-001';
+  var VERSION_XYZ = '1.0.0';
+  var VERSION_DERIVED = '20260927-001';
+  var PROJECT_ROOT = '/Users/demo/src/agent-team-board';
+  var ATB = 'node scripts/atb.mjs';
+
+  var state = { mode: 'bad', legacy: false, kind: 'summary' };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // 与 publish-flow.mjs 三个提示词的行文对应（节选运行参数区与首行，非全文）
+  function promptOf(kind, ver) {
+    if (kind === 'summary') {
+      return [
+        '运行参数（随任务变化，命令占位符以本区实际值为准）：',
+        '项目路径：' + PROJECT_ROOT,
+        '发布计划号：' + PLAN_ID + '（版本号 ' + ver + '）',
+        '执行编号：sum-20260927-080102-ab01',
+        'CLI 入口：' + ATB,
+        '默认语言文档清单（语言集首语言 cn，共 4 个文档，4 类 × 1）：',
+        '- README.md（简体中文 / README）',
+        '- CHANGELOG.md（简体中文 / CHANGELOG）',
+        '- FEATURES.md（简体中文 / FEATURES）',
+        '- AGENTS.md（简体中文 / AGENTS）',
+        '关联范围（按实际代码与提交核实变化，不简单罗列需求 / Bug 原文）：',
+        '- REQ-20260927-002'
+      ].join('\n');
+    }
+    if (kind === 'translate') {
+      return [
+        '你是发布文档 AI 翻译任务的派发协调者，负责「' + PLAN_ID + '」（版本号 ' + ver + '）的翻译派发（阶段二：默认语言已全部人工审核）：对下列每个目标文件各派发一个子代理，全部并行（并行子代理数 = 目标文件数，不设上限），每个子代理只负责翻译自己名下的一个文件；派发与回执之外不展开代码修改。',
+        '',
+        '项目路径：' + PROJECT_ROOT,
+        '发布计划号：' + PLAN_ID + '（版本号 ' + ver + '）',
+        '执行编号：tr-20260927-090203-cd01',
+        '',
+        '翻译基准（唯一基准——已人工审核的默认语言 cn 文档，语义以基准文件为准，不得引入基准外信息，不得编造）：',
+        '目标文件与基准文件对应（左基准 → 右目标，均在项目路径下，共 4 个目标文件，4 类 × 1 语言，剩余语言 en）：',
+        '- README.md → README_en.md（English / README）',
+        '- CHANGELOG.md → CHANGELOG_en.md（English / CHANGELOG）',
+        '- FEATURES.md → FEATURES_en.md（English / FEATURES）',
+        '- AGENTS.md → AGENTS_en.md（English / AGENTS）'
+      ].join('\n');
+    }
+    return [
+      '运行参数（随任务变化，命令占位符以本区实际值为准）：',
+      '项目路径：' + PROJECT_ROOT,
+      '发布计划号：' + PLAN_ID + '（版本号 ' + ver + '）',
+      '执行编号：chk-20260927-100304-ef01',
+      'CLI 入口：' + ATB,
+      '默认语言校对清单（语言集首语言 cn，共 4 个文档，4 类）：',
+      '- README.md（简体中文 / README）',
+      '- CHANGELOG.md（简体中文 / CHANGELOG）',
+      '- FEATURES.md（简体中文 / FEATURES）',
+      '- AGENTS.md（简体中文 / AGENTS）'
+    ].join('\n');
+  }
+
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // UI 版本号：真实页面（web/build.js 列表卡片与详情头部）优先取 v.version，存量回退派生
+  function uiVersion() { return state.legacy ? VERSION_DERIVED : VERSION_XYZ; }
+  // 提示词版本号：缺陷 = 恒派生；修复后 = 优先 v.version（存量回退派生）
+  function promptVersion() {
+    if (state.mode === 'bad') return VERSION_DERIVED;
+    return state.legacy ? VERSION_DERIVED : VERSION_XYZ;
+  }
+
+  function render() {
+    var ver = promptVersion();
+    // 控制条状态
+    $('modeBad').setAttribute('aria-pressed', state.mode === 'bad' ? 'true' : 'false');
+    $('modeGood').setAttribute('aria-pressed', state.mode === 'good' ? 'true' : 'false');
+    $('legacyPlan').checked = state.legacy;
+    // 步骤按钮 active
+    ['pickSummary', 'pickProofread', 'pickTranslate'].forEach(function (id) {
+      var map = { pickSummary: 'summary', pickProofread: 'proofread', pickTranslate: 'translate' };
+      $(id).classList.toggle('active', map[id] === state.kind);
+    });
+    // 头部版本号高亮：与提示词一致 → 绿；不一致 → 保持中性但标出对照
+    var uiVerEl = $('uiVersion');
+    uiVerEl.textContent = uiVersion();
+    // 提示词文本 + 高亮版本号
+    var text = promptOf(state.kind, ver);
+    var badVer = state.mode === 'bad' && !state.legacy; // 缺陷且新计划 → 派生值是错的
+    var html = esc(text).split(esc(ver)).map(function (part, i, arr) {
+      if (i === arr.length - 1) return part;
+      return part + (badVer
+        ? '<mark class="bad">' + esc(ver) + '</mark>'
+        : '<mark class="good">' + esc(ver) + '</mark>');
+    }).join('');
+    $('promptArea').innerHTML = html;
+    // 标题与校对仅复制说明
+    var titles = {
+      summary: 'AI 总结提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb summary 逐文件回执，本页自动刷新）',
+      translate: 'AI 翻译提示词（已复制到剪贴板，交给 AI Agent 执行；进度经 atb translate 逐文件回执，本页自动刷新）',
+      proofread: 'AI 校对提示词（已复制到剪贴板，交给 AI Agent 逐文件核查默认语言文档；结果经 atb docscheck 逐文件回执）'
+    };
+    $('promptTitle').textContent = titles[state.kind];
+    $('copyOnlyNote').hidden = state.kind !== 'proofread';
+    // 一致性指示（状态反馈）
+    var c = $('consistency');
+    if (state.legacy) {
+      c.className = 'consistency warn';
+      c.textContent = '存量计划（无 version 字段）：界面与提示词版本号均为 ' + VERSION_DERIVED +
+        '（计划编号派生回退口径，REQ-20260922-006 旧数据不迁移）——两处一致，预期行为，缺陷与修复后两态相同。';
+    } else if (state.mode === 'bad') {
+      c.className = 'consistency err';
+      c.textContent = '✕ 版本号不同源：同屏界面版本号 ' + VERSION_XYZ + '（x.y.z 字段），提示词内版本号 ' +
+        VERSION_DERIVED + '（计划编号派生）——三个 AI 提示词（总结 / 翻译 / 校对）均未取 v.version。';
+    } else {
+      c.className = 'consistency ok';
+      c.textContent = '✓ 版本号同源：界面与提示词均为 ' + VERSION_XYZ +
+        '（提示词函数新增 version 参数并优先取用，与 BUG-20260928-006 修复的官网提示词同构；完整计划号 BLD-… 保留）。';
+    }
+  }
+
+  var toastTimer = null;
+  function toast(msg, cls) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'show ' + (cls || '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ''; }, 2600);
+  }
+
+  function copyPrompt() {
+    var text = promptOf(state.kind, promptVersion());
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        toast('✓ 提示词已复制：版本号 ' + promptVersion() + '（当前态：' +
+          (state.legacy ? '存量回退' : state.mode === 'bad' ? '缺陷' : '修复后') + '）', 'ok');
+      }, function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) toast('✓ 提示词已复制（兼容方式）', 'ok');
+      else toast('复制失败：file:// 环境剪贴板受限，请在文本区手动选择复制', 'err');
+    } catch (e) {
+      toast('复制失败：file:// 环境剪贴板受限，请在文本区手动选择复制', 'err');
+    }
+  }
+
+  $('modeBad').addEventListener('click', function () { state.mode = 'bad'; render(); });
+  $('modeGood').addEventListener('click', function () { state.mode = 'good'; render(); });
+  $('legacyPlan').addEventListener('change', function (e) { state.legacy = e.target.checked; render(); });
+  $('pickSummary').addEventListener('click', function () { state.kind = 'summary'; render(); });
+  $('pickProofread').addEventListener('click', function () { state.kind = 'proofread'; render(); });
+  $('pickTranslate').addEventListener('click', function () { state.kind = 'translate'; render(); });
+  $('copyBtn').addEventListener('click', copyPrompt);
+
+  render();
+})();
+</script>
+</body>
+</html>
