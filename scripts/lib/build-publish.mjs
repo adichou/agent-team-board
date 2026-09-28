@@ -219,6 +219,10 @@ async function verifySite(url,productId,base){
  for(const r of [`/apps/${productId}`,`/apps/${productId}/faq`,`/apps/${productId}/changelog`,'/support'])
   for(const u of [page(r),page(`/en${r}`)])await get(u);
 }
+// BUG-20260928-015 确认锁回退：发布运行以失败 / 取消终态收尾时调用（取消 ≠ 发布成功）。
+// 仅当该运行的确认仍挂账（confirmedRunId 匹配）且按失败口径判定时清除确认锁（成功不可逆）；
+// 版本记录缺失 / 写入失败不阻断发布收尾（与 start 处确认落账同宽口径）。
+const rollbackConfirm=(dataDir,run)=>{if(run?.bldId){try{buildStore.rollbackReleaseConfirm(dataDir,run.bldId,{runId:run.id});}catch{/* 确认回退失败不阻断收尾 */}}};
 async function execute(dataDir,root,id){
  const key=`${dataDir}:${id}`,log=message=>store.updateRun(dataDir,id,r=>r.logs.push({at:new Date().toISOString(),message}));
  const save=(fn)=>store.updateRun(dataDir,id,fn);
@@ -229,7 +233,7 @@ async function execute(dataDir,root,id){
  try{
   for(const [stageKey] of store.steps){
    let run=store.readRun(dataDir,id);
-   if(run.cancelRequested){save(r=>{r.status='canceled';});return;}
+   if(run.cancelRequested){save(r=>{r.status='canceled';});rollbackConfirm(dataDir,run);return;}
    // 回验总是重新执行，进程重启后重新启动本机服务。
    if(run.stages.find(s=>s.key===stageKey).status==='done'&&!stageKey.endsWith('verify'))continue;
    save(r=>{r.stages.find(s=>s.key===stageKey).status='running';});log(`开始 ${stageKey}`);
@@ -282,9 +286,10 @@ async function execute(dataDir,root,id){
      save(r=>{r.targets.site.status='done';r.targets.site.verifiedVersion=r.version;});
     }
     save(r=>{r.stages.find(s=>s.key===stageKey).status='done';});log(`完成 ${stageKey}`);
-   }catch(e){save(r=>{r.status='failed';r.error={message:e.message,stage:stageKey};const s=r.stages.find(s=>s.key===stageKey);s.status='failed';s.error=e.message;if(stageKey.startsWith('webapp'))r.targets.webapp.status='failed';if(stageKey.startsWith('site'))r.targets.site.status='failed';});log(e.message);return;}
+   }catch(e){save(r=>{r.status='failed';r.error={message:e.message,stage:stageKey};const s=r.stages.find(s=>s.key===stageKey);s.status='failed';s.error=e.message;if(stageKey.startsWith('webapp'))r.targets.webapp.status='failed';if(stageKey.startsWith('site'))r.targets.site.status='failed';});log(e.message);rollbackConfirm(dataDir,run);return;}
   }
-  save(r=>{r.status=r.targets.webapp.status==='done'&&r.targets.site.status==='done'?'succeeded':'failed';});
+  const fin=save(r=>{r.status=r.targets.webapp.status==='done'&&r.targets.site.status==='done'?'succeeded':'failed';});
+  if(fin.status!=='succeeded')rollbackConfirm(dataDir,fin); // BUG-20260928-015：完成态判 failed 同样回退
  }finally{active.delete(key);}
 }
 export async function start(dataDir,root,id,token){
@@ -299,11 +304,11 @@ export async function start(dataDir,root,id,token){
  //（或既有运行的重试）触发——此刻即正式发布时点（version.json release.confirmedAt，
  // 幂等首认固化）；推送动作本身不落此账。版本记录缺失 / 写入失败不阻断发布执行。
  if(run.bldId){try{buildStore.recordReleaseConfirm(dataDir,run.bldId,{runId:run.id});}catch{/* 确认落账失败不阻断发布 */}}
- const completion=execute(dataDir,root,id);completion.catch(e=>{store.updateRun(dataDir,id,r=>{r.status='failed';r.error={message:e.message};});});
+ const completion=execute(dataDir,root,id);completion.catch(e=>{store.updateRun(dataDir,id,r=>{r.status='failed';r.error={message:e.message};});rollbackConfirm(dataDir,store.readRun(dataDir,id));});
  return {run:store.readRun(dataDir,id),completion};
 }
-export function cancel(dataDir,id){return store.updateRun(dataDir,id,r=>{if(['running','prechecking'].includes(r.status))r.cancelRequested=true;else if(r.status!=='succeeded')r.status='canceled';});}
-export function recover(dataDir){for(const r of store.listRuns(dataDir))if(['running','prechecking'].includes(r.status)&&!active.has(`${dataDir}:${r.id}`))store.updateRun(dataDir,r.id,x=>{x.status='failed';x.error={message:'服务中断，请重新预检并确认重试'};});}
+export function cancel(dataDir,id){const run=store.updateRun(dataDir,id,r=>{if(['running','prechecking'].includes(r.status))r.cancelRequested=true;else if(r.status!=='succeeded')r.status='canceled';});if(run.status==='canceled')rollbackConfirm(dataDir,run);return run;}
+export function recover(dataDir){for(const r of store.listRuns(dataDir))if(['running','prechecking'].includes(r.status)&&!active.has(`${dataDir}:${r.id}`)){store.updateRun(dataDir,r.id,x=>{x.status='failed';x.error={message:'服务中断，请重新预检并确认重试'};});rollbackConfirm(dataDir,r);}}
 export async function openDirectory(dataDir,id,target,{platform=process.platform,open=p=>exec('/usr/bin/open',['-a','Finder',p])}={}){
  const info=store.directoryInfo(store.readRun(dataDir,id),target);
  if(!info.available)throw new AtbError(info.reason);

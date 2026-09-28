@@ -2339,7 +2339,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       // 发布汇总（不改既有语义）。
       versions: buildStore.listVersions(dataDir).map((v) => ({
         ...v,
-        released: buildStore.isReleased(v),
+        released: buildStore.isReleased(v, dataDir),
         // REQ-20260922-006 发布时间：顶层 releasedAt（推送成功时写入）；存量已推送计划
         // 无该字段时按 release.pushedAt 回退（列表装配处统一计算，前端不再兜底）。注意
         // release 键随后被产品发布汇总覆盖，推送事实只经 releasedAt 透出（pushed 键随
@@ -2484,8 +2484,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
         throw new buildStore.BuildConflictError('版本正在合并中，请勿重复触发');
       }
       // BUG-20260928-005：锁定基准 = 发布确认（正式发布）——merged（含已推送未确认）允许
-      // 为补入条目重开合并（增量：只补未合并条目，已并入提交幂等记成功）；发布确认后拒绝。
-      if (buildStore.isReleased(v)) {
+      // 为补入条目重开合并（增量：已并入提交幂等记成功）；发布确认后拒绝。
+      // BUG-20260928-015：isReleased 传数据目录兜底——确认对应发布运行 failed / canceled
+      // 时不构成正式发布（不按「已正式发布」拦截）。
+      if (buildStore.isReleased(v, board)) {
         throw new buildStore.BuildConflictError('版本已正式发布，不可再合并（如需调整请新建版本）');
       }
       // REQ-20260920-003 发布前置：工作目录必须在 dev（main / 其他分支 / detached 一律阻止，
@@ -2617,7 +2619,9 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       versionNumber: v.version || flow.versionNumberOf(v.id),
       langs: flow.docLangsOf(v), // REQ-20260921-010 文档语言集（缺省 cn,en）
       customDocs: flow.customDocsOf(v), // REQ-20260922-003 自定义文档清单（缺省空，回显）
-      steps: flow.publishStepsState(v, docsEval),
+      // BUG-20260928-015：门禁 released 以 isReleased(v, board) 兜底口径传入（确认运行
+      // failed / canceled 不锁范围）。
+      steps: flow.publishStepsState(v, docsEval, buildStore.isReleased(v, board)),
       docs: docsEval,
       docsFlow: docsFlowOf(dataDir, v),
       summary: docsSummary.summaryRunView(docsSummary.latestSummaryRun(dataDir, v.id)),
@@ -3004,7 +3008,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       const board = requireBoard();
       const v = buildStore.readVersion(board, body.id);
       if (v.status === 'merging') throw new buildStore.BuildConflictError('版本合并中，暂不可合并文档');
-      if (buildStore.isReleased(v)) throw new buildStore.BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
+      if (buildStore.isReleased(v, board)) throw new buildStore.BuildConflictError('已正式发布，范围锁定（如需调整请新建版本）');
       if (!v.docs || !v.docs.commitHash) throw new core.AtbError('发布文档尚未提交：请先完成「文档与翻译」并提交文档，再执行文档合并');
       const docsEval = flow.evaluateDocsState(v, docReadFile);
       if (docsEval.overall !== 'committed') {

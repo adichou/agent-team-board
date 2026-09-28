@@ -852,10 +852,13 @@ const DOCS_GATE_TEXT = {
 //     放开供查看结果。
 // BUG-20260928-005：仅推送（release.pushedAt）不锁定——推送是事实不是「正式发布」，正式
 // 发布以「发布」按钮二次确认（release.confirmedAt，一键发布链路 start 落账）为准。
-export function publishStepsState(v, docsEval) {
+// BUG-20260928-015：可选第三参 released（服务端以 isReleased(v, dataDir) 兜底口径传入）——
+// 确认对应的发布运行以失败 / 取消终态结束时该确认不构成正式发布（门禁不锁范围）；缺省按
+// confirmedAt 现状判定（只读求值不读运行账本，旧调用零回归）。
+export function publishStepsState(v, docsEval, releasedOverride) {
   const items = Array.isArray(v?.items) ? v.items : [];
   const status = v?.status || 'draft';
-  const released = !!(v?.release && v?.release.confirmedAt);
+  const released = typeof releasedOverride === 'boolean' ? releasedOverride : !!(v?.release && v?.release.confirmedAt);
   const docsMerged = !!(v?.docsMerge && v?.docsMerge.commitHash);
   const legacyDocs = !!(v?.docs && v?.docs.commitHash); // 旧流程（先文档后合并）已有提交记录
   const anyMerged = status === 'merged' || items.some((x) => x.mergedAt);
