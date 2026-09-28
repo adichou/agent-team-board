@@ -728,10 +728,76 @@ export function siteEvidenceReachable(siteRoot, hash, branch) {
   return isAncestorOf(siteRoot, hash, b);
 }
 
+// ---------- BUG-20260928-003：发布文档引用的本地图片随文档一并提交 ----------
+// 口径对齐 BUG-20260927-001（state-guard 静态解析）：仅认相对引用（scheme://、协议相对 //、
+// 绝对路径、锚点一律不算，decodeURIComponent 容错），解析须落在项目根内、扩展名在图片白名单
+// 内，且不入受保护源码目录与看板目录 agent-team-board/——源码 / 应用数据不能借「文档引用」
+// 进入图片通道。与守卫的两点预期差异：① 解析对象是本次提交清单内的全部 .md 文档（含语言
+// 变体——它们本就在发布提交范围内，其引用的图片同样需要入库，否则发布渲染破图）；② 仅并入
+// 磁盘存在且未被 .gitignore 忽略的文件（缺图不阻断文档提交、被忽略图片不强收入库，均交由
+// 用户自查）。正则与白名单同 state-guard 保持一致。
+const DOC_IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|svg|avif|ico|bmp|apng)$/i;
+const DOC_IMAGE_FORBIDDEN_TOP_DIRS = ['scripts', 'commands', 'skills', 'hooks', '.zcode-plugin', '.codex-plugin', 'assets', 'agent-team-board'];
+
+// 提取文档正文里的本地引用候选：Markdown ![alt](src "title")（src 可 <尖括号> 包裹）与
+// HTML <img src=…>（与 state-guard localImageRefsOf 同款正则）。
+function docLocalImageRefs(text) {
+  const refs = [];
+  const srcOf = (raw) => {
+    const s = String(raw || '').trim();
+    return s.startsWith('<') && s.endsWith('>') ? s.slice(1, -1) : s;
+  };
+  for (const m of String(text || '').matchAll(/!\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g)) {
+    refs.push(srcOf(m[1]));
+  }
+  for (const m of String(text || '').matchAll(/<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)) {
+    refs.push(m[1] || m[2] || m[3]);
+  }
+  return refs.filter(Boolean);
+}
+
+// 引用 → 项目根内相对 posix 路径；不是本地图片引用（带 scheme、//、/、# 开头、逃逸项目根、
+// 非图片扩展名、落点在受保护源码目录 / 看板目录）返回 null。
+function docImageRefRel(root, rawRef) {
+  let ref = String(rawRef || '').trim();
+  if (!ref) return null;
+  try { ref = decodeURIComponent(ref); } catch { /* 含非法 % 序列按原文判定 */ }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(ref)) return null; // https: / data: / mailto: 等带 scheme
+  if (ref.startsWith('//') || ref.startsWith('/') || ref.startsWith('#')) return null;
+  const relPosix = path.relative(root, path.resolve(root, ref)).split(path.sep).join('/');
+  if (!relPosix || relPosix === '..' || relPosix.startsWith('../')) return null; // 逃逸项目根
+  if (!DOC_IMAGE_EXT_RE.test(relPosix)) return null; // 仅图片扩展名
+  if (DOC_IMAGE_FORBIDDEN_TOP_DIRS.includes(relPosix.split('/')[0])) return null; // 源码 / 看板数据不入范围
+  return relPosix;
+}
+
+// 汇总：docFiles（根第一层 .md 清单）正文引用、磁盘存在且未被 .gitignore 忽略的本地图片
+// 相对 posix 清单（去重保序）。check-ignore 逐文件按退出码判定（0 = 被忽略 → 跳过，
+// 不强收入库、尊重忽略意图，也不因 add 失败阻断整个发布文档提交；其余一律并入）。
+function docReferencedImages(root, docFiles) {
+  const rels = new Set();
+  for (const name of docFiles) {
+    let text = '';
+    try {
+      if (!fs.statSync(path.join(root, name)).isFile()) continue;
+      text = fs.readFileSync(path.join(root, name), 'utf8');
+    } catch { continue; } // 单个文档缺失 / 损坏不影响其余
+    for (const raw of docLocalImageRefs(text)) {
+      const rel = docImageRefRel(root, raw);
+      if (!rel) continue;
+      try { if (fs.statSync(path.join(root, rel)).isFile()) rels.add(rel); } catch { /* 缺图不入 */ }
+    }
+  }
+  return [...rels].filter((rel) => gitRaw(root, ['check-ignore', '--quiet', '--', rel]).status !== 0);
+}
+
 // 受限写（文档提交）：只提交给定清单（REQ-20260921-010 起由调用方按语言集展开，如
 // cn,en,fr → 4 × 3 共 12 个 <KEY>[_<lang>].md）中已存在的文件——git add 与 git commit
 // 均按 pathspec 限定，绝不夹带业务源码或其他工作区修改；无变化时不制造空提交（noop）。
-// files 缺省保留旧八字节点号清单（兼容既有调用方）。
+// BUG-20260928-003：本次提交文档正文引用的本地图片并入 git add / git commit pathspec 与
+// noop 判定的 diff 范围（文档无变化但图片新增 / 修改仍产生提交，保证发布渲染不破图）；
+// 返回值 images = 并入的图片清单，files / hashes 仍为 .md 文档（recordDocsCommit 对文件名
+// 有发布文档白名单校验，图片不得混入）。files 缺省保留旧八字节点号清单（兼容既有调用方）。
 // 返回逐文件内容 sha256（供 recordDocsCommit 固化「提交时点磁盘内容」基准）。
 export function commitPublishDocs(root, { message, files } = {}) {
   const DOC_FILES = Array.isArray(files) && files.length
@@ -740,14 +806,16 @@ export function commitPublishDocs(root, { message, files } = {}) {
   if (!isGitRepo(root)) throw new AtbError('项目不是 git 仓库：请先初始化 git（可经 atb init），再提交文档');
   const existing = DOC_FILES.filter((f) => fs.existsSync(path.join(root, f)));
   if (!existing.length) throw new AtbError('尚无已编写的发布文档（先保存至少一个文档再提交）');
-  gitOk(root, ['add', '--', ...existing], '暂存发布文档');
-  const diff = gitRaw(root, ['diff', '--cached', '--quiet', '--', ...existing]);
-  if (diff.status === 0) return { ok: true, noop: true, files: existing, hashes: null };
-  gitOk(root, ['commit', '-m', String(message || 'docs: 发布文档'), '--', ...existing], '提交发布文档');
+  const images = docReferencedImages(root, existing);
+  const scope = [...existing, ...images];
+  gitOk(root, ['add', '--', ...scope], '暂存发布文档');
+  const diff = gitRaw(root, ['diff', '--cached', '--quiet', '--', ...scope]);
+  if (diff.status === 0) return { ok: true, noop: true, files: existing, images, hashes: null };
+  gitOk(root, ['commit', '-m', String(message || 'docs: 发布文档'), '--', ...scope], '提交发布文档');
   const commitHash = gitOk(root, ['rev-parse', 'HEAD'], '读取文档提交').trim();
   const hashes = {};
   for (const f of existing) {
     hashes[f] = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, f))).digest('hex');
   }
-  return { ok: true, noop: false, commitHash, files: existing, hashes };
+  return { ok: true, noop: false, commitHash, files: existing, images, hashes };
 }
