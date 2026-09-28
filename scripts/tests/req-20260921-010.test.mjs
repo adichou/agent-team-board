@@ -121,7 +121,9 @@ t('L1-5 buildDocSummaryPrompt：清单按语言集的默认语言（首语言）
   for (const f of ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md']) {
     assert.ok(p.includes(`${f}（`), `提示词应含默认语言 ${f}`);
   }
-  assert.ok(!p.includes('README_en.md') && !p.includes('_fr.md') && !p.includes('_jp.md'), '总结清单不含剩余语言文件');
+  // BUG-20260928-009：收窄口径改为校验「默认语言文档清单」区（切换行示例含剩余语言变体属正常）
+  const listSec = p.slice(p.indexOf('默认语言文档清单'), p.indexOf('关联范围'));
+  assert.ok(!listSec.includes('README_en.md') && !listSec.includes('_fr.md') && !listSec.includes('_jp.md'), '总结清单不含剩余语言文件');
   assert.ok(!p.includes('语言集条目标题（不应内嵌）'), 'BUG-20260921-005：关联范围不内嵌条目标题');
   assert.ok(p.includes('4 个文档') && p.includes('4 类 × 1'), '文件数与阶段说明与实际一致');
   assert.ok(p.includes('README.md → CHANGELOG.md / FEATURES.md'), 'README 链接提示按默认语言命名');
@@ -129,7 +131,11 @@ t('L1-5 buildDocSummaryPrompt：清单按语言集的默认语言（首语言）
 
   const p2 = flow.buildDocSummaryPrompt({ projectRoot: '/p', planId: 'BLD-20260921-010', items: [], langs: ['en', 'cn'] });
   assert.ok(p2.includes('默认语言（语言集首语言 en）') || p2.includes('首语言 en'), '默认语言随语言集首语言（可为英文）');
-  assert.ok(!p2.includes('README_cn.md') && !p2.includes('README.md → CHANGELOG.md') === false, '英文默认语言时 README.md 即英文基准');
+  // BUG-20260928-009：切换行示例合法含全部语言变体（含 README_cn.md），收窄口径改为校验
+  // 「默认语言文档清单」区；README 互链提示仍按默认语言命名。
+  const listSec2 = p2.slice(p2.indexOf('默认语言文档清单'), p2.indexOf('关联范围'));
+  assert.ok(!listSec2.includes('README_cn.md'), '英文默认语言时清单不含剩余语言文件');
+  assert.ok(p2.includes('README.md → CHANGELOG.md'), '英文默认语言时 README.md 即英文基准');
 });
 
 t('L1-6 evaluateDocsState / evaluateDocsFlow：行数 = 4×N，计数与文案不硬编码 8', () => {

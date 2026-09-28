@@ -146,7 +146,9 @@ t('L1-6 AI 总结提示词：计划号/版本号/项目路径/八文档/逐文�
   assert.ok(p.includes('BLD-20260921-001') && p.includes('20260921-001'), '计划号与版本号');
   assert.ok(p.includes('/tmp/proj-x'), '项目路径');
   assert.ok(p.includes('README.md') && p.includes('AGENTS.md'), '默认语言四文档清单');
-  assert.ok(!p.includes('README_en.md') && !p.includes('_en.md'), '总结清单不含剩余语言文件（REQ-20260921-012 阶段一收窄）');
+  // BUG-20260928-009：收窄口径改为校验「默认语言文档清单」区（切换行示例含剩余语言变体属正常）
+  const listSec = p.slice(p.indexOf('默认语言文档清单'), p.indexOf('关联范围'));
+  assert.ok(!listSec.includes('README_en.md') && !listSec.includes('_en.md'), '总结清单不含剩余语言文件（REQ-20260921-012 阶段一收窄）');
   assert.ok(p.includes('sum-20260921-010101-ab01'), '带 runId');
   assert.ok(!p.includes('文档编写页优化'), 'BUG-20260921-005：关联范围不内嵌条目标题');
   assert.ok(p.includes('summary file') && p.includes('summary done') && p.includes('summary fail'), '逐文件进度回执 CLI 指令');

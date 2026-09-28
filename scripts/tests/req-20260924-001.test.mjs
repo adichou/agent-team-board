@@ -60,7 +60,9 @@ t('L1-4 AI 校对提示词：默认语言文件清单（不含剩余语言与 LI
   for (const f of ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md', 'MIGRATION.md']) {
     assert.ok(p.includes(f), `校对清单含默认语言 ${f}`);
   }
-  assert.ok(!p.includes('README_en.md') && !p.includes('MIGRATION_en.md'), '剩余语言文件不在校对范围');
+  // BUG-20260928-009：收窄口径改为校验「默认语言校对清单」区（切换行核查示例含剩余语言变体属正常）
+  const listSec = p.slice(p.indexOf('默认语言校对清单'));
+  assert.ok(!listSec.includes('README_en.md') && !listSec.includes('MIGRATION_en.md'), '剩余语言文件不在校对清单');
   assert.ok(!p.includes('LICENSE.md'), '单文件类 LICENSE 不进校对');
   assert.ok(p.includes('docscheck file') && p.includes('docscheck done') && p.includes('docscheck fail'), 'atb docscheck 回执指令');
   assert.ok(p.includes('pass') && p.includes('fail') && p.includes('--issues'), '逐文件 pass/fail + issues 回执');

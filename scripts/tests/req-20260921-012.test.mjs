@@ -103,7 +103,9 @@ t('L1-3 提示词：AI 总结仅默认语言 4 文件；AI 翻译以已审核默
   for (const f of ['README.md', 'CHANGELOG.md', 'FEATURES.md', 'AGENTS.md']) {
     assert.ok(p.includes(`${f}（`), `总结清单含默认语言 ${f}`);
   }
-  assert.ok(!p.includes('README_en.md') && !p.includes('_en.md'), '总结清单不再包含剩余语言文件');
+  // BUG-20260928-009：收窄口径改为校验「默认语言文档清单」区（切换行示例含剩余语言变体属正常）
+  const listSec = p.slice(p.indexOf('默认语言文档清单'), p.indexOf('关联范围'));
+  assert.ok(!listSec.includes('README_en.md') && !listSec.includes('_en.md'), '总结清单不再包含剩余语言文件');
   assert.ok(!p.includes('三阶段流程'), 'BUG-20260921-005：关联范围不内嵌条目标题');
 
   const base = {
@@ -382,7 +384,9 @@ t('L3 服务接口：阶段门禁 / AI 翻译 / 提交前置（全审即放行�
     r = await req(port, 'POST', `/api/build/docs-summary/start${P}`, { id: vid });
     assert.equal(r.status, 200, `summary start：${r.text}`);
     const sumRunId = r.json.runId;
-    assert.ok(!r.json.prompt.includes('README_en.md'), '总结提示词不含剩余语言文件');
+    // BUG-20260928-009：收窄口径改为校验「默认语言文档清单」区（切换行示例含剩余语言变体属正常）
+    const sumListSec = r.json.prompt.slice(r.json.prompt.indexOf('默认语言文档清单'), r.json.prompt.indexOf('关联范围'));
+    assert.ok(!sumListSec.includes('README_en.md') && !sumListSec.includes('_en.md'), '总结提示词清单不含剩余语言文件');
     summaryStore.markSummaryFile(dataDir, sumRunId, 'README.md', 'summarized');
     r = await req(port, 'GET', `/api/build/docs-summary/current${P}&id=${vid}`);
     assert.equal(r.json.run.counts.total, 4, '进度 x/4');

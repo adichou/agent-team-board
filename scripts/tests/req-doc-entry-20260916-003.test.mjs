@@ -4,7 +4,8 @@
 // 不应导致测试失败；仅保留「声明的仓库内路径逐一真实存在」的结构检查）。
 // 覆盖：
 //   A1 根 README.md 存在且非空，清单声明的每一个仓库内路径在仓库中真实存在（清单内置于本文件）
-//   B3 路径清单含 README.en.md、migrate-layout.mjs、plugin-pack.mjs 且逐一真实存在
+//   B3 路径清单含 migrate-layout.mjs、plugin-pack.mjs 且逐一真实存在（README.en.md 已随
+//   BUG-20260928-009 删除——点号命名孤儿文件，由 <KEY>_<lang>.md 语言变体机制取代）
 // 用法：node scripts/tests/req-doc-entry-20260916-003.test.mjs
 
 import assert from 'node:assert/strict';
@@ -25,7 +26,6 @@ const declaredPaths = [
   '.zcode-plugin/plugin.json',
   '.codex-plugin/plugin.json',
   'README.md',
-  'README.en.md', // REQ-20260918-001 英文对照版
   'index.html', // 仓库根产品落地页（REQ-20260916-002）
   'AGENTS.md',
   'skills/agent-team-board/SKILL.md',
@@ -87,8 +87,9 @@ t('A1 README 声明的仓库内路径全部真实存在（REQ-20260916-003）', 
 
 // ---------- B 组：REQ-20260918-001 路径清单扩展（存在性） ----------
 
-t('B3 路径清单含 README.en.md / migrate-layout.mjs / plugin-pack.mjs 且逐一真实存在', () => {
-  for (const rel of ['README.en.md', 'scripts/lib/migrate-layout.mjs', 'scripts/lib/plugin-pack.mjs']) {
+t('B3 路径清单含 migrate-layout.mjs / plugin-pack.mjs 且逐一真实存在（README.en.md 已随 BUG-20260928-009 删除）', () => {
+  assert.ok(!declaredPaths.includes('README.en.md'), '清单不再包含已删除的 README.en.md');
+  for (const rel of ['scripts/lib/migrate-layout.mjs', 'scripts/lib/plugin-pack.mjs']) {
     assert.ok(declaredPaths.includes(rel), `A1 路径清单未包含：${rel}`);
     assert.ok(fs.existsSync(path.join(pluginRoot, rel)), `文件不存在：${rel}`);
   }
