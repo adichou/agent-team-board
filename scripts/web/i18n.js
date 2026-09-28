@@ -193,7 +193,6 @@ const EN = {
   // 读取失败 / 详情失败 / 计划确认等动态拼接见 EN_DYNAMIC）
   '在当前版本详情的「发布」页签查看本版本的发布记录': 'View this version\'s release records in the "Release" tab of its detail pane',
   '正在加载发布记录…': 'Loading release records…',
-  '当前版本暂无发布记录': 'No release records for this version yet',
   '请先完成合并入 main': 'Merge into main first',
   '重试只重新读取记录，不执行任何发布操作。': 'Retry only re-reads the records; it never executes a release.',
   '版本详情页签': 'Version detail tabs',
@@ -225,17 +224,33 @@ const EN = {
   '确认启动发布': 'Confirm & start release',
   '发布计划确认（产品发布）': 'Release plan confirmation (product release)',
   '用户启动即授权以上明确操作；预检不推送、不上传、不部署。取消不会发出任何执行请求。': 'Starting authorizes exactly the operations above; precheck pushes nothing, uploads nothing, deploys nothing. Cancel sends no execution request.',
-  // BUG-20260928-002 唯一「发布」入口：极简二次确认弹窗 / 一键链路版本号补填 / 空态一键口径 /
-  // 已发布态从简说明（插值句见 EN_DYNAMIC）
+  // BUG-20260928-002 唯一「发布」入口保留词条（弹窗标题 / 确认按钮 / 版本号补填）；
+  // BUG-20260928-012 发布直线流程（运行记录展示模块删除）：检查弹窗 / 结果面板 / 重试 /
+  // 本地时间标注（插值句见 EN_DYNAMIC）。旧「启动中… / 空态一键口径 / 预检未通过重试」
+  // 词条随模块删除与文案收敛清理。
   '发布二次确认': 'Publish confirmation',
   '确认发布': 'Confirm release',
-  '启动中…': 'Starting…',
   '请填写发行版本号（如 1.2.0）': 'Enter a release version number (e.g. 1.2.0)',
   '发行版本号（与版本显示名分开）': 'Release version number (separate from the display name)',
   '1.2.0（实际对外发行号）': '1.2.0 (the actual public version number)',
-  '当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布。': 'No release records for this version yet. Click "Release" for a quick confirmation; confirming creates the release draft and prechecks it automatically, then starts the release right away.',
+  '发布前检查': 'Pre-release checks',
+  '正在按检查规则检查…': 'Running release checks…',
+  '发布检查中…': 'Release checks running…',
+  '检查未通过': 'Checks failed',
+  '存在不通过项，本次不进入发布；请处理后重新点击「发布」。': 'Some checks failed — publishing will not proceed; resolve them and click "Release" again.',
+  '检查已全部通过。': 'All checks passed.',
+  '开始检查': 'Start checks',
+  '返回': 'Back',
+  '✓ 发布成功': '✓ Released',
+  '✕ 发布失败': '✕ Release failed',
+  '（本地时间）': ' (local time)',
+  '尚未发布。': 'Not released yet.',
+  '重试重新走发布流程（检查 → 确认 → 执行）。': 'Retry goes through the same release flow (checks → confirm → execute).',
+  '点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后执行，执行结果直接在本页显示（成功显示发布时间，失败显示原因与重试）。': 'Click "Release": checks run first — any failure is reported clearly and publishing stops; after all checks pass and you confirm, execution runs and the result appears on this page (release time on success, reason and retry on failure).',
+  '✕ 检查未通过，未进入发布': '✕ Checks failed — publishing not started',
+  '✓ 检查已全部通过，请二次确认': '✓ All checks passed — confirm to publish',
+  '✓ 发布已开始，执行结束后在本页显示结果': '✓ Release started — the result will appear here when execution finishes',
   '当前版本未合并，请先完成合并入 main。': 'This version is not merged yet — merge into main first.',
-  '预检未通过：请处理阻塞项后重试': 'Precheck failed: resolve the blockers and try again',
   '发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。': 'Release succeeded: the version plan chip now reads "Published" and the plan is locked — no further edits (linked items & commits, merge into main, AI refine, docs merge, etc.). Create a new version plan for any changes.',
   // REQ-20260911-009 设置页「Git 工作流」分区（主操作后经 REQ-20260920-002 改为切换导向）
   'Git 工作流': 'Git workflow',
@@ -1800,14 +1815,18 @@ const EN_DYNAMIC = {
   // BUG-20260915-014 构建模块版本详情发布页签：读取失败 / 详情失败 / 创建与动作反馈（动态拼接）
   '发布记录读取失败：◇': 'Failed to load release records: $1',
   '详情读取失败：◇': 'Failed to load run details: $1',
-  // BUG-20260928-002 发布区收敛为唯一「发布」入口：极简二次确认 + 一键发布链路反馈（动态拼接）
+  // BUG-20260928-002 发布区收敛为唯一「发布」入口：极简二次确认 + 发布链路反馈（动态拼接）；
+  // BUG-20260928-012 直线流程（检查 → 确认 → 执行 → 结果）：检查反馈 / 结果面板 / 本地时间
+  //（旧「发布已启动见运行详情 / 预检未通过」句随运行记录模块删除与检查前置清理）
   '发布二次确认（◇）': 'Publish confirmation ($1)',
   '即将发布版本 v◇。': 'About to release version v$1.',
-  '发布时间：◇': 'Published at: $1',
+  '发布（◇）': 'Release ($1)',
+  '发布时间：◇（本地时间）': 'Released at: $1 (local time)',
+  '✓ 发布成功（v◇）': '✓ Released (v$1)',
+  '✕ 发布失败：◇': '✕ Release failed: $1',
+  '✕ 发布检查失败：◇': '✕ Release check failed: $1',
   '发布中止：◇': 'Publish aborted: $1',
   '✕ 发布中止：◇': '✕ Publish aborted: $1',
-  '✓ 发布已启动（◇）：执行进度见下方运行详情': '✓ Release started ($1): follow progress in the run details below',
-  '预检未通过：◇：◇': 'Precheck failed: $1: $2',
   '创建失败（◇）': 'Create failed ($1)',
   '预检失败（◇）': 'Precheck failed ($1)',
   '发布启动失败（◇）': 'Failed to start the release ($1)',

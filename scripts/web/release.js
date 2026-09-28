@@ -303,7 +303,7 @@ const ATBRelease = (() => {
         <div class="t">
           <strong>${esc(r.productId)} · v${esc(r.version)}</strong> ${pStatusChip(r.status)}
         </div>
-        <div class="meta">来源 ${esc(r.bldId)} · Web App ${esc(TARGET_STATUS_LABEL[r.targets?.webapp] || r.targets?.webapp)} · 官网 ${esc(TARGET_STATUS_LABEL[r.targets?.site] || r.targets?.site)}${r.extraCount ? ` · 额外提交 ${r.extraCount}` : ''}</div>
+        <div class="meta">来源 ${esc(r.bldId)} · Web App ${esc(TARGET_STATUS_LABEL[r.targets?.webapp?.status] || '未提供')} · 官网 ${esc(TARGET_STATUS_LABEL[r.targets?.site?.status] || '未提供')}${r.extraCount ? ` · 额外提交 ${r.extraCount}` : ''}</div>
         ${r.error?.message ? `<div class="meta err">${esc(String(r.error.message).slice(0, 120))}</div>` : ''}
       </div>`).join('');
   }

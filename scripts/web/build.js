@@ -38,10 +38,9 @@ const ATBBuild = (() => {
 
   const STATUS_LABEL = { draft: '计划中', merging: '合并中', merged: '已合并', failed: '失败' };
   const STATUS_CLS = { draft: 'st-mute', merging: 'st-run', merged: 'st-ok', failed: 'st-fail' };
-  // BUG-20260915-014：发布页签运行 / 阶段 / 目标状态标签（沿用 release.js 产品发布口径：
-  // succeeded 为「已发布」，与版本计划的「已合并」区分；draft 是草稿，不显示为已发布）
+  // BUG-20260915-014：发布页签运行状态标签（沿用 release.js 产品发布口径：succeeded 为
+  //「已发布」，与版本计划的「已合并」区分；draft 是草稿，不显示为已发布）
   const REL_STATUS_LABEL = { draft: '草稿', prechecking: '预检', running: '进行中', 'waiting-manual': '等待人工', succeeded: '已发布', failed: '失败', canceled: '已取消' };
-  const REL_STEP_LABEL = { pending: '待执行', running: '进行中', done: '已完成', failed: '失败', canceled: '已取消' };
   const TABS = [['versions', '版本计划'], ['branches', '分支浏览']];
   const HASH_RE = /^[0-9a-f]{40}$/i;
   // REQ-20260915-003：关联条目联合列表每页条数——产品参数待确认（条目 README「待确认」：
@@ -51,6 +50,8 @@ const ATBBuild = (() => {
   // NAME_MAX / DESC_MAX（客户端校验只做就地拦截，数据层校验兜底双保险）
   const INFO_NAME_MAX = 80;
   const INFO_DESC_MAX = 4000;
+  // BUG-20260928-012：发布执行轮询间隔（3 秒一轮；执行无中间进度界面，结束直接出结果面板）
+  const RELEASE_POLL_MS = 3000;
 
   const state = {
     project: null,
@@ -88,8 +89,10 @@ const ATBBuild = (() => {
     mergeBusy: false,
     deleteConfirm: null, // { verId } REQ-20260913-004 删除确认弹窗
     deleteBusy: false,
-    // REQ-20260915-002 产品发布：从已合并版本创建发布（弹层仅核对发行版本号，其余自动带入）
-    releaseConfirm: null, // { verId, version, busy, error }
+    // BUG-20260928-012 发布直线流程会话态（点击「发布」→ 检查提示 → 二次确认 → 执行）：
+    // { verId, version, phase: version(补填版本号) | checking | confirm | failed-check,
+    //   checks, runId, fingerprint, error, busy }
+    releaseFlow: null,
     // REQ-20260920-003 五步流程：右侧详情按 版本计划 → 关联条目与提交 → 文档编写 → 合并入
     // main → 正式发布 分步导航（替代原「概况 / 发布」两页签）；随项目 / 版本切换重置回 plan
     step: 'plan', // plan | link | docs | merge | release
@@ -101,9 +104,13 @@ const ATBBuild = (() => {
     siteTimer: null,
     // REQ-20260921-008：AI 总结进度轮询句柄（15 秒一轮；离开文档编写步 / 切换版本即停止）
     summaryTimer: null,
-    // 发布页签数据（以 verId 归属隔离；seq/detailSeq 丢弃切换版本 / 项目后迟到的旧响应）
-    // phase: idle → loading → ready | error；detailPhase: idle | loading | ready | error
-    rel: null, // { verId, seq, phase, error, runs, runId, detailSeq, detailPhase, detailError, detail, planModal, busy }
+    // BUG-20260928-012 发布执行轮询句柄（3 秒一轮；执行结束直接出结果面板，离开发布步 /
+    // 切换版本 / 切换项目即停止，返回发布步自愈重启——覆盖确认执行与服务重启恢复两场景）
+    releasePollTimer: null,
+    // 发布页签数据（以 verId 归属隔离；seq 丢弃切换版本 / 项目后迟到的旧响应）
+    // phase: idle → loading → ready | error（BUG-20260928-012：运行记录不再上屏展示，
+    // runs 仅驱动结果面板 / 按钮态与内部草稿复用）
+    rel: null, // { verId, seq, phase, error, runs, config, publishError }
     branches: null,      // /api/build/branches 响应
     branchesPhase: 'idle', // idle | loading | error
     branchesError: null,
@@ -136,6 +143,14 @@ const ATBBuild = (() => {
   const esc = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const fmtTime = (iso) => (iso ? String(iso).replace('T', ' ').slice(0, 16) : '—');
+  // BUG-20260928-012：发布时间本地时区格式化（YYYY-MM-DD HH:mm:ss）——fmtTime 为 ISO 字符串
+  // 直截（UTC 原样），发布结果面板按用户本地时间展示（全局时间本地化另见 BUG-20260928-010）
+  const fmtTimeLocal = (iso) => {
+    const d = new Date(iso);
+    if (iso == null || iso === '' || isNaN(d.getTime())) return iso || '—';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
   const short = (h) => String(h || '').slice(0, 8);
   // BUG-20260913-005：透传 isErr（错误 toast 与普通提示在任务面板口径下有样式差异）
   const toast = (m, isErr) => { try { if (typeof window !== 'undefined' && window.toast) window.toast(m, isErr); } catch { /* 测试环境无 toast */ } };
@@ -363,6 +378,7 @@ const ATBBuild = (() => {
     state.pf = null;
     stopSiteTimer();
     stopSummaryTimer(); // REQ-20260921-008：旧版本 AI 总结进度轮询停止
+    stopReleasePoll(); // BUG-20260928-012：旧版本发布执行轮询停止
     resetItemsList();
   }
 
@@ -384,7 +400,7 @@ const ATBBuild = (() => {
         // BUG-20260915-014：详情页签与发布数据随项目切换重置（页签回概况，旧项目记录不串用）；
         // REQ-20260920-003：五步流程与官网轮询随项目切换重置（step 回 plan）
         step: 'plan', rel: null, pf: null,
-        releaseConfirm: null, // BUG-20260928-002：发布二次确认弹窗随项目切换关闭（链路按 rc 身份自行中止）
+        releaseFlow: null, // BUG-20260928-012：发布直线流程弹窗随项目切换关闭（链路按 flow 身份自行中止）
         mergeConfirm: null, pushConfirm: null, mergeBusy: false,
         deleteConfirm: null, deleteBusy: false,
         branches: null, branchesPhase: 'idle', branchesError: null,
@@ -398,6 +414,7 @@ const ATBBuild = (() => {
         rendered: false, pendingRestore: state.pendingRestore,
       });
       stopSiteTimer(); // REQ-20260920-003：切换项目停止旧项目官网轮询
+      stopReleasePoll(); // BUG-20260928-012：切换项目停止旧项目发布执行轮询
       render(); // 拉取前先呈现加载态
     }
     refreshWorkspaceApps(); // BUG-20260913-005：宿主探测预热（fire-and-forget，loaded 后为 no-op）
@@ -1500,9 +1517,11 @@ const ATBBuild = (() => {
 
   /* ---------- REQ-20260915-002 产品发布入口 ---------- */
 
-  // BUG-20260928-002 发布二次确认（极简）：点击「发布」直接弹确认，确认即授权一键发布链路
-  //（自动创建草稿并预检再启动，doOneClickPublish）；取消不发出任何执行请求。
-  // 存量计划无 version 字段时在弹窗内补填发行版本号（REQ-20260922-006 预填口径保留）。
+  // BUG-20260928-012 发布直线流程入口（人工口径 2026-09-28）：点击「发布」→ 按检查规则提示
+  //（有不通过项明确提示且不进入执行）→ 二次确认 → 执行 → 出结果。发布运行记录展示模块
+  //（BUG-20260915-014 的列表卡片 + 运行详情）已删除，草稿降级为内部机制不再上屏；
+  // 不新增「取消草稿」清理入口。守卫沿用：仅 merged、须配置官网仓库、发布中不重复触发。
+  // 存量计划无 version 字段时先弹「发行版本号」补填（REQ-20260922-006 预填口径保留）。
   function openPublishConfirm(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
@@ -1510,27 +1529,42 @@ const ATBBuild = (() => {
       toast('仅已合并（merged）的版本计划可发布：请先完成「合并入 main」', true);
       return;
     }
+    if (state.releaseFlow) return; // 直线流程弹窗已开（检查 / 确认 / 未通过反馈中）
     const rel = relOf(v);
-    if (rel?.publishBusy) return;
+    if ((rel?.runs || []).some((r) => ['running', 'prechecking'].includes(r.status))) return; // 已在发布执行中
     if (rel && !rel.config?.homepageRepoRoot) {
       toast('请先配置官网仓库后再发布', true);
       return;
     }
-    state.releaseConfirm = { verId: v.id, version: v.version ? String(v.version).replace(/^v/, '') : '', busy: false, error: null };
+    const version = v.version ? String(v.version).replace(/^v/, '') : '';
+    // busy 由 doPublishCheck 自管（请求进行中防重复）；此处只定 phase：有版本号直接检查
+    state.releaseFlow = { verId: v.id, version, phase: version ? 'checking' : 'version', checks: null, runId: null, fingerprint: null, error: null, busy: false };
+    render();
+    if (version) doPublishCheck();
+  }
+
+  // 直线流程失败面板「重试」：重新走同一发布流程（检查 → 确认 → 执行，不跳过确认）
+  function retryPublish() {
+    const v = selVersion();
+    if (!v) return;
+    return openPublishConfirm(v.id);
+  }
+
+  // 直线流程弹窗关闭（取消 / 遮罩 / Esc / 检查未通过「返回」）；检查 / 执行 busy 中不可关
+  function closePublishFlow() {
+    const flow = state.releaseFlow;
+    if (!flow || flow.busy) return;
+    state.releaseFlow = null;
     render();
   }
 
-  // BUG-20260915-014：发布页签数据（概况/发布两页签中的「发布」）——按当前项目 + 当前版本
-  //（bldId）就地展示产品发布记录，替代原跨模块跳转（跳转命中 app.js HIDDEN_VIEWS 回落，
-  // 用户被弹回需求模块，即本 Bug 根因）。数据全部只读拉取；预检 / 计划确认 / 启动 / 重试 /
-  // 取消沿用既有产品发布流程与允许状态，均需显式点击（start 必经计划确认弹窗）。
+  // BUG-20260928-012：发布页签数据（以 verId 归属隔离）——运行记录不再上屏展示（模块删除），
+  // runs 仅驱动结果面板（成功 / 失败）、发布按钮态与内部草稿复用；config 为官网配置快照；
+  // publishError 就近反馈二次确认后执行失败的服务端原因（role=alert）。
   function defaultRel(verId) {
     return {
-      verId, seq: 0, phase: 'idle', error: null, runs: null,
-      runId: null, detailSeq: 0, detailPhase: 'idle', detailError: null, detail: null,
-      planModal: null, busy: false,
-      // BUG-20260928-002 一键发布链路：执行中标记（发布条按钮「启动中…」）与中止原因就近反馈
-      publishBusy: false, publishError: null,
+      verId, seq: 0, phase: 'idle', error: null, runs: null, config: null,
+      publishError: null,
     };
   }
 
@@ -1540,7 +1574,7 @@ const ATBBuild = (() => {
   }
 
   // 拉取当前版本的发布记录（GET state 后前端按 bldId 过滤；只读）。
-  // force 用于重试 / 动作完成后的刷新；静默丢弃迟到响应：闭包对象与 state.rel 身份
+  // force 用于重试 / 执行结束后的刷新；静默丢弃迟到响应：闭包对象与 state.rel 身份
   // 不一致（切换版本 / 项目已重置）或 seq 已前进（新一轮加载）即放弃。
   async function ensureReleaseData(force = false) {
     const v = selVersion();
@@ -1560,7 +1594,6 @@ const ATBBuild = (() => {
       rel.config = data.config || {};
       rel.runs = (data.runs || []).filter((x) => x.bldId === v.id);
       rel.phase = 'ready';
-      if (!rel.runs.some((x) => x.id === rel.runId)) rel.runId = rel.runs[0]?.id || null;
     } catch (e) {
       if (state.rel !== rel || rel.seq !== seq) return;
       rel.runs = null;
@@ -1569,103 +1602,153 @@ const ATBBuild = (() => {
       render();
       return;
     }
-    if (rel.runId) await fetchRelDetail(rel.runId);
-    else render();
+    render();
+    ensureReleasePoll(); // BUG-20260928-012：发现活动发布（含恢复场景）即启动执行轮询
   }
 
-  // 拉取运行详情（GET run/:id；选择记录与刷新共用；detailSeq 丢弃迟到的旧详情）
-  async function fetchRelDetail(id) {
+  // BUG-20260928-012 发布执行轮询：执行期间无中间进度界面（仅按钮「发布中…」），3 秒一轮
+  // 读活动运行状态；结束（succeeded / failed / canceled）直接刷新出结果面板。离开发布步 /
+  // 切换版本 / 切换项目即停止，返回发布步由 render 自愈重启。
+  function stopReleasePoll() {
+    if (state.releasePollTimer) { clearInterval(state.releasePollTimer); state.releasePollTimer = null; }
+  }
+
+  function ensureReleasePoll() {
+    if (state.releasePollTimer || typeof setInterval !== 'function') return; // 测试沙箱无定时器：跳过
+    if (state.step !== 'release') return;
+    const rel = state.rel;
+    if (!rel || rel.phase !== 'ready' || !(rel.runs || []).some((r) => ['running', 'prechecking'].includes(r.status))) return;
+    state.releasePollTimer = setInterval(() => { releasePoll(); }, RELEASE_POLL_MS);
+  }
+
+  async function releasePoll() {
     const rel = state.rel;
     const v = selVersion();
-    if (!rel || !v || rel.verId !== v.id) return;
-    const seq = ++rel.detailSeq;
-    if (rel.runId !== id) rel.directoryActions = {};
-    rel.runId = id;
-    rel.detailPhase = 'loading';
-    rel.detailError = null;
-    render();
-    try {
-      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(id)}?project=${encodeURIComponent(state.project)}`);
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
-      if (state.rel !== rel || rel.detailSeq !== seq) return;
-      rel.detail = data;
-      rel.detailPhase = 'ready';
-    } catch (e) {
-      if (state.rel !== rel || rel.detailSeq !== seq) return;
-      rel.detail = null;
-      rel.detailPhase = 'error';
-      rel.detailError = e.message;
+    const active = (rel?.runs || []).find((r) => ['running', 'prechecking'].includes(r.status));
+    if (!rel || !v || rel.verId !== v.id || !active || state.step !== 'release' || !state.project) {
+      stopReleasePoll();
+      return;
     }
-    render();
+    try {
+      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(active.id)}?project=${encodeURIComponent(state.project)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return; // 单轮失败静默，下轮再试
+      if (state.rel !== rel) return; // 迟到响应：版本 / 项目已切换
+      if (['running', 'prechecking'].includes(data.run?.status)) return; // 仍在执行
+      stopReleasePoll();
+      await ensureReleaseData(true);
+      await refresh(); // 构建列表「已发布」标识随最新发布状态更新（单轮显式刷新，不额外轮询）
+    } catch { /* 网络异常下轮再试 */ }
   }
 
-  function selectReleaseRun(id) {
-    if (!id) return;
-    return fetchRelDetail(id);
-  }
-
-  // 发布动作（POST precheck / refreeze / start / retry / cancel）：显式点击触发；
-  // 执行中 busy 禁用防重复；完成只刷新（重发 state + run 读取，不重复执行）
-  async function relAction(id, action, payload = {}) {
-    const rel = state.rel;
-    if (!rel || rel.busy || !id || !action) return;
-    rel.busy = true;
+  // BUG-20260928-012 直线流程第一步：按检查规则检查（服务端预检单一事实源，BUG-20260928-011
+  // 口径）。检查 = 复用 / 创建草稿（from-build，内部机制不上屏）+ 预检（run/:id/precheck）；
+  // 有不通过项 → 「检查未通过」弹窗明确提示，不进入二次确认、不发 start；全部通过 → 进入
+  // 二次确认弹窗（token = 预检指纹，确认后才执行）。
+  async function doPublishCheck() {
+    const flow = state.releaseFlow;
+    if (!flow || flow.busy) return;
+    const view = $('#buildView');
+    if (flow.phase === 'version') {
+      const input = view?.querySelector('#bldRelVersion');
+      const val = (input?.value || flow.version || '').trim();
+      if (!val) { flow.error = '请填写发行版本号（如 1.2.0）'; render(); return; }
+      flow.version = val;
+      flow.error = null;
+    }
+    if (flow.phase !== 'version' && flow.phase !== 'checking') return;
+    const project = state.project;
+    flow.phase = 'checking';
+    flow.busy = true;
+    flow.checks = null;
+    flow.error = null;
     render();
     try {
-      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(id)}/${action}?project=${encodeURIComponent(state.project)}`, {
+      const v = findVersion(flow.verId);
+      if (!v) throw new Error('版本计划不存在或已删除');
+      // 复用同发行版本号的可续跑草稿（draft/failed/canceled），否则创建新草稿（内部机制）
+      const rel = relOf(v);
+      let target = (rel?.runs || []).find((r) => r.version === flow.version && ['draft', 'failed', 'canceled'].includes(r.status));
+      if (!target) {
+        const sep = project ? `?project=${encodeURIComponent(project)}` : '';
+        const r = await fetch(`/api/build-publish/from-build${sep}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bldId: v.id, version: flow.version }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `创建失败（${r.status}）`);
+        target = data.run;
+      }
+      if (state.releaseFlow !== flow) return; // 弹窗已被关闭（防御；busy 中本不可关）
+      const q = `?project=${encodeURIComponent(project)}`;
+      const pr = await fetch(`/api/build-publish/run/${encodeURIComponent(target.id)}/precheck${q}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: '{}',
       });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `操作失败（${r.status}）`);
-      toast(`✓ 已提交发布操作（${action}）：状态刷新后查看结果`);
+      const pdata = await pr.json().catch(() => ({}));
+      if (!pr.ok) throw new Error(pdata.error || `预检失败（${pr.status}）`);
+      if (state.releaseFlow !== flow) return;
+      const precheck = pdata.run?.precheck || {};
+      flow.runId = target.id;
+      flow.checks = precheck.checks || [];
+      flow.fingerprint = precheck.fingerprint;
+      if (!precheck.ok) {
+        flow.phase = 'failed-check';
+        toast('✕ 检查未通过，未进入发布', true);
+      } else {
+        flow.phase = 'confirm';
+        toast('✓ 检查已全部通过，请二次确认');
+      }
     } catch (e) {
-      toast(`✕ 发布操作失败：${e.message}`, true);
+      flow.phase = 'failed-check';
+      flow.error = e.message;
+      toast(`✕ 发布检查失败：${e.message}`, true);
     } finally {
-      if (state.rel === rel) rel.busy = false;
-      await ensureReleaseData(true);
-      // BUG-20260917-001：发布动作完成后顺带重取构建 state，让左侧卡片「已发布」标识随
-      // 最新发布状态更新（单次显式动作触发一次刷新，不引入轮询）
-      await refresh();
-    }
-  }
-
-  // 预览发布计划（GET plan，只读装配）：弹窗展示明确计划，确认才 start（沿用既有确认口径）
-  async function openRelPlan(id) {
-    const rel = state.rel;
-    if (!id || !state.project) return;
-    try {
-      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(id)}/plan?project=${encodeURIComponent(state.project)}`);
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || `读取失败（${r.status}）`);
-      if (state.rel !== rel) return;
-      rel.planModal = { runId: id, plan: data.plan || {} };
+      flow.busy = false;
       render();
-    } catch (e) {
-      toast(`✕ 发布计划读取失败：${e.message}`, true);
     }
   }
 
-  function closeRelPlan() {
-    if (state.rel) state.rel.planModal = null;
+  // BUG-20260928-012 直线流程第三步：二次确认后执行（POST start，token = 预检指纹，服务端
+  // 守卫与 BUG-20260928-005 正式发布确认落账口径不变）。执行期间无中间进度界面，仅「发布」
+  // 按钮禁用显示「发布中…」；执行结束由 releasePoll 直接出结果面板。
+  async function doPublishConfirm() {
+    const flow = state.releaseFlow;
+    if (!flow || flow.phase !== 'confirm' || flow.busy) return;
+    const v = findVersion(flow.verId);
+    if (!v) { state.releaseFlow = null; render(); return; }
+    const project = state.project;
+    flow.busy = true;
+    flow.error = null;
     render();
-  }
-
-  async function confirmRelStart() {
-    const rel = state.rel;
-    const id = rel?.planModal?.runId;
-    const token = rel?.planModal?.plan?.token;
-    if (!rel) return;
-    rel.planModal = null;
-    if (!id) return;
-    await relAction(id, 'start', { token });
+    try {
+      const q = `?project=${encodeURIComponent(project)}`;
+      const sr = await fetch(`/api/build-publish/run/${encodeURIComponent(flow.runId)}/start${q}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: flow.fingerprint }),
+      });
+      const sdata = await sr.json().catch(() => ({}));
+      if (!sr.ok) throw new Error(sdata.error || `发布启动失败（${sr.status}）`);
+      state.releaseFlow = null;
+      toast('✓ 发布已开始，执行结束后在本页显示结果');
+      if (state.selVerId !== v.id) selectVersion(v.id);
+      state.step = 'release';
+      render();
+      await ensureReleaseData(true); // 立即以 running 态驱动按钮（轮询随之自愈启动）
+      await refresh(); // 构建状态（已发布标签等）随发布进展更新
+    } catch (e) {
+      state.releaseFlow = null;
+      const relNow = relOf(v);
+      if (relNow && state.project === project) relNow.publishError = `发布中止：${e.message}`;
+      toast(`✕ 发布中止：${e.message}`, true);
+      render();
+    }
   }
 
   function refreshReleasePane() {
-    // BUG-20260917-001：「刷新状态」除重读发布记录外一并重取构建 state，
-    // 让左侧卡片「已发布」标识随最新发布状态更新（单次显式动作触发，不引入轮询）
     return ensureReleaseData(true).finally(() => refresh());
   }
 
@@ -2438,196 +2521,109 @@ const ATBBuild = (() => {
     state.step = s;
     stopSiteTimer();
     stopSummaryTimer();
+    stopReleasePoll(); // BUG-20260928-012：离开发布步停止执行轮询（返回由 render 自愈重启）
     render();
     if (s === 'docs' || s === 'merge' || s === 'docmerge' || s === 'release') ensurePublishPlan();
     if (s === 'docs') startSummaryTimer();
     if (s === 'release') {
-      ensureReleaseData(); // BUG-20260915-014：产品发布记录就地展示（沿用）
+      ensureReleaseData(); // BUG-20260928-012：发布数据就绪后自愈执行轮询（含恢复场景）
       startSiteTimer();
     }
   }
 
-  // 「查看发布记录」新落点：选中所在卡片版本并进入「发布」步（不跳隐藏模块）
+  // 「查看发布记录」程序化激活入口：选中所在卡片版本并进入「发布」步（不跳隐藏模块）
   function openReleaseTab(verId) {
     const v = verId ? findVersion(verId) : selVersion();
     if (!v) return;
     if (v.id !== state.selVerId) selectVersion(v.id); // 清空旧版本发布数据（含记录与错误）
     state.step = 'release';
     stopSiteTimer();
+    stopReleasePoll();
     render();
     startSiteTimer();
     return ensureReleaseData();
   }
 
-  // BUG-20260928-002 一键发布链路：二次确认后自动「创建草稿（按需）→ 预检 → 启动」。
-  // 不再要求先手动「创建并预检」，也不再先走「预览发布计划」读取步骤；预检阻塞即中止并
-  // 就近反馈原因（发布条下方 role=alert + toast，不静默）。服务端链路、守卫与允许状态不变
-  //（start 仍须预检指纹 token；取消 / 中止不补发执行请求）。
-  async function doOneClickPublish() {
-    const rc = state.releaseConfirm;
-    const project = state.project;
-    const view = $('#buildView');
-    const v = findVersion(rc?.verId);
-    if (!v || rc.busy) return;
-    const version = (view?.querySelector('#bldRelVersion')?.value || rc.version || '').trim();
-    if (!version) {
-      rc.error = '请填写发行版本号（如 1.2.0）';
-      render();
-      return;
-    }
-    rc.version = version;
-    rc.busy = true;
-    rc.error = null;
-    let rel = relOf(v);
-    if (rel) { rel.publishBusy = true; rel.publishError = null; }
-    render();
-    const settle = (relNow) => { if (relNow) relNow.publishBusy = false; };
-    const fail = (message) => {
-      rc.busy = false;
-      if (state.releaseConfirm === rc) state.releaseConfirm = null;
-      const relNow = relOf(v);
-      settle(relNow);
-      if (relNow && state.project === project) relNow.publishError = `发布中止：${message}`;
-      toast(`✕ 发布中止：${message}`, true);
-      render();
-    };
-    const canceled = () => settle(relOf(v));
-    try {
-      // 1. 目标运行：优先复用同发行版本号的可续跑草稿（draft/failed/canceled），否则创建新草稿
-      let target = (rel?.runs || []).find((r) => r.version === version && ['draft', 'failed', 'canceled'].includes(r.status));
-      if (!target) {
-        const sep = state.project ? `?project=${encodeURIComponent(state.project)}` : '';
-        const r = await fetch(`/api/build-publish/from-build${sep}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bldId: v.id, version }),
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.error || `创建失败（${r.status}）`);
-        target = data.run;
-      }
-      if (state.releaseConfirm !== rc) return canceled(); // 确认弹窗已被关闭（取消 / 切换项目）：链路即止
-      const q = `?project=${encodeURIComponent(state.project)}`;
-      // 2. 预检（发布链路自动执行；预检类提示仍保留在运行详情动作区）
-      const pr = await fetch(`/api/build-publish/run/${encodeURIComponent(target.id)}/precheck${q}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      const pdata = await pr.json().catch(() => ({}));
-      if (!pr.ok) throw new Error(pdata.error || `预检失败（${pr.status}）`);
-      const precheck = pdata.run?.precheck || {};
-      if (!precheck.ok) {
-        const bad = (precheck.checks || []).find((c) => !c.ok);
-        throw new Error(bad ? `预检未通过：${bad.label}：${bad.detail || '未通过'}` : '预检未通过：请处理阻塞项后重试');
-      }
-      if (state.releaseConfirm !== rc) return canceled();
-      // 3. 启动（token = 预检指纹；二次确认即授权，沿用服务端 start 守卫）
-      const sr = await fetch(`/api/build-publish/run/${encodeURIComponent(target.id)}/start${q}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: precheck.fingerprint }),
-      });
-      const sdata = await sr.json().catch(() => ({}));
-      if (!sr.ok) throw new Error(sdata.error || `发布启动失败（${sr.status}）`);
-      rc.busy = false;
-      state.releaseConfirm = null;
-      toast(`✓ 发布已启动（${target.id}）：执行进度见下方运行详情`);
-      if (state.selVerId !== v.id) selectVersion(v.id);
-      state.step = 'release';
-      rel = relOf(v) || rel;
-      settle(rel);
-      if (state.rel === rel) rel.runId = target.id;
-      await refreshReleasePane();
-    } catch (e) {
-      fail(e.message);
-    }
-  }
-
-  // BUG-20260928-002 发布二次确认弹窗：文案极简（仅提示即将发布的版本号），确认即授权；
-  // 存量计划无 version 字段时改为补填发行版本号（校验同旧创建弹层）。
+  // BUG-20260928-012 发布直线流程弹窗：按 phase 渲染——
+  //   version（补填发行版本号）→ checking（按检查规则检查中）→ confirm（二次确认，列检查项）
+  //   failed-check（检查未通过：列失败项 / 请求错误，明确提示本次不进入发布）。
+  // 执行不在弹窗内（确认后关闭弹窗，无中间进度界面，仅按钮「发布中…」）。
   function renderPublishConfirm() {
-    const rc = state.releaseConfirm;
-    if (!rc) return '';
-    const v = findVersion(rc.verId);
-    if (!v) { state.releaseConfirm = null; return ''; }
+    const flow = state.releaseFlow;
+    if (!flow) return '';
+    const v = findVersion(flow.verId);
+    if (!v) { state.releaseFlow = null; return ''; }
+    // 标签包独立 strong（与 ✓/✕/△ 前缀分属不同文本节点，i18n 全文匹配可命中——
+    // BUG-20260928-011 E2 口径沿用到检查弹窗）
+    const checkItem = (c) => `<li class="${c.ok ? (c.advisory ? 'bld-check-adv' : '') : 'bld-check-fail'}">${c.ok ? (c.advisory ? '△' : '✓') : '✕'} <strong>${esc(c.label)}</strong>${c.detail ? `<span class="muted small">${esc(c.detail)}</span>` : ''}</li>`;
+    const checksHtml = (checks) => `<ul class="bld-rel-checks">${(checks || []).map(checkItem).join('')}</ul>`;
+    const foot = (left, right) => `<footer class="modal-foot">${left}${right}</footer>`;
+    const cancelBtn = (disabled) => `<button type="button" class="btn" id="bldRelCancel"${disabled ? ' disabled' : ''}>取消</button>`;
+    let title, body, footer;
+    if (flow.phase === 'version') {
+      title = `发布（${v.id}）`;
+      body = `<div class="rel-modal-body">
+          <label class="field">发行版本号（与版本显示名分开）
+            <input id="bldRelVersion" value="${esc(flow.version)}" placeholder="1.2.0（实际对外发行号）"></label>
+          ${flow.error ? `<p class="rel-form-err" role="alert">${esc(flow.error)}</p>` : ''}</div>`;
+      footer = foot(cancelBtn(false), '<button type="button" class="btn primary" id="bldRelGo">开始检查</button>');
+    } else if (flow.phase === 'checking') {
+      title = '发布前检查';
+      body = `<div class="rel-modal-body"><p class="muted" role="status">正在按检查规则检查…</p></div>`;
+      footer = foot(cancelBtn(true), '<button type="button" class="btn primary" id="bldRelGo" disabled>发布检查中…</button>');
+    } else if (flow.phase === 'confirm') {
+      title = `发布二次确认（${v.id}）`;
+      body = `<div class="rel-modal-body">
+          ${checksHtml(flow.checks)}
+          <p>检查已全部通过。即将发布版本 v${esc(flow.version)}。</p></div>`;
+      footer = foot(cancelBtn(false), '<button type="button" class="btn primary" id="bldRelGo">确认发布</button>');
+    } else {
+      title = '检查未通过';
+      body = `<div class="rel-modal-body">
+          ${flow.checks?.length ? checksHtml(flow.checks) : ''}
+          ${flow.error ? `<p class="rel-form-err" role="alert">${esc(flow.error)}</p>` : ''}
+          <p class="small">存在不通过项，本次不进入发布；请处理后重新点击「发布」。</p></div>`;
+      footer = '<footer class="modal-foot"><button type="button" class="btn" id="bldRelBack">返回</button></footer>';
+    }
     return `
-      <div class="rel-modal-wrap" id="bldPublishWrap" role="dialog" aria-label="发布二次确认">
+      <div class="rel-modal-wrap" id="bldPublishWrap" role="dialog" aria-label="${esc(title)}">
         <div class="rel-modal">
-          <h3>发布二次确认（${esc(v.id)}）</h3>
-          <div class="rel-modal-body">
-            ${rc.version
-              ? `<p>即将发布版本 v${esc(rc.version)}。</p>`
-              : `<label class="field">发行版本号（与版本显示名分开）
-              <input id="bldRelVersion" value="${esc(rc.version)}" placeholder="1.2.0（实际对外发行号）"></label>`}
-            ${rc.error ? `<p class="rel-form-err" role="alert">${esc(rc.error)}</p>` : ''}
-          </div>
-          <footer class="modal-foot">
-            <button type="button" class="btn" id="bldRelCancel"${rc.busy ? ' disabled' : ''}>取消</button>
-            <button type="button" class="btn primary" id="bldRelGo"${rc.busy ? ' disabled' : ''}>${rc.busy ? '启动中…' : '确认发布'}</button>
-          </footer>
+          <h3>${esc(title)}</h3>
+          ${body}
+          ${footer}
         </div>
       </div>`;
   }
 
-  /* ---------- BUG-20260915-014 发布页签渲染（当前项目 + 当前版本 bldId 的产品发布记录） ---------- */
+  /* ---------- BUG-20260928-012 发布页签渲染（运行记录展示模块已删除：直线流程 + 结果面板） ---------- */
 
-  const relStatusChip = (s) => `<span class="st ${s === 'succeeded' ? 'st-ok' : s === 'failed' ? 'st-fail' : s === 'running' || s === 'prechecking' ? 'st-run' : s === 'waiting-manual' ? 'st-wait' : 'st-mute'}">${esc(REL_STATUS_LABEL[s] || s || '未提供')}</span>`;
-  const relStepChip = (s) => `<span class="st ${s === 'done' ? 'st-ok' : s === 'failed' ? 'st-fail' : s === 'running' ? 'st-run' : 'st-mute'}">${esc(REL_STEP_LABEL[s] || s || '未提供')}</span>`;
-
-  // BUG-20260928-002：发布区收敛为唯一「发布」主按钮（唯一发布入口）——顶部操作条与空态 /
-  // 记录列表里的重复「创建并预检」入口（BUG-20260916-001 + BUG-20260915-014 引入的堆叠）删除，
-  // 点击「发布」直接弹二次确认（openPublishConfirm），确认后一键发布链路自动创建草稿并预检、
-  // 启动（doOneClickPublish）。未就绪禁用并就近说明原因（请先配置官网仓库 / 请先完成合并入
-  // main / 发布中… / 已发布；创建并预检不再作为按钮前置原因，预检类提示保留在运行详情
-  // 动作区）；未配置官网仓库保留「前往设置」（goPublishSettings 口径不变）；一键链路的中止
-  // 原因就近反馈（publishError）。发布主按钮始终可见（BUG-20260916-001 原则保留）。
+  // BUG-20260928-012：发布区收敛为唯一「发布」主按钮（BUG-20260928-002 口径保留）——点击
+  // 弹检查（openPublishConfirm 直线流程）。未就绪禁用并就近说明原因（请先配置官网仓库 /
+  // 请先完成合并入 main / 发布中… / 已发布）；直线流程弹窗开着（检查 / 确认）同样禁用；
+  // 未配置官网仓库保留「前往设置」（goPublishSettings 口径不变）；执行失败的服务端原因
+  // 就近反馈（publishError，role=alert）。发布主按钮始终可见。
   function renderPublishActions(v, rel) {
-    const run = rel?.detail?.run;
     const configured = !!rel?.config?.homepageRepoRoot;
-    const busy = !!rel?.publishBusy;
-    const running = busy || run?.status === 'running' || (rel?.runs || []).some((r) => ['running', 'prechecking'].includes(r.status));
-    const succeeded = run?.status === 'succeeded' || (rel?.runs || []).some((r) => r.status === 'succeeded');
+    const flowBusy = !!state.releaseFlow; // 直线流程（检查 / 确认 / 未通过反馈）进行中
+    const running = flowBusy || (rel?.runs || []).some((r) => ['running', 'prechecking'].includes(r.status));
+    const succeeded = (rel?.runs || []).some((r) => r.status === 'succeeded');
     const reason = !configured ? '请先配置官网仓库' : v.status !== 'merged' ? '请先完成合并入 main' : running ? '发布中…' : succeeded ? '已发布' : '';
-    const label = busy ? '启动中…' : running ? '发布中…' : succeeded ? '已发布' : '发布';
+    const label = running ? '发布中…' : succeeded ? '已发布' : '发布';
     return `<section class="bld-publish-actions"><p>
-      <button type="button" class="btn primary bld-publish-btn" data-rel-publish="${esc(v.id)}"${reason || busy ? ' disabled' : ''}>${label}</button>
+      <button type="button" class="btn primary bld-publish-btn" data-rel-publish="${esc(v.id)}"${reason || flowBusy ? ' disabled' : ''}>${label}</button>
       ${reason && !succeeded ? `<span class="muted">${esc(reason)}</span>` : ''}
       ${!configured ? '<button type="button" class="btn" data-publish-settings>前往设置</button>' : ''}</p>
       ${rel?.publishError ? `<p class="rel-form-err" role="alert">${esc(rel.publishError)}</p>` : ''}</section>`;
-  }
-
-  function renderPublishDirectories(rel) {
-    const dirs = rel.detail.directories || {};
-    return `<section><h4>发布目录</h4><div style="display:flex;flex-wrap:wrap;gap:16px">${['webapp', 'site'].map(target => {
-      const d = dirs[target] || { reason: '未记录（待确认）' };
-      const action = rel.directoryActions?.[target];
-      return `<div style="flex:1 1 260px;min-width:0"><strong>${target === 'webapp' ? '构建物目录' : '官网目录'}</strong>
-        <p style="overflow-wrap:anywhere;user-select:text">${esc(d.path || d.reason)}</p>
-        ${d.repoRoot ? `<p style="overflow-wrap:anywhere">官网仓库根目录：${esc(d.repoRoot)}</p>` : ''}
-        <button type="button" class="btn small" data-publish-open="${target}"${d.available && !action?.busy ? '' : ' disabled'}>${action?.busy ? '正在打开…' : '在 Finder 中打开'}</button>
-        <p role="status">${esc(action?.message || (!d.available ? d.reason : '') || '')}</p></div>`;
-    }).join('')}</div></section>`;
-  }
-
-  async function openPublishDirectory(target) {
-    const rel = state.rel;
-    if (!rel?.runId || rel.directoryActions?.[target]?.busy) return;
-    rel.directoryActions ||= {};
-    rel.directoryActions[target] = { busy: true }; render();
-    try {
-      const r = await fetch(`/api/build-publish/run/${encodeURIComponent(rel.runId)}/open?project=${encodeURIComponent(state.project)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target }) });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || '打开失败');
-      rel.directoryActions[target] = { message: data.message };
-    } catch (e) { rel.directoryActions[target] = { message: e.message }; }
-    if (state.rel === rel) render();
   }
 
   function goPublishSettings() {
     window.dispatchEvent(new CustomEvent('atb:publish-settings', { detail: { project: state.project, versionId: state.selVerId } }));
   }
 
+  // BUG-20260928-012 发布页签主体：不再展示发布运行记录模块（列表卡片 / 运行详情已删除），
+  // 直线流程出结果——成功：发布时间（本地时区格式化）+ 标签更新与锁定说明；执行中：无中间
+  // 进度界面（人工口径，仅按钮「发布中…」）；失败：错误信息 + 「重试」；空闲：直线流程说明。
+  // draft / canceled 运行不上屏（内部草稿复用机制保留，无取消草稿入口）。
   function renderReleasePane(v) {
     const rel = relOf(v);
     const pane = (body) => `<div class="bld-rel-pane" data-rel-ver="${esc(v.id)}">${renderPublishActions(v, rel)}${body}</div>`;
@@ -2640,107 +2636,26 @@ const ATBBuild = (() => {
           <span class="muted small">重试只重新读取记录，不执行任何发布操作。</span></p>`);
     }
     const runs = rel.runs || [];
-    // BUG-20260928-002 已发布态从简：只显示发布时间与发布成功说明（版本计划标签口径见
-    // BUG-20260917-001；发布计划锁定口径见 BUG-20260920-005，不放宽、不新增解锁路径），
-    // 不再堆叠发布记录列表 / 运行详情。
-    const doneRun = rel.detail?.run?.status === 'succeeded' ? rel.detail.run : runs.find((r) => r.status === 'succeeded');
-    if (doneRun) {
-      return pane(`<p class="small">发布时间：${esc(fmtTime(doneRun.updatedAt))}</p>
+    const succeededRun = runs.find((r) => r.status === 'succeeded');
+    if (succeededRun) {
+      // BUG-20260928-002 已发布态从简 + BUG-20260928-012 发布时间本地时区格式化
+      return pane(`<p class="small"><span class="st st-ok">✓ 发布成功</span>（v${esc(succeededRun.version || '未提供')}）</p>
+        <p class="bld-rel-pubtime">发布时间：${esc(fmtTimeLocal(succeededRun.updatedAt))}（本地时间）</p>
         <p class="bld-iso-note" role="status">发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。</p>`);
     }
-    if (!runs.length) {
-      return pane(`<p class="muted small">当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布。${v.status !== 'merged' ? '当前版本未合并，请先完成合并入 main。' : ''}</p>`);
+    if (runs.some((r) => ['running', 'prechecking'].includes(r.status))) {
+      return pane(''); // 执行中：无中间进度界面（人工口径），仅按钮「发布中…」
     }
-    const cards = runs.map((r) => `
-      <div class="rel-card${r.id === rel.runId ? ' sel' : ''}" data-rel-run="${esc(r.id)}" role="button" tabindex="0">
-        <div class="t"><strong>${esc(r.id)}</strong> ${relStatusChip(r.status)}</div>
-        <div class="meta">v${esc(r.version || '未提供')} · Web App ${esc(REL_STEP_LABEL[r.targets?.webapp] || r.targets?.webapp || '未提供')} · 官网 ${esc(REL_STEP_LABEL[r.targets?.site] || r.targets?.site || '未提供')}</div>
-        ${r.error?.message ? `<div class="meta err">${esc(String(r.error.message).slice(0, 120))}</div>` : ''}
-      </div>`).join('');
-    return pane(`
-      <div class="bld-rel-split">
-        <div class="bld-rel-list" aria-label="发布记录">${cards}</div>
-        ${renderRelDetailPane(rel)}
-      </div>`);
-  }
-
-  // 运行详情：运行 ID / 发行版本号 / 状态 / 阶段 / Web App 与官网目标结果 / 失败阶段与错误信息；
-  // 字段缺失显示「未提供」，不猜测结果。动作区沿用 release.js 产品页签的允许状态。
-  function renderRelDetailPane(rel) {
-    if (!rel.runId) return '<div class="bld-rel-detail muted">点击左侧运行查看详情</div>';
-    if (rel.detailPhase === 'loading') return '<div class="bld-rel-detail"><p class="muted" role="status">加载运行详情…</p></div>';
-    if (rel.detailPhase === 'error' || !rel.detail) {
-      return `<div class="bld-rel-detail"><p class="rel-form-err" role="alert">详情读取失败：${esc(rel.detailError || rel.error || '未知原因')}</p>
-        <p><button type="button" class="btn small" data-rel-detail-retry>重试</button></p></div>`;
+    const failedRun = runs.find((r) => r.status === 'failed');
+    if (failedRun) {
+      const failedStage = (failedRun.stages || []).find((s) => s.status === 'failed');
+      const errMsg = failedRun.error?.message || failedStage?.error || null;
+      return pane(`<p class="meta err small" role="alert">✕ 发布失败：${esc(String(errMsg || '未提供'))}</p>
+        ${failedStage?.label ? `<p class="muted small">失败阶段：${esc(failedStage.label)}</p>` : ''}
+        <p><button type="button" class="btn small primary" data-rel-retry-publish="${esc(v.id)}">重试</button>
+          <span class="muted small">重试重新走发布流程（检查 → 确认 → 执行）。</span></p>`);
     }
-    const run = rel.detail.run || {};
-    const stages = run.stages || [];
-    const failed = stages.find((s) => s.status === 'failed');
-    const errText = (failed && (failed.error?.message || failed.error)) || run.error?.message || rel.detail.error?.message || null;
-    const tgt = (label, t) => `<div class="bld-rel-target"><strong>${label}</strong> ${relStepChip(t?.status)}${t?.localUrl ? ` <a href="${esc(t.localUrl)}" target="_blank" rel="noreferrer">${esc(t.localUrl)}</a>` : ''}</div>`;
-    const dis = rel.busy ? ' disabled' : '';
-    const acts = [];
-    if (['draft', 'failed', 'canceled'].includes(run.status)) {
-      acts.push(`<button type="button" class="btn small" data-rel-act="precheck" data-rel-run="${esc(run.id)}"${dis}>预检</button>`);
-      acts.push(`<button type="button" class="btn small" data-rel-act="refreeze" data-rel-run="${esc(run.id)}"${dis} title="main 已前进时按当前 main 重新冻结（旧预检失效后须重新预检）">重新冻结</button>`);
-      acts.push(`<button type="button" class="btn small primary" data-rel-act="plan" data-rel-run="${esc(run.id)}"${run.precheck?.ok ? dis : ' disabled title="请先预检（预检不推送 / 不部署）"'}>预览发布计划</button>`);
-    }
-    if (run.status === 'failed') {
-      acts.push(`<button type="button" class="btn small warn" data-rel-act="plan" data-rel-run="${esc(run.id)}"${dis}>重试失败阶段</button>`);
-      acts.push(`<button type="button" class="btn small" data-rel-act="refreeze" data-rel-run="${esc(run.id)}"${dis}>重新冻结</button>`);
-    }
-    if (['prechecking', 'running'].includes(run.status)) {
-      acts.push(`<button type="button" class="btn small" data-rel-act="cancel" data-rel-run="${esc(run.id)}"${dis}>取消后续阶段</button>`);
-    }
-    acts.push(`<button type="button" class="btn small quiet" data-rel-act="refresh" data-rel-run="${esc(run.id)}">刷新状态</button>`);
-    return `
-      <div class="bld-rel-detail" aria-label="运行详情">
-        <header class="rel-detail-head"><div>
-          <h3>${esc(run.id)} ${relStatusChip(run.status)}</h3>
-          <p class="muted small">来源 ${esc(run.bldId || '未提供')}${run.bldName ? ` · ${esc(run.bldName)}` : ''} · 更新 ${esc(fmtTime(run.updatedAt))}</p>
-        </div></header>
-        <dl class="rel-kv">
-          <dt>运行 ID</dt><dd>${esc(run.id || '未提供')}</dd>
-          <dt>发行版本号</dt><dd>v${esc(run.version || '未提供')}</dd>
-          <dt>状态</dt><dd>${relStatusChip(run.status)}</dd>
-        </dl>
-        <div class="bld-rel-targets">
-          ${tgt('Web App', run.targets?.webapp)}
-          ${tgt('官网与文档', run.targets?.site)}
-        </div>
-        ${run.status === 'failed' ? `<p class="meta err small" role="note">失败阶段：${esc(failed?.label || failed?.key || '未提供')}${errText ? `：${esc(String(errText))}` : ''}</p>` : ''}
-        ${renderPublishDirectories(rel)}
-        ${run.precheck ? `<div><strong>预检</strong>${run.precheck.stale ? '<p class="err">配置或冻结输入已变化，请重新预检</p>' : ''}<ul>${(run.precheck.checks || []).map(c => c.advisory
-          ? `<li class="rel-check-advisory"><strong>${esc(c.label)}</strong>：<span>${esc(c.detail)}</span></li>`
-          : `<li><strong>${esc(c.label)}</strong>：<span>${c.ok ? '通过' : esc(c.detail || '未通过')}</span></li>`).join('')}</ul></div>` : ''}
-        <details><summary>执行日志</summary><pre>${esc((rel.detail.logs || []).map(x => `${x.at} ${x.message}`).join('\n'))}</pre></details>
-        <div class="bld-rel-stages"><strong>阶段</strong>
-          <ul>${stages.length ? stages.map((s) => `<li class="${s.status === 'failed' ? 'err' : ''}">${esc(s.label || s.key || '未提供')} ${relStepChip(s.status)}${s.status === 'failed' && (s.error?.message || s.error) ? `<span class="muted small">${esc(String(s.error?.message || s.error))}</span>` : ''}</li>`).join('') : '<li class="muted small">未提供</li>'}</ul>
-        </div>
-        <footer class="bld-rel-acts">${acts.join('')}</footer>
-      </div>`;
-  }
-
-  // 发布计划确认弹窗（沿用 release.js 口径：展示明确计划，确认即授权 start；取消不发任何请求）
-  function renderRelPlanModal() {
-    const m = state.rel?.planModal;
-    if (!m) return '';
-    const plan = m.plan || {};
-    return `
-      <div class="rel-modal-wrap" id="bldRelPlanWrap" role="dialog" aria-label="发布计划确认（产品发布）">
-        <div class="rel-modal">
-          <h3>发布计划确认（产品发布）</h3>
-          <div class="rel-modal-body">
-            <ul>${(plan.steps || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
-            ${plan.warning ? `<p class="meta err small" role="note">${esc(plan.warning)}</p>` : ''}
-            <p class="muted small">用户启动即授权以上明确操作；预检不推送、不上传、不部署。取消不会发出任何执行请求。</p>
-          </div>
-          <footer class="modal-foot">
-            <button type="button" class="btn" id="bldRelPlanCancel">取消</button>
-            <button type="button" class="btn primary" id="bldRelPlanConfirm">确认发布</button>
-          </footer>
-        </div>
-      </div>`;
+    return pane(`<p class="muted small">尚未发布。点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后执行，执行结果直接在本页显示（成功显示发布时间，失败显示原因与重试）。${v.status !== 'merged' ? '当前版本未合并，请先完成合并入 main。' : ''}</p>`);
   }
 
   /* ---------- 分支浏览与同步 ---------- */
@@ -2906,7 +2821,7 @@ const ATBBuild = (() => {
 
   // BUG-20260917-001：左侧版本卡片状态标签——该版本存在发布成功（succeeded）的运行时
   //（/api/build/state 附带的 release.published，任一成功运行即成立），以绿色「已发布」
-  // 替换原合并状态标签（口径与右侧「发布」页签 relStatusChip 一致，title 提示成功运行）；
+  // 替换原合并状态标签（口径与发布运行状态标签一致，title 提示成功运行）；
   // 未发布成功（无运行 / 草稿 / 预检 / 进行中 / 失败 / 已取消）保持原四态标签与按钮规则不变，
   // 中间态不上卡片（在「发布」页签查看）。
   function versionChip(v) {
@@ -4892,7 +4807,6 @@ ${langsField}
       ${renderPushConfirm()}
       ${renderDeleteConfirm()}
       ${renderPublishConfirm()}
-      ${renderRelPlanModal()}
       ${renderReviewModal(selVersion())}
       ${renderLicenseModal(selVersion())}
       ${renderSecondaryEditModal(selVersion())}`;
@@ -4906,8 +4820,10 @@ ${langsField}
       const v0 = selVersion();
       const needPf = v0 && ['docs', 'merge', 'release'].includes(state.step) && (!state.pf || state.pf.verId !== v0.id);
       if (needPf) ensurePublishPlan();
-      // BUG-20260915-014：正式发布步同时自愈加载产品发布记录（原发布页签数据）
+      // BUG-20260928-012：正式发布步同时自愈加载产品发布数据与执行轮询（含恢复场景：
+      // 进入时已有 running 运行则轮询至结果态）
       if (v0 && state.step === 'release' && (!state.rel || state.rel.verId !== v0.id)) ensureReleaseData();
+      ensureReleasePoll();
       // 官网检测轮询自愈：处于正式发布步且未启动时启动（离开发布步由 setStep / selectVersion 停止）
       if (v0 && state.step === 'release' && !state.siteTimer) startSiteTimer();
       // REQ-20260921-008：AI 总结进度轮询自愈（处于文档编写步且未启动时启动；离开由 setStep / selectVersion 停止）
@@ -5140,20 +5056,30 @@ ${langsField}
     }
     q('#bldPushCancel')?.addEventListener('click', () => { state.pushConfirm = null; render(); });
     q('#bldPushGo')?.addEventListener('click', doPush);
-    // BUG-20260928-002 唯一发布入口：详情「正式发布」步「发布」按钮直接弹二次确认
-    //（openPublishConfirm，取消不发请求），确认后一键发布链路自动创建草稿并预检、启动
-    //（doOneClickPublish）；原「创建并预检」前置入口（旧创建行为键）随区域
-    // 收敛移除，「查看发布记录」按钮仍按 REQ-20260921-016 移除（发布记录直接展示在正式
-    // 发布步，openReleaseTab 仍作为程序化激活入口保留）。
+    // BUG-20260928-012 唯一发布入口：详情「正式发布」步「发布」按钮开启直线流程
+    //（openPublishConfirm：检查提示 → 二次确认 → 执行 → 出结果；运行记录展示模块已删除，
+    // openReleaseTab 仍作为程序化激活入口保留）。
     for (const el of view.querySelectorAll('[data-rel-publish]')) {
       el.addEventListener('click', () => openPublishConfirm(el.dataset.relPublish));
     }
-    q('#bldRelCancel')?.addEventListener('click', () => { if (!state.releaseConfirm?.busy) { state.releaseConfirm = null; render(); } });
-    q('#bldRelGo')?.addEventListener('click', doOneClickPublish);
-    q('#bldPublishWrap')?.addEventListener('click', (e) => {
-      if (e.target?.id === 'bldPublishWrap' && !state.releaseConfirm?.busy) { state.releaseConfirm = null; render(); }
+    // 直线流程弹窗：取消 / 遮罩关闭（busy 中不可关）；主按钮按 phase 分派（补填版本号 →
+    // 开始检查；二次确认 → 确认执行）；检查未通过「返回」关闭；版本号输入即时回写防重渲染丢字
+    q('#bldRelCancel')?.addEventListener('click', closePublishFlow);
+    q('#bldRelBack')?.addEventListener('click', closePublishFlow);
+    q('#bldRelVersion')?.addEventListener('input', () => {
+      const flow = state.releaseFlow;
+      const input = q('#bldRelVersion');
+      if (flow && flow.phase === 'version' && input) flow.version = input.value;
     });
-    // REQ-20260920-003 五步流程导航 + 发布记录选择 / 动作 / 只读重试（BUG-20260915-014 迁移）
+    q('#bldRelGo')?.addEventListener('click', () => {
+      const phase = state.releaseFlow?.phase;
+      if (phase === 'version') doPublishCheck();
+      else if (phase === 'confirm') doPublishConfirm();
+    });
+    q('#bldPublishWrap')?.addEventListener('click', (e) => {
+      if (e.target?.id === 'bldPublishWrap') closePublishFlow();
+    });
+    // REQ-20260920-003 五步流程导航 + 发布数据只读重试（BUG-20260915-014 迁移）
     for (const el of view.querySelectorAll('[data-step]')) {
       el.addEventListener('click', () => setStep(el.dataset.step));
     }
@@ -5337,32 +5263,17 @@ ${langsField}
     licenseWrap?.addEventListener('click', (e) => {
       if (e.target?.id === 'bldLicenseWrap' && !state.pf?.license?.busy) closeLicensePicker();
     });
-    for (const el of view.querySelectorAll('[data-rel-run]')) {
-      el.addEventListener('click', (e) => {
-        if (e.target?.closest?.('button')) return;
-        selectReleaseRun(el.dataset.relRun);
-      });
+    // BUG-20260928-012：运行记录展示模块已删除——原运行卡片 / 详情动作 / 目录打开 /
+    // 计划确认弹窗绑定随之移除；新增失败结果面板「重试」入口。
+    for (const el of view.querySelectorAll('[data-rel-retry-publish]')) {
+      el.addEventListener('click', () => retryPublish());
     }
-    for (const el of view.querySelectorAll('[data-rel-act]')) {
-      el.addEventListener('click', () => {
-        const act = el.dataset.relAct;
-        const id = el.dataset.relRun;
-        if (act === 'plan') openRelPlan(id);
-        else if (act === 'refresh') refreshReleasePane();
-        else relAction(id, act);
-      });
-    }
-    for (const el of view.querySelectorAll('[data-publish-open]')) el.addEventListener('click', () => openPublishDirectory(el.dataset.publishOpen));
     for (const el of view.querySelectorAll('[data-publish-settings]')) el.addEventListener('click', goPublishSettings);
     q('#bldRelRetry')?.addEventListener('click', () => ensureReleaseData(true));
-    q('[data-rel-detail-retry]')?.addEventListener('click', () => { if (state.rel?.runId) fetchRelDetail(state.rel.runId); });
-    q('#bldRelPlanCancel')?.addEventListener('click', closeRelPlan);
-    q('#bldRelPlanConfirm')?.addEventListener('click', confirmRelStart);
   }
 
   document.addEventListener?.('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (state.rel?.planModal) { closeRelPlan(); return; } // BUG-20260915-014：发布计划确认弹窗（取消不发请求）
     if (state.pf?.license?.open) { closeLicensePicker(); return; } // REQ-20260922-005：选择开源协议弹框 Esc 关闭（不启动总结）
     if (state.pf?.edit?.open) { // REQ-20260924-006：二次编辑弹窗 Esc——挂起态先撤提示，未保存走关闭保护
       if (state.pf.edit.pending) { state.pf.edit.pending = null; render(); }
@@ -5372,7 +5283,7 @@ ${langsField}
     if (state.pf?.review?.open) { closeReview(); return; } // REQ-20260921-008：审查对话框 Esc 关闭
     if (state.pushConfirm) { state.pushConfirm = null; render(); return; }
     if (state.deleteConfirm) { if (!state.deleteBusy) { state.deleteConfirm = null; render(); } return; }
-    if (state.releaseConfirm) { if (!state.releaseConfirm.busy) { state.releaseConfirm = null; render(); } return; }
+    if (state.releaseFlow) { closePublishFlow(); return; } // BUG-20260928-012：直线流程弹窗 Esc（busy 中不可关）
     if (state.mergeConfirm) { state.mergeConfirm = null; render(); return; }
     if (state.answer) { state.answer = null; render(); return; }
     if (state.createPanel || state.addPanel) { state.createPanel = null; state.addPanel = null; render(); }
@@ -5410,13 +5321,14 @@ ${langsField}
     doDocsMerge,
     // REQ-20260915-003：切换选中版本（清空关联列表搜索并回第一页）
     selectVersion,
-    // REQ-20260915-002 产品发布入口行为接缝；BUG-20260928-002 收敛为唯一「发布」入口：
-    // 二次确认（openPublishConfirm）+ 一键发布链路（doOneClickPublish，自动创建草稿并预检再启动）
-    openPublishConfirm, doOneClickPublish,
-    // BUG-20260915-014：详情「正式发布」步与发布记录接缝（测试与就地查看 / 动作交互）；
+    // REQ-20260915-002 产品发布入口接缝；BUG-20260928-012 直线流程（检查提示 → 二次确认 →
+    // 执行 → 出结果）：入口（openPublishConfirm / retryPublish / closePublishFlow）、
+    // 检查（doPublishCheck）与确认执行（doPublishConfirm）、执行轮询单轮（releasePoll）、
+    // 本地时间格式化（fmtTimeLocal，发布时间展示）
+    openPublishConfirm, doPublishCheck, doPublishConfirm, retryPublish, closePublishFlow, releasePoll, fmtTimeLocal,
+    // BUG-20260915-014：详情「正式发布」步接缝（运行记录展示模块已删除）；
     // REQ-20260920-003 更名 setDetailTab → setStep（五步流程）
-    setStep, openReleaseTab, selectReleaseRun, relAction,
-    openRelPlan, confirmRelStart, refreshReleasePane, openPublishDirectory,
+    setStep, openReleaseTab, refreshReleasePane,
     // REQ-20260920-003：发布流程接缝（推送 / 官网检测）；
     // REQ-20260921-008：文档编写页流水线接缝（刷新 / AI 总结 / 审查对话框 / 提交）；
     // REQ-20260921-012：AI 翻译接缝（BUG-20260926-002：整体审查完结接缝随阶段去除）
