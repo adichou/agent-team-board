@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BUG-20260928-002 界面演示 · 正式发布步「本版本发布」区域收敛</title>
+<style>
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2d3748; --txt:#e6edf3;
+    --muted:#8b949e; --pri:#2f6feb; --pri-dim:#24437a; --ok:#2ea043; --warn:#d29922;
+    --fail:#c93c37; --flag:#f85149; --sel:#20304d; --chipbg:#21262d;
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f8fa; --panel:#ffffff; --panel2:#f0f3f7; --line:#d5dbe1; --txt:#1f2328;
+    --muted:#656d76; --pri:#0969da; --pri-dim:#9cb8e8; --ok:#1a7f37; --warn:#9a6700;
+    --fail:#cf222e; --flag:#cf222e; --sel:#dbeafe; --chipbg:#eaeef2;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:56px}
+  button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--txt);padding:5px 12px}
+  button:focus-visible{outline:2px solid var(--pri);outline-offset:1px}
+  button.pri{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:600}
+  button.pri.big{font-size:15px;padding:8px 22px}
+  button.ghost{background:transparent}
+  button[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+  button.pri[aria-disabled="true"]{background:var(--pri-dim);border-color:var(--pri-dim)}
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;
+    padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{font-size:16px;margin:0}
+  .sub{margin:2px 0 0;color:var(--muted);font-size:12px}
+  .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:transparent;padding:5px 12px}
+  .seg button.on{background:var(--pri);color:#fff;font-weight:600}
+  select{font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+  label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--muted);font-size:13px;cursor:pointer}
+  main{display:grid;grid-template-columns:250px 1fr;gap:16px;max-width:1100px;margin:18px auto;padding:0 16px}
+  @media (max-width:820px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .vcard strong{display:block;font-size:14px}
+  .vcard .meta{color:var(--muted);font-size:12px;margin-top:4px}
+  .steps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .steps span{border:1px solid var(--line);border-radius:999px;padding:3px 12px;color:var(--muted);font-size:12px;background:var(--panel)}
+  .steps span.on{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:600}
+  .flow{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px;
+    color:var(--muted);font-size:12px;background:var(--panel)}
+  .flow strong{color:var(--txt);font-size:13px}
+  .flow p{margin:4px 0}
+  .flow .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  /* 焦点区域：本版本发布 */
+  .pub{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px 16px}
+  .pub>strong{font-size:14px}
+  .pub .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px}
+  .muted{color:var(--muted)}
+  .small{font-size:12px}
+  .st{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;border:1px solid transparent}
+  .st-ok{background:rgba(46,160,67,.15);color:var(--ok);border-color:var(--ok)}
+  .st-fail{background:rgba(201,60,55,.15);color:var(--fail);border-color:var(--fail)}
+  .st-run{background:rgba(210,153,34,.15);color:var(--warn);border-color:var(--warn)}
+  .st-mute{background:var(--chipbg);color:var(--muted);border-color:var(--line)}
+  .flag{display:inline-block;border:1px dashed var(--flag);color:var(--flag);border-radius:999px;
+    font-size:11px;padding:0 8px;margin-left:6px;user-select:none}
+  .note{margin-top:10px;padding:8px 10px;border-radius:8px;font-size:12px;border:1px dashed var(--line)}
+  .note.bug{border-color:var(--flag);color:var(--flag)}
+  .note.fix{border-color:var(--ok);color:var(--ok)}
+  .split{display:grid;grid-template-columns:minmax(220px,340px) 1fr;gap:14px;margin-top:12px}
+  @media (max-width:820px){.split{grid-template-columns:1fr}}
+  .runlist{display:flex;flex-direction:column;gap:8px}
+  .rc{border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;background:var(--panel2)}
+  .rc.sel{border-color:var(--pri);background:var(--sel)}
+  .rc .t{display:flex;gap:8px;align-items:center;justify-content:space-between}
+  .rc .meta{color:var(--muted);font-size:12px;margin-top:2px}
+  .detail{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--panel2)}
+  .detail h3{margin:0;font-size:14px;display:flex;gap:8px;align-items:center}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:10px 0;font-size:13px}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0}
+  .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  /* 弹窗 */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:520px;width:calc(100% - 40px);padding:18px 20px}
+  .modal h3{margin:0 0 8px;font-size:15px}
+  .modal ul{margin:8px 0;padding-left:20px}
+  .modal .foot{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+  #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-size:13px;display:none;z-index:60;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+  footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+    color:var(--muted);font-size:12px;padding:8px 16px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>BUG-20260928-002 演示 · 「正式发布」步「本版本发布」区域收敛</h1>
+    <p class="sub">对照演示缺陷现象与期望收敛后状态 · 全部为内存演示数据，不调用真实接口、不执行真实发布</p>
+  </div>
+  <div class="ctl">
+    <span class="seg" role="group" aria-label="对照切换">
+      <button type="button" id="mBug">缺陷态（现状）</button>
+      <button type="button" id="mFix">期望态（收敛后）</button>
+    </span>
+    <label class="chk" for="stSel">状态</label>
+    <select id="stSel" aria-label="状态切换">
+      <option value="empty">空态（无发布记录）</option>
+      <option value="loading">加载中</option>
+      <option value="error">读取失败</option>
+      <option value="draft">有记录 · 草稿未预检</option>
+      <option value="ready">有记录 · 预检通过</option>
+      <option value="running">发布中</option>
+      <option value="done">已发布</option>
+      <option value="unconfig">未配置官网仓库</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="unmerged"> 版本未合并</label>
+    <button type="button" id="themeBtn">浅色</button>
+  </div>
+</header>
+
+<main>
+  <aside class="card vcard" aria-label="版本卡片（演示）">
+    <strong id="vName">看板 v1.2 发布演练</strong>
+    <div class="meta">VP-20260928-001 · <span id="vChip" class="st st-ok">已合并</span></div>
+    <div class="meta small">演示用版本卡；列表精简口径见 REQ-20260921-016。</div>
+  </aside>
+
+  <section aria-label="版本详情（正式发布步，演示）">
+    <nav class="steps" aria-label="五步导航">
+      <span>版本计划</span><span>关联条目与提交</span><span>文档编写</span><span>合并入 main</span><span class="on">正式发布</span>
+    </nav>
+    <div class="flow" aria-label="推送与官网资料（上下文，演示）">
+      <strong>动作一 · 推送远端</strong>
+      <div class="row"><span>尚未推送到远端（演示）。</span>
+        <button type="button" class="demo-noop" aria-disabled="true" data-reason="演示：不执行真实推送">推送主分支</button></div>
+      <strong>动作二 · 官网资料更新</strong>
+      <div class="row"><span>提示词与检测在官网仓库执行（演示省略）。</span>
+        <button type="button" class="demo-noop" aria-disabled="true" data-reason="演示：不执行真实检测">立即检测</button></div>
+    </div>
+    <div class="pub" id="pubRegion" aria-label="本版本发布区域（焦点区域）"></div>
+  </section>
+</main>
+
+<div id="modalRoot"></div>
+<div id="toast" role="status"></div>
+<footer>仅演示：数据为内存虚构值；不访问文件系统、不推送代码、不部署站点。禁用按钮点击以气泡说明原因（沿「点击必反馈」口径）。最终收敛形态以 design.md 定稿为准。</footer>
+
+<script>
+'use strict';
+const S = { mode:'bug', st:'empty', unmerged:false, dark:true, sel:0, busyCreate:false, prechecking:false, planBusy:false };
+
+const RUN_ID = 'run-20260928-0930-a1b2';
+function runOf(st){
+  if(st==='draft')   return { id:RUN_ID, version:'1.2.0', status:'draft',     precheckOk:false, upd:'2026-09-28 09:30（演示）' };
+  if(st==='ready')   return { id:RUN_ID, version:'1.2.0', status:'draft',     precheckOk:true,  upd:'2026-09-28 09:32（演示）' };
+  if(st==='running') return { id:RUN_ID, version:'1.2.0', status:'running',   precheckOk:true,  upd:'2026-09-28 09:35（演示）' };
+  if(st==='done')    return { id:RUN_ID, version:'1.2.0', status:'succeeded', precheckOk:true,  upd:'2026-09-28 09:41（演示）' };
+  return null;
+}
+const configured = () => S.st !== 'unconfig';
+const reasonOf = () => {
+  if(!configured()) return '请先配置官网仓库';
+  const r = runOf(S.st);
+  if(!r) return '请先创建并预检';
+  if(r.status==='running') return '发布中…';
+  if(r.status==='succeeded') return '已发布';
+  if(!r.precheckOk) return '请重新预检并处理阻塞项';
+  return '';
+};
+const pubReady = () => { const r=runOf(S.st); return configured() && r && r.precheckOk && r.status==='draft'; };
+const STATUS_LBL = { draft:'草稿', running:'发布中', succeeded:'已发布', failed:'失败' };
+const chip = s => `<span class="st ${s==='succeeded'?'st-ok':s==='running'?'st-run':'st-mute'}">${STATUS_LBL[s]||s}</span>`;
+
+let toastTimer=null;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block';
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.style.display='none';},2400); }
+
+/* ---------- 缺陷态：忠实还原现状（renderPublishActions + renderReleasePane 空态/记录分支） ---------- */
+function bugView(){
+  const r = runOf(S.st), reason = reasonOf();
+  const createBtn = (flag) => `<button type="button" class="act-create" ${S.unmerged?`aria-disabled="true" data-reason="请先完成合并入 main（仅已合并的版本可创建发布）"`:''}>创建并预检</button>${flag?'<span class="flag">重复入口</span>':''}`;
+  const pubBtn = `<button type="button" class="pri act-pub" ${pubReady()?'':`aria-disabled="true" data-reason="${reason||'发布条件未满足'}"`}>${r&&r.status==='running'?'发布中…':r&&r.status==='succeeded'?'已发布':'发布'}</button>`;
+  let body='';
+  if(S.st==='loading') body = '<p class="muted" role="status">正在加载发布记录…</p>';
+  else if(S.st==='error') body = `<p class="st-fail st" style="border-style:solid">发布记录读取失败：演示网络错误</p>
+    <p style="margin-top:8px"><button type="button" class="act-retry">重试</button> <span class="muted small">重试只重新读取记录，不执行任何发布操作。</span></p>`;
+  else if(!r) body = `<p class="muted">当前版本暂无发布记录<span class="flag">空态与顶部操作条重复</span></p>
+    <p>${createBtn(true)}${S.unmerged?' <span class="muted small">请先完成合并入 main</span>':''}</p>`;
+  else body = splitView(r, createBtn(true));
+  return `<strong>本版本发布</strong><div class="row">
+      ${pubBtn}${createBtn(false)}<span class="muted">${reason}</span>${!configured()?'<button type="button" class="act-settings">前往设置</button>':''}
+    </div>${body}
+    <div class="note bug">缺陷标注：同一屏出现两个功能相同的「创建并预检」（顶部操作条 + 下方空态/列表各一），「发布」按钮、原因文案与空态文案分散堆叠。</div>`;
+}
+
+/* ---------- 期望态（本轮确认口径）：删除圈注堆叠区域，收敛为唯一「发布」主按钮：点击直接二次确认，确认后直接发布 ---------- */
+const fixReason = () => {
+  if(!configured()) return '请先配置官网仓库';
+  if(S.unmerged) return '请先完成合并入 main';
+  const r = runOf(S.st);
+  if(r && r.status==='running') return '发布中…';
+  if(r && r.status==='succeeded') return '已发布';
+  return '';
+};
+function fixView(){
+  const r = runOf(S.st), reason = fixReason();
+  const pubBtn = `<button type="button" class="pri big act-pub"${reason?` aria-disabled="true" data-reason="${reason}"`:''}>${r&&r.status==='running'?'发布中…':r&&r.status==='succeeded'?'已发布':'发布'}</button>`;
+  let body='';
+  if(S.st==='loading') body = '<p class="muted small" role="status">正在加载发布记录…</p>';
+  else if(S.st==='error') body = `<p class="st-fail st" style="border-style:solid;margin-top:8px">发布记录读取失败：演示网络错误</p>
+    <p style="margin-top:8px"><button type="button" class="act-retry">重试</button> <span class="muted small">重试只重新读取记录，不执行任何发布操作。</span></p>`;
+  else if(!r) body = `<p class="muted small" style="margin-top:8px">当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布（本轮确认口径，不再要求先手动「创建并预检」）。${S.unmerged?' 当前版本未合并，先完成合并入 main。':''}</p>`;
+  else body = splitView(r);
+  return `<div class="row" style="margin-top:0">
+      ${pubBtn}<span class="muted">${reason}</span>${!configured()?'<button type="button" class="act-settings">前往设置</button>':''}
+    </div>${body}
+    ${S.st==='done'
+      ? '<div class="note fix">发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。演示口径。</div>'
+      : '<div class="note fix">收敛后（本轮确认口径）：删除圈注的堆叠区域；「发布」为唯一发布入口，点击直接弹二次确认提示，确认后自动创建草稿并预检、直接启动发布；不再出现独立「创建并预检」前置入口。</div>'}`;
+}
+
+function splitView(r, listCreateBtn=''){
+  const cards = `<div class="rc ${S.sel===0?'sel':''}" data-sel="0" role="button" tabindex="0">
+      <div class="t"><strong>${r.id}</strong>${chip(r.status)}</div>
+      <div class="meta">v${r.version} · Web App ${r.status==='succeeded'?'已完成':'待执行'} · 官网 ${r.status==='succeeded'?'已完成':'待执行'}（演示）</div>
+    </div>`;
+  const acts = [];
+  if(r.status==='draft'){
+    acts.push(`<button type="button" class="act-precheck" ${S.prechecking?'disabled':''}>${S.prechecking?'预检中…':'预检'}</button>`);
+    acts.push('<button type="button" class="demo-noop" data-reason="演示：已请求重新冻结（不执行真实操作）">重新冻结</button>');
+    acts.push(`<button type="button" class="pri act-plan" ${r.precheckOk?'':`aria-disabled="true" data-reason="请先预检（预检不推送 / 不部署）"`}>预览发布计划</button>`);
+  }
+  if(r.status==='running') acts.push('<button type="button" class="demo-noop" data-reason="演示：已请求取消后续阶段（不执行真实操作）">取消后续阶段</button>');
+  acts.push('<button type="button" class="demo-noop" data-reason="演示：已刷新状态（不执行真实操作）">刷新状态</button>');
+  const tgt = (l,s)=>`<div><strong>${l}</strong> ${chip(s)} <span class="muted small">${s==='succeeded'?'http://localhost/demo（演示链接）':'尚未生成'}</span></div>`;
+  return `<div class="split">
+    <div class="runlist" aria-label="发布记录">${cards}${listCreateBtn?`<p style="margin:4px 0 0">${listCreateBtn}</p>`:''}</div>
+    <div class="detail" aria-label="运行详情（演示）">
+      <h3>${r.id} ${chip(r.status)}</h3>
+      <p class="muted small">来源 BLD-20260927-001 · 更新 ${r.upd}</p>
+      <dl class="kv"><dt>运行 ID</dt><dd>${r.id}</dd><dt>发行版本号</dt><dd>v${r.version}</dd><dt>状态</dt><dd>${chip(r.status)}</dd></dl>
+      ${tgt('Web App', r.status==='succeeded'?'done':'pending')}
+      ${tgt('官网与文档', r.status==='succeeded'?'done':'pending')}
+      <div class="acts">${acts.join('')}</div>
+    </div></div>`;
+}
+
+function planModal(){
+  if(S.mode==='fix'){
+    return `<div class="mask" id="mask"><div class="modal" role="dialog" aria-modal="true" aria-label="发布二次确认">
+      <h3>确认发布（VP-20260928-001 · 演示）</h3>
+      <p>即将发布版本 <strong>v1.2.0</strong>。确认后将自动创建发布草稿并完成预检，随后<strong>直接启动发布</strong>（Web App 与官网 / 用户文档）。</p>
+      <p class="muted small">二次确认即授权执行；预检不推送、不上传、不部署，预检阻塞时中止并就近提示原因。取消不发出任何执行请求。</p>
+      <div class="foot"><button type="button" id="planCancel">取消</button>
+      <button type="button" class="pri" id="planGo"${S.planBusy?' disabled':''}>${S.planBusy?'启动中…':'确认发布'}</button></div>
+    </div></div>`;
+  }
+  return `<div class="mask" id="mask"><div class="modal" role="dialog" aria-modal="true" aria-label="发布计划确认">
+    <h3>发布计划确认（${RUN_ID} · 演示）</h3>
+    <ul><li>冻结范围：main / dev 分支头与远端目标（演示值）</li>
+    <li>发布目标：Web App 与官网 / 用户文档（两个必备目标）</li>
+    <li>预检已通过；确认后才启动执行，取消不执行。</li></ul>
+    <p class="muted small">演示弹窗对应「预览发布计划 → 确认发布」流程；真实计划内容以运行数据为准。</p>
+    <div class="foot"><button type="button" id="planCancel">取消</button>
+    <button type="button" class="pri" id="planGo"${S.planBusy?' disabled':''}>${S.planBusy?'启动中…':'确认发布'}</button></div>
+  </div></div>`;
+}
+
+function render(){
+  document.getElementById('pubRegion').innerHTML = S.mode==='bug' ? bugView() : fixView();
+  document.getElementById('modalRoot').innerHTML = (S.modal && S.st!=='error' && S.st!=='loading') ? planModal() : '';
+  document.getElementById('mBug').classList.toggle('on', S.mode==='bug');
+  document.getElementById('mFix').classList.toggle('on', S.mode==='fix');
+  document.getElementById('mBug').setAttribute('aria-pressed', S.mode==='bug');
+  document.getElementById('mFix').setAttribute('aria-pressed', S.mode==='fix');
+  document.getElementById('stSel').value = S.st;
+  document.getElementById('unmerged').checked = S.unmerged;
+  const c = document.getElementById('vChip');
+  const published = S.st==='done'; // 发布成功后版本计划标签更新为「已发布」（源码 versionChip 现状口径，两态一致）
+  c.textContent = published?'已发布':(S.unmerged?'未合并':'已合并');
+  c.className = 'st ' + (published?'st-ok':(S.unmerged?'st-mute':'st-ok'));
+  document.getElementById('themeBtn').textContent = S.dark?'浅色':'深色';
+}
+
+/* 动作 */
+function doCreate(){
+  if(S.busyCreate) return;
+  S.busyCreate = true; toast('正在创建发布草稿并预检…（演示）'); render();
+  setTimeout(()=>{ S.busyCreate=false; S.st='ready'; S.sel=0; S.prechecking=false;
+    toast('✓ 已创建产品发布 '+RUN_ID+'（草稿）并完成预检（演示）'); render(); }, 800);
+}
+function doPrecheck(){
+  if(S.prechecking) return;
+  S.prechecking = true; toast('预检中…（预检不推送 / 不部署，演示）'); render();
+  setTimeout(()=>{ S.prechecking=false; if(S.st==='draft') S.st='ready';
+    toast('✓ 预检通过（演示）'); render(); }, 800);
+}
+function confirmPublish(){
+  if(S.planBusy) return;
+  S.planBusy = true; render();
+  setTimeout(()=>{ S.planBusy=false; S.modal=false;
+    const fresh = !runOf(S.st); // 期望态：确认后自动创建草稿并预检（演示即时完成），随后直接启动
+    S.st='running'; S.sel=0; render();
+    toast(fresh?'已自动创建发布草稿并完成预检，发布执行中…（演示）':'发布执行中…（演示）');
+    setTimeout(()=>{ if(S.st==='running'){ S.st='done'; toast('✓ 发布完成：版本计划标签更新为「已发布」，发布计划已锁定（演示，不推送 / 不部署）'); render(); } }, 2200);
+  }, 400);
+}
+
+/* 事件 */
+document.getElementById('mBug').addEventListener('click', ()=>{ S.mode='bug'; render(); });
+document.getElementById('mFix').addEventListener('click', ()=>{ S.mode='fix'; render(); });
+document.getElementById('stSel').addEventListener('change', e=>{ S.st=e.target.value; S.sel=0; S.prechecking=false; render(); });
+document.getElementById('unmerged').addEventListener('change', e=>{ S.unmerged=e.target.checked; render(); });
+document.getElementById('themeBtn').addEventListener('click', ()=>{
+  S.dark=!S.dark; document.documentElement.dataset.theme = S.dark?'dark':'light'; render(); });
+
+document.addEventListener('click', e=>{
+  const t = e.target.closest('button, .rc');
+  if(!t) return;
+  if(t.id==='planGo'){ confirmPublish(); return; }
+  if(t.id==='planCancel'){ S.modal=false; render(); toast('已取消，不执行发布（演示）'); return; }
+  if(t.classList.contains('rc') || t.closest('.rc')){ S.sel=0; render(); return; }
+  if(t.dataset.reason){ toast(t.dataset.reason); return; }
+  if(t.classList.contains('act-pub')){
+    if(t.getAttribute('aria-disabled')==='true') return; // data-reason 分支已处理
+    S.modal=true; render(); return; // 缺陷态：打开发布计划确认弹窗（还原现状）；期望态：直接弹二次确认，确认后直接发布
+  }
+  if(t.classList.contains('act-create')){ if(t.getAttribute('aria-disabled')!=='true') doCreate(); return; }
+  if(t.classList.contains('act-precheck')){ doPrecheck(); return; }
+  if(t.classList.contains('act-plan')){ if(t.getAttribute('aria-disabled')!=='true'){ S.modal=true; render(); } return; }
+  if(t.classList.contains('act-retry')){ S.st = S.st==='unconfig'?'unconfig':'empty'; toast('已重新读取发布记录（演示）'); render(); return; }
+  if(t.classList.contains('act-settings')){ toast('演示：前往设置并保留来源版本上下文（不跳转）'); return; }
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && S.modal){ S.modal=false; render(); }
+  if(e.key==='Enter' && e.target.classList?.contains('rc')){ S.sel=0; render(); }
+});
+render();
+</script>
+</body>
+</html>
