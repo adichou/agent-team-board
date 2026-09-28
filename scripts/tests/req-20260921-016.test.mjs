@@ -231,7 +231,8 @@ t('T6 合并 / 发布 / 发布记录仍在详情对应步骤：合并步有主�
   await h.flush();
   detail = detailPart(h.inner());
   assert.match(detail, /data-rel-publish="BLD-MERGED"/, '正式发布步唯一「发布」入口仍在（merged 可用）');
-  assert.match(detail, /aria-label="发布记录"|暂无发布记录/, '正式发布步发布记录区仍在（有记录列清单 / 无记录显空态）');
+  // BUG-20260928-012：发布运行记录展示模块删除——正式发布步为直线流程说明 + 结果面板
+  assert.match(detail, /尚未发布。点击「发布」/, '正式发布步直线流程说明仍在（未发布态）');
   assert.ok(!listPart(h.inner()).includes('data-ver-merge'), '列表无合并入口（详情独有）');
   assert.ok(!listPart(h.inner()).includes('data-rel-publish'), '列表无发布入口（详情独有）');
 });

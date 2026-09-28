@@ -311,7 +311,7 @@ t('P3c 详情「概况」名称行仍显示合并状态；右侧「发布」页�
   assert.match(rel, /class="st st-ok"[^>]*>已发布<\/span>/, '发布页签运行状态仍为「已发布」');
 });
 
-t('P4 发布动作 / 刷新状态完成后重取构建 state：卡片标识随最新发布状态更新（无需手动刷新页面）', async () => {
+t('P4 发布数据刷新 / 执行结束轮询后重取构建 state：卡片标识随最新发布状态更新（无需手动刷新页面）', async () => {
   // 初始 state：BLD-A 尚未带上发布汇总（发布运行刚成功、state 未刷新）
   const h = setup({ versions: [ver('BLD-A', 'v1.0', 'merged', null)] });
   await h.enter();
@@ -320,36 +320,42 @@ t('P4 发布动作 / 刷新状态完成后重取构建 state：卡片标识随�
   await h.tick(4);
   // 服务端已汇总为已发布（下一次 /api/build/state 返回带 release）
   h.live.versions[0].release = { published: true, version: '1.2.0', runId: 'BPUB-20260917-0a1' };
-  // 「刷新状态」入口 → 重取发布记录 + 重取构建 state
+  // 发布数据刷新入口 → 重取发布记录 + 重取构建 state（BUG-20260928-012：原「刷新状态」
+  // 按钮随运行详情模块删除，refreshReleasePane / releasePoll 结束路径沿用同一联动口径）
   const before = h.calls.filter((c) => c.path === '/api/build/state').length;
   await h.run(`window.ATBBuild.refreshReleasePane()`);
   await h.tick(4);
-  assert.ok(h.calls.filter((c) => c.path === '/api/build/state').length > before, '刷新状态后重取了构建 state');
+  assert.ok(h.calls.filter((c) => c.path === '/api/build/state').length > before, '刷新后重取了构建 state');
   assert.match(cardOf(h.inner(), 'BLD-A'), /class="st st-ok"[^>]*>已发布<\/span>/, '卡片标签随之更新为「已发布」');
-  // 发布动作（relAction）完成后同样联动
+  // state 回落后再刷新：卡片标签随之还原（以实际数据为准）
   h.live.versions[0].release = null;
-  await h.run(`window.ATBBuild.relAction('BPUB-20260917-0a1', 'cancel')`);
+  await h.run(`window.ATBBuild.refreshReleasePane()`);
   await h.tick(4);
   assert.doesNotMatch(cardOf(h.inner(), 'BLD-A'), /已发布/, 'state 回落后卡片标签随之还原（以实际数据为准）');
 });
 
 /* ---------- P5 静态契约 ---------- */
 
-t('P5 静态契约：卡片标签经 versionChip（发布成功替换）；发布动作与刷新状态完成后刷新构建 state；发布页签既有绑定不回归', () => {
+t('P5 静态契约：卡片标签经 versionChip（发布成功替换）；发布执行结束与发布数据刷新后刷新构建 state；发布页签既有绑定不回归', () => {
   const listFn = buildJs.match(/function renderVersionList\(\) \{[\s\S]*?\n  \}/);
   assert.ok(listFn, '缺少 renderVersionList');
   assert.ok(listFn[0].includes('versionChip(v)'), '卡片标题行标签应经 versionChip(v) 渲染');
-  const relFn = buildJs.match(/async function relAction\(id, action, payload = \{\}\) \{[\s\S]*?\n  \}/);
-  assert.ok(relFn, '缺少 relAction');
-  assert.match(relFn[0], /await refresh\(\)/, 'relAction 完成后应刷新构建 state');
+  // BUG-20260928-012：运行详情动作（relAction）随模块删除；执行结束轮询（releasePoll）与
+  // 确认执行（doPublishConfirm）完成后刷新构建 state 的联动口径保留
+  const pollFn = buildJs.match(/async function releasePoll\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(pollFn, '缺少 releasePoll');
+  assert.match(pollFn[0], /await refresh\(\)/, '执行结束轮询应刷新构建 state');
+  const confirmFn = buildJs.match(/async function doPublishConfirm\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(confirmFn, '缺少 doPublishConfirm');
+  assert.match(confirmFn[0], /await refresh\(\)/, '确认执行完成后应刷新构建 state');
   const paneFn = buildJs.match(/function refreshReleasePane\(\) \{[\s\S]*?\n  \}/);
   assert.ok(paneFn, '缺少 refreshReleasePane');
-  assert.match(paneFn[0], /refresh\(\)/, '刷新状态入口应一并刷新构建 state');
-  assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-act\]'\)/, '发布动作绑定不回归');
-  // REQ-20260921-016：「查看发布记录」卡片按钮及其绑定移除（发布记录直接展示在正式发布步，
-  // openReleaseTab 仍为程序化激活入口）；BUG-20260928-002 起唯一「发布」入口（创建并预检
-  // 前置入口随区域收敛移除，data-rel-publish 绑定不回归）
+  assert.match(paneFn[0], /refresh\(\)/, '发布数据刷新入口应一并刷新构建 state');
+  // REQ-20260921-016：「查看发布记录」卡片按钮及其绑定移除（发布数据直接驱动正式发布步，
+  // openReleaseTab 仍为程序化激活入口）；BUG-20260928-002 起唯一「发布」入口；
+  // BUG-20260928-012：运行详情动作区（data-rel-act）随模块删除
   assert.ok(!buildJs.includes('data-ver-release-view'), '查看发布记录卡片按钮与绑定移除（REQ-20260921-016）');
+  assert.ok(!buildJs.includes('data-rel-act'), '运行详情动作区随模块删除（BUG-20260928-012）');
   assert.match(buildJs, /view\.querySelectorAll\('\[data-rel-publish\]'\)/, '唯一「发布」入口（正式发布步）绑定不回归');
 });
 

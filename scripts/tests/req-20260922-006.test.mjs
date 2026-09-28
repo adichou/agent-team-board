@@ -240,7 +240,8 @@ t('U1 前端契约：版本号 v.version 回退旧派生；发布于渲染；创
   assert.ok(src.includes('发布于'), '应渲染「发布于」发布时间');
   assert.ok(/发布于\s*:?[^`]*fmtTime\((?:v\.)?(?:releasedAt|relAt)/.test(src) || /releasedAt[^\n]*fmtTime|fmtTime[^\n]*releasedAt/.test(src), '发布时间应取 releasedAt 格式化');
   assert.ok(src.includes('bldNewVersion'), '创建表单应有版本号输入（bldNewVersion）');
-  assert.ok(src.includes('version: v.version'), '产品发布弹窗应预填计划版本号（version: v.version）');
+  // BUG-20260928-012 直线流程：弹窗预填计划版本号（去 v 前缀，源码级口径）
+  assert.match(src, /v\.version \? String\(v\.version\)\.replace\(\/\^v\/ */, '产品发布弹窗应预填计划版本号（取 v.version）');
 });
 
 // ---------- U2 i18n 中英同步 ----------

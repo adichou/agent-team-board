@@ -131,12 +131,13 @@ t('R2 状态口径 + 按版本绑定（BUG-20260928-002 起唯一入口为发布
   assert.match(pubBarFn[0], /data-rel-publish=/, '入口带 data-rel-publish 行为标记（openPublishConfirm 二次确认）');
   // 未合并直调兜底：不弹窗
   h.run(`window.ATBBuild.openPublishConfirm('BLD-DRAFT')`);
-  assert.doesNotMatch(h.inner(), /发布二次确认（/, '未合并版本不打开二次确认（兜底口径保留）');
-  // openPublishConfirm 目标按传入版本（不受右侧选中态影响）
+  assert.doesNotMatch(h.inner(), /发布（BLD-DRAFT）/, '未合并版本不打开发布弹窗（兜底口径保留）');
+  // openPublishConfirm 目标按传入版本（不受右侧选中态影响）；BUG-20260928-012 直线流程：
+  // 夹具版本计划无 version 字段 → 弹「发行版本号」补填弹窗（标题按传入版本）
   h.run(`window.ATBBuild.openPublishConfirm('BLD-MERGED')`);
   const rcInner = h.inner();
-  assert.match(rcInner, /发布二次确认（BLD-MERGED）/, 'merged 打开发布二次确认（目标为传入版本）');
-  assert.doesNotMatch(rcInner, /发布二次确认（BLD-DRAFT）/, '不误用右侧选中版本');
+  assert.match(rcInner, /发布（BLD-MERGED）/, 'merged 打开发布弹窗（目标为传入版本；无版本号先补填）');
+  assert.ok(!rcInner.includes('发布（BLD-DRAFT）'), '不误用右侧选中版本');
   assert.match(rcInner, /rel-card sel" data-ver-id="BLD-DRAFT"/, '选中态保持不变');
   // BUG-20260915-014：查看发布记录不再派发 atb:goto-view（旧跳转命中 HIDDEN_VIEWS 回落，
   // 即缺陷根因）——改为就地激活所在卡片版本的详情发布页签（REQ-20260921-016 起按钮移除，
