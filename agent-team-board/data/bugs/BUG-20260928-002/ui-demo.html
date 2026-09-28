@@ -167,7 +167,7 @@ const reasonOf = () => {
   return '';
 };
 const pubReady = () => { const r=runOf(S.st); return configured() && r && r.precheckOk && r.status==='draft'; };
-const STATUS_LBL = { draft:'草稿', running:'发布中', succeeded:'已发布', failed:'失败' };
+const STATUS_LBL = { draft:'草稿', running:'发布中', succeeded:'已发布', failed:'失败', done:'已完成', pending:'待执行' };
 const chip = s => `<span class="st ${s==='succeeded'?'st-ok':s==='running'?'st-run':'st-mute'}">${STATUS_LBL[s]||s}</span>`;
 
 let toastTimer=null;
@@ -209,13 +209,13 @@ function fixView(){
   else if(S.st==='error') body = `<p class="st-fail st" style="border-style:solid;margin-top:8px">发布记录读取失败：演示网络错误</p>
     <p style="margin-top:8px"><button type="button" class="act-retry">重试</button> <span class="muted small">重试只重新读取记录，不执行任何发布操作。</span></p>`;
   else if(!r) body = `<p class="muted small" style="margin-top:8px">当前版本暂无发布记录。点击「发布」直接弹出二次确认，确认后自动创建发布草稿并预检、随后直接启动发布（本轮确认口径，不再要求先手动「创建并预检」）。${S.unmerged?' 当前版本未合并，先完成合并入 main。':''}</p>`;
+  else if(S.st==='done') body = `<p style="margin-top:8px">发布时间：2026-09-28 09:41（演示）</p>
+    <div class="note fix">发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。</div>`;
   else body = splitView(r);
   return `<div class="row" style="margin-top:0">
-      ${pubBtn}<span class="muted">${reason}</span>${!configured()?'<button type="button" class="act-settings">前往设置</button>':''}
+      ${pubBtn}${S.st==='done'?'':`<span class="muted">${reason}</span>`}${!configured()?'<button type="button" class="act-settings">前往设置</button>':''}
     </div>${body}
-    ${S.st==='done'
-      ? '<div class="note fix">发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。演示口径。</div>'
-      : '<div class="note fix">收敛后（本轮确认口径）：删除圈注的堆叠区域；「发布」为唯一发布入口，点击直接弹二次确认提示，确认后自动创建草稿并预检、直接启动发布；不再出现独立「创建并预检」前置入口。</div>'}`;
+    ${S.st==='done' ? '' : '<div class="note fix">收敛后（本轮确认口径）：删除圈注的堆叠区域；「发布」为唯一发布入口，点击直接弹二次确认提示，确认后自动创建草稿并预检、直接启动发布；不再出现独立「创建并预检」前置入口。</div>'}`;
 }
 
 function splitView(r, listCreateBtn=''){
@@ -231,7 +231,7 @@ function splitView(r, listCreateBtn=''){
   }
   if(r.status==='running') acts.push('<button type="button" class="demo-noop" data-reason="演示：已请求取消后续阶段（不执行真实操作）">取消后续阶段</button>');
   acts.push('<button type="button" class="demo-noop" data-reason="演示：已刷新状态（不执行真实操作）">刷新状态</button>');
-  const tgt = (l,s)=>`<div><strong>${l}</strong> ${chip(s)} <span class="muted small">${s==='succeeded'?'http://localhost/demo（演示链接）':'尚未生成'}</span></div>`;
+  const tgt = (l,s)=>`<div><strong>${l}</strong> ${chip(s)} <span class="muted small">${s==='done'?'http://localhost/demo（演示链接）':'尚未生成'}</span></div>`;
   return `<div class="split">
     <div class="runlist" aria-label="发布记录">${cards}${listCreateBtn?`<p style="margin:4px 0 0">${listCreateBtn}</p>`:''}</div>
     <div class="detail" aria-label="运行详情（演示）">
