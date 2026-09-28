@@ -20,21 +20,16 @@ export function contentDir(repoRoot,product){
 }
 const escRegExp=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // REQ-20260916-004：新架构（Vite + Vue 站点）双语材料口径——src/data/apps.js 注册 +
-// content/<产品id>/ 中英成对 md；缺失项一次性列入错误信息。
-function siteMaterials(repoRoot,productId,version){
+// content/<产品id>/ 中英成对 md。
+// BUG-20260928-013：删除 content/<产品id>/ 双语成对内容文件（changelog / faq / support /
+// docs）的强制检查——缺失即跳过，不参与材料指纹收集（文件不读、不 fingerprint）；
+// src/data/apps.js 存在性与产品注册检查保留。
+function siteMaterials(repoRoot,productId){
  const errors=[];let apps='';
  try{apps=fs.readFileSync(path.join(repoRoot,'src','data','apps.js'),'utf8');}catch{errors.push('官网仓库缺少 src/data/apps.js');}
  if(apps&&!new RegExp(`id:\\s*['"]${escRegExp(productId)}['"]`).test(apps))errors.push(`src/data/apps.js 未注册产品 ${productId}（可在设置中配置官网产品 id 映射）`);
- const dir=contentDir(repoRoot,productId),missing=[];
- for(const f of [`changelog/v${version}.zh.md`,`changelog/v${version}.en.md`,'faq.zh.md','faq.en.md','support.zh.md','support.en.md'])
-  if(!fs.existsSync(path.join(dir,f)))missing.push(`content/${productId}/${f}`);
- let docs=[];try{docs=fs.readdirSync(path.join(dir,'docs'));}catch{}
- const slugs=[...new Set(docs.map(f=>f.replace(/\.(zh|en)\.md$/,'')))].filter(s=>docs.includes(`${s}.zh.md`)&&docs.includes(`${s}.en.md`));
- if(!slugs.length)missing.push(`content/${productId}/docs/ 的中英成对文档（如 docs/quick-start.zh.md 与 docs/quick-start.en.md）`);
- if(missing.length)errors.push(`缺少：${missing.join('、')}`);
  if(errors.length)throw new AtbError(errors.join('；'));
- return [...[`changelog/v${version}.zh.md`,`changelog/v${version}.en.md`,'faq.zh.md','faq.en.md','support.zh.md','support.en.md'],...slugs.flatMap(s=>[`docs/${s}.zh.md`,`docs/${s}.en.md`])]
-  .map(f=>({relative:f,hash:store.fingerprint(fs.readFileSync(path.join(dir,f),'utf8'))}));
+ return [];
 }
 // 子路径 base 从官网仓库 vite 配置解析（GitHub Pages 项目站点部署），缺省根路径。
 function siteBase(repoRoot){
@@ -66,7 +61,7 @@ export async function inputs(root,run){
  const productId=store.resolveProductId(config,path.basename(root));
  const homepage={repoRoot:config.homepageRepoRoot,revision:config.revision,productId,contentDir:config.homepageRepoRoot?contentDir(config.homepageRepoRoot,productId):''};
  let materialFiles=null,materialError=null;
- if(homepage.repoRoot){try{materialFiles=siteMaterials(homepage.repoRoot,productId,run.version);}catch(e){materialError=e.message;}}
+ if(homepage.repoRoot){try{materialFiles=siteMaterials(homepage.repoRoot,productId);}catch(e){materialError=e.message;}}
  return {mainSha:await git(root,'rev-parse','refs/heads/main'),devSha:await git(root,'rev-parse','refs/heads/dev'),remote,remoteUrlHash:store.fingerprint(await git(root,'remote','get-url','--push',remote)),homepage,materialFiles,materialError,version:run.version};
 }
 // REQ-20260920-003：包含性检验适配重放证据——隔离合并以 cherry-pick 重放提交进 main，原始
@@ -205,7 +200,10 @@ function get(url){return new Promise((resolve,reject)=>{const req=http.get(url,r
 // REQ-20260916-004：新架构回验。站点为 CSR SPA——壳页不含内容，内容经 import.meta.glob
 // 构建期内联进 assets（文件路径串可 grep），据此做无浏览器的产物契约校验；语言切换为客户端
 // 按钮，以 zh↔/en 镜像路由可达为口径。
-async function verifySite(url,productId,version,base){
+// BUG-20260928-013：删除 changelog / docs 内容的内联检查（产物不再要求内联
+// /content/<产品id>/changelog/… 与 docs/… 路径串，docs 路由可达随之移除）；
+// 产品注册信息检查与 faq / support / changelog 路由可达保留。
+async function verifySite(url,productId,base){
  const origin=new URL(url).origin;
  const page=p=>`${origin}${base==='/'?'':base.replace(/\/$/,'')}${p}`;
  const bundle=[await get(page('/'))];
@@ -217,10 +215,7 @@ async function verifySite(url,productId,version,base){
  }
  const text=bundle.join('\n');
  if(!new RegExp(`id:\\s*["']${escRegExp(productId)}["']`).test(text))throw Error(`构建产物未包含产品 ${productId} 的注册信息，产品页无法渲染`);
- for(const locale of ['zh','en'])if(!text.includes(`/content/${productId}/changelog/v${version}.${locale}.md`))throw Error(`官网更新内容缺少 ${version} 的${locale==='zh'?'中':'英'}文条目（content/${productId}/changelog/v${version}.${locale}.md）`);
- const slugs=[...new Set([...text.matchAll(new RegExp(`/content/${escRegExp(productId)}/docs/([A-Za-z0-9._-]+)\\.zh\\.md`,'g'))].map(m=>m[1]))];
- if(!slugs.length)throw Error(`构建产物未包含文档内容（content/${productId}/docs/）`);
- for(const r of [`/apps/${productId}`,`/apps/${productId}/docs`,`/apps/${productId}/faq`,`/apps/${productId}/changelog`,'/support',...slugs.map(s=>`/apps/${productId}/docs/${s}`)])
+ for(const r of [`/apps/${productId}`,`/apps/${productId}/faq`,`/apps/${productId}/changelog`,'/support'])
   for(const u of [page(r),page(`/en${r}`)])await get(u);
 }
 async function execute(dataDir,root,id){
@@ -268,7 +263,7 @@ async function execute(dataDir,root,id){
     if(stageKey==='site-deploy'){
      // REQ-20260916-004：在官网仓库执行 npm install 与 npm run build，产物以 dist/ 为准。
      const {repoRoot,productId}=run.frozen.homepage;
-     store.validateRepo(repoRoot);siteMaterials(repoRoot,productId,run.version);
+     store.validateRepo(repoRoot);siteMaterials(repoRoot,productId);
      await command(repoRoot,'npm',['install']);
      await command(repoRoot,'npm',['run','build']);
      const dist=path.join(repoRoot,'dist');
@@ -279,7 +274,7 @@ async function execute(dataDir,root,id){
      const site=store.readRun(dataDir,id).directories.site;if(!site?.path)throw Error('官网构建产物目录未生成');
      const {productId}=store.readRun(dataDir,id).frozen.homepage;
      const url=await startServer('site',site.path,site.base);
-     await verifySite(url,productId,run.version,site.base||'/');
+     await verifySite(url,productId,site.base||'/');
      save(r=>{r.targets.site.status='done';r.targets.site.verifiedVersion=r.version;});
     }
     save(r=>{r.stages.find(s=>s.key===stageKey).status='done';});log(`完成 ${stageKey}`);
