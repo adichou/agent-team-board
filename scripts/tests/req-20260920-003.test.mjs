@@ -95,7 +95,10 @@ t('L1-4 AI 总结提示词（REQ-20260921-008 更名自 AI 写作）：技术写
   }
   for (const f of flow.defaultDocFiles().map((x) => x.file)) assert.ok(p.includes(`${f}（`), `提示词应列默认语言 ${f}`);
   assert.ok(!p.includes('示例'), 'BUG-20260921-005：关联范围不内嵌条目标题');
-  assert.ok(!p.includes('README_en.md'), 'REQ-20260921-012：总结清单收窄为默认语言（剩余语言走 AI 翻译）');
+  // BUG-20260928-009：语言切换行规则在运行参数区给出含剩余语言变体的切换行示例（跨语言互链），
+  // 收窄口径改为校验「默认语言文档清单」区本身不含剩余语言文件。
+  const listSec = p.slice(p.indexOf('默认语言文档清单'), p.indexOf('关联范围'));
+  assert.ok(!listSec.includes('README_en.md') && !listSec.includes('_en.md'), 'REQ-20260921-012：总结清单收窄为默认语言（剩余语言走 AI 翻译）');
   assert.ok(p.includes('summarizing') && p.includes('summarized'), 'REQ-20260921-008：逐文件进度回执指令');
 });
 
