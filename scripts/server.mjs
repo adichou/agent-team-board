@@ -2626,8 +2626,10 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
       // REQ-20260924-001：AI 校对 run 视图（默认语言错别字与行文规范核查结果，BUG-20260926-002）；
       // BUG-20260925-002：decisions（决断账本）与 supersededDecided（上一轮决断数）随视图透出
       docsCheck: docsCheckView(dataDir, v.id),
+      // BUG-20260928-006：官网提示词版本号同源——传入计划 x.y.z version（存量计划无该字段时
+      // 由构建函数回退计划编号派生口径），与 versionNumber 展示口径一致（REQ-20260922-006）。
       sitePrompt: config.homepageRepoRoot
-        ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null })
+        ? flow.buildSiteWritingPrompt({ projectRoot: root, siteRoot: config.homepageRepoRoot, planId: v.id, baseline: v.merge?.mainSha || null, version: v.version || null })
         : null,
       siteRepoRoot: config.homepageRepoRoot || null,
       // REQ-20260926-002：隔离分析不再有 blocked / exempted（混合提交阻断移除）；shared

@@ -449,13 +449,15 @@ export function buildDocProofreadPrompt({ projectRoot, planId, runId = null, lan
 // 官网 AI 总结提示词（REQ-20260921-007 前旧称官网 AI 写作提示词）：在官网仓库执行；读取本项目
 // 已发布版本的 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新内容；完成提交消息带完整计划号。
 // 不强制官网技术栈 / 目录 / 构建。
-export function buildSiteWritingPrompt({ projectRoot, siteRoot, planId, baseline = null } = {}) {
-  const version = versionNumberOf(planId) || planId;
+// BUG-20260928-006：版本号同源——优先取调用方传入的计划 x.y.z version（REQ-20260922-006），
+// 未传 / 存量计划（无 version 字段）沿用计划编号派生口径（YYYYMMDD-NNN，旧数据不迁移）。
+export function buildSiteWritingPrompt({ projectRoot, siteRoot, planId, baseline = null, version = null } = {}) {
+  const ver = version || versionNumberOf(planId) || planId;
   const lines = [];
-  lines.push(`你是技术写作人员，在官网仓库（${siteRoot || '（未提供）'}）内完成「${planId}」（版本号 ${version}）的官网同步。`);
+  lines.push(`你是技术写作人员，在官网仓库（${siteRoot || '（未提供）'}）内完成「${planId}」（版本号 ${ver}）的官网同步。`);
   lines.push('');
   lines.push(`项目仓库（已发布基准${baseline ? ` ${shortHash(baseline)}` : ''}）：${projectRoot || '（未提供）'}`);
-  lines.push(`发布计划号：${planId}（版本号 ${version}）`);
+  lines.push(`发布计划号：${planId}（版本号 ${ver}）`);
   lines.push('');
   lines.push('要求：');
   lines.push('- 只读取项目仓库已发布版本（上述基准）中的 CHANGELOG 与 FEATURES 中英文材料，不要读取 dev 分支尚未发布的内容。');
