@@ -48,30 +48,18 @@ export function listRuns(dataDir,bldId){
  if(!fs.existsSync(runsRoot(dataDir)))return [];
  return fs.readdirSync(runsRoot(dataDir)).filter(id=>/^BPUB-[a-f0-9-]{36}$/.test(id)).map(id=>readRun(dataDir,id)).filter(r=>!bldId||r.bldId===bldId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
-// BUG-20260917-001：按版本计划（bldId）汇总「已发布」——任一运行 succeeded 即视为已发布（成功
-// 不可逆，之后再建新发行版本的草稿 / 失败不撤下标识）；取最新一条成功运行（listRuns 已按
-// createdAt 新→旧，首条命中即最新）。返回 Map<bldId,{published:true,version,runId}>，
-// 供构建模块列表接口随 versions 一次装配返回，避免前端逐版本请求。
-export function publishedByBld(dataDir){
- const out=new Map();
- for(const r of listRuns(dataDir)){
-  if(r.status!=='succeeded'||!r.bldId||out.has(r.bldId))continue;
-  out.set(r.bldId,{published:true,version:r.version,runId:r.id});
- }
- return out;
-}
-// 发布成功为不可逆事实；后续失败或草稿不得重新开放版本写入。
-export const PUBLISHED_READ_ONLY = '已发布，版本计划仅可查看；如需调整请新建版本';
-export function assertUnpublished(dataDir, bldId) {
- if (bldId && publishedByBld(dataDir).has(bldId)) throw new AtbError(PUBLISHED_READ_ONLY);
-}
-export const steps=[['sync-source','源码 main/dev 原子推送'],['webapp-build','冻结源码构建'],['webapp-verify','Web App 本机回验'],['site-deploy','官网构建与部署'],['site-verify','官网本机回验']];
+// REQ-20260929-002：已发布汇总（publishedByBld）/ 写守卫（assertUnpublished）/ 只读口径
+//（PUBLISHED_READ_ONLY）迁至 build-store（确认动作直接写版本计划发布态——落账口径随本条目
+// 换基准，见 build-store.publishedByBld 并集口径），本文件不再持有，避免 build-store 与本
+// 模块双向依赖。
 export function createRun(dataDir,input){
  if(!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$/.test(input.version||''))throw new AtbError('发行版本号非法');
  const runs=listRuns(dataDir);
  if(runs.some(r=>['running','prechecking'].includes(r.status)))throw new AtbError('当前项目已有活动发布');
  if(runs.some(r=>r.version===input.version&&r.status==='succeeded'))throw new AtbError('该发行版本已发布');
- const run={...input,id:`BPUB-${crypto.randomUUID()}`,status:'draft',createdAt:new Date().toISOString(),stages:steps.map(([key,label])=>({key,label,status:'pending'})),targets:{webapp:{status:'pending'},site:{status:'pending'}},directories:{},logs:[],precheck:null,cancelRequested:false};
+ // REQ-20260929-002：执行阶段已删除——新发布运行不再产生 stages / targets / directories
+ // 数据（存量旧运行的既有字段原样保留读取，不迁移）。
+ const run={...input,id:`BPUB-${crypto.randomUUID()}`,status:'draft',createdAt:new Date().toISOString(),logs:[],precheck:null,cancelRequested:false};
  fs.mkdirSync(runDir(dataDir,run.id),{recursive:true});writeJsonAtomic(path.join(runDir(dataDir,run.id),'run.json'),run);return run;
 }
 export function updateRun(dataDir,id,change){const run=readRun(dataDir,id);change(run);run.updatedAt=new Date().toISOString();writeJsonAtomic(path.join(runDir(dataDir,id),'run.json'),run);return run;}

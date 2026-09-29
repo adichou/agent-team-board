@@ -99,9 +99,7 @@ const ATBBuild = (() => {
     // 发布流程数据（/api/build/publish-plan 装配；以 verId 归属隔离，seq 丢弃切换版本 / 项目后
     // 迟到的旧响应）：phase: idle → loading → ready | error
     // REQ-20260921-008：prompt（AI 总结提示词预览）与 review（审查对话框开合与逐栏状态）入 pf
-    pf: null, // { verId, seq, phase, error, plan, busy, commitMsg, refreshing, prompt, review, siteBusy }
-    // 官网检测轮询句柄（60 秒一轮；离开发布步 / 切换版本 / 切换页签即停止，返回可继续核对）
-    siteTimer: null,
+    pf: null, // { verId, seq, phase, error, plan, busy, commitMsg, refreshing, prompt, review }
     // REQ-20260921-008：AI 总结进度轮询句柄（15 秒一轮；离开文档编写步 / 切换版本即停止）
     summaryTimer: null,
     // BUG-20260928-012 发布执行轮询句柄（3 秒一轮；执行结束直接出结果面板，离开发布步 /
@@ -375,7 +373,6 @@ const ATBBuild = (() => {
     state.planEdit = null; // REQ-20260921-014：切换版本丢弃概况页签未保存编辑（不误保存）
     state.rel = null;
     state.pf = null;
-    stopSiteTimer();
     stopSummaryTimer(); // REQ-20260921-008：旧版本 AI 总结进度轮询停止
     stopReleasePoll(); // BUG-20260928-012：旧版本发布执行轮询停止
     resetItemsList();
@@ -412,7 +409,6 @@ const ATBBuild = (() => {
         lastSync: null, // BUG-20260914-011：同步结果明细（pushed/failed/skipped）随项目切换重置
         rendered: false, pendingRestore: state.pendingRestore,
       });
-      stopSiteTimer(); // REQ-20260920-003：切换项目停止旧项目官网轮询
       stopReleasePoll(); // BUG-20260928-012：切换项目停止旧项目发布执行轮询
       render(); // 拉取前先呈现加载态
     }
@@ -1543,13 +1539,10 @@ const ATBBuild = (() => {
     if (state.releaseFlow) return; // 直线流程弹窗已开（检查 / 确认 / 未通过反馈中）
     const rel = relOf(v);
     if ((rel?.runs || []).some((r) => ['running', 'prechecking'].includes(r.status))) return; // 已在发布执行中
-    if (rel && !rel.config?.homepageRepoRoot) {
-      toast('请先配置官网仓库后再发布', true);
-      return;
-    }
+    // REQ-20260929-002：发布不再要求配置官网仓库（「未配置官网仓库」守卫与提示删除）。
     const version = v.version ? String(v.version).replace(/^v/, '') : '';
     // busy 由 doPublishCheck 自管（请求进行中防重复）；此处只定 phase：有版本号直接检查
-    state.releaseFlow = { verId: v.id, version, phase: version ? 'checking' : 'version', checks: null, runId: null, fingerprint: null, error: null, busy: false };
+    state.releaseFlow = { verId: v.id, version, phase: version ? 'checking' : 'version', checks: null, runId: null, fingerprint: null, planSteps: null, error: null, busy: false };
     render();
     if (version) doPublishCheck();
   }
@@ -1710,6 +1703,12 @@ const ATBBuild = (() => {
         flow.phase = 'failed-check';
         toast('✕ 检查未通过，未进入发布', true);
       } else {
+        // REQ-20260929-002：检查通过后拉取发布计划（服务端步骤数据，现仅 1 条）供二次确认展示。
+        const lr = await fetch(`/api/build-publish/run/${encodeURIComponent(target.id)}/plan${q}`);
+        const ldata = await lr.json().catch(() => ({}));
+        if (!lr.ok) throw new Error(ldata.error || `发布计划读取失败（${lr.status}）`);
+        if (state.releaseFlow !== flow) return;
+        flow.planSteps = ldata.plan?.steps || [];
         flow.phase = 'confirm';
         toast('✓ 检查已全部通过，请二次确认');
       }
@@ -1786,7 +1785,6 @@ const ATBBuild = (() => {
       // REQ-20260922-005 选择开源协议弹框：{ open, sel(选中 SPDX id), busy(写入中),
       // loading(目录加载中), error(加载失败), list(协议目录，含标准文本) }
       license: null,
-      siteBusy: false,
       // REQ-20260924-006 二次编辑弹窗（默认语言单语言）：edit = { open, file, mode:
       // 'edit'|'preview', content(草稿), disk(最近已知磁盘内容，null=读取中/读取失败),
       // busy(保存中), loadErr, pending(未保存保护挂起动作), savedNote, pendingFocus }
@@ -2473,78 +2471,13 @@ const ATBBuild = (() => {
     } catch { /* 轮询网络异常静默 */ }
   }
 
-  /* ---------- 官网检测轮询（60 秒一轮 + 立即检测；离开发布步即停止） ---------- */
-
-  function stopSiteTimer() {
-    if (state.siteTimer) { clearInterval(state.siteTimer); state.siteTimer = null; }
-  }
-
-  function startSiteTimer() {
-    stopSiteTimer();
-    if (typeof setInterval !== 'function') return; // 测试沙箱无定时器：跳过（浏览器正常轮询）
-    state.siteTimer = setInterval(() => { siteScan(false); }, 60_000);
-  }
-
-  async function siteScan(force) {
-    if (blockPublished(selVersion())) return;
-    const v = selVersion();
-    const pf = v ? pfOf(v) : null;
-    if (!pf || !state.project || pf.siteBusy) return;
-    if (!force && state.step !== 'release') return; // 离开发布步不触发
-    pf.siteBusy = true;
-    try {
-      const r = await fetch(`/api/build/release/site-scan?project=${encodeURIComponent(state.project)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: v.id, force: !!force }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `检测失败（${r.status}）`);
-      if (state.pf === pf && selVersion()?.id === v.id && data.site) {
-        pf.plan = { ...(pf.plan || {}), release: { ...(pf.plan?.release || {}), site: data.site }, siteNotice: data.notice || '' };
-        render();
-      }
-    } catch (e) {
-      toast(`✕ 官网检测失败：${e.message}`, true);
-    } finally {
-      pf.siteBusy = false;
-    }
-  }
-
-  // 正式发布第一步：推送主分支（只推 main/master 解析结果；成功记录推送完成时间）
-  async function pushMain() {
-    if (blockPublished(selVersion())) return;
-    const v = selVersion();
-    const pf = v ? pfOf(v) : null;
-    if (!pf || pf.busy || !state.project) return;
-    const remote = $('#buildView')?.querySelector('.bld-push-main-remote')?.value || 'origin';
-    pf.busy = true;
-    render();
-    try {
-      const r = await fetch(`/api/build/release/push?project=${encodeURIComponent(state.project)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: v.id, remote }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `推送失败（${r.status}）`);
-      toast(`✓ 已推送主分支 ${data.pushed?.branch || ''} → ${data.pushed?.remote || remote}（推送完成时间已记录，官网检测从该时间起）`);
-      await Promise.all([ensurePublishPlan(true), refresh()]);
-    } catch (e) {
-      toast(`✕ 推送失败：${e.message}（可重试；失败不进入完成状态）`, true);
-    } finally {
-      pf.busy = false;
-      if (state.pf === pf) render();
-    }
-  }
-
   // REQ-20260920-003 五步导航切换：步进 / 回退均为浏览位置，数据按需拉取；进入「正式发布」
-  // 步启动官网检测轮询（60 秒一轮），离开（任意切步 / 切版本 / 切页签 / 切项目）即停止。
   // REQ-20260921-008：docs 步驻留期间启动 AI 总结进度轮询（15 秒一轮），离开即停。
   function setStep(step) {
     const s = ['plan', 'merge', 'docs', 'docmerge', 'release'].includes(step) ? step : 'plan';
     // REQ-20260921-014：切换步骤丢弃概况页签未保存编辑（同一步骤重复点击不丢草稿）
     if (s !== state.step) state.planEdit = null;
     state.step = s;
-    stopSiteTimer();
     stopSummaryTimer();
     stopReleasePoll(); // BUG-20260928-012：离开发布步停止执行轮询（返回由 render 自愈重启）
     render();
@@ -2552,7 +2485,6 @@ const ATBBuild = (() => {
     if (s === 'docs') startSummaryTimer();
     if (s === 'release') {
       ensureReleaseData(); // BUG-20260928-012：发布数据就绪后自愈执行轮询（含恢复场景）
-      startSiteTimer();
     }
   }
 
@@ -2562,10 +2494,8 @@ const ATBBuild = (() => {
     if (!v) return;
     if (v.id !== state.selVerId) selectVersion(v.id); // 清空旧版本发布数据（含记录与错误）
     state.step = 'release';
-    stopSiteTimer();
     stopReleasePoll();
     render();
-    startSiteTimer();
     return ensureReleaseData();
   }
 
@@ -2600,7 +2530,8 @@ const ATBBuild = (() => {
       title = `发布二次确认（${v.id}）`;
       body = `<div class="rel-modal-body">
           ${checksHtml(flow.checks)}
-          <p>检查已全部通过。即将发布版本 v${esc(flow.version)}。</p></div>`;
+          <p>检查已全部通过。即将发布版本 v${esc(flow.version)}。</p>
+          <div class="bld-rel-plan"><strong>发布计划</strong><ol>${(flow.planSteps || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div></div>`;
       footer = foot(cancelBtn(false), '<button type="button" class="btn primary" id="bldRelGo">确认发布</button>');
     } else {
       title = '检查未通过';
@@ -2623,26 +2554,20 @@ const ATBBuild = (() => {
   /* ---------- BUG-20260928-012 发布页签渲染（运行记录展示模块已删除：直线流程 + 结果面板） ---------- */
 
   // BUG-20260928-012：发布区收敛为唯一「发布」主按钮（BUG-20260928-002 口径保留）——点击
-  // 弹检查（openPublishConfirm 直线流程）。未就绪禁用并就近说明原因（请先配置官网仓库 /
-  // 请先完成合并入 main / 发布中… / 已发布）；直线流程弹窗开着（检查 / 确认）同样禁用；
-  // 未配置官网仓库保留「前往设置」（goPublishSettings 口径不变）；执行失败的服务端原因
-  // 就近反馈（publishError，role=alert）。发布主按钮始终可见。
+  // 弹检查（openPublishConfirm 直线流程）。未就绪禁用并就近说明原因（请先完成合并入 main /
+  // 发布中… / 已发布）；直线流程弹窗开着（检查 / 确认）同样禁用；执行失败的服务端原因
+  // 就近反馈（publishError，role=alert）。REQ-20260929-002：删除「未配置官网仓库」禁用提示
+  // 与「前往设置」入口（发布不依赖官网仓库配置）。发布主按钮始终可见。
   function renderPublishActions(v, rel) {
-    const configured = !!rel?.config?.homepageRepoRoot;
     const flowBusy = !!state.releaseFlow; // 直线流程（检查 / 确认 / 未通过反馈）进行中
     const running = flowBusy || (rel?.runs || []).some((r) => ['running', 'prechecking'].includes(r.status));
     const succeeded = (rel?.runs || []).some((r) => r.status === 'succeeded');
-    const reason = !configured ? '请先配置官网仓库' : v.status !== 'merged' ? '请先完成合并入 main' : running ? '发布中…' : succeeded ? '已发布' : '';
+    const reason = v.status !== 'merged' ? '请先完成合并入 main' : running ? '发布中…' : succeeded ? '已发布' : '';
     const label = running ? '发布中…' : succeeded ? '已发布' : '发布';
     return `<section class="bld-publish-actions"><p>
       <button type="button" class="btn primary bld-publish-btn" data-rel-publish="${esc(v.id)}"${reason || flowBusy ? ' disabled' : ''}>${label}</button>
-      ${reason && !succeeded ? `<span class="muted">${esc(reason)}</span>` : ''}
-      ${!configured ? '<button type="button" class="btn" data-publish-settings>前往设置</button>' : ''}</p>
+      ${reason && !succeeded ? `<span class="muted">${esc(reason)}</span>` : ''}</p>
       ${rel?.publishError ? `<p class="rel-form-err" role="alert">${esc(rel.publishError)}</p>` : ''}</section>`;
-  }
-
-  function goPublishSettings() {
-    window.dispatchEvent(new CustomEvent('atb:publish-settings', { detail: { project: state.project, versionId: state.selVerId } }));
   }
 
   // BUG-20260928-012 发布页签主体：不再展示发布运行记录模块（列表卡片 / 运行详情已删除），
@@ -2678,9 +2603,10 @@ const ATBBuild = (() => {
       return pane(`<p class="meta err small" role="alert">✕ 发布失败：${esc(String(errMsg || '未提供'))}</p>
         ${failedStage?.label ? `<p class="muted small">失败阶段：${esc(failedStage.label)}</p>` : ''}
         <p><button type="button" class="btn small primary" data-rel-retry-publish="${esc(v.id)}">重试</button>
-          <span class="muted small">重试重新走发布流程（检查 → 确认 → 执行）。</span></p>`);
+          <span class="muted small">重试重新走发布流程（检查 → 确认，不跳过确认）。</span></p>`);
     }
-    return pane(`<p class="muted small">尚未发布。点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后执行，执行结果直接在本页显示（成功显示发布时间，失败显示原因与重试）。${v.status !== 'merged' ? '当前版本未合并，请先完成合并入 main。' : ''}</p>`);
+    // REQ-20260929-002：发布不再执行推送 / 构建——确认后即更新版本计划状态（空闲说明同步）。
+    return pane(`<p class="muted small">尚未发布。点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后，版本计划状态即更新为「已发布」（不推送远端、不构建官网仓库），发布时间取确认时点。${v.status !== 'merged' ? '当前版本未合并，请先完成合并入 main。' : ''}</p>`);
   }
 
   /* ---------- 分支浏览与同步 ---------- */
@@ -2803,7 +2729,6 @@ const ATBBuild = (() => {
 
   function setTab(t) {
     state.tab = TABS.some(([k]) => k === t) ? t : 'versions';
-    if (state.tab !== 'versions') stopSiteTimer(); // REQ-20260920-003：离开版本计划页签即停止官网轮询
     if (state.tab === 'branches' && !state.branches && state.data?.isRepo) loadBranches();
     render();
   }
@@ -2978,8 +2903,9 @@ const ATBBuild = (() => {
   /* ---------- REQ-20260926-002 五步流程渲染（plan / merge / docs / docmerge / release） ---------- */
 
   // REQ-20260926-002 五步重定义：选择条目与提交 → 挑选合并 → 文档与翻译 → 文档合并 → 发布。
-  // 「关联条目与提交」并入第一步（link 键移除，快照恢复归一 link → plan）；最后一步「发布」=
-  // 推送远端 + 官网资料更新两个动作分别展示结果。
+  // 「关联条目与提交」并入第一步（link 键移除，快照恢复归一 link → plan）；最后一步「发布」
+  //（REQ-20260929-002：收敛为「检查 → 二次确认 → 更新版本计划状态」，原推送远端 / 官网
+  // 资料更新两动作区已删除）。
   const STEP_LABEL = { plan: '选择条目与提交', merge: '挑选合并', docs: '文档与翻译', docmerge: '文档合并', release: '发布' };
   // 旧快照步骤键归一（link 步并入第一步）
   const LEGACY_STEP_KEY = { link: 'plan' };
@@ -3091,7 +3017,6 @@ const ATBBuild = (() => {
     }
     return { langs: parts.map((x) => x.toLowerCase()) };
   }
-  const SITE_STATE_LABEL = { waiting: '等待官网同步', scanning: '扫描中', missed: '未命中（可继续检测）', hit: '已检测到官网同步', failed: '读取失败' };
 
   function renderStepNav(v) {
     const pf = pfOf(v);
@@ -4296,66 +4221,6 @@ ${langsField}
       </div>`;
   }
 
-  // 发布步（REQ-20260926-002 最后一步，两个动作分别展示结果）：
-  //   动作一 · 推送远端——以明确操作把本地 main 推送到远端（成功记录推送完成时间）；
-  //   动作二 · 官网资料更新——依据本版本最终文档更新官网资料（提示词 + 同步检测作为更新结果）。
-  // 区分本地 main 已合入（合并完成）、远端已推送（pushedAt）、官网资料已更新（site hit）；
-  // 不把本地合入等同于远端发布或网站部署成功；两动作失败分别展示原因与重试入口。
-  // 官网提示词默认折叠（BUG-20260928-004）：与 REQ-20260921-007「AI 总结 / AI 翻译提示词」同口径的
-  // details 折叠盒，摘要行说明用途与复制口径，需要查看全文再展开；同步状态标签与「立即检测」
-  // 在折叠区外渲染，不再被常驻展开的长提示词推到折叠线以下（复制链路与提示词内容不变）。
-  function renderReleaseFlowPane(v) {
-    const pf = pfOf(v);
-    if (!pf || pf.phase === 'loading') return '<div class="bld-release-pane"><p class="muted" role="status">正在加载发布状态…</p></div>';
-    if (pf.phase === 'error' || !pf.plan) {
-      return `<div class="bld-release-pane"><p class="rel-form-err" role="alert">发布状态读取失败：${esc(pf.error || '未知原因')}</p>
-        <p><button type="button" class="btn small" data-pf-retry>重试</button></p></div>`;
-    }
-    const p = pf.plan;
-    const rel = p.release || {};
-    const remotes = (p.remotes || []).length ? p.remotes : ['origin'];
-    const onDev = p.currentBranch === 'dev';
-    const relGate = (p.steps || []).find((s) => s.key === 'release') || null;
-    const pushLock = relGate?.locked ? (relGate.reason || '前置条件未满足') : (onDev ? '' : (p.currentBranch ? `当前分支是 ${esc(p.currentBranch)}，不在 dev：请自行切换回 dev 后重试（不自动切分支）` : '当前处于 detached HEAD，不在 dev：请自行切换回 dev 后重试（不自动切分支）'));
-    const pushState = rel.pushedAt
-      ? `<p class="small" role="status">已推送到远端 ${esc(rel.pushRemote || '')}（完成时间 ${esc(fmtTime(rel.pushedAt))}，基准 <code data-i18n-skip>${esc(short(rel.pushedSha))}</code>）；官网资料更新以该时间为检测起点。</p>`
-      : '<p class="small muted">尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。</p>';
-    // BUG-20260928-005：已推送但未经「发布」按钮二次确认——明确推送不等于正式发布，
-    // 范围操作未被锁定，补确认路径即「发布」按钮（一键发布链路）。
-    const pushNotReleaseNote = rel.pushedAt && !releasedOf(v)
-      ? '<p class="muted small" role="note">推送完成不等于正式发布：正式发布以「发布」按钮二次确认为准，确认后版本范围锁定。</p>'
-      : '';
-    const site = rel.site || { status: 'waiting' };
-    const siteCls = site.status === 'hit' ? 'st-ok' : site.status === 'failed' ? 'st-fail' : site.status === 'scanning' ? 'st-run' : 'st-mute';
-    const evidence = site.status === 'hit' && site.evidence
-      ? `<p class="small">官网已同步：匹配提交 <code data-i18n-skip>${esc(short(site.evidence.hash))}</code>（分支 ${esc(site.branch || '—')}，检测时间 ${esc(fmtTime(site.evidence.matchedAt))}）<br>主题：${esc(site.evidence.subject || '')}</p>`
-      : '';
-    const siteInfo = site.reason ? `<p class="small">${esc(site.reason)}</p>` : '';
-    const times = `<p class="muted small">官网路径：${esc(p.siteRepoRoot || '未配置（设置中配置官网仓库根目录）')} · 实际分支：${esc(site.branch || '—')} · 上次检测 ${esc(fmtTime(site.lastScanAt))}${site.nextScanAt ? ` · 下一次 ${esc(fmtTime(site.nextScanAt))}` : ''}${site.since ? ` · 扫描起点 ${esc(fmtTime(site.since))}` : ''}</p>`;
-    return `
-      <div class="bld-release-pane">
-        <section><strong>动作一 · 推送远端</strong>
-          ${pushState}
-          ${pushNotReleaseNote}
-          <p><label class="small">目标远端 <select class="bld-push-main-remote">${remotes.map((r) => `<option>${esc(r)}</option>`).join('')}</select></label>
-            <button type="button" class="btn primary" data-pf-push${pushLock ? ` aria-disabled="true" title="${esc(pushLock)}"` : (pf.busy ? ' disabled' : '')}>${pf.busy ? '推送中…' : '推送主分支'}</button>
-            <span class="muted small">以明确操作推送本地主分支（${esc(p.mainBranch || 'main')}）到远端：不推 dev、不强推；失败展示原因，可重试。</span></p>
-        </section>
-        <section><strong>动作二 · 官网资料更新</strong>
-          <p class="muted small">依据本版本最终发布文档更新官网资料：提示词在官网仓库执行，读取本项目已发布版本 CHANGELOG / FEATURES 中英文材料，按官网自身架构更新；完成提交消息须含完整计划号。结果单独展示，与推送结果互不等同。</p>
-          ${p.sitePrompt ? `<details class="bld-docs-prompt-box bld-site-prompt-box">
-          <summary>官网提示词（默认折叠，点击展开查看全文；复制后在官网仓库会话粘贴执行，提交消息须含完整计划号）</summary>
-          <textarea class="bld-site-prompt" rows="7" readonly>${esc(p.sitePrompt)}</textarea>
-          <p><button type="button" class="btn small primary" data-pf-copy-site>复制官网提示词</button></p>
-        </details>` : '<p class="small muted">未配置官网仓库：先在设置中配置官网仓库根目录。</p>'}
-          <p><span class="st ${siteCls}">${esc(SITE_STATE_LABEL[site.status] || site.status)}</span>
-            <button type="button" class="btn small" data-pf-scan${pf.siteBusy ? ' disabled' : ''}>${pf.siteBusy ? '检测中…' : '立即检测'}</button></p>
-          ${evidence}${siteInfo}${times}
-          <p class="muted small" role="note">${esc(p.siteNotice || pf.plan?.siteNotice || '每分钟检查官网本地主分支；匹配仅表示本地提交已同步，不代表已推送或网站已部署')}</p>
-        </section>
-      </div>`;
-  }
-
   // REQ-20260921-014：概况页签就地编辑表单——名称 + 描述同一表单一次保存；字数计数器
   //（N / 上限）输入时由监听直接更新文本节点（不整页重渲染保焦点）；错误区承载客户端校验
   // 与保存失败原因（失败内容保留可重试）；保存中双按钮禁用防重复提交
@@ -4473,7 +4338,7 @@ ${langsField}
     if (state.step === 'docs') stepBody = renderDocsPane(v);
     else if (state.step === 'merge') stepBody = renderMergePane(v);
     else if (state.step === 'docmerge') stepBody = renderDocMergePane(v);
-    else if (state.step === 'release') stepBody = `${renderReleaseFlowPane(v)}${renderReleasePane(v)}`;
+    else if (state.step === 'release') stepBody = renderReleasePane(v); // REQ-20260929-002：发布步收敛为发布动作区 + 结果面板（推送 / 官网动作区已删除）
     // REQ-20260926-002：第一步「选择条目与提交」= 概况（信息编辑 / AI 完善）+ 条目与提交关联
     //（原 link 步内容并入；同时展示条目、去重后的提交及关联）
     else stepBody = `${planBody}${linkBody}`;
@@ -4853,8 +4718,6 @@ ${langsField}
       // 进入时已有 running 运行则轮询至结果态）
       if (v0 && state.step === 'release' && (!state.rel || state.rel.verId !== v0.id)) ensureReleaseData();
       ensureReleasePoll();
-      // 官网检测轮询自愈：处于正式发布步且未启动时启动（离开发布步由 setStep / selectVersion 停止）
-      if (v0 && state.step === 'release' && !state.siteTimer) startSiteTimer();
       // REQ-20260921-008：AI 总结进度轮询自愈（处于文档编写步且未启动时启动；离开由 setStep / selectVersion 停止）
       if (v0 && state.step === 'docs' && !state.summaryTimer) startSummaryTimer();
     }
@@ -4874,7 +4737,7 @@ ${langsField}
     '#bldEditInfo', '#bldPlanSave', '#bldSaveName', '#bldSaveDesc', '#bldApplyBtn', '#bldAddItem', '#bldAddSubmit',
     '[data-ver-answer]', '[data-ver-merge]', '[data-ver-delete]', '[data-remove-item]', '[data-commit-item]',
     '#bldMergeGo', '#bldDeleteGo', '[data-docs-merge]', '[data-pf-edit]', '[data-pf-langs]',
-    '[data-pf-summary]', '[data-pf-translate]', '[data-pf-proofstep]', '[data-pf-commit]', '[data-pf-push]', '[data-pf-scan]',
+    '[data-pf-summary]', '[data-pf-translate]', '[data-pf-proofstep]', '[data-pf-commit]',
     '[data-doc-add-open]', '[data-doc-add-confirm]', '[data-doc-rm]', '[data-review-approve]',
     '[data-chk-edit]', '[data-chk-accept]', '[data-chk-reject]', '[data-chk-retry]', '[data-edit-save]', '[data-edit-keep]',
     '[data-edit-mode="edit"]', '[data-license-confirm]', '[data-license-skip]',
@@ -5284,14 +5147,8 @@ ${langsField}
       if (ok) toast('✓ AI 翻译提示词已复制：交给 AI Agent 以已审核默认语言文档为基准逐文件翻译，进度在本页与任务模块自动刷新');
       else toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制', true);
     });
-    q('[data-pf-copy-site]')?.addEventListener('click', async () => {
-      const box = q('.bld-site-prompt');
-      const ok = await copyText(box?.value || '');
-      if (ok) toast('✓ 官网提示词已复制：请切换到官网仓库会话粘贴执行（提交消息须含完整计划号）');
-      else toast('剪贴板不可用：请在提示词文本框中全选（⌘A）并手动复制', true);
-    });
-    q('[data-pf-push]')?.addEventListener('click', pushMain);
-    q('[data-pf-scan]')?.addEventListener('click', () => siteScan(true));
+    // REQ-20260929-002：发布步删除推送与官网两动作区（源码远端推送与官网物料
+    // 不再由构建模块发布步承担，发布收敛为更新版本计划状态），相关绑定随渲染入口移除。
     // REQ-20260921-008 审查对话框交互：类型页签 / 每栏通过审核 / 关闭（含遮罩点击）。
     // BUG-20260925-006：编辑·预览切换与保存控件随审查只读化移除，编辑走「② 二次编辑」弹窗。
     for (const el of view.querySelectorAll('[data-review-tab]')) {
@@ -5345,7 +5202,6 @@ ${langsField}
     for (const el of view.querySelectorAll('[data-rel-retry-publish]')) {
       el.addEventListener('click', () => retryPublish());
     }
-    for (const el of view.querySelectorAll('[data-publish-settings]')) el.addEventListener('click', goPublishSettings);
     q('#bldRelRetry')?.addEventListener('click', () => ensureReleaseData(true));
   }
 
@@ -5419,7 +5275,7 @@ ${langsField}
     seedChkDecisions, alreadyAppliedChk,
     // REQ-20260922-005：选择开源协议弹框（行为接缝，测试与交互共用）
     confirmLicensePick, skipLicensePick, closeLicensePicker,
-    loadReviewPair, approveReviewFile, commitDocs, pushMain, siteScan, summaryPoll,
+    loadReviewPair, approveReviewFile, commitDocs, summaryPoll,
     getCandidates: () => state.createPanel?.candidates || [],
     searchStats,
   };

@@ -2306,7 +2306,8 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     const body = JSON.parse((await readBody(req)) || '{}');
     try {
       // 所有版本写接口共用成功发布校验，陈旧页面与已打开表单也不能绕过。
-      if (dataDir && body.id) buildPublishStore.assertUnpublished(dataDir, body.id);
+      // REQ-20260929-002：已发布守卫迁至 build-store（确认动作直接写版本计划发布态）。
+      if (dataDir && body.id) buildStore.assertUnpublished(dataDir, body.id);
       return await fn(body);
     } catch (e) {
       if (e instanceof buildStore.BuildConflictError || e instanceof releaseStore.ReleaseConflictError) {
@@ -2326,11 +2327,12 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     const branches = buildGit.listBranches(root);
     // REQ-20260916-007：version.json 自动入库取消（版本账本属应用数据本地留存），版本管理提交
     // 状态随之下线；BUG-20260918-002：item 类闭环同口径下线，版本列表不再装配管理提交状态。
-    // BUG-20260917-001：按 bldId 附各版本发布汇总（任一 succeeded 运行 → release.published），
-    // 供左侧版本卡片显示「已发布」标识；随列表一次装配返回（无逐版本请求）；
-    // 发布记录读取异常降级为无标识（release:null），不阻塞构建模块 state。
+    // BUG-20260917-001：按 bldId 附各版本发布汇总（→ release.published），供左侧版本卡片显示
+    // 「已发布」标识；随列表一次装配返回（无逐版本请求）；发布记录读取异常降级为无标识
+    //（release:null），不阻塞构建模块 state。REQ-20260929-002：汇总口径迁至 build-store
+    //（版本计划确认态 ∪ 存量 succeeded 运行并集）。
     let releaseMap = new Map();
-    try { releaseMap = buildPublishStore.publishedByBld(dataDir); } catch { /* 发布记录异常不阻塞 */ }
+    try { releaseMap = buildStore.publishedByBld(dataDir); } catch { /* 发布记录异常不阻塞 */ }
     return sendJson(res, 200, {
       initialized: true,
       isRepo: branches.isRepo,
@@ -2873,7 +2875,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return runPost((body) => {
       const board = requireBoard();
       const runId = runningDocsRunId(docsSummary.unfinishedSummaryRuns(board), body.runId, '总结');
-      buildPublishStore.assertUnpublished(board, docsSummary.getSummaryRun(board, runId).verId);
+      buildStore.assertUnpublished(board, docsSummary.getSummaryRun(board, runId).verId);
       const r = docsSummary.finishSummaryRun(board, runId, { result: 'failed', reason: DOCS_ABORT_REASON });
       return sendJson(res, 200, {
         ok: true,
@@ -2887,7 +2889,7 @@ async function handleBuildApi(req, res, u, pathname, root, dataDir) {
     return runPost((body) => {
       const board = requireBoard();
       const runId = runningDocsRunId(docsTranslate.unfinishedTranslateRuns(board), body.runId, '翻译');
-      buildPublishStore.assertUnpublished(board, docsTranslate.getTranslateRun(board, runId).verId);
+      buildStore.assertUnpublished(board, docsTranslate.getTranslateRun(board, runId).verId);
       const r = docsTranslate.finishTranslateRun(board, runId, { result: 'failed', reason: DOCS_ABORT_REASON });
       return sendJson(res, 200, {
         ok: true,

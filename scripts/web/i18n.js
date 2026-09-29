@@ -54,10 +54,6 @@ const EN = {
   '尚未提交发布文档：请先在「文档与翻译」步完成编写、翻译、审核并提交。': 'Release docs not committed yet: finish writing, translation and review in "Docs & translation", then commit.',
   '已合并入 main：重放提交 ': 'Merged into main: replayed commit ',
   ' · main 头 ': ' · main head ',
-  '尚未推送到远端（推送成功时间将作为官网资料更新的检测起点）。': 'Not pushed to the remote yet (the push completion time will start the website-update detection window).',
-  // BUG-20260928-005：推送不等于正式发布——已推送未经「发布」按钮二次确认时的就近说明
-  //（补确认路径即「发布」按钮，确认后范围锁定）。
-  '推送完成不等于正式发布：正式发布以「发布」按钮二次确认为准，确认后版本范围锁定。': 'Pushing is not an official release: it takes the "Release" button plus a second confirmation, after which the version scope is locked.',
   // BUG-20260921-015 条目多提交：关联列表展示全部提交（chips）与移出提示
   '该条目关联的全部提交': 'All commits linked to this item',
   '移出该条目（连同全部 commit 关联）': 'Remove this item (with all its commit associations)',
@@ -170,11 +166,9 @@ const EN = {
   '创建发布': 'Create release',
   '查看发布记录': 'View release records',
   // BUG-20260928-002 发布区收敛为唯一「发布」入口：发布条禁用原因 / 前往设置 / 守卫 toast
-  '请先配置官网仓库': 'Configure the website repository first',
   '前往设置': 'Go to settings',
   '发布中…': 'Publishing…',
   '仅已合并（merged）的版本计划可发布：请先完成「合并入 main」': 'Only merged version plans can be released: merge into main first',
-  '请先配置官网仓库后再发布': 'Configure the website repository before releasing',
   '暂无条目：点「＋ 添加条目」纳入需求单 / Bug 单': 'No linked items yet: click "＋ Add items" to include requirement or bug items',
   // REQ-20260921-014 概况页签（详情第 1 步「版本计划」）显式编辑版本名称与描述：
   // 表单标签 / 校验 / 锁定 / 反馈文案；一并补齐所涉行内编辑欠账（悬停提示、空描述占位、
@@ -249,11 +243,13 @@ const EN = {
   '✕ 发布失败': '✕ Release failed',
   '（本地时间）': ' (local time)',
   '尚未发布。': 'Not released yet.',
-  '重试重新走发布流程（检查 → 确认 → 执行）。': 'Retry goes through the same release flow (checks → confirm → execute).',
-  '点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后执行，执行结果直接在本页显示（成功显示发布时间，失败显示原因与重试）。': 'Click "Release": checks run first — any failure is reported clearly and publishing stops; after all checks pass and you confirm, execution runs and the result appears on this page (release time on success, reason and retry on failure).',
+  '重试重新走发布流程（检查 → 确认，不跳过确认）。': 'Retry goes through the same release flow (checks → confirm; confirmation is never skipped).',
+  '点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后，版本计划状态即更新为「已发布」（不推送远端、不构建官网仓库），发布时间取确认时点。': 'Click "Release": checks run first — any failure is reported clearly and publishing stops; after all checks pass and you confirm, the version plan is immediately marked "Published" (no remote push, no website build) with the release time taken at confirmation.',
   '✕ 检查未通过，未进入发布': '✕ Checks failed — publishing not started',
   '✓ 检查已全部通过，请二次确认': '✓ All checks passed — confirm to publish',
-  '✓ 发布已开始，执行结束后在本页显示结果': '✓ Release started — the result will appear here when execution finishes',
+  '✓ 发布已开始，执行结束后在本页显示结果': '✓ Release started — the result will appear here when it finishes',
+  // REQ-20260929-002 二次确认弹窗发布计划区（步骤文案为服务端动态拼接，见 EN_DYNAMIC）
+  '发布计划': 'Release plan',
   '当前版本未合并，请先完成合并入 main。': 'This version is not merged yet — merge into main first.',
   '发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。': 'Release succeeded: the version plan chip now reads "Published" and the plan is locked — no further edits (linked items & commits, merge into main, AI refine, docs merge, etc.). Create a new version plan for any changes.',
   // REQ-20260911-009 设置页「Git 工作流」分区（主操作后经 REQ-20260920-002 改为切换导向）
@@ -1180,14 +1176,6 @@ const EN = {
   '文档编写': 'Write docs',
   '正式发布': 'Official release',
   '官网 AI 总结': 'Website AI summary',
-  '复制官网提示词': 'Copy website prompt',
-  // BUG-20260928-004 官网提示词改折叠布局：摘要行（默认折叠、按需展开查看全文的复制口径说明）；
-  // 未配置官网仓库 fallback 文案随本块补齐 EN 词条（原仅中文展示，BUG-20260912-001 中英文同步）
-  '官网提示词（默认折叠，点击展开查看全文；复制后在官网仓库会话粘贴执行，提交消息须含完整计划号）': 'Website prompt (collapsed by default — click to expand the full text; after copying, paste and run it in a session of the website repository; the commit message must include the full plan id)',
-  '未配置官网仓库：先在设置中配置官网仓库根目录。': 'Website repository not configured: set the website repository root in Settings first.',
-  '推送主分支': 'Push main branch',
-  '推送中…': 'Pushing…',
-  '立即检测': 'Check now',
   '检测中…': 'Checking…',
   '编辑': 'Edit',
   '预览': 'Preview',
@@ -1196,14 +1184,7 @@ const EN = {
   '已提交': 'Docs committed',
   '需重新编写': 'Needs rewrite',
   '未编写': 'Not written',
-  '等待官网同步': 'Waiting for website sync',
-  '已检测到官网同步': 'Website sync detected',
-  '未命中（可继续检测）': 'No match yet (you can keep checking)',
   '读取失败': 'Read failed',
-  // REQ-20260926-002：发布步改两动作布局（推送远端 + 官网资料更新），旧「第一步 / 第二步 /
-  // 第三步」三节标题词条随界面移除清理
-  '动作一 · 推送远端': 'Action 1 · Push to remote',
-  '动作二 · 官网资料更新': 'Action 2 · Update website content',
   '隔离分析': 'Isolation analysis',
   '目标远端': 'Target remote',
   '（空文档）': '(empty document)',
@@ -1656,7 +1637,6 @@ const EN_CLI = {
   '发布文档': 'Release docs',
   '挑选条目': 'Picked items',
   '已完成未挑选条目': 'Done items not in any version plan',
-  '无法识别冻结源码的 Web App 构建方式（预检已不含构建识别项；请检查冻结 main 的 package.json / index.html）': 'Cannot detect a Web App build in the frozen source (build detection is no longer a precheck item; check package.json / index.html on the frozen main)',
 };
 
 // BUG-20260925-003：EN_CLI 组装并入 EN——运行时 t() 与反向词典 ZH_EXACT 同用并入后的
@@ -1845,6 +1825,8 @@ const EN_DYNAMIC = {
   '✓ 已提交发布操作（◇）：状态刷新后查看结果': '✓ Release action submitted ($1): check the result after the status refresh',
   '✕ 发布操作失败：◇': '✕ Release action failed: $1',
   '✕ 发布计划读取失败：◇': '✕ Failed to load the release plan: $1',
+  // REQ-20260929-002 发布计划步骤（服务端 plan() 动态拼接，仅 1 条：更新版本计划状态）
+  '将版本计划 ◇ 状态更新为「已发布」（v◇；发布时间取确认时点，不推送远端、不构建官网仓库）': 'Mark version plan $1 as "Published" (v$2; release time taken at confirmation — no remote push, no website build)',
   '失败阶段：◇': 'Failed stage: $1',
   '失败阶段：◇：◇': 'Failed stage: $1: $2',
   // BUG-20260916-001 设置页官网配置读取/保存失败反馈（动态拼接）

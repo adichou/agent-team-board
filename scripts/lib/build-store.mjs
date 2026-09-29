@@ -14,7 +14,6 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { AtbError, writeJsonAtomic } from './core.mjs';
 import * as flow from './publish-flow.mjs';
-import { assertUnpublished } from './build-publish-store.mjs';
 
 const pad = (n, len) => String(n).padStart(len, '0');
 const nowIso = () => new Date().toISOString();
@@ -268,6 +267,46 @@ export function publishRunOf(dataDir, runId) {
 function publishRunFailedLike(dataDir, runId) {
   const run = publishRunOf(dataDir, runId);
   return !!run && ['failed', 'canceled'].includes(run.status);
+}
+
+// REQ-20260929-002 已发布汇总迁入本层（原 build-publish-store.publishedByBld，落账口径由
+// 「发布运行 succeeded 推导」换基准为「确认动作直接写版本计划发布态」），并集口径：
+//   ① 版本计划确认态（isReleased——release.confirmedAt 且对应运行非失败 / 取消终态）；
+//   ② 存量 succeeded 发布运行（BUG-20260928-005 之前经旧执行阶段发布的历史版本，不做迁移、
+//     不回退标识、不解锁）。
+// 运行账本只读同源路径（与 publishRunOf 一致），不引入对 build-publish-store 的反向依赖。
+// 供构建模块列表接口随 versions 一次装配返回（Map<bldId,{published:true,version,runId}>）。
+function listPublishRuns(dataDir) {
+  const dir = path.join(dataDir, 'runtime', 'builds', 'publish-runs');
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  return names
+    .filter((id) => /^BPUB-[A-Za-z0-9-]+$/.test(id))
+    .map((id) => readJsonSafe(path.join(dir, id, 'run.json')))
+    .filter(Boolean)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+export function publishedByBld(dataDir) {
+  const out = new Map();
+  for (const r of listPublishRuns(dataDir)) {
+    if (r.status !== 'succeeded' || !r.bldId || out.has(r.bldId)) continue;
+    out.set(r.bldId, { published: true, version: r.version, runId: r.id });
+  }
+  for (const v of listVersions(dataDir)) {
+    if (out.has(v.id) || !isReleased(v, dataDir)) continue;
+    out.set(v.id, { published: true, version: v.version || null, runId: (v.release && v.release.confirmedRunId) || null });
+  }
+  return out;
+}
+
+// 发布成功为不可逆事实；后续失败或草稿不得重新开放版本写入。
+// 口径与迁移前一致（仅按 succeeded 运行账本拦截，AtbError）：「确认账但无 succeeded 运行」
+// 的锁定由既有 isReleased 链路承担（BuildConflictError → HTTP 409，文案「已正式发布」），
+// 两道合计完备（确认账存在时 isReleased 保守判已发布）。迁自 build-publish-store（REQ-
+// 20260929-002），保持异常类型与触发条件零变化。
+export const PUBLISHED_READ_ONLY = '已发布，版本计划仅可查看；如需调整请新建版本';
+export function assertUnpublished(dataDir, bldId) {
+  if (bldId && listPublishRuns(dataDir).some((r) => r.status === 'succeeded' && r.bldId === bldId)) throw new AtbError(PUBLISHED_READ_ONLY);
 }
 
 // 条目增删锁：合并中禁用增删；发布确认（正式发布）才锁定——merged（含已推送未确认）
@@ -678,20 +717,26 @@ export function recordPushSuccess(dataDir, id, { remote, sha } = {}) {
 
 // BUG-20260928-005 正式发布确认落账：用户点击「发布」并通过二次确认后，一键发布链路
 //（build-publish.start，BUG-20260928-002）在运行启动时调用——正式发布锁定以该时点为准
-//（isReleased），推送动作本身不锁定。幂等：有效确认存在期间不重置（发布重试不换时点）；
-// BUG-20260928-015 起「首次固化」修正为「最近一次有效确认」——确认对应的发布运行以失败 /
-// 取消终态结束时确认锁被 rollbackReleaseConfirm 回退，再发布时在此重新固化新的确认时点与
-// 运行编号（历史确认留痕在 publish-runs 与 run 账本中可追溯）；确认前已有的推送事实
-//（pushedAt / site）原样保留。
+//（isReleased），推送动作本身不锁定。REQ-20260929-002 起发布收敛为状态更新（无执行阶段），
+// 本落账即发布动作本体（确认 → 版本计划置「已发布」）。幂等：有效确认存在期间不重置（发布
+// 重试不换时点）；BUG-20260928-015 起「首次固化」修正为「最近一次有效确认」——确认对应的
+// 发布运行以失败 / 取消终态结束时确认锁被 rollbackReleaseConfirm 回退，再发布时在此重新固化
+// 新的确认时点与运行编号（历史确认留痕在 publish-runs 与 run 账本中可追溯）；确认前已有的
+// 推送事实（pushedAt / site）原样保留。
 export function recordReleaseConfirm(dataDir, id, { runId = null } = {}) {
   const v = readVersion(dataDir, id);
   const prev = v.release || {};
   if (prev.confirmedAt) return v;
+  const now = nowIso();
   v.release = {
     ...prev,
-    confirmedAt: nowIso(),
+    confirmedAt: now,
     confirmedRunId: runId,
   };
+  // REQ-20260929-002 发布时间取确认时点：发布不再推送远端（REQ-20260922-006 随推送同步
+  // releasedAt 的口径退役），releasedAt 与 confirmedAt 同刻固化；存量已推送计划的
+  // release.pushedAt（推送事实）原样保留。
+  v.releasedAt = now;
   v.by = 'board';
   return writeVersion(dataDir, v);
 }
