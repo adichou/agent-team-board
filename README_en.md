@@ -16,7 +16,7 @@ If you use an agent to develop this product, read [AGENTS.md](./AGENTS_en.md) fi
 
 ## Version
 
-The current version is 1.0.0, the first baseline release.
+The current version is 1.0.1, a fix-and-simplification patch for the release module: the release action is streamlined into "check → second confirmation → mark the version plan as released", and no longer performs remote pushes or website builds; projects with a master main branch are now supported; completed entries that have no associated commits yet can also be included in a version plan; and it fixes 4 defects, including the version status label and the timezone display of times in the interface. See the [Changelog](./CHANGELOG_en.md) for details.
 
 ## Getting Started
 
@@ -74,7 +74,7 @@ flowchart TB
     subgraph P5["⑤ Release"]
         L["Human: create a version plan<br/>selecting completed entries and this release's commits"] --> M["Curated merge: the selected commits are merged into main"]
         M --> N["Documentation: AI summary → human review<br/>→ AI translation → per-file review"]
-        N --> O["Docs merged into main · human pushes the release"]
+        N --> O["Docs merged into main<br/>Release: mark the version as released after confirmation<br/>(no automatic push; the remote release is done manually)"]
     end
 
     A --> B

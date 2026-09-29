@@ -2,6 +2,25 @@
 
 [中文](./CHANGELOG.md) | [English](./CHANGELOG_en.md)
 
+## 1.0.1 Release Module Patch
+
+A patch release focused on simplifying the release flow and fixing defects, with 2 requirements and 4 bug fixes in total.
+
+### Release Flow Simplified
+
+- The release action is consolidated into "Check → Second Confirmation → Update Version Plan Status": main/dev are no longer pushed to the remote and the website repository is no longer built; after the second confirmation passes, the version plan is simply marked as "Released" (the release time is taken at the moment of confirmation; once released, the state is irreversible and the version plan becomes view-only). The release plan is reduced from 3 steps to 1, the release button is no longer disabled due to "website repository not configured", and projects in non-Web-App forms without package.json (such as Chrome extensions) can release normally; if source push and website updates are still needed, they are performed manually in the repository.
+- Adapts to projects whose mainline is master: the main branch name is resolved from the project's actual state (main first, falling back to master when only master exists locally), and creating a release no longer fails with a `git rev-parse` error; behavior is unchanged for projects that have a main branch. Existing release run records (including old-phase data) are read and displayed as-is, without migration.
+
+### Version Plans
+
+- Completed entries with no linked commits can still be included in a version: such entries are no longer grayed out in the candidate panel, an inline hint reads "No linked commits (can still be included in the version)", and "Select All" no longer skips them; cherry-pick merge automatically skips their commit-merge step, and the version's linked-entry list and the release documents include the entry as usual, showing a "No linked commits" empty state.
+
+### Bug Fixes
+
+- After a version plan is released, both the list and the right-side detail consistently show a "Released" label instead of incorrectly showing "Merged"; modification entry points such as edit, delete, and merge for released versions are uniformly grayed out with the reason explained.
+- Interface times are now displayed uniformly in the browser's local time zone instead of UTC.
+- AI summarization prompts are generated according to the release plan's language set: single-language projects are no longer required to insert a language-switch line, while multi-language projects keep cross-linking across the language set.
+
 ## 1.0.0 First Baseline Release
 
 The first official release, covering the complete pipeline from requirement registration to version release, with 199 requirements and 226 bug fixes merged in total.

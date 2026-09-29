@@ -4,7 +4,7 @@
 
 This file is aimed at the Agents and humans who develop the agent-team-board product itself in this repository. When using this product to manage tasks for **other projects**, the authoritative entry point is [skills/agent-team-board/SKILL.md](./skills/agent-team-board/SKILL.md) (this file does not duplicate its content); for the detailed boundary between the two scenarios, see "Dual Entry-Point Boundary" at the end of this file.
 
-This document was consolidated under release plan BLD-20260927-001 (version 1.0.0, the first baseline version); what follows are the repository collaboration rules — release documents do not replace the task-management skill.
+This document was reviewed and updated along with release plan BLD-20260929-001 (version 1.0.1); what follows are the repository collaboration rules — release documents do not replace the task-management skill.
 
 ## Development Must Go Through the Board
 
@@ -37,8 +37,8 @@ This document was consolidated under release plan BLD-20260927-001 (version 1.0.
 ## Data and Release Collaboration
 
 - Entry descriptions, designs, test cases, and reports are kept in `agent-team-board/data/` and managed with Git (entry creation and deletion are committed synchronously by the system to leave an audit trail — REQ-20260927-001 / REQ-20260923-004); status, locks, settings, confirmation records, and execution ledgers are kept in `agent-team-board/runtime/`, remain local only, and are not committed as release documents.
-- When writing release materials, base them on the commits linked to the version plan and the actual code behind them. Requirement wording, features currently on the dev branch, or documentation commits alone cannot prove that a capability made it into the version; capabilities that were rolled back or whose entry points are hidden must be described according to their actual state.
-- The release README links to the same-language CHANGELOG and FEATURES; AGENTS carries only the applicable collaboration rules. Completing the documents does not mean accepted, merged, or released; do not run pushes or deployments on your own initiative.
+- When writing release materials, base them on the commits linked to the version plan and the actual code behind them. Requirement wording, features currently on the dev branch, or documentation commits alone cannot prove that a capability made it into the version; capabilities that were rolled back or whose entry points are hidden must be described according to their actual state. A version plan may include completed entries that have no linked commits yet (REQ-20260929-001) — such entries must be described truthfully as part of the included scope, without fabricating commit links.
+- The release README links to the same-language CHANGELOG and FEATURES; AGENTS carries only the applicable collaboration rules. Completing the documents does not mean accepted, merged, or released; do not run pushes or deployments on your own initiative. As of REQ-20260929-002, release actions are consolidated into "check → second confirmation → mark the version plan as released", with no remote pushes or repository builds performed — pushing source and updating the official website are always carried out manually in the repository.
 - Release documents proceed in two phases (REQ-20260921-012; as of BUG-20260926-002 there is no longer an overall review-completion confirmation): the default-language release documents (the four document types plus the version design document DESIGN.md) are first summarized by AI and then reviewed by a human file by file; the remaining languages are AI-translated and then reviewed file by file; the document-writing step is complete — and commits unlocked — only after every file in the language set has passed review.
 
 ## Document Map
