@@ -645,8 +645,13 @@ t('L5-1 导航与模块命名：顶栏「构建」改为「发布」；五步流
   // REQ-20260921-008：文档编写页重构为「总结 → 审查 → 提交」——AI 写作 / TRAE / 提交文档到 Git
   // 随旧布局移除，改为 AI 总结 / 刷新 / 审查 / 提交四按钮 + 审查对话框；官网侧入口保留
   //（REQ-20260921-007 起官网侧统一更名「官网 AI 总结」）
-  for (const s of ['AI 总结', 'data-pf-refresh', 'data-pf-summary', 'data-pf-review', 'data-pf-commit', '官网资料更新', '立即检测']) {
+  // REQ-20260929-002：发布步两动作区（推送远端 / 官网资料更新 + 立即检测）已整体删除，
+  // 发布收敛为「检查 → 二次确认 → 更新版本计划状态」
+  for (const s of ['AI 总结', 'data-pf-refresh', 'data-pf-summary', 'data-pf-review', 'data-pf-commit', 'data-rel-publish']) {
     assert.ok(buildJs.includes(s), `文档/发布页关键入口：${s}`);
+  }
+  for (const gone of ['官网资料更新', '立即检测', '动作一 · 推送远端']) {
+    assert.ok(!buildJs.includes(gone), `发布步两动作区已删：不应再含「${gone}」`);
   }
   assert.ok(buildJs.includes('docFilesOf'), '前端按语言集展开文档清单（REQ-20260921-010 起 DOC_FILES 常量下线）');
 });
@@ -656,7 +661,7 @@ t('L5-2 i18n 同步：发布流程新增文案中英文同步', () => {
   const { EN } = I._dict;
   // REQ-20260921-008：「AI 写作」「提交文档到 Git」随更名 / 布局重构清理；AI 总结词条接替
   //（REQ-20260921-007 起官网键统一更名「官网 AI 总结」）
-  for (const zh of ['发布', 'AI 总结', '官网 AI 总结', '立即检测', '正式发布', '文档编写', '关联条目与提交']) {
+  for (const zh of ['发布', 'AI 总结', '官网 AI 总结', '正式发布', '文档编写', '关联条目与提交']) {
     assert.ok(zh in EN, `词典应含「${zh}」`);
   }
   assert.ok(!('AI 写作' in EN) && !('提交文档到 Git' in EN), '旧键已随界面更名清理');

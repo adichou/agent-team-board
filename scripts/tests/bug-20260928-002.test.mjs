@@ -202,20 +202,20 @@ t('R1b 有记录态（草稿残留）：发布按钮置顶唯一；运行记录�
   assert.ok(!inner.includes('[object Object]'), '无 targets 对象摘要（随模块删除消除）');
 });
 
-t('R1c 禁用口径：未合并 / 未配置 / 发布中 / 已发布分别禁用并就近显示原因；未配置保留「前往设置」', async () => {
+t('R1c 禁用口径：未合并 / 发布中 / 已发布分别禁用并就近显示原因；未配置官网仓库不再禁用（REQ-20260929-002）', async () => {
   // 未合并（BLD-B 为 draft 未合并）
   let hh = harness({ runs: [] });
   await openRel(hh, 'BLD-B');
   let inner = hh.inner();
   assert.match(inner, /data-rel-publish="BLD-B"[^>]*disabled/, '未合并版本发布禁用');
   assert.match(inner, /请先完成合并入 main/, '未合并就近说明原因');
-  // 未配置官网仓库
+  // REQ-20260929-002：未配置官网仓库不再禁用（发布不依赖官网配置），无「前往设置」入口
   hh = harness({ runs: [], config: {} });
   await openRel(hh, 'BLD-A');
   inner = hh.inner();
-  assert.match(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '未配置官网仓库发布禁用');
-  assert.match(inner, /请先配置官网仓库/, '未配置就近说明原因');
-  assert.match(inner, /data-publish-settings>[^<]*前往设置/, '未配置保留「前往设置」入口');
+  assert.doesNotMatch(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '未配置官网仓库发布不再禁用');
+  assert.ok(!inner.includes('请先配置官网仓库'), '无未配置禁用说明');
+  assert.ok(!inner.includes('前往设置'), '无「前往设置」入口');
   // 发布中
   hh = harness({ runs: [relRun({ id: 'BPUB-R', status: 'running' })] });
   await openRel(hh, 'BLD-A');
@@ -254,13 +254,14 @@ t('R2a 点击「发布」先检查：弹「发布前检查」（自动创建草�
   assert.equal(hh.calls.filter((c) => c.path.endsWith('/start')).length, starts0, '取消不发出任何执行请求（start）');
 });
 
-t('R2b 链路：检查（创建草稿 → 预检）→ 二次确认 → 启动（token = 预检指纹）；不再读取发布计划；成功后弹窗关闭并刷新', async () => {
+t('R2b 链路：检查（创建草稿 → 预检）→ 读取发布计划 → 二次确认 → 启动（token = 预检指纹）；成功后弹窗关闭并刷新', async () => {
   const hh = harness({ runs: [] });
   await openRel(hh, 'BLD-A');
   await publish(hh, 'BLD-A');
   const flow = hh.calls.filter((c) => /\/api\/build-publish/.test(c.path) && c.method === 'POST').map((c) => c.path);
   assert.deepEqual(flow, ['/api/build-publish/from-build', '/api/build-publish/run/BPUB-NEW-1/precheck', '/api/build-publish/run/BPUB-NEW-1/start'], '链路顺序：创建草稿 → 预检（检查阶段）→ 确认后启动');
-  assert.equal(hh.calls.filter((c) => /\/plan$/.test(c.path)).length, 0, '不再走「预览发布计划」读取步骤');
+  // REQ-20260929-002：检查通过后拉取发布计划（GET plan，二次确认弹窗展示服务端步骤数据）
+  assert.equal(hh.calls.filter((c) => /\/plan$/.test(c.path)).length, 1, '检查通过后读取发布计划一次（确认弹窗展示步骤）');
   const start = hh.calls.find((c) => c.path.endsWith('/start'));
   assert.deepEqual(start.body, { token: 'fp-1' }, 'start 携带预检指纹 token（服务端守卫口径不变）');
   const create = hh.calls.find((c) => c.path === '/api/build-publish/from-build');
@@ -430,11 +431,11 @@ t('R4a 直线流程文案入 EN、含插值句入 EN_DYNAMIC，值不含中文',
   for (const k of ['发布前检查', '正在按检查规则检查…', '检查未通过', '存在不通过项，本次不进入发布；请处理后重新点击「发布」。',
     '检查已全部通过。', '开始检查', '✓ 发布成功', '✕ 发布失败', '（本地时间）', '尚未发布。',
     '✓ 发布已开始，执行结束后在本页显示结果',
-    '发布二次确认', '确认发布', '发布中…', '请先配置官网仓库', '前往设置',
+    '发布二次确认', '确认发布', '发布中…', '发布计划',
     '请填写发行版本号（如 1.2.0）', '发行版本号（与版本显示名分开）', '1.2.0（实际对外发行号）',
     '当前版本未合并，请先完成合并入 main。',
     '发布成功：版本计划标签已更新为「已发布」，发布计划已锁定、不允许再修改（关联条目与提交 / 合并入 main / AI 完善 / 文档合并等不可再调整，如需调整请新建版本）。',
-    '仅已合并（merged）的版本计划可发布：请先完成「合并入 main」', '请先配置官网仓库后再发布']) {
+    '仅已合并（merged）的版本计划可发布：请先完成「合并入 main」']) {
     assert.ok(EN[k], `EN 应含「${k}」`);
     assert.ok(!/[\u4e00-\u9fff]/.test(EN[k]), `EN 值不含中文：${k}`);
   }

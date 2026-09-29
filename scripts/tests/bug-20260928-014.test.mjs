@@ -40,7 +40,8 @@ function makeSite(id) {
   return repo;
 }
 
-// 全链路执行（源码项目工作区位于 dev）：预检 → 计划 → 启动，返回最终 run 与冻结值。
+// 全链路执行（源码项目工作区位于 dev）：预检 → 计划 → 确认发布（REQ-20260929-002：确认即
+// 终态 succeeded，无执行阶段），返回最终 run 与冻结值。
 async function runThrough(name, version) {
   const fx = makeProject(root, name);
   assert.equal(git(fx.project, 'branch', '--show-current'), 'dev', '夹具源码项目应从 dev 出发');
@@ -49,30 +50,27 @@ async function runThrough(name, version) {
   const checked = await publish.precheck(fx.db, fx.project, run.id);
   assert.equal(checked.precheck.ok, true, JSON.stringify(checked.precheck.checks));
   const plan = await publish.plan(fx.db, fx.project, run.id);
-  const result = await publish.start(fx.db, fx.project, run.id, plan.token);
-  await result.completion;
-  return { fx, plan, run, done: store.readRun(fx.db, run.id) };
+  const { run: started } = await publish.start(fx.db, fx.project, run.id, plan.token);
+  return { fx, plan, run, done: store.readRun(fx.db, run.id), started };
 }
 
-test('P1 从 dev 发布全链路成功：全程不切分支（分支与 HEAD 均不变），推送 / 远端回验口径不变', async () => {
+test('P1 从 dev 发布全链路成功：全程不切分支（REQ-20260929-002：确认即成功，无推送 / 执行阶段）', async () => {
   store.saveConfig(makeSite('p1'));
-  const { fx, plan, run, done } = await runThrough('p1', '1.0');
+  const { fx, plan, done } = await runThrough('p1', '1.0');
   assert.equal(done.status, 'succeeded', JSON.stringify(done));
-  assert.equal(done.targets.webapp.status, 'done');
-  assert.equal(done.targets.site.status, 'done');
-  assert.ok(!/切换源码/.test(plan.steps[0]), `计划文案不应再宣称切换源码分支：${plan.steps[0]}`);
-  assert.match(plan.steps[0], /原子推送/);
-  assert.match(plan.steps[0], /不切换工作区分支/);
-  // 发布结束后工作区仍在 dev（原实现 checkout main 后不切回，此处即本 Bug 的核心断言）
+  assert.equal(done.targets, undefined, 'REQ-20260929-002：新发布不产生 targets 数据');
+  assert.ok(!/切换源码|切换工作区/.test(plan.steps[0]), `计划文案不应再宣称切换源码分支：${plan.steps[0]}`);
+  assert.equal(plan.steps.length, 1, '计划仅 1 条（更新版本计划状态）');
+  // 发布结束后工作区仍在 dev（原实现 checkout main 后不切回，此处即本 Bug 的核心断言；
+  // REQ-20260929-002 起发布不再有任何 git 操作，天然满足）
   assert.equal(git(fx.project, 'branch', '--show-current'), 'dev', '发布结束后工作区仍在 dev');
   const devHead = git(fx.project, 'rev-parse', 'refs/heads/dev');
   assert.equal(git(fx.project, 'rev-parse', 'HEAD'), devHead, '发布全程 HEAD 未被移动');
-  // 推送与远端回验口径不变：bare 远端两分支 SHA = 冻结值
-  assert.equal(git(path.join(root, 'remote-p1.git'), 'rev-parse', 'main'), run.frozen.mainSha);
-  assert.equal(git(path.join(root, 'remote-p1.git'), 'rev-parse', 'dev'), run.frozen.devSha);
+  // REQ-20260929-002：发布全程无 git push——bare 远端不出现任何 ref
+  assert.equal(git(path.join(root, 'remote-p1.git'), 'for-each-ref', '--format=%(refname)'), '', '发布不推送远端');
 });
 
-test('N1 本地 main 与冻结 SHA 不一致 → sync-source 以只读 ref 比对拦截，且不切分支', async () => {
+test('N1 本地 main 与冻结 SHA 不一致 → 发布仍成功（REQ-20260929-002：无 sync-source 比对拦截，发布不推送远端）', async () => {
   store.saveConfig(makeSite('n1'));
   const fx = makeProject(root, 'n1');
   const headBefore = git(fx.project, 'rev-parse', 'HEAD');
@@ -85,33 +83,24 @@ test('N1 本地 main 与冻结 SHA 不一致 → sync-source 以只读 ref 比�
   const checked = await publish.precheck(fx.db, fx.project, run.id);
   assert.equal(checked.precheck.ok, true, JSON.stringify(checked.precheck.checks));
   const plan = await publish.plan(fx.db, fx.project, run.id);
-  const result = await publish.start(fx.db, fx.project, run.id, plan.token);
-  await result.completion;
-  const done = store.readRun(fx.db, run.id);
-  assert.equal(done.status, 'failed');
-  assert.equal(done.error.stage, 'sync-source');
-  assert.match(done.error.message, /main 与冻结源码不一致/);
-  assert.equal(git(fx.project, 'branch', '--show-current'), 'dev', '拦截时同样不切换工作区分支');
-  assert.equal(git(fx.project, 'rev-parse', 'HEAD'), headBefore, '拦截后 HEAD 未被移动');
-  // 未通过本地一致性校验 → 不推送：远端（夹具初始无任何 ref）不应出现 main / dev
-  assert.equal(git(path.join(root, 'remote-n1.git'), 'for-each-ref', '--format=%(refname)'), '', '未通过校验不应推送');
+  const { run: done } = await publish.start(fx.db, fx.project, run.id, plan.token);
+  assert.equal(done.status, 'succeeded', '主分支前进不再拦截（一致性比对随执行阶段删除）');
+  assert.equal(git(fx.project, 'branch', '--show-current'), 'dev', '发布全程不切换工作区分支');
+  assert.equal(git(fx.project, 'rev-parse', 'HEAD'), headBefore, '发布后 HEAD 未被移动');
+  // 发布不推送：远端（夹具初始无任何 ref）不应出现 main / dev
+  assert.equal(git(path.join(root, 'remote-n1.git'), 'for-each-ref', '--format=%(refname)'), '', '发布不推送远端');
 });
 
-test('N2 site-deploy 中途失败（产品未注册）→ 发布失败后工作区仍在 dev（复现 BPUB-711ea71f 场景）', async () => {
+test('N2 官网未注册产品 → 发布仍成功（REQ-20260929-002：site-deploy 已删，官网形态与发布解耦）', async () => {
   store.saveConfig(makeSite('registered-elsewhere'));
-  const { fx, run, done } = await runThrough('n2', '1.0'); // 产品 id = 项目目录名 n2，site 未注册 n2
-  assert.equal(done.status, 'failed');
-  assert.equal(done.error.stage, 'site-deploy');
-  assert.match(done.error.message, /apps\.js/);
-  assert.equal(git(fx.project, 'branch', '--show-current'), 'dev', '中途失败后工作区仍在 dev');
-  // 失败前 sync-source 已完成：推送仍到位（远端 = 冻结值），证明推送不依赖本地检出 main
-  assert.equal(git(path.join(root, 'remote-n2.git'), 'rev-parse', 'main'), run.frozen.mainSha);
-  assert.equal(git(path.join(root, 'remote-n2.git'), 'rev-parse', 'dev'), run.frozen.devSha);
+  const { fx, done } = await runThrough('n2', '1.0'); // 产品 id = 项目目录名 n2，site 未注册 n2
+  assert.equal(done.status, 'succeeded', '官网未注册不再使发布失败');
+  assert.equal(git(fx.project, 'branch', '--show-current'), 'dev', '发布后工作区仍在 dev');
+  assert.equal(git(path.join(root, 'remote-n2.git'), 'for-each-ref', '--format=%(refname)'), '', '发布全程不推送远端');
 });
 
 for (const [name, fn] of cases) {
   await fn();
   console.log(`PASS ${name}`);
 }
-publish.stopServers(); // 回验本机服务不关会挂住事件循环，进程无法退出
 fs.rmSync(root, { recursive: true, force: true });

@@ -418,18 +418,19 @@ t('M3a 空闲（未发布）：直线流程说明 + 唯一可点击的「发布�
   assert.ok(!inner.includes('aria-label="发布记录"'), '无发布记录列表');
 });
 
-t('M3b 禁用口径保留：未合并 / 未配置 / 发布中 / 已发布分别禁用并就近说明；未配置保留「前往设置」', async () => {
+t('M3b 禁用口径保留：未合并 / 发布中 / 已发布分别禁用并就近说明；未配置官网仓库不再禁用（REQ-20260929-002）', async () => {
   let hh = harness({ runs: [] });
   await openRel(hh, 'BLD-B');
   let inner = hh.inner();
   assert.match(inner, /data-rel-publish="BLD-B"[^>]*disabled/, '未合并版本发布禁用');
   assert.match(inner, /请先完成合并入 main/, '未合并就近说明');
+  // REQ-20260929-002：发布不再要求配置官网仓库——未配置不禁用、无「前往设置」入口
   hh = harness({ runs: [], config: {} });
   await openRel(hh, 'BLD-A');
   inner = hh.inner();
-  assert.match(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '未配置官网仓库发布禁用');
-  assert.match(inner, /请先配置官网仓库/, '未配置就近说明');
-  assert.match(inner, /data-publish-settings>[^<]*前往设置/, '未配置保留「前往设置」');
+  assert.doesNotMatch(inner, /data-rel-publish="BLD-A"[^>]*disabled/, '未配置官网仓库发布不再禁用');
+  assert.ok(!inner.includes('请先配置官网仓库'), '无未配置禁用说明');
+  assert.ok(!inner.includes('前往设置'), '无「前往设置」入口');
   hh = harness({ runs: [relRun({ id: 'BPUB-S', status: 'succeeded', updatedAt: '2026-09-28T09:41:00.000Z' })] });
   await openRel(hh, 'BLD-A');
   await hh.tick();
@@ -473,8 +474,8 @@ t('M4a 新增静态文案入 EN、含插值句入 EN_DYNAMIC，值不含中文',
   const { EN, EN_DYNAMIC } = I._dict;
   for (const k of ['发布前检查', '正在按检查规则检查…', '发布检查中…', '检查未通过', '存在不通过项，本次不进入发布；请处理后重新点击「发布」。',
     '检查已全部通过。', '开始检查', '返回', '✓ 发布成功', '✕ 发布失败', '重试', '（本地时间）', '尚未发布。',
-    '重试重新走发布流程（检查 → 确认 → 执行）。',
-    '点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后执行，执行结果直接在本页显示（成功显示发布时间，失败显示原因与重试）。',
+    '重试重新走发布流程（检查 → 确认，不跳过确认）。',
+    '点击「发布」：先按检查规则检查，有不通过项会明确提示且不进入发布；全部通过并二次确认后，版本计划状态即更新为「已发布」（不推送远端、不构建官网仓库），发布时间取确认时点。',
     '✕ 检查未通过，未进入发布', '✓ 检查已全部通过，请二次确认', '✓ 发布已开始，执行结束后在本页显示结果']) {
     assert.ok(EN[k], `EN 应含「${k}」`);
     assert.ok(!/[\u4e00-\u9fff]/.test(EN[k]), `EN 值不含中文：${k}`);

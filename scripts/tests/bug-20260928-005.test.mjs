@@ -114,10 +114,11 @@ t('D4 一键发布链路接线：build-publish.start 在运行置 running 时落
   assert.match(src, /from '\.\/build-store\.mjs'/, 'build-publish 应引入 build-store');
   const iRunning = src.indexOf("r.status='running'");
   const iConfirm = src.indexOf('recordReleaseConfirm');
-  const iExecute = src.indexOf('completion=execute');
+  const iDone = src.indexOf("r.status='succeeded'");
   assert.ok(iRunning >= 0, 'start 内应存在置 running 的落账');
   assert.ok(iConfirm > iRunning, '置 running 后应调用 recordReleaseConfirm（二次确认即正式发布口径）');
-  assert.ok(iExecute > iConfirm, '确认落账先于发布执行');
+  // REQ-20260929-002：发布收敛为状态更新——确认落账成功后运行直接置终态 succeeded（无执行阶段）
+  assert.ok(iDone > iConfirm, '确认落账成功后运行置 succeeded');
   // 服务端守卫与 state 装配换用 isReleased（不再用 isPushed 判定正式发布）；
   // BUG-20260928-015 起 isReleased 增传数据目录（读取侧兜底：确认运行失败 / 取消不判已发布）
   const serverSrc = fs.readFileSync(path.join(pluginRoot, 'scripts', 'server.mjs'), 'utf8');
@@ -219,7 +220,7 @@ t('U1 锁定键换 released：仅推送（无 released）增删 / 合并 / AI �
   assert.doesNotMatch(await mergeBtnAt('BLD-MERGED'), /aria-disabled/, 'merged 未推送合并可用（零回归）');
 });
 
-t('U2 发布步「动作一 · 推送远端」：已推送未确认就近说明推送不等于正式发布（不显示「已正式发布，范围锁定」）；发布确认后不再出现该说明', async () => {
+t('U2 REQ-20260929-002：发布步「动作一 · 推送远端 / 动作二 · 官网资料更新」区整体删除（源码远端推送与官网物料不再由构建模块发布步承担）', async () => {
   const pushRel = { pushedAt: '2026-09-28T01:00:00.000Z', pushedSha: H1, pushRemote: 'origin', site: { status: 'waiting' } };
   const h = await setup({
     versions: [
@@ -235,20 +236,17 @@ t('U2 发布步「动作一 · 推送远端」：已推送未确认就近说明�
   const releasePaneAt = async (id) => {
     h.run(`window.ATBBuild.selectVersion(${JSON.stringify(id)}); window.ATBBuild.setStep('release')`);
     for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0));
-    const inner = h.inner();
-    const j = inner.indexOf('动作一 · 推送远端');
-    assert.ok(j >= 0, `${id} 发布步动作一区存在`);
-    return inner.slice(j, inner.indexOf('动作二', j));
+    return h.inner();
   };
-  // 已推送未确认：推送事实照常展示 + 就近说明「推送 ≠ 正式发布 / 补确认路径」；无锁定提示
-  const pushedPane = await releasePaneAt('BLD-PUSHED');
-  assert.match(pushedPane, /已推送到远端/, '已推送未确认展示推送事实');
-  assert.match(pushedPane, /推送完成不等于正式发布：正式发布以「发布」按钮二次确认为准，确认后版本范围锁定。/, '就近说明推送不等于正式发布');
-  assert.doesNotMatch(pushedPane, /范围锁定（如需调整请新建版本）/, '已推送未确认不显示「已正式发布，范围锁定」');
-  // 发布确认后：不再出现该说明（锁定口径见各操作禁用）
-  const releasedPane = await releasePaneAt('BLD-RELEASED');
-  assert.match(releasedPane, /已推送到远端/, '确认后推送事实仍展示');
-  assert.doesNotMatch(releasedPane, /推送完成不等于正式发布/, '确认后不再出现推送 ≠ 正式发布说明');
+  // 已推送未确认与已确认：发布步均不再渲染推送 / 官网动作区与「推送 ≠ 正式发布」说明
+  for (const id of ['BLD-PUSHED', 'BLD-RELEASED']) {
+    const pane = await releasePaneAt(id);
+    assert.ok(!pane.includes('动作一 · 推送远端'), `${id} 发布步无动作一区`);
+    assert.ok(!pane.includes('动作二 · 官网资料更新'), `${id} 发布步无动作二区`);
+    assert.ok(!pane.includes('已推送到远端'), `${id} 发布步无推送事实展示`);
+    assert.ok(!pane.includes('推送主分支'), `${id} 发布步无推送入口`);
+    assert.ok(!pane.includes('推送完成不等于正式发布'), `${id} 发布步无「推送 ≠ 正式发布」说明`);
+  }
 });
 
 /* ---------- I1 i18n ---------- */
@@ -257,7 +255,6 @@ t('I1 i18n 同步：推送 ≠ 正式发布说明句 EN 词条齐备；既有正
   await import('../web/i18n.js');
   const { EN } = globalThis.ATBI18N._dict;
   for (const zh of [
-    '推送完成不等于正式发布：正式发布以「发布」按钮二次确认为准，确认后版本范围锁定。',
     '已正式发布，不允许再 AI 完善',
     '已正式发布，条目已锁定',
     '已正式发布，范围锁定（如需调整请新建版本）',

@@ -14,7 +14,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import * as core from '../lib/core.mjs';
-import * as buildStore from '../lib/build-store.mjs';
+import * as buildStore from '../lib/build-store.mjs'; // REQ-20260929-002：publishedByBld 迁至版本模块（确认口径 ∪ 存量 succeeded 并集）
 import * as bpStore from '../lib/build-publish-store.mjs';
 
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -41,23 +41,23 @@ function seedRun(dataDir, bldId, version, status, at) {
 t('P1 publishedByBld：无运行为空；未成功状态不上标识；succeeded 上标识；多次成功取最新；成功后再失败仍视为已发布；bldId 隔离', () => {
   const dir = mkDir('atb-pub-chip-');
   // 无任何运行
-  assert.deepEqual([...bpStore.publishedByBld(dir).entries()], [], '无运行 → 空汇总');
+  assert.deepEqual([...buildStore.publishedByBld(dir).entries()], [], '无运行 → 空汇总');
   // 未成功状态：draft / failed / canceled 不产生标识
   seedRun(dir, 'BLD-B', '1.0.0', 'draft', '2026-09-17T01:00:00.000Z');
   seedRun(dir, 'BLD-B', '1.1.0', 'failed', '2026-09-17T02:00:00.000Z');
   seedRun(dir, 'BLD-B', '1.2.0', 'canceled', '2026-09-17T03:00:00.000Z');
-  assert.equal(bpStore.publishedByBld(dir).get('BLD-B'), undefined, '未成功状态不上标识');
+  assert.equal(buildStore.publishedByBld(dir).get('BLD-B'), undefined, '未成功状态不上标识');
   // succeeded → 标识（published / version / runId）
   const ok1 = seedRun(dir, 'BLD-A', '1.2.0', 'succeeded', '2026-09-17T04:00:00.000Z');
-  assert.deepEqual(bpStore.publishedByBld(dir).get('BLD-A'), { published: true, version: '1.2.0', runId: ok1.id }, 'succeeded 上标识');
+  assert.deepEqual(buildStore.publishedByBld(dir).get('BLD-A'), { published: true, version: '1.2.0', runId: ok1.id }, 'succeeded 上标识');
   // 多次成功：取最新一条成功运行
   const ok2 = seedRun(dir, 'BLD-A', '1.3.0', 'succeeded', '2026-09-17T05:00:00.000Z');
-  assert.deepEqual(bpStore.publishedByBld(dir).get('BLD-A'), { published: true, version: '1.3.0', runId: ok2.id }, '多次成功取最新');
+  assert.deepEqual(buildStore.publishedByBld(dir).get('BLD-A'), { published: true, version: '1.3.0', runId: ok2.id }, '多次成功取最新');
   // 成功后再建新发行版本失败运行 → 仍视为已发布（成功不可逆，标识不撤下）
   seedRun(dir, 'BLD-A', '1.4.0', 'failed', '2026-09-17T06:00:00.000Z');
-  assert.deepEqual(bpStore.publishedByBld(dir).get('BLD-A'), { published: true, version: '1.3.0', runId: ok2.id }, '成功后再失败仍视为已发布');
+  assert.deepEqual(buildStore.publishedByBld(dir).get('BLD-A'), { published: true, version: '1.3.0', runId: ok2.id }, '成功后再失败仍视为已发布');
   // bldId 隔离
-  assert.equal(bpStore.publishedByBld(dir).get('BLD-C'), undefined, '其他版本不受影响');
+  assert.equal(buildStore.publishedByBld(dir).get('BLD-C'), undefined, '其他版本不受影响');
 });
 
 /* ---------- P2 服务接口：/api/build/state 附 release 汇总 ---------- */

@@ -364,8 +364,11 @@ t('L5-1 前端五步导航与页面契约：新步骤标签、无一键加入、
   assert.ok(!buildJs.includes('一键加入所有未选祖先提交'), '一键加入引导移除');
   assert.ok(!buildJs.includes('data-iso-add-deps'), '一键加入交互入口移除');
   assert.ok(buildJs.includes('data-docs-merge'), '文档合并动作入口存在');
-  assert.ok(buildJs.includes('data-pf-push'), '推送远端动作入口存在');
-  assert.ok(buildJs.includes('官网资料更新'), '官网资料更新动作语义存在');
+  // REQ-20260929-002：发布步两动作区（推送远端 / 官网资料更新）已整体删除，发布收敛为
+  //「检查 → 二次确认 → 更新版本计划状态」，发布主入口保留
+  assert.ok(!buildJs.includes('data-pf-push'), '推送远端动作入口已删');
+  assert.ok(!buildJs.includes('官网资料更新'), '官网资料更新动作语义已删');
+  assert.ok(buildJs.includes('data-rel-publish'), '发布主入口存在');
   // 'link' 步骤键随合并入第一步清理（快照恢复归一除外）
   assert.ok(!/"link"\s*\]/.test(buildJs) && !/'link'\s*\]/.test(buildJs), '五步导航数组不再含 link');
 });

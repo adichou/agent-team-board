@@ -38,8 +38,9 @@ test('H1 全就绪：预检仅 2 项必选检查全通过，无提醒项；旧 7
   for (const old of ['冻结范围', '工作区', '官网全局配置', '双语材料', '条目包含性', 'Web App 构建识别', '原子推送预演']) {
     assert.ok(!checked.precheck.checks.some((c) => c.label === old), `旧检查「${old}」不应再出现在预检结果中`);
   }
-  // Web App 构建识别仍照实计算（执行阶段数据），但不再作为检查项
-  assert.equal(checked.precheck.profile?.kind, 'static');
+  // REQ-20260929-002：构建识别（profile）计算与落库整体删除——预检结果不再含 profile 字段
+  assert.equal(checked.precheck.profile, undefined);
+  assert.equal('profile' in checked.precheck, false, '预检结果不应再有 profile 键');
 });
 
 test('B1-a 文档未全部审核 → 阻塞并逐项列出缺口（文件 + 状态）', async () => {
@@ -223,5 +224,4 @@ for (const [name, fn] of cases) {
   await fn();
   console.log(`PASS ${name}`);
 }
-publish.stopServers();
 fs.rmSync(root, { recursive: true, force: true });

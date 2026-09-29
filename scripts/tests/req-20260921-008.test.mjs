@@ -553,8 +553,9 @@ t('L4-4 文案更名与轮询：docs 页签「AI 写作」清零、官网侧已�
   const source = fs.readFileSync(new URL('../web/build.js', import.meta.url), 'utf8');
   const pane = source.match(/  function renderDocsPane\(v\) \{[\s\S]*?\n  \}/)[0];
   assert.ok(!pane.includes('AI 写作'), '文档编写页签内 AI 写作清零');
-  // 008 当时官网侧保留不在本单范围；REQ-20260921-007 起随统一更名清理
-  assert.ok(source.includes('官网资料更新'), '发布步官网资料更新动作（REQ-20260926-002 发布步两动作重排，更名沿袭 REQ-20260921-007 去写作化）');
+  // 008 当时官网侧保留不在本单范围；REQ-20260921-007 起随统一更名清理；REQ-20260929-002
+  // 起发布步两动作区（推送远端 / 官网资料更新）整体删除——无「官网资料更新」与「官网 AI 写作」
+  assert.ok(!source.includes('官网资料更新'), 'REQ-20260929-002：发布步官网资料更新动作已随两动作区删除');
   assert.ok(!source.includes('官网 AI 写作'), '正式发布步官网旧文案无残留');
   assert.ok(source.includes('docs-summary/current'), 'docs 步轮询 AI 总结进度');
   assert.ok(/summaryTimer|SUMMARY_POLL/.test(source), '轮询定时器管理存在');

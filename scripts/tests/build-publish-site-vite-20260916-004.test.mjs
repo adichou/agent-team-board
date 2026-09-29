@@ -1,11 +1,11 @@
-// REQ-20260916-004：官网目标适配 app-homepage-repo 新站点架构（Vite + Vue）。
-// BUG-20260928-011 起预检口径重构：官网物料（注册 + content 成对）不再是预检检查项——
-// 预检必选项为发布文档 / 挑选条目，物料缺口在执行阶段 site-deploy / site-verify 暴露。
-// BUG-20260928-013 起删除 content/<产品id>/ 双语成对内容文件（changelog / faq / support /
-// docs）的强制检查：缺失即跳过、不参与材料指纹收集；site-verify 不再校验产物内联
-// changelog / docs 内容路径（docs 路由可达随之移除）；apps.js 产品注册检查保留。
-// 本文件覆盖：产品 id 映射设置、site-deploy 构建 dist 与 site-verify 的 SPA fallback /
-// 产品注册回验、content 缺失即跳过口径、预检新鲜度指纹。
+// REQ-20260916-004：官网目标适配 app-homepage-repo 新站点架构（Vite + Vue）——原口径为
+// site-deploy / site-verify 在官网仓库执行 npm 构建并回验。REQ-20260929-002 人工定夺：
+// 「构建」模块发布删除全部执行阶段（含官网构建与回验），官网物料 / 注册 / content 材料不再
+// 参与发布输入与预检口径。本文件改为验证：
+//   ① 产品 id 映射与 config API 保留（「发布」模块 PREL 与设置页仍用）；
+//   ② 官网各形态（已注册 / 未注册 / 无 content / 构建产物缺失 / 官网未配置）均不再影响
+//      BPUB 发布——预检通过、计划 1 条、确认即成功；
+//   ③ 官网内容变化不使预检指纹失效（inputs 不再收集官网材料）。
 const cases=[]; const test=(name,fn)=>cases.push([name,fn]);
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,10 +20,8 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atb-site-vite-test-'));
 process.env.ATB_BUILD_PUBLISH_CONFIG = path.join(root, 'global.json');
 const git = (cwd, ...args) => execFileSync('git', args, {cwd, encoding:'utf8'}).trim();
 
-// 新架构官网仓库夹具：src/data/apps.js 注册 +（可选）content/<id>/ 中英成对 md +
-// build 脚本产出模拟 Vite dist（壳 index.html 引用 base 前缀 assets，assets 内联
-// content 路径串与注册串——真实站点经 import.meta.glob eager 打包后的可回验契约）。
-// noContent=true 时完全不生成 content/<id>/（BUG-20260928-013 缺失即跳过口径）。
+// 官网仓库夹具（保留原构造形态：src/data/apps.js 注册 + content 材料 + build 脚本产物），
+// 用于验证「官网形态与发布成败解耦」；register=false / noContent / noIndex 等制造各种缺口。
 function makeSite({id='demo',versions=['1.0','1.1'],register=true,docsPair=true,bundleChangelog=true,bundleApp=true,noIndex=false,noContent=false}={}){
  const repo=path.join(root,`site-${Math.random().toString(36).slice(2,8)}`);
  fs.mkdirSync(path.join(repo,'src','data'),{recursive:true});
@@ -62,88 +60,70 @@ function makeSite({id='demo',versions=['1.0','1.1'],register=true,docsPair=true,
  return repo;
 }
 // 源码项目夹具（共享 build-publish-fixture）：main + dev（含文档提交，cherry-pick 回 main
-// ——预检必选项①发布文档就绪）+ bare 远端。
+//——预检必选项①发布文档就绪）+ bare 远端。
 const makeSource = (name) => makeProject(root, name);
+// REQ-20260929-002：全链路 = 预检 → 计划（1 条）→ 确认即成功；官网形态不参与成败。
 async function runThrough(fx,version){
  const v=makeVersion(fx,{itemId:'REQ-20260916-004'});
  const run=await publish.create(fx.db,fx.project,v,version);
  const checked=await publish.precheck(fx.db,fx.project,run.id);
- assert.equal(checked.precheck.ok,true,JSON.stringify(checked.precheck.checks)); // 预检不再被官网物料口径阻塞
+ assert.equal(checked.precheck.ok,true,JSON.stringify(checked.precheck.checks)); // 官网形态不再影响预检
  const plan=await publish.plan(fx.db,fx.project,run.id);
- const result=await publish.start(fx.db,fx.project,run.id,plan.token);
- await result.completion;
+ assert.equal(plan.steps.length,1,'发布计划仅 1 条（更新版本计划状态）');
+ const {run:done}=await publish.start(fx.db,fx.project,run.id,plan.token);
  return {db:fx.db,run,plan,done:store.readRun(fx.db,run.id)};
 }
-// 预检结果不应再包含官网物料 / 旧 7 检标签（BUG-20260928-011 口径）。
-const assertNoSiteChecks=(run)=>{
- for(const label of ['冻结范围','工作区','官网全局配置','双语材料','条目包含性','Web App 构建识别','原子推送预演'])
-  assert.ok(!(run.precheck?.checks||[]).some(c=>c.label===label),`旧检查「${label}」不应再出现在预检结果中`);
-};
 
-test('P1 注册且 content 中英成对齐备 → 预检通过（无旧检查项）且全链路成功', async () => {
+test('P1 官网注册且材料齐备 → 预检通过、确认即成功（无官网构建执行）', async () => {
  store.saveConfig(makeSite({id:'p1',versions:['1.0']}));
  const {done}=await runThrough(makeSource('p1'),'1.0');
- assert.equal(done.precheck.ok,true,JSON.stringify(done.precheck.checks));
- assertNoSiteChecks(done);
  assert.equal(done.status,'succeeded',JSON.stringify(done.error||null));
+ assert.equal(done.directories,undefined,'不再产生官网构建目录数据');
 });
 
-test('P2 apps.js 未注册产品 → 预检仍通过，失败后移执行阶段 site-deploy 并提示未注册与产品 id', async () => {
+test('P2 apps.js 未注册产品 → 不再阻塞：预检通过、发布成功（原 site-deploy 失败口径删除）', async () => {
  store.saveConfig(makeSite({id:'p2',versions:['1.0'],register:false}));
  const {done}=await runThrough(makeSource('p2'),'1.0');
- assertNoSiteChecks(done);
- assert.equal(done.status,'failed');
- assert.equal(done.error.stage,'site-deploy');
- assert.match(done.error.message,/apps\.js/);assert.match(done.error.message,/未注册/);assert.match(done.error.message,/p2/);
+ assert.equal(done.status,'succeeded','官网未注册不再影响发布');
 });
 
-test('P3 缺 changelog 英文与 faq 英文 → 缺失即跳过，全链路成功', async () => {
+test('P3/P4 content 材料缺口（changelog / faq / docs 不成对）→ 发布成功', async () => {
  const repo=makeSite({id:'p3',versions:['1.0']});
  fs.rmSync(path.join(repo,'content','p3','changelog','v1.0.en.md'));
  fs.rmSync(path.join(repo,'content','p3','faq.en.md'));
  store.saveConfig(repo);
  const {done}=await runThrough(makeSource('p3'),'1.0');
- assert.equal(done.precheck.ok,true,'预检不再按物料口径阻塞');
- assert.equal(done.status,'succeeded',JSON.stringify(done.error||null));
-});
-
-test('P4 docs 无中英成对文档 → 缺失即跳过，全链路成功', async () => {
+ assert.equal(done.status,'succeeded');
  store.saveConfig(makeSite({id:'p4',versions:['1.0'],docsPair:false}));
- const {done}=await runThrough(makeSource('p4'),'1.0');
- assert.equal(done.precheck.ok,true,'预检不再按物料口径阻塞');
- assert.equal(done.status,'succeeded',JSON.stringify(done.error||null));
+ const {done:d4}=await runThrough(makeSource('p4'),'1.0');
+ assert.equal(d4.status,'succeeded');
 });
 
-test('N1 官网 content/<产品id>/ 目录整体缺失 → 预检通过且全链路成功（apps.js 注册检查仍生效）', async () => {
+test('N1 content 目录整体缺失 / D2 构建产物缺 index.html / V2 产物缺注册串 → 均发布成功（不再执行官网构建回验）', async () => {
  store.saveConfig(makeSite({id:'n1',versions:['1.0'],noContent:true}));
  const {done}=await runThrough(makeSource('n1'),'1.0');
- assert.equal(done.precheck.ok,true,JSON.stringify(done.precheck.checks));
- assertNoSiteChecks(done);
- assert.equal(done.status,'succeeded',JSON.stringify(done.error||null));
- assert.equal(done.targets.site.status,'done');
+ assert.equal(done.status,'succeeded');
+ store.saveConfig(makeSite({id:'d2',versions:['1.0'],noIndex:true}));
+ const {done:d2}=await runThrough(makeSource('d2'),'1.0');
+ assert.equal(d2.status,'succeeded','构建产物缺失不再在 site-deploy 暴露（阶段已删）');
+ store.saveConfig(makeSite({id:'v2',versions:['1.0'],bundleApp:false}));
+ const {done:v2}=await runThrough(makeSource('v2'),'1.0');
+ assert.equal(v2.status,'succeeded','产物注册串缺失不再在 site-verify 暴露（阶段已删）');
 });
 
-test('P5+P6 产品 id 默认取项目目录名，productIds 映射可覆盖后重试成功', async () => {
+test('P5 产品 id 默认取项目目录名，映射可覆盖（config 能力保留，仅不再影响发布成败）', async () => {
  const repo=makeSite({id:'demo',versions:['1.0']});
  store.saveConfig(repo);
  const fx=makeSource('cam-media-man-mobile');
- const {run,done}=await runThrough(fx,'1.0');
- // 默认产品 id = 项目目录名：content/cam-media-man-mobile 不存在 → 执行阶段 site-deploy 失败
- assert.equal(done.precheck.ok,true,'预检不再按产品 id / 物料口径阻塞');
- assert.equal(done.status,'failed');
- assert.match(done.error.message,/cam-media-man-mobile/);
- // 配置映射覆盖后：重新预检（指纹刷新）→ 计划 → 重试，只补失败阶段即成功
+ // 默认产品 id = 项目目录名（官网未注册该 id）→ 发布仍成功（物料口径退出发布）
+ const {done}=await runThrough(fx,'1.0');
+ assert.equal(done.status,'succeeded');
+ // 映射覆盖能力保留（PREL / 设置页仍用）
  store.saveProductId('cam-media-man-mobile','demo');
- const re=await publish.precheck(fx.db,fx.project,run.id);
- assert.equal(re.precheck.ok,true,JSON.stringify(re.precheck.checks));
- const plan=await publish.plan(fx.db,fx.project,run.id);
- const retry=await publish.start(fx.db,fx.project,run.id,plan.token);
- await retry.completion;
- const done2=store.readRun(fx.db,run.id);
- assert.equal(done2.status,'succeeded',JSON.stringify(done2.error||null));
+ assert.equal(store.resolveProductId(store.readConfig(),'cam-media-man-mobile'),'demo');
 });
 
-test('P7 官网材料内容变更 → 不再收集 content 文件指纹，plan 仍有效', async () => {
+test('P7 官网材料内容变更 → 不参与预检指纹，plan 仍有效', async () => {
  store.saveConfig(makeSite({id:'p7',versions:['1.0']}));
  const fx=makeSource('p7');
  const v=makeVersion(fx,{itemId:'REQ-20260916-004'});
@@ -152,21 +132,18 @@ test('P7 官网材料内容变更 → 不再收集 content 文件指纹，plan �
  assert.equal(checked.precheck.ok,true);
  fs.writeFileSync(path.join(store.readConfig().homepageRepoRoot,'content','p7','faq.zh.md'),'# FAQ changed\n');
  const plan=await publish.plan(fx.db,fx.project,run.id);
- assert.ok(plan.token,'content 文件内容变化不再使预检指纹失效（不参与材料指纹收集）');
+ assert.ok(plan.token,'官网材料变化不使预检指纹失效（inputs 不再收集官网材料）');
 });
 
 test('S1 saveProductId 写入/清除映射并持久化，非法 id 拒绝', () => {
  store.saveConfig(makeSite({id:'demo'}));
  const cfg=store.saveProductId('proj-x','demo');
  assert.equal(cfg.productIds['proj-x'],'demo');
- assert.equal(store.resolveProductId(store.readConfig(),'proj-x'),'demo');
  assert.equal(store.resolveProductId(store.readConfig(),'other'),'other');
- store.saveProductId('proj-x','demo');
  assert.throws(()=>store.saveProductId('proj-x','../evil'),/非法/);
  const cleared=store.saveProductId('proj-x','');
  assert.equal(cleared.productIds['proj-x'],undefined);
  assert.equal(store.resolveProductId(store.readConfig(),'proj-x'),'proj-x');
- assert.equal(store.readConfig().productIds['proj-x'],undefined);
 });
 
 test('S2 config API 按当前项目写入映射并回显 projectProductId', async () => {
@@ -178,41 +155,11 @@ test('S2 config API 按当前项目写入映射并回显 projectProductId', asyn
  assert.equal(got.projectProductId,'demo');
 });
 
-test('D1 全链路成功：官网 npm 构建、产物目录 dist、阶段全绿', async () => {
- const repo=makeSite({id:'d1',versions:['1.0','1.1']});
- store.saveConfig(repo);
- const {run,plan,done}=await runThrough(makeSource('d1'),'1.0');
- assert.match(plan.steps[2],/npm install/);assert.match(plan.steps[2],/dist/);
- assert.equal(done.status,'succeeded',JSON.stringify(done));
- assert.equal(done.targets.webapp.status,'done');
- assert.equal(done.targets.site.status,'done');
- assert.equal(store.directoryInfo(done,'site').path,path.join(fs.realpathSync(repo),'dist'));
- assert.equal(git(path.join(root,'remote-d1.git'),'rev-parse','main'),run.frozen.mainSha);
-});
-
-test('D2 构建产物缺 dist/index.html → site-deploy 失败并说明', async () => {
- store.saveConfig(makeSite({id:'d2',versions:['1.0'],noIndex:true}));
- const {done}=await runThrough(makeSource('d2'),'1.0');
- assert.equal(done.status,'failed');
- assert.equal(done.error.stage,'site-deploy');
- assert.match(done.error.message,/dist\/index\.html/);
-});
-
-test('V1 构建产物缺更新版本条目 → changelog 内联检查已删除，site-verify 仍成功', async () => {
- store.saveConfig(makeSite({id:'v1',versions:['1.0'],bundleChangelog:false}));
- const {done}=await runThrough(makeSource('v1'),'1.0');
- assert.equal(done.status,'succeeded',JSON.stringify(done.error||null));
- assert.equal(done.targets.site.status,'done');
-});
-
-test('V2 构建产物缺产品注册串 → site-verify 失败并指明产品页无法渲染', async () => {
- store.saveConfig(makeSite({id:'v2',versions:['1.0'],bundleApp:false}));
- const {done}=await runThrough(makeSource('v2'),'1.0');
- assert.equal(done.status,'failed');
- assert.equal(done.error.stage,'site-verify');
- assert.match(done.error.message,/v2/);assert.match(done.error.message,/产品/);
+test('S3 官网完全未配置（全局配置为空）→ 发布成功', async () => {
+ const fx=makeSource('s3-nocfg');
+ const {done}=await runThrough(fx,'1.0');
+ assert.equal(done.status,'succeeded','未配置官网仓库不阻塞发布（REQ-20260929-002）');
 });
 
 for(const [name,fn] of cases){await fn();console.log(`PASS ${name}`);}
-publish.stopServers();// 回验本机服务不关会挂住事件循环，进程无法退出
 fs.rmSync(root,{recursive:true,force:true});

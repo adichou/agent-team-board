@@ -202,12 +202,12 @@ t('G1 publishStepsState 第三参：false 时失败确认计划 docs / docmerge 
 t('J1 build-publish 失败 / 取消终态收尾调用 rollbackReleaseConfirm；server / publish-flow 换兜底口径', () => {
   const src = fs.readFileSync(path.join(pluginRoot, 'scripts', 'lib', 'build-publish.mjs'), 'utf8');
   assert.match(src, /rollbackReleaseConfirm/, 'build-publish 应调用确认锁回退');
-  // 阶段失败落账后回退
-  const iStageFail = src.indexOf("r.status='failed';r.error={message:e.message,stage:stageKey}");
-  assert.ok(iStageFail >= 0, '阶段失败落账存在');
-  assert.ok(src.indexOf('rollbackConfirm(', iStageFail) > iStageFail, '阶段失败后应回退确认锁');
-  // cancel / recover / 完成态 failed 同样接线
-  assert.ok((src.match(/rollbackConfirm\(/g) || []).length >= 5, '取消 / 完成 failed / start 异常 / cancel / recover 收尾均接线');
+  // REQ-20260929-002：执行阶段已删——失败口径收敛为「确认落账失败」（start 内落账失败 → run
+  // failed + 回退确认锁）；cancel / recover 收尾同样接线
+  const iConfirmFail = src.indexOf("r.status='failed';r.error={message:e.message};");
+  assert.ok(iConfirmFail >= 0, '确认落账失败落账存在');
+  assert.ok(src.indexOf('rollbackConfirm(', iConfirmFail) > iConfirmFail, '落账失败后应回退确认锁');
+  assert.ok((src.match(/rollbackConfirm\(/g) || []).length >= 3, '落账失败 / cancel / recover 收尾均接线');
   const serverSrc = fs.readFileSync(path.join(pluginRoot, 'scripts', 'server.mjs'), 'utf8');
   assert.ok(!/isReleased\(v\)[^,]/.test(serverSrc), 'server 各处 isReleased 应传数据目录兜底');
   assert.match(serverSrc, /isReleased\(v,\s*(?:dataDir|board)\)/, 'server isReleased 传目录（读取侧兜底）');
