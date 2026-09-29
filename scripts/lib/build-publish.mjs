@@ -5,6 +5,7 @@ import http from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { AtbError, listItems } from './core.mjs';
+import { MAIN_BRANCH, resolveMainBranch } from './git-flow.mjs';
 import * as store from './build-publish-store.mjs';
 import * as buildStore from './build-store.mjs';
 import * as flow from './publish-flow.mjs';
@@ -14,6 +15,12 @@ const exec=promisify(execFile);
 const active=new Map(), servers=new Map();
 const command=async(cwd,bin,args)=>{try{return (await exec(bin,args,{cwd,timeout:180000,maxBuffer:8*1024*1024})).stdout.trim();}catch(e){throw new AtbError(`${bin} ${args[0]} 失败：${String(e.stderr||e.message).slice(0,1000)}`);}};
 const git=(root,...args)=>command(root,'git',args);
+// BUG-20260929-003：主分支名统一按 resolveMainBranch() 解析取用（REQ-20260916-005 的
+// main→master 回退，git-flow 同源）；解析为 null（空仓库等无基点）时回退 main——维持既有
+// rev-parse refs/heads/main 报错路径不变。覆盖冻结 mainSha、文档合并核验、条目包含性核验、
+// sync-source 一致性比对与推送 refspec / 远端回验。
+const mainBranchOf=(root)=>resolveMainBranch(root)||MAIN_BRANCH;
+const mainRef=(root)=>`refs/heads/${mainBranchOf(root)}`;
 export function contentDir(repoRoot,product){
  if(!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(product)||product.includes('..'))throw new AtbError('项目名无法作为安全官网内容目录');
  return path.join(repoRoot,'content',product);
@@ -62,7 +69,10 @@ export async function inputs(root,run){
  const homepage={repoRoot:config.homepageRepoRoot,revision:config.revision,productId,contentDir:config.homepageRepoRoot?contentDir(config.homepageRepoRoot,productId):''};
  let materialFiles=null,materialError=null;
  if(homepage.repoRoot){try{materialFiles=siteMaterials(homepage.repoRoot,productId);}catch(e){materialError=e.message;}}
- return {mainSha:await git(root,'rev-parse','refs/heads/main'),devSha:await git(root,'rev-parse','refs/heads/dev'),remote,remoteUrlHash:store.fingerprint(await git(root,'remote','get-url','--push',remote)),homepage,materialFiles,materialError,version:run.version};
+ // BUG-20260929-003：冻结主分支头按解析出的主分支名取用（main→master），分支名随冻结
+ // 记录（mainSha 字段名沿用，语义为「主分支头」），供执行阶段 refspec / 回验取用。
+ const mainBranch=mainBranchOf(root);
+ return {mainBranch,mainSha:await git(root,'rev-parse',`refs/heads/${mainBranch}`),devSha:await git(root,'rev-parse','refs/heads/dev'),remote,remoteUrlHash:store.fingerprint(await git(root,'remote','get-url','--push',remote)),homepage,materialFiles,materialError,version:run.version};
 }
 // REQ-20260920-003：包含性检验适配重放证据——隔离合并以 cherry-pick 重放提交进 main，原始
 // commit 不再是 main 祖先；认可「原始提交为祖先」或「记录的重放提交为祖先」两种证据。
@@ -126,7 +136,7 @@ async function assertDocsReady(dataDir,root,run){
  // 已合并入 main：认可「文档提交在 main」或「记录的重放提交在 main」两种证据（与条目包含性同口径）
  const docCommit=String(v.docs?.commitHash||'').toLowerCase();
  const replay=(v.docsMerge?.replays||[]).find((r)=>String(r.original||'').toLowerCase()===docCommit)?.replayed;
- const mainSha=await git(root,'rev-parse','refs/heads/main');
+ const mainSha=await git(root,'rev-parse',mainRef(root));
  if(!(await isAncestor(root,String(replay||docCommit),mainSha)))throw new AtbError(`发布文档尚未合并到 main：请先完成「文档合并」步（文档提交 ${docCommit.slice(0,12)} 不在 main 历史中）`);
 }
 // 提醒项：当前项目已完成（done）但未纳入任何版本计划（任意状态均视为已挑选——含已发布
@@ -154,7 +164,7 @@ export async function precheck(dataDir,root,id){
   await check('挑选条目',async()=>{
    let v=null;try{v=buildStore.readVersion(dataDir,run.bldId);}catch{}
    // 按版本计划当前清单核验（运行冻结后补入的条目同样覆盖；版本记录缺失回退冻结快照）
-   await assertItemsIncluded(root,v?.items?.length?v.items:run.frozen.items,await git(root,'rev-parse','refs/heads/main'),v?.merge?.replays||run.frozen.replays||[]);
+   await assertItemsIncluded(root,v?.items?.length?v.items:run.frozen.items,await git(root,'rev-parse',mainRef(root)),v?.merge?.replays||run.frozen.replays||[]);
   });
   const remind=unpickedDoneItems(dataDir);
   if(remind.length)checks.push({label:'已完成未挑选条目',ok:true,advisory:true,detail:`存在 ${remind.length} 个已完成但未纳入任何版本计划的条目：${remind.join('、')}（不阻塞本次发布，可考虑纳入后续版本）`});
@@ -177,8 +187,9 @@ export async function refreeze(dataDir,root,id){
 export async function plan(dataDir,root,id){
  const run=store.readRun(dataDir,id),current=await inputs(root,run);
  if(!run.precheck?.ok||run.precheck.fingerprint!==store.fingerprint(current))throw new AtbError('预检未通过或已失效，请重新预检');
- // BUG-20260928-014：计划文案与执行口径一致——不切换源码分支，按显式 SHA 原子推送两分支。
- return {token:run.precheck.fingerprint,frozen:run.frozen,steps:[`不切换工作区分支，原子推送 main ${current.mainSha} / dev ${current.devSha} 至 ${current.remote}`,`从冻结 main 构建 Web App ${run.version} 并本机回验`,`官网仓库 ${current.homepage.repoRoot} 执行 npm install 与 npm run build（产物 dist）并本机回验`],warning:run.frozen.extraCommits?.length?`冻结范围含额外提交：${run.frozen.extraCommits.join('；')}`:null};
+  // BUG-20260928-014：计划文案与执行口径一致——不切换源码分支，按显式 SHA 原子推送两分支。
+  // BUG-20260929-003：推送分支名按解析出的主分支名（main→master）。
+  return {token:run.precheck.fingerprint,frozen:run.frozen,steps:[`不切换工作区分支，原子推送 ${current.mainBranch} ${current.mainSha} / dev ${current.devSha} 至 ${current.remote}`,`从冻结 main 构建 Web App ${run.version} 并本机回验`,`官网仓库 ${current.homepage.repoRoot} 执行 npm install 与 npm run build（产物 dist）并本机回验`],warning:run.frozen.extraCommits?.length?`冻结范围含额外提交：${run.frozen.extraCommits.join('；')}`:null};
 }
 function serve(root,base='/'){
  return new Promise((resolve,reject)=>{
@@ -240,13 +251,16 @@ async function execute(dataDir,root,id){
    try{
     if(stageKey==='sync-source'){
      // BUG-20260928-014：发布全程不切换用户工作区分支——删除 checkout main，本地一致性
-     // 校验改为只读 ref 比对（rev-parse refs/heads/main === 冻结 mainSha，与原 HEAD 比对同
+     // 校验改为只读 ref 比对（rev-parse 主分支 ref === 冻结 mainSha，与原 HEAD 比对同
      // 语义且不依赖当前分支）；推送用显式 SHA refspec，本就不要求本地检出该分支。
+     // BUG-20260929-003：主分支名按冻结记录取用（main→master）；旧运行无该字段时回退
+     // 当前解析 / main，不改变既有 main 项目行为。
+     const mainBranch=run.frozen.mainBranch||resolveMainBranch(root)||MAIN_BRANCH;
      await clean(root);
-     if(await git(root,'rev-parse','refs/heads/main')!==run.frozen.mainSha)throw Error('main 与冻结源码不一致');
-     await git(root,'push','--atomic',run.frozen.remote,`${run.frozen.mainSha}:refs/heads/main`,`${run.frozen.devSha}:refs/heads/dev`);
-     const refs=await git(root,'ls-remote',run.frozen.remote,'refs/heads/main','refs/heads/dev');
-     for(const branch of ['main','dev'])if(!refs.includes(`${run.frozen[branch+'Sha']}\trefs/heads/${branch}`))throw Error(`远端 ${branch} SHA 回验不匹配`);
+     if(await git(root,'rev-parse',`refs/heads/${mainBranch}`)!==run.frozen.mainSha)throw Error(`${mainBranch} 与冻结源码不一致`);
+     await git(root,'push','--atomic',run.frozen.remote,`${run.frozen.mainSha}:refs/heads/${mainBranch}`,`${run.frozen.devSha}:refs/heads/dev`);
+     const refs=await git(root,'ls-remote',run.frozen.remote,`refs/heads/${mainBranch}`,'refs/heads/dev');
+     for(const [branch,sha] of [[mainBranch,run.frozen.mainSha],['dev',run.frozen.devSha]])if(!refs.includes(`${sha}\trefs/heads/${branch}`))throw Error(`远端 ${branch} SHA 回验不匹配`);
     }
     if(stageKey==='webapp-build'){
      const source=path.join(store.runDir(dataDir,id),'source'),output=path.join(store.runDir(dataDir,id),'artifacts');
